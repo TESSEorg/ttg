@@ -69,7 +69,7 @@ public:
     }
 
     // Broadcast the given value to all keys
-    void broadcast(const auto& keylist, const valueT& value) {
+    template <typename rangeT> void broadcast(const rangeT& keylist, const valueT& value) {
         for (auto key : keylist) send(key,value);
     }
 };
@@ -115,8 +115,8 @@ public:
     }
 
     // Broadcasts to the i'th flow
-    template <std::size_t i, typename valueT>
-    void broadcast(const auto& keylist, const valueT& value) {
+    template <std::size_t i, typename rangeT, typename valueT>
+    void broadcast(const rangeT& keylist, const valueT& value) {
         get<i>().broadcast(keylist, value);
     }
 

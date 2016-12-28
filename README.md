@@ -2,7 +2,7 @@
 prototype C++ API for PaRSEC
 
 # compile
-only GNU C++ compiler v6 seems to work
+GNU C++ (6.x) and Clang (Apple LLVM 8.0.0) compilers work
 
 - `cmake .`
 - `make t9`
