@@ -18,6 +18,19 @@ install(FILES ${flow_headers}
 string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
 target_compile_options(flow INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
 
+# tree algorithms
 add_executable (t9 t9.cc)
 target_link_libraries(t9 LINK_PUBLIC flow)
+
+# sparse tensor algorithms
+find_package(Eigen3)
+message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
+if (EIGEN3_FOUND)
+  add_library(eigen3 INTERFACE IMPORTED)
+  set_property(TARGET eigen3 PROPERTY
+               INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
+  
+  add_executable (spmm spmm.cc)
+  target_link_libraries(spmm LINK_PUBLIC eigen3 flow)
+endif(EIGEN3_FOUND)
 
