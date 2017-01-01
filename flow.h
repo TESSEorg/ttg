@@ -12,7 +12,7 @@
 // output flows.
 //
 // Like PaRSEC (I think), a task that will execute an operation and
-// all values in its associated input/output data flows are labelled
+// all values in its associated input/output data flows are labeled
 // by the same key --- think of it as the index of a for loop
 // iteration.  The place where computation occurs or data is stored
 // are driven by the key.

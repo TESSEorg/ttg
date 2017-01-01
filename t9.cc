@@ -46,7 +46,7 @@ std::ostream& operator<<(std::ostream&s, const Key& key) {
     return s;
 }
 
-// Maps middle of the box labelled by key in [0,1] to real value in [-L,L]
+// Maps middle of the box labeled by key in [0,1] to real value in [-L,L]
 double key_to_x(const Key& key) {
     const double scale = (2.0*L)*pow2(-key.n);
     return -L + scale*(0.5+key.l);
