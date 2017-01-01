@@ -22,6 +22,10 @@ target_compile_options(flow INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}
 add_executable (t9 t9.cc)
 target_link_libraries(t9 LINK_PUBLIC flow)
 
+# dense summa
+add_executable (mxm_simple_suma mxm_simple_suma.cc)
+target_link_libraries(mxm_simple_suma LINK_PUBLIC flow)
+
 # sparse tensor algorithms
 find_package(Eigen3)
 message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")

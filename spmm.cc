@@ -33,11 +33,13 @@ using SpMatrixFlow = Flows<Key<2>,blk_t>;
 
 // flow data from existing data structure
 // @todo extend Flow to fit the concept expected by Op (and satisfied by Flows), e.g. provide size()
-class Flow_From_SpMatrix : Op<Key<0>, ControlFlow, SpMatrixFlow, Flow_From_SpMatrix> {
+class Flow_From_SpMatrix : public Op<Key<0>, ControlFlow, SpMatrixFlow, Flow_From_SpMatrix> {
  public:
-  Flow_From_SpMatrix(const SpMatrix& matrix, SpMatrixFlow& flow, const ControlFlow& ctl):
+  using baseT = Op<Key<0>, ControlFlow, SpMatrixFlow, Flow_From_SpMatrix>;
+  Flow_From_SpMatrix(const SpMatrix& matrix, SpMatrixFlow flow, ControlFlow ctl):
+    baseT(ctl, flow, "spmatrix_to_flow"),
     matrix_(matrix), flow_(flow), ctl_(ctl) {}
-  void op(const Key<0>& key, const Control&, Flows<Key<0>>) {
+  void op(const Key<0>& key, const Control&, SpMatrixFlow&) {
     for (int k=0; k<matrix_.outerSize(); ++k) {
       for (SpMatrix::InnerIterator it(matrix_,k); it; ++it)
       {
@@ -47,32 +49,38 @@ class Flow_From_SpMatrix : Op<Key<0>, ControlFlow, SpMatrixFlow, Flow_From_SpMat
   }
  private:
   const SpMatrix& matrix_;
-  SpMatrixFlow& flow_;
-  const ControlFlow& ctl_;
+  SpMatrixFlow flow_;
+  ControlFlow ctl_;
 };
 // flow (move?) data into a data structure
-class Flow_To_SpMatrix : Op<Key<2>, SpMatrixFlow, ControlFlow, Flow_To_SpMatrix> {
+class Flow_To_SpMatrix : public Op<Key<2>, SpMatrixFlow, ControlFlow, Flow_To_SpMatrix> {
  public:
-  Flow_To_SpMatrix(SpMatrix& matrix, SpMatrixFlow& flow, const ControlFlow& ctl):
+  using baseT = Op<Key<2>, SpMatrixFlow, ControlFlow, Flow_To_SpMatrix>;
+
+  Flow_To_SpMatrix(SpMatrix& matrix, SpMatrixFlow flow, ControlFlow ctl):
+    baseT(flow, ctl, "flow_to_spmatrix"),
     matrix_(matrix), flow_(flow), ctl_(ctl) {}
-  void op(const Key<2>& key, const blk_t& elem, Flows<Key<2>>) {
+  void op(const Key<2>& key, const blk_t& elem, ControlFlow) {
     matrix_.insert(key[0], key[1]) = elem;
   }
+
  private:
   SpMatrix& matrix_;
-  SpMatrixFlow& flow_;
-  const ControlFlow& ctl_;
+  SpMatrixFlow flow_;
+  ControlFlow ctl_;
 };
 
 // sparse mm
-class SpMM: Op<Key<3>, Flows<Key<3>,blk_t,blk_t>, SpMatrixFlow, SpMM> {
+class SpMM: public Op<Key<3>, Flows<Key<3>,blk_t,blk_t>, SpMatrixFlow, SpMM> {
  public:
-  SpMM(const SpMatrixFlow& a, const SpMatrixFlow& b, const SpMatrixFlow& c) :
+  using baseT = Op<Key<3>, Flows<Key<3>,blk_t,blk_t>, SpMatrixFlow, SpMM>;
+  SpMM(SpMatrixFlow a, SpMatrixFlow b, SpMatrixFlow c) :
+    baseT(make_flows(a.get<0>(),b.get<0>()),c,"SpMM"),
     a_(a), b_(b), c_(c) {}
  private:
-  const SpMatrixFlow& a_;
-  const SpMatrixFlow& b_;
-  const SpMatrixFlow& c_;
+  SpMatrixFlow a_;
+  SpMatrixFlow b_;
+  SpMatrixFlow c_;
 };
 
 int main(int argc, char* argv[]) {
