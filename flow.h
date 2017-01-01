@@ -69,7 +69,8 @@ public:
     }
 
     // Broadcast the given value to all keys
-    template <typename rangeT> void broadcast(const rangeT& keylist, const valueT& value) {
+    template <typename rangeT>
+    void broadcast(const rangeT& keylist, const valueT& value) {
         for (auto key : keylist) send(key,value);
     }
 };
@@ -132,6 +133,22 @@ template <typename keyT, typename...valuesT>
 auto make_flows(Flow<keyT,valuesT>...args) {return Flows<keyT, valuesT...>(args...);}
 
 
+// Data/functionality common to all Ops
+class BaseOp {
+    static bool trace; // If true prints trace of all assignments and all op invocations
+public:
+    
+    // Sets trace to value and returns previous setting
+    static bool set_trace(bool value) {std::swap(trace,value); return value;}
+
+    static bool get_trace() {return trace;}
+
+    static bool tracing() {return trace;}
+};
+
+// With more than one source file this will need to be moved
+bool BaseOp::trace = false;
+
 // Mix-in class used with CRTP to implement operations in a flow.  The
 // derived class should implement an operation with this name and
 // signature.
@@ -150,16 +167,18 @@ auto make_flows(Flow<keyT,valuesT>...args) {return Flows<keyT, valuesT...>(args.
 // provide specializations of op that merge/split an std::vector of flows
 // from/to an std::vector of values.
 template <typename keyT, typename input_flowsT, typename output_flowsT, typename derivedT>
-class Op {
+class Op : private BaseOp {
+
     static constexpr int numargs = input_flowsT::size(); // Number of arguments in the input flows
     output_flowsT outputs;
-    std::string name;  // mostly used for debugging
+    std::string name;  // mostly used for debugging output
     
     struct OpArgs{
         int counter;            // Tracks the number of arguments set
+        std::array<bool,numargs> argset; // Tracks if a given arg is already set;
         typename input_flowsT::key_plus_output_tuple_type t; // The key and input flow values
         
-        OpArgs() : counter(numargs), t() {}
+        OpArgs() : counter(numargs), argset(), t() {}
     };
     
     std::map<keyT,OpArgs> cache; // Contains tasks waiting for input to become complete
@@ -181,11 +200,21 @@ class Op {
         // insert here ... for now always shove things into the cache
         // and execute when ready.
 
+        if (tracing()) std::cout << name << " : " << key << ": setting argument : " << i << std::endl;
+
         OpArgs& args = cache[key];
+
+        if (args.argset[i]) {
+            std::cerr << name << " : " << key << ": error argument is already set : " << i << std::endl;
+            throw "bad set arg";
+        }
+
+        args.argset[i] = true;        
+        
         std::get<i+1>(args.t) = value;
         args.counter--;
-        //std::cout << "Op setting argument " << i << " " << key << " " << value << " counter=" << args.counter << std::endl;
         if (args.counter == 0) {
+            if (tracing()) std::cout << name << " : " << key << ": invoking op " << std::endl;
             std::get<0>(args.t) = key;
             call_op_from_tuple(args.t, std::make_index_sequence<std::tuple_size<typename input_flowsT::key_plus_output_tuple_type>::value>{});
             cache.erase(key);
@@ -196,7 +225,9 @@ class Op {
     template <typename flowT, std::size_t i>
     void register_input_callback(flowT& input) {
         using callbackT = std::function<void(const keyT&, const typename flowT::value_type&)>;
-        //std::cout << "registering " << i << std::endl;
+
+        if (tracing()) std::cout << name << " : registering callback for argument : " << i << std::endl;
+
         auto callback = [this](const keyT& key, const typename flowT::value_type& value){set_arg<typename flowT::value_type,i>(key,value);};
         input.add_callback(callbackT(callback));
     }
@@ -237,7 +268,17 @@ public:
     ~Op() {
         if (cache.size() != 0) {
             std::cerr << "warning: unprocessed tasks in destructor of operation '" << name << "'" << std::endl;
-            for (auto item : cache) std::cerr << "   unused: " << item.first << std::endl;
+            std::cerr << "   T => argument assigned     F => argument unassigned" << std::endl;
+            int nprint=0;
+            for (auto item : cache) {
+                if (nprint++ > 10) {
+                    std::cerr << "   etc." << std::endl;
+                    break;
+                }
+                std::cerr << "   unused: " << item.first << " : ( ";
+                for (std::size_t i=0; i<numargs; i++) std::cerr << (item.second.argset[i] ? "T" : "F") << " ";
+                std::cerr << ")" << std::endl;
+            }
         }
     }
 
