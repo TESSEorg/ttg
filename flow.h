@@ -247,8 +247,8 @@ public:
     Op(const std::string& name = std::string("unnamed op")) : outputs(), name(name) {}
 
     // Full constructor makes operation connected to both input and output flows
-    template <typename...input_valuesT, typename...output_valuesT> 
-    Op(Flows<keyT,input_valuesT...> inputs, Flows<keyT,output_valuesT...> outputs,
+    template <typename...input_valuesT, typename... output_key_and_valuesT>
+    Op(Flows<keyT,input_valuesT...> inputs, Flows<output_key_and_valuesT...> outputs,
        const std::string& name = std::string("unnamed op"))
         : outputs(outputs)
         , name(name)
