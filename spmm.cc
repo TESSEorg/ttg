@@ -118,7 +118,8 @@ class SpMM {
     Multiply(Flows<Key<3>,blk_t> a_ijk, Flows<Key<3>,blk_t> b_ijk,
              Flows<Key<3>,blk_t> c_ijk,
              SpMatrixFlow c) :
-      baseT(make_flows(a_repl.get<0>(),b_repl.get<0>(),c_contrib.get<0>()), c, "SpMM::Multiply")
+      baseT(make_flows(a_ijk.get<0>(),b_ijk.get<0>(),c_ijk.get<0>()), c, "SpMM::Multiply"),
+      c_ijk_(c_ijk)
       {
       // for each i and j determine first k that contributes, initialize input {i,j,first_k} flow to 0
       }
@@ -135,11 +136,13 @@ class SpMM {
       if (have_next_k) {
         // need Op::inputs()!
         // N.B.initial c_ijk was zeroed out above
-        this->inputs().send<2>(Key<3>({i,j,next_k}),c_ij + a_ik * b_kj);
+        c_ijk_.send<0>(Key<3>({i,j,next_k}),c_ijk + a_ijk * b_ijk);
       }
       else
-        result.send<0>(Key<2>({i,j}), c_ij + a_ik * b_kj);
+        result.send<0>(Key<2>({i,j}), c_ijk + a_ijk * b_ijk);
     }
+   private:
+    Flows<Key<3>,blk_t> c_ijk_;
   };
 
  private:
