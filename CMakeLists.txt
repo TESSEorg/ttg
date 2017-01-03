@@ -18,6 +18,12 @@ install(FILES ${flow_headers}
 string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
 target_compile_options(flow INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
 
+# helloworlds
+add_executable (helloworld helloworld.cc)
+target_link_libraries(helloworld LINK_PUBLIC flow)
+add_executable (helloworld_wrap helloworld_wrap.cc)
+target_link_libraries(helloworld_wrap LINK_PUBLIC flow)
+
 # tree algorithms
 add_executable (t9 t9.cc)
 target_link_libraries(t9 LINK_PUBLIC flow)
