@@ -236,6 +236,10 @@ bool BaseOp::trace = false;
 //         const std::tuple<input_valuesT...>& input_values,
 //         output_flowsT& output_flows)
 //
+// [Aside: derive from Op not OpTuple to pass input values as arguments
+// to op() rather than packed in a tuple.  Some template voodoo should
+// be able to fuse the two classes if that is preferable.]
+//
 // where
 //
 // input_key is the key associated with the task and all of its input
@@ -250,13 +254,14 @@ bool BaseOp::trace = false;
 //
 // input_flowsT must presently be InFlows<keyT,value0T,...>
 template <typename input_flowsT, typename output_flowsT, typename derivedT>
-class Op : private BaseOp {
+class OpTuple : private BaseOp {
 public:
    
     typedef typename input_flowsT::key_type input_key_type;
     typedef typename input_flowsT::values_tuple_type input_values_tuple_type;
     typedef output_flowsT output_type;
 
+private:
     static constexpr int numargs = input_flowsT::size(); // Number of arguments in the input flows
     output_flowsT outputs;
     std::string name;  // mostly used for debugging output
@@ -270,12 +275,6 @@ public:
     };
     
     std::map<input_key_type,OpArgs> cache; // Contains tasks waiting for input to become complete
-    
-    // // Helper routine to call user operation from the data
-    // template<typename tupleT, std::size_t...S>
-    // void  call_op_from_tuple(const tupleT& params, std::index_sequence<S...>) {
-    //     static_cast<derivedT*>(this)->op(std::get<S>(params)..., outputs);
-    // }
 
     // Used in the callback from a flow to set i'th argument
     template <typename valueT, std::size_t i>
@@ -324,20 +323,20 @@ public:
         int junk[] = {0,(register_input_callback<typename std::tuple_element<IS,Tuple>::type, IS>(std::get<IS>(inputs)),0)...}; junk[0]++;
     }
 
-    Op(const Op& other) = delete;
+    OpTuple(const OpTuple& other) = delete;
 
-    Op& operator=(const Op& other) = delete;
+    OpTuple& operator=(const OpTuple& other) = delete;
 
 public:
 
     // Default constructor makes operation that still needs to be connected to input and output flows
-    Op(const std::string& name = std::string("unnamed op")) : outputs(), name(name) {}
+    OpTuple(const std::string& name = std::string("unnamed op")) : outputs(), name(name) {}
 
     // Full constructor makes operation connected to both input and output flows
     // This format for the constructor forces the type constraint and automates some conversions.
     template <typename...input_valuesT>
-    Op(InFlows<input_key_type,input_valuesT...> inputs, const output_flowsT& outputs,
-       const std::string& name = std::string("unnamed op"))
+    OpTuple(InFlows<input_key_type,input_valuesT...> inputs, const output_flowsT& outputs,
+       const std::string& name = std::string("unnamed tuple op"))
         : outputs(outputs)
         , name(name)
     {
@@ -345,17 +344,17 @@ public:
                                  std::make_index_sequence<std::tuple_size<std::tuple<input_valuesT...>>::value>{});
     }
 
-    Op (Op&& other) = default;
+    OpTuple (OpTuple&& other) = default; // Primarily to enable returning a value assuming RVO via move so don't actually make a new copy
 
     // Connects an incompletely constructed operation to its input and output flows
-    void connect(input_flowsT& inputs, const output_flowsT& outputs) {
+    void connect(input_flowsT inputs, const output_flowsT& outputs) {
         this->outputs = outputs;
         register_input_callbacks(inputs.all(),
                                  std::make_index_sequence<std::tuple_size<typename input_flowsT::values_tuple_type>::value>{});
     }        
    
     // Destructor checks for unexecuted tasks
-    ~Op() {
+    ~OpTuple() {
         if (cache.size() != 0) {
             std::cerr << "warning: unprocessed tasks in destructor of operation '" << name << "'" << std::endl;
             std::cerr << "   T => argument assigned     F => argument unassigned" << std::endl;
@@ -377,13 +376,48 @@ public:
     const std::string& get_name() const {return name;}
 };
 
+
+// Call derivedT::op() unpacking input values as arguments so the signature of op is
+//
+// void op(const keyT& key, const input_valuesT& args ..., output_type& output);
+//
+template <typename input_flowsT, typename output_flowsT, typename derivedT>
+class Op : public OpTuple<input_flowsT, output_flowsT, Op<input_flowsT, output_flowsT, derivedT>>  {
+public:
+    using opT = OpTuple<input_flowsT, output_flowsT, Op<input_flowsT, output_flowsT, derivedT>>;
+    typedef typename input_flowsT::key_type input_key_type;
+    typedef typename input_flowsT::values_tuple_type input_values_tuple_type;
+    typedef output_flowsT output_type;
+
+
+    // Helper routine to call user operation from the data
+    template<std::size_t...S>
+    void  call_op_from_tuple(const input_key_type& key, const input_values_tuple_type& params, output_type& output, std::index_sequence<S...>) {
+        static_cast<derivedT*>(this)->op(key, std::get<S>(params)..., output);
+    }
+
+public:
+    Op(const std::string& name = std::string("unamed arg op"))
+        : opT(name) {}
+
+    template <typename...input_valuesT>
+    Op(InFlows<input_key_type,input_valuesT...> inputs, const output_flowsT& outputs,
+       const std::string& name = std::string("unnamed arg op"))
+        : opT(inputs, outputs, name) {}
+
+    void op(const input_key_type& key, const input_values_tuple_type& t, output_type& output) {
+        call_op_from_tuple(key, t, output, std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{});
+        
+    };
+};
+
 // Class to wrap a callable with signature
 //
 // void op(const input_keyT&, const std::tuple<valuesT...>&, outputT&)
 //
 template <typename funcT, typename input_flowsT, typename output_flowsT>
-class WrapOp : public Op<input_flowsT, output_flowsT, WrapOp<funcT,input_flowsT,output_flowsT>> {
-    using baseT = Op<input_flowsT, output_flowsT, WrapOp<funcT,input_flowsT,output_flowsT>>;
+class WrapOp : public OpTuple<input_flowsT, output_flowsT, WrapOp<funcT,input_flowsT,output_flowsT>> {
+    using baseT = OpTuple<input_flowsT, output_flowsT, WrapOp<funcT,input_flowsT,output_flowsT>>;
 
     funcT func;
 

@@ -95,16 +95,16 @@ std::ostream& operator<<(std::ostream&s, const Control& ctl) {
 
 // Prints input to cout, produces nothing
 template <typename keyT, typename valueT>
-class Printer : public Op<keyT, Flows<keyT,valueT>, Flows<keyT>, Printer<keyT,valueT>> {
-    using baseT = Op<keyT, Flows<keyT,valueT>, Flows<keyT>, Printer<keyT,valueT>>;
+class Printer : public Op<InFlows<keyT,valueT>, Flows<>, Printer<keyT,valueT>> {
+    using baseT = Op<InFlows<keyT,valueT>, Flows<>, Printer<keyT,valueT>>;
     const std::string str;
 public:
-    explicit Printer(Flow<keyT,valueT> in, const char* str="") : baseT(Flows<keyT,valueT>(in), Flows<keyT>(), "printer"), str(str) {}
+    explicit Printer(Flow<keyT,valueT> in, const char* str="") : baseT(make_inflows(in), Flows<>(), "printer"), str(str) {}
     
-    explicit Printer(Flows<keyT,valueT> in) : baseT(in,Flows<keyT>()) {}
+    explicit Printer(InFlows<keyT,valueT> in) : baseT(in,Flows<>()) {}
 
-    void op(const keyT& key, const valueT& value, Flows<keyT> out) const {
-        std::cout << str << " (" << key << "," << value << ")" << std::endl;
+    void op(const keyT& key, const std::tuple<valueT>& t, Flows<>& out) const {
+        std::cout << str << " (" << key << "," << std::get<0>(t) << ")" << std::endl;
     }
 };
 
@@ -112,8 +112,8 @@ public:
 // --- input is the key at which to start projecting (usually the
 // root) and produces output in a downward traversal of the tree.
 template <typename funcT>
-class Project : public Op<Key, Flows<Key,Control>, Flows<Key, Control, Node>, Project<funcT>> {
-    using baseT = Op<Key, Flows<Key,Control>, Flows<Key, Control, Node>, Project<funcT>>;
+class Project : public Op<InFlows<Key,Control>, Flows<Flow<Key,Control>, Flow<Key,Node>>, Project<funcT>> {
+    using baseT = Op<InFlows<Key,Control>, Flows<Flow<Key,Control>, Flow<Key,Node>>, Project<funcT>>;
     funcT f;
  public:
     Project(const funcT& func, Flow<Key,Control> in, Flow<Key,Node> out) : baseT("project"), f(func) {
@@ -121,7 +121,8 @@ class Project : public Op<Key, Flows<Key,Control>, Flows<Key, Control, Node>, Pr
         this->connect({ctl}, {ctl,out});
     }
 
-    void op(const Key& key, const Control& junk, Flows<Key, Control, Node> out) {
+    //void op(const Key& key, const Control& junk, baseT::output_type& out) {
+    void op(const Key& key, const Control& junk, Flows<Flow<Key,Control>,Flow<Key,Node>>& out) {
         const double sl = f(key_to_x(key.left_child()));
         const double sr = f(key_to_x(key.right_child()));
         const double s = 0.5*(sl+sr), d = 0.5*(sl-sr);
@@ -141,8 +142,8 @@ class Project : public Op<Key, Flows<Key,Control>, Flows<Key, Control, Node>, Pr
 
 // Binary operation in scaling function basis without automatic refinement.  Assumes inputs
 // are provided using a downward traversal of the tree in the scaling function basis.
-class BinaryOp : public Op<Key, Flows<Key,Node,Node>, Flows<Key, Node, Node, Node>, BinaryOp> {
-    using baseT = Op<Key, Flows<Key,Node,Node>, Flows<Key, Node, Node, Node>, BinaryOp>;
+class BinaryOp : public Op<InFlows<Key,Node,Node>, Flows<Flow<Key,Node>, Flow<Key,Node>, Flow<Key,Node>>, BinaryOp> {
+    using baseT = Op<InFlows<Key,Node,Node>, Flows<Flow<Key,Node>, Flow<Key,Node>, Flow<Key,Node>>, BinaryOp>;
     double (*func)(double,double);
  public:    
     BinaryOp(double (*func)(double,double), Flow<Key,Node> left, Flow<Key,Node> right, Flow<Key,Node> Result) : baseT("binaryop"), func(func) {
@@ -150,9 +151,10 @@ class BinaryOp : public Op<Key, Flows<Key,Node,Node>, Flows<Key, Node, Node, Nod
         this->connect({L,R},{L,R,Result});
     }
 
-    void op(const Key& key, const Node& left, const Node& right, Flows<Key, Node, Node, Node> outputs) {
+    void op(const Key& key, const Node& left, const Node& right, typename baseT::output_type& outputs) {
         Flow<Key,Node> L, R, Result;
         std::tie(L,R,Result) = outputs.all();
+
         if (!(left.has_children || right.has_children)) {
             Result.send(key,Node(key, func(left.s,right.s),0.0,false));
         }
@@ -167,13 +169,12 @@ class BinaryOp : public Op<Key, Flows<Key,Node,Node>, Flows<Key, Node, Node, Nod
 
 // Differentiates the input function assuming input is in the scaling function basis and
 // provided in a downward traversal of the tree. 
-class Diff : public Op<Key, Flows<Key,Node,Node,Node>, Flows<Key,Node,Node,Node,Node>, Diff> {
-    using baseT = Op<Key, Flows<Key,Node,Node,Node>, Flows<Key,Node,Node,Node,Node>, Diff>;
+class Diff : public Op<InFlows<Key,Node,Node,Node>, Flows<Flow<Key,Node>,Flow<Key,Node>,Flow<Key,Node>,Flow<Key,Node>>, Diff> {
+    using baseT = Op<InFlows<Key,Node,Node,Node>, Flows<Flow<Key,Node>,Flow<Key,Node>,Flow<Key,Node>,Flow<Key,Node>>, Diff>;
 
-    struct SendToOutputTree : public Op<Key, Flows<Key,Node>, Flows<Key,Node,Node,Node>, SendToOutputTree> {
-        void op(const Key& key, const Node& node, Flows<Key,Node,Node,Node>& out) {
-            Flow<Key,Node> L, C, R;
-            std::tie(L, C, R) = out.all();
+    struct SendToOutputTree : public Op<InFlows<Key,Node>, Flows<Flow<Key,Node>,Flow<Key,Node>,Flow<Key,Node>>, SendToOutputTree> {
+        void op(const Key& key, const Node& node, Flows<Flow<Key,Node>,Flow<Key,Node>,Flow<Key,Node>>& out) {
+            Flow<Key,Node> L, C, R;  std::tie(L, C, R) = out.all();
             L.send(key.right(), node);
             C.send(key, node);
             R.send(key.left(), node);
@@ -187,7 +188,7 @@ public:
         this->connect({L,C,R},{L,C,R,out});
     }
 
-    void op(const Key& key, const Node& left, const Node& center, const Node& right, Flows<Key,Node,Node,Node,Node>& outputs) {
+    void op(const Key& key, const Node& left, const Node& center, const Node& right, baseT::output_type& outputs) {
         Flow<Key,Node> L, C, R, out;
         std::tie(L,C,R,out) = outputs.all();
         if (!(left.has_children || center.has_children || right.has_children)) {
@@ -210,16 +211,16 @@ public:
 
 // Input can be provided in any order. Output appears in order of an upward
 // traversal of the tree.
-class Compress : public Op<Key,Flows<Key,Node>,Flows<Key,double,double,Node>,Compress> {
-    using baseT = Op<Key,Flows<Key,Node>,Flows<Key,double,double,Node>,Compress>;
+class Compress : public Op<InFlows<Key,Node>,Flows<Flow<Key,double>,Flow<Key,double>,Flow<Key,Node>>,Compress> {
+    using baseT = Op<InFlows<Key,Node>,Flows<Flow<Key,double>,Flow<Key,double>,Flow<Key,Node>>,Compress>;
 
-    class DoIt : public Op<Key, Flows<Key,double,double>,Flows<Key,double,double,Node>,DoIt> {
-        using baseT = Op<Key, Flows<Key,double,double>,Flows<Key,double,double,Node>,DoIt>;
+    class DoIt : public Op<InFlows<Key,double,double>,Flows<Flow<Key,double>,Flow<Key,double>,Flow<Key,Node>>,DoIt> {
+        using baseT = Op<InFlows<Key,double,double>,Flows<Flow<Key,double>,Flow<Key,double>,Flow<Key,Node>>,DoIt>;
     public:
         DoIt() : baseT("compress:doit") {}
         
         // Given left and right child values, compute s & d for this node, store d and pass s up.
-        void op(const Key& key, double left, double right, Flows<Key,double,double,Node>& outputs) {
+        void op(const Key& key, double left, double right, baseT::output_type& outputs) {
             Flow<Key,double> L, R;
             Flow<Key,Node> out;
             std::tie(L,R,out) = outputs.all();
@@ -251,7 +252,7 @@ public:
     }
 
     // Discard interior nodes, send leaf values to parent and fill in output leaves
-    void op(const Key& key, const Node& node, Flows<Key,double,double,Node>& outputs) {
+    void op(const Key& key, const Node& node, baseT::output_type& outputs) {
         Flow<Key,double> L, R;
         Flow<Key,Node> out;
         std::tie(L,R,out) = outputs.all();
@@ -271,11 +272,11 @@ public:
     }
 };
 
-class Reconstruct : public Op<Key, Flows<Key,double,Node>, Flows<Key,double,Node>, Reconstruct> {
-    using baseT = Op<Key, Flows<Key,double,Node>, Flows<Key,double,Node>, Reconstruct>;
+class Reconstruct : public Op<InFlows<Key,double,Node>, Flows<Flow<Key,double>,Flow<Key,Node>>, Reconstruct> {
+    using baseT = Op<InFlows<Key,double,Node>, Flows<Flow<Key,double>,Flow<Key,Node>>, Reconstruct>;
 
-    struct Start : public Op<Key, Flows<Key,Node>, Flows<Key,double>, Start> {
-        void op(const Key& key, const Node& node, Flows<Key,double>& outputs) {
+    struct Start : public Op<InFlows<Key,Node>, Flows<Flow<Key,double>>, Start> {
+        void op(const Key& key, const Node& node, Flows<Flow<Key,double>>& outputs) {
             if (key.n==0) outputs.send<0>(key,node.s);
         }
     } start;
@@ -287,7 +288,7 @@ public:
         this->connect({S,in},{S,out});
     }
 
-    void op(const Key& key, double s, const Node& node, Flows<Key,double,Node>& outputs) {
+    void op(const Key& key, double s, const Node& node, baseT::output_type& outputs) {
         if (node.has_children) {
             outputs.send<0>(key.left_child(), s+node.d);
             outputs.send<0>(key.right_child(),s-node.d);
@@ -300,14 +301,14 @@ public:
 };
 
 // Compute the 2-norm of the function in either basis
-class Norm2 : public Op<Key,Flows<Key,Node>,Flows<Key>, Norm2> {
-    using baseT = Op<Key,Flows<Key,Node>,Flows<Key>, Norm2>;
+class Norm2 : public Op<InFlows<Key,Node>,Flows<>, Norm2> {
+    using baseT = Op<InFlows<Key,Node>,Flows<>, Norm2>;
     double sumsq;
 public:
-    Norm2(Flow<Key,Node> in) : baseT(make_flows(in),Flows<Key>(), "norm2"), sumsq(0.0) {}
+    Norm2(Flow<Key,Node> in) : baseT(make_inflows(in),Flows<>(), "norm2"), sumsq(0.0) {}
 
     // Lazy implementation of reduce operation ... just accumulates to local variable instead of summing up tree
-    void op(const Key& key, const Node& node, Flows<Key>& output) {
+    void op(const Key& key, const Node& node, baseT::output_type& output) {
         const double boxsize = 2.0*L*pow2(-key.n);
         sumsq += (node.s*node.s + node.d*node.d)*boxsize;
     }
