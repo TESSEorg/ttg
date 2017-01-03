@@ -172,64 +172,56 @@ class MxM {
     
     Flow<tripleT,Matrix> Aik_bcast, Bkj_bcast, Cij_reduce;
 
-    // Note input matrix has key pairT but actual output has key
-    // tripleT so have to wrap the output until we relax constraint on
-    // output key types matching that of input
-    class BroadcastA : public Op<pairT, Flows<pairT,Matrix>, Flows<pairT>, BroadcastA> {
-        using baseT = Op<pairT, Flows<pairT,Matrix>, Flows<pairT>, BroadcastA>;
+    class BroadcastA : public Op<InFlows<pairT,Matrix>, Flows<Flow<tripleT,Matrix>>, BroadcastA> {
+        using baseT = Op<InFlows<pairT,Matrix>, Flows<Flow<tripleT,Matrix>>, BroadcastA>;
         const std::size_t N; // Matrix dimensions in DGEMM sense
         const std::size_t M;
         const std::size_t K;
         const std::size_t tilesize;
-        Flow<tripleT, Matrix> out;
     public:
         BroadcastA(std::size_t N, std::size_t M, std::size_t K, std::size_t tilesize,
                    Flow<pairT,Matrix> in, Flow<tripleT,Matrix> out)
-            : baseT(make_flows(in), Flows<pairT>(), "broadcastA")
+            : baseT(make_flows(in), make_flows(out), "broadcastA")
             , N(N)
             , M(M)
             , K(K)
             , tilesize(tilesize)
-            , out(out)
         {}
 
-        void op(const pairT& ik, const Matrix& Aik, Flows<pairT> junk) {
+        void op(const pairT& ik, const Matrix& Aik, Flows<Flow<tripleT,Matrix>>& out) {
             std::size_t i=ik.first, k=ik.second;
             std::vector<tripleT> ijk;
             for (std::size_t j=0; j<M; j+=tilesize) ijk.push_back({i,j,k});
-            out.broadcast(ijk, Aik);
+            out.broadcast<0>(ijk, Aik);
         }
     } broadcastA;
         
-    // Ditto
-    class BroadcastB : public Op<pairT, Flows<pairT,Matrix>, Flows<pairT>, BroadcastB> {
-        using baseT = Op<pairT, Flows<pairT,Matrix>, Flows<pairT>, BroadcastB>;
+    class BroadcastB : public Op<InFlows<pairT,Matrix>, Flows<Flow<tripleT,Matrix>>, BroadcastB> {
+        using baseT = Op<InFlows<pairT,Matrix>, Flows<Flow<tripleT,Matrix>>, BroadcastB>;
         const std::size_t N; // Matrix dimensions in DGEMM sense
         const std::size_t M;
         const std::size_t K;
         const std::size_t tilesize;
-        Flow<tripleT, Matrix> out;
     public:
         BroadcastB(std::size_t N, std::size_t M, std::size_t K, std::size_t tilesize,
                    Flow<pairT,Matrix> in, Flow<tripleT,Matrix> out)
-            : baseT(make_flows(in), Flows<pairT>(), "broadcastB")
+            : baseT(make_flows(in), make_flows(out), "broadcastB")
             , N(N)
             , M(M)
             , K(K)
             , tilesize(tilesize)
-            , out(out)
         {}
 
-        void op(const pairT& kj, const Matrix& Bkj, Flows<pairT> junk) {
+        void op(const pairT& kj, const Matrix& Bkj, Flows<Flow<tripleT,Matrix>>& out) {
             std::size_t k=kj.first, j=kj.second;
             std::vector<tripleT> ijk;
             for (std::size_t i=0; i<N; i+=tilesize) ijk.push_back({i,j,k});
-            out.broadcast(ijk, Bkj);
+            out.broadcast<0>(ijk, Bkj);
         }
     } broadcastB;
 
-    class MxMTask : public Op<tripleT, Flows<tripleT,Matrix,Matrix>, Flows<tripleT,Matrix>, MxMTask> {
-        using baseT = Op<tripleT, Flows<tripleT,Matrix,Matrix>, Flows<tripleT,Matrix>, MxMTask>;
+    class MxMTask : public Op<InFlows<tripleT,Matrix,Matrix>, Flows<Flow<tripleT,Matrix>>, MxMTask> {
+        using baseT = Op<InFlows<tripleT,Matrix,Matrix>, Flows<Flow<tripleT,Matrix>>, MxMTask>;
         const std::size_t N; // Matrix dimensions in DGEMM sense
         const std::size_t M;
         const std::size_t K;
@@ -244,19 +236,18 @@ class MxM {
             , tilesize(tilesize)
         {}
             
-        void op(const tripleT& ijk, const Matrix& Aik, const Matrix& Bkj, Flows<tripleT,Matrix>& Cijreduce) {
+        void op(const tripleT& ijk, const Matrix& Aik, const Matrix& Bkj, Flows<Flow<tripleT,Matrix>>& Cijreduce) {
             Cijreduce.send<0>(ijk, mxm_ref(Aik, Bkj));
         }
     } mxmtask;
 
-    // Simple reduction for testing .. again input and output have different types
-    class Reduce : public Op<tripleT, Flows<tripleT,Matrix,Matrix>, Flows<tripleT,Matrix>, Reduce> {
-        using baseT = Op<tripleT, Flows<tripleT,Matrix,Matrix>, Flows<tripleT,Matrix>, Reduce>;
+    // Simple reduction for testing
+    class Reduce : public Op<InFlows<tripleT,Matrix,Matrix>, Flows<Flow<tripleT,Matrix>,Flow<pairT,Matrix>>, Reduce> {
+        using baseT = Op<InFlows<tripleT,Matrix,Matrix>, Flows<Flow<tripleT,Matrix>,Flow<pairT,Matrix>>, Reduce>;
         const std::size_t N; // Matrix dimensions in DGEMM sense
         const std::size_t M;
         const std::size_t K;
         const std::size_t tilesize;
-        Flow<pairT,Matrix> result;
     public:
         Reduce(std::size_t N, std::size_t M, std::size_t K, std::size_t tilesize,
                Flow<tripleT,Matrix> Cijreduce, Flow<pairT,Matrix> result)
@@ -265,10 +256,9 @@ class MxM {
             , M(M)
             , K(K)
             , tilesize(tilesize)
-            , result(result)
         {
             Flow <tripleT,Matrix> sumflow;
-            this->connect({Cijreduce,sumflow},{sumflow});
+            this->connect({Cijreduce,sumflow},{sumflow,result});
 
             // prime the accumulator
             std::vector<tripleT> ijk;
@@ -281,15 +271,15 @@ class MxM {
             sumflow.broadcast(ijk,zero);
         }
 
-        void op(tripleT ijk, const Matrix& Cij, const Matrix& sum, Flows<tripleT,Matrix>& sumflow) {
+        void op(tripleT ijk, const Matrix& Cij, const Matrix& sum, Flows<Flow<tripleT,Matrix>, Flow<pairT,Matrix>>& out) {
             std::size_t i=ijk.first, j=ijk.second, k=ijk.third;
             Matrix total = sum + Cij;
             std::size_t nextk = k+tilesize;
             if (nextk < K) {
-                sumflow.send<0>({i,j,nextk}, total);
+                out.send<0>(tripleT{i,j,nextk}, total);
             }
             else {
-                result.send({i,j}, total);
+                out.send<1>(pairT{i,j}, total);
             }
         }
     } reduce;
@@ -312,18 +302,18 @@ public:
 };
 
 // Incoming tiles are written to memory
-class Writer : public Op<pairT,Flows<pairT,Matrix>,Flows<pairT>,Writer> {
-    using baseT = Op<pairT,Flows<pairT,Matrix>,Flows<pairT>,Writer>;
+class Writer : public Op<InFlows<pairT,Matrix>,Flows<>,Writer> {
+    using baseT = Op<InFlows<pairT,Matrix>,Flows<>,Writer>;
     Matrix& A; // Ugh, but will do for testing
     std::size_t tilesize;
 public:
     Writer(Flow<pairT,Matrix> in, Matrix& A, std::size_t tilesize)
-        : baseT(make_flows(in), Flows<pairT>(), "writer")
+        : baseT(make_flows(in), Flows<>(), "writer")
         , A(A)
         , tilesize(tilesize)
     {}
 
-    void op(const pairT ij, const Matrix& patch, Flows<pairT> junk) {
+    void op(const pairT ij, const Matrix& patch, Flows<> junk) {
         std::size_t ilo=ij.first, ihi=ilo+tilesize, jlo=ij.second, jhi=jlo+tilesize;
         A.set_patch(ilo,ihi,jlo,jhi,patch);
     }
