@@ -282,7 +282,11 @@ template <typename input_flowsT, typename output_flowsT, typename derivedT>
 class OpTuple : private BaseOp {
 public:
 
-    static_assert(input_flowsT::size() != 0, "OpTuple<input_flowsT,...> expects non-empty input_flowsT");
+    static_assert(input_flowsT::size() != 0,
+                  "OpTuple<input_flowsT,...> expects non-empty input_flowsT");
+    static_assert(detail::has_key_type<input_flowsT>::value,
+                  "OpTuple<input_flowsT,...> expects a set of input flows with matching key types");
+
     typedef typename input_flowsT::key_type input_key_type;
     typedef typename input_flowsT::values_tuple_type input_values_tuple_type;
     typedef output_flowsT output_type;
