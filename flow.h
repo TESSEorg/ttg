@@ -52,18 +52,14 @@
 // Flows< Flow<key0T,value0T>, ... > --- essentially a tuple of flows
 // that can have any type for their keys and values.  Can be used to
 // provide the output flows for an operation.  It can be empty; i.e.,
-// just Flows<> is permissible. If all of the keys have the same type
-// and it is not empty, a Flows is automatically convertible to
-// InFlows.  Provides send<i>/broadcast<i>/get<i>/all()/size()
-// methods.    Copy/assignment semantics???
+// just Flows<> is permissible. An important case of Flows is where
+// the constituent Flow types all share same key; then it defines
+// value_tuple_type and key_plus_value_tuple_type.
+// Provides send<i>/broadcast<i>/get<i>/all()/size() methods.
+// Copy/assignment semantics???
 //
-// InFlows<keyT, Flow<keyT,value0T>, ...> --- essentially a tuple of
-// flows that all share the same key type (keyT) but can have
-// different value types.  Cannot be empty since with no input
-// arguments a task cannot be triggered.  Provides get<i>/size()
-// methods and defines value_tuple_type and key_plus_value_tuple_type.
-// Copy/assignment semantics???  Also provides all() as a temporary
-// convenience.
+// InFlows --- a bundle of Flow's that all share same key type but can have
+// different value types. Just syntactic sugar.
 //
 // Op ---
 //
@@ -229,7 +225,7 @@ public:
     static constexpr std::size_t size() {return std::tuple_size<std::tuple<flowTs...>>::value;}
 };
 
-// An alias for Flows with same key type
+// FlowArray is an alias for Flows with same key type
 template <typename keyT, typename...valueTs>
 using InFlows = Flows<Flow<keyT,valueTs>...>;
 
@@ -281,7 +277,8 @@ bool BaseOp::trace = false;
 template <typename input_flowsT, typename output_flowsT, typename derivedT>
 class OpTuple : private BaseOp {
 public:
-   
+
+    static_assert(input_flowsT::size() != 0, "OpTuple<input_flowsT,...> expects non-empty input_flowsT");
     typedef typename input_flowsT::key_type input_key_type;
     typedef typename input_flowsT::values_tuple_type input_values_tuple_type;
     typedef output_flowsT output_type;
