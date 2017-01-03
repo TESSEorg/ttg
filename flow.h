@@ -227,7 +227,11 @@ public:
 
 // FlowArray is an alias for Flows with same key type
 template <typename keyT, typename...valueTs>
-using InFlows = Flows<Flow<keyT,valueTs>...>;
+using FlowArray = Flows<Flow<keyT,valueTs>...>;
+
+// InFlows is the old name for FlowArray
+template <typename keyT, typename...valueTs>
+using InFlows = FlowArray<keyT,valueTs...>;
 
 // Factory function occasionally needed where type deduction fails 
 template <typename...flowsT>
