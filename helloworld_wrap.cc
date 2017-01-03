@@ -17,8 +17,8 @@ int main() {
     Flow<double,std::string> pipe;
     Flows<> nothing;
 
-    auto hello = make_wrapper(&h, make_inflows(control), make_flows(pipe), "hello");
-    auto world = make_wrapper(&w, make_inflows(pipe), nothing, "world");
+    auto hello = make_wrapper(&h, make_flows(control), make_flows(pipe), "hello");
+    auto world = make_wrapper(&w, make_flows(pipe), nothing, "world");
 
     control.send(0,"");
 

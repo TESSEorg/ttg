@@ -99,7 +99,7 @@ class Printer : public Op<InFlows<keyT,valueT>, Flows<>, Printer<keyT,valueT>> {
     using baseT = Op<InFlows<keyT,valueT>, Flows<>, Printer<keyT,valueT>>;
     const std::string str;
 public:
-    explicit Printer(Flow<keyT,valueT> in, const char* str="") : baseT(make_inflows(in), Flows<>(), "printer"), str(str) {}
+    explicit Printer(Flow<keyT,valueT> in, const char* str="") : baseT(make_flows(in), Flows<>(), "printer"), str(str) {}
     
     explicit Printer(InFlows<keyT,valueT> in) : baseT(in,Flows<>()) {}
 
@@ -305,7 +305,7 @@ class Norm2 : public Op<InFlows<Key,Node>,Flows<>, Norm2> {
     using baseT = Op<InFlows<Key,Node>,Flows<>, Norm2>;
     double sumsq;
 public:
-    Norm2(Flow<Key,Node> in) : baseT(make_inflows(in),Flows<>(), "norm2"), sumsq(0.0) {}
+    Norm2(Flow<Key,Node> in) : baseT(make_flows(in),Flows<>(), "norm2"), sumsq(0.0) {}
 
     // Lazy implementation of reduce operation ... just accumulates to local variable instead of summing up tree
     void op(const Key& key, const Node& node, baseT::output_type& output) {

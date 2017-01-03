@@ -126,17 +126,78 @@ Flow<keyT,valueT> clone(Flow<keyT,valueT>& inflow) {
     return outflow;
 }
 
+// machinery to help define key_type in Flows when possible
+namespace detail {
+struct dont_define_key_typedefs {};
 
-// An ordered tuple of flows with arbitrary key and value types.  Can
+template <typename keyT, typename...valueTs>
+struct do_define_key_typedefs {
+  typedef keyT key_type;
+  typedef std::tuple<keyT, valueTs...> key_plus_output_tuple_type;
+};
+
+struct invalid_key_type {};
+
+template <typename...>
+struct key_type {
+  typedef invalid_key_type type;
+};
+
+template <typename flowT>
+struct key_type<flowT> {
+  typedef typename flowT::key_type type;
+};
+
+template <typename flowT, typename... flowTs>
+struct key_type<flowT, flowTs...> : public key_type<flowTs...> {
+  typedef key_type<flowTs...> baseT;
+
+  typedef typename std::conditional<
+      std::is_same<typename key_type<flowT>::type,
+                   typename baseT::type>::value,
+      typename baseT::type, invalid_key_type>::type type;
+};
+
+template <typename T>
+struct value_type {
+  typedef typename T::value_type type;
+};
+
+template <typename... flowTs>
+struct flows_typedefs
+    : public std::conditional<
+          std::is_same<typename key_type<flowTs...>::type,
+                       invalid_key_type>::value,
+          dont_define_key_typedefs,
+          do_define_key_typedefs<
+              typename key_type<flowTs...>::type,
+              typename detail::value_type<flowTs>::type...>>::type {
+  typedef std::tuple<typename detail::value_type<flowTs>::type...>
+      values_tuple_type;
+};
+
+/// trait to determine if T has key_type
+template<class T>
+class has_key_type {
+    /// true case
+    template<class U>
+    static std::true_type __test(typename U::key_type*);
+    /// false case
+    template<class >
+    static std::false_type __test(...);
+  public:
+    static constexpr const bool value = std::is_same<std::true_type,
+        decltype(__test<T>(0))>::value;
+};
+
+}  // namespace detail
+
+// An tuple of flows, each of which has arbitrary key and value types.  Can
 // be empty.
 template <typename...flowTs>
-class Flows {
+class Flows : public detail::flows_typedefs<flowTs...> {
     std::tuple<flowTs...> t;
 public:
-    //typedef keyT key_type;
-    //typedef std::tuple<Ts...> output_tuple_type;
-    //typedef std::tuple<keyT, Ts...> key_plus_output_tuple_type;
-    
     Flows() : t() {}
 
     template <typename...argsT>
@@ -168,49 +229,13 @@ public:
     static constexpr std::size_t size() {return std::tuple_size<std::tuple<flowTs...>>::value;}
 };
 
-
-// An ordered tuple of flows all sharing a common key used to
-// represent the input arguments of an operation.
+// An alias for Flows with same key type
 template <typename keyT, typename...valueTs>
-class InFlows {
-    std::tuple<Flow<keyT,valueTs>...> t;
-public:
-    typedef keyT key_type;
-    typedef std::tuple<valueTs...> values_tuple_type;
-    typedef std::tuple<keyT, valueTs...> key_plus_values_tuple_type;
-    
-    InFlows() : t() {}
-
-    template <typename...argsT>
-    InFlows(const Flow<keyT,argsT>&... args) : t(args...) {}
-    
-    template <typename...argsT>
-    InFlows(const std::tuple<Flow<keyT,argsT>...>& t) : t(t) {}
-
-    template <typename...argsT>
-    InFlows(const Flows<Flow<keyT,argsT>...>& t) : t(t.all()) {}
-    
-    // Gets the i'th flow
-    template <std::size_t i>
-    auto & get() {return std::get<i>(t);}
-
-    // Returns a tuple containing all flows.
-    auto & all() {return t;}
-
-    // Returns the number of flows
-    static constexpr std::size_t size() {return std::tuple_size<values_tuple_type>::value;}
-};
-
+using InFlows = Flows<Flow<keyT,valueTs>...>;
 
 // Factory function occasionally needed where type deduction fails 
 template <typename...flowsT>
 auto make_flows(flowsT...args) {return Flows<flowsT...>(args...);}
-
-
-// Factory function occasionally needed where type deduction fails 
-template <typename keyT, typename...valuesT>
-auto make_inflows(const Flow<keyT,valuesT>&...args) {return InFlows<keyT, valuesT...>(args...);}
-
 
 // Data/functionality common to all Ops
 class BaseOp {

@@ -9,7 +9,7 @@ class Hello : public OpTuple<InFlows<int,std::string>, Flows<Flow<double,std::st
  public:
 
     Hello(Flow<int,std::string> ctl, Flow<double,std::string> pipe)
-        : baseT(make_inflows(ctl), make_flows(pipe), "hello") {}
+        : baseT(make_flows(ctl), make_flows(pipe), "hello") {}
 
     void op(int index, const baseT::input_values_tuple_type& args, baseT::output_type& out) {
         out.send<0>(double(index), std::get<0>(args)+"hello");
@@ -24,7 +24,7 @@ class World : public OpTuple<InFlows<double,std::string>, Nothing, World> {
  public:
 
     World(Flow<double,std::string> pipe)
-        : baseT(make_inflows(pipe), Nothing(), "world") {}
+        : baseT(make_flows(pipe), Nothing(), "world") {}
 
     void op(double index, const baseT::input_values_tuple_type& args, baseT::output_type& out) {
         std::cout << std::get<0>(args) << " world!" << std::endl;
