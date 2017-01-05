@@ -11,14 +11,26 @@ void w(double index, const std::tuple<std::string>& args, Flows<>& out) {
     std::cout << std::get<0>(args) << " world!" << std::endl;
 }
 
+void h2(int index, const std::string& args, Flows<Flow<double,std::string>>& out) {
+    out.send<0>(double(index), args+"hello");
+}
+
+void w2(double index, const std::string& args, Flows<>& out) {
+    std::cout << args << " world2!" << std::endl;
+}
+
+
 int main() {
     BaseOp::set_trace(true);
     Flow<int,std::string> control;
-    Flow<double,std::string> pipe;
+    Flow<double,std::string> pipe, pipe2;
     Flows<> nothing;
 
-    auto hello = make_wrapper(&h, make_flows(control), make_flows(pipe), "hello");
-    auto world = make_wrapper(&w, make_flows(pipe), nothing, "world");
+    auto hello = make_optuple_wrapper(&h, make_flows(control), make_flows(pipe), "hello");
+    auto world = make_optuple_wrapper(&w, make_flows(pipe), nothing, "world");
+
+    auto hello2 = make_op_wrapper(&h2, make_flows(control), make_flows(pipe2), "hello");
+    auto world2 = make_op_wrapper(&w2, make_flows(pipe), nothing, "world");
 
     control.send(0,"");
 

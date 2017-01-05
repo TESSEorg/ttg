@@ -121,7 +121,7 @@ public:
 //
 // Relies on the input flow providing add_callback()
 template <typename keyT, typename valueT>
-Flow<keyT,valueT> clone(Flow<keyT,valueT>& inflow) {
+Flow<keyT,valueT> clone(const Flow<keyT,valueT>& inflow) {
     Flow<keyT,valueT> outflow;
     inflow.add_callback([outflow](const keyT& key, const valueT& value){const_cast<Flow<keyT,valueT>*>(&outflow)->send(key,value);});
     return outflow;
@@ -382,7 +382,7 @@ public:
                                  std::make_index_sequence<std::tuple_size<std::tuple<input_valuesT...>>::value>{});
     }
 
-    OpTuple (OpTuple&& other) = default; // Primarily to enable returning a value assuming RVO via move so don't actually make a new copy
+    //OpTuple (OpTuple&& other) = default; // Primarily to enable returning a value assuming RVO via move so don't actually make a new copy
 
     // Connects an incompletely constructed operation to its input and output flows
     void connect(const input_flowsT& inputs, const output_flowsT& outputs) {
@@ -454,13 +454,13 @@ public:
 // void op(const input_keyT&, const std::tuple<valuesT...>&, outputT&)
 //
 template <typename funcT, typename input_flowsT, typename output_flowsT>
-class WrapOp : public OpTuple<input_flowsT, output_flowsT, WrapOp<funcT,input_flowsT,output_flowsT>> {
-    using baseT = OpTuple<input_flowsT, output_flowsT, WrapOp<funcT,input_flowsT,output_flowsT>>;
+class WrapOpTuple : public OpTuple<input_flowsT, output_flowsT, WrapOpTuple<funcT,input_flowsT,output_flowsT>> {
+    using baseT = OpTuple<input_flowsT, output_flowsT, WrapOpTuple<funcT,input_flowsT,output_flowsT>>;
 
     funcT func;
 
  public:
-    WrapOp(const funcT& func, const input_flowsT& inflows, const output_flowsT& outflows, const std::string& name = "wrapper")
+    WrapOpTuple(const funcT& func, const input_flowsT& inflows, const output_flowsT& outflows, const std::string& name = "wrapper")
         : baseT(inflows,outflows,name)
         , func(func)
     {}
@@ -473,12 +473,62 @@ class WrapOp : public OpTuple<input_flowsT, output_flowsT, WrapOp<funcT,input_fl
 // Wrap a callable with signature
 //
 // void op(const input_keyT&, const std::tuple<input_valuesT...>&, outputT&);
-//
-// Mmmm ... apparently 
 template <typename funcT, typename input_flowsT, typename output_flowsT>
-auto make_wrapper(const funcT& func, const input_flowsT& inputs, const output_flowsT& outputs, const std::string& name="wrapper") {
-    return WrapOp<funcT, input_flowsT, output_flowsT>(func, inputs, outputs, name);
+auto make_optuple_wrapper(const funcT& func, const input_flowsT& inputs, const output_flowsT& outputs, const std::string& name="wrapper") {
+    return WrapOpTuple<funcT, input_flowsT, output_flowsT>(func, inputs, outputs, name);
 }
+
+// Class to wrap a callable with signature
+//
+// void op(const input_keyT&, const valuesT& ..., outputT&)
+template <typename funcT, typename input_keyT, typename output_flowsT, typename...input_valuesT>
+class WrapOp : public Op<InFlows<input_keyT,input_valuesT...>, output_flowsT, WrapOp<funcT,input_keyT,output_flowsT,input_valuesT...>> {
+    using baseT = Op<InFlows<input_keyT,input_valuesT...>, output_flowsT, WrapOp<funcT,input_keyT,output_flowsT,input_valuesT...>>;
+
+    funcT func;
+ public:
+    WrapOp(const funcT& func, const InFlows<input_keyT,input_valuesT...>& inflows, const output_flowsT& outflows, const std::string& name = "wrapper")
+        : baseT(inflows,outflows,name)
+        , func(func)
+    {}
+
+    // Deduction fails for this
+    // void op(const input_keyT& key, const input_valuesT& ... values, output_flowsT& out) {
+    //     func(key, values..., out);
+    // }
+
+    // So for a while go old school
+    template <typename value0T>
+    void op(const input_keyT& key, const value0T& value0, output_flowsT& out) {
+        func(key, value0, out);
+    }
+
+    // So for a while go old school
+    template <typename value0T, typename value1T>
+    void op(const input_keyT& key, const value0T& value0, const value1T& value1, output_flowsT& out) {
+        func(key, value0, value1, out);
+    }
+    
+    // So for a while go old school
+    template <typename value0T, typename value1T, typename value2T>
+    void op(const input_keyT& key, const value0T& value0, const value1T& value1, const value2T& value2, output_flowsT& out) {
+        func(key, value0, value1, value2, out);
+    }
+};
+
+// Wrap a callable convertible to an std::function with signature
+//
+// void op(const input_keyT&, const input_valuesT& ..., outputT&);
+template <typename funcT, typename input_keyT, typename output_flowsT, typename...input_valuesT>
+auto make_op_wrapper(const funcT& func,
+                  const InFlows<input_keyT, input_valuesT...>& inputs,
+                  const output_flowsT& outputs,
+                  const std::string& name="wrapper")
+{
+    return WrapOp<funcT, input_keyT, output_flowsT, input_valuesT...> (func, inputs, outputs, name);
+}
+
+
 
 
 #endif
