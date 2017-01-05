@@ -77,6 +77,10 @@
 // It necessarily has shallow copy semantics to ensure all copies
 // refer to the same underlying object, to ensure correct lifetime of
 // objects, and to make it easier to plug and play.
+//
+// Flow, as well as higher level constructs built out of it, like Flows (a tuple of Flow's)
+// and FlowArray, must meet a FlowBundle concept requirements to be usable
+// by Op facilities.
 template <typename keyT, typename valueT>
 class Flow {
     using callbackT = std::function<void(const keyT&, const valueT&)>;
@@ -89,7 +93,6 @@ class Flow {
 
 public:
 
-    typedef keyT key_type;
     typedef valueT value_type;
 
     Flow() : p(std::make_shared<FlowImpl>()) {}
@@ -102,16 +105,42 @@ public:
         p->callbacks.push_back(callback);
     }        
 
+    ///////////////////////////////////////////////////////////
+    // everything below is required by the FlowBundle concept
+
+    typedef keyT key_type;
+    typedef std::tuple<key_type, value_type> key_plus_output_tuple_type;
+    typedef std::tuple<value_type> values_tuple_type;
+
     // Send the given (key,value) into the flow
+    template <std::size_t i = 0>
     void send(const keyT& key, const valueT& value) {
+        static_assert(i == 0, "Flow::send<i> expects i=0");
         for (auto callback : p->callbacks) callback(key,value);
     }
 
     // Broadcast the given value to all keys
-    template <typename rangeT>
+    template <typename rangeT, std::size_t i = 0>
     void broadcast(const rangeT& keylist, const valueT& value) {
+        static_assert(i == 0, "Flow::broadcast<i> expects i=0");
         for (auto key : keylist) send(key,value);
     }
+
+    // Gets the i'th flow
+    template <std::size_t i = 0>
+    auto & get() {
+      static_assert(i == 0, "Flow::get<i> expects i=0");
+      return *this;
+    }
+
+    // Returns a tuple containing all flows.  Primarily used for unpacking using std::tie.
+    auto all() {return std::make_tuple(*this);}
+
+    // Returns a tuple containing all flows.  Primarily used for unpacking using std::tie.
+    const auto all() const {return std::make_tuple(*this);}
+
+    // Returns the number of flows
+    static constexpr std::size_t size() { return 1; }
 };
 
 
@@ -366,12 +395,12 @@ private:
 
         OpTupleImpl(const std::string& name) : name(name), outputs() {}
 
-        template <typename...input_valuesT>
-        OpTupleImpl(const InFlows<input_key_type,input_valuesT...>& inputs, const output_flowsT& outputs,  const std::string& name)
+        template <typename arg_input_flowsT>
+        OpTupleImpl(const arg_input_flowsT& inputs, const output_flowsT& outputs,  const std::string& name)
             : name(name), outputs(outputs)
         {
             register_input_callbacks(inputs.all(),
-                                     std::make_index_sequence<std::tuple_size<std::tuple<input_valuesT...>>::value>{});
+                                     std::make_index_sequence<std::tuple_size<typename arg_input_flowsT::values_tuple_type>::value>{});
         }
 
         // Destructor checks for unexecuted tasks
@@ -405,8 +434,8 @@ public:
 
     // Full constructor makes operation connected to both input and output flows
     // This format for the constructor forces the type constraint and automates some conversions.
-    template <typename...input_valuesT>
-    OpTuple(const InFlows<input_key_type,input_valuesT...>& inputs, const output_flowsT& outputs,
+    template <typename arg_input_flowsT>
+    OpTuple(const arg_input_flowsT& inputs, const output_flowsT& outputs,
             const std::string& name = std::string("unnamed tuple op"))
         : impl(new OpTupleImpl(inputs, outputs, name))
     {impl->owner = this;}
@@ -455,10 +484,13 @@ public:
     Op(const std::string& name = std::string("unamed arg op"))
         : opT(name) {}
 
-    template <typename...input_valuesT>
-    Op(const InFlows<input_key_type,input_valuesT...>& inputs, const output_flowsT& outputs,
+    template <typename arg_input_flowsT>
+    Op(const arg_input_flowsT& inputs, const output_flowsT& outputs,
        const std::string& name = std::string("unnamed arg op"))
-        : opT(inputs, outputs, name) {}
+        : opT(inputs, outputs, name) {
+      static_assert(std::is_same<typename arg_input_flowsT::key_type,input_key_type>::value,
+                    "Op::Op(inputs,outputs,name) received nonconforming inputs object");
+    }
 
     void op(const input_key_type& key, const input_values_tuple_type& t, output_type& output) {
         call_op_from_tuple(key, t, output, std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{});
@@ -498,13 +530,14 @@ auto make_optuple_wrapper(const funcT& func, const input_flowsT& inputs, const o
 // Class to wrap a callable with signature
 //
 // void op(const input_keyT&, const valuesT& ..., outputT&)
-template <typename funcT, typename input_keyT, typename output_flowsT, typename...input_valuesT>
-class WrapOp : public Op<InFlows<input_keyT,input_valuesT...>, output_flowsT, WrapOp<funcT,input_keyT,output_flowsT,input_valuesT...>> {
-    using baseT = Op<InFlows<input_keyT,input_valuesT...>, output_flowsT, WrapOp<funcT,input_keyT,output_flowsT,input_valuesT...>>;
+template <typename funcT, typename input_flowsT, typename output_flowsT>
+class WrapOp : public Op<input_flowsT, output_flowsT, WrapOp<funcT,input_flowsT,output_flowsT>> {
+    using baseT = Op<input_flowsT, output_flowsT, WrapOp<funcT,input_flowsT,output_flowsT>>;
+    using input_keyT = typename input_flowsT::key_type;
 
     funcT func;
  public:
-    WrapOp(const funcT& func, const InFlows<input_keyT,input_valuesT...>& inflows, const output_flowsT& outflows, const std::string& name = "wrapper")
+    WrapOp(const funcT& func, const input_flowsT& inflows, const output_flowsT& outflows, const std::string& name = "wrapper")
         : baseT(inflows,outflows,name)
         , func(func)
     {}
@@ -536,13 +569,13 @@ class WrapOp : public Op<InFlows<input_keyT,input_valuesT...>, output_flowsT, Wr
 // Wrap a callable convertible to an std::function with signature
 //
 // void op(const input_keyT&, const input_valuesT& ..., outputT&);
-template <typename funcT, typename input_keyT, typename output_flowsT, typename...input_valuesT>
+template <typename funcT, typename input_flowsT, typename output_flowsT>
 auto make_op_wrapper(const funcT& func,
-                  const InFlows<input_keyT, input_valuesT...>& inputs,
+                  const input_flowsT& inputs,
                   const output_flowsT& outputs,
                   const std::string& name="wrapper")
 {
-    return WrapOp<funcT, input_keyT, output_flowsT, input_valuesT...> (func, inputs, outputs, name);
+    return WrapOp<funcT, input_flowsT, output_flowsT> (func, inputs, outputs, name);
 }
 
 
