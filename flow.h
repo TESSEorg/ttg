@@ -286,132 +286,149 @@ bool BaseOp::trace = false;
 // Flows<...>.
 //
 // input_flowsT must presently be InFlows<keyT,value0T,...>
-template <typename input_flowsT, typename output_flowsT, typename derivedT>
-class OpTuple : private BaseOp {
-public:
 
+template <typename input_flowsT, typename output_flowsT, typename derivedT>
+class OpTuple {
+public:
+    typedef typename input_flowsT::key_type input_key_type;
+    typedef typename input_flowsT::values_tuple_type input_values_tuple_type;
+    typedef output_flowsT output_type;
+    
+private:
+    static constexpr int numargs = input_flowsT::size(); // Number of arguments in the input flows
+    
     static_assert(input_flowsT::size() != 0,
                   "OpTuple<input_flowsT,...> expects non-empty input_flowsT");
     static_assert(detail::has_key_type<input_flowsT>::value,
                   "OpTuple<input_flowsT,...> expects a set of input flows with matching key types");
-
-    typedef typename input_flowsT::key_type input_key_type;
-    typedef typename input_flowsT::values_tuple_type input_values_tuple_type;
-    typedef output_flowsT output_type;
-
-private:
-    static constexpr int numargs = input_flowsT::size(); // Number of arguments in the input flows
-    output_flowsT outputs;
-    std::string name;  // mostly used for debugging output
-    
-    struct OpArgs{
-        int counter;            // Tracks the number of arguments set
-        std::array<bool,numargs> argset; // Tracks if a given arg is already set;
-        typename input_flowsT::values_tuple_type t; // The flow values
         
-        OpArgs() : counter(numargs), argset(), t() {}
+    struct OpTupleImpl : private BaseOp {
+        
+        struct OpArgs{
+            int counter;            // Tracks the number of arguments set
+            std::array<bool,numargs> argset; // Tracks if a given arg is already set;
+            typename input_flowsT::values_tuple_type t; // The flow values
+            
+            OpArgs() : counter(numargs), argset(), t() {}
+        };
+        
+        std::string name;  // mostly used for debugging output
+        output_flowsT outputs;
+        std::map<input_key_type,OpArgs> cache; // Contains tasks waiting for input to become complete
+        OpTuple<input_flowsT, output_flowsT, derivedT>* owner; // So can forward calls to derived class
+        
+        // Used in the callback from a flow to set i'th argument
+        template <typename valueT, std::size_t i>
+        void set_arg(const input_key_type& key, const valueT& value) {
+            // In parallel case we would be using a write accessor to a
+            // local concurrent container to obtain exclusive access to
+            // counter and to avoid race condition on first insert.
+            
+            // Lots of optimiatizations and scheduling strategies to
+            // insert here ... for now always shove things into the cache
+            // and execute when ready.
+            
+            if (tracing()) std::cout << name << " : " << key << ": setting argument : " << i << std::endl;
+            
+            OpArgs& args = cache[key];
+            
+            if (args.argset[i]) {
+                std::cerr << name << " : " << key << ": error argument is already set : " << i << std::endl;
+                throw "bad set arg";
+            }
+            
+            args.argset[i] = true;        
+            
+            std::get<i>(args.t) = value;
+            args.counter--;
+            if (args.counter == 0) {
+                if (tracing()) std::cout << name << " : " << key << ": invoking op " << std::endl;
+                static_cast<derivedT*>(owner)->op(key, args.t, outputs);
+                cache.erase(key);
+            }
+        }
+        
+        // Registers the callback for the i'th input flow
+        template <typename flowT, std::size_t i>
+        void register_input_callback(const flowT& input) {
+            using callbackT = std::function<void(const input_key_type&, const typename flowT::value_type&)>;
+            
+            if (tracing()) std::cout << name << " : registering callback for argument : " << i << std::endl;
+            
+            auto callback = [this](const input_key_type& key, const typename flowT::value_type& value){set_arg<typename flowT::value_type,i>(key,value);};
+            input.add_callback(callbackT(callback));
+        }
+        
+        template<typename Tuple, std::size_t...IS>
+        void register_input_callbacks(const Tuple& inputs, std::index_sequence<IS...>) {
+            int junk[] = {0,(register_input_callback<typename std::tuple_element<IS,Tuple>::type, IS>(std::get<IS>(inputs)),0)...}; junk[0]++;
+        }
+
+        OpTupleImpl(const std::string& name) : name(name), outputs() {}
+
+        template <typename...input_valuesT>
+        OpTupleImpl(const InFlows<input_key_type,input_valuesT...>& inputs, const output_flowsT& outputs,  const std::string& name)
+            : name(name), outputs(outputs)
+        {
+            register_input_callbacks(inputs.all(),
+                                     std::make_index_sequence<std::tuple_size<std::tuple<input_valuesT...>>::value>{});
+        }
+
+        // Destructor checks for unexecuted tasks
+        ~OpTupleImpl() {
+            if (cache.size() != 0) {
+                std::cerr << "warning: unprocessed tasks in destructor of operation '" << name << "'" << std::endl;
+                std::cerr << "   T => argument assigned     F => argument unassigned" << std::endl;
+                int nprint=0;
+                for (auto item : cache) {
+                    if (nprint++ > 10) {
+                        std::cerr << "   etc." << std::endl;
+                        break;
+                    }
+                    std::cerr << "   unused: " << item.first << " : ( ";
+                    for (std::size_t i=0; i<numargs; i++) std::cerr << (item.second.argset[i] ? "T" : "F") << " ";
+                    std::cerr << ")" << std::endl;
+                }
+            }
+        }
     };
-    
-    std::map<input_key_type,OpArgs> cache; // Contains tasks waiting for input to become complete
 
-    // Used in the callback from a flow to set i'th argument
-    template <typename valueT, std::size_t i>
-    void set_arg(const input_key_type& key, const valueT& value) {
-        // In parallel case we would be using a write accessor to a
-        // local concurrent container to obtain exclusive access to
-        // counter and to avoid race condition on first insert.
-
-        // Lots of optimiatizations and scheduling strategies to
-        // insert here ... for now always shove things into the cache
-        // and execute when ready.
-
-        if (tracing()) std::cout << name << " : " << key << ": setting argument : " << i << std::endl;
-
-        OpArgs& args = cache[key];
-
-        if (args.argset[i]) {
-            std::cerr << name << " : " << key << ": error argument is already set : " << i << std::endl;
-            throw "bad set arg";
-        }
-
-        args.argset[i] = true;        
+    std::unique_ptr<OpTupleImpl> impl;
         
-        std::get<i>(args.t) = value;
-        args.counter--;
-        if (args.counter == 0) {
-            if (tracing()) std::cout << name << " : " << key << ": invoking op " << std::endl;
-            static_cast<derivedT*>(this)->op(key, args.t, outputs);
-            cache.erase(key);
-        }
-    }
-    
-    // Registers the callback for the i'th input flow
-    template <typename flowT, std::size_t i>
-    void register_input_callback(const flowT& input) {
-        using callbackT = std::function<void(const input_key_type&, const typename flowT::value_type&)>;
-
-        if (tracing()) std::cout << name << " : registering callback for argument : " << i << std::endl;
-
-        auto callback = [this](const input_key_type& key, const typename flowT::value_type& value){set_arg<typename flowT::value_type,i>(key,value);};
-        input.add_callback(callbackT(callback));
-    }
-
-    template<typename Tuple, std::size_t...IS>
-    void register_input_callbacks(const Tuple& inputs, std::index_sequence<IS...>) {
-        int junk[] = {0,(register_input_callback<typename std::tuple_element<IS,Tuple>::type, IS>(std::get<IS>(inputs)),0)...}; junk[0]++;
-    }
-
     OpTuple(const OpTuple& other) = delete;
-
+        
     OpTuple& operator=(const OpTuple& other) = delete;
 
 public:
-
     // Default constructor makes operation that still needs to be connected to input and output flows
-    OpTuple(const std::string& name = std::string("unnamed op")) : outputs(), name(name) {}
+    OpTuple(const std::string& name = std::string("unnamed op")) : impl(new OpTupleImpl(name)) {impl->owner= this;}
 
     // Full constructor makes operation connected to both input and output flows
     // This format for the constructor forces the type constraint and automates some conversions.
     template <typename...input_valuesT>
     OpTuple(const InFlows<input_key_type,input_valuesT...>& inputs, const output_flowsT& outputs,
-       const std::string& name = std::string("unnamed tuple op"))
-        : outputs(outputs)
-        , name(name)
-    {
-        register_input_callbacks(inputs.all(),
-                                 std::make_index_sequence<std::tuple_size<std::tuple<input_valuesT...>>::value>{});
-    }
+            const std::string& name = std::string("unnamed tuple op"))
+        : impl(new OpTupleImpl(inputs, outputs, name))
+    {impl->owner = this;}
 
-    //OpTuple (OpTuple&& other) = default; // Primarily to enable returning a value assuming RVO via move so don't actually make a new copy
-
-    // Connects an incompletely constructed operation to its input and output flows
-    void connect(const input_flowsT& inputs, const output_flowsT& outputs) {
-        this->outputs = outputs;
-        register_input_callbacks(inputs.all(),
-                                 std::make_index_sequence<std::tuple_size<typename input_flowsT::values_tuple_type>::value>{});
-    }        
-   
-    // Destructor checks for unexecuted tasks
-    ~OpTuple() {
-        if (cache.size() != 0) {
-            std::cerr << "warning: unprocessed tasks in destructor of operation '" << name << "'" << std::endl;
-            std::cerr << "   T => argument assigned     F => argument unassigned" << std::endl;
-            int nprint=0;
-            for (auto item : cache) {
-                if (nprint++ > 10) {
-                    std::cerr << "   etc." << std::endl;
-                    break;
-                }
-                std::cerr << "   unused: " << item.first << " : ( ";
-                for (std::size_t i=0; i<numargs; i++) std::cerr << (item.second.argset[i] ? "T" : "F") << " ";
-                std::cerr << ")" << std::endl;
-            }
+    OpTuple (OpTuple&& other) {
+        if (this != &other) {
+            impl.reset();
+            std::swap(impl,other.impl);
+            impl->owner= this;
         }
     }
 
-    void set_name(const std::string& name) {this->name = name;}
+    // Connects an incompletely constructed operation to its input and output flows
+    void connect(const input_flowsT& inputs, const output_flowsT& outputs) {
+        impl->outputs = outputs;
+        impl->register_input_callbacks(inputs.all(),
+                                       std::make_index_sequence<std::tuple_size<typename input_flowsT::values_tuple_type>::value>{});
+    }        
+   
+    void set_name(const std::string& name) {impl->name = name;}
 
-    const std::string& get_name() const {return name;}
+    const std::string& get_name() const {return impl->name;}
 };
 
 
