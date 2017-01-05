@@ -27,6 +27,8 @@ target_link_libraries(helloworld_wrap LINK_PUBLIC flow)
 # tree algorithms
 add_executable (t9 t9.cc)
 target_link_libraries(t9 LINK_PUBLIC flow)
+add_executable (t9-wrap t9-wrap.cc)
+target_link_libraries(t9-wrap LINK_PUBLIC flow)
 
 # dense summa
 add_executable (mxm_simple_suma mxm_simple_suma.cc)
