@@ -40,8 +40,8 @@ operator<<(std::ostream& os, const Key<Rank>& key) {
 }
 
 struct Control {};
-using ControlFlow = FlowArray<Key<0>, Control>;
-using SpMatrixFlow = FlowArray<Key<2>,blk_t>;
+using ControlFlow = Flow<Key<0>, Control>;
+using SpMatrixFlow = Flow<Key<2>,blk_t>;
 
 // flow data from existing data structure
 class Flow_From_SpMatrix : public Op<ControlFlow, SpMatrixFlow, Flow_From_SpMatrix> {
@@ -166,7 +166,7 @@ class SpMM {
         }
       }
     void op(const Key<3>& key, const blk_t& a_ijk, const blk_t& b_ijk, const blk_t& c_ijk,
-            FlowArray<Key<2>,blk_t> result) {
+            SpMatrixFlow result) {
       const auto i = key[0];
       const auto j = key[1];
       const auto k = key[2];
