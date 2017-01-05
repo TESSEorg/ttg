@@ -1,11 +1,23 @@
 #include <array>
 #include <iostream>
 #include <vector>
+#include <chrono>
+#include <thread>
 
 #include <Eigen/SparseCore>
 
 using blk_t = double;  // replace with btas::Tensor to have a block-sparse matrix
 using SpMatrix = Eigen::SparseMatrix<blk_t>;
+
+template<typename _Scalar, int _Options, typename _StorageIndex>
+struct colmajor_layout;
+template<typename _Scalar, typename _StorageIndex>
+struct colmajor_layout<_Scalar, Eigen::ColMajor, _StorageIndex> : public std::true_type {
+};
+template<typename _Scalar, typename _StorageIndex>
+struct colmajor_layout<_Scalar, Eigen::RowMajor, _StorageIndex> : public std::false_type {
+};
+
 
 #include <flow.h>
 
@@ -28,14 +40,13 @@ operator<<(std::ostream& os, const Key<Rank>& key) {
 }
 
 struct Control {};
-using ControlFlow = Flows<Key<0>, Control>;
-using SpMatrixFlow = Flows<Key<2>,blk_t>;
+using ControlFlow = FlowArray<Key<0>, Control>;
+using SpMatrixFlow = FlowArray<Key<2>,blk_t>;
 
 // flow data from existing data structure
-// @todo extend Flow to fit the concept expected by Op (and satisfied by Flows), e.g. provide size()
-class Flow_From_SpMatrix : public Op<Key<0>, ControlFlow, SpMatrixFlow, Flow_From_SpMatrix> {
+class Flow_From_SpMatrix : public Op<ControlFlow, SpMatrixFlow, Flow_From_SpMatrix> {
  public:
-  using baseT = Op<Key<0>, ControlFlow, SpMatrixFlow, Flow_From_SpMatrix>;
+  using baseT = Op<ControlFlow, SpMatrixFlow, Flow_From_SpMatrix>;
   Flow_From_SpMatrix(const SpMatrix& matrix, SpMatrixFlow flow, ControlFlow ctl):
     baseT(ctl, flow, "spmatrix_to_flow"),
     matrix_(matrix) {}
@@ -52,9 +63,9 @@ class Flow_From_SpMatrix : public Op<Key<0>, ControlFlow, SpMatrixFlow, Flow_Fro
   SpMatrixFlow flow_;
 };
 // flow (move?) data into a data structure
-class Flow_To_SpMatrix : public Op<Key<2>, SpMatrixFlow, ControlFlow, Flow_To_SpMatrix> {
+class Flow_To_SpMatrix : public Op<SpMatrixFlow, ControlFlow, Flow_To_SpMatrix> {
  public:
-  using baseT = Op<Key<2>, SpMatrixFlow, ControlFlow, Flow_To_SpMatrix>;
+  using baseT = Op<SpMatrixFlow, ControlFlow, Flow_To_SpMatrix>;
 
   Flow_To_SpMatrix(SpMatrix& matrix, SpMatrixFlow flow, ControlFlow ctl):
     baseT(flow, ctl, "flow_to_spmatrix"),
@@ -70,88 +81,231 @@ class Flow_To_SpMatrix : public Op<Key<2>, SpMatrixFlow, ControlFlow, Flow_To_Sp
 // sparse mm
 class SpMM {
  public:
-  SpMM(SpMatrixFlow a, SpMatrixFlow b, SpMatrixFlow c) :
-    a_(a), b_(b), c_(c) {}
+  SpMM(SpMatrixFlow a, SpMatrixFlow b, SpMatrixFlow c,
+       const SpMatrix& a_mat, const SpMatrix& b_mat) :
+    a_(a), b_(b), c_(c), a_ijk_(), b_ijk_(), c_ijk_(),
+    a_rowidx_to_colidx_(make_rowidx_to_colidx(a_mat)),
+    b_colidx_to_rowidx_(make_colidx_to_rowidx(b_mat)),
+    bcast_a_(a, a_ijk_, make_rowidx_to_colidx(b_mat)),
+    bcast_b_(b, b_ijk_, make_colidx_to_rowidx(a_mat)),
+    mult_(a_ijk_, b_ijk_, c_ijk_, c, a_rowidx_to_colidx_, b_colidx_to_rowidx_)
+ {
+ }
 
   /// broadcast A[i][k] to all {i,j,k} such that B[j][k] exists
-  class BcastA : public Op<Key<2>, SpMatrixFlow, Flows<Key<3>,blk_t>, BcastA> {
+  class BcastA : public Op<SpMatrixFlow, FlowArray<Key<3>,blk_t>, BcastA> {
    public:
-    using baseT = Op<Key<2>, SpMatrixFlow, Flows<Key<3>,blk_t>, BcastA>;
-    BcastA(SpMatrixFlow a, Flows<Key<3>,blk_t> a_repl, const std::vector<std::vector<long>>& b_rowidx_to_colidx) :
-      baseT(a, a_repl,"SpMM::bcast_a"), b_rowidx_to_colidx_(b_rowidx_to_colidx) {}
-    void op(const Key<2>& key, const blk_t& a_ik, Flows<Key<3>,blk_t> bcast) {
+    using baseT = Op<SpMatrixFlow, FlowArray<Key<3>,blk_t>, BcastA>;
+    BcastA(SpMatrixFlow a, FlowArray<Key<3>,blk_t> a_ijk, std::vector<std::vector<long>>&& b_rowidx_to_colidx) :
+      baseT(a, a_ijk,"SpMM::bcast_a"), b_rowidx_to_colidx_(std::move(b_rowidx_to_colidx)) {}
+    void op(const Key<2>& key, const blk_t& a_ik, FlowArray<Key<3>,blk_t> a_ijk) {
       const auto i = key[0];
       const auto k = key[1];
       // broadcast a_ik to all existing {i,j,k}
       std::vector<Key<3>> ijk_keys;
-      for(auto& j: b_rowidx_to_colidx_[k])
+      for(auto& j: b_rowidx_to_colidx_[k]) {
+//        std::cout << "Broadcasting A[" << i << "][" << k << "] to j=" << j << std::endl;
         ijk_keys.emplace_back(Key<3>({i,j,k}));
-      bcast.broadcast<0>(ijk_keys, a_ik);
+      }
+      a_ijk.broadcast<0>(ijk_keys, a_ik);
     }
    private:
-    const std::vector<std::vector<long>>& b_rowidx_to_colidx_;
+    std::vector<std::vector<long>> b_rowidx_to_colidx_;
   };  // class BcastA
 
   /// broadcast B[k][j] to all {i,j,k} such that A[i][k] exists
-  class BcastB : public Op<Key<2>, SpMatrixFlow, Flows<Key<3>,blk_t>, BcastB> {
+  class BcastB : public Op<SpMatrixFlow, FlowArray<Key<3>,blk_t>, BcastB> {
    public:
-    using baseT = Op<Key<2>, SpMatrixFlow, Flows<Key<3>,blk_t>, BcastB>;
-    BcastB(SpMatrixFlow b, Flows<Key<3>,blk_t> b_repl, const std::vector<std::vector<long>>& a_colidx_to_rowidx) :
-      baseT(b, b_repl,"SpMM::bcast_b"), a_colidx_to_rowidx_(a_colidx_to_rowidx) {}
-    void op(const Key<2>& key, const blk_t& b_kj, Flows<Key<3>,blk_t> bcast) {
+    using baseT = Op<SpMatrixFlow, FlowArray<Key<3>,blk_t>, BcastB>;
+    BcastB(SpMatrixFlow b, FlowArray<Key<3>,blk_t> b_ijk, std::vector<std::vector<long>>&& a_colidx_to_rowidx) :
+      baseT(b, b_ijk,"SpMM::bcast_b"), a_colidx_to_rowidx_(std::move(a_colidx_to_rowidx)) {}
+    void op(const Key<2>& key, const blk_t& b_kj, FlowArray<Key<3>,blk_t> b_ijk) {
       const auto k = key[0];
       const auto j = key[1];
       // broadcast b_kj to *jk
       std::vector<Key<3>> ijk_keys;
-      for(auto& i: a_colidx_to_rowidx_[k])
+      for(auto& i: a_colidx_to_rowidx_[k]) {
+//        std::cout << "Broadcasting B[" << k << "][" << j << "] to i=" << i << std::endl;
         ijk_keys.emplace_back(Key<3>({i,j,k}));
-      bcast.broadcast<0>(ijk_keys, b_kj);
+      }
+      b_ijk.broadcast<0>(ijk_keys, b_kj);
     }
    private:
-    const std::vector<std::vector<long>>& a_colidx_to_rowidx_;
+    std::vector<std::vector<long>> a_colidx_to_rowidx_;
   };  // class BcastA
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
-  class Multiply : public Op<Key<3>, Flows<Key<3>,blk_t,blk_t,blk_t>, SpMatrixFlow, Multiply> {
+  class Multiply : public Op<FlowArray<Key<3>,blk_t,blk_t,blk_t>, SpMatrixFlow, Multiply> {
    public:
-    using baseT = Op<Key<3>, Flows<Key<3>,blk_t,blk_t,blk_t>, SpMatrixFlow, Multiply>;
-    Multiply(Flows<Key<3>,blk_t> a_ijk, Flows<Key<3>,blk_t> b_ijk,
-             Flows<Key<3>,blk_t> c_ijk,
-             SpMatrixFlow c) :
+    using baseT = Op<FlowArray<Key<3>,blk_t,blk_t,blk_t>, SpMatrixFlow, Multiply>;
+    Multiply(FlowArray<Key<3>,blk_t> a_ijk, FlowArray<Key<3>,blk_t> b_ijk,
+             FlowArray<Key<3>,blk_t> c_ijk,
+             SpMatrixFlow c,
+             const std::vector<std::vector<long>>& a_rowidx_to_colidx,
+             const std::vector<std::vector<long>>& b_colidx_to_rowidx) :
       baseT(make_flows(a_ijk.get<0>(),b_ijk.get<0>(),c_ijk.get<0>()), c, "SpMM::Multiply"),
-      c_ijk_(c_ijk)
+      c_ijk_(c_ijk), a_rowidx_to_colidx_(a_rowidx_to_colidx), b_colidx_to_rowidx_(b_colidx_to_rowidx)
       {
-      // for each i and j determine first k that contributes, initialize input {i,j,first_k} flow to 0
+        // for each i and j determine first k that contributes, initialize input {i,j,first_k} flow to 0
+        for(long i=0; i!=a_rowidx_to_colidx_.size(); ++i) {
+          if (a_rowidx_to_colidx_[i].empty()) continue;
+          for(long j=0; j!=b_colidx_to_rowidx_.size(); ++j) {
+            if (b_colidx_to_rowidx_[j].empty()) continue;
+
+            long k;
+            bool have_k;
+            std::tie(k,have_k) = compute_first_k(i,j);
+            if (have_k) {
+//              std::cout << "Initializing C[" << i << "][" << j << "] to zero" << std::endl;
+              c_ijk_.send<0>(Key<3>({i,j,k}),0);
+            }
+            else {
+//              std::cout << "C[" << i << "][" << j << "] is empty" << std::endl;
+            }
+          }
+        }
       }
     void op(const Key<3>& key, const blk_t& a_ijk, const blk_t& b_ijk, const blk_t& c_ijk,
-            Flows<Key<2>,blk_t> result) {
+            FlowArray<Key<2>,blk_t> result) {
       const auto i = key[0];
       const auto j = key[1];
       const auto k = key[2];
       long next_k;
       bool have_next_k;
       std::tie(next_k,have_next_k) = compute_next_k(i,j,k);
+//      std::cout << "Multiplying A[" << i << "][" << k << "] by B[" << k << "][" << j << "]" << std::endl;
+//      std::cout << "  next_k? " << (have_next_k ? std::to_string(next_k) : "does not exist") << std::endl;
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow
       if (have_next_k) {
-        // need Op::inputs()!
-        // N.B.initial c_ijk was zeroed out above
         c_ijk_.send<0>(Key<3>({i,j,next_k}),c_ijk + a_ijk * b_ijk);
       }
       else
         result.send<0>(Key<2>({i,j}), c_ijk + a_ijk * b_ijk);
     }
    private:
-    Flows<Key<3>,blk_t> c_ijk_;
+    FlowArray<Key<3>,blk_t> c_ijk_;
+    const std::vector<std::vector<long>>& a_rowidx_to_colidx_;
+    const std::vector<std::vector<long>>& b_colidx_to_rowidx_;
+
+    // given {i,j} return first k such that A[i][k] and B[k][j] exist
+    std::tuple<long,bool> compute_first_k(long i, long j) {
+      auto a_iter_fence = a_rowidx_to_colidx_[i].end();
+      auto a_iter = a_rowidx_to_colidx_[i].begin();
+      if (a_iter == a_iter_fence)
+        return std::make_tuple(-1,false);
+      auto b_iter_fence = b_colidx_to_rowidx_[j].end();
+      auto b_iter = b_colidx_to_rowidx_[j].begin();
+      if (b_iter == b_iter_fence)
+        return std::make_tuple(-1,false);
+
+      {
+        auto a_colidx = *a_iter;
+        auto b_rowidx = *b_iter;
+        while (a_colidx != b_rowidx) {
+          if (a_colidx < b_rowidx) {
+            ++a_iter;
+            if (a_iter == a_iter_fence)
+              return std::make_tuple(-1,false);
+            a_colidx = *a_iter;
+          }
+          else {
+            ++b_iter;
+            if (b_iter == b_iter_fence)
+              return std::make_tuple(-1,false);
+            b_rowidx = *b_iter;
+          }
+        }
+        return std::make_tuple(a_colidx,true);
+      }
+      assert(false);
+    }
+
+    // given {i,j,k} such that A[i][k] and B[k][j] exist
+    // return next k such that this condition holds
+    std::tuple<long,bool> compute_next_k(long i, long j, long k) {
+      auto a_iter_fence = a_rowidx_to_colidx_[i].end();
+      auto a_iter = std::find(a_rowidx_to_colidx_[i].begin(), a_iter_fence, k);
+      assert(a_iter != a_iter_fence);
+      auto b_iter_fence = b_colidx_to_rowidx_[j].end();
+      auto b_iter = std::find(b_colidx_to_rowidx_[j].begin(), b_iter_fence, k);
+      assert(b_iter != b_iter_fence);
+      while (a_iter != a_iter_fence && b_iter != b_iter_fence) {
+        ++a_iter;
+        ++b_iter;
+        if (a_iter == a_iter_fence || b_iter == b_iter_fence)
+          return std::make_tuple(-1,false);
+        auto a_colidx = *a_iter;
+        auto b_rowidx = *b_iter;
+        while (a_colidx != b_rowidx) {
+          if (a_colidx < b_rowidx) {
+            ++a_iter;
+            if (a_iter == a_iter_fence)
+              return std::make_tuple(-1,false);
+            a_colidx = *a_iter;
+          }
+          else {
+            ++b_iter;
+            if (b_iter == b_iter_fence)
+              return std::make_tuple(-1,false);
+            b_rowidx = *b_iter;
+          }
+        }
+        return std::make_tuple(a_colidx,true);
+      }
+    }
+
   };
 
  private:
   SpMatrixFlow a_;
   SpMatrixFlow b_;
   SpMatrixFlow c_;
+  FlowArray<Key<3>,blk_t> a_ijk_;
+  FlowArray<Key<3>,blk_t> b_ijk_;
+  FlowArray<Key<3>,blk_t> c_ijk_;
+  std::vector<std::vector<long>> a_rowidx_to_colidx_;
+  std::vector<std::vector<long>> b_colidx_to_rowidx_;
+  BcastA bcast_a_;
+  BcastB bcast_b_;
+  Multiply mult_;
+
+  // result[i][j] gives the j-th nonzero row for column i in matrix mat
+  std::vector<std::vector<long>> make_colidx_to_rowidx(const SpMatrix& mat) {
+    std::vector<std::vector<long>> colidx_to_rowidx;
+    for (int k=0; k<mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
+      for (SpMatrix::InnerIterator it(mat,k); it; ++it) {
+        auto row = it.row();
+        auto col = it.col();
+        if (col >= colidx_to_rowidx.size())
+          colidx_to_rowidx.resize(col+1);
+        // in either case (col- or row-major) row index increasing for the given col
+        colidx_to_rowidx[col].push_back(row);
+      }
+    }
+    return colidx_to_rowidx;
+  }
+  // result[i][j] gives the j-th nonzero column for row i in matrix mat
+  std::vector<std::vector<long>> make_rowidx_to_colidx(const SpMatrix& mat) {
+    std::vector<std::vector<long>> rowidx_to_colidx;
+    for (int k=0; k<mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
+      for (SpMatrix::InnerIterator it(mat,k); it; ++it) {
+        auto row = it.row();
+        auto col = it.col();
+        if (row >= rowidx_to_colidx.size())
+          rowidx_to_colidx.resize(row+1);
+        // in either case (col- or row-major) col index increasing for the given row
+        rowidx_to_colidx[row].push_back(col);
+      }
+    }
+    return rowidx_to_colidx;
+  }
+
 };
 
 int main(int argc, char* argv[]) {
+
+  BaseOp::set_trace(false);
 
   const int n = 2;
   const int m = 3;
@@ -189,10 +343,14 @@ int main(int argc, char* argv[]) {
   SpMatrix C(n,m);
   SpMatrixFlow C_flow;
   Flow_To_SpMatrix c(C, C_flow, ctl);
-  SpMM a_times_b(A_flow, B_flow, C_flow);
+  SpMM a_times_b(A_flow, B_flow, C_flow, A, B);
 
   // execute the flow
   ctl.send<0>(Key<0>(),Control());
+
+  // no way to check for completion yet
+  using namespace std::chrono_literals;
+  std::this_thread::sleep_for(2s);
 
   // validate against the reference output
   SpMatrix Cref = A * B;
