@@ -88,7 +88,7 @@ class SpMM {
     b_colidx_to_rowidx_(make_colidx_to_rowidx(b_mat)),
     bcast_a_(a, a_ijk_, make_rowidx_to_colidx(b_mat)),
     bcast_b_(b, b_ijk_, make_colidx_to_rowidx(a_mat)),
-    mult_(a_ijk_, b_ijk_, c_ijk_, c, a_rowidx_to_colidx_, b_colidx_to_rowidx_)
+    multiplyadd_(a_ijk_, b_ijk_, c_ijk_, c, a_rowidx_to_colidx_, b_colidx_to_rowidx_)
  {
  }
 
@@ -135,10 +135,10 @@ class SpMM {
   };  // class BcastA
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
-  class Multiply : public Op<FlowArray<Key<3>,blk_t,blk_t,blk_t>, SpMatrixFlow, Multiply> {
+  class MultiplyAdd : public Op<FlowArray<Key<3>,blk_t,blk_t,blk_t>, SpMatrixFlow, MultiplyAdd> {
    public:
-    using baseT = Op<FlowArray<Key<3>,blk_t,blk_t,blk_t>, SpMatrixFlow, Multiply>;
-    Multiply(FlowArray<Key<3>,blk_t> a_ijk, FlowArray<Key<3>,blk_t> b_ijk,
+    using baseT = Op<FlowArray<Key<3>,blk_t,blk_t,blk_t>, SpMatrixFlow, MultiplyAdd>;
+    MultiplyAdd(FlowArray<Key<3>,blk_t> a_ijk, FlowArray<Key<3>,blk_t> b_ijk,
              FlowArray<Key<3>,blk_t> c_ijk,
              SpMatrixFlow c,
              const std::vector<std::vector<long>>& a_rowidx_to_colidx,
@@ -268,7 +268,7 @@ class SpMM {
   std::vector<std::vector<long>> b_colidx_to_rowidx_;
   BcastA bcast_a_;
   BcastB bcast_b_;
-  Multiply mult_;
+  MultiplyAdd multiplyadd_;
 
   // result[i][j] gives the j-th nonzero row for column i in matrix mat
   std::vector<std::vector<long>> make_colidx_to_rowidx(const SpMatrix& mat) {
