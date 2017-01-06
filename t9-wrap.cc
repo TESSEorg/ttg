@@ -5,7 +5,7 @@
 // Same as t9.cc but using wrapper templates to get rid of most boilerplate template stuff
 
 const double L = 10.0; // The computational domain is [-L,L]
-const double thresh = 1e-2; // The threshold for small difference coefficients
+const double thresh = 1e-6; // The threshold for small difference coefficients
 
 void error(const char* s) {
     std::cerr << s << std::endl;
@@ -103,7 +103,7 @@ template <typename keyT, typename valueT>
 auto make_printer(const Flow<keyT,valueT>& in, const char* str="") {
     auto func = [str](const keyT& key, const valueT& value, Flows<>& out) 
         {std::cout << str << " (" << key << "," << value << ")" << std::endl;};
-    return make_op_wrapper(func, make_flows(in), Flows<>(), "printer");
+    return make_op_wrapper(func, in, Flows<>(), "printer");
 }
 
 template <typename funcT>
@@ -125,7 +125,7 @@ auto make_project(const funcT& func, const ctlFlow& ctl, nodeFlow& result) {
         }
     };
     auto c = clone(ctl);
-    return make_op_wrapper(f, make_flows(c), make_flows(c,result), "project");
+    return make_op_wrapper(f, c, make_flows(c,result), "project");
 }
 
 template <typename funcT>
@@ -176,7 +176,7 @@ void diff(const Key& key, const Node& left, const Node& center, const Node& righ
 
 auto make_diff(nodeFlow in, nodeFlow out) {
     nodeFlow L, C, R;
-    return std::make_tuple(make_op_wrapper(&send_to_output_tree, make_flows(in), make_flows(L,C,R), "send_to_output_tree"),
+    return std::make_tuple(make_op_wrapper(&send_to_output_tree, in, make_flows(L,C,R), "send_to_output_tree"),
                            make_op_wrapper(&diff, make_flows(L,C,R), make_flows(L,C,R,out),"diff"));
 }
 
@@ -221,11 +221,11 @@ void send_leaves_up(const Key& key, const Node& node, Flows<doubleFlow,doubleFlo
 
 auto make_compress(const nodeFlow& in, nodeFlow& out) {
     doubleFlow L, R;
-    return std::make_tuple(make_op_wrapper(&send_leaves_up, make_flows(in), make_flows(L,R,out), "send_leaves_up"),
+    return std::make_tuple(make_op_wrapper(&send_leaves_up, in, make_flows(L,R,out), "send_leaves_up"),
                            make_op_wrapper(&do_compress,make_flows(L,R), make_flows(L,R,out), "do_compress"));
 }
 
-void start_reconstruct(const Key& key, const Node& node, Flows<doubleFlow>& outputs) {
+void start_reconstruct(const Key& key, const Node& node, doubleFlow& outputs) {
     if (key.n==0) outputs.send<0>(key,node.s);
 }
 
@@ -242,7 +242,7 @@ void do_reconstruct(const Key& key, double s, const Node& node, Flows<doubleFlow
 
 auto make_reconstruct(const nodeFlow& in, nodeFlow& out) {
     doubleFlow S;     // passes scaling functions down
-    return std::make_tuple(make_op_wrapper(&start_reconstruct, make_flows(in), make_flows(S), "start_recon"),
+    return std::make_tuple(make_op_wrapper(&start_reconstruct, in, S, "start_recon"),
                            make_op_wrapper(&do_reconstruct, make_flows(S,in), make_flows(S,out), "do_recon"));
 }
 
@@ -251,7 +251,7 @@ class Norm2 : public Op<InFlows<Key,Node>,Flows<>, Norm2> {
     using baseT = Op<InFlows<Key,Node>,Flows<>, Norm2>;
     double sumsq;
 public:
-    Norm2(const nodeFlow& in) : baseT(make_flows(in),Flows<>(), "norm2"), sumsq(0.0) {}
+    Norm2(const nodeFlow& in) : baseT(in,Flows<>(), "norm2"), sumsq(0.0) {}
 
     // Lazy implementation of reduce operation ... just accumulates to local variable instead of summing up tree
     void op(const Key& key, const Node& node, baseT::output_type& output) {
