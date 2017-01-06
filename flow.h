@@ -8,34 +8,52 @@
 #include <memory>
 #include <map>
 
-// Operations take arguments from input data flows and inject results
-// into output flows.
+// We are forming an execution graph to represent data streaming
+// through a series of operations or computational steps.  Each node
+// in the graph represents an operation on the incoming data.  Each
+// arc in the graph represents a flow of data from one operation to
+// the next.  This operation graph need not be acylic, hence we can
+// easily represent iteration and recursion.
 //
-// Each piece of data in a flow comprises a (key,value) pair.  The
-// key labels the instance of the value and is used to match
-// against the instance of the task that will consume it.
+// There can be multiple independent instances of an operation in the
+// execution graph. E.g., consider evaluating a[i]*b[i]*c[i]*d[i]*e[i]
+// for each element (i) in the vectors a, b, c, d, e --- we will need
+// several (four) independent instances of the multiply operation.
 //
-// Like PaRSEC (I think), a task that will execute an operation and
-// all associated *input* arguments are labeled by the same key ---
-// think of it as the index of a for-loop iteration.  The place where
-// computation occurs or data is stored are driven by the key.
+// For each set of input arguments flowing to an operation, a task is
+// (logically) created.  The task graph will be acyclic since a task
+// can only send data to its successors and not to itself.
+// 
+// Tasks take arguments from input data flows, execute an operation,
+// and inject results into output data flows to send data to
+// successor tasks.
 //
-// Different to PaRSEC, output results can be associated with
-// different key types.  Why?  Imagine an algorithm on a tree (in
-// which data are labelled by the node names) feeding results into a
-// matrix (in which data are labelled by the (row,column) indicies)
-// feeding results into a matrix algorithm (with tasks labelled by
-// triplets (i,j,k)), etc.  
+// Tasks (like PaRSEC) are identified by a key (or index) --- think of
+// it as the index of a for-loop iteration with each iteration
+// executed in a separate task. In the vector multiplication example
+// above, the key would be the vector index (i). The place where
+// computation occurs is determined by the key, and arguments (data)
+// are sent to the task using flows labelled by the key.
+//
+// Each piece of data in a flow comprises a (key,value) pair.  The key
+// labels the task instance to which the value is being sent, and the
+// flow is connected (by position) with a specific argument of the
+// operation that the task will execute.  Since the task and all of
+// its arguments are assoicated with the same key, they clearly must
+// all have the same key type.
+//
+// Ouputs (results) of a task are injected into flows that connect
+// with arguments of sucessor (dependent) tasks.  These tasks may be
+// associated with different key types.  Why?  Imagine an algorithm on
+// a tree (in which data are labelled by the node names) feeding
+// results into a matrix (in which data are labelled by the
+// [row,column] indicies) feeding results into a matrix algorithm
+// (with tasks labelled by triplets [i,j,k]), etc.
 //
 // The act of inserting data into any of the input flows associated
-// with an operation creates the task that will execute the operation
-// for the given key.
-//
-// Once all input values (arguments) are assigned for a given
-// key, the corresponding task is (or can be) executed.
-//
-// There may be multiple independent instances of data flows and
-// operations.
+// with an operation (logically) creates the task that will execute
+// it.  Once all input arguments are assigned, the task is (or can be)
+// executed.
 //
 // For wrapping simple callables, essentially all of the boilerplate
 // can be automated via templates.  Only more complex operations
@@ -54,18 +72,23 @@
 // provide the output flows for an operation.  It can be empty; i.e.,
 // just Flows<> is permissible. An important case of Flows is where
 // the constituent Flow types all share same key; then it defines
-// value_tuple_type and key_plus_value_tuple_type.
-// Provides send<i>/broadcast<i>/get<i>/all()/size() methods.
-// Copy/assignment semantics???
+// value_tuple_type and key_plus_value_tuple_type.  Provides
+// send<i>/broadcast<i>/get<i>/all()/size() methods.  It must have
+// shallow copy semantics since copying is necessary but each copy
+// must refer to the same underlying data structure.
 //
-// InFlows --- a bundle of Flow's that all share same key type but can have
-// different value types. Just syntactic sugar.
+// InFlows --- a bundle of Flow's that all share same key type but can
+// have different value types. Just syntactic sugar.
 //
-// OpTuple ---
+// OpTuple --- a mixin class that provides the functionality necessary
+// to turn a function (defined as derived class method) into an
+// operation that can be connected via flows and have data in the
+// flows trigger computation.
 //
-// Op ---
+// Op --- provides some syntactic convenience compared to OpTuple
 //
-// BaseOp ---
+// BaseOp --- presently used to turn tracing log messages on/off for
+// all operation instances.
 
 
 // A flow is plumbing used to connect the output of an operation to
