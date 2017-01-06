@@ -121,8 +121,8 @@ class Project : public Op<Flow<Key,Control>, Flows<Flow<Key,Control>, Flow<Key,N
         this->connect(ctl, {ctl,out});
     }
 
-    //void op(const Key& key, const Control& junk, baseT::output_type& out) {
-    void op(const Key& key, const Control& junk, Flows<Flow<Key,Control>,Flow<Key,Node>>& out) {
+    //void op(const Key& key, const Control&, baseT::output_type& out) {
+    void op(const Key& key, const Control&, Flows<Flow<Key,Control>,Flow<Key,Node>>& out) {
         const double sl = f(key_to_x(key.left_child()));
         const double sr = f(key_to_x(key.right_child()));
         const double s = 0.5*(sl+sr), d = 0.5*(sl-sr);
