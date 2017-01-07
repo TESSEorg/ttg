@@ -99,9 +99,9 @@ class Printer : public Op<Flow<keyT,valueT>, Flows<>, Printer<keyT,valueT>> {
     using baseT = Op<Flow<keyT,valueT>, Flows<>, Printer<keyT,valueT>>;
     const std::string str;
 public:
-    explicit Printer(Flow<keyT,valueT> in, const char* str="") : baseT(in, Flows<>(), "printer"), str(str) {}
+    explicit Printer(const Flow<keyT,valueT>& in, const char* str="") : baseT(in, Flows<>(), "printer"), str(str) {}
     
-    explicit Printer(Flow<keyT,valueT> in) : baseT(in,Flows<>()) {}
+    explicit Printer(const Flow<keyT,valueT>& in) : baseT(in,Flows<>()) {}
 
     void op(const keyT& key, const std::tuple<valueT>& t, Flows<>& out) const {
         std::cout << str << " (" << key << "," << std::get<0>(t) << ")" << std::endl;
@@ -116,7 +116,7 @@ class Project : public Op<Flow<Key,Control>, Flows<Flow<Key,Control>, Flow<Key,N
     using baseT = Op<Flow<Key,Control>, Flows<Flow<Key,Control>, Flow<Key,Node>>, Project<funcT>>;
     funcT f;
  public:
-    Project(const funcT& func, Flow<Key,Control> in, Flow<Key,Node> out) : baseT("project"), f(func) {
+    Project(const funcT& func, const Flow<Key,Control>& in, Flow<Key,Node> out) : baseT("project"), f(func) {
         Flow<Key,Control> ctl = clone(in);
         this->connect(ctl, {ctl,out});
     }
@@ -182,7 +182,7 @@ class Diff : public Op<InFlows<Key,Node,Node,Node>, Flows<Flow<Key,Node>,Flow<Ke
     } sendtooutputtree;
         
 public:
-    Diff(Flow<Key,Node> in, Flow<Key,Node> out) : baseT("diff") {
+    Diff(const Flow<Key,Node>& in, Flow<Key,Node> out) : baseT("diff") {
         Flow<Key,Node> L, C, R;
         sendtooutputtree.connect(in,{L,C,R});
         this->connect({L,C,R},{L,C,R,out});
@@ -243,7 +243,7 @@ class Compress : public Op<Flow<Key,Node>,Flows<Flow<Key,double>,Flow<Key,double
 
 
 public:
-    Compress(Flow<Key,Node> in, Flow<Key,Node> out)
+    Compress(const Flow<Key,Node>& in, Flow<Key,Node> out)
         : baseT("compress"), doit()
     {
         Flow<Key,double> L, R;
@@ -282,7 +282,7 @@ class Reconstruct : public Op<InFlows<Key,double,Node>, Flows<Flow<Key,double>,F
     } start;
 
 public:
-    Reconstruct(Flow<Key,Node> in, Flow<Key,Node> out) : baseT("reconstruct") {
+    Reconstruct(const Flow<Key,Node>& in, Flow<Key,Node> out) : baseT("reconstruct") {
         Flow<Key,double> S;     // passes scaling functions down
         start.connect(in,S);    // Clunky but ok in test code
         this->connect({S,in},{S,out});
@@ -305,7 +305,7 @@ class Norm2 : public Op<Flow<Key,Node>,Flows<>, Norm2> {
     using baseT = Op<Flow<Key,Node>,Flows<>, Norm2>;
     double sumsq;
 public:
-    Norm2(Flow<Key,Node> in) : baseT(in,Flows<>(), "norm2"), sumsq(0.0) {}
+    Norm2(const Flow<Key,Node>& in) : baseT(in,Flows<>(), "norm2"), sumsq(0.0) {}
 
     // Lazy implementation of reduce operation ... just accumulates to local variable instead of summing up tree
     void op(const Key& key, const Node& node, baseT::output_type& output) {
