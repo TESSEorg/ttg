@@ -21,11 +21,12 @@
 // several (four) independent instances of the multiply operation.
 //
 // For each set of input arguments flowing to an operation, a task is
-// (logically) created.  The task graph will be acyclic since a task
-// can only send data to its successors and not to itself.
+// (logically) created.  The task graph will be a directed acyclic
+// graph (DAG) since a task can only send data to its successors and
+// not to itself, and computation never reverses.
 // 
 // Tasks take arguments from input data flows, execute an operation,
-// and inject results into output data flows to send data to
+// and inject results into output data flows that send data to
 // successor tasks.
 //
 // Tasks (like PaRSEC) are identified by a key (or index) --- think of
@@ -33,39 +34,40 @@
 // executed in a separate task. In the vector multiplication example
 // above, the key would be the vector index (i). The place where
 // computation occurs is determined by the key, and arguments (data)
-// are sent to the task using flows labelled by the key.
+// are sent to the task using flows.
 //
 // Each piece of data in a flow comprises a (key,value) pair.  The key
 // labels the task instance to which the value is being sent, and the
-// flow is connected (by position) with a specific argument of the
-// operation that the task will execute.  Since the task and all of
-// its arguments are assoicated with the same key, they clearly must
-// all have the same key type.
+// flow is connected with a specific argument of the operation that
+// the task will execute.  Since the task and all of its arguments are
+// assoicated with the same key, the task and the input flows clearly
+// must all have the same key type.
 //
 // Ouputs (results) of a task are injected into flows that connect
-// with arguments of sucessor (dependent) tasks.  These tasks may be
-// associated with different key types.  Why?  Imagine an algorithm on
-// a tree (in which data are labelled by the node names) feeding
-// results into a matrix (in which data are labelled by the
-// [row,column] indicies) feeding results into a matrix algorithm
-// (with tasks labelled by triplets [i,j,k]), etc.
+// with arguments of sucessor tasks.  These tasks may be associated
+// with different key types.  Why?  Imagine an algorithm on a tree (in
+// which data are labelled by the node names) feeding results into an
+// operation on a matrix (in which tasks are labelled by the pairs
+// [row,column]) feeding results into a linear algebra algorithm (with
+// tasks labelled by triplets [i,j,k]), etc.
 //
 // The act of inserting data into any of the input flows associated
 // with an operation (logically) creates the task that will execute
-// it.  Once all input arguments are assigned, the task is (or can be)
-// executed.
+// it.  Once all input arguments are assigned, the task becomes
+// executable.
 //
-// For wrapping simple callables, essentially all of the boilerplate
-// can be automated via templates.  Only more complex operations
-// must manually define a class.
+// For simple callables, essentially all of the boilerplate can be
+// automated via factory function templates.  Only more complex
+// operations must manually define a class.
 //
 // The essential classes (soon to be abstracted further to permit
-// multiple co-existing implementations) are
+// multiple co-existing implementations) are:
 //
 // Flow<keyT,valueT> --- plumbing connecting the output of one task
-// with the input of one or more successors.  Provides
+// with the input arguments of one or more successors.  Provides
 // send/broadcast/add_callback methods and defines key_type and
-// value_type.  Copy/assignment semantics???
+// value_type.  Copy/assignment semantics are shallow so that
+// all copies refer to the same underlying flow. 
 //
 // Flows< Flow<key0T,value0T>, ... > --- essentially a tuple of flows
 // that can have any type for their keys and values.  Can be used to
@@ -73,9 +75,7 @@
 // just Flows<> is permissible. An important case of Flows is where
 // the constituent Flow types all share same key; then it defines
 // value_tuple_type and key_plus_value_tuple_type.  Provides
-// send<i>/broadcast<i>/get<i>/all()/size() methods.  It must have
-// shallow copy semantics since copying is necessary but each copy
-// must refer to the same underlying data structure.
+// send<i>/broadcast<i>/get<i>/all()/size() methods. 
 //
 // InFlows --- a bundle of Flow's that all share same key type but can
 // have different value types. Just syntactic sugar.
@@ -83,12 +83,16 @@
 // OpTuple --- a mixin class that provides the functionality necessary
 // to turn a function (defined as derived class method) into an
 // operation that can be connected via flows and have data in the
-// flows trigger computation.
+// flows trigger computation.  An OpTuple may be moved but not copied
+// or assigned so that the associated instance of an operation remains
+// unique and independent. If you want another independent instance,
+// just make one.
 //
 // Op --- provides some syntactic convenience compared to OpTuple
+// from which it is derived.
 //
-// BaseOp --- presently used to turn tracing log messages on/off for
-// all operation instances.
+// BaseOp --- presently used only to turn tracing log messages on/off
+// for all operation instances.
 
 
 // A flow is plumbing used to connect the output of an operation to
@@ -101,9 +105,9 @@
 // refer to the same underlying object, to ensure correct lifetime of
 // objects, and to make it easier to plug and play.
 //
-// Flow, as well as higher level constructs built out of it, like Flows (a tuple of Flow's)
-// and FlowArray, must meet a FlowBundle concept requirements to be usable
-// by Op facilities.
+// Flow, as well as higher level constructs built out of it, like
+// Flows (a tuple of Flow's) and FlowArray, must meet a FlowBundle
+// concept requirements to be usable by Op facilities.
 template <typename keyT, typename valueT>
 class Flow {
     using callbackT = std::function<void(const keyT&, const valueT&)>;
@@ -181,72 +185,72 @@ Flow<keyT,valueT> clone(const Flow<keyT,valueT>& inflow) {
 
 // machinery to help define key_type in Flows when possible
 namespace detail {
-struct dont_define_key_typedefs {};
-
-template <typename keyT, typename...valueTs>
-struct do_define_key_typedefs {
-  typedef keyT key_type;
-  typedef std::tuple<keyT, valueTs...> key_plus_output_tuple_type;
-};
-
-struct invalid_key_type {};
-
-template <typename...>
-struct key_type {
-  typedef invalid_key_type type;
-};
-
-template <typename flowT>
-struct key_type<flowT> {
-  typedef typename flowT::key_type type;
-};
-
-template <typename flowT, typename... flowTs>
-struct key_type<flowT, flowTs...> : public key_type<flowTs...> {
-  typedef key_type<flowTs...> baseT;
-
-  typedef typename std::conditional<
-      std::is_same<typename key_type<flowT>::type,
-                   typename baseT::type>::value,
-      typename baseT::type, invalid_key_type>::type type;
-};
-
-template <typename T>
-struct value_type {
-  typedef typename T::value_type type;
-};
-
-template <typename... flowTs>
-struct flows_typedefs
-    : public std::conditional<
-          std::is_same<typename key_type<flowTs...>::type,
-                       invalid_key_type>::value,
-          dont_define_key_typedefs,
-          do_define_key_typedefs<
-              typename key_type<flowTs...>::type,
-              typename detail::value_type<flowTs>::type...>>::type {
-  typedef std::tuple<typename detail::value_type<flowTs>::type...>
-      values_tuple_type;
-};
-
-/// trait to determine if T has key_type
-template<class T>
-class has_key_type {
-    /// true case
-    template<class U>
-    static std::true_type __test(typename U::key_type*);
-    /// false case
-    template<class >
-    static std::false_type __test(...);
-  public:
-    static constexpr const bool value = std::is_same<std::true_type,
-        decltype(__test<T>(0))>::value;
-};
-
+    struct dont_define_key_typedefs {};
+    
+    template <typename keyT, typename...valueTs>
+    struct do_define_key_typedefs {
+        typedef keyT key_type;
+        typedef std::tuple<keyT, valueTs...> key_plus_output_tuple_type;
+    };
+    
+    struct invalid_key_type {};
+    
+    template <typename...>
+    struct key_type {
+        typedef invalid_key_type type;
+    };
+    
+    template <typename flowT>
+    struct key_type<flowT> {
+        typedef typename flowT::key_type type;
+    };
+    
+    template <typename flowT, typename... flowTs>
+    struct key_type<flowT, flowTs...> : public key_type<flowTs...> {
+        typedef key_type<flowTs...> baseT;
+        
+        typedef typename std::conditional<
+            std::is_same<typename key_type<flowT>::type,
+                         typename baseT::type>::value,
+            typename baseT::type, invalid_key_type>::type type;
+    };
+    
+    template <typename T>
+    struct value_type {
+        typedef typename T::value_type type;
+    };
+    
+    template <typename... flowTs>
+    struct flows_typedefs
+        : public std::conditional<
+        std::is_same<typename key_type<flowTs...>::type,
+                     invalid_key_type>::value,
+        dont_define_key_typedefs,
+        do_define_key_typedefs<
+            typename key_type<flowTs...>::type,
+            typename detail::value_type<flowTs>::type...>>::type {
+        typedef std::tuple<typename detail::value_type<flowTs>::type...>
+            values_tuple_type;
+    };
+    
+    /// trait to determine if T has key_type
+    template<class T>
+    class has_key_type {
+        /// true case
+        template<class U>
+        static std::true_type __test(typename U::key_type*);
+        /// false case
+        template<class >
+        static std::false_type __test(...);
+    public:
+        static constexpr const bool value = std::is_same<std::true_type,
+                                                         decltype(__test<T>(0))>::value;
+    };
+    
 }  // namespace detail
 
-// An tuple of flows, each of which has arbitrary key and value types.  Can
-// be empty.
+// An tuple of flows, each of which has arbitrary key and value types.
+// Can be empty.
 template <typename...flowTs>
 class Flows : public detail::flows_typedefs<flowTs...> {
     std::tuple<flowTs...> t;
@@ -338,7 +342,6 @@ bool BaseOp::trace = false;
 // Flows<...>.
 //
 // input_flowsT must presently be InFlows<keyT,value0T,...>
-
 template <typename input_flowsT, typename output_flowsT, typename derivedT>
 class OpTuple {
 public:
