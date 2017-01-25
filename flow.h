@@ -304,7 +304,9 @@ auto make_flows(flowsT...args) {return Flows<flowsT...>(args...);}
 // Data/functionality common to all Ops
 class BaseOp {
     static bool trace; // If true prints trace of all assignments and all op invocations
+    static int count;  // Counts number of instances (to explore if cycles are inhibiting garbage collection)
 public:
+    BaseOp() {count++;}
     
     // Sets trace to value and returns previous setting
     static bool set_trace(bool value) {std::swap(trace,value); return value;}
@@ -312,10 +314,15 @@ public:
     static bool get_trace() {return trace;}
 
     static bool tracing() {return trace;}
+
+    static int get_count() {return count;}
+
+    ~BaseOp() {count--;}
 };
 
 // With more than one source file this will need to be moved
 bool BaseOp::trace = false;
+int BaseOp::count = 0;
 
 // Mix-in class used with CRTP to implement operations in a flow.  The
 // derived class should implement an operation with this name and

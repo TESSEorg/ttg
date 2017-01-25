@@ -334,7 +334,7 @@ double C(const double x) {return std::exp(-x*x)*std::sin(x);}
 
 double R(const double x) {return (A(x) + B(x))*C(x);}
 
-int main () {
+void doit() {
     using projectT = Project<double(*)(double)>;
     
     Flow<Key,Control> ctl;
@@ -378,6 +378,12 @@ int main () {
     std::cout << "Norm2 of a reconstructed " << norma3.get() << std::endl;
     std::cout << "Norm2 of error in abc    " << normabcerr.get() << std::endl;
     std::cout << "Norm2 of error in diff   " << normdifferr.get() << std::endl;
+}
+
+int main () {
+    doit();
+
+    std::cout << "\n BaseOp instance count: " << BaseOp::get_count() << std::endl;
 
     return 0;
 }
