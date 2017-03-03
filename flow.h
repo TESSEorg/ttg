@@ -382,6 +382,9 @@ private:
         // Used in the callback from a flow to set i'th argument
         template <typename valueT, std::size_t i>
         void set_arg(const input_key_type& key, const valueT& value) {
+
+          static_assert(!std::is_const<std::tuple_element_t<i, typename input_flowsT::values_tuple_type>>::value,
+                        "OpTuple cannot deal with Flows with constant value types");
             // In parallel case we would be using a write accessor to a
             // local concurrent container to obtain exclusive access to
             // counter and to avoid race condition on first insert.

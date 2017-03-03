@@ -47,7 +47,7 @@ using SpMatrixFlow = Flow<Key<2>,blk_t>;
 class Flow_From_SpMatrix : public Op<ControlFlow, SpMatrixFlow, Flow_From_SpMatrix> {
  public:
   using baseT = Op<ControlFlow, SpMatrixFlow, Flow_From_SpMatrix>;
-  Flow_From_SpMatrix(const SpMatrix& matrix, SpMatrixFlow flow, ControlFlow ctl):
+  Flow_From_SpMatrix(const SpMatrix& matrix, const SpMatrixFlow& flow, const ControlFlow& ctl):
     baseT(ctl, flow, "spmatrix_to_flow"),
     matrix_(matrix) {}
   void op(const Key<0>& key, const Control&, SpMatrixFlow& flow) {
@@ -67,7 +67,7 @@ class Flow_To_SpMatrix : public Op<SpMatrixFlow, ControlFlow, Flow_To_SpMatrix> 
  public:
   using baseT = Op<SpMatrixFlow, ControlFlow, Flow_To_SpMatrix>;
 
-  Flow_To_SpMatrix(SpMatrix& matrix, SpMatrixFlow flow, ControlFlow ctl):
+  Flow_To_SpMatrix(SpMatrix& matrix, const SpMatrixFlow& flow, const ControlFlow& ctl):
     baseT(flow, ctl, "flow_to_spmatrix"),
     matrix_(matrix) {}
   void op(const Key<2>& key, const blk_t& elem, ControlFlow) {
