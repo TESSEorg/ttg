@@ -386,7 +386,7 @@ private:
             // local concurrent container to obtain exclusive access to
             // counter and to avoid race condition on first insert.
             
-            // Lots of optimiatizations and scheduling strategies to
+            // Lots of optimizations and scheduling strategies to
             // insert here ... for now always shove things into the cache
             // and execute when ready.
             
