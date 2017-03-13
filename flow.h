@@ -12,7 +12,7 @@
 // through a series of operations or computational steps.  Each node
 // in the graph represents an operation on the incoming data.  Each
 // arc in the graph represents a flow of data from one operation to
-// the next.  This operation graph need not be acylic, hence we can
+// the next.  This operation graph need not be acyclic, hence we can
 // easily represent iteration and recursion.
 //
 // There can be multiple independent instances of an operation in the
@@ -40,16 +40,16 @@
 // labels the task instance to which the value is being sent, and the
 // flow is connected with a specific argument of the operation that
 // the task will execute.  Since the task and all of its arguments are
-// assoicated with the same key, the task and the input flows clearly
+// associated with the same key, the task and the input flows clearly
 // must all have the same key type.
 //
-// Ouputs (results) of a task are injected into flows that connect
-// with arguments of sucessor tasks.  These tasks may be associated
+// Outputs (results) of a task are injected into flows that connect
+// with arguments of successor tasks.  These tasks may be associated
 // with different key types.  Why?  Imagine an algorithm on a tree (in
-// which data are labelled by the node names) feeding results into an
-// operation on a matrix (in which tasks are labelled by the pairs
+// which data are labeled by the node names) feeding results into an
+// operation on a matrix (in which tasks are labeled by the pairs
 // [row,column]) feeding results into a linear algebra algorithm (with
-// tasks labelled by triplets [i,j,k]), etc.
+// tasks labeled by triplets [i,j,k]), etc.
 //
 // The act of inserting data into any of the input flows associated
 // with an operation (logically) creates the task that will execute
