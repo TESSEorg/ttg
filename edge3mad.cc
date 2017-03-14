@@ -15,7 +15,7 @@ class A : public  Op<keyT, std::tuple<int>, std::tuple<OutEdge<keyT,int>,OutEdge
     void op(const keyT& key, const std::tuple<int>& t) {
         int value = std::get<0>(t);
         std::cout << "A got value " << value << std::endl;
-        if (value < 3) {
+        if (value < 100) {
             send<0>(key+1, value+1);
         }
         else {
@@ -66,18 +66,24 @@ public:
         merge.out<0>().connect(a.in<0>());
         a.out<0>().connect(merge.in<1>());
         a.out<1>().connect(consumer.in<0>());
+        world.gop.fence();
     }
 
     void start() {if (world.rank() == 0) producer.op(0,std::tuple<>());}
 
-    void wait() {}
+    void wait() {world.gop.fence();}
 };
 
 int main(int argc, char** argv) {
     initialize(argc, argv);
     World world(SafeMPI::COMM_WORLD);
 
-    //BaseOp::set_trace(true);
+    for (int arg=1; arg<argc; ++arg) {
+        if (strcmp(argv[arg],"-dx")==0)
+            xterm_debug(argv[0], 0);
+    }
+
+    BaseOp::set_trace(true);
     Everything x(world);
     x.start();
     x.wait();

@@ -154,25 +154,25 @@ private:
         ProcessID owner = pmap->owner(key);
 
         if (owner != world.rank()) {
-            if (tracing()) std::cout << get_name() << " : " << key << ": forwarding setting argument : " << i << std::endl;
+            if (tracing()) std::cout << world.rank() << ":" << get_name() << " : " << key << ": forwarding setting argument : " << i << std::endl;
             worldobjT::send(owner, &opT:: template set_arg<i,valueT>, key, value);
         }
         else {
-            if (tracing()) std::cout << get_name() << " : " << key << ": setting argument : " << i << std::endl;
+            if (tracing()) std::cout << world.rank() << ":" << get_name() << " : " << key << ": setting argument : " << i << std::endl;
             
             accessorT acc;
             cache.insert(acc, key);
             OpArgs& args = acc->second;
             
             if (args.argset[i]) {
-                std::cerr << get_name() << " : " << key << ": error argument is already set : " << i << std::endl;
+                std::cerr << world.rank() << ":" << get_name() << " : " << key << ": error argument is already set : " << i << std::endl;
                 throw "bad set arg";
             }
             args.argset[i] = true;        
             std::get<i>(args.t) = value;
             args.counter--;
             if (args.counter == 0) {
-                if (tracing()) std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
+                if (tracing()) std::cout << world.rank() << ":" << get_name() << " : " << key << ": invoking op " << std::endl;
                 static_cast<derivedT*>(this)->op(key, args.t);
                 cache.erase(key);
             }
@@ -198,15 +198,15 @@ public:
     // Destructor checks for unexecuted tasks
     ~Op() {
         if (cache.size() != 0) {
-            std::cerr << "warning: unprocessed tasks in destructor of operation '" << get_name() << "'" << std::endl;
-            std::cerr << "   T => argument assigned     F => argument unassigned" << std::endl;
+            std::cerr << world.rank() << ":" << "warning: unprocessed tasks in destructor of operation '" << get_name() << "'" << std::endl;
+            std::cerr << world.rank() << ":" << "   T => argument assigned     F => argument unassigned" << std::endl;
             int nprint=0;
             for (auto item : cache) {
                 if (nprint++ > 10) {
                     std::cerr << "   etc." << std::endl;
                     break;
                 }
-                std::cerr << "   unused: " << item.first << " : ( ";
+                std::cerr << world.rank() << ":" << "   unused: " << item.first << " : ( ";
                 for (std::size_t i=0; i<numargs; i++) std::cerr << (item.second.argset[i] ? "T" : "F") << " ";
                 std::cerr << ")" << std::endl;
             }
@@ -255,11 +255,11 @@ private:
         ProcessID owner = pmap->owner(key);
 
         if (owner != world.rank()) {
-            if (tracing()) std::cout << get_name() << " : " << key << ": forwarding setting argument : " << i << std::endl;
+            if (tracing()) std::cout << world.rank() << ":" << get_name() << " : " << key << ": forwarding setting argument : " << i << std::endl;
             worldobjT::send(owner, &opT:: template set_arg<i>, key, value);
         }
         else {
-            if (tracing()) std::cout << get_name() << " : " << key << ": setting argument : " << i << std::endl;
+            if (tracing()) std::cout << world.rank() << ":" << get_name() << " : " << key << ": setting argument : " << i << std::endl;
             outedge.send(key,value);
         }
     }
@@ -286,7 +286,7 @@ public:
     template <int i>
     OutEdge<keyT,valueT>&
     out() {
-        static_assert(i==0);
+        static_assert(i==0, "why?");
         return outedge;
     }
 };
