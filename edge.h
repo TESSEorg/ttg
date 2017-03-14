@@ -67,6 +67,7 @@ class InEdge : public BaseEdge<keyT,valueT> {
 protected:
 
     template <typename kT, typename iT, typename oT, typename dT> friend class Op;
+    template <typename kT, typename vT> friend class Merge;
 
     InEdge(const typename BaseEdge<keyT,valueT>::callbackT& callback) {this->set_callback(callback);}
 
@@ -109,9 +110,9 @@ public:
     static int get_count() {return count;}
 
     void set_name(const std::string& name) {this->name = name;}
-
+    
     const std::string& get_name() const {return name;}
-
+    
     ~BaseOp() {count--;}
 };
 
@@ -131,13 +132,13 @@ private:
         
         OpArgs() : counter(numargs), argset(), t() {}
     };
-        
+    
     output_edgesT output_edges;
-
+    
     //inputs_edgesT input_edges;
-
+    
     std::map<keyT, OpArgs> cache; // Contains tasks waiting for input to become complete
-
+    
     // Used to set the i'th argument
     template <std::size_t i, typename valueT>
     void set_arg(const keyT& key, const valueT& value) {
@@ -156,16 +157,16 @@ private:
             cache.erase(key);
         }
     }
-
+    
     Op(const Op& other) = delete;
-        
+    
     Op& operator=(const Op& other) = delete;
-
+    
     Op (Op&& other) = delete;
     
 public:
     Op(const std::string& name = std::string("unnamed op")) : BaseOp(name) {}
-
+    
     // Destructor checks for unexecuted tasks
     ~Op() {
         if (cache.size() != 0) {
@@ -183,7 +184,7 @@ public:
             }
         }
     }
-
+    
     // Returns input edge i to facilitate connection
     template <std::size_t i>
     InEdge<keyT,typename std::tuple_element<i, input_valuesT>::type>
@@ -194,7 +195,7 @@ public:
         auto callback = [this] (const keyT& key, const valueT& value) {set_arg<i,valueT>(key,value);};
         return edgeT(callbackT(callback));
     }
-
+    
     // Returns the output edge i to facilitate connection
     template <int i>
     typename std::tuple_element<i, output_edgesT>::type &
@@ -208,5 +209,43 @@ public:
     template <int i, typename outkeysT, typename outvalT>
     void broadcast(const outkeysT& keys, const outvalT& value) {out<i>().broadcast(keys,value);}
 };
+
+template <typename keyT, typename valueT>
+class Merge : private BaseOp {
+private:
+    static constexpr int numargs = 2;
+    
+    OutEdge<keyT,valueT> outedge;
+    
+    template <std::size_t i>
+    void set_arg(const keyT& key, const valueT& value) {
+        if (tracing()) std::cout << get_name() << " : " << key << ": setting argument : " << i << std::endl;
+        outedge.send(key,value);
+    }
+    
+public:
+    Merge(const std::string& name = std::string("unnamed op")) : BaseOp(name) {}
+    
+    // Returns input edge i to facilitate connection
+    template <std::size_t i>
+    InEdge<keyT,valueT>
+    in () {
+        using edgeT = InEdge<keyT,valueT>;
+        using callbackT = std::function<void(const keyT&, const valueT&)>;
+        auto callback = [this] (const keyT& key, const valueT& value) {set_arg<i>(key,value);};
+        return edgeT(callbackT(callback));
+    }
+    
+    // Returns the output edge i to facilitate connection
+    template <int i>
+    OutEdge<keyT,valueT>&
+    out() {
+        static_assert(i==0);
+        return outedge;
+    }
+};
+
+
+
 
 #endif
