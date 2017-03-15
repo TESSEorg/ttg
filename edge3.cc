@@ -1,6 +1,12 @@
 #include <iostream>
 #include <tuple>
 #include "edge.h"
+#include <mpi.h>
+
+#include<parsec/execution_unit.h>
+
+parsec_execution_unit_t* eu = NULL;
+parsec_handle_t* handle = NULL;
 
 using keyT = int;
 
@@ -11,7 +17,7 @@ class A : public  Op<keyT, std::tuple<int>, std::tuple<OutEdge<keyT,int>,OutEdge
     void op(const keyT& key, const std::tuple<int>& t) {
         int value = std::get<0>(t);
         std::cout << "A got value " << value << std::endl;
-        if (value < 3) {
+        if (value < 10) {
             send<0>(key+1, value+1);
         }
         else {
@@ -63,11 +69,25 @@ public:
     void wait() {}
 };
 
-int main() {
+int main(int argc, char* argv[]) {
     //BaseOp::set_trace(true);
+    MPI_Init(&argc, &argv);
+    
+    parsec_context_t* parsec = parsec_init(1, &argc, &argv);
+    handle = (parsec_handle_t*)calloc(1, sizeof(parsec_handle_t));
+    handle->handle_id = 1;
+    eu = parsec->virtual_processes[0]->execution_units[0];
+
     Everything x;
     x.start();
     x.wait();
+
+    parsec_context_start(parsec);
+    parsec_context_wait(parsec);
+    parsec_fini(&parsec);
+
+    MPI_Finalize();
+    
     return 0;
 }
 

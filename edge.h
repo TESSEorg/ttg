@@ -13,8 +13,26 @@
 
 #include <parsec.h>
 #include <parsec/parsec_internal.h>
+#include <parsec/devices/device.h>
+#include <parsec/data_internal.h>
+#include <parsec/scheduling.h>
+
+extern "C" parsec_execution_unit_t* eu;
+extern "C" parsec_handle_t* handle;
 
 static int static_global_function_id = 0;
+
+extern "C" {
+    typedef struct my_op_s : public parsec_execution_context_t {
+        void(*function_template_class_ptr)(void*) ;
+        void* object_ptr;
+        uint64_t key;
+    } my_op_t;
+
+    static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
+                                     parsec_execution_context_t* task);
+}
+
 
 template <typename keyT, typename valueT>
 class BaseEdge {
@@ -28,7 +46,6 @@ protected:
 
 private:
 
-    bool connected = false;
 
 public:
     const parsec_flow_t* flow;
@@ -37,7 +54,6 @@ public:
     BaseEdge(const parsec_flow_t* f, int fid) : flow(f), function_id(fid) { }
     
     void send(const keyT& key, const valueT& value) const {
-        assert(connected);
         std::cout << " Send: " << key << std::endl;
         // DO PaRSEC magic
     }
@@ -168,10 +184,17 @@ private:
         args.counter--;
         if (args.counter == 0) {
             if (tracing()) std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
-            static_cast<derivedT*>(this)->op(key, args.t);
+            //static_cast<derivedT*>(this)->op(key, args.t);
             cache.erase(key);
             //create PaRSEC task
             // and give it to the scheduler
+            my_op_t* task = malloc(sizeof(my_op_t));
+            task->function_template_class_ptr = &Op::static_op;
+            task->object_ptr = static_cast<derivedT*>(this);
+            task->key = key;
+            task->data[0].data_in = malloc(sizeof(value));
+            memcpy(task->data[0].data_in, &value, sizeof(value));
+            __parsec_schedule(eu, task, 0);
         }
     }
     
@@ -192,12 +215,12 @@ public:
         self.nb_flows = std::max((int)numargs, (int)std::tuple_size<output_edgesT>::value);
         
         self.incarnations = (__parsec_chore_t *) malloc(2 * sizeof(__parsec_chore_t));
-        self.incarnations[0].type = PARSEC_DEV_CPU;
-        self.incarnations[0].evaluate = NULL;
-        self.incarnations[0].hook = 0;
-        self.incarnations[1].type = PARSEC_DEV_NONE;
-        self.incarnations[1].evaluate = NULL;
-        self.incarnations[1].hook = NULL;
+        ((__parsec_chore_t*)self.incarnations)[0].type = PARSEC_DEV_CPU;
+        ((__parsec_chore_t*)self.incarnations)[0].evaluate = NULL;
+        ((__parsec_chore_t*)self.incarnations)[0].hook = 0;
+        ((__parsec_chore_t*)self.incarnations)[1].type = PARSEC_DEV_NONE;
+        ((__parsec_chore_t*)self.incarnations)[1].evaluate = NULL;
+        ((__parsec_chore_t*)self.incarnations)[1].hook = NULL;
 
         for( i = 0; i < numargs; i++ ) {
             parsec_flow_t* flow = new parsec_flow_t;
@@ -247,8 +270,17 @@ public:
         }
     }
 
-    static void static_op(void* derived_ptr, void* key_ptr, void* dc_ptr_list) {
-        ((*derivedT)derived_ptr)->op(*(keyT*)key_ptr, *(tuple<inputs>)(dc_ptr_list));
+    static void static_op(parsec_execution_context_t* my_task) {
+        my_op_t* task = static_cast<my_op_t*>(my_task);
+        /*        
+                  struct data_repo_entry_s     *data_repo;
+                  struct parsec_data_copy_s    *data_in;
+                  struct parsec_data_copy_s    *data_out;
+        */
+
+        ((derivedT*)task->object_ptr)->op((keyT)task->key,
+                                          *static_cast<input_valuesT*>(task->data[0].data_in->device_private)
+                                          /* *(tuple<inputs>)(dc_ptr_list)*/);
     }
 
 #if 0
@@ -290,26 +322,11 @@ public:
     void broadcast(const outkeysT& keys, const outvalT& value) {out<i>().broadcast(keys,value);}
 };
 
-extern "C"{
-    typedef struct my_op_s {
-        PARSEC_MINIMAL_EXECUTION_CONTEXT
-#if defined(PARSEC_PROF_TRACE)
-        parsec_profile_ddesc_info_t prof_info;
-#endif /* defined(PARSEC_PROF_TRACE) */
-        void* function_template_class_ptr;
-        void* object_ptr;
-        int value;
-    } my_op_t;
-
-static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
-                                 parsec_execution_context_t* task);
-}
-
 static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
                                  parsec_execution_context_t* task)
 {
-    my_op_t* me = (my_op_t*)task;
-    Op::static_op(me->object_ptr, NULL, NULL);
+    my_op_t* me = static_cast<my_op_t*>(task);
+    me->function_template_class_ptr(task);
     (void)eu;
 }
 
@@ -332,6 +349,22 @@ public:
     out() {
         using edgeT = OutEdge<keyT,valueT>;
         return edgeT(this->self.out[i], this->self.function_id);
+    }
+
+    // Used to set the i'th argument
+    template <std::size_t i>
+    void set_arg(const keyT& key, const valueT& value) {
+        //if (this->tracing()) std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
+
+        //create PaRSEC task
+        // and give it to the scheduler
+        my_op_t* task = malloc(sizeof(my_op_t));
+        task->function_template_class_ptr = &baseT::static_op;
+        task->object_ptr = this;
+        task->key = key;
+        task->data[0].data_in = malloc(sizeof(value));
+        memcpy(task->data[0].data_in, &value, sizeof(value));
+        __parsec_schedule(eu, task, 0);
     }
 };
 
