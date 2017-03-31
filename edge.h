@@ -26,6 +26,7 @@ extern "C" {
     typedef struct my_op_s : public parsec_execution_context_t {
         void(*function_template_class_ptr)(void*) ;
         void* object_ptr;
+        void(*static_set_arg)(int, int);
         uint64_t key;
     } my_op_t;
 
@@ -55,6 +56,9 @@ public:
     
     void send(const keyT& key, const valueT& value) const {
         std::cout << " Send: " << key << std::endl;
+        
+        Op<keyT>::set_arg_static(key, value, this->flow->dep_out[0]->flow->dep_in[0].function_id);
+
         // DO PaRSEC magic
     }
 
@@ -170,12 +174,12 @@ private:
 
     std::map<keyT, OpArgs> cache; // Contains tasks waiting for input to become complete
 
-    std::map<int, Op*> function_id_to_instance;
+    static std::map<int, Op*> function_id_to_instance;
 
     template <std::size_t i, typename valueT>
     static void set_arg_static(const keyT& key, const valueT& value, int function_id) {
-        Op* op = function_id_to_instance[function_id]; // error checking!
-        op->set_arg<i,valueT>(key, value);
+        Op* op2 = function_id_to_instance[function_id]; // error checking!
+        op2->set_arg<i,valueT>(key, value);
     }
     
     // Used to set the i'th argument
@@ -339,6 +343,10 @@ static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
     me->function_template_class_ptr(task);
     (void)eu;
 }
+
+template <typename keyT, typename input_valuesT, typename output_edgesT, typename derivedT>
+    std::map<int, Op<keyT, input_valuesT, output_edgesT, derivedT>*>
+    Op<keyT, input_valuesT, output_edgesT, derivedT>::function_id_to_instance = {};
 
 template <typename keyT, typename valueT>
 class Merge : public Op<keyT, std::tuple<valueT,valueT>, std::tuple<OutEdge<keyT, valueT>>, Merge<keyT, valueT>> {
