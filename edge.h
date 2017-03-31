@@ -169,6 +169,14 @@ private:
     };
 
     std::map<keyT, OpArgs> cache; // Contains tasks waiting for input to become complete
+
+    std::map<int, Op*> function_id_to_instance;
+
+    template <std::size_t i, typename valueT>
+    static void set_arg_static(const keyT& key, const valueT& value, int function_id) {
+        Op* op = function_id_to_instance[function_id]; // error checking!
+        op->set_arg<i,valueT>(key, value);
+    }
     
     // Used to set the i'th argument
     template <std::size_t i, typename valueT>
@@ -213,6 +221,8 @@ public:
         self.nb_parameters = 1;
         self.nb_locals = 0;
         self.nb_flows = std::max((int)numargs, (int)std::tuple_size<output_edgesT>::value);
+
+        function_id_to_instance[self.function_id] = this;
         
         self.incarnations = (__parsec_chore_t *) malloc(2 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t*)self.incarnations)[0].type = PARSEC_DEV_CPU;
