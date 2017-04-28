@@ -200,7 +200,7 @@ private:
             cache.erase(key);
             //create PaRSEC task
             // and give it to the scheduler
-            my_op_t* task = malloc(sizeof(my_op_t));
+            my_op_t* task = calloc(1, sizeof(my_op_t));
             task->function_template_class_ptr = &Op::static_op;
             task->object_ptr = static_cast<derivedT*>(this);
             task->key = key;
@@ -376,7 +376,7 @@ public:
 
         //create PaRSEC task
         // and give it to the scheduler
-        my_op_t* task = malloc(sizeof(my_op_t));
+        my_op_t* task = calloc(1, sizeof(my_op_t));
         task->function_template_class_ptr = &baseT::static_op;
         task->object_ptr = this;
         task->key = key;
