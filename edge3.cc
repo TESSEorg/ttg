@@ -50,18 +50,14 @@ class Everything : public  Op<keyT, std::tuple<>, std::tuple<>, Everything> {
     Producer producer;
     A a;
     Consumer consumer;
-    Merge<keyT,int> merge;
 public:
     Everything()
         : producer("producer")
         , a("A")
         , consumer("consumer")
-        , merge("merge")
     {
-        producer.out<0>().connect(merge.in<0>());
-        merge.out<0>().connect(a.in<0>());
-        a.out<0>().connect(merge.in<1>());
-        a.out<1>().connect(consumer.in<0>());
+        producer.out<0>().connect(a.in<0>());
+        a.out<0>().connect(consumer.in<0>());
     }
 
     void start() {producer.op(0,std::tuple<>());}

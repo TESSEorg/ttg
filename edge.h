@@ -52,16 +52,15 @@ public:
     const parsec_flow_t* flow;
     int function_id;
 
+    BaseEdge() : flow(NULL), function_id(-1) { }
+
     BaseEdge(const parsec_flow_t* f, int fid) : flow(f), function_id(fid) { }
-    
-    void send(const keyT& key, const valueT& value) const {
-        std::cout << " Send: " << key << std::endl;
-        
-        Op<keyT>::set_arg_static(key, value, this->flow->dep_out[0]->flow->dep_in[0].function_id);
 
-        // DO PaRSEC magic
+    void init(const parsec_flow_t* f, int fid) {
+        flow = f;
+        function_id = fid;
     }
-
+    
     template <typename rangeT>
     void broadcast(const rangeT& keylist, const valueT& value) const {
         for (auto key : keylist) send(key,value);
@@ -83,8 +82,19 @@ protected:
     template <typename kT, typename vT> friend class Merge;
 
 public:
+    void (*set_arg_static_fct)(const keyT& key, const valueT& value, int function_id);
 
-    InEdge(const parsec_flow_t* f, int fid) : BaseEdge<keyT, valueT>(f, fid) {}
+    InEdge(const parsec_flow_t* f, int fid,
+           void (*set_arg_static_fct_)(const keyT& key, const valueT& value, int function_id)) :
+        BaseEdge<keyT, valueT>(f, fid), set_arg_static_fct(set_arg_static_fct_) {}
+
+    void send(const keyT& key, const valueT& value) const {
+        std::cout << " Send: " << key << std::endl;
+
+        this->set_arg_static_fct(key, value, this->flow->dep_out[0]->flow->dep_in[0]->function_id);
+
+        // DO PaRSEC magic
+    }
 };
 
 
@@ -94,9 +104,20 @@ public:
 // It is connected to an input using the connect method (i.e., outedge.connect(inedge))
 template <typename keyT, typename valueT>
     class OutEdge : public BaseEdge<keyT,valueT> {
+    bool initialized;
  public:
+    void (*set_arg_static_fct)(const keyT& key, const valueT& value, int function_id);
 
-    OutEdge(const parsec_flow_t* f, int fid) : BaseEdge<keyT,valueT>(f, fid) {}
+    OutEdge() : initialized(false) {}
+    
+    void init(const parsec_flow_t* f, int fid) {
+        BaseEdge<keyT, valueT>::init(f, fid);
+        initialized = true;
+    }
+    
+    bool is_initialized(void) {
+        return initialized;
+    }
  
     void connect(const InEdge<keyT,valueT>& in) {
         int i;
@@ -120,9 +141,19 @@ template <typename keyT, typename valueT>
         outdep->dep_datatype_index = 0;
         outdep->belongs_to = in.flow;
 
+        this->set_arg_static_fct = in.set_arg_static_fct;
+        
         (*(parsec_flow_t**)&(this->flow))->dep_out[0] = indep;
         for( i = 0; NULL != in.flow->dep_in[i]; i++);
         (*(parsec_flow_t**)&(in.flow))->dep_in[i] = outdep;
+    }
+    
+    void send(const keyT& key, const valueT& value) const {
+        std::cout << " Send: " << key << std::endl;
+
+        this->set_arg_static_fct(key, value, this->flow->dep_out[0]->flow->dep_in[0]->function_id);
+
+        // DO PaRSEC magic
     }
 };
 
@@ -131,7 +162,7 @@ class BaseOp {
     static bool trace; // If true prints trace of all assignments and all op invocations
     static int count;  // Counts number of instances (to explore if cycles are inhibiting garbage collection)
     std::string name;
-
+    static std::map<int, BaseOp*> function_id_to_instance;
 public:
 
     BaseOp(const std::string& name) : name(name) {count++;}
@@ -174,18 +205,24 @@ private:
 
     std::map<keyT, OpArgs> cache; // Contains tasks waiting for input to become complete
 
-    static std::map<int, Op*> function_id_to_instance;
-
+    output_edgesT outedges_cache;
+    
+public:
     template <std::size_t i, typename valueT>
     static void set_arg_static(const keyT& key, const valueT& value, int function_id) {
-        Op* op2 = function_id_to_instance[function_id]; // error checking!
+        Op* op2 = static_cast<Op*>(function_id_to_instance[function_id]); // error checking!
+        
         op2->set_arg<i,valueT>(key, value);
     }
-    
+private:
     // Used to set the i'th argument
     template <std::size_t i, typename valueT>
     void set_arg(const keyT& key, const valueT& value) {
         if (tracing()) std::cout << get_name() << " : " << key << ": setting argument : " << i << std::endl;
+        auto it = cache.find(key);
+        if( it == cache.end() ) {
+            cache[key] = OpArgs();
+        }
         OpArgs& args = cache[key];
         if (args.argset[i]) {
             std::cerr << get_name() << " : " << key << ": error argument is already set : " << i << std::endl;
@@ -200,11 +237,18 @@ private:
             cache.erase(key);
             //create PaRSEC task
             // and give it to the scheduler
-            my_op_t* task = calloc(1, sizeof(my_op_t));
-            task->function_template_class_ptr = &Op::static_op;
+            my_op_t* task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
+
+            OBJ_CONSTRUCT(task, parsec_list_item_t);
+            task->function = &this->self;
+            task->parsec_handle = handle;
+            task->status = PARSEC_TASK_STATUS_HOOK;
+            
+            task->function_template_class_ptr =
+                reinterpret_cast<void (*)(void*)>(&Op::static_op);
             task->object_ptr = static_cast<derivedT*>(this);
             task->key = key;
-            task->data[0].data_in = malloc(sizeof(value));
+            task->data[0].data_in = static_cast<parsec_data_copy_t*>(malloc(sizeof(value)));
             memcpy(task->data[0].data_in, &value, sizeof(value));
             __parsec_schedule(eu, task, 0);
         }
@@ -317,14 +361,18 @@ public:
     InEdge<keyT,typename std::tuple_element<i, input_valuesT>::type>
     in () {
         using edgeT = InEdge<keyT,typename std::tuple_element<i, input_valuesT>::type>;
-        return edgeT(this->self.in[i], this->self.function_id);
+        return edgeT(this->self.in[i], this->self.function_id,
+                     &Op::set_arg_static<i, typename std::tuple_element<i, input_valuesT>::type>);
     }
     // Returns the output edge i to facilitate connection
     template <int i>
-    typename std::tuple_element<i, output_edgesT>::type
+    typename std::tuple_element<i, output_edgesT>::type&
     out() {
         using edgeT = typename std::tuple_element<i, output_edgesT>::type;
-        return edgeT(this->self.out[i], this->self.function_id);
+        if( ! (std::get<i>(outedges_cache).is_initialized()) ) {
+            std::get<i>(outedges_cache).init(this->self.out[i], this->self.function_id);
+        }
+        return std::get<i>(outedges_cache);
     }
 
     // Send result to successor task of output i
@@ -342,11 +390,10 @@ static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
     my_op_t* me = static_cast<my_op_t*>(task);
     me->function_template_class_ptr(task);
     (void)eu;
+    return PARSEC_HOOK_RETURN_DONE;
 }
 
-template <typename keyT, typename input_valuesT, typename output_edgesT, typename derivedT>
-    std::map<int, Op<keyT, input_valuesT, output_edgesT, derivedT>*>
-    Op<keyT, input_valuesT, output_edgesT, derivedT>::function_id_to_instance = {};
+std::map<int, BaseOp*> BaseOp::function_id_to_instance = {};
 
 template <typename keyT, typename valueT>
 class Merge : public Op<keyT, std::tuple<valueT,valueT>, std::tuple<OutEdge<keyT, valueT>>, Merge<keyT, valueT>> {
@@ -359,7 +406,8 @@ public:
     InEdge<keyT,valueT>
     in () {
         using edgeT = InEdge<keyT,valueT>;
-        return edgeT(this->self.in[i], this->self.function_id);
+        return edgeT(this->self.in[i], this->self.function_id,
+                     &baseT::template set_arg_static<i, valueT>);
     }
     // Returns the output edge i to facilitate connection
     template <std::size_t i>
@@ -376,7 +424,7 @@ public:
 
         //create PaRSEC task
         // and give it to the scheduler
-        my_op_t* task = calloc(1, sizeof(my_op_t));
+        my_op_t* task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
         task->function_template_class_ptr = &baseT::static_op;
         task->object_ptr = this;
         task->key = key;
