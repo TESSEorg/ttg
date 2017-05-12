@@ -183,6 +183,13 @@ public:
     ~BaseOp() {count--;}
 };
 
+static parsec_hook_return_t do_nothing(parsec_execution_unit_t *eu, parsec_execution_context_t *task)
+{
+    (void)eu;
+    (void)task;
+    return PARSEC_HOOK_RETURN_DONE;
+}
+
 // With more than one source file this will need to be moved
 bool BaseOp::trace = false;
 int BaseOp::count = 0;
@@ -263,10 +270,12 @@ private:
 public:
     Op(const std::string& name = std::string("unnamed op")) : BaseOp(name) {
         int i;
+
+        memset(&self, 0, sizeof(parsec_function_t));
         
         self.name = name.c_str();
         self.function_id = static_global_function_id++;
-        self.nb_parameters = 1;
+        self.nb_parameters = 0;
         self.nb_locals = 0;
         self.nb_flows = std::max((int)numargs, (int)std::tuple_size<output_edgesT>::value);
 
@@ -275,10 +284,12 @@ public:
         self.incarnations = (__parsec_chore_t *) malloc(2 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t*)self.incarnations)[0].type = PARSEC_DEV_CPU;
         ((__parsec_chore_t*)self.incarnations)[0].evaluate = NULL;
-        ((__parsec_chore_t*)self.incarnations)[0].hook = 0;
+        ((__parsec_chore_t*)self.incarnations)[0].hook = hook;
         ((__parsec_chore_t*)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t*)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t*)self.incarnations)[1].hook = NULL;
+
+        self.release_task = do_nothing;
 
         for( i = 0; i < numargs; i++ ) {
             parsec_flow_t* flow = new parsec_flow_t;
@@ -293,7 +304,7 @@ public:
         }
         *((parsec_flow_t**)&(self.in[i])) = NULL;
 
-        for( i = 0; i < std::tuple_size<output_edgesT>::value; i++ ) {
+        for( i = 0; i < (int)std::tuple_size<output_edgesT>::value; i++ ) {
             parsec_flow_t* flow = new parsec_flow_t;
             flow->name = strdup((std::string("flow out") + std::to_string(i)).c_str());
             flow->sym_type = SYM_INOUT;
@@ -306,8 +317,8 @@ public:
         }
         *((parsec_flow_t**)&(self.out[i])) = NULL;
     
-         *(int*)&self.flags = 0;
-         *(int*)&self.dependencies_goal = 0;
+        self.flags = 0;
+        self.dependencies_goal = 0;
     };
     
     // Destructor checks for unexecuted tasks
@@ -337,8 +348,10 @@ public:
         */
 
         ((derivedT*)task->object_ptr)->op((keyT)task->key,
-                                          *static_cast<input_valuesT*>(task->data[0].data_in->device_private)
-                                          /* *(tuple<inputs>)(dc_ptr_list)*/);
+                                          *reinterpret_cast<input_valuesT*>(task->data[0].data_in));
+#ifdef OR_BETTER
+            *static_cast<input_valuesT*>(task->data[0].data_in->device_private));
+#endif
     }
 
 #if 0
@@ -368,7 +381,6 @@ public:
     template <int i>
     typename std::tuple_element<i, output_edgesT>::type&
     out() {
-        using edgeT = typename std::tuple_element<i, output_edgesT>::type;
         if( ! (std::get<i>(outedges_cache).is_initialized()) ) {
             std::get<i>(outedges_cache).init(this->self.out[i], this->self.function_id);
         }
