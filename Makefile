@@ -1,8 +1,12 @@
 all: mxm_simple_suma t9
 
-CXXFLAGS = -g -O0 -Wall -std=c++14
+CXXFLAGS = -g -O0 -Wall $(subst c1x,c++14,$(shell pkg-config --cflags parsec))
+LDFLAGS = $(shell pkg-config --libs parsec)
 
 MADTOP = /home/rjh/Devel/madness
+
+edge3: edge3.cc edge.h
+	mpicxx -o edge3 $(CXXFLAGS) edge3.cc $(LDFLAGS)
 
 edge3mad: edge3mad.cc edgemad.h edge.h
 	mpicxx -DHAVE_CONFIG_H   -I$(MADTOP)/src -I$(MADTOP)/src -I$(MADTOP)/src/apps -D"MADNESS_GITREVISION=\"`git --git-dir=$(MADTOP)/.git rev-parse HEAD`\" " -DMPICH_SKIP_MPICXX=1 -DOMPI_SKIP_MPICXX=1 -DTBB_USE_DEBUG=1  -g -O0 -g -Wall -Wno-strict-aliasing -Wno-deprecated -Wno-unused-local-typedefs -MT edge3mad.o -MD -MP  -c -o edge3mad.o edge3mad.cc &&\
