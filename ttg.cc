@@ -227,10 +227,10 @@ public:
 class A : public  TTGOp<keyT, std::tuple<TTGOut<keyT,int>,TTGOut<keyT,int>>, A, int> {
     using baseT = TTGOp<keyT, std::tuple<TTGOut<keyT,int>,TTGOut<keyT,int>>, A, int>;
  public:
-    A(World& world, const std::string& name) : baseT(world, name, {"input"}, {"iterate","result"}) {}
+    A(const std::string& name) : baseT(name, {"input"}, {"iterate","result"}) {}
 
-    A(World& world, const typename baseT::input_edges_type& inedges, const typename baseT::output_edges_type& outedges, const std::string& name)
-        : baseT(world, inedges, outedges, name, {"input"}, {"result", "iterate"}) {}
+    A(const typename baseT::input_edges_type& inedges, const typename baseT::output_edges_type& outedges, const std::string& name)
+        : baseT(inedges, outedges, name, {"input"}, {"result", "iterate"}) {}
     
     void op(const keyT& key, const std::tuple<int>& t, baseT::output_terminals_type& out) {
         int value = std::get<0>(t);
@@ -247,10 +247,10 @@ class A : public  TTGOp<keyT, std::tuple<TTGOut<keyT,int>,TTGOut<keyT,int>>, A, 
 class Producer : public TTGOp<keyT, std::tuple<TTGOut<keyT,int>>, Producer> {
     using baseT =       TTGOp<keyT, std::tuple<TTGOut<keyT,int>>, Producer>;
  public:
-    Producer(World& world, const std::string& name) : baseT(world, name, {}, {"output"}) {}
+    Producer(const std::string& name) : baseT(name, {}, {"output"}) {}
     
-    Producer(World& world, const typename baseT::output_edges_type& outedges, const std::string& name)
-        : baseT(world, empty(), outedges, name, {}, {"output"}) {}
+    Producer(const typename baseT::output_edges_type& outedges, const std::string& name)
+        : baseT(empty(), outedges, name, {}, {"output"}) {}
     
     void op(const keyT& key, const std::tuple<>& t, baseT::output_terminals_type& out) {
         std::cout << "produced " << 0 << std::endl;
@@ -261,13 +261,13 @@ class Producer : public TTGOp<keyT, std::tuple<TTGOut<keyT,int>>, Producer> {
 class Consumer : public TTGOp<keyT, std::tuple<>, Consumer, int> {
     using baseT =       TTGOp<keyT, std::tuple<>, Consumer, int>;
 public:
-    Consumer(World& world, const std::string& name) : baseT(world, name, {"input"}, {}) {}
+    Consumer(const std::string& name) : baseT(name, {"input"}, {}) {}
     void op(const keyT& key, const std::tuple<int>& t, baseT::output_terminals_type& out) {
         std::cout << "consumed " << std::get<0>(t) << std::endl;
     }
 
-    Consumer(World& world, const typename baseT::input_edges_type& inedges, const std::string& name)
-        : baseT(world, inedges, empty(), name, {"input"}, {}) {}
+    Consumer(const typename baseT::input_edges_type& inedges, const std::string& name)
+        : baseT(inedges, empty(), name, {"input"}, {}) {}
 };
 
 
@@ -280,12 +280,12 @@ class Everything : public TTGOp<keyT, std::tuple<>, Everything> {
     
     World& world;
 public:
-    Everything(World& world)
-        : baseT(world, "everything",{},{})
-        , producer(world, "producer")
-        , a(world, "A")
-        , consumer(world, "consumer")
-        , world(world)
+    Everything()
+        : baseT("everything",{},{})
+        , producer("producer")
+        , a("A")
+        , consumer("consumer")
+        , world(madness::World::get_default())
     {
         producer.out<0>().connect(a.in<0>());
         a.out<0>().connect(consumer.in<0>());
@@ -315,12 +315,12 @@ class Everything2 : public TTGOp<keyT, std::tuple<>, Everything> {
 
     World& world;
 public:
-    Everything2(World& world)
-        : baseT(world, "everything", {}, {})
-        , producer(world, {P2A}, "producer")
-        , a(world, fuse(P2A,A2A), {A2C,A2A}, "A")
-        , consumer(world, {A2C}, "consumer")
-        , world(world)
+    Everything2()
+        : baseT("everything", {}, {})
+        , producer({P2A}, "producer")
+        , a(fuse(P2A,A2A), {A2C,A2A}, "A")
+        , consumer({A2C}, "consumer")
+        , world(madness::World::get_default())
     {
         world.gop.fence();
     }
@@ -346,14 +346,14 @@ int main(int argc, char** argv) {
     }
 
     TTGOpBase::set_trace_all(false);
-    Everything x(world);
+    Everything x;
     x.print();
     std::cout << x.dot() << std::endl;
 
     x.start();
     x.wait();
 
-    Everything2 y(world);
+    Everything2 y;
     y.print();
     std::cout << y.dot() << std::endl;
     

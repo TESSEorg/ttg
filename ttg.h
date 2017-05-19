@@ -380,13 +380,12 @@ private:
     }
 
 public:
-    TTGOp(madness::World& world,
-          const std::string& name,
+    TTGOp(const std::string& name,
           const std::vector<std::string>& innames,
           const std::vector<std::string>& outnames)
         : TTGOpBase(name, numins, numouts)
-        , worldobjT(world)
-        , world(world)
+        , worldobjT(madness::World::get_default())
+        , world(madness::World::get_default())
         , pmap(std::make_shared<madness::WorldDCDefaultPmap<keyT>>(world))
     {
         // Cannot call in base constructor since terminals not yet constructed
@@ -402,15 +401,14 @@ public:
         this->process_pending();
     }
     
-    TTGOp(madness::World& world,
-          const input_edges_type& inedges,
+    TTGOp(const input_edges_type& inedges,
           const output_edges_type& outedges,
           const std::string& name,
           const std::vector<std::string>& innames,
           const std::vector<std::string>& outnames)
         : TTGOpBase(name, numins, numouts)
-        , worldobjT(world)
-        , world(world)
+        , worldobjT(madness::World::get_default())
+        , world(madness::World::get_default())
         , pmap(std::make_shared<madness::WorldDCDefaultPmap<keyT>>(world))
     {
         // Cannot call in base constructor since terminals not yet constructed
@@ -470,6 +468,42 @@ public:
         set_arg_empty(key);
     }
 };
+
+// // Class to wrap a callable with signature
+// //
+// // void op(const input_keyT&, const std::tuple<input_valuesT...>&, std::tuple<output_terminalsT...>&)
+// //
+// template <typename keyT, typename funcT, typename output_terminalsT, typename...input_valuesT>
+// class WrapOp : public TTGOp<keyT, output_terminalsT, WrapOp<keyT,funcT,output_terminalsT,input_valuesT...>> {
+//     using baseT =     TTGOp<keyT, output_terminalsT, WrapOp<keyT,funcT,output_terminalsT,input_valuesT...>>;
+
+//     funcT func;
+
+//  public:
+//     WrapOp(const funcT& func,
+//            const baseT::input_edges_type& inedges,
+//            const baseT::output_edges_type& outedges,
+//            const std::string& name = "wrapper",
+//            const std::vector<std::string>& innames = std::vector<std::string>(baseT::numins, "input"),
+//            const std::vector<std::string>& outnames= std::vector<std::string>(baseT::numins, "output"))
+//         : baseT(inedges, outedges, name, innames, outnames)
+//         , func(func)
+//     {}
+    
+//     void op(const keyT& key, const typename baseT::input_values_tuple_type& args, output_terminalsT& out) {
+//         func(key, args, out);
+//     }
+// };
+
+// // Factory function to assist in wrapping a callable with signature
+// //
+// // void op(const input_keyT&, const std::tuple<input_valuesT...>&, std::tuple<output_terminalsT...>&)
+// template <typename funcT, typename input_flowsT, typename output_flowsT>
+// auto make_optuple_wrapper(const funcT& func, const input_flowsT& inputs, const output_flowsT& outputs, const std::string& name="wrapper") {
+//     return WrapOpTuple<funcT, input_flowsT, output_flowsT>(func, inputs, outputs, name);
+// }
+
+
 
 
 #endif // MADNESS_TTG_H_INCLUDED
