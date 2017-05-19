@@ -18,6 +18,3 @@ ttg: ttg.cc ttg.h ttgbase.h
 
 clean:
 	rm -rf *.o mxm_simple_suma t9 edge3mad ttg
-
-
-
