@@ -250,7 +250,7 @@ class Producer : public TTGOp<keyT, std::tuple<TTGOut<keyT,int>>, Producer> {
     Producer(const std::string& name) : baseT(name, {}, {"output"}) {}
     
     Producer(const typename baseT::output_edges_type& outedges, const std::string& name)
-        : baseT(empty(), outedges, name, {}, {"output"}) {}
+        : baseT(edges(), outedges, name, {}, {"output"}) {}
     
     void op(const keyT& key, const std::tuple<>& t, baseT::output_terminals_type& out) {
         std::cout << "produced " << 0 << std::endl;
@@ -267,7 +267,7 @@ public:
     }
 
     Consumer(const typename baseT::input_edges_type& inedges, const std::string& name)
-        : baseT(inedges, empty(), name, {"input"}, {}) {}
+        : baseT(inedges, edges(), name, {"input"}, {}) {}
 };
 
 
@@ -317,9 +317,10 @@ class Everything2 : public TTGOp<keyT, std::tuple<>, Everything> {
 public:
     Everything2()
         : baseT("everything", {}, {})
-        , producer({P2A}, "producer")
-        , a(fuse(P2A,A2A), {A2C,A2A}, "A")
-        , consumer({A2C}, "consumer")
+        , P2A("P2A"), A2A("A2A"), A2C("A2C")
+        , producer(P2A, "producer")
+        , a(fuse(P2A,A2A), edges(A2C,A2A), "A")
+        , consumer(A2C, "consumer")
         , world(madness::World::get_default())
     {
         world.gop.fence();
@@ -334,7 +335,60 @@ public:
     void wait() {world.gop.fence();}
 };
 
+class Everything3 {
 
+    static void p(const keyT& key, const std::tuple<>& t, std::tuple<TTGOut<keyT,int>>& out) {
+        std::cout << "produced " << 0 << std::endl;
+        send<0>(key,int(key),out);
+    }
+
+    static void a(const keyT& key, const std::tuple<int>& t, std::tuple<TTGOut<keyT,int>,TTGOut<keyT,int>>&  out) {
+        int value = std::get<0>(t);
+        if (value >= 100) {
+            send<0>(key, value, out);
+        }
+        else {
+            send<1>(key+1, value+1, out);
+        }
+    }
+
+    static void c(const keyT& key, const std::tuple<int>& t, std::tuple<>& out) {
+        std::cout << "consumed " << std::get<0>(t) << std::endl;
+    }
+
+    Edge<keyT,int> P2A, A2A, A2C; // !!!! Edges must be constructed before classes that use them
+
+    // using wpT = decltype(wrap<keyT>(&p, edges(), edges(P2A)));
+    // using waT = decltype(wrap(&a, edges(fuse(P2A,A2A)), edges(A2C,A2A)));
+    // using  wcT = decltype(wrap(&c, edges(A2C), edges()));
+                         
+    decltype(wrap<keyT>(&p, edges(), edges(P2A))) wp;
+    decltype(wrap(&a, edges(fuse(P2A,A2A)), edges(A2C,A2A))) wa;
+    decltype(wrap(&c, edges(A2C), edges())) wc;
+
+public:
+    Everything3()
+        : P2A("P2A"), A2A("A2A"), A2C("A2C")
+        , wp(wrap<keyT>(&p, edges(), edges(P2A), "producer",{},{"start"}))
+        , wa(wrap(&a, edges(fuse(P2A,A2A)), edges(A2C,A2A), "A",{"input"},{"result","iterate"}))
+        , wc(wrap(&c, edges(A2C), edges(), "consumer",{"result"},{}))
+    {
+        madness::World::get_default().gop.fence();
+    }
+    
+    void print() {TTGPrint()(wp.get());}
+
+    std::string dot() {return TTGDot()(wp.get());}
+    
+    void start() {if (madness::World::get_default().rank() == 0) wp->invoke(0);}
+    
+    void wait() {madness::World::get_default().gop.fence();}
+};
+    
+void fred(int key, const std::tuple<double,char>& args, std::tuple<TTGOut<double,double>>& out) {
+    std::cout << "fred: " << std::get<0>(args) << " " << std::get<1>(args) << std::endl;
+    send<0>(1,3.14,out);
+}
 
 int main(int argc, char** argv) {
     initialize(argc, argv);
@@ -359,6 +413,19 @@ int main(int argc, char** argv) {
     
     y.start();
     y.wait();
+
+    // Edge<int,double> x2f;
+    // Edge<int,char> y2f;
+    // Edge<double,double> f2z;
+    // auto f = wrap(&fred,
+    //               edges(x2f,y2f),
+    //               edges(f2z));
+
+    //TTGOpBase::set_trace_all(true);
+    Everything3 z;
+    std::cout << z.dot() << std::endl;
+    z.start();
+    z.wait();
     
     finalize();
     return 0;

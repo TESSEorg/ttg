@@ -28,6 +28,8 @@
         
         
     public:
+        static constexpr bool is_a_terminal = true;
+        
         TTGTerminalBase() : op(0), n(0),name("") {}
         
         void set(TTGOpBase* op, size_t index, const std::string& name, const std::string& key_type_str, const std::string& value_type_str) {

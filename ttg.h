@@ -15,26 +15,30 @@
 #include <madness/world/worldtypes.h>
 #include "ttgbase.h"
 
-template <typename keyT, typename valueT> class EdgeArray;
+
+template <typename keyT, typename valueT> class Edge; // Forward decl.
 
 template <typename keyT, typename valueT>
 class TTGIn : public TTGTerminalBase {
 public:
     typedef valueT value_type;
     typedef keyT key_type;
-    typedef EdgeArray<keyT,valueT> edge_type;
+    typedef Edge<keyT,valueT> edge_type;
     using send_callback_type = std::function<void(const keyT&, const valueT&)>;
+    static constexpr bool is_an_input_terminal = true;
 
 private:
     bool initialized;
     send_callback_type send_callback;
 
+    // No moving, copying, assigning permitted
     TTGIn(TTGIn&& other) = delete;
     TTGIn(const TTGIn& other) = delete;
     TTGIn& operator=(const TTGIn& other) = delete; 
+    TTGIn& operator=(const TTGIn&& other) = delete; 
 
 public:
-    
+
     TTGIn() : initialized(false) {}
 
     TTGIn(const send_callback_type& send_callback)
@@ -69,14 +73,17 @@ public:
     typedef valueT value_type;
     typedef keyT key_type;
     typedef TTGIn<keyT,valueT> input_terminal_type;
-    typedef EdgeArray<keyT,valueT> edge_type;
+    typedef Edge<keyT,valueT> edge_type;
+    static constexpr bool is_an_output_terminal = true;
 
 private:
     std::vector<input_terminal_type*> successors;
     
+    // No moving, copying, assigning permitted
     TTGOut(TTGOut&& other) = delete;
     TTGOut(const TTGOut& other) = delete;
     TTGOut& operator=(const TTGOut& other) = delete;
+    TTGOut& operator=(const TTGOut&& other) = delete;
 
 public:
 
@@ -102,111 +109,81 @@ public:
 template <typename keyT, typename valueT>
 class Edge {
 private:
-
     struct EdgePimpl {
+        std::string name;
         TTGIn<keyT,valueT>* out;
         TTGOut<keyT,valueT>* in;
 
-        EdgePimpl() : out(0), in(0) {}
+        EdgePimpl() : name(""), out(0), in(0) {}
 
+        EdgePimpl(const std::string& name) : name(name), out(0), in(0) {}
 
+        void set_in(TTGOut<keyT,valueT>* in) {
+            std::cout << "edge setting in " << name << " " << (void*) in << " " << (void*) (this->in) << " " << (void*)(this->out) << std::endl;
+            if (this->in) throw "Edge: setting input twice";
+            this->in = in;
+            try_to_connect();
+        }
+
+        void set_out(TTGIn<keyT,valueT>* out) {
+            std::cout << "edge setting out " << name << " " << (void*) in << " " << (void*) (this->in) << " " << (void*)(this->out) << std::endl;
+            if (this->out) throw "Edge: setting output twice";
+            this->out = out;
+            try_to_connect();
+        }
+
+        void try_to_connect() const {
+            if (in && out) {
+                in->connect(*out); // Easy to get your inputs and outputs mixed up!
+            }
+        }
+        
         ~EdgePimpl() {
             if ((!in) || (!out)) {
                 std::cerr << "Edge: destroying edge pimpl with either in or out not assigned --- DAG may be incomplete" << std::endl;
             }
         }
-        
     };
 
-    mutable std::shared_ptr<EdgePimpl> p; // Need shallow copy semantics
+    mutable std::vector<std::shared_ptr<EdgePimpl>> p; // Need shallow copy semantics
 
-    void try_to_connect() const {
-        if (p->in && p->out) {
-            p->in->connect(*(p->out)); // Easy to get your inputs and outputs mixed up!
+public:
+    typedef TTGIn<keyT,valueT>   input_terminal_type;
+    typedef TTGOut<keyT,valueT> output_terminal_type;
+    typedef keyT key_type;
+    typedef valueT value_type;
+    static constexpr bool is_an_edge = true;
+
+    Edge(const std::string name = "anon") : p(1) {
+        p[0] = std::make_shared<EdgePimpl>(name);
+    }
+
+    template <typename...valuesT>
+    Edge(const Edge<keyT,valuesT>&...edges) : p(0) {
+        std::vector<Edge<keyT,valueT>> v = {edges...};
+        for (auto& edge : v) {
+            p.insert(p.end(), edge.p.begin(), edge.p.end());
         }
     }
 
-public:
-    Edge() : p(new EdgePimpl) {}
-
     void set_in(TTGOut<keyT,valueT>* in) const {
-        if (!p) throw "Edge: not constructed before use!";
-        if (p->in) throw "Edge: setting input twice";
-        p->in = in;
-        try_to_connect();
+        for (auto& edge : p) edge->set_in(in);
     }
 
     void set_out(TTGIn<keyT,valueT>* out) const {
-        if (!p) throw "Edge: not constructed before use!";
-        if (p->out) throw "Edge: setting output twice";
-        p->out = out;
-        try_to_connect();
-    }
-
-    template <typename stream>
-    void print(stream& s) const {
-        TTGIn<keyT,valueT>* out = 0;
-        TTGOut<keyT,valueT>* in = 0;
-        if (p) {
-            out = p->out;
-            in  = p->in;
-        }
-        std::cout << "Edge(pimpl=" << (void*) p.get() << ", in=" << (void*) in << ", out=" << (void*) out << ")";
+        for (auto& edge : p) edge->set_out(out);
     }
 };
 
-// Multiple edges that have the same type since they are originating
-// from or terminating upon the same terminal ... behaves just like
-// a single edge in terms of connecting
-template <typename keyT, typename valueT>
-class EdgeArray {
-private:
-    mutable std::vector<Edge<keyT,valueT>> edges;
-
-public:
-    template <typename...argsT>
-    EdgeArray(const argsT&... args) : edges({args...}) {}
-
-    EdgeArray() : edges() {}
-
-    void set_in(TTGOut<keyT,valueT>* in) const {
-        for (auto& edge : edges) edge.set_in(in);
-    }
-
-    void set_out(TTGIn<keyT,valueT>* out) const {
-        for (auto& edge : edges) edge.set_out(out);
-    }
-
-    template <typename stream>
-    void print(stream& s) const {
-        for (auto& edge : edges) edge.print(s);
-    }
-};
-
-template <typename keyT, typename valueT>
-std::ostream& operator<<(std::ostream& s, const Edge<keyT,valueT>& edge) {
-    edge.print(s);
-    return s;
-}
-
-template <typename keyT, typename valueT>
-std::ostream& operator<<(std::ostream& s, const EdgeArray<keyT,valueT>& edges) {
-    edges.print(s);
-    return s;
-}
-
-// All the types have to be the same ... just using valuesT for variadic args
+// Fuse edges into one ... all the types have to be the same ... just using valuesT for variadic args
 template <typename keyT, typename...valuesT>
 auto
 fuse(const Edge<keyT,valuesT>&...args) {
     using valueT = typename std::tuple_element<0, std::tuple<valuesT...>>::type; // grab first type
-    // std::vector<Edge<keyT,valueT>> v = {args...};
-    // return EdgeArray<keyT,valueT>(v);
-    return EdgeArray<keyT,valueT>(args...);
+    return Edge<keyT,valueT>(args...); // This will force all valuesT to be the same
 }
 
-std::tuple<> empty() {return std::make_tuple<>();}
-
+// Make a tuple of Edges ... needs some type checking injected
 template <typename...inedgesT>
 auto edges(const inedgesT& ... args) {
     return std::make_tuple(args...);
@@ -222,6 +199,24 @@ void broadcast(const rangeT& keylist, const valueT& value, std::tuple<output_ter
     std::get<i>(t).broadcast(keylist,value);
 }
 
+// Make type of tuple of edges from type of tuple of terminals
+template <typename termsT> struct terminals_to_edges;
+template <typename...termsT> struct terminals_to_edges<std::tuple<termsT...>> {
+    typedef std::tuple<typename termsT::edge_type...> type;
+};
+
+// Make type of tuple of output terminals from type of tuple of edges
+template <typename edgesT> struct edges_to_output_terminals;
+template <typename...edgesT> struct edges_to_output_terminals<std::tuple<edgesT...>> {
+    typedef std::tuple<typename edgesT::output_terminal_type...> type;
+};
+
+// Make type of tuple of input terminals from type of tuple of edges
+template <typename edgesT> struct edges_to_input_terminals;
+template <typename...edgesT> struct edges_to_input_terminals<std::tuple<edgesT...>> {
+    typedef std::tuple<typename edgesT::input_terminal_type...> type;
+};
+
 template <typename keyT, typename output_terminalsT, typename derivedT, typename...input_valueTs>
 class TTGOp
     : public TTGOpBase
@@ -230,12 +225,6 @@ private:
     madness::World& world;
     std::shared_ptr<madness::WorldDCPmapInterface<keyT>> pmap;
     
-    // Make type of tuple of edges from type of tuple of terminals
-    template <typename termsT> struct munge {};
-    template <typename...termsT> struct munge<std::tuple<termsT...>> {
-        typedef std::tuple<typename termsT::edge_type...> type;
-    };
-
     using opT = TTGOp<keyT, output_terminalsT, derivedT, input_valueTs...>;
     using worldobjT = madness::WorldObject<opT>;
 
@@ -245,10 +234,10 @@ public:
 
     using input_values_tuple_type = std::tuple<input_valueTs...>;
     using input_terminals_type = std::tuple<TTGIn<keyT,input_valueTs>...>;
-    using input_edges_type = typename munge<input_terminals_type>::type;
+    using input_edges_type = std::tuple<Edge<keyT,input_valueTs>...>;
 
     using output_terminals_type = output_terminalsT;
-    using output_edges_type = typename munge<output_terminalsT>::type;
+    using output_edges_type = typename terminals_to_edges<output_terminalsT>::type;
 
 private:
 
@@ -347,11 +336,17 @@ private:
         int junk[] = {0,(set_arg<IS>(key,std::get<IS>(args)),0)...}; junk[0]++;
     }
     
-    // Copy/assign forbidden
+    // Copy/assign/move forbidden ... we could make it work using
+    // PIMPL for this base class.  However, this instance of the base
+    // class is tied to a specific instance of a derived class a
+    // pointer to which is captured for invoking derived class
+    // functions.  Thus, not only does the derived class has to be
+    // involved but we would have to do it in a thread safe way
+    // including for possibly already running tasks and remote
+    // references.  This is not worth the effort ... wherever you are
+    // wanting to move/assign an Op you should be using a pointer.
     TTGOp(const TTGOp& other) = delete;
     TTGOp& operator=(const TTGOp& other) = delete;
-    
-    // Moving will be supported eventually
     TTGOp (TTGOp&& other) = delete;
     TTGOp& operator=(TTGOp&& other) = delete;
 
@@ -388,8 +383,7 @@ public:
         , world(madness::World::get_default())
         , pmap(std::make_shared<madness::WorldDCDefaultPmap<keyT>>(world))
     {
-        // Cannot call in base constructor since terminals not yet constructed
-
+        // Cannot call these in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value) throw "TTGOP: #input names != #input terminals";
         if (outnames.size() != std::tuple_size<output_terminalsT>::value) throw "TTGOP: #output names != #output terminals";
         
@@ -469,40 +463,49 @@ public:
     }
 };
 
-// // Class to wrap a callable with signature
-// //
-// // void op(const input_keyT&, const std::tuple<input_valuesT...>&, std::tuple<output_terminalsT...>&)
-// //
-// template <typename keyT, typename funcT, typename output_terminalsT, typename...input_valuesT>
-// class WrapOp : public TTGOp<keyT, output_terminalsT, WrapOp<keyT,funcT,output_terminalsT,input_valuesT...>> {
-//     using baseT =     TTGOp<keyT, output_terminalsT, WrapOp<keyT,funcT,output_terminalsT,input_valuesT...>>;
+// Class to wrap a callable with signature
+//
+// void op(const input_keyT&, const std::tuple<input_valuesT...>&, std::tuple<output_terminalsT...>&)
+//
+template <typename funcT, typename keyT, typename output_terminalsT, typename...input_valuesT>
+class WrapOp : public TTGOp<keyT, output_terminalsT, WrapOp<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...> {
+    using baseT =     TTGOp<keyT, output_terminalsT, WrapOp<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...>;
+    funcT func;
+ public:
+    WrapOp(const funcT& func,
+           const typename baseT::input_edges_type& inedges,
+           const typename baseT::output_edges_type& outedges,
+           const std::string& name,
+           const std::vector<std::string>& innames,
+           const std::vector<std::string>& outnames)
+        : baseT(inedges, outedges, name, innames, outnames)
+        , func(func)
+    {}
+ 
+    void op(const keyT& key, const typename baseT::input_values_tuple_type& args, output_terminalsT& out) {
+        func(key, args, out);
+    }
+};
 
-//     funcT func;
-
-//  public:
-//     WrapOp(const funcT& func,
-//            const baseT::input_edges_type& inedges,
-//            const baseT::output_edges_type& outedges,
-//            const std::string& name = "wrapper",
-//            const std::vector<std::string>& innames = std::vector<std::string>(baseT::numins, "input"),
-//            const std::vector<std::string>& outnames= std::vector<std::string>(baseT::numins, "output"))
-//         : baseT(inedges, outedges, name, innames, outnames)
-//         , func(func)
-//     {}
-    
-//     void op(const keyT& key, const typename baseT::input_values_tuple_type& args, output_terminalsT& out) {
-//         func(key, args, out);
-//     }
-// };
-
-// // Factory function to assist in wrapping a callable with signature
-// //
-// // void op(const input_keyT&, const std::tuple<input_valuesT...>&, std::tuple<output_terminalsT...>&)
-// template <typename funcT, typename input_flowsT, typename output_flowsT>
-// auto make_optuple_wrapper(const funcT& func, const input_flowsT& inputs, const output_flowsT& outputs, const std::string& name="wrapper") {
-//     return WrapOpTuple<funcT, input_flowsT, output_flowsT>(func, inputs, outputs, name);
-// }
-
+// Factory function to assist in wrapping a callable with signature
+//
+// void op(const input_keyT&, const std::tuple<input_valuesT...>&, std::tuple<output_terminalsT...>&)
+template <typename keyT, typename funcT, typename...input_valuesT, typename...output_edgesT>
+auto wrap(const funcT& func,
+          const std::tuple<Edge<keyT,input_valuesT>...>& inedges,
+          const std::tuple<output_edgesT...>& outedges,
+          const std::string& name = "wrapper",
+          const std::vector<std::string>& innames = std::vector<std::string>(std::tuple_size<std::tuple<Edge<keyT,input_valuesT>...>>::value,  "input"),
+          const std::vector<std::string>& outnames= std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output"))
+{
+    using input_terminals_type = std::tuple<typename Edge<keyT,input_valuesT>::input_terminal_type...>;
+    using output_terminals_type = typename edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
+    using callable_type = std::function<void(const keyT&, const std::tuple<input_valuesT...>&, output_terminals_type&)>;
+    callable_type f(func); // pimarily to check types
+    using wrapT = WrapOp<funcT, keyT, output_terminals_type, input_valuesT...>;
+ 
+    return std::unique_ptr<wrapT>(new wrapT(func, inedges, outedges, name, innames, outnames));
+}
 
 
 
