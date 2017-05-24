@@ -358,16 +358,57 @@ class Everything3 {
 
     Edge<keyT,int> P2A, A2A, A2C; // !!!! Edges must be constructed before classes that use them
 
-    // using wpT = decltype(wrap<keyT>(&p, edges(), edges(P2A)));
-    // using waT = decltype(wrap(&a, edges(fuse(P2A,A2A)), edges(A2C,A2A)));
-    // using  wcT = decltype(wrap(&c, edges(A2C), edges()));
-                         
+    decltype(wrapt<keyT>(&p, edges(), edges(P2A))) wp;
+    decltype(wrapt(&a, edges(fuse(P2A,A2A)), edges(A2C,A2A))) wa;
+    decltype(wrapt(&c, edges(A2C), edges())) wc;
+
+public:
+    Everything3()
+        : P2A("P2A"), A2A("A2A"), A2C("A2C")
+        , wp(wrapt<keyT>(&p, edges(), edges(P2A), "producer",{},{"start"}))
+        , wa(wrapt(&a, edges(fuse(P2A,A2A)), edges(A2C,A2A), "A",{"input"},{"result","iterate"}))
+        , wc(wrapt(&c, edges(A2C), edges(), "consumer",{"result"},{}))
+    {
+        madness::World::get_default().gop.fence();
+    }
+    
+    void print() {TTGPrint()(wp.get());}
+
+    std::string dot() {return TTGDot()(wp.get());}
+    
+    void start() {if (madness::World::get_default().rank() == 0) wp->invoke(0);}
+    
+    void wait() {madness::World::get_default().gop.fence();}
+};
+    
+class Everything4 {
+
+    static void p(const keyT& key, std::tuple<TTGOut<keyT,int>>& out) {
+        std::cout << "produced " << 0 << std::endl;
+        send<0>(key,int(key),out);
+    }
+
+    static void a(const keyT& key, int value, std::tuple<TTGOut<keyT,int>,TTGOut<keyT,int>>&  out) {
+        if (value >= 100) {
+            send<0>(key, value, out);
+        }
+        else {
+            send<1>(key+1, value+1, out);
+        }
+    }
+
+    static void c(const keyT& key, int value, std::tuple<>& out) {
+        std::cout << "consumed " << value << std::endl;
+    }
+
+    Edge<keyT,int> P2A, A2A, A2C; // !!!! Edges must be constructed before classes that use them
+
     decltype(wrap<keyT>(&p, edges(), edges(P2A))) wp;
     decltype(wrap(&a, edges(fuse(P2A,A2A)), edges(A2C,A2A))) wa;
     decltype(wrap(&c, edges(A2C), edges())) wc;
 
 public:
-    Everything3()
+    Everything4()
         : P2A("P2A"), A2A("A2A"), A2C("A2C")
         , wp(wrap<keyT>(&p, edges(), edges(P2A), "producer",{},{"start"}))
         , wa(wrap(&a, edges(fuse(P2A,A2A)), edges(A2C,A2A), "A",{"input"},{"result","iterate"}))
@@ -385,11 +426,6 @@ public:
     void wait() {madness::World::get_default().gop.fence();}
 };
     
-void fred(int key, const std::tuple<double,char>& args, std::tuple<TTGOut<double,double>>& out) {
-    std::cout << "fred: " << std::get<0>(args) << " " << std::get<1>(args) << std::endl;
-    send<0>(1,3.14,out);
-}
-
 int main(int argc, char** argv) {
     initialize(argc, argv);
     World world(SafeMPI::COMM_WORLD);
@@ -400,6 +436,8 @@ int main(int argc, char** argv) {
     }
 
     TTGOpBase::set_trace_all(false);
+
+    // First compose with manual classes and connections
     Everything x;
     x.print();
     std::cout << x.dot() << std::endl;
@@ -407,6 +445,7 @@ int main(int argc, char** argv) {
     x.start();
     x.wait();
 
+    // Next compose with manual classes and edges
     Everything2 y;
     y.print();
     std::cout << y.dot() << std::endl;
@@ -414,18 +453,17 @@ int main(int argc, char** argv) {
     y.start();
     y.wait();
 
-    // Edge<int,double> x2f;
-    // Edge<int,char> y2f;
-    // Edge<double,double> f2z;
-    // auto f = wrap(&fred,
-    //               edges(x2f,y2f),
-    //               edges(f2z));
-
-    //TTGOpBase::set_trace_all(true);
+    // Next compose with wrappers using tuple API and edges
     Everything3 z;
     std::cout << z.dot() << std::endl;
     z.start();
     z.wait();
+    
+    // Next compose with wrappers using unpacked tuple API and edges
+    Everything4 q;
+    std::cout << q.dot() << std::endl;
+    q.start();
+    q.wait();
     
     finalize();
     return 0;
