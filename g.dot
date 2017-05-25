@@ -1,8 +1,9 @@
 digraph G {
-        n0x7ffc29366488 [shape=record,style=filled,fillcolor=gray90,label="{producer  | { <out0> \<double,int\> output} } "];
-n0x7ffc29366488:out0:s -> n0x7ffc293665f8:in0:n;
-        n0x7ffc293665f8 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<double,int\> input} |A  | { <out0> \<double,int\> result | <out1> \<double,int\> iterate} } "];
-n0x7ffc293665f8:out0:s -> n0x7ffc293668c0:in0:n;
-n0x7ffc293665f8:out1:s -> n0x7ffc293665f8:in0:n;
-        n0x7ffc293668c0 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<double,int\> input} |consumer  } "];
+        ranksep=1.5;
+        n0x2d06c00 [shape=record,style=filled,fillcolor=gray90,label="{producer  | { <out0> \<double,int\> start} } "];
+n0x2d06c00:out0:s -> n0x37f8000:in0:n;
+        n0x37f8000 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<double,int\> input} |A  | { <out0> \<double,int\> result | <out1> \<double,int\> iterate} } "];
+n0x37f8000:out0:s -> n0x2d3a1a0:in0:n;
+n0x37f8000:out1:s -> n0x37f8000:in0:n;
+        n0x2d3a1a0 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<double,int\> result} |consumer  } "];
 }

@@ -90,7 +90,6 @@ public:
     TTGOut() {}
 
     void connect(input_terminal_type& successor) {
-        std::cout << "actually connecting\n";
         successors.push_back(&successor);
         static_cast<TTGTerminalBase*>(this)->connect_base(&successor);
     }
@@ -109,42 +108,57 @@ public:
 template <typename keyT, typename valueT>
 class Edge {
 private:
+
+    // An EdgePimpl represents a single edge that most usually will
+    // most usually connect a single output terminal with a single
+    // input terminal.  However, we had to relax this constraint in
+    // order to easily accomodate connecting an input/output edge to
+    // an operation that to the outside looked like a single op but
+    // internally was implemented as multiple operations.  Thus, the
+    // input/output edge has to connect to multiple terminals.
+    // Permitting multiple end points makes this much easier to
+    // compose, easier to implement, and likely more efficient at
+    // runtime.  This is why outs/ins are vectors rather than pointers
+    // to a single terminal.
     struct EdgePimpl {
         std::string name;
-        TTGIn<keyT,valueT>* out;
-        TTGOut<keyT,valueT>* in;
+        std::vector<TTGIn<keyT,valueT>*> outs;
+        std::vector<TTGOut<keyT,valueT>*> ins;
 
-        EdgePimpl() : name(""), out(0), in(0) {}
-
-        EdgePimpl(const std::string& name) : name(name), out(0), in(0) {}
+        EdgePimpl() : name(""), outs(), ins() {}
+        
+        EdgePimpl(const std::string& name) : name(name), outs(), ins() {}
 
         void set_in(TTGOut<keyT,valueT>* in) {
-            std::cout << "edge setting in " << name << " " << (void*) in << " " << (void*) (this->in) << " " << (void*)(this->out) << std::endl;
-            if (this->in) throw "Edge: setting input twice";
-            this->in = in;
-            try_to_connect();
+            if (ins.size()) std::cout << "Edge: " << name << " : has multiple inputs" << std::endl;
+            ins.push_back(in);
+            try_to_connect_new_in(in);
         }
 
         void set_out(TTGIn<keyT,valueT>* out) {
-            std::cout << "edge setting out " << name << " " << (void*) in << " " << (void*) (this->in) << " " << (void*)(this->out) << std::endl;
-            if (this->out) throw "Edge: setting output twice";
-            this->out = out;
-            try_to_connect();
+            if (outs.size()) std::cout << "Edge: " << name << " : has multiple outputs" << std::endl;
+            outs.push_back(out);
+            try_to_connect_new_out(out);
         }
 
-        void try_to_connect() const {
-            if (in && out) {
-                in->connect(*out); // Easy to get your inputs and outputs mixed up!
-            }
+        void try_to_connect_new_in(TTGOut<keyT,valueT>* in) const {
+            for (auto out : outs) if (in && out) in->connect(*out);
+        }
+        
+        void try_to_connect_new_out(TTGIn<keyT,valueT>* out) const {
+            for (auto in : ins) if (in && out) in->connect(*out);
         }
         
         ~EdgePimpl() {
-            if ((!in) || (!out)) {
+            if (ins.size()==0 || outs.size()==0) {
                 std::cerr << "Edge: destroying edge pimpl with either in or out not assigned --- DAG may be incomplete" << std::endl;
             }
         }
     };
 
+
+    // We have a vector here to accomodate fusing multiple edges together
+    // when connecting them all to a single terminal.  
     mutable std::vector<std::shared_ptr<EdgePimpl>> p; // Need shallow copy semantics
 
 public:
@@ -154,7 +168,7 @@ public:
     typedef valueT value_type;
     static constexpr bool is_an_edge = true;
 
-    Edge(const std::string name = "anon") : p(1) {
+    Edge(const std::string name = "anonymous edge") : p(1) {
         p[0] = std::make_shared<EdgePimpl>(name);
     }
 
@@ -462,6 +476,7 @@ public:
         set_arg_empty(key);
     }
 };
+
 
 // Class to wrap a callable with signature
 //
