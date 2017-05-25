@@ -283,7 +283,11 @@ public:
         sumsq += (node.s*node.s + node.d*node.d)*boxsize;
     }
 
-    double get() const {return std::sqrt(sumsq);}
+    double get() const {
+        double value = sumsq;
+        madness::World::get_default().gop.sum(value);
+        return std::sqrt(value);
+    }
 };
 
 auto make_norm2(const nodeEdge& in) {return std::unique_ptr<Norm2>(new Norm2(in));} // for dull uniformity
@@ -346,11 +350,6 @@ int main(int argc, char** argv) {
 
     auto start = make_start(ctl);
 
-    std::cout << "Is everything connected? " << TTGVerify()(start.get()) << std::endl;
-    std::cout << "==== begin dot ====\n";
-    std::cout << TTGDot()(start.get()) << std::endl;
-    std::cout << "====  end dot  ====\n";
-    
     // auto printer = make_printer(a);
     // auto printer2 = make_printer(b);
     // auto printer = make_printer(a_plus_b);
@@ -361,16 +360,27 @@ int main(int argc, char** argv) {
     // auto pp = make_printer(compa,"compa");
     // auto pp = make_printer(compa,"compa");
 
-    // This kicks off the entire computation
-    start->invoke(Key(0,0));
+    if (madness::World::get_default().rank() == 0) {
+        std::cout << "Is everything connected? " << TTGVerify()(start.get()) << std::endl;
+        std::cout << "==== begin dot ====\n";
+        std::cout << TTGDot()(start.get()) << std::endl;
+        std::cout << "====  end dot  ====\n";
+        
+        // This kicks off the entire computation
+        start->invoke(Key(0,0));
+    }
+    
+    madness::World::get_default().gop.fence();
 
-    madness::World::get_default().gop.fence();    
+    double nap=norma->get(), nac=norma2->get(), nar=norma3->get(), nabcerr=normabcerr->get(), ndifferr=normdifferr->get();
 
-    std::cout << "Norm2 of a projected     " << norma->get() << std::endl;
-    std::cout << "Norm2 of a compressed    " << norma2->get() << std::endl;
-    std::cout << "Norm2 of a reconstructed " << norma3->get() << std::endl;
-    std::cout << "Norm2 of error in abc    " << normabcerr->get() << std::endl;
-    std::cout << "Norm2 of error in diff   " << normdifferr->get() << std::endl;
+    if (madness::World::get_default().rank() == 0) {
+        std::cout << "Norm2 of a projected     " << nap << std::endl;
+        std::cout << "Norm2 of a compressed    " << nac << std::endl;
+        std::cout << "Norm2 of a reconstructed " << nar << std::endl;
+        std::cout << "Norm2 of error in abc    " << nabcerr << std::endl;
+        std::cout << "Norm2 of error in diff   " << ndifferr << std::endl;
+    }
 
     madness::finalize();
     
