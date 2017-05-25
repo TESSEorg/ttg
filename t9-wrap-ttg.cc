@@ -321,27 +321,27 @@ int main(int argc, char** argv) {
         a_plus_b("a+b"), a_plus_b_times_c("(a+b)*c"), deriva("deriva"), compa("compa"), recona("recona");
 
     // The following can indeed be specified in any order!
-    auto p1 = make_project(&A, ctl, a);
-    auto p2 = make_project(&B, ctl, b);
-    auto p3 = make_project(&C, ctl, c);
-    auto p4 = make_project(&R, ctl, abc);
-    auto p5 = make_project(&diffA, ctl, diffa);
+    auto p1 = make_project(&A, ctl, a, "project A");
+    auto p2 = make_project(&B, ctl, b, "project B");
+    auto p3 = make_project(&C, ctl, c, "project C");
+    auto p4 = make_project(&R, ctl, abc, "project ABC");
+    auto p5 = make_project(&diffA, ctl, diffa, "project dA/dx");
     
-    auto b1 = make_binary_op(add, a, b, a_plus_b);
-    auto b2 = make_binary_op(mul, a_plus_b, c, a_plus_b_times_c);
-    auto b3 = make_binary_op(sub, a_plus_b_times_c, abc, errabc);
-    auto b4 = make_binary_op(sub, diffa, deriva, errdiff);
+    auto b1 = make_binary_op(add, a, b, a_plus_b, "a+b");
+    auto b2 = make_binary_op(mul, a_plus_b, c, a_plus_b_times_c, "(a+b)*c");
+    auto b3 = make_binary_op(sub, a_plus_b_times_c, abc, errabc, "(a+b)*c - abc");
+    auto b4 = make_binary_op(sub, diffa, deriva, errdiff, "dA/dx analytic - numeric");
 
-    auto d = make_diff(a, deriva);
+    auto d = make_diff(a, deriva, "dA/dx numeric");
 
     auto norma = make_norm2(a);
     auto normabcerr = make_norm2(errabc);
     auto normdifferr = make_norm2(errdiff);
 
-    auto comp1 = make_compress(a,compa);
+    auto comp1 = make_compress(a,compa,"compress(A)");
     auto norma2 = make_norm2(compa);
 
-    auto recon1 = make_reconstruct(compa,recona);
+    auto recon1 = make_reconstruct(compa,recona,"reconstruct(A)");
     auto norma3 = make_norm2(recona);
 
     auto start = make_start(ctl);
