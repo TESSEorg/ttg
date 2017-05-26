@@ -1,14 +1,15 @@
 #ifndef MADNESS_TTG_H_INCLUDED
 #define MADNESS_TTG_H_INCLUDED
 
-#include <string>
+#include <array>
+#include <cassert>
+#include <functional>
 #include <iostream>
+#include <map>
+#include <memory>
+#include <string>
 #include <tuple>
 #include <vector>
-#include <functional>
-#include <memory>
-#include <cassert>
-#include <map>
 
 #include <madness/world/MADworld.h>
 #include <madness/world/worldhashmap.h>
