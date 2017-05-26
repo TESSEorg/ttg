@@ -48,7 +48,7 @@ if (EIGEN3_FOUND)
 endif(EIGEN3_FOUND)
 
 ################################## TTG API
-set(ttg_headers ttg.h ttg_base.h)
+set(ttg_headers ttg.h ttg_base.h demangle.h)
 add_library(ttg INTERFACE)
 target_include_directories(ttg INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
