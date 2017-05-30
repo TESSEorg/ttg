@@ -89,8 +89,8 @@ public:
 };
 
 
-class Everything2 : public TTGOp<keyT, std::tuple<>, Everything> {
-    using baseT =          TTGOp<keyT, std::tuple<>, Everything>;
+class Everything2 : public TTGOp<keyT, std::tuple<>, Everything2> {
+    using baseT =          TTGOp<keyT, std::tuple<>, Everything2>;
     
     Edge<keyT,int> P2A, A2A, A2C; // !!!! Edges must be constructed before classes that use them
     Producer producer;
