@@ -1,13 +1,56 @@
 #define WORLD_INSTANTIATE_STATIC_TEMPLATES
-#include "ttg.h"
 #include <tuple>
 #include <cmath>
 #include <cassert>
 #include <iostream>
 #include <random>
 #include <cstdio>
+
 #include <madness/world/worldmutex.h>
 #include <madness/world/worldhash.h>
+#include <madness/world/archive.h>
+
+using pairT = std::pair<std::size_t, std::size_t>;
+
+namespace madness {
+    template <>
+    madness::hashT hash_value(const pairT& t) {
+        return (t.first<<32) + t.second;
+    }
+}
+
+struct tripleT {
+    std::size_t first, second, third;
+    tripleT() {}
+    tripleT(size_t i,std::size_t j,std::size_t k) : first(i), second(j), third(k) {}
+
+    bool operator<(const tripleT& a) const { // for storing in map
+        if (first < a.first) return true;
+        else if (first > a.first) return false;
+        else if (second < a.second) return true;
+        else if (second > a.second) return false;
+        else if (third < a.third) return true;
+        else return false;
+    }
+
+    bool operator==(const tripleT& a) const { // for storing in hash
+        return (first==a.first && second==a.second && third==a.third);
+    }
+
+    madness::hashT hash() const {return (first<<40) + (second<<20) + first;}
+
+    template <typename Archive> void serialize(Archive& ar) {madness::archive::wrap((unsigned char*) this, sizeof(*this));}
+};
+
+std::ostream& operator<<(std::ostream&s, const pairT& a) {
+    return s << "(" << a.first << "," << a.second << ")";
+}
+
+std::ostream& operator<<(std::ostream&s, const tripleT& a) {
+    return s << "(" << a.first << "," << a.second << "," << a.third << ")";
+}
+
+#include "ttg.h"
 
 class Matrix {
     std::size_t n, m;
@@ -129,46 +172,6 @@ Matrix mxm_ref(const Matrix& a, const Matrix& b) {
             for (std::size_t r=0; r<m; r++)
                 c(p,r) += a(p,q)*b(q,r);
     return c;
-}
-
-using pairT = std::pair<std::size_t, std::size_t>;
-
-namespace madness {
-    template <>
-    madness::hashT hash_value(const pairT& t) {
-        return (t.first<<32) + t.second;
-    }
-}
-
-struct tripleT {
-    std::size_t first, second, third;
-    tripleT() {}
-    tripleT(size_t i,std::size_t j,std::size_t k) : first(i), second(j), third(k) {}
-
-    bool operator<(const tripleT& a) const { // for storing in map
-        if (first < a.first) return true;
-        else if (first > a.first) return false;
-        else if (second < a.second) return true;
-        else if (second > a.second) return false;
-        else if (third < a.third) return true;
-        else return false;
-    }
-
-    bool operator==(const tripleT& a) const { // for storing in hash
-        return (first==a.first && second==a.second && third==a.third);
-    }
-
-    madness::hashT hash() const {return (first<<40) + (second<<20) + first;}
-
-    template <typename Archive> void serialize(Archive& ar) {madness::archive::wrap((unsigned char*) this, sizeof(*this));}
-};
-
-std::ostream& operator<<(std::ostream&s, const pairT& a) {
-    return s << "(" << a.first << "," << a.second << ")";
-}
-
-std::ostream& operator<<(std::ostream&s, const tripleT& a) {
-    return s << "(" << a.first << "," << a.second << "," << a.third << ")";
 }
 
 class MxM {
