@@ -2,7 +2,6 @@
 #include <iostream>
 #include <tuple>
 #include "ttg.h"
-#include <madness/world/MADworld.h>
 
 using namespace madness;
 
