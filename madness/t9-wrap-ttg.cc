@@ -1,5 +1,5 @@
 #define WORLD_INSTANTIATE_STATIC_TEMPLATES
-#include "ttg-mad.h"
+#include "madness/ttg.h"
 #include <cmath>
 #include <iostream>
 #include <madness/world/worldmutex.h>

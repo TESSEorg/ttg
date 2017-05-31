@@ -51,37 +51,59 @@ if (EIGEN3_FOUND)
 endif(EIGEN3_FOUND)
 
 ################################## TTG API
-set(ttg_headers ttg-mad.h ttgbase.h demangle.h)
-add_library(ttg INTERFACE)
-target_include_directories(ttg INTERFACE
+
+################
+####### MADNESS
+################
+set(ttg-mad_headers madness/ttg.h ttg.h demangle.h)
+add_library(ttg-mad INTERFACE)
+target_include_directories(ttg-mad INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   )
-target_compile_features(ttg INTERFACE cxx_return_type_deduction)
-install(FILES ${ttg_headers}
+target_compile_features(ttg-mad INTERFACE cxx_return_type_deduction)
+install(FILES ${ttg-mad_headers}
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-        COMPONENT ttg)
+        COMPONENT ttg-mad)
 # Use current CMAKE_CXX_FLAGS to compile targets dependent on this library
 string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
-target_compile_options(ttg INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
+target_compile_options(ttg-mad INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
 # MADNESS is the only prerequisite
 find_package(MADNESS REQUIRED 0.10.1 CONFIG QUIET COMPONENTS world HINTS ${MADNESS_ROOT_DIR})
-target_link_libraries(ttg INTERFACE MADworld)
+target_link_libraries(ttg-mad INTERFACE MADworld)
 
 # sanity check
-add_executable (ttgtest ttg.cc)
-target_link_libraries(ttgtest LINK_PUBLIC ttg)
+add_executable (ttgtest-mad madness/ttg.cc)
+target_link_libraries(ttgtest-mad LINK_PUBLIC ttg-mad)
 
 # T9 example
-add_executable (t9-wrap-ttg t9-wrap-ttg.cc)
-target_link_libraries(t9-wrap-ttg LINK_PUBLIC ttg)
+add_executable (t9-wrap-mad madness/t9-wrap-ttg.cc)
+target_link_libraries(t9-wrap-mad LINK_PUBLIC ttg-mad)
 
 # dense matmul
-add_executable (mxm_simple_suma_ttg mxm_simple_suma_ttg.cc)
-target_link_libraries(mxm_simple_suma_ttg LINK_PUBLIC ttg)
+add_executable (mxm-summa-mad madness/mxm-summa.cc)
+target_link_libraries(mxm-summa-mad LINK_PUBLIC ttg-mad)
 
-# sparse matmul
-if (EIGEN3_FOUND)
-  add_executable (spmm-ttg spmm-ttg.cc)
-  target_link_libraries(spmm-ttg LINK_PUBLIC eigen3 ttg)
-endif(EIGEN3_FOUND)
+################
+####### PaRSEC
+################
+set(ttg-parsec_headers parsec/ttg.h ttg.h demangle.h)
+add_library(ttg-parsec INTERFACE)
+target_include_directories(ttg-parsec INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+  )
+target_compile_features(ttg-parsec INTERFACE cxx_return_type_deduction)
+install(FILES ${ttg-parsec_headers}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        COMPONENT ttg-parsec)
+# Use current CMAKE_CXX_FLAGS to compile targets dependent on this library
+string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
+target_compile_options(ttg-parsec INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
+# PaRSEC is the only explicit prerequisite
+find_package(parsec HINTS ${PARSEC_ROOT_DIR})
+target_link_libraries(ttg-parsec INTERFACE parsec)
+
+# sanity check
+add_executable (ttgtest-parsec parsec/ttg.cc)
+target_link_libraries(ttgtest-parsec LINK_PUBLIC ttg-parsec)

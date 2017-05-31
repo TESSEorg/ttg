@@ -51,7 +51,7 @@ std::ostream& operator<<(std::ostream&s, const tripleT& a) {
     return s << "(" << a.first << "," << a.second << "," << a.third << ")";
 }
 
-#include "ttg-mad.h"
+#include "madness/ttg.h"
 
 class Matrix {
     std::size_t n, m;

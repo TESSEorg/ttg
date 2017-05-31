@@ -2,7 +2,7 @@
 #define WORLD_INSTANTIATE_STATIC_TEMPLATES
 #include <iostream>
 #include <tuple>
-#include "ttg-mad.h"
+#include "madness/ttg.h"
 
 using namespace madness;
 

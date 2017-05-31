@@ -1,5 +1,7 @@
-#ifndef MADNESS_TTG_H_INCLUDED
-#define MADNESS_TTG_H_INCLUDED
+#ifndef PARSEC_TTG_H_INCLUDED
+#define PARSEC_TTG_H_INCLUDED
+
+#include "../ttg.h"
 
 #include <array>
 #include <cassert>
@@ -14,7 +16,6 @@
 #include <madness/world/MADworld.h>
 #include <madness/world/worldhashmap.h>
 #include <madness/world/worldtypes.h>
-#include "ttgbase.h"
 
 // how to improve:
 // 1. terminals -> ports to match established terminology in ...
@@ -582,4 +583,4 @@ auto wrap(const funcT& func,
 
 
 
-#endif // MADNESS_TTG_H_INCLUDED
+#endif // PARSEC_TTG_H_INCLUDED
