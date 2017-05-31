@@ -110,10 +110,10 @@ template <typename keyT, typename valueT>
 class Edge {
 private:
 
-    // An EdgePimpl represents a single edge that most usually will
-    // most usually connect a single output terminal with a single
+    // An EdgeImpl represents a single edge that most usually will
+    // connect a single output terminal with a single
     // input terminal.  However, we had to relax this constraint in
-    // order to easily accomodate connecting an input/output edge to
+    // order to easily accommodate connecting an input/output edge to
     // an operation that to the outside looked like a single op but
     // internally was implemented as multiple operations.  Thus, the
     // input/output edge has to connect to multiple terminals.
@@ -121,14 +121,14 @@ private:
     // compose, easier to implement, and likely more efficient at
     // runtime.  This is why outs/ins are vectors rather than pointers
     // to a single terminal.
-    struct EdgePimpl {
+    struct EdgeImpl {
         std::string name;
         std::vector<TTGIn<keyT,valueT>*> outs;
         std::vector<TTGOut<keyT,valueT>*> ins;
 
-        EdgePimpl() : name(""), outs(), ins() {}
+        EdgeImpl() : name(""), outs(), ins() {}
         
-        EdgePimpl(const std::string& name) : name(name), outs(), ins() {}
+        EdgeImpl(const std::string& name) : name(name), outs(), ins() {}
 
         void set_in(TTGOut<keyT,valueT>* in) {
             if (ins.size()) std::cout << "Edge: " << name << " : has multiple inputs" << std::endl;
@@ -150,7 +150,7 @@ private:
             for (auto in : ins) if (in && out) in->connect(*out);
         }
         
-        ~EdgePimpl() {
+        ~EdgeImpl() {
             if (ins.size()==0 || outs.size()==0) {
                 std::cerr << "Edge: destroying edge pimpl with either in or out not assigned --- DAG may be incomplete" << std::endl;
             }
@@ -160,7 +160,7 @@ private:
 
     // We have a vector here to accomodate fusing multiple edges together
     // when connecting them all to a single terminal.  
-    mutable std::vector<std::shared_ptr<EdgePimpl>> p; // Need shallow copy semantics
+    mutable std::vector<std::shared_ptr<EdgeImpl>> p; // Need shallow copy semantics
 
 public:
     typedef TTGIn<keyT,valueT>   input_terminal_type;
@@ -170,7 +170,7 @@ public:
     static constexpr bool is_an_edge = true;
 
     Edge(const std::string name = "anonymous edge") : p(1) {
-        p[0] = std::make_shared<EdgePimpl>(name);
+        p[0] = std::make_shared<EdgeImpl>(name);
     }
 
     template <typename...valuesT>
