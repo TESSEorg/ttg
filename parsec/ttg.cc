@@ -8,12 +8,15 @@
 #include <mpi.h>
 #include <parsec/execution_unit.h>
 
+using namespace parsec::ttg;
+using namespace ::ttg;
+
 using keyT = double;
 
-class A : public TTGOp<keyT, std::tuple<TTGOut<keyT, int>, TTGOut<keyT, int>>,
+class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>,
                        A, int> {
   using baseT =
-      TTGOp<keyT, std::tuple<TTGOut<keyT, int>, TTGOut<keyT, int>>, A, int>;
+      Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, int>;
 
  public:
   A(const std::string& name) : baseT(name, {"input"}, {"iterate", "result"}) {}
@@ -34,8 +37,8 @@ class A : public TTGOp<keyT, std::tuple<TTGOut<keyT, int>, TTGOut<keyT, int>>,
   }
 };
 
-class Producer : public TTGOp<keyT, std::tuple<TTGOut<keyT, int>>, Producer> {
-  using baseT = TTGOp<keyT, std::tuple<TTGOut<keyT, int>>, Producer>;
+class Producer : public Op<keyT, std::tuple<Out<keyT, int>>, Producer> {
+  using baseT = Op<keyT, std::tuple<Out<keyT, int>>, Producer>;
 
  public:
   Producer(const std::string& name) : baseT(name, {}, {"output"}) {}
@@ -51,8 +54,8 @@ class Producer : public TTGOp<keyT, std::tuple<TTGOut<keyT, int>>, Producer> {
   }
 };
 
-class Consumer : public TTGOp<keyT, std::tuple<>, Consumer, int> {
-  using baseT = TTGOp<keyT, std::tuple<>, Consumer, int>;
+class Consumer : public Op<keyT, std::tuple<>, Consumer, int> {
+  using baseT = Op<keyT, std::tuple<>, Consumer, int>;
 
  public:
   Consumer(const std::string& name) : baseT(name, {"input"}, {}) {}
@@ -67,8 +70,8 @@ class Consumer : public TTGOp<keyT, std::tuple<>, Consumer, int> {
       : baseT(inedges, edges(), name, {"input"}, {}) {}
 };
 
-class Everything : public TTGOp<keyT, std::tuple<>, Everything> {
-  using baseT = TTGOp<keyT, std::tuple<>, Everything>;
+class Everything : public Op<keyT, std::tuple<>, Everything> {
+  using baseT = Op<keyT, std::tuple<>, Everything>;
 
   Producer producer;
   A a;
@@ -87,13 +90,13 @@ class Everything : public TTGOp<keyT, std::tuple<>, Everything> {
     a.out<0>().connect(consumer.in<0>());
     a.out<1>().connect(a.in<0>());
 
-    TTGVerify()(&producer);
+    Verify()(&producer);
     // ctx->fence();
   }
 
-  void print() { TTGPrint()(&producer); }
+  void print() { Print()(&producer); }
 
-  std::string dot() { return TTGDot()(&producer); }
+  std::string dot() { return Dot()(&producer); }
 
   void start() {
     // if (my rank = 0)
@@ -106,8 +109,8 @@ class Everything : public TTGOp<keyT, std::tuple<>, Everything> {
 };
 
 #if 0
-class Everything2 : public TTGOp<keyT, std::tuple<>, Everything2> {
-    using baseT =          TTGOp<keyT, std::tuple<>, Everything2>;
+class Everything2 : public Op<keyT, std::tuple<>, Everything2> {
+    using baseT =          Op<keyT, std::tuple<>, Everything2>;
     
     Edge<keyT,int> P2A, A2A, A2C; // !!!! Edges must be constructed before classes that use them
     Producer producer;
@@ -127,9 +130,9 @@ public:
         world.gop.fence();
     }
     
-    void print() {TTGPrint()(&producer);}
+    void print() {Print()(&producer);}
 
-    std::string dot() {return TTGDot()(&producer);}
+    std::string dot() {return Dot()(&producer);}
     
     void start() {if (world.rank() == 0) producer.invoke(0);}
     
@@ -138,12 +141,12 @@ public:
 
 class Everything3 {
 
-    static void p(const keyT& key, const std::tuple<>& t, std::tuple<TTGOut<keyT,int>>& out) {
+    static void p(const keyT& key, const std::tuple<>& t, std::tuple<Out<keyT,int>>& out) {
         std::cout << "produced " << 0 << std::endl;
         send<0>(key,int(key),out);
     }
 
-    static void a(const keyT& key, const std::tuple<int>& t, std::tuple<TTGOut<keyT,int>,TTGOut<keyT,int>>&  out) {
+    static void a(const keyT& key, const std::tuple<int>& t, std::tuple<Out<keyT,int>,Out<keyT,int>>&  out) {
         int value = std::get<0>(t);
         if (value >= 100) {
             send<0>(key, value, out);
@@ -173,9 +176,9 @@ public:
         madness::World::get_default().gop.fence();
     }
     
-    void print() {TTGPrint()(wp.get());}
+    void print() {Print()(wp.get());}
 
-    std::string dot() {return TTGDot()(wp.get());}
+    std::string dot() {return Dot()(wp.get());}
     
     void start() {if (madness::World::get_default().rank() == 0) wp->invoke(0);}
     
@@ -184,12 +187,12 @@ public:
     
 class Everything4 {
 
-    static void p(const keyT& key, std::tuple<TTGOut<keyT,int>>& out) {
+    static void p(const keyT& key, std::tuple<Out<keyT,int>>& out) {
         std::cout << "produced " << 0 << std::endl;
         send<0>(key,int(key),out);
     }
 
-    static void a(const keyT& key, int value, std::tuple<TTGOut<keyT,int>,TTGOut<keyT,int>>&  out) {
+    static void a(const keyT& key, int value, std::tuple<Out<keyT,int>,Out<keyT,int>>&  out) {
         if (value >= 100) {
             send<0>(key, value, out);
         }
@@ -218,9 +221,9 @@ public:
         madness::World::get_default().gop.fence();
     }
     
-    void print() {TTGPrint()(wp.get());}
+    void print() {Print()(wp.get());}
 
-    std::string dot() {return TTGDot()(wp.get());}
+    std::string dot() {return Dot()(wp.get());}
     
     void start() {if (madness::World::get_default().rank() == 0) wp->invoke(0);}
     
@@ -245,7 +248,7 @@ int main(int argc, char** argv) {
     handle->update_nb_runtime_task = parsec_ptg_update_runtime_task;
     eu = parsec->virtual_processes[0]->execution_units[0];
 
-  TTGOpBase::set_trace_all(false);
+  OpBase::set_trace_all(false);
 
   // First compose with manual classes and connections
   Everything x(parsec);

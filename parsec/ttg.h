@@ -14,11 +14,11 @@
 #include <vector>
 
 #include <parsec.h>
-#include <parsec/parsec_internal.h>
-#include <parsec/devices/device.h>
 #include <parsec/data_internal.h>
-#include <parsec/scheduling.h>
 #include <parsec/datarepo.h>
+#include <parsec/devices/device.h>
+#include <parsec/parsec_internal.h>
+#include <parsec/scheduling.h>
 
 extern parsec_execution_unit_t* eu;
 extern parsec_handle_t* handle;
@@ -26,286 +26,49 @@ extern parsec_handle_t* handle;
 static int static_global_function_id = 0;
 
 extern "C" {
-    typedef struct my_op_s : public parsec_execution_context_t {
-        void(*function_template_class_ptr)(void*) ;
-        void* object_ptr;
-        void(*static_set_arg)(int, int);
-        uint64_t key;
-        uint32_t in_data_count;
-    } my_op_t;
+typedef struct my_op_s : public parsec_execution_context_t {
+  void (*function_template_class_ptr)(void*);
+  void* object_ptr;
+  void (*static_set_arg)(int, int);
+  uint64_t key;
+  uint32_t in_data_count;
+} my_op_t;
 
-    static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
-                                     parsec_execution_context_t* task);
+static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
+                                 parsec_execution_context_t* task);
 }
 
-// how to improve:
-// 1. terminals -> ports to match established terminology in ...
-// 2. add namespace ttg, TTGName -> ttg::Name; e.g. TTGOpBase -> ttg::OpBase
-// 3. to make runtimes interoperable: use inline namespaces?
-//    namespace madness {
-//      inline namespace ::ttg
-//    }
-
-template <typename keyT, typename valueT>
-class Edge;  // Forward decl.
-
-template <typename keyT, typename valueT>
-class TTGIn : public TTGTerminalBase {
- public:
-  typedef valueT value_type;
-  typedef keyT key_type;
-  typedef Edge<keyT, valueT> edge_type;
-  using send_callback_type = std::function<void(const keyT&, const valueT&)>;
-  static constexpr bool is_an_input_terminal = true;
-
- private:
-  bool initialized;
-  send_callback_type send_callback;
-
-  // No moving, copying, assigning permitted
-  TTGIn(TTGIn&& other) = delete;
-  TTGIn(const TTGIn& other) = delete;
-  TTGIn& operator=(const TTGIn& other) = delete;
-  TTGIn& operator=(const TTGIn&& other) = delete;
-
- public:
-  TTGIn() : initialized(false) {}
-
-  TTGIn(const send_callback_type& send_callback)
-      : initialized(true), send_callback(send_callback) {}
-
-  // callback (std::function) is used to erase the operator type and argument
-  // index
-  void set_callback(const send_callback_type& send_callback) {
-    initialized = true;
-    this->send_callback = send_callback;
-  }
-
-  void send(const keyT& key, const valueT& value) {
-    if (!initialized) throw "sending to uninitialzed callback";
-    send_callback(key, value);
-  }
-
-  // An optimized implementation will need a separate callback for broadcast
-  // with a specific value for rangeT
-  template <typename rangeT>
-  void broadcast(const rangeT& keylist, const valueT& value) {
-    if (!initialized) throw "broadcasting to uninitialzed callback";
-    for (auto key : keylist) send(key, value);
-  }
-};
-
-// Output terminal
-template <typename keyT, typename valueT>
-class TTGOut : public TTGTerminalBase {
- public:
-  typedef valueT value_type;
-  typedef keyT key_type;
-  typedef TTGIn<keyT, valueT> input_terminal_type;
-  typedef Edge<keyT, valueT> edge_type;
-  static constexpr bool is_an_output_terminal = true;
-
- private:
-  std::vector<input_terminal_type*> successors;
-
-  // No moving, copying, assigning permitted
-  TTGOut(TTGOut&& other) = delete;
-  TTGOut(const TTGOut& other) = delete;
-  TTGOut& operator=(const TTGOut& other) = delete;
-  TTGOut& operator=(const TTGOut&& other) = delete;
-
- public:
-  TTGOut() {}
-
-  void connect(input_terminal_type& successor) {
-    successors.push_back(&successor);
-    static_cast<TTGTerminalBase*>(this)->connect_base(&successor);
-  }
-
-  void send(const keyT& key, const valueT& value) {
-    for (auto successor : successors) successor->send(key, value);
-  }
-
-  // An optimized implementation will need a separate callback for broadcast
-  // with a specific value for rangeT
-  template <typename rangeT>
-  void broadcast(const rangeT& keylist, const valueT& value) {
-    for (auto successor : successors) successor->broadcast(keylist, value);
-  }
-};
-
-template <typename keyT, typename valueT>
-class Edge {
- private:
-  // An EdgeImpl represents a single edge that most usually will
-  // connect a single output terminal with a single
-  // input terminal.  However, we had to relax this constraint in
-  // order to easily accommodate connecting an input/output edge to
-  // an operation that to the outside looked like a single op but
-  // internally was implemented as multiple operations.  Thus, the
-  // input/output edge has to connect to multiple terminals.
-  // Permitting multiple end points makes this much easier to
-  // compose, easier to implement, and likely more efficient at
-  // runtime.  This is why outs/ins are vectors rather than pointers
-  // to a single terminal.
-  struct EdgeImpl {
-    std::string name;
-    std::vector<TTGIn<keyT, valueT>*> outs;
-    std::vector<TTGOut<keyT, valueT>*> ins;
-
-    EdgeImpl() : name(""), outs(), ins() {}
-
-    EdgeImpl(const std::string& name) : name(name), outs(), ins() {}
-
-    void set_in(TTGOut<keyT, valueT>* in) {
-      if (ins.size())
-        std::cout << "Edge: " << name << " : has multiple inputs" << std::endl;
-      ins.push_back(in);
-      try_to_connect_new_in(in);
-    }
-
-    void set_out(TTGIn<keyT, valueT>* out) {
-      if (outs.size())
-        std::cout << "Edge: " << name << " : has multiple outputs" << std::endl;
-      outs.push_back(out);
-      try_to_connect_new_out(out);
-    }
-
-    void try_to_connect_new_in(TTGOut<keyT, valueT>* in) const {
-      for (auto out : outs)
-        if (in && out) in->connect(*out);
-    }
-
-    void try_to_connect_new_out(TTGIn<keyT, valueT>* out) const {
-      for (auto in : ins)
-        if (in && out) in->connect(*out);
-    }
-
-    ~EdgeImpl() {
-      if (ins.size() == 0 || outs.size() == 0) {
-        std::cerr << "Edge: destroying edge pimpl with either in or out not "
-                     "assigned --- DAG may be incomplete"
-                  << std::endl;
-      }
-    }
-  };
-
-  // We have a vector here to accomodate fusing multiple edges together
-  // when connecting them all to a single terminal.
-  mutable std::vector<std::shared_ptr<EdgeImpl>>
-      p;  // Need shallow copy semantics
-
- public:
-  typedef TTGIn<keyT, valueT> input_terminal_type;
-  typedef TTGOut<keyT, valueT> output_terminal_type;
-  typedef keyT key_type;
-  typedef valueT value_type;
-  static constexpr bool is_an_edge = true;
-
-  Edge(const std::string name = "anonymous edge") : p(1) {
-    p[0] = std::make_shared<EdgeImpl>(name);
-  }
-
-  template <typename... valuesT>
-  Edge(const Edge<keyT, valuesT>&... edges) : p(0) {
-    std::vector<Edge<keyT, valueT>> v = {edges...};
-    for (auto& edge : v) {
-      p.insert(p.end(), edge.p.begin(), edge.p.end());
-    }
-  }
-
-  void set_in(TTGOut<keyT, valueT>* in) const {
-    for (auto& edge : p) edge->set_in(in);
-  }
-
-  void set_out(TTGIn<keyT, valueT>* out) const {
-    for (auto& edge : p) edge->set_out(out);
-  }
-};
-
-// Fuse edges into one ... all the types have to be the same ... just using
-// valuesT for variadic args
-template <typename keyT, typename... valuesT>
-auto fuse(const Edge<keyT, valuesT>&... args) {
-  using valueT = typename std::tuple_element<
-      0, std::tuple<valuesT...>>::type;  // grab first type
-  return Edge<keyT, valueT>(
-      args...);  // This will force all valuesT to be the same
-}
-
-// Make a tuple of Edges ... needs some type checking injected
-template <typename... inedgesT>
-auto edges(const inedgesT&... args) {
-  return std::make_tuple(args...);
-}
-
-template <size_t i, typename keyT, typename valueT,
-          typename... output_terminalsT>
-void send(const keyT& key, const valueT& value,
-          std::tuple<output_terminalsT...>& t) {
-  std::get<i>(t).send(key, value);
-}
-
-template <size_t i, typename rangeT, typename valueT,
-          typename... output_terminalsT>
-void broadcast(const rangeT& keylist, const valueT& value,
-               std::tuple<output_terminalsT...>& t) {
-  std::get<i>(t).broadcast(keylist, value);
-}
-
-// Make type of tuple of edges from type of tuple of terminals
-template <typename termsT>
-struct terminals_to_edges;
-template <typename... termsT>
-struct terminals_to_edges<std::tuple<termsT...>> {
-  typedef std::tuple<typename termsT::edge_type...> type;
-};
-
-// Make type of tuple of output terminals from type of tuple of edges
-template <typename edgesT>
-struct edges_to_output_terminals;
-template <typename... edgesT>
-struct edges_to_output_terminals<std::tuple<edgesT...>> {
-  typedef std::tuple<typename edgesT::output_terminal_type...> type;
-};
-
-// Make type of tuple of input terminals from type of tuple of edges
-template <typename edgesT>
-struct edges_to_input_terminals;
-template <typename... edgesT>
-struct edges_to_input_terminals<std::tuple<edgesT...>> {
-  typedef std::tuple<typename edgesT::input_terminal_type...> type;
-};
-
-static parsec_hook_return_t do_nothing(parsec_execution_unit_t *eu, parsec_execution_context_t *task)
-{
-    (void)eu;
-    (void)task;
-    return PARSEC_HOOK_RETURN_DONE;
+static parsec_hook_return_t do_nothing(parsec_execution_unit_t* eu,
+                                       parsec_execution_context_t* task) {
+  (void)eu;
+  (void)task;
+  return PARSEC_HOOK_RETURN_DONE;
 }
 
 static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
-                                 parsec_execution_context_t* task)
-{
-    my_op_t* me = static_cast<my_op_t*>(task);
-    me->function_template_class_ptr(task);
-    (void)eu;
-    return PARSEC_HOOK_RETURN_DONE;
+                                 parsec_execution_context_t* task) {
+  my_op_t* me = static_cast<my_op_t*>(task);
+  me->function_template_class_ptr(task);
+  (void)eu;
+  return PARSEC_HOOK_RETURN_DONE;
 }
 
+namespace parsec {
+namespace ttg {
+
 struct ParsecBaseOp {
-protected:
-    static std::map<int, ParsecBaseOp*> function_id_to_instance;
-    data_repo_t *input_data;
-    parsec_function_t self;
+ protected:
+  static std::map<int, ParsecBaseOp*> function_id_to_instance;
+  data_repo_t* input_data;
+  parsec_function_t self;
 };
 std::map<int, ParsecBaseOp*> ParsecBaseOp::function_id_to_instance = {};
 
 template <typename keyT, typename output_terminalsT, typename derivedT,
           typename... input_valueTs>
-class TTGOp : public TTGOpBase, ParsecBaseOp {
+class Op : public ::ttg::OpBase, ParsecBaseOp {
  private:
-  using opT = TTGOp<keyT, output_terminalsT, derivedT, input_valueTs...>;
+  using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
 
  public:
   static constexpr int numins =
@@ -335,35 +98,34 @@ class TTGOp : public TTGOpBase, ParsecBaseOp {
 
     OpArgs() : counter(numins), argset(), t() {}
 
-    void run() {
-        derived->op(key, t, derived->output_terminals);
-    }
+    void run() { derived->op(key, t, derived->output_terminals); }
 
     virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
   };
 
   static void static_op(parsec_execution_context_t* my_task) {
-        my_op_t* task = static_cast<my_op_t*>(my_task);
-        /*        
-                  struct data_repo_entry_s     *data_repo;
-                  struct parsec_data_copy_s    *data_in;
-                  struct parsec_data_copy_s    *data_out;
-        */
-        derivedT* obj = (derivedT*)task->object_ptr;
-        obj->op((keyT)task->key,
-                *static_cast<input_values_tuple_type*>(task->data[0].data_in->device_private),
-                obj->output_terminals);
+    my_op_t* task = static_cast<my_op_t*>(my_task);
+    /*
+              struct data_repo_entry_s     *data_repo;
+              struct parsec_data_copy_s    *data_in;
+              struct parsec_data_copy_s    *data_out;
+    */
+    derivedT* obj = (derivedT*)task->object_ptr;
+    obj->op((keyT)task->key,
+            *static_cast<input_values_tuple_type*>(
+                task->data[0].data_in->device_private),
+            obj->output_terminals);
   }
 
-    static void static_op_noarg(parsec_execution_context_t* my_task) {
-        my_op_t* task = static_cast<my_op_t*>(my_task);
-        /*        
-                  struct data_repo_entry_s     *data_repo;
-                  struct parsec_data_copy_s    *data_in;
-                  struct parsec_data_copy_s    *data_out;
-        */
-        derivedT* obj = (derivedT*)task->object_ptr;
-        obj->op((keyT)task->key, std::tuple<>(), obj->output_terminals);
+  static void static_op_noarg(parsec_execution_context_t* my_task) {
+    my_op_t* task = static_cast<my_op_t*>(my_task);
+    /*
+              struct data_repo_entry_s     *data_repo;
+              struct parsec_data_copy_s    *data_in;
+              struct parsec_data_copy_s    *data_out;
+    */
+    derivedT* obj = (derivedT*)task->object_ptr;
+    obj->op((keyT)task->key, std::tuple<>(), obj->output_terminals);
   }
 
   using cacheT = std::map<keyT, OpArgs>;
@@ -373,70 +135,78 @@ class TTGOp : public TTGOpBase, ParsecBaseOp {
   template <std::size_t i>
   void set_arg(const keyT& key, const typename std::tuple_element<
                                     i, input_values_tuple_type>::type& value) {
-    using valueT = typename std::tuple_element<i, input_values_tuple_type>::type;
+    using valueT =
+        typename std::tuple_element<i, input_values_tuple_type>::type;
 
-    if (tracing()) std::cout << get_name() << " : " << key << ": setting argument : " << i << std::endl;
-    
-    data_repo_entry_t *e = data_repo_lookup_entry_and_create(eu, input_data, (uint64_t)key);
-    if( e->data[i] != NULL ) {
-            std::cerr << get_name() << " : " << key << ": error argument is already set : " << i << std::endl;
-            throw "bad set arg";
+    if (tracing())
+      std::cout << get_name() << " : " << key << ": setting argument : " << i
+                << std::endl;
+
+    data_repo_entry_t* e =
+        data_repo_lookup_entry_and_create(eu, input_data, (uint64_t)key);
+    if (e->data[i] != NULL) {
+      std::cerr << get_name() << " : " << key
+                << ": error argument is already set : " << i << std::endl;
+      throw "bad set arg";
     }
 
-    parsec_data_copy_t *copy = OBJ_NEW(parsec_data_copy_t);
+    parsec_data_copy_t* copy = OBJ_NEW(parsec_data_copy_t);
     valueT* valueCopy = std::allocator<valueT>().allocate(1);
-    auto copy_r = new(valueCopy) valueT(value);
+    auto copy_r = new (valueCopy) valueT(value);
     copy->device_private = (void*)valueCopy;
     e->data[i] = copy;
 
     my_op_t* task;
-    if( NULL == (task = static_cast<my_op_t*>(e->ttg_task)) ) {
-        task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
+    if (NULL == (task = static_cast<my_op_t*>(e->ttg_task))) {
+      task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
 
-        OBJ_CONSTRUCT(task, parsec_list_item_t);
-        task->function = &this->self;
-        task->parsec_handle = handle;
-        task->status = PARSEC_TASK_STATUS_HOOK;
-            
-        task->function_template_class_ptr =
-            reinterpret_cast<void (*)(void*)>(&TTGOp::static_op);
-        task->object_ptr = static_cast<derivedT*>(this);
-        task->key = key;
+      OBJ_CONSTRUCT(task, parsec_list_item_t);
+      task->function = &this->self;
+      task->parsec_handle = handle;
+      task->status = PARSEC_TASK_STATUS_HOOK;
 
-        if( !parsec_atomic_cas_ptr(&e->ttg_task, NULL, task) ) {
-            free(task);
-            task = static_cast<my_op_t*>(e->ttg_task);
-        }
+      task->function_template_class_ptr =
+          reinterpret_cast<void (*)(void*)>(&Op::static_op);
+      task->object_ptr = static_cast<derivedT*>(this);
+      task->key = key;
+
+      if (!parsec_atomic_cas_ptr(&e->ttg_task, NULL, task)) {
+        free(task);
+        task = static_cast<my_op_t*>(e->ttg_task);
+      }
     }
     int count = parsec_atomic_inc_32b(&task->in_data_count);
-    if( count == self.dependencies_goal ) {
-        for(int ii = 0; ii < self.dependencies_goal; ii++) {
-            task->data[ii].data_in = e->data[ii];
-        }
-        data_repo_entry_used_once(eu, input_data, (uint64_t)key);
-        if (tracing()) std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
-        __parsec_schedule(eu, static_cast<parsec_execution_context_t*>(task), 0);
+    if (count == self.dependencies_goal) {
+      for (int ii = 0; ii < self.dependencies_goal; ii++) {
+        task->data[ii].data_in = e->data[ii];
+      }
+      data_repo_entry_used_once(eu, input_data, (uint64_t)key);
+      if (tracing())
+        std::cout << get_name() << " : " << key << ": invoking op "
+                  << std::endl;
+      __parsec_schedule(eu, static_cast<parsec_execution_context_t*>(task), 0);
     }
   }
 
   // Used to generate tasks with no input arguments
   void set_arg_empty(const keyT& key) {
-        if (tracing()) std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
-        //create PaRSEC task
-        // and give it to the scheduler
-        my_op_t* task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
+    if (tracing())
+      std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
+    // create PaRSEC task
+    // and give it to the scheduler
+    my_op_t* task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
 
-        OBJ_CONSTRUCT(task, parsec_list_item_t);
-        task->function = &this->self;
-        task->parsec_handle = handle;
-        task->status = PARSEC_TASK_STATUS_HOOK;
-            
-        task->function_template_class_ptr =
-            reinterpret_cast<void (*)(void*)>(&TTGOp::static_op_noarg);
-        task->object_ptr = static_cast<derivedT*>(this);
-        task->key = key;
-        task->data[0].data_in = static_cast<parsec_data_copy_t*>(NULL);
-        __parsec_schedule(eu, task, 0);
+    OBJ_CONSTRUCT(task, parsec_list_item_t);
+    task->function = &this->self;
+    task->parsec_handle = handle;
+    task->status = PARSEC_TASK_STATUS_HOOK;
+
+    task->function_template_class_ptr =
+        reinterpret_cast<void (*)(void*)>(&Op::static_op_noarg);
+    task->object_ptr = static_cast<derivedT*>(this);
+    task->key = key;
+    task->data[0].data_in = static_cast<parsec_data_copy_t*>(NULL);
+    __parsec_schedule(eu, task, 0);
   }
 
   // Used by invoke to set all arguments associated with a task
@@ -456,10 +226,10 @@ class TTGOp : public TTGOpBase, ParsecBaseOp {
   // including for possibly already running tasks and remote
   // references.  This is not worth the effort ... wherever you are
   // wanting to move/assign an Op you should be using a pointer.
-  TTGOp(const TTGOp& other) = delete;
-  TTGOp& operator=(const TTGOp& other) = delete;
-  TTGOp(TTGOp&& other) = delete;
-  TTGOp& operator=(TTGOp&& other) = delete;
+  Op(const Op& other) = delete;
+  Op& operator=(const Op& other) = delete;
+  Op(Op&& other) = delete;
+  Op& operator=(Op&& other) = delete;
 
   // Registers the callback for the i'th input terminal
   template <typename terminalT, std::size_t i>
@@ -504,14 +274,14 @@ class TTGOp : public TTGOpBase, ParsecBaseOp {
   }
 
  public:
-  TTGOp(const std::string& name, const std::vector<std::string>& innames,
-        const std::vector<std::string>& outnames)
-      : TTGOpBase(name, numins, numouts) {
+  Op(const std::string& name, const std::vector<std::string>& innames,
+     const std::vector<std::string>& outnames)
+      : ::ttg::OpBase(name, numins, numouts) {
     // Cannot call these in base constructor since terminals not yet constructed
     if (innames.size() != std::tuple_size<input_terminals_type>::value)
-      throw "TTGOP: #input names != #input terminals";
+      throw "parsec::ttg::OP: #input names != #input terminals";
     if (outnames.size() != std::tuple_size<output_terminalsT>::value)
-      throw "TTGOP: #output names != #output terminals";
+      throw "parsec::ttg::OP: #output names != #output terminals";
 
     register_input_terminals(input_terminals, innames);
     register_output_terminals(output_terminals, outnames);
@@ -520,63 +290,63 @@ class TTGOp : public TTGOpBase, ParsecBaseOp {
 
     int i;
 
-        memset(&self, 0, sizeof(parsec_function_t));
-        
-        self.name = name.c_str();
-        self.function_id = static_global_function_id++;
-        self.nb_parameters = 0;
-        self.nb_locals = 0;
-        self.nb_flows = std::max((int)numins, (int)numouts);
+    memset(&self, 0, sizeof(parsec_function_t));
 
-        function_id_to_instance[self.function_id] = this;
-        
-        self.incarnations = (__parsec_chore_t *) malloc(2 * sizeof(__parsec_chore_t));
-        ((__parsec_chore_t*)self.incarnations)[0].type = PARSEC_DEV_CPU;
-        ((__parsec_chore_t*)self.incarnations)[0].evaluate = NULL;
-        ((__parsec_chore_t*)self.incarnations)[0].hook = hook;
-        ((__parsec_chore_t*)self.incarnations)[1].type = PARSEC_DEV_NONE;
-        ((__parsec_chore_t*)self.incarnations)[1].evaluate = NULL;
-        ((__parsec_chore_t*)self.incarnations)[1].hook = NULL;
+    self.name = name.c_str();
+    self.function_id = static_global_function_id++;
+    self.nb_parameters = 0;
+    self.nb_locals = 0;
+    self.nb_flows = std::max((int)numins, (int)numouts);
 
-        self.release_task = do_nothing;
+    function_id_to_instance[self.function_id] = this;
 
-        for( i = 0; i < numins; i++ ) {
-            parsec_flow_t* flow = new parsec_flow_t;
-            flow->name = strdup((std::string("flow in") + std::to_string(i)).c_str());
-            flow->sym_type = SYM_INOUT;
-            flow->flow_flags = FLOW_ACCESS_RW;
-            flow->dep_in[0] = NULL;
-            flow->dep_out[0] = NULL;
-            flow->flow_index = i;
-            flow->flow_datatype_mask = (1 << i);
-            *((parsec_flow_t**)&(self.in[i])) = flow;
-        }
-        *((parsec_flow_t**)&(self.in[i])) = NULL;
+    self.incarnations = (__parsec_chore_t*)malloc(2 * sizeof(__parsec_chore_t));
+    ((__parsec_chore_t*)self.incarnations)[0].type = PARSEC_DEV_CPU;
+    ((__parsec_chore_t*)self.incarnations)[0].evaluate = NULL;
+    ((__parsec_chore_t*)self.incarnations)[0].hook = hook;
+    ((__parsec_chore_t*)self.incarnations)[1].type = PARSEC_DEV_NONE;
+    ((__parsec_chore_t*)self.incarnations)[1].evaluate = NULL;
+    ((__parsec_chore_t*)self.incarnations)[1].hook = NULL;
 
-        for( i = 0; i < numouts; i++ ) {
-            parsec_flow_t* flow = new parsec_flow_t;
-            flow->name = strdup((std::string("flow out") + std::to_string(i)).c_str());
-            flow->sym_type = SYM_INOUT;
-            flow->flow_flags = FLOW_ACCESS_RW;
-            flow->dep_in[0] = NULL;
-            flow->dep_out[0] = NULL;
-            flow->flow_index = i;
-            flow->flow_datatype_mask = (1 << i);
-            *((parsec_flow_t**)&(self.out[i]))  = flow;
-        }
-        *((parsec_flow_t**)&(self.out[i])) = NULL;
-    
-        self.flags = 0;
-        self.dependencies_goal = (~(uint32_t)0) >> (32-numins);
+    self.release_task = do_nothing;
 
-        input_data = data_repo_create_nothreadsafe(4096, numins);
+    for (i = 0; i < numins; i++) {
+      parsec_flow_t* flow = new parsec_flow_t;
+      flow->name = strdup((std::string("flow in") + std::to_string(i)).c_str());
+      flow->sym_type = SYM_INOUT;
+      flow->flow_flags = FLOW_ACCESS_RW;
+      flow->dep_in[0] = NULL;
+      flow->dep_out[0] = NULL;
+      flow->flow_index = i;
+      flow->flow_datatype_mask = (1 << i);
+      *((parsec_flow_t**)&(self.in[i])) = flow;
+    }
+    *((parsec_flow_t**)&(self.in[i])) = NULL;
+
+    for (i = 0; i < numouts; i++) {
+      parsec_flow_t* flow = new parsec_flow_t;
+      flow->name =
+          strdup((std::string("flow out") + std::to_string(i)).c_str());
+      flow->sym_type = SYM_INOUT;
+      flow->flow_flags = FLOW_ACCESS_RW;
+      flow->dep_in[0] = NULL;
+      flow->dep_out[0] = NULL;
+      flow->flow_index = i;
+      flow->flow_datatype_mask = (1 << i);
+      *((parsec_flow_t**)&(self.out[i])) = flow;
+    }
+    *((parsec_flow_t**)&(self.out[i])) = NULL;
+
+    self.flags = 0;
+    self.dependencies_goal = (~(uint32_t)0) >> (32 - numins);
+
+    input_data = data_repo_create_nothreadsafe(4096, numins);
   }
-    
-  TTGOp(const input_edges_type& inedges, const output_edges_type& outedges,
-        const std::string& name, const std::vector<std::string>& innames,
-        const std::vector<std::string>& outnames)
-      : TTGOp(name, innames, outnames) {
-      
+
+  Op(const input_edges_type& inedges, const output_edges_type& outedges,
+     const std::string& name, const std::vector<std::string>& innames,
+     const std::vector<std::string>& outnames)
+      : Op(name, innames, outnames) {
     connect_my_inputs_to_incoming_edge_outputs(
         std::make_index_sequence<numins>{}, inedges);
     connect_my_outputs_to_outgoing_edge_inputs(
@@ -584,10 +354,10 @@ class TTGOp : public TTGOpBase, ParsecBaseOp {
   }
 
   // Destructor checks for unexecuted tasks
-  ~TTGOp() {
+  ~Op() {
     if (cache.size() != 0) {
-        int rank = 0;
-        std::cerr << rank << ":"
+      int rank = 0;
+      std::cerr << rank << ":"
                 << "warning: unprocessed tasks in destructor of operation '"
                 << get_name() << "'" << std::endl;
       std::cerr << rank << ":"
@@ -641,12 +411,12 @@ class TTGOp : public TTGOpBase, ParsecBaseOp {
 template <typename funcT, typename keyT, typename output_terminalsT,
           typename... input_valuesT>
 class WrapOp
-    : public TTGOp<keyT, output_terminalsT,
+    : public Op<keyT, output_terminalsT,
+                WrapOp<funcT, keyT, output_terminalsT, input_valuesT...>,
+                input_valuesT...> {
+  using baseT = Op<keyT, output_terminalsT,
                    WrapOp<funcT, keyT, output_terminalsT, input_valuesT...>,
-                   input_valuesT...> {
-  using baseT = TTGOp<keyT, output_terminalsT,
-                      WrapOp<funcT, keyT, output_terminalsT, input_valuesT...>,
-                      input_valuesT...>;
+                   input_valuesT...>;
   funcT func;
 
  public:
@@ -670,13 +440,12 @@ class WrapOp
 template <typename funcT, typename keyT, typename output_terminalsT,
           typename... input_valuesT>
 class WrapOpArgs
-    : public TTGOp<keyT, output_terminalsT,
+    : public Op<keyT, output_terminalsT,
+                WrapOpArgs<funcT, keyT, output_terminalsT, input_valuesT...>,
+                input_valuesT...> {
+  using baseT = Op<keyT, output_terminalsT,
                    WrapOpArgs<funcT, keyT, output_terminalsT, input_valuesT...>,
-                   input_valuesT...> {
-  using baseT =
-      TTGOp<keyT, output_terminalsT,
-            WrapOpArgs<funcT, keyT, output_terminalsT, input_valuesT...>,
-            input_valuesT...>;
+                   input_valuesT...>;
   funcT func;
 
   template <std::size_t... S>
@@ -757,5 +526,8 @@ auto wrap(const funcT& func,
   return std::make_unique<wrapT>(func, inedges, outedges, name, innames,
                                  outnames);
 }
+
+}  // namespace ttg
+}  // namespace parsec
 
 #endif  // PARSEC_TTG_H_INCLUDED

@@ -7,11 +7,17 @@
 #include <random>
 #include <cstdio>
 
+#include "madness/ttg.h"
+
 #include <madness/world/worldmutex.h>
 #include <madness/world/worldhash.h>
 #include <madness/world/archive.h>
 
 using pairT = std::pair<std::size_t, std::size_t>;
+
+using namespace madness;
+using namespace madness::ttg;
+using namespace ::ttg;
 
 namespace madness {
     template <>
@@ -50,8 +56,6 @@ std::ostream& operator<<(std::ostream&s, const pairT& a) {
 std::ostream& operator<<(std::ostream&s, const tripleT& a) {
     return s << "(" << a.first << "," << a.second << "," << a.third << ")";
 }
-
-#include "madness/ttg.h"
 
 class Matrix {
     std::size_t n, m;
@@ -200,8 +204,8 @@ class MxM {
     
     Edge<tripleT,Matrix> Aik_bcast, Bkj_bcast, Cij_reduce;
 
-    class BroadcastA : public TTGOp<pairT, std::tuple<TTGOut<tripleT,Matrix>>, BroadcastA, Matrix> {
-        using baseT =         TTGOp<pairT, std::tuple<TTGOut<tripleT,Matrix>>, BroadcastA, Matrix>;
+    class BroadcastA : public Op<pairT, std::tuple<Out<tripleT,Matrix>>, BroadcastA, Matrix> {
+        using baseT =         Op<pairT, std::tuple<Out<tripleT,Matrix>>, BroadcastA, Matrix>;
         const std::size_t N; // Matrix dimensions in DGEMM sense
         const std::size_t M;
         const std::size_t K;
@@ -216,7 +220,7 @@ class MxM {
             , tilesize(tilesize)
         {}
 
-        void op(const pairT& ik, const std::tuple<Matrix>& t, std::tuple<TTGOut<tripleT,Matrix>>& out) {
+        void op(const pairT& ik, const std::tuple<Matrix>& t, std::tuple<Out<tripleT,Matrix>>& out) {
             const Matrix& Aik = std::get<0>(t);
             std::size_t i=ik.first, k=ik.second;
             std::vector<tripleT> ijk;
@@ -225,8 +229,8 @@ class MxM {
         }
     } broadcastA;
         
-    class BroadcastB : public TTGOp<pairT, std::tuple<TTGOut<tripleT,Matrix>>, BroadcastB, Matrix> {
-        using baseT =         TTGOp<pairT, std::tuple<TTGOut<tripleT,Matrix>>, BroadcastB, Matrix>;
+    class BroadcastB : public Op<pairT, std::tuple<Out<tripleT,Matrix>>, BroadcastB, Matrix> {
+        using baseT =         Op<pairT, std::tuple<Out<tripleT,Matrix>>, BroadcastB, Matrix>;
         const std::size_t N; // Matrix dimensions in DGEMM sense
         const std::size_t M;
         const std::size_t K;
@@ -241,7 +245,7 @@ class MxM {
             , tilesize(tilesize)
         {}
 
-        void op(const pairT& kj, const std::tuple<Matrix>& t, std::tuple<TTGOut<tripleT,Matrix>>& out) {
+        void op(const pairT& kj, const std::tuple<Matrix>& t, std::tuple<Out<tripleT,Matrix>>& out) {
             const Matrix& Bkj = std::get<0>(t);
             std::size_t k=kj.first, j=kj.second;
             std::vector<tripleT> ijk;
@@ -250,8 +254,8 @@ class MxM {
         }
     } broadcastB;
 
-    class MxMTask : public TTGOp<tripleT, std::tuple<TTGOut<tripleT,Matrix>>, MxMTask, Matrix, Matrix> {
-        using baseT =      TTGOp<tripleT, std::tuple<TTGOut<tripleT,Matrix>>, MxMTask, Matrix, Matrix>;
+    class MxMTask : public Op<tripleT, std::tuple<Out<tripleT,Matrix>>, MxMTask, Matrix, Matrix> {
+        using baseT =      Op<tripleT, std::tuple<Out<tripleT,Matrix>>, MxMTask, Matrix, Matrix>;
         const std::size_t N; // Matrix dimensions in DGEMM sense
         const std::size_t M;
         const std::size_t K;
@@ -266,15 +270,15 @@ class MxM {
             , tilesize(tilesize)
         {}
             
-        void op(const tripleT& ijk, const std::tuple<Matrix, Matrix>& t, std::tuple<TTGOut<tripleT,Matrix>>& out) {
+        void op(const tripleT& ijk, const std::tuple<Matrix, Matrix>& t, std::tuple<Out<tripleT,Matrix>>& out) {
             const Matrix &Aik=std::get<0>(t), &Bkj=std::get<1>(t);
             ::send<0>(ijk, mxm_ref(Aik, Bkj), out);
         }
     } mxmtask;
 
     // Simple reduction for testing
-    class Reduce : public TTGOp<tripleT, std::tuple<TTGOut<pairT,Matrix>,TTGOut<tripleT,Matrix>>, Reduce, Matrix, Matrix> {
-        using baseT =     TTGOp<tripleT, std::tuple<TTGOut<pairT,Matrix>,TTGOut<tripleT,Matrix>>, Reduce, Matrix, Matrix>;
+    class Reduce : public Op<tripleT, std::tuple<Out<pairT,Matrix>,Out<tripleT,Matrix>>, Reduce, Matrix, Matrix> {
+        using baseT =     Op<tripleT, std::tuple<Out<pairT,Matrix>,Out<tripleT,Matrix>>, Reduce, Matrix, Matrix>;
         const std::size_t N; // Matrix dimensions in DGEMM sense
         const std::size_t M;
         const std::size_t K;
@@ -305,7 +309,7 @@ class MxM {
             this->out<1>().broadcast(ijk,zero);
         }
 
-        void op(tripleT ijk, const std::tuple<Matrix,Matrix>& t, std::tuple<TTGOut<pairT,Matrix>,TTGOut<tripleT,Matrix>>& out) {
+        void op(tripleT ijk, const std::tuple<Matrix,Matrix>& t, std::tuple<Out<pairT,Matrix>,Out<tripleT,Matrix>>& out) {
             const Matrix &Cij=std::get<0>(t), &sum=std::get<1>(t);
             std::size_t i=ijk.first, j=ijk.second, k=ijk.third;
             Matrix total = sum + Cij;
@@ -337,8 +341,8 @@ public:
 };
 
 // Incoming tiles are written to memory
-class Writer : public TTGOp<pairT, std::tuple<>, Writer, Matrix> {
-    using baseT =     TTGOp<pairT, std::tuple<>, Writer, Matrix>;
+class Writer : public Op<pairT, std::tuple<>, Writer, Matrix> {
+    using baseT =     Op<pairT, std::tuple<>, Writer, Matrix>;
     Matrix& A; // Ugh, but will do for testing
     std::size_t tilesize;
 public:
@@ -356,8 +360,8 @@ public:
 
 
 // Read Aik sending tiles to output with k in outer loop ... eventually can use control to throttle
-class ReadA : public TTGOp<int, std::tuple<TTGOut<pairT,Matrix>>, ReadA, int> {
-    using baseT =    TTGOp<int, std::tuple<TTGOut<pairT,Matrix>>, ReadA, int>;
+class ReadA : public Op<int, std::tuple<Out<pairT,Matrix>>, ReadA, int> {
+    using baseT =    Op<int, std::tuple<Out<pairT,Matrix>>, ReadA, int>;
 
     const Matrix& A;
     const size_t tilesize;
@@ -368,7 +372,7 @@ class ReadA : public TTGOp<int, std::tuple<TTGOut<pairT,Matrix>>, ReadA, int> {
         , tilesize(tilesize)
     {}
     
-    void op(const int& key, const std::tuple<int>& junk, std::tuple<TTGOut<pairT,Matrix>>& out) {
+    void op(const int& key, const std::tuple<int>& junk, std::tuple<Out<pairT,Matrix>>& out) {
         for (std::size_t klo=0; klo<A.rowdim(); klo+=tilesize) {
             std::size_t khi = klo+tilesize;
             for (std::size_t ilo=0; ilo<A.coldim(); ilo+=tilesize) {
@@ -380,8 +384,8 @@ class ReadA : public TTGOp<int, std::tuple<TTGOut<pairT,Matrix>>, ReadA, int> {
 };
 
 // Read Bkj sending tiles to output with k in outer loop ... eventually can use control to throttle
-class ReadB : public TTGOp<int, std::tuple<TTGOut<pairT,Matrix>>, ReadB, int> {
-    using baseT =    TTGOp<int, std::tuple<TTGOut<pairT,Matrix>>, ReadB, int>;
+class ReadB : public Op<int, std::tuple<Out<pairT,Matrix>>, ReadB, int> {
+    using baseT =    Op<int, std::tuple<Out<pairT,Matrix>>, ReadB, int>;
 
     const Matrix& B;
     const size_t tilesize;
@@ -392,7 +396,7 @@ class ReadB : public TTGOp<int, std::tuple<TTGOut<pairT,Matrix>>, ReadB, int> {
         , tilesize(tilesize)
     {}
     
-    void op(const int& key, const std::tuple<int>& junk, std::tuple<TTGOut<pairT,Matrix>>& out) {
+    void op(const int& key, const std::tuple<int>& junk, std::tuple<Out<pairT,Matrix>>& out) {
         for (std::size_t klo=0; klo<B.coldim(); klo+=tilesize) {
             std::size_t khi = klo+tilesize;
             for (std::size_t jlo=0; jlo<B.rowdim(); jlo+=tilesize) {
@@ -403,15 +407,15 @@ class ReadB : public TTGOp<int, std::tuple<TTGOut<pairT,Matrix>>, ReadB, int> {
     }
 };
 
-class Control : public TTGOp<int, std::tuple<TTGOut<int,int>>, Control> {
-    using baseT =      TTGOp<int, std::tuple<TTGOut<int,int>>, Control>;
+class Control : public Op<int, std::tuple<Out<int,int>>, Control> {
+    using baseT =      Op<int, std::tuple<Out<int,int>>, Control>;
 
  public:
     Control(Edge<int,int>& ctl)
         : baseT(edges(),edges(ctl),"Control",{},{"ctl"})
         {}
 
-    void op(const int& key, const std::tuple<>& junk, std::tuple<TTGOut<int,int>>& out) {
+    void op(const int& key, const std::tuple<>& junk, std::tuple<Out<int,int>>& out) {
         ::send<0>(0,0,out);
     }
 
@@ -440,7 +444,7 @@ int main(int argc, char** argv) {
         madness::error("Currently only works with one MPI process (multiple threads OK)");
     }
 
-    //TTGOpBase::set_trace_all(true);
+    //OpBase::set_trace_all(true);
     
     const std::size_t tilesize = 7;
     const std::size_t N=13*tilesize, M=17*tilesize, K=19*tilesize;    
@@ -463,7 +467,7 @@ int main(int argc, char** argv) {
     Writer writerop(C, csuma, tilesize); // write result to memory 
 
     std::cout << "==== begin dot ====\n";
-    std::cout << TTGDot()(&control) << std::endl;
+    std::cout << Dot()(&control) << std::endl;
     std::cout << "====  end dot  ====\n";
 
     control.start();

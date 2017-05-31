@@ -112,13 +112,17 @@ std::ostream& operator<<(std::ostream&s, const Control& ctl) {
     return s;
 }
 
+using namespace madness;
+using namespace madness::ttg;
+using namespace ::ttg;
+
 using nodeEdge = Edge<Key,Node>;
 using doubleEdge = Edge<Key,double>;
 using ctlEdge = Edge<Key,Control>;
 
-using nodeOut = TTGOut<Key,Node>;
-using doubleOut = TTGOut<Key,double>;
-using ctlOut = TTGOut<Key,Control>;
+using nodeOut = Out<Key,Node>;
+using doubleOut = Out<Key,double>;
+using ctlOut = Out<Key,Control>;
 
 template <typename keyT, typename valueT>
 auto make_printer(const Edge<keyT,valueT>& in, const char* str="") {
@@ -268,8 +272,8 @@ auto make_reconstruct(const nodeEdge& in, nodeEdge& out, const std::string& name
 }
 
 // cannot easily replace this with wrapper due to persistent state
-class Norm2 : public TTGOp<Key, std::tuple<>, Norm2, Node> {
-    using baseT =    TTGOp<Key, std::tuple<>, Norm2, Node>;
+class Norm2 : public Op<Key, std::tuple<>, Norm2, Node> {
+    using baseT =    Op<Key, std::tuple<>, Norm2, Node>;
     double sumsq;
     madness::SCALABLE_MUTEX_TYPE charon;    
 public:
@@ -361,9 +365,9 @@ int main(int argc, char** argv) {
     // auto pp = make_printer(compa,"compa");
 
     if (madness::World::get_default().rank() == 0) {
-        std::cout << "Is everything connected? " << TTGVerify()(start.get()) << std::endl;
+        std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
         std::cout << "==== begin dot ====\n";
-        std::cout << TTGDot()(start.get()) << std::endl;
+        std::cout << Dot()(start.get()) << std::endl;
         std::cout << "====  end dot  ====\n";
         
         // This kicks off the entire computation
