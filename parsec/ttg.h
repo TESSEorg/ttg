@@ -18,6 +18,7 @@
 #include <parsec/devices/device.h>
 #include <parsec/data_internal.h>
 #include <parsec/scheduling.h>
+#include <parsec/datarepo.h>
 
 extern parsec_execution_unit_t* eu;
 extern parsec_handle_t* handle;
@@ -30,6 +31,7 @@ extern "C" {
         void* object_ptr;
         void(*static_set_arg)(int, int);
         uint64_t key;
+        uint32_t in_data_count;
     } my_op_t;
 
     static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
@@ -294,14 +296,14 @@ static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
 struct ParsecBaseOp {
 protected:
     static std::map<int, ParsecBaseOp*> function_id_to_instance;
+    data_repo_t *input_data;
+    parsec_function_t self;
 };
 std::map<int, ParsecBaseOp*> ParsecBaseOp::function_id_to_instance = {};
 
 template <typename keyT, typename output_terminalsT, typename derivedT,
           typename... input_valueTs>
 class TTGOp : public TTGOpBase, ParsecBaseOp {
- protected:
-    parsec_function_t self;
  private:
   using opT = TTGOp<keyT, output_terminalsT, derivedT, input_valueTs...>;
 
@@ -349,11 +351,19 @@ class TTGOp : public TTGOpBase, ParsecBaseOp {
         */
         derivedT* obj = (derivedT*)task->object_ptr;
         obj->op((keyT)task->key,
-                *reinterpret_cast<input_values_tuple_type*>(task->data[0].data_in),
+                *static_cast<input_values_tuple_type*>(task->data[0].data_in->device_private),
                 obj->output_terminals);
-#ifdef OR_BETTER
-            *static_cast<input_values_tuple_type*>(task->data[0].data_in->device_private));
-#endif
+  }
+
+    static void static_op_noarg(parsec_execution_context_t* my_task) {
+        my_op_t* task = static_cast<my_op_t*>(my_task);
+        /*        
+                  struct data_repo_entry_s     *data_repo;
+                  struct parsec_data_copy_s    *data_in;
+                  struct parsec_data_copy_s    *data_out;
+        */
+        derivedT* obj = (derivedT*)task->object_ptr;
+        obj->op((keyT)task->key, std::tuple<>(), obj->output_terminals);
   }
 
   using cacheT = std::map<keyT, OpArgs>;
@@ -363,42 +373,50 @@ class TTGOp : public TTGOpBase, ParsecBaseOp {
   template <std::size_t i>
   void set_arg(const keyT& key, const typename std::tuple_element<
                                     i, input_values_tuple_type>::type& value) {
-    using valueT = typename std::tuple_element<i, input_terminals_type>::type;
+    using valueT = typename std::tuple_element<i, input_values_tuple_type>::type;
 
     if (tracing()) std::cout << get_name() << " : " << key << ": setting argument : " << i << std::endl;
-        auto it = cache.find(key);
-        if( it == cache.end() ) {
-            cache[key] = OpArgs();
-        }
-        OpArgs& args = cache[key];
-        if (args.argset[i]) {
+    
+    data_repo_entry_t *e = data_repo_lookup_entry_and_create(eu, input_data, (uint64_t)key);
+    if( e->data[i] != NULL ) {
             std::cerr << get_name() << " : " << key << ": error argument is already set : " << i << std::endl;
             throw "bad set arg";
-        }
-        args.argset[i] = true;        
-        std::get<i>(args.t) = value;
-        args.counter--;
-        if (args.counter == 0) {
-            if (tracing()) std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
-            //static_cast<derivedT*>(this)->op(key, args.t);
-            cache.erase(key);
-            //create PaRSEC task
-            // and give it to the scheduler
-            my_op_t* task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
+    }
 
-            OBJ_CONSTRUCT(task, parsec_list_item_t);
-            task->function = &this->self;
-            task->parsec_handle = handle;
-            task->status = PARSEC_TASK_STATUS_HOOK;
+    parsec_data_copy_t *copy = OBJ_NEW(parsec_data_copy_t);
+    valueT* valueCopy = std::allocator<valueT>().allocate(1);
+    auto copy_r = new(valueCopy) valueT(value);
+    copy->device_private = (void*)valueCopy;
+    e->data[i] = copy;
+
+    my_op_t* task;
+    if( NULL == (task = static_cast<my_op_t*>(e->ttg_task)) ) {
+        task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
+
+        OBJ_CONSTRUCT(task, parsec_list_item_t);
+        task->function = &this->self;
+        task->parsec_handle = handle;
+        task->status = PARSEC_TASK_STATUS_HOOK;
             
-            task->function_template_class_ptr =
-                reinterpret_cast<void (*)(void*)>(&TTGOp::static_op);
-            task->object_ptr = static_cast<derivedT*>(this);
-            task->key = key;
-            task->data[0].data_in = static_cast<parsec_data_copy_t*>(malloc(sizeof(value)));
-            memcpy(task->data[0].data_in, &value, sizeof(value));
-            __parsec_schedule(eu, task, 0);
+        task->function_template_class_ptr =
+            reinterpret_cast<void (*)(void*)>(&TTGOp::static_op);
+        task->object_ptr = static_cast<derivedT*>(this);
+        task->key = key;
+
+        if( !parsec_atomic_cas_ptr(&e->ttg_task, NULL, task) ) {
+            free(task);
+            task = static_cast<my_op_t*>(e->ttg_task);
         }
+    }
+    int count = parsec_atomic_inc_32b(&task->in_data_count);
+    if( count == self.dependencies_goal ) {
+        for(int ii = 0; ii < self.dependencies_goal; ii++) {
+            task->data[ii].data_in = e->data[ii];
+        }
+        data_repo_entry_used_once(eu, input_data, (uint64_t)key);
+        if (tracing()) std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
+        __parsec_schedule(eu, static_cast<parsec_execution_context_t*>(task), 0);
+    }
   }
 
   // Used to generate tasks with no input arguments
@@ -414,7 +432,7 @@ class TTGOp : public TTGOpBase, ParsecBaseOp {
         task->status = PARSEC_TASK_STATUS_HOOK;
             
         task->function_template_class_ptr =
-            reinterpret_cast<void (*)(void*)>(&TTGOp::static_op);
+            reinterpret_cast<void (*)(void*)>(&TTGOp::static_op_noarg);
         task->object_ptr = static_cast<derivedT*>(this);
         task->key = key;
         task->data[0].data_in = static_cast<parsec_data_copy_t*>(NULL);
@@ -549,7 +567,9 @@ class TTGOp : public TTGOpBase, ParsecBaseOp {
         *((parsec_flow_t**)&(self.out[i])) = NULL;
     
         self.flags = 0;
-        self.dependencies_goal = 0;
+        self.dependencies_goal = (~(uint32_t)0) >> (32-numins);
+
+        input_data = data_repo_create_nothreadsafe(4096, numins);
   }
     
   TTGOp(const input_edges_type& inedges, const output_edges_type& outedges,
