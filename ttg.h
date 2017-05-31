@@ -552,7 +552,7 @@ auto wrapt(const funcT& func,
     callable_type f(func); // pimarily to check types
     using wrapT = WrapOp<funcT, keyT, output_terminals_type, input_valuesT...>;
     
-    return std::unique_ptr<wrapT>(new wrapT(func, inedges, outedges, name, innames, outnames));
+    return std::make_unique<wrapT>(func, inedges, outedges, name, innames, outnames);
 }
 
 // Factory function to assist in wrapping a callable with signature
@@ -570,7 +570,7 @@ auto wrap(const funcT& func,
     using output_terminals_type = typename edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
     using wrapT = WrapOpArgs<funcT, keyT, output_terminals_type, input_valuesT...>;
     
-    return std::unique_ptr<wrapT>(new wrapT(func, inedges, outedges, name, innames, outnames));
+    return std::make_unique<wrapT>(func, inedges, outedges, name, innames, outnames);
 }
 
 
