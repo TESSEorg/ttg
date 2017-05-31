@@ -4,6 +4,15 @@ project(cxxapi)
 enable_language(CXX)
 include(GNUInstallDirs)
 
+# sparse tensor algorithms need Eigen
+find_package(Eigen3)
+message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
+if (EIGEN3_FOUND)
+  add_library(eigen3 INTERFACE IMPORTED)
+  set_property(TARGET eigen3 PROPERTY
+               INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
+endif (EIGEN3_FOUND)
+
 ################################## "flow" API
 set(flow_headers flow.h edge.h)
 add_library(flow INTERFACE)
@@ -35,14 +44,8 @@ target_link_libraries(t9-wrap LINK_PUBLIC flow)
 add_executable (mxm_simple_suma mxm_simple_suma.cc)
 target_link_libraries(mxm_simple_suma LINK_PUBLIC flow)
 
-# sparse tensor algorithms
-find_package(Eigen3)
-message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
+# sparse matmul
 if (EIGEN3_FOUND)
-  add_library(eigen3 INTERFACE IMPORTED)
-  set_property(TARGET eigen3 PROPERTY
-               INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
-  
   add_executable (spmm spmm.cc)
   target_link_libraries(spmm LINK_PUBLIC eigen3 flow)
 endif(EIGEN3_FOUND)
@@ -65,8 +68,20 @@ target_compile_options(ttg INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>
 find_package(MADNESS REQUIRED 0.10.1 CONFIG QUIET COMPONENTS world HINTS ${MADNESS_ROOT_DIR})
 target_link_libraries(ttg INTERFACE MADworld)
 
+# sanity check
 add_executable (ttgtest ttg.cc)
 target_link_libraries(ttgtest LINK_PUBLIC ttg)
 
+# T9 example
 add_executable (t9-wrap-ttg t9-wrap-ttg.cc)
 target_link_libraries(t9-wrap-ttg LINK_PUBLIC ttg)
+
+# dense matmul
+add_executable (mxm_simple_suma_ttg mxm_simple_suma_ttg.cc)
+target_link_libraries(mxm_simple_suma_ttg LINK_PUBLIC ttg)
+
+# sparse matmul
+if (EIGEN3_FOUND)
+  add_executable (spmm-ttg spmm-ttg.cc)
+  target_link_libraries(spmm-ttg LINK_PUBLIC eigen3 ttg)
+endif(EIGEN3_FOUND)
