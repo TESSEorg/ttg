@@ -1,7 +1,8 @@
+
 #define WORLD_INSTANTIATE_STATIC_TEMPLATES
 #include <iostream>
 #include <tuple>
-#include "ttg.h"
+#include "ttg-mad.h"
 
 using namespace madness;
 

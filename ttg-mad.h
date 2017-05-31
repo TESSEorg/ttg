@@ -16,6 +16,13 @@
 #include <madness/world/worldtypes.h>
 #include "ttgbase.h"
 
+// how to improve:
+// 1. terminals -> ports to match established terminology in ...
+// 2. add namespace ttg, TTGName -> ttg::Name; e.g. TTGOpBase -> ttg::OpBase
+// 3. to make runtimes interoperable: use inline namespaces?
+//    namespace madness {
+//      inline namespace ::ttg
+//    }
 
 template <typename keyT, typename valueT> class Edge; // Forward decl.
 

@@ -6,7 +6,7 @@
 
 #include <Eigen/SparseCore>
 
-#include "ttg.h"
+#include "ttg-mad.h"
 
 #error "has not been converted yet to TTG"
 

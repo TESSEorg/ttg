@@ -1,3 +1,4 @@
+
 #define WORLD_INSTANTIATE_STATIC_TEMPLATES
 #include <tuple>
 #include <cmath>
@@ -50,7 +51,7 @@ std::ostream& operator<<(std::ostream&s, const tripleT& a) {
     return s << "(" << a.first << "," << a.second << "," << a.third << ")";
 }
 
-#include "ttg.h"
+#include "ttg-mad.h"
 
 class Matrix {
     std::size_t n, m;
