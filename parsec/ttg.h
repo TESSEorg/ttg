@@ -13,6 +13,29 @@
 #include <tuple>
 #include <vector>
 
+#include <parsec.h>
+#include <parsec/parsec_internal.h>
+#include <parsec/devices/device.h>
+#include <parsec/data_internal.h>
+#include <parsec/scheduling.h>
+
+extern parsec_execution_unit_t* eu;
+extern parsec_handle_t* handle;
+
+static int static_global_function_id = 0;
+
+extern "C" {
+    typedef struct my_op_s : public parsec_execution_context_t {
+        void(*function_template_class_ptr)(void*) ;
+        void* object_ptr;
+        void(*static_set_arg)(int, int);
+        uint64_t key;
+    } my_op_t;
+
+    static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
+                                     parsec_execution_context_t* task);
+}
+
 // how to improve:
 // 1. terminals -> ports to match established terminology in ...
 // 2. add namespace ttg, TTGName -> ttg::Name; e.g. TTGOpBase -> ttg::OpBase
@@ -252,9 +275,33 @@ struct edges_to_input_terminals<std::tuple<edgesT...>> {
   typedef std::tuple<typename edgesT::input_terminal_type...> type;
 };
 
+static parsec_hook_return_t do_nothing(parsec_execution_unit_t *eu, parsec_execution_context_t *task)
+{
+    (void)eu;
+    (void)task;
+    return PARSEC_HOOK_RETURN_DONE;
+}
+
+static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
+                                 parsec_execution_context_t* task)
+{
+    my_op_t* me = static_cast<my_op_t*>(task);
+    me->function_template_class_ptr(task);
+    (void)eu;
+    return PARSEC_HOOK_RETURN_DONE;
+}
+
+struct ParsecBaseOp {
+protected:
+    static std::map<int, ParsecBaseOp*> function_id_to_instance;
+};
+std::map<int, ParsecBaseOp*> ParsecBaseOp::function_id_to_instance = {};
+
 template <typename keyT, typename output_terminalsT, typename derivedT,
           typename... input_valueTs>
-class TTGOp : public TTGOpBase {
+class TTGOp : public TTGOpBase, ParsecBaseOp {
+ protected:
+    parsec_function_t self;
  private:
   using opT = TTGOp<keyT, output_terminalsT, derivedT, input_valueTs...>;
 
@@ -277,7 +324,7 @@ class TTGOp : public TTGOpBase {
   input_terminals_type input_terminals;
   output_terminalsT output_terminals;
 
-  struct OpArgs : madness::TaskInterface {
+  struct OpArgs {
     int counter;                      // Tracks the number of arguments set
     std::array<bool, numins> argset;  // Tracks if a given arg is already set;
     input_values_tuple_type t;        // The input values
@@ -286,15 +333,30 @@ class TTGOp : public TTGOpBase {
 
     OpArgs() : counter(numins), argset(), t() {}
 
-    void run(madness::World& world) {
-      derived->op(key, t, derived->output_terminals);
+    void run() {
+        derived->op(key, t, derived->output_terminals);
     }
 
     virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
   };
 
-  using cacheT = madness::ConcurrentHashMap<keyT, OpArgs*>;
-  using accessorT = typename cacheT::accessor;
+  static void static_op(parsec_execution_context_t* my_task) {
+        my_op_t* task = static_cast<my_op_t*>(my_task);
+        /*        
+                  struct data_repo_entry_s     *data_repo;
+                  struct parsec_data_copy_s    *data_in;
+                  struct parsec_data_copy_s    *data_out;
+        */
+        derivedT* obj = (derivedT*)task->object_ptr;
+        obj->op((keyT)task->key,
+                *reinterpret_cast<input_values_tuple_type*>(task->data[0].data_in),
+                obj->output_terminals);
+#ifdef OR_BETTER
+            *static_cast<input_values_tuple_type*>(task->data[0].data_in->device_private));
+#endif
+  }
+
+  using cacheT = std::map<keyT, OpArgs>;
   cacheT cache;
 
   // Used to set the i'th argument
@@ -303,81 +365,60 @@ class TTGOp : public TTGOpBase {
                                     i, input_values_tuple_type>::type& value) {
     using valueT = typename std::tuple_element<i, input_terminals_type>::type;
 
-#if 0  // MADNESS
-    ProcessID owner = pmap->owner(key);
+    if (tracing()) std::cout << get_name() << " : " << key << ": setting argument : " << i << std::endl;
+        auto it = cache.find(key);
+        if( it == cache.end() ) {
+            cache[key] = OpArgs();
+        }
+        OpArgs& args = cache[key];
+        if (args.argset[i]) {
+            std::cerr << get_name() << " : " << key << ": error argument is already set : " << i << std::endl;
+            throw "bad set arg";
+        }
+        args.argset[i] = true;        
+        std::get<i>(args.t) = value;
+        args.counter--;
+        if (args.counter == 0) {
+            if (tracing()) std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
+            //static_cast<derivedT*>(this)->op(key, args.t);
+            cache.erase(key);
+            //create PaRSEC task
+            // and give it to the scheduler
+            my_op_t* task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
 
-    if (owner != world.rank()) {
-      if (tracing())
-        std::cout << world.rank() << ":" << get_name() << " : " << key
-                  << ": forwarding setting argument : " << i << std::endl;
-      worldobjT::send(owner, &opT::template set_arg<i>, key, value);
-    } else {
-      if (tracing())
-        std::cout << world.rank() << ":" << get_name() << " : " << key
-                  << ": setting argument : " << i << std::endl;
-
-      accessorT acc;
-      if (cache.insert(acc, key))
-        acc->second = new OpArgs();  // It will be deleted by the task q
-      OpArgs* args = acc->second;
-
-      if (args->argset[i]) {
-        std::cerr << world.rank() << ":" << get_name() << " : " << key
-                  << ": error argument is already set : " << i << std::endl;
-        throw "bad set arg";
-      }
-      args->argset[i] = true;
-      std::get<i>(args->t) = value;
-      args->counter--;
-      if (args->counter == 0) {
-        if (tracing())
-          std::cout << world.rank() << ":" << get_name() << " : " << key
-                    << ": submitting task for op " << std::endl;
-        args->derived = static_cast<derivedT*>(this);
-        args->key = key;
-
-        world.taskq.add(args);
-
-        // world.taskq.add(static_cast<derivedT*>(this), &derivedT::op, key,
-        // args.t);
-
-        // if (tracing()) std::cout << world.rank() << ":" << get_name() << " :
-        // " << key << ": invoking op " << std::endl;
-        // static_cast<derivedT*>(this)
-
-        cache.erase(key);
-      }
-    }
-#endif
+            OBJ_CONSTRUCT(task, parsec_list_item_t);
+            task->function = &this->self;
+            task->parsec_handle = handle;
+            task->status = PARSEC_TASK_STATUS_HOOK;
+            
+            task->function_template_class_ptr =
+                reinterpret_cast<void (*)(void*)>(&TTGOp::static_op);
+            task->object_ptr = static_cast<derivedT*>(this);
+            task->key = key;
+            task->data[0].data_in = static_cast<parsec_data_copy_t*>(malloc(sizeof(value)));
+            memcpy(task->data[0].data_in, &value, sizeof(value));
+            __parsec_schedule(eu, task, 0);
+        }
   }
 
   // Used to generate tasks with no input arguments
   void set_arg_empty(const keyT& key) {
-#if 0  // MADNESS
-    ProcessID owner = pmap->owner(key);
+        if (tracing()) std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
+        //create PaRSEC task
+        // and give it to the scheduler
+        my_op_t* task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
 
-    if (owner != world.rank()) {
-      if (tracing())
-        std::cout << world.rank() << ":" << get_name() << " : " << key
-                  << ": forwarding no-arg task: " << std::endl;
-      worldobjT::send(owner, &opT::set_arg_empty, key);
-    } else {
-      accessorT acc;
-      if (cache.insert(acc, key))
-        acc->second = new OpArgs();  // It will be deleted by the task q
-      OpArgs* args = acc->second;
-
-      if (tracing())
-        std::cout << world.rank() << ":" << get_name() << " : " << key
-                  << ": submitting task for op " << std::endl;
-      args->derived = static_cast<derivedT*>(this);
-      args->key = key;
-
-      world.taskq.add(args);
-
-      cache.erase(key);
-    }
-#endif
+        OBJ_CONSTRUCT(task, parsec_list_item_t);
+        task->function = &this->self;
+        task->parsec_handle = handle;
+        task->status = PARSEC_TASK_STATUS_HOOK;
+            
+        task->function_template_class_ptr =
+            reinterpret_cast<void (*)(void*)>(&TTGOp::static_op);
+        task->object_ptr = static_cast<derivedT*>(this);
+        task->key = key;
+        task->data[0].data_in = static_cast<parsec_data_copy_t*>(NULL);
+        __parsec_schedule(eu, task, 0);
   }
 
   // Used by invoke to set all arguments associated with a task
@@ -459,39 +500,77 @@ class TTGOp : public TTGOpBase {
 
     register_input_callbacks(std::make_index_sequence<numins>{});
 
-    this->process_pending();
-  }
+    int i;
 
+        memset(&self, 0, sizeof(parsec_function_t));
+        
+        self.name = name.c_str();
+        self.function_id = static_global_function_id++;
+        self.nb_parameters = 0;
+        self.nb_locals = 0;
+        self.nb_flows = std::max((int)numins, (int)numouts);
+
+        function_id_to_instance[self.function_id] = this;
+        
+        self.incarnations = (__parsec_chore_t *) malloc(2 * sizeof(__parsec_chore_t));
+        ((__parsec_chore_t*)self.incarnations)[0].type = PARSEC_DEV_CPU;
+        ((__parsec_chore_t*)self.incarnations)[0].evaluate = NULL;
+        ((__parsec_chore_t*)self.incarnations)[0].hook = hook;
+        ((__parsec_chore_t*)self.incarnations)[1].type = PARSEC_DEV_NONE;
+        ((__parsec_chore_t*)self.incarnations)[1].evaluate = NULL;
+        ((__parsec_chore_t*)self.incarnations)[1].hook = NULL;
+
+        self.release_task = do_nothing;
+
+        for( i = 0; i < numins; i++ ) {
+            parsec_flow_t* flow = new parsec_flow_t;
+            flow->name = strdup((std::string("flow in") + std::to_string(i)).c_str());
+            flow->sym_type = SYM_INOUT;
+            flow->flow_flags = FLOW_ACCESS_RW;
+            flow->dep_in[0] = NULL;
+            flow->dep_out[0] = NULL;
+            flow->flow_index = i;
+            flow->flow_datatype_mask = (1 << i);
+            *((parsec_flow_t**)&(self.in[i])) = flow;
+        }
+        *((parsec_flow_t**)&(self.in[i])) = NULL;
+
+        for( i = 0; i < numouts; i++ ) {
+            parsec_flow_t* flow = new parsec_flow_t;
+            flow->name = strdup((std::string("flow out") + std::to_string(i)).c_str());
+            flow->sym_type = SYM_INOUT;
+            flow->flow_flags = FLOW_ACCESS_RW;
+            flow->dep_in[0] = NULL;
+            flow->dep_out[0] = NULL;
+            flow->flow_index = i;
+            flow->flow_datatype_mask = (1 << i);
+            *((parsec_flow_t**)&(self.out[i]))  = flow;
+        }
+        *((parsec_flow_t**)&(self.out[i])) = NULL;
+    
+        self.flags = 0;
+        self.dependencies_goal = 0;
+  }
+    
   TTGOp(const input_edges_type& inedges, const output_edges_type& outedges,
         const std::string& name, const std::vector<std::string>& innames,
         const std::vector<std::string>& outnames)
-      : TTGOpBase(name, numins, numouts) {
-    // Cannot call in base constructor since terminals not yet constructed
-    if (innames.size() != std::tuple_size<input_terminals_type>::value)
-      throw "TTGOP: #input names != #input terminals";
-    if (outnames.size() != std::tuple_size<output_terminalsT>::value)
-      throw "TTGOP: #output names != #output terminals";
-
-    register_input_terminals(input_terminals, innames);
-    register_output_terminals(output_terminals, outnames);
-
-    register_input_callbacks(std::make_index_sequence<numins>{});
-
+      : TTGOp(name, innames, outnames) {
+      
     connect_my_inputs_to_incoming_edge_outputs(
         std::make_index_sequence<numins>{}, inedges);
     connect_my_outputs_to_outgoing_edge_inputs(
         std::make_index_sequence<numouts>{}, outedges);
-
-    this->process_pending();
   }
 
   // Destructor checks for unexecuted tasks
   ~TTGOp() {
     if (cache.size() != 0) {
-      std::cerr << world.rank() << ":"
+        int rank = 0;
+        std::cerr << rank << ":"
                 << "warning: unprocessed tasks in destructor of operation '"
                 << get_name() << "'" << std::endl;
-      std::cerr << world.rank() << ":"
+      std::cerr << rank << ":"
                 << "   T => argument assigned     F => argument unassigned"
                 << std::endl;
       int nprint = 0;
@@ -500,10 +579,10 @@ class TTGOp : public TTGOpBase {
           std::cerr << "   etc." << std::endl;
           break;
         }
-        std::cerr << world.rank() << ":"
+        std::cerr << rank << ":"
                   << "   unused: " << item.first << " : ( ";
         for (std::size_t i = 0; i < numins; i++)
-          std::cerr << (item.second->argset[i] ? "T" : "F") << " ";
+          std::cerr << (item.second.argset[i] ? "T" : "F") << " ";
         std::cerr << ")" << std::endl;
       }
     }

@@ -4,6 +4,10 @@
 #include <iostream>
 #include <tuple>
 
+#include "parsec.h"
+#include <mpi.h>
+#include <parsec/execution_unit.h>
+
 using keyT = double;
 
 class A : public TTGOp<keyT, std::tuple<TTGOut<keyT, int>, TTGOut<keyT, int>>,
@@ -55,6 +59,7 @@ class Consumer : public TTGOp<keyT, std::tuple<>, Consumer, int> {
   void op(const keyT& key, const std::tuple<int>& t,
           baseT::output_terminals_type& out) {
     std::cout << "consumed " << std::get<0>(t) << std::endl;
+    handle->nb_tasks = 0;
   }
 
   Consumer(const typename baseT::input_edges_type& inedges,
@@ -223,18 +228,36 @@ public:
 };
 #endif
 
+parsec_execution_unit_t* eu = NULL;
+parsec_handle_t* handle = NULL;
+
+extern "C" int parsec_ptg_update_runtime_task(parsec_handle_t *handle, int tasks);
+
 int main(int argc, char** argv) {
-  MPI_Init_thread(argc, argv, MPI_THREAD_MULTIPLE);
+    int provided;
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+
+    parsec_context_t *parsec = parsec_init(1, NULL, NULL);
+    handle = (parsec_handle_t*)calloc(1, sizeof(parsec_handle_t));
+    handle->handle_id = 1;
+    handle->nb_tasks = 1;
+    handle->nb_pending_actions = 1;
+    handle->update_nb_runtime_task = parsec_ptg_update_runtime_task;
+    eu = parsec->virtual_processes[0]->execution_units[0];
 
   TTGOpBase::set_trace_all(false);
 
   // First compose with manual classes and connections
-  Everything x;
+  Everything x(parsec);
   x.print();
   std::cout << x.dot() << std::endl;
 
   x.start();
   x.wait();
+
+  parsec_enqueue(parsec, handle);
+  int ret = parsec_context_start(parsec);
+  parsec_context_wait(parsec);
 
 #if 0
     // Next compose with manual classes and edges
@@ -258,6 +281,7 @@ int main(int argc, char** argv) {
     q.wait();
 #endif
 
-  MPI_Finalize();
-  return 0;
+    parsec_fini(&parsec);
+    MPI_Finalize();
+    return 0;
 }

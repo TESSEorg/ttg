@@ -4,6 +4,8 @@ project(cxxapi)
 enable_language(CXX)
 include(GNUInstallDirs)
 
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
+
 # sparse tensor algorithms need Eigen
 find_package(Eigen3)
 message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
@@ -69,7 +71,7 @@ install(FILES ${ttg-mad_headers}
 string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
 target_compile_options(ttg-mad INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
 # MADNESS is the only prerequisite
-find_package(MADNESS REQUIRED 0.10.1 CONFIG QUIET COMPONENTS world HINTS ${MADNESS_ROOT_DIR})
+find_package(MADNESS 0.10.1 CONFIG QUIET COMPONENTS world HINTS ${MADNESS_ROOT_DIR})
 target_link_libraries(ttg-mad INTERFACE MADworld)
 
 # sanity check
@@ -101,8 +103,10 @@ install(FILES ${ttg-parsec_headers}
 string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
 target_compile_options(ttg-parsec INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
 # PaRSEC is the only explicit prerequisite
-find_package(parsec HINTS ${PARSEC_ROOT_DIR})
-target_link_libraries(ttg-parsec INTERFACE parsec)
+find_package(PARSEC MODULE)
+link_directories(${PARSEC_LIBRARY_DIRS})
+target_include_directories(ttg-parsec INTERFACE ${PARSEC_INCLUDE_DIRS})
+target_link_libraries(ttg-parsec INTERFACE parsec ${PARSEC_LIBRARIES})
 
 # sanity check
 add_executable (ttgtest-parsec parsec/ttg.cc)
