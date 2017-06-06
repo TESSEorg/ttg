@@ -209,7 +209,7 @@ set(ENV_PARSEC_DIR "$ENV{PARSEC_DIR}")
 set(ENV_PARSEC_INCDIR "$ENV{PARSEC_INCDIR}")
 set(ENV_PARSEC_LIBDIR "$ENV{PARSEC_LIBDIR}")
 set(PARSEC_GIVEN_BY_USER "FALSE")
-if ( PARSEC_DIR OR ( PARSEC_INCDIR AND PARSEC_LIBDIR) OR ENV_PARSEC_DIR OR (ENV_PARSEC_INCDIR AND ENV_PARSEC_LIBDIR) )
+if ( ( PARSEC_INCDIR AND PARSEC_LIBDIR) OR (ENV_PARSEC_INCDIR AND ENV_PARSEC_LIBDIR) )
     set(PARSEC_GIVEN_BY_USER "TRUE")
 endif()
 
@@ -221,6 +221,14 @@ find_package(PkgConfig QUIET)
 if(PKG_CONFIG_EXECUTABLE AND NOT PARSEC_GIVEN_BY_USER)
 
     pkg_search_module(PARSEC parsec)
+    if( NOT PARSEC_FOUND )
+        # If PARSEC_DIR has been provided look for the PaRSEC pkg in the corresponding directory
+        message(STATUS "Extend PKG_CONFIG_PATH to include PARSEC_DIR")
+        if( PARSEC_DIR )
+          set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:${PARSEC_DIR}/lib/pkgconfig")
+          pkg_search_module(PARSEC parsec)
+        endif( PARSEC_DIR )
+    endif( NOT PARSEC_FOUND )
     if (NOT PARSEC_FIND_QUIETLY)
         if (PARSEC_FOUND AND PARSEC_LIBRARIES)
             message(STATUS "Looking for PARSEC - found using PkgConfig")
@@ -230,8 +238,8 @@ if(PKG_CONFIG_EXECUTABLE AND NOT PARSEC_GIVEN_BY_USER)
             #        "C(PLUS)_INCLUDE_PATH environment variable.${ColourReset}")
             #endif()
         else()
-            message("${Magenta}Looking for PARSEC - not found using PkgConfig."
-                "Perhaps you should add the directory containing libparsec.pc"
+            message("${Magenta}Looking for PARSEC - not found using PkgConfig. "
+                "Perhaps you should add the directory containing parsec.pc "
                 "to the PKG_CONFIG_PATH environment variable.${ColourReset}")
         endif()
     endif()
