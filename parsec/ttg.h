@@ -78,12 +78,12 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
                                                   // results
 
   using input_values_tuple_type = std::tuple<input_valueTs...>;
-  using input_terminals_type = std::tuple<TTGIn<keyT, input_valueTs>...>;
-  using input_edges_type = std::tuple<Edge<keyT, input_valueTs>...>;
+  using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
+  using input_edges_type = std::tuple<::ttg::Edge<keyT, input_valueTs>...>;
 
   using output_terminals_type = output_terminalsT;
   using output_edges_type =
-      typename terminals_to_edges<output_terminalsT>::type;
+      typename ::ttg::terminals_to_edges<output_terminalsT>::type;
 
  private:
   input_terminals_type input_terminals;
@@ -478,19 +478,19 @@ class WrapOpArgs
 template <typename keyT, typename funcT, typename... input_valuesT,
           typename... output_edgesT>
 auto wrapt(const funcT& func,
-           const std::tuple<Edge<keyT, input_valuesT>...>& inedges,
+           const std::tuple<::ttg::Edge<keyT, input_valuesT>...>& inedges,
            const std::tuple<output_edgesT...>& outedges,
            const std::string& name = "wrapper",
            const std::vector<std::string>& innames = std::vector<std::string>(
-               std::tuple_size<std::tuple<Edge<keyT, input_valuesT>...>>::value,
+               std::tuple_size<std::tuple<::ttg::Edge<keyT, input_valuesT>...>>::value,
                "input"),
            const std::vector<std::string>& outnames = std::vector<std::string>(
                std::tuple_size<std::tuple<output_edgesT...>>::value,
                "output")) {
   using input_terminals_type =
-      std::tuple<typename Edge<keyT, input_valuesT>::input_terminal_type...>;
+      std::tuple<typename ::ttg::Edge<keyT, input_valuesT>::input_terminal_type...>;
   using output_terminals_type =
-      typename edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
+      typename ::ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
   using callable_type =
       std::function<void(const keyT&, const std::tuple<input_valuesT...>&,
                          output_terminals_type&)>;
@@ -508,18 +508,18 @@ auto wrapt(const funcT& func,
 template <typename keyT, typename funcT, typename... input_valuesT,
           typename... output_edgesT>
 auto wrap(const funcT& func,
-          const std::tuple<Edge<keyT, input_valuesT>...>& inedges,
+          const std::tuple<::ttg::Edge<keyT, input_valuesT>...>& inedges,
           const std::tuple<output_edgesT...>& outedges,
           const std::string& name = "wrapper",
           const std::vector<std::string>& innames = std::vector<std::string>(
-              std::tuple_size<std::tuple<Edge<keyT, input_valuesT>...>>::value,
+              std::tuple_size<std::tuple<::ttg::Edge<keyT, input_valuesT>...>>::value,
               "input"),
           const std::vector<std::string>& outnames = std::vector<std::string>(
               std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
   using input_terminals_type =
-      std::tuple<typename Edge<keyT, input_valuesT>::input_terminal_type...>;
+      std::tuple<typename ::ttg::Edge<keyT, input_valuesT>::input_terminal_type...>;
   using output_terminals_type =
-      typename edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
+      typename ::ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
   using wrapT =
       WrapOpArgs<funcT, keyT, output_terminals_type, input_valuesT...>;
 
