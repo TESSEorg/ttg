@@ -98,8 +98,10 @@ public:
     return successors;
   }
 
-  /// Connect a TTG output terminal to TTG input terminal ... this forwards to the
-  /// the derived class connect method
+  /// Connect this (a TTG output terminal) to a TTG input terminal.
+  /// The base class method forwards to the the derived class connect method and so
+  /// type checking for the key/value will be done at runtime when performing the
+  /// dynamic down cast from TerminalBase* to In<keyT,valueT>.
   virtual void connect(TerminalBase* in) = 0;
 
   virtual ~TerminalBase() {}
@@ -108,8 +110,9 @@ public:
 /// Provides basic information and DAG connectivity (eventually statistics,
 /// etc.)
 class OpBase {
-  static bool
-      trace;  //< If true prints trace of all assignments and all op invocations
+
+private:
+  static bool trace;  //< If true prints trace of all assignments and all op invocations
 
   std::string name;
   std::vector<TerminalBase*> inputs;
@@ -147,38 +150,7 @@ class OpBase {
     junk[0]++;
   }
 
- public:
-  OpBase(const std::string& name, size_t numins, size_t numouts)
-      : name(name), inputs(numins), outputs(numouts), trace_instance(false) {}
-
-  /// Sets trace to value and returns previous setting
-  static bool set_trace_all(bool value) {
-    std::swap(trace, value);
-    return value;
-  }
-  bool set_trace_instance(bool value) {
-    std::swap(trace_instance, value);
-    return value;
-  }
-  bool get_trace() { return trace || trace_instance; }
-  bool tracing() { return get_trace(); }
-
-  void set_name(const std::string& name) { this->name = name; }
-  const std::string& get_name() const { return name; }
-
-  const std::vector<TerminalBase*>& get_inputs() const { return inputs; }
-    
-  const std::vector<TerminalBase*>& get_outputs() const { return outputs; }
-
-  TerminalBase* in(size_t i) {
-    if (i >= inputs.size()) throw "opbase: you are requesting an input terminal that does not exist";
-    return inputs[i];
-  }
-
-  TerminalBase* out(size_t i) {
-    if (i >= outputs.size()) throw "opbase: you are requesting an output terminal that does not exist";
-    return outputs[i];
-  }
+protected:
 
   template <typename terminalsT, typename namesT>
   void register_input_terminals(terminalsT& terms, const namesT& names) {
@@ -192,6 +164,52 @@ class OpBase {
     register_terminals(
         std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms,
         names, &OpBase::set_output);
+  }
+
+ public:
+    
+  OpBase(const std::string& name, size_t numins, size_t numouts)
+      : name(name), inputs(numins), outputs(numouts), trace_instance(false) {}
+
+  /// Sets trace for all operations to value and returns previous setting
+  static bool set_trace_all(bool value) {
+    std::swap(trace, value);
+    return value;
+  }
+
+  /// Sets trace for just this instance to value and returns previous setting
+  bool set_trace_instance(bool value) {
+    std::swap(trace_instance, value);
+    return value;
+  }
+
+  /// Returns true if tracing set for either this instance or all instances
+  bool get_trace() { return trace || trace_instance; }
+  bool tracing() { return get_trace(); }
+
+
+  /// Sets the name of this operation
+  void set_name(const std::string& name) { this->name = name; }
+
+  /// Gets the name of this operation
+  const std::string& get_name() const { return name; }
+
+  /// Returns the vector of input terminals
+  const std::vector<TerminalBase*>& get_inputs() const { return inputs; }
+    
+  /// Returns the vector of output terminals
+  const std::vector<TerminalBase*>& get_outputs() const { return outputs; }
+
+  /// Returns a pointer to the i'th input terminal
+  TerminalBase* in(size_t i) {
+    if (i >= inputs.size()) throw "opbase: you are requesting an input terminal that does not exist";
+    return inputs[i];
+  }
+
+  /// Returns a pointer to the i'th output terminal
+  TerminalBase* out(size_t i) {
+    if (i >= outputs.size()) throw "opbase: you are requesting an output terminal that does not exist";
+    return outputs[i];
   }
 
   virtual ~OpBase() {}
