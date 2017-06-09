@@ -16,10 +16,17 @@
 namespace ttg {
 
 class OpBase;  // forward decl
+template <typename keyT, typename valueT> class In;  // forward decl
+template <typename keyT, typename valueT> class Out; // forward decl
 
 /// Provides basic information and DAG connectivity (eventually statistics,
 /// etc.)
 class TerminalBase {
+
+public:
+  static constexpr bool is_a_terminal = true;
+
+private:
   OpBase* op;                  //< Pointer to containing operation
   size_t n;                    //< Index of terminal
   std::string name;            //< Name of terminal
@@ -31,9 +38,12 @@ class TerminalBase {
   TerminalBase(const TerminalBase&) = delete;
   TerminalBase(TerminalBase&&);
 
- public:
-  static constexpr bool is_a_terminal = true;
+  friend class OpBase;
+  template <typename keyT, typename valueT> friend class In;
+  template <typename keyT, typename valueT> friend class Out;
 
+protected:
+    
   TerminalBase() : op(0), n(0), name("") {}
 
   void set(OpBase* op, size_t index, const std::string& name,
@@ -44,6 +54,14 @@ class TerminalBase {
     this->key_type_str = key_type_str;
     this->value_type_str = value_type_str;
   }
+
+  /// Add directed connection (this --> successor) in internal representation of the TTG.
+  /// This is called by the derived class's connect method
+  void connect_base(TerminalBase* successor) {
+    successors.push_back(successor);
+  }
+
+public:
 
   /// Return ptr to containing op
   OpBase* get_op() const {
@@ -63,24 +81,26 @@ class TerminalBase {
     return name;
   }
 
+  /// Returns string representation of key type
   const std::string& get_key_type_str() const {
     if (!op) throw "ttg::TerminalBase:get_key_type_str() but op is null";
     return key_type_str;
   }
+
+  /// Returns string representation of value type
   const std::string& get_value_type_str() const {
     if (!op) throw "ttg::TerminalBase:get_value_type_str() but op is null";
     return value_type_str;
-  }
-
-  /// Add directed connection (this --> successor)
-  void connect_base(TerminalBase* successor) {
-    successors.push_back(successor);
   }
 
   /// Get connections to successors
   const std::vector<TerminalBase*>& get_connections() const {
     return successors;
   }
+
+  /// Connect a TTG output terminal to TTG input terminal ... this forwards to the
+  /// the derived class connect method
+  virtual void connect(TerminalBase* in) = 0;
 
   virtual ~TerminalBase() {}
 };
@@ -147,7 +167,18 @@ class OpBase {
   const std::string& get_name() const { return name; }
 
   const std::vector<TerminalBase*>& get_inputs() const { return inputs; }
+    
   const std::vector<TerminalBase*>& get_outputs() const { return outputs; }
+
+  TerminalBase* in(size_t i) {
+    if (i >= inputs.size()) throw "opbase: you are requesting an input terminal that does not exist";
+    return inputs[i];
+  }
+
+  TerminalBase* out(size_t i) {
+    if (i >= outputs.size()) throw "opbase: you are requesting an output terminal that does not exist";
+    return outputs[i];
+  }
 
   template <typename terminalsT, typename namesT>
   void register_input_terminals(terminalsT& terms, const namesT& names) {
@@ -405,6 +436,10 @@ class In : public TerminalBase {
   In& operator=(const In& other) = delete;
   In& operator=(const In&& other) = delete;
 
+  void connect(TerminalBase* p) {
+    throw "to connect terminals use out->connect(in) rather than in->connect(out)";
+  }
+    
  public:
   In() : initialized(false) {}
 
@@ -453,6 +488,15 @@ class Out : public TerminalBase {
 
  public:
   Out() {}
+
+  void connect(TerminalBase* p) {
+      if (auto d = dynamic_cast<input_terminal_type*>(p)) {
+          this->connect(*d);
+      }
+      else {
+          throw "you are trying to connect terminals with incompatible types";
+      }
+  }
 
   void connect(input_terminal_type& successor) {
     successors.push_back(&successor);
