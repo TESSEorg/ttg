@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <tuple>
+#include <memory>
 
 #include "madness/ttg.h"
 
@@ -30,6 +31,8 @@ class A : public  Op<keyT, std::tuple<Out<keyT,int>,Out<keyT,int>>, A, int> {
             ::send<1>(key+1, value+1, out);
         }
     }
+
+    ~A() {std::cout << "A destructor\n";}
 };
 
 class Producer : public Op<keyT, std::tuple<Out<keyT,int>>, Producer> {
@@ -44,6 +47,8 @@ class Producer : public Op<keyT, std::tuple<Out<keyT,int>>, Producer> {
         std::cout << "produced " << 0 << std::endl;
         ::send<0>((int)(key),0,out);
     }
+
+    ~Producer() {std::cout << "Producer destructor\n";}
 };
 
 class Consumer : public Op<keyT, std::tuple<>, Consumer, int> {
@@ -56,6 +61,8 @@ public:
 
     Consumer(const typename baseT::input_edges_type& inedges, const std::string& name)
         : baseT(inedges, edges(), name, {"input"}, {}) {}
+
+    ~Consumer() {std::cout << "Consumer destructor\n";}
 };
 
 
@@ -88,6 +95,37 @@ public:
     std::string dot() {return Dot()(&producer);}
     
     void start() {if (world.rank() == 0) producer.invoke(0);}
+    
+    void wait() {world.gop.fence();}
+};
+
+
+class EverythingBase {
+    std::unique_ptr<OpBase> producer;
+    std::unique_ptr<OpBase> a;
+    std::unique_ptr<OpBase> consumer;
+    
+    World& world;
+public:
+    EverythingBase()
+        : producer(new Producer("producer"))
+        , a(new A("A"))
+        , consumer(new Consumer("consumer"))
+        , world(madness::World::get_default())
+    {
+        producer->out(0)->connect(a->in(0));
+        a->out(0)->connect(consumer->in(0));
+        a->out(1)->connect(a->in(0));
+
+        Verify()(producer.get());
+        world.gop.fence();
+    }
+    
+    void print() {Print()(producer.get());}
+
+    std::string dot() {return Dot()(producer.get());}
+    
+    void start() {if (world.rank() == 0) dynamic_cast<Producer*>(producer.get())->invoke(0);} // Ugh!
     
     void wait() {world.gop.fence();}
 };
@@ -213,7 +251,32 @@ public:
     
     void wait() { ::madness::World::get_default().gop.fence();}
 };
+
+template <typename input_terminalsT, typename output_terminalsT>
+class CompositeOp {
+
+public:
+
+    static constexpr int numins = std::tuple_size< input_terminalsT>::value;  // number of input arguments
+    static constexpr int numouts= std::tuple_size<output_terminalsT>::value;  // number of outputs or results
+
+    using input_terminals_type = input_terminalsT;
+    using input_edges_type = typename ::ttg::terminals_to_edges<input_terminalsT>::type;
+
+    using output_terminals_type = output_terminalsT;
+    using output_edges_type = typename ::ttg::terminals_to_edges<output_terminalsT>::type;
+ 
+    template <typename...opTs, >;
+    CompositeOp(std::tuple<std::unique_ptr<opTs>...>&& ops, std::array<
+
+
+
+};
     
+
+
+    
+
 int main(int argc, char** argv) {
     initialize(argc, argv);
     World world(SafeMPI::COMM_WORLD);
@@ -226,12 +289,24 @@ int main(int argc, char** argv) {
     OpBase::set_trace_all(false);
 
     // First compose with manual classes and connections
-    Everything x;
-    x.print();
-    std::cout << x.dot() << std::endl;
+    {
+      Everything x;
+      x.print();
+      std::cout << x.dot() << std::endl;
+      
+      x.start();
+      x.wait();
+    }
 
-    x.start();
-    x.wait();
+    // Next compose with base class pointers and verify destruction
+    {
+      EverythingBase x;
+      x.print();
+      std::cout << x.dot() << std::endl;
+      
+      x.start();
+      x.wait();
+    }
 
     // Next compose with manual classes and edges
     Everything2 y;
@@ -252,7 +327,7 @@ int main(int argc, char** argv) {
     std::cout << q.dot() << std::endl;
     q.start();
     q.wait();
-    
+
     finalize();
     return 0;
 }
