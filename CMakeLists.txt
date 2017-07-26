@@ -72,6 +72,7 @@ string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
 target_compile_options(ttg-mad INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
 # MADNESS is the only prerequisite
 find_package(MADNESS 0.10.1 CONFIG QUIET COMPONENTS world HINTS ${MADNESS_ROOT_DIR})
+message(STATUS "MADNESS_FOUND=${MADNESS_FOUND}")
 target_link_libraries(ttg-mad INTERFACE MADworld)
 
 # sanity check
