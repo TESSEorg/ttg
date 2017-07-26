@@ -73,19 +73,19 @@ target_compile_options(ttg-mad INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LI
 # MADNESS is the only prerequisite
 find_package(MADNESS 0.10.1 CONFIG QUIET COMPONENTS world HINTS ${MADNESS_ROOT_DIR})
 message(STATUS "MADNESS_FOUND=${MADNESS_FOUND}")
-target_link_libraries(ttg-mad INTERFACE MADworld)
+target_link_libraries(ttg-mad INTERFACE MADworld ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
 # sanity check
 add_executable (ttgtest-mad madness/ttg.cc)
-target_link_libraries(ttgtest-mad LINK_PUBLIC ttg-mad)
+target_link_libraries(ttgtest-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
 # T9 example
 add_executable (t9-wrap-mad madness/t9-wrap-ttg.cc)
-target_link_libraries(t9-wrap-mad LINK_PUBLIC ttg-mad)
+target_link_libraries(t9-wrap-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
 # dense matmul
 add_executable (mxm-summa-mad madness/mxm-summa.cc)
-target_link_libraries(mxm-summa-mad LINK_PUBLIC ttg-mad)
+target_link_libraries(mxm-summa-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
 ################
 ####### PaRSEC
