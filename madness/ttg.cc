@@ -252,6 +252,7 @@ public:
     void wait() { ::madness::World::get_default().gop.fence();}
 };
 
+#if 0
 template <typename input_terminalsT, typename output_terminalsT>
 class CompositeOp {
 
@@ -272,7 +273,7 @@ public:
 
 
 };
-    
+#endif
 
 
     
