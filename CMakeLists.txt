@@ -87,6 +87,12 @@ target_link_libraries(t9-wrap-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKE
 add_executable (mxm-summa-mad madness/mxm-summa.cc)
 target_link_libraries(mxm-summa-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
+# sparse matmul
+if (EIGEN3_FOUND)
+  add_executable (spmm-mad madness/spmm.cc)
+  target_link_libraries(spmm-mad LINK_PUBLIC ttg-mad eigen3 ${MADNESS_DISABLEPIE_LINKER_FLAG})
+endif()
+
 ################
 ####### PaRSEC
 ################

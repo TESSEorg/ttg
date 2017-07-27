@@ -1,3 +1,4 @@
+#define WORLD_INSTANTIATE_STATIC_TEMPLATES
 #include <array>
 #include <iostream>
 #include <vector>
@@ -8,9 +9,9 @@
 
 #include "madness/ttg.h"
 
-#error "has not been converted yet to TTG"
-
 using namespace madness;
+using namespace madness::ttg;
+using namespace ::ttg;
 
 using blk_t = double;  // replace with btas::Tensor to have a block-sparse matrix
 using SpMatrix = Eigen::SparseMatrix<blk_t>;
@@ -24,17 +25,19 @@ template<typename _Scalar, typename _StorageIndex>
 struct colmajor_layout<_Scalar, Eigen::RowMajor, _StorageIndex> : public std::false_type {
 };
 
-
-#include <flow.h>
-
 template <std::size_t Rank>
 struct Key : public std::array<long, Rank> {
+  static constexpr const long max_key = 1<<20;
   Key() = default;
   template <typename Integer> Key(std::initializer_list<Integer> ilist) {
     std::copy(ilist.begin(), ilist.end(), this->begin());
   }
   template <typename Archive>
   void serialize(Archive& ar) {ar & madness::archive::wrap((unsigned char*) this, sizeof(*this));}
+  madness::hashT hash() const {
+    static_assert(Rank == 2 || Rank == 3, "Key<Rank>::hash only implemented for Rank={2,3}");
+    return Rank == 2 ? (*this)[0] * max_key + (*this)[1] : ((*this)[0] * max_key + (*this)[1]) * max_key + (*this)[2];
+  }
 };
 
 template <std::size_t Rank>
@@ -47,39 +50,38 @@ operator<<(std::ostream& os, const Key<Rank>& key) {
   return os;
 }
 
-struct Control {};
-using ControlFlow = Flow<Key<0>, Control>;
-using SpMatrixFlow = Flow<Key<2>,blk_t>;
-
 // flow data from existing data structure
-class Flow_From_SpMatrix : public TTGOp<ControlFlow, SpMatrixFlow, Flow_From_SpMatrix> {
+class Read_SpMatrix : public Op<int, std::tuple<Out<Key<2>,blk_t>>, Read_SpMatrix, int> {
  public:
-  using baseT = Op<ControlFlow, SpMatrixFlow, Flow_From_SpMatrix>;
-  Flow_From_SpMatrix(const SpMatrix& matrix, const SpMatrixFlow& flow, const ControlFlow& ctl):
-    baseT(ctl, flow, "spmatrix_to_flow"),
+  using baseT =              Op<int, std::tuple<Out<Key<2>,blk_t>>, Read_SpMatrix, int>;
+
+  Read_SpMatrix(const SpMatrix& matrix, Edge<int,int>& ctl, Edge<Key<2>,blk_t>& out):
+    baseT(edges(ctl), edges(out), "read_spmatrix", {"ctl"}, {"Mij"}),
     matrix_(matrix) {}
-  void op(const Key<0>& key, const Control&, SpMatrixFlow& flow) {
+
+  void op(const int& key, const std::tuple<int>& junk, std::tuple<Out<Key<2>,blk_t>>& out) {
     for (int k=0; k<matrix_.outerSize(); ++k) {
       for (SpMatrix::InnerIterator it(matrix_,k); it; ++it)
       {
-        flow.send<0>(Key<2>({it.row(),it.col()}), it.value());
+        ::send<0>(Key<2>({it.row(),it.col()}), it.value(), out);
       }
     }
   }
  private:
   const SpMatrix& matrix_;
-  SpMatrixFlow flow_;
 };
-// flow (move?) data into a data structure
-class Flow_To_SpMatrix : public Op<SpMatrixFlow, ControlFlow, Flow_To_SpMatrix> {
- public:
-  using baseT = Op<SpMatrixFlow, ControlFlow, Flow_To_SpMatrix>;
 
-  Flow_To_SpMatrix(SpMatrix& matrix, const SpMatrixFlow& flow, const ControlFlow& ctl):
-    baseT(flow, ctl, "flow_to_spmatrix"),
+// flow (move?) data into a data structure
+class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t> {
+ public:
+  using baseT =               Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t>;
+
+  Write_SpMatrix(SpMatrix& matrix, Edge<Key<2>,blk_t>& in):
+    baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}),
     matrix_(matrix) {}
-  void op(const Key<2>& key, const blk_t& elem, ControlFlow) {
-    matrix_.insert(key[0], key[1]) = elem;
+
+  void op(const Key<2>& key, const std::tuple<blk_t>& elem, std::tuple<>&) {
+    matrix_.insert(key[0], key[1]) = std::get<0>(elem);
   }
 
  private:
@@ -89,7 +91,7 @@ class Flow_To_SpMatrix : public Op<SpMatrixFlow, ControlFlow, Flow_To_SpMatrix> 
 // sparse mm
 class SpMM {
  public:
-  SpMM(SpMatrixFlow a, SpMatrixFlow b, SpMatrixFlow c,
+  SpMM(Edge<Key<2>,blk_t>& a, Edge<Key<2>,blk_t>& b, Edge<Key<2>,blk_t>& c,
        const SpMatrix& a_mat, const SpMatrix& b_mat) :
     a_(a), b_(b), c_(c), a_ijk_(), b_ijk_(), c_ijk_(),
     a_rowidx_to_colidx_(make_rowidx_to_colidx(a_mat)),
@@ -101,12 +103,15 @@ class SpMM {
  }
 
   /// broadcast A[i][k] to all {i,j,k} such that B[j][k] exists
-  class BcastA : public Op<SpMatrixFlow, FlowArray<Key<3>,blk_t>, BcastA> {
+  class BcastA : public Op<Key<2>, std::tuple<Out<Key<3>,blk_t>>, BcastA, blk_t> {
    public:
-    using baseT = Op<SpMatrixFlow, FlowArray<Key<3>,blk_t>, BcastA>;
-    BcastA(SpMatrixFlow a, FlowArray<Key<3>,blk_t> a_ijk, std::vector<std::vector<long>>&& b_rowidx_to_colidx) :
-      baseT(a, a_ijk,"SpMM::bcast_a"), b_rowidx_to_colidx_(std::move(b_rowidx_to_colidx)) {}
-    void op(const Key<2>& key, const blk_t& a_ik, FlowArray<Key<3>,blk_t> a_ijk) {
+    using baseT =       Op<Key<2>, std::tuple<Out<Key<3>,blk_t>>, BcastA, blk_t>;
+
+    BcastA(Edge<Key<2>,blk_t>& a, Edge<Key<3>,blk_t>& a_ijk, std::vector<std::vector<long>>&& b_rowidx_to_colidx) :
+      baseT(edges(a), edges(a_ijk),"SpMM::bcast_a", {"a_ik"}, {"a_ijk"}),
+      b_rowidx_to_colidx_(std::move(b_rowidx_to_colidx)) {}
+
+    void op(const Key<2>& key, const std::tuple<blk_t>& a_ik, std::tuple<Out<Key<3>,blk_t>>& a_ijk) {
       const auto i = key[0];
       const auto k = key[1];
       // broadcast a_ik to all existing {i,j,k}
@@ -115,19 +120,23 @@ class SpMM {
 //        std::cout << "Broadcasting A[" << i << "][" << k << "] to j=" << j << std::endl;
         ijk_keys.emplace_back(Key<3>({i,j,k}));
       }
-      a_ijk.broadcast<0>(ijk_keys, a_ik);
+      ::broadcast<0>(ijk_keys, std::get<0>(a_ik), a_ijk);
     }
+
    private:
     std::vector<std::vector<long>> b_rowidx_to_colidx_;
   };  // class BcastA
 
   /// broadcast B[k][j] to all {i,j,k} such that A[i][k] exists
-  class BcastB : public Op<SpMatrixFlow, FlowArray<Key<3>,blk_t>, BcastB> {
+  class BcastB : public Op<Key<2>, std::tuple<Out<Key<3>,blk_t>>, BcastB, blk_t> {
    public:
-    using baseT = Op<SpMatrixFlow, FlowArray<Key<3>,blk_t>, BcastB>;
-    BcastB(SpMatrixFlow b, FlowArray<Key<3>,blk_t> b_ijk, std::vector<std::vector<long>>&& a_colidx_to_rowidx) :
-      baseT(b, b_ijk,"SpMM::bcast_b"), a_colidx_to_rowidx_(std::move(a_colidx_to_rowidx)) {}
-    void op(const Key<2>& key, const blk_t& b_kj, FlowArray<Key<3>,blk_t> b_ijk) {
+    using baseT =       Op<Key<2>, std::tuple<Out<Key<3>,blk_t>>, BcastB, blk_t>;
+
+    BcastB(Edge<Key<2>,blk_t>& b, Edge<Key<3>,blk_t>& b_ijk, std::vector<std::vector<long>>&& a_colidx_to_rowidx) :
+      baseT(edges(b), edges(b_ijk),"SpMM::bcast_b", {"b_kj"}, {"b_ijk"}),
+      a_colidx_to_rowidx_(std::move(a_colidx_to_rowidx)) {}
+
+    void op(const Key<2>& key, const std::tuple<blk_t>& b_kj, std::tuple<Out<Key<3>,blk_t>>& b_ijk) {
       const auto k = key[0];
       const auto j = key[1];
       // broadcast b_kj to *jk
@@ -136,23 +145,26 @@ class SpMM {
 //        std::cout << "Broadcasting B[" << k << "][" << j << "] to i=" << i << std::endl;
         ijk_keys.emplace_back(Key<3>({i,j,k}));
       }
-      b_ijk.broadcast<0>(ijk_keys, b_kj);
+      ::broadcast<0>(ijk_keys, std::get<0>(b_kj), b_ijk);
     }
+
    private:
     std::vector<std::vector<long>> a_colidx_to_rowidx_;
   };  // class BcastA
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
-  class MultiplyAdd : public Op<FlowArray<Key<3>,blk_t,blk_t,blk_t>, SpMatrixFlow, MultiplyAdd> {
+  class MultiplyAdd : public Op<Key<3>, std::tuple<Out<Key<2>,blk_t>, Out<Key<3>,blk_t>>, MultiplyAdd, blk_t, blk_t, blk_t> {
    public:
-    using baseT = Op<FlowArray<Key<3>,blk_t,blk_t,blk_t>, SpMatrixFlow, MultiplyAdd>;
-    MultiplyAdd(FlowArray<Key<3>,blk_t> a_ijk, FlowArray<Key<3>,blk_t> b_ijk,
-             FlowArray<Key<3>,blk_t> c_ijk,
-             SpMatrixFlow c,
-             const std::vector<std::vector<long>>& a_rowidx_to_colidx,
-             const std::vector<std::vector<long>>& b_colidx_to_rowidx) :
-      baseT(make_flows(a_ijk.get<0>(),b_ijk.get<0>(),c_ijk.get<0>()), c, "SpMM::Multiply"),
-      c_ijk_(c_ijk), a_rowidx_to_colidx_(a_rowidx_to_colidx), b_colidx_to_rowidx_(b_colidx_to_rowidx)
+    using baseT =            Op<Key<3>, std::tuple<Out<Key<2>,blk_t>, Out<Key<3>,blk_t>>, MultiplyAdd, blk_t, blk_t, blk_t>;
+
+    MultiplyAdd(Edge<Key<3>,blk_t>& a_ijk, Edge<Key<3>,blk_t>& b_ijk,
+                Edge<Key<3>,blk_t>& c_ijk,
+                Edge<Key<2>,blk_t>& c,
+                const std::vector<std::vector<long>>& a_rowidx_to_colidx,
+                const std::vector<std::vector<long>>& b_colidx_to_rowidx) :
+      baseT(edges(a_ijk,b_ijk,c_ijk), edges(c, c_ijk), "SpMM::Multiply", {"a_ijk", "b_ijk", "c_ijk"}, {"c_ij", "c_ijk"}),
+      c_ijk_(c_ijk),
+      a_rowidx_to_colidx_(a_rowidx_to_colidx), b_colidx_to_rowidx_(b_colidx_to_rowidx)
       {
         // for each i and j determine first k that contributes, initialize input {i,j,first_k} flow to 0
         for(long i=0; i!=a_rowidx_to_colidx_.size(); ++i) {
@@ -165,7 +177,7 @@ class SpMM {
             std::tie(k,have_k) = compute_first_k(i,j);
             if (have_k) {
 //              std::cout << "Initializing C[" << i << "][" << j << "] to zero" << std::endl;
-              c_ijk_.send<0>(Key<3>({i,j,k}),0);
+              ::send(Key<3>({i,j,k}), 0, c_ijk_.in());
             }
             else {
 //              std::cout << "C[" << i << "][" << j << "] is empty" << std::endl;
@@ -173,8 +185,9 @@ class SpMM {
           }
         }
       }
-    void op(const Key<3>& key, const blk_t& a_ijk, const blk_t& b_ijk, const blk_t& c_ijk,
-            SpMatrixFlow result) {
+
+    void op(const Key<3>& key, const std::tuple<blk_t, blk_t, blk_t>& _ijk,
+            std::tuple<Out<Key<2>,blk_t>,Out<Key<3>,blk_t>>& result) {
       const auto i = key[0];
       const auto j = key[1];
       const auto k = key[2];
@@ -186,13 +199,13 @@ class SpMM {
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow
       if (have_next_k) {
-        c_ijk_.send<0>(Key<3>({i,j,next_k}),c_ijk + a_ijk * b_ijk);
+        ::send(Key<3>({i,j,next_k}), std::get<2>(_ijk) + std::get<0>(_ijk) * std::get<1>(_ijk), c_ijk_.in());
       }
       else
-        result.send<0>(Key<2>({i,j}), c_ijk + a_ijk * b_ijk);
+        ::send<0>(Key<2>({i,j}), std::get<2>(_ijk) + std::get<0>(_ijk) * std::get<1>(_ijk), result);
     }
    private:
-    FlowArray<Key<3>,blk_t> c_ijk_;
+    Edge<Key<3>,blk_t> c_ijk_;
     const std::vector<std::vector<long>>& a_rowidx_to_colidx_;
     const std::vector<std::vector<long>>& b_colidx_to_rowidx_;
 
@@ -266,12 +279,12 @@ class SpMM {
   };
 
  private:
-  SpMatrixFlow a_;
-  SpMatrixFlow b_;
-  SpMatrixFlow c_;
-  FlowArray<Key<3>,blk_t> a_ijk_;
-  FlowArray<Key<3>,blk_t> b_ijk_;
-  FlowArray<Key<3>,blk_t> c_ijk_;
+  Edge<Key<2>,blk_t>& a_;
+  Edge<Key<2>,blk_t>& b_;
+  Edge<Key<2>,blk_t>& c_;
+  Edge<Key<3>,blk_t> a_ijk_;
+  Edge<Key<3>,blk_t> b_ijk_;
+  Edge<Key<3>,blk_t> c_ijk_;
   std::vector<std::vector<long>> a_rowidx_to_colidx_;
   std::vector<std::vector<long>> b_colidx_to_rowidx_;
   BcastA bcast_a_;
@@ -311,9 +324,32 @@ class SpMM {
 
 };
 
-int main(int argc, char* argv[]) {
+class Control : public Op<int, std::tuple<Out<int,int>>, Control> {
+    using baseT =      Op<int, std::tuple<Out<int,int>>, Control>;
 
-  BaseOp::set_trace(false);
+ public:
+    Control(Edge<int,int>& ctl)
+        : baseT(edges(),edges(ctl),"Control",{},{"ctl"})
+        {}
+
+    void op(const int& key, const std::tuple<>&, std::tuple<Out<int,int>>& out) {
+        ::send<0>(0,0,out);
+    }
+
+    void start() {
+        invoke(0);
+    }
+};
+
+int main(int argc, char** argv) {
+  World& world = madness::initialize(argc, argv);
+  world.gop.fence();
+
+  if (world.size() > 1) {
+      madness::error("Currently only works with one MPI process (multiple threads OK)");
+  }
+
+  //OpBase::set_trace_all(true);
 
   const int n = 2;
   const int m = 3;
@@ -342,27 +378,29 @@ int main(int argc, char* argv[]) {
     B.setFromTriplets(B_elements.begin(), B_elements.end());
   }
 
-  ControlFlow ctl; // this is just a kick to jumpstart the computation
-  SpMatrixFlow A_flow, B_flow;
-  Flow_From_SpMatrix a(A, A_flow, ctl);
-  Flow_From_SpMatrix b(B, B_flow, ctl);
+  Edge<int, int> ctl("control");
+  Control control(ctl);
+  Edge<Key<2>,blk_t> eA, eB, eC;
+  Read_SpMatrix a(A, ctl, eA);
+  Read_SpMatrix b(B, ctl, eB);
 
   // set up matmul flow
   SpMatrix C(n,m);
-  SpMatrixFlow C_flow;
-  Flow_To_SpMatrix c(C, C_flow, ctl);
-  SpMM a_times_b(A_flow, B_flow, C_flow, A, B);
+  Write_SpMatrix c(C, eC);
+  SpMM a_times_b(eA, eB, eC, A, B);
 
   // execute the flow
-  ctl.send<0>(Key<0>(),Control());
+  control.start();
 
   // no way to check for completion yet
-  using namespace std::chrono_literals;
-  std::this_thread::sleep_for(2s);
+  world.gop.fence();
+  world.gop.fence();
 
   // validate against the reference output
   SpMatrix Cref = A * B;
   std::cout << "Cref-C=" << Cref-C << std::endl;
+
+  madness::finalize();
 
   return 0;
 }
