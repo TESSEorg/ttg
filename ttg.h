@@ -643,6 +643,13 @@ auto edges(const inedgesT&... args) {
   return std::make_tuple(args...);
 }
 
+template <typename keyT, typename valueT,
+          typename output_terminalT>
+void send(const keyT& key, const valueT& value,
+          output_terminalT& t) {
+  t.send(key, value);
+}
+
 template <size_t i, typename keyT, typename valueT,
           typename... output_terminalsT>
 void send(const keyT& key, const valueT& value,
