@@ -7,10 +7,11 @@ and from there do
 
 ## madness examples
 - `cmake <path to the top of parsec-cxx> -DMADNESS_ROOT_DIR=<install prefix of Madness compiled with cmake>`
-- `make ttgtest-mad t9-wrap-mad mxm-summa-mad `
+- `make ttgtest-mad t9-wrap-mad mxm-summa-mad spmm-mad`
 - `./ttgtest-mad`
 - `./t9-wrap-mad`
 - `./mxm-summa-ttg`
+- `./spmm-mad`
 
 ## parsec examples
 
