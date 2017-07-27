@@ -455,7 +455,7 @@ int main(int argc, char** argv) {
     std::cout << " reference result " << std::endl;
     //pretty_print(c);    
 
-    Matrix csuma(N,M); // suma result will go here
+    Matrix c_summa(N,M); // SUMMA result will go here
 
     Edge<pairT,Matrix> A, B, C; // input (A,B) and output (C) flows
     Edge<int,int> ctl("control");
@@ -464,7 +464,7 @@ int main(int argc, char** argv) {
     ReadA readA(a, tilesize, ctl, A);
     ReadB readB(b, tilesize, ctl, B);
     MxM mxmop(N, M, K, tilesize, A, B, C);
-    Writer writerop(C, csuma, tilesize); // write result to memory 
+    Writer writerop(C, c_summa, tilesize); // write result to memory
 
     std::cout << "==== begin dot ====\n";
     std::cout << Dot()(&control) << std::endl;
@@ -475,10 +475,10 @@ int main(int argc, char** argv) {
     madness::World::get_default().gop.fence();
 
     // Cross fingers
-    //std::cout << " suma result " << std::endl;
-    //pretty_print(csuma);
+    //std::cout << " SUMMA result " << std::endl;
+    //pretty_print(c_summa);
 
-    std::cout << "\nnorm of difference is " << (c - csuma).normf() << std::endl;
+    std::cout << "\nnorm of difference is " << (c - c_summa).normf() << std::endl;
 
     madness::finalize();
     
