@@ -620,6 +620,11 @@ class Edge {
   void set_out(In<keyT, valueT>* out) const {
     for (auto& edge : p) edge->set_out(out);
   }
+
+  // this is currently just a hack, need to understand better whether this is a good idea
+  Out<keyT, valueT>& in(size_t edge_index = 0, size_t terminal_index = 0) {
+    return *(p.at(edge_index)->ins.at(terminal_index));
+  }
 };
 
 // Fuse edges into one ... all the types have to be the same ... just using
