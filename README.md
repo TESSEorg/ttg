@@ -13,6 +13,12 @@ and from there do
 - `./mxm-summa-ttg`
 - `./spmm-mad`
 
+### spmm-mad notes
+To use block sparse matrices (instead of element sparse) must manually add additional compile flags (do `make spmm-mad VERBOSE=1` to reveal the compilation command):
+`-I/path/to/btas -I/path/to.boost -DBLOCK_SPARSE_GEMM=1`. Obtain (latest) BTAS from https://github.com/BTAS/BTAS .
+
+Block-sparse version of the code is not tested.
+
 ## parsec examples
 
 - `cmake <path to the top of parsec-cxx> -DMADNESS_ROOT_DIR=<install prefix of Madness compiled with cmake>`

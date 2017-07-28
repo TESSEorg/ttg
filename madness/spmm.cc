@@ -78,8 +78,12 @@ operator*(const btas::Tensor<_T, _Range, _Store>& A, const btas::Tensor<_T, _Ran
 template <typename _T, class _Range, class _Store>
 btas::Tensor<_T, _Range, _Store>
 gemm(btas::Tensor<_T, _Range, _Store>&& C, const btas::Tensor<_T, _Range, _Store>& A, const btas::Tensor<_T, _Range, _Store>& B) {
-  btas::contract_222(1.0, A, {1,2}, B, {2,3},
-                     1.0, C, {1,3}, false, false);
+  using array = btas::DEFAULT::index<int>;
+  if (C.empty()) {
+    C = btas::Tensor<_T, _Range, _Store>(btas::Range(A.range().extent(0),B.range().extent(1)), 0.0);
+  }
+  btas::contract_222(1.0, A, array{1,2}, B, array{2,3},
+                     1.0, C, array{1,3}, false, false);
   return std::move(C);
 }
 }
@@ -251,7 +255,7 @@ class SpMM {
             std::tie(k,have_k) = compute_first_k(i,j);
             if (have_k) {
 //              std::cout << "Initializing C[" << i << "][" << j << "] to zero" << std::endl;
-              ::send(Key<3>({i,j,k}), 0, c_ijk_.in());
+              ::send(Key<3>({i,j,k}), blk_t(0), c_ijk_.in());
             }
             else {
 //              std::cout << "C[" << i << "][" << j << "] is empty" << std::endl;
@@ -260,7 +264,7 @@ class SpMM {
         }
       }
 
-    void op(const Key<3>& key, const std::tuple<blk_t, blk_t, blk_t>& _ijk,
+    void op(const Key<3>& key, std::tuple<blk_t, blk_t, blk_t>& _ijk,
             std::tuple<Out<Key<2>,blk_t>,Out<Key<3>,blk_t>>& result) {
       const auto i = key[0];
       const auto j = key[1];
@@ -273,10 +277,10 @@ class SpMM {
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow
       if (have_next_k) {
-        ::send(Key<3>({i,j,next_k}), gemm(std::get<2>(_ijk), std::get<0>(_ijk), std::get<1>(_ijk)), c_ijk_.in());
+        ::send(Key<3>({i,j,next_k}), gemm(std::move(std::get<2>(_ijk)), std::get<0>(_ijk), std::get<1>(_ijk)), c_ijk_.in());
       }
       else
-        ::send<0>(Key<2>({i,j}), gemm(std::get<2>(_ijk), std::get<0>(_ijk), std::get<1>(_ijk)), result);
+        ::send<0>(Key<2>({i,j}), gemm(std::move(std::get<2>(_ijk)), std::get<0>(_ijk), std::get<1>(_ijk)), result);
     }
    private:
     Edge<Key<3>,blk_t> c_ijk_;
@@ -434,14 +438,33 @@ int main(int argc, char** argv) {
   {
     using triplet_t = Eigen::Triplet<blk_t>;
     std::vector<triplet_t> A_elements;
+#if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
+    auto A_blksize = {128,256};
+    A_elements.emplace_back(0,1,blk_t(btas::Range(A_blksize),12.3));
+    A_elements.emplace_back(0,2,blk_t(btas::Range(A_blksize),10.7));
+    A_elements.emplace_back(0,3,blk_t(btas::Range(A_blksize),-2.3));
+    A_elements.emplace_back(1,0,blk_t(btas::Range(A_blksize),-0.3));
+    A_elements.emplace_back(1,2,blk_t(btas::Range(A_blksize),1.2));
+#else
     A_elements.emplace_back(0,1,12.3);
     A_elements.emplace_back(0,2,10.7);
     A_elements.emplace_back(0,3,-2.3);
     A_elements.emplace_back(1,0,-0.3);
     A_elements.emplace_back(1,2,1.2);
+#endif
     A.setFromTriplets(A_elements.begin(), A_elements.end());
 
     std::vector<triplet_t> B_elements;
+#if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
+    auto B_blksize = {256,196};
+    B_elements.emplace_back(0,0,blk_t(btas::Range(B_blksize),12.3));
+    B_elements.emplace_back(1,0,blk_t(btas::Range(B_blksize),10.7));
+    B_elements.emplace_back(3,0,blk_t(btas::Range(B_blksize),-2.3));
+    B_elements.emplace_back(1,1,blk_t(btas::Range(B_blksize),-0.3));
+    B_elements.emplace_back(1,2,blk_t(btas::Range(B_blksize),1.2));
+    B_elements.emplace_back(2,2,blk_t(btas::Range(B_blksize),7.2));
+    B_elements.emplace_back(3,2,blk_t(btas::Range(B_blksize),0.2));
+#else
     B_elements.emplace_back(0,0,12.3);
     B_elements.emplace_back(1,0,10.7);
     B_elements.emplace_back(3,0,-2.3);
@@ -449,6 +472,7 @@ int main(int argc, char** argv) {
     B_elements.emplace_back(1,2,1.2);
     B_elements.emplace_back(2,2,7.2);
     B_elements.emplace_back(3,2,0.2);
+#endif
     B.setFromTriplets(B_elements.begin(), B_elements.end());
   }
 
@@ -472,7 +496,7 @@ int main(int argc, char** argv) {
 
   // validate against the reference output
   SpMatrix Cref = A * B;
-  std::cout << "Cref-C=" << Cref-C << std::endl;
+  std::cout << "Cref=" << Cref << std::endl;
 
   madness::finalize();
 
