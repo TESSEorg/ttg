@@ -6,6 +6,14 @@
 #include <thread>
 
 #include <Eigen/SparseCore>
+#if __has_include(<btas/features.h>)
+# include <btas/features.h>
+# ifdef BTAS_IS_USABLE
+#  include <btas/btas.h>
+# else
+#  warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
+# endif
+#endif
 
 #include "madness/ttg.h"
 
@@ -13,8 +21,50 @@ using namespace madness;
 using namespace madness::ttg;
 using namespace ::ttg;
 
-using blk_t = double;  // replace with btas::Tensor to have a block-sparse matrix
+#if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
+using blk_t = btas::Tensor<double>;
+#else
+using blk_t = double;
+#endif
 using SpMatrix = Eigen::SparseMatrix<blk_t>;
+
+/////////////////////////////////////////////
+// additional ops are needed to make Eigen::SparseMatrix<btas::Tensor> possible
+#ifdef BTAS_IS_USABLE
+namespace madness {
+  namespace archive {
+
+    template<class Archive, typename T>
+    struct ArchiveLoadImpl<Archive, btas::varray<T> > {
+        static inline void load(const Archive& ar, btas::varray<T>& x) {
+          typename btas::varray<T>::size_type n;
+          ar & n;
+          x.resize(n);
+          for (typename btas::varray<T>::value_type& xi : x)
+            ar & xi;
+        }
+    };
+
+    template<class Archive, typename T>
+    struct ArchiveStoreImpl<Archive, btas::varray<T> > {
+        static inline void store(const Archive& ar, const btas::varray<T>& x) {
+          ar & x.size();
+          for (const typename btas::varray<T>::value_type& xi : x)
+            ar & xi;
+        }
+    };
+
+    template<class Archive, typename _T, class _Range, class _Store>
+    struct ArchiveSerializeImpl<Archive, btas::Tensor<_T, _Range, _Store> > {
+        static inline void serialize(const Archive& ar,
+                                     btas::Tensor<_T, _Range, _Store>& t) {
+        }
+    };
+
+  }
+}
+#endif  // BTAS_IS_USABLE
+/////////////////////////////////////////////
 
 template<typename _Scalar, int _Options, typename _StorageIndex>
 struct colmajor_layout;
