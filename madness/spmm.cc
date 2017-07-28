@@ -10,6 +10,7 @@
 # include <btas/features.h>
 # ifdef BTAS_IS_USABLE
 #  include <btas/btas.h>
+#  include <btas/optimize/contract.h>
 # else
 #  warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
 # endif
@@ -63,7 +64,30 @@ namespace madness {
 
   }
 }
+
+namespace btas {
+template <typename _T, class _Range, class _Store>
+inline btas::Tensor<_T, _Range, _Store>
+operator*(const btas::Tensor<_T, _Range, _Store>& A, const btas::Tensor<_T, _Range, _Store>& B) {
+  btas::Tensor<_T, _Range, _Store> C;
+  btas::contract(1.0, A, {1,2}, B, {2,3},
+                 0.0, C, {1,3});
+  return C;
+}
+
+template <typename _T, class _Range, class _Store>
+btas::Tensor<_T, _Range, _Store>
+gemm(btas::Tensor<_T, _Range, _Store>&& C, const btas::Tensor<_T, _Range, _Store>& A, const btas::Tensor<_T, _Range, _Store>& B) {
+  btas::contract_222(1.0, A, {1,2}, B, {2,3},
+                     1.0, C, {1,3}, false, false);
+  return std::move(C);
+}
+}
 #endif  // BTAS_IS_USABLE
+double
+gemm(double C, double A, double B) {
+  return C + A*B;
+}
 /////////////////////////////////////////////
 
 template<typename _Scalar, int _Options, typename _StorageIndex>
@@ -249,10 +273,10 @@ class SpMM {
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow
       if (have_next_k) {
-        ::send(Key<3>({i,j,next_k}), std::get<2>(_ijk) + std::get<0>(_ijk) * std::get<1>(_ijk), c_ijk_.in());
+        ::send(Key<3>({i,j,next_k}), gemm(std::get<2>(_ijk), std::get<0>(_ijk), std::get<1>(_ijk)), c_ijk_.in());
       }
       else
-        ::send<0>(Key<2>({i,j}), std::get<2>(_ijk) + std::get<0>(_ijk) * std::get<1>(_ijk), result);
+        ::send<0>(Key<2>({i,j}), gemm(std::get<2>(_ijk), std::get<0>(_ijk), std::get<1>(_ijk)), result);
     }
    private:
     Edge<Key<3>,blk_t> c_ijk_;
