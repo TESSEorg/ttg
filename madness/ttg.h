@@ -215,11 +215,12 @@ class Op : public ::ttg::OpBase,
 
  public:
   Op(const std::string& name, const std::vector<std::string>& innames,
-     const std::vector<std::string>& outnames)
+     const std::vector<std::string>& outnames,
+     std::shared_ptr<WorldDCPmapInterface<keyT>> pmap = std::make_shared<WorldDCDefaultPmap<keyT>>(World::get_default()))
       : ::ttg::OpBase(name, numins, numouts),
         worldobjT(World::get_default()),
         world(World::get_default()),
-        pmap(std::make_shared<WorldDCDefaultPmap<keyT>>(world)) {
+        pmap(pmap) {
     // Cannot call these in base constructor since terminals not yet constructed
     if (innames.size() != std::tuple_size<input_terminals_type>::value)
       throw "madness::ttg::Op: #input names != #input terminals";
@@ -236,11 +237,12 @@ class Op : public ::ttg::OpBase,
 
   Op(const input_edges_type& inedges, const output_edges_type& outedges,
      const std::string& name, const std::vector<std::string>& innames,
-     const std::vector<std::string>& outnames)
+     const std::vector<std::string>& outnames,
+     std::shared_ptr<WorldDCPmapInterface<keyT>> pmap = std::make_shared<WorldDCDefaultPmap<keyT>>(World::get_default()))
       : ::ttg::OpBase(name, numins, numouts),
         worldobjT(World::get_default()),
         world(World::get_default()),
-        pmap(std::make_shared<WorldDCDefaultPmap<keyT>>(world)) {
+        pmap(pmap) {
     // Cannot call in base constructor since terminals not yet constructed
     if (innames.size() != std::tuple_size<input_terminals_type>::value)
       throw "madness::ttg::Op: #input names != #input terminals";
