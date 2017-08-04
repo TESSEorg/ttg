@@ -128,13 +128,23 @@ operator<<(std::ostream& os, const Key<Rank>& key) {
   return os;
 }
 
+// inputs and result matrices reside on node 0 to allow easy testing
+template <typename Key>
+class Process0Pmap : public WorldDCPmapInterface<Key> {
+ public:
+  Process0Pmap() = default;
+    ProcessID owner(const Key&) const override {
+      return 0;
+    }
+};
+
 // flow data from existing data structure
 class Read_SpMatrix : public Op<int, std::tuple<Out<Key<2>,blk_t>>, Read_SpMatrix, int> {
  public:
   using baseT =              Op<int, std::tuple<Out<Key<2>,blk_t>>, Read_SpMatrix, int>;
 
   Read_SpMatrix(const SpMatrix& matrix, Edge<int,int>& ctl, Edge<Key<2>,blk_t>& out):
-    baseT(edges(ctl), edges(out), "read_spmatrix", {"ctl"}, {"Mij"}),
+    baseT(edges(ctl), edges(out), "read_spmatrix", {"ctl"}, {"Mij"}, std::make_shared<Process0Pmap<int>>()),
     matrix_(matrix) {}
 
   void op(const int& key, const std::tuple<int>& junk, std::tuple<Out<Key<2>,blk_t>>& out) {
@@ -155,7 +165,7 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t> {
   using baseT =               Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t>;
 
   Write_SpMatrix(SpMatrix& matrix, Edge<Key<2>,blk_t>& in):
-    baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}),
+    baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, std::make_shared<Process0Pmap<Key<2>>>()),
     matrix_(matrix) {}
 
   void op(const Key<2>& key, const std::tuple<blk_t>& elem, std::tuple<>&) {
@@ -419,23 +429,54 @@ class Control : public Op<int, std::tuple<Out<int,int>>, Control> {
     }
 };
 
+#ifdef BTAS_IS_USABLE
+template <typename _T, class _Range, class _Store>
+std::tuple<_T,_T> norms(const btas::Tensor<_T, _Range, _Store>& t) {
+  _T norm_2_square = 0.0;
+  _T norm_inf = 0.0;
+  for (auto k : t) {
+    norm_2_square += k*k;
+    norm_inf = std::max(norm_inf, std::abs(k));
+  }
+  return std::make_tuple(norm_2_square, norm_inf);
+}
+#endif
+
+std::tuple<double,double> norms(double t) {
+  return std::make_tuple(t*t, std::abs(t));
+}
+
+std::tuple<double,double> norms(const SpMatrix& A){
+  double norm_2_square = 0.0;
+  double norm_inf = 0.0;
+  for (int i = 0; i < A.outerSize(); ++i) {
+    for (SpMatrix::InnerIterator it(A, i); it; ++it) {
+      //  cout << 1+it.row() << "\t"; // row index
+      //  cout << 1+it.col() << "\t"; // col index (here it is equal to k)
+      //  cout << it.value() << endl;
+      auto elem = it.value();
+      double elem_norm_2_square, elem_norm_inf;
+      std::tie(elem_norm_2_square, elem_norm_inf) = norms(elem);
+      norm_2_square += elem_norm_2_square;
+      norm_inf = std::max(norm_inf, elem_norm_inf);
+    }
+  }
+  return std::make_tuple(norm_2_square,norm_inf);
+}
+
 int main(int argc, char** argv) {
   World& world = madness::initialize(argc, argv);
   world.gop.fence();
-
-  if (world.size() > 1) {
-      madness::error("Currently only works with one MPI process (multiple threads OK)");
-  }
 
   //OpBase::set_trace_all(true);
 
   const int n = 2;
   const int m = 3;
   const int k = 4;
+  SpMatrix A(n,k), B(k,m), C(n,m);
 
-  // initialize inputs (these will become shapes when switch to blocks)
-  SpMatrix A(n,k), B(k,m);
-  {
+  // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
+  if (world.rank() == 0) {
     using triplet_t = Eigen::Triplet<blk_t>;
     std::vector<triplet_t> A_elements;
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
@@ -476,27 +517,31 @@ int main(int argc, char** argv) {
     B.setFromTriplets(B_elements.begin(), B_elements.end());
   }
 
+  // flow graph needs to exist on every node
   Edge<int, int> ctl("control");
   Control control(ctl);
   Edge<Key<2>,blk_t> eA, eB, eC;
   Read_SpMatrix a(A, ctl, eA);
   Read_SpMatrix b(B, ctl, eB);
-
-  // set up matmul flow
-  SpMatrix C(n,m);
   Write_SpMatrix c(C, eC);
   SpMM a_times_b(eA, eB, eC, A, B);
 
-  // execute the flow
+  // ready, go!
   control.start();
 
-  // no way to check for completion yet
+  // no way to check for completion yet, so just wait
   world.gop.fence();
   world.gop.fence();
 
-  // validate against the reference output
-  SpMatrix Cref = A * B;
-  std::cout << "Cref=" << Cref << std::endl;
+  // rank 0 only: validate against the reference output
+  if (world.rank() == 0) {
+    SpMatrix Cref = A * B;
+
+    double norm_2_square, norm_inf;
+    std::tie(norm_2_square, norm_inf) = norms(Cref-C);
+    std::cout << "||Cref - C||_2      = " << std::sqrt(norm_2_square) << std::endl;
+    std::cout << "||Cref - C||_\\infty = " << norm_inf << std::endl;
+  }
 
   madness::finalize();
 
