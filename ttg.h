@@ -15,6 +15,13 @@
 
 namespace ttg {
 
+namespace detail {
+  static bool trace = false;
+  bool tracing() { return trace; }
+  void set_trace() { trace = true; }
+  void unset_trace() { trace = false; }
+}  // namespace detail
+
 class OpBase;  // forward decl
 template <typename keyT, typename valueT> class In;  // forward decl
 template <typename keyT, typename valueT> class Out; // forward decl
@@ -557,14 +564,14 @@ class Edge {
     EdgeImpl(const std::string& name) : name(name), outs(), ins() {}
 
     void set_in(Out<keyT, valueT>* in) {
-      if (ins.size())
+      if (ins.size() && detail::tracing())
         std::cout << "Edge: " << name << " : has multiple inputs" << std::endl;
       ins.push_back(in);
       try_to_connect_new_in(in);
     }
 
     void set_out(In<keyT, valueT>* out) {
-      if (outs.size())
+      if (outs.size() && detail::tracing())
         std::cout << "Edge: " << name << " : has multiple outputs" << std::endl;
       outs.push_back(out);
       try_to_connect_new_out(out);

@@ -114,7 +114,9 @@ struct Key : public std::array<long, Rank> {
   void serialize(Archive& ar) {ar & madness::archive::wrap((unsigned char*) this, sizeof(*this));}
   madness::hashT hash() const {
     static_assert(Rank == 2 || Rank == 3, "Key<Rank>::hash only implemented for Rank={2,3}");
-    return Rank == 2 ? (*this)[0] * max_key + (*this)[1] : ((*this)[0] * max_key + (*this)[1]) * max_key + (*this)[2];
+    //return Rank == 2 ? (*this)[0] * max_key + (*this)[1] : ((*this)[0] * max_key + (*this)[1]) * max_key + (*this)[2];
+    // will hash ijk same as ij so that contributions from every k to C[i][j] will be computed where C[i][j] resides
+    return (*this)[0] * max_key + (*this)[1];
   }
 };
 
@@ -143,9 +145,10 @@ class Read_SpMatrix : public Op<int, std::tuple<Out<Key<2>,blk_t>>, Read_SpMatri
  public:
   using baseT =              Op<int, std::tuple<Out<Key<2>,blk_t>>, Read_SpMatrix, int>;
 
-  Read_SpMatrix(const SpMatrix& matrix, Edge<int,int>& ctl, Edge<Key<2>,blk_t>& out):
-    baseT(edges(ctl), edges(out), "read_spmatrix", {"ctl"}, {"Mij"}, std::make_shared<Process0Pmap<int>>()),
-    matrix_(matrix) {}
+  Read_SpMatrix(const char* label, const SpMatrix& matrix, Edge<int,int>& ctl, Edge<Key<2>,blk_t>& out):
+    baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"}, std::make_shared<Process0Pmap<int>>()),
+    matrix_(matrix) {
+  }
 
   void op(const int& key, const std::tuple<int>& junk, std::tuple<Out<Key<2>,blk_t>>& out) {
     for (int k=0; k<matrix_.outerSize(); ++k) {
@@ -166,7 +169,8 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t> {
 
   Write_SpMatrix(SpMatrix& matrix, Edge<Key<2>,blk_t>& in):
     baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, std::make_shared<Process0Pmap<Key<2>>>()),
-    matrix_(matrix) {}
+    matrix_(matrix) {
+  }
 
   void op(const Key<2>& key, const std::tuple<blk_t>& elem, std::tuple<>&) {
     matrix_.insert(key[0], key[1]) = std::get<0>(elem);
@@ -179,15 +183,25 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t> {
 // sparse mm
 class SpMM {
  public:
-  SpMM(Edge<Key<2>,blk_t>& a, Edge<Key<2>,blk_t>& b, Edge<Key<2>,blk_t>& c,
+  SpMM(World& world, Edge<Key<2>,blk_t>& a, Edge<Key<2>,blk_t>& b, Edge<Key<2>,blk_t>& c,
        const SpMatrix& a_mat, const SpMatrix& b_mat) :
+    world_(world),
     a_(a), b_(b), c_(c), a_ijk_(), b_ijk_(), c_ijk_(),
     a_rowidx_to_colidx_(make_rowidx_to_colidx(a_mat)),
     b_colidx_to_rowidx_(make_colidx_to_rowidx(b_mat)),
-    bcast_a_(a, a_ijk_, make_rowidx_to_colidx(b_mat)),
-    bcast_b_(b, b_ijk_, make_colidx_to_rowidx(a_mat)),
-    multiplyadd_(a_ijk_, b_ijk_, c_ijk_, c, a_rowidx_to_colidx_, b_colidx_to_rowidx_)
+    a_colidx_to_rowidx_(make_colidx_to_rowidx(a_mat)),
+    b_rowidx_to_colidx_(make_rowidx_to_colidx(b_mat))
  {
+    // data is on rank 0, broadcast metadata from there
+    ProcessID root = 0;
+    world_.gop.broadcast_serializable(a_rowidx_to_colidx_, root);
+    world_.gop.broadcast_serializable(b_rowidx_to_colidx_, root);
+    world_.gop.broadcast_serializable(a_colidx_to_rowidx_, root);
+    world_.gop.broadcast_serializable(b_colidx_to_rowidx_, root);
+
+    bcast_a_ = std::make_unique<BcastA>(a, a_ijk_, b_rowidx_to_colidx_);
+    bcast_b_ = std::make_unique<BcastB>(b, b_ijk_, a_colidx_to_rowidx_);
+    multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c, a_rowidx_to_colidx_, b_colidx_to_rowidx_);
  }
 
   /// broadcast A[i][k] to all {i,j,k} such that B[j][k] exists
@@ -195,9 +209,10 @@ class SpMM {
    public:
     using baseT =       Op<Key<2>, std::tuple<Out<Key<3>,blk_t>>, BcastA, blk_t>;
 
-    BcastA(Edge<Key<2>,blk_t>& a, Edge<Key<3>,blk_t>& a_ijk, std::vector<std::vector<long>>&& b_rowidx_to_colidx) :
-      baseT(edges(a), edges(a_ijk),"SpMM::bcast_a", {"a_ik"}, {"a_ijk"}),
-      b_rowidx_to_colidx_(std::move(b_rowidx_to_colidx)) {}
+    BcastA(Edge<Key<2>,blk_t>& a, Edge<Key<3>,blk_t>& a_ijk, const std::vector<std::vector<long>>& b_rowidx_to_colidx) :
+      baseT(edges(a), edges(a_ijk),"SpMM::bcast_a", {"a_ik"}, {"a_ijk"}, std::make_shared<Process0Pmap<Key<2>>>()),
+      b_rowidx_to_colidx_(b_rowidx_to_colidx) {
+    }
 
     void op(const Key<2>& key, const std::tuple<blk_t>& a_ik, std::tuple<Out<Key<3>,blk_t>>& a_ijk) {
       const auto i = key[0];
@@ -205,14 +220,15 @@ class SpMM {
       // broadcast a_ik to all existing {i,j,k}
       std::vector<Key<3>> ijk_keys;
       for(auto& j: b_rowidx_to_colidx_[k]) {
-//        std::cout << "Broadcasting A[" << i << "][" << k << "] to j=" << j << std::endl;
+        if (tracing())
+          madness::print("Broadcasting A[", i, "][", k, "] to j=", j);
         ijk_keys.emplace_back(Key<3>({i,j,k}));
       }
       ::broadcast<0>(ijk_keys, std::get<0>(a_ik), a_ijk);
     }
 
    private:
-    std::vector<std::vector<long>> b_rowidx_to_colidx_;
+    const std::vector<std::vector<long>>& b_rowidx_to_colidx_;
   };  // class BcastA
 
   /// broadcast B[k][j] to all {i,j,k} such that A[i][k] exists
@@ -220,9 +236,10 @@ class SpMM {
    public:
     using baseT =       Op<Key<2>, std::tuple<Out<Key<3>,blk_t>>, BcastB, blk_t>;
 
-    BcastB(Edge<Key<2>,blk_t>& b, Edge<Key<3>,blk_t>& b_ijk, std::vector<std::vector<long>>&& a_colidx_to_rowidx) :
-      baseT(edges(b), edges(b_ijk),"SpMM::bcast_b", {"b_kj"}, {"b_ijk"}),
-      a_colidx_to_rowidx_(std::move(a_colidx_to_rowidx)) {}
+    BcastB(Edge<Key<2>,blk_t>& b, Edge<Key<3>,blk_t>& b_ijk, const std::vector<std::vector<long>>& a_colidx_to_rowidx) :
+      baseT(edges(b), edges(b_ijk),"SpMM::bcast_b", {"b_kj"}, {"b_ijk"}, std::make_shared<Process0Pmap<Key<2>>>()),
+      a_colidx_to_rowidx_(a_colidx_to_rowidx) {
+    }
 
     void op(const Key<2>& key, const std::tuple<blk_t>& b_kj, std::tuple<Out<Key<3>,blk_t>>& b_ijk) {
       const auto k = key[0];
@@ -230,14 +247,15 @@ class SpMM {
       // broadcast b_kj to *jk
       std::vector<Key<3>> ijk_keys;
       for(auto& i: a_colidx_to_rowidx_[k]) {
-//        std::cout << "Broadcasting B[" << k << "][" << j << "] to i=" << i << std::endl;
+        if (tracing())
+          madness::print("Broadcasting B[", k, "][", j, "] to i=", i);
         ijk_keys.emplace_back(Key<3>({i,j,k}));
       }
       ::broadcast<0>(ijk_keys, std::get<0>(b_kj), b_ijk);
     }
 
    private:
-    std::vector<std::vector<long>> a_colidx_to_rowidx_;
+    const std::vector<std::vector<long>>& a_colidx_to_rowidx_;
   };  // class BcastA
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
@@ -254,21 +272,30 @@ class SpMM {
       c_ijk_(c_ijk),
       a_rowidx_to_colidx_(a_rowidx_to_colidx), b_colidx_to_rowidx_(b_colidx_to_rowidx)
       {
-        // for each i and j determine first k that contributes, initialize input {i,j,first_k} flow to 0
+        auto& pmap = get_pmap();
+        auto& world = get_world();
+        // for each i and j that belongs to this node
+        // determine first k that contributes, initialize input {i,j,first_k} flow to 0
         for(long i=0; i!=a_rowidx_to_colidx_.size(); ++i) {
           if (a_rowidx_to_colidx_[i].empty()) continue;
           for(long j=0; j!=b_colidx_to_rowidx_.size(); ++j) {
             if (b_colidx_to_rowidx_[j].empty()) continue;
 
-            long k;
-            bool have_k;
-            std::tie(k,have_k) = compute_first_k(i,j);
-            if (have_k) {
-//              std::cout << "Initializing C[" << i << "][" << j << "] to zero" << std::endl;
-              ::send(Key<3>({i,j,k}), blk_t(0), c_ijk_.in());
-            }
-            else {
-//              std::cout << "C[" << i << "][" << j << "] is empty" << std::endl;
+            // assuming here {i,j,k} for all k map to same node
+            ProcessID owner = pmap->owner(Key<3>({i, j, 0l}));
+            if (owner == world.rank()) {
+              long k;
+              bool have_k;
+              std::tie(k, have_k) = compute_first_k(i, j);
+              if (have_k) {
+                if (tracing())
+                  madness::print("Initializing C[", i, "][", j, "] to zero");
+                ::send(Key<3>({i, j, k}), blk_t(0), c_ijk_.in());
+                // this->set_arg<2>(Key<3>({i,j,k}), blk_t(0));
+              } else {
+                if (tracing())
+                  madness::print("C[", i, "][", j, "] is empty");
+              }
             }
           }
         }
@@ -282,12 +309,14 @@ class SpMM {
       long next_k;
       bool have_next_k;
       std::tie(next_k,have_next_k) = compute_next_k(i,j,k);
-//      std::cout << "Multiplying A[" << i << "][" << k << "] by B[" << k << "][" << j << "]" << std::endl;
-//      std::cout << "  next_k? " << (have_next_k ? std::to_string(next_k) : "does not exist") << std::endl;
+      if (tracing()) {
+        madness::print("Multiplying A[", i, "][", k, "] by B[", k, "][", j, "]");
+        madness::print("  next_k? ", (have_next_k ? std::to_string(next_k) : "does not exist"));
+      }
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow
       if (have_next_k) {
-        ::send(Key<3>({i,j,next_k}), gemm(std::move(std::get<2>(_ijk)), std::get<0>(_ijk), std::get<1>(_ijk)), c_ijk_.in());
+        ::send<1>(Key<3>({i,j,next_k}), gemm(std::move(std::get<2>(_ijk)), std::get<0>(_ijk), std::get<1>(_ijk)), result);
       }
       else
         ::send<0>(Key<2>({i,j}), gemm(std::move(std::get<2>(_ijk)), std::get<0>(_ijk), std::get<1>(_ijk)), result);
@@ -367,6 +396,7 @@ class SpMM {
   };
 
  private:
+  World& world_;
   Edge<Key<2>,blk_t>& a_;
   Edge<Key<2>,blk_t>& b_;
   Edge<Key<2>,blk_t>& c_;
@@ -375,9 +405,11 @@ class SpMM {
   Edge<Key<3>,blk_t> c_ijk_;
   std::vector<std::vector<long>> a_rowidx_to_colidx_;
   std::vector<std::vector<long>> b_colidx_to_rowidx_;
-  BcastA bcast_a_;
-  BcastB bcast_b_;
-  MultiplyAdd multiplyadd_;
+  std::vector<std::vector<long>> a_colidx_to_rowidx_;
+  std::vector<std::vector<long>> b_rowidx_to_colidx_;
+  std::unique_ptr<BcastA> bcast_a_;
+  std::unique_ptr<BcastB> bcast_b_;
+  std::unique_ptr<MultiplyAdd> multiplyadd_;
 
   // result[i][j] gives the j-th nonzero row for column i in matrix mat
   std::vector<std::vector<long>> make_colidx_to_rowidx(const SpMatrix& mat) {
@@ -417,8 +449,9 @@ class Control : public Op<int, std::tuple<Out<int,int>>, Control> {
 
  public:
     Control(Edge<int,int>& ctl)
-        : baseT(edges(),edges(ctl),"Control",{},{"ctl"})
-        {}
+        : baseT(edges(),edges(ctl),"Control",{},{"ctl"}, std::make_shared<Process0Pmap<int>>())
+        {
+        }
 
     void op(const int& key, const std::tuple<>&, std::tuple<Out<int,int>>& out) {
         ::send<0>(0,0,out);
@@ -466,9 +499,10 @@ std::tuple<double,double> norms(const SpMatrix& A){
 
 int main(int argc, char** argv) {
   World& world = madness::initialize(argc, argv);
-  world.gop.fence();
-
+  // uncomment to trace execution
   //OpBase::set_trace_all(true);
+  // if tracing, best to split output by rank to avoid gibberish
+  //redirectio(world, true);
 
   const int n = 2;
   const int m = 3;
@@ -521,13 +555,14 @@ int main(int argc, char** argv) {
   Edge<int, int> ctl("control");
   Control control(ctl);
   Edge<Key<2>,blk_t> eA, eB, eC;
-  Read_SpMatrix a(A, ctl, eA);
-  Read_SpMatrix b(B, ctl, eB);
+  Read_SpMatrix a("A", A, ctl, eA);
+  Read_SpMatrix b("B", B, ctl, eB);
   Write_SpMatrix c(C, eC);
-  SpMM a_times_b(eA, eB, eC, A, B);
+  SpMM a_times_b(world, eA, eB, eC, A, B);
 
-  // ready, go!
-  control.start();
+  // ready, go! need only 1 kick, so must be done by 1 thread only
+  if (world.rank() == 0)
+    control.start();
 
   // no way to check for completion yet, so just wait
   world.gop.fence();

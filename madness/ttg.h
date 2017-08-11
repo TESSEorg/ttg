@@ -30,6 +30,10 @@ class Op : public ::ttg::OpBase,
   World& world;
   std::shared_ptr<WorldDCPmapInterface<keyT>> pmap;
 
+ protected:
+  World& get_world() { return world; }
+  std::shared_ptr<WorldDCPmapInterface<keyT>>& get_pmap() { return pmap; }
+
   using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
   using worldobjT = WorldObject<opT>;
 
@@ -59,7 +63,7 @@ class Op : public ::ttg::OpBase,
     derivedT* derived;                // Pointer to derived class instance
     keyT key;                         // Task key
 
-    OpArgs() : counter(numins), argset(), t() {}
+    OpArgs() : counter(numins), argset(), t() { std::fill(argset.begin(), argset.end(), false); }
 
     void run(World& world) { derived->op(key, t, derived->output_terminals); }
 
@@ -80,13 +84,11 @@ class Op : public ::ttg::OpBase,
 
     if (owner != world.rank()) {
       if (tracing())
-        std::cout << world.rank() << ":" << get_name() << " : " << key
-                  << ": forwarding setting argument : " << i << std::endl;
+        madness::print(world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
       worldobjT::send(owner, &opT::template set_arg<i>, key, value);
     } else {
       if (tracing())
-        std::cout << world.rank() << ":" << get_name() << " : " << key
-                  << ": setting argument : " << i << std::endl;
+        madness::print(world.rank(), ":", get_name(), " : ", key, ": setting argument : ", i);
 
       accessorT acc;
       if (cache.insert(acc, key))
@@ -94,8 +96,7 @@ class Op : public ::ttg::OpBase,
       OpArgs* args = acc->second;
 
       if (args->argset[i]) {
-        std::cerr << world.rank() << ":" << get_name() << " : " << key
-                  << ": error argument is already set : " << i << std::endl;
+        madness::print_error(world.rank(), ":", get_name(), " : ", key, ": error argument is already set : ", i);
         throw "bad set arg";
       }
       args->argset[i] = true;
@@ -103,8 +104,7 @@ class Op : public ::ttg::OpBase,
       args->counter--;
       if (args->counter == 0) {
         if (tracing())
-          std::cout << world.rank() << ":" << get_name() << " : " << key
-                    << ": submitting task for op " << std::endl;
+          madness::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
         args->derived = static_cast<derivedT*>(this);
         args->key = key;
 
@@ -128,8 +128,7 @@ class Op : public ::ttg::OpBase,
 
     if (owner != world.rank()) {
       if (tracing())
-        std::cout << world.rank() << ":" << get_name() << " : " << key
-                  << ": forwarding no-arg task: " << std::endl;
+        madness::print(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
       worldobjT::send(owner, &opT::set_arg_empty, key);
     } else {
       accessorT acc;
@@ -138,8 +137,7 @@ class Op : public ::ttg::OpBase,
       OpArgs* args = acc->second;
 
       if (tracing())
-        std::cout << world.rank() << ":" << get_name() << " : " << key
-                  << ": submitting task for op " << std::endl;
+        madness::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
       args->derived = static_cast<derivedT*>(this);
       args->key = key;
 
