@@ -41,7 +41,7 @@ namespace madness {
           typename btas::varray<T>::size_type n;
           ar & n;
           x.resize(n);
-          for (typename btas::varray<T>::value_type& xi : x)
+          for (auto& xi : x)
             ar & xi;
         }
     };
@@ -50,15 +50,66 @@ namespace madness {
     struct ArchiveStoreImpl<Archive, btas::varray<T> > {
         static inline void store(const Archive& ar, const btas::varray<T>& x) {
           ar & x.size();
-          for (const typename btas::varray<T>::value_type& xi : x)
+          for (const auto& xi : x)
             ar & xi;
         }
     };
 
+    template<class Archive, typename T>
+    struct ArchiveLoadImpl<Archive, btas::DEFAULT::index<T> > {
+        static inline void load(const Archive& ar, btas::DEFAULT::index<T>& x) {
+          typename btas::DEFAULT::index<T>::size_type n;
+          ar & n;
+          x.resize(n);
+          for (auto& xi : x)
+            ar & xi;
+        }
+    };
+
+    template<class Archive, typename T>
+    struct ArchiveStoreImpl<Archive, btas::DEFAULT::index<T> > {
+        static inline void store(const Archive& ar, const btas::DEFAULT::index<T>& x) {
+          ar & x.size();
+          for (const auto& xi : x)
+            ar & xi;
+        }
+    };
+
+    template<class Archive, CBLAS_ORDER _Order,
+        typename _Index,
+        typename _Ordinal>
+    struct ArchiveLoadImpl<Archive, btas::RangeNd<_Order, _Index, _Ordinal> > {
+        static inline void load(const Archive& ar, btas::RangeNd<_Order, _Index, _Ordinal>& r) {
+          _Index lobound, upbound;
+          typename btas::RangeNd<_Order, _Index, _Ordinal>::extent_type stride;
+          ar & lobound & upbound & stride;
+          r = btas::RangeNd<_Order, _Index, _Ordinal>(std::move(lobound), std::move(upbound), std::move(stride));
+        }
+    };
+
+    template<class Archive, CBLAS_ORDER _Order,
+    typename _Index,
+    typename _Ordinal>
+    struct ArchiveStoreImpl<Archive, btas::RangeNd<_Order, _Index, _Ordinal> > {
+        static inline void store(const Archive& ar, const btas::RangeNd<_Order, _Index, _Ordinal>& r) {
+          ar & r.lobound() & r.upbound() & r.stride();
+        }
+    };
+
     template<class Archive, typename _T, class _Range, class _Store>
-    struct ArchiveSerializeImpl<Archive, btas::Tensor<_T, _Range, _Store> > {
-        static inline void serialize(const Archive& ar,
-                                     btas::Tensor<_T, _Range, _Store>& t) {
+    struct ArchiveLoadImpl<Archive, btas::Tensor<_T, _Range, _Store> > {
+        static inline void load(const Archive& ar, btas::Tensor<_T, _Range, _Store>& t) {
+          _Range range;
+          _Store storage;
+          ar & range & storage;
+          t = btas::Tensor<_T, _Range, _Store>(std::move(range), std::move(storage));
+        }
+    };
+
+    template<class Archive, typename _T, class _Range, class _Store>
+    struct ArchiveStoreImpl<Archive, btas::Tensor<_T, _Range, _Store> > {
+        static inline void store(const Archive& ar, const btas::Tensor<_T, _Range, _Store>& t) {
+          ar & t.range() & t.storage();
         }
     };
 
