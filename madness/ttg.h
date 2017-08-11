@@ -21,6 +21,27 @@
 namespace madness {
 namespace ttg {
 
+namespace detail {
+World*& default_world_accessor() {
+  static World* world_ptr = nullptr;
+  return world_ptr;
+}
+}  // namespace detail
+
+World& get_default_world() {
+  if (detail::default_world_accessor() != nullptr) {
+    return *detail::default_world_accessor();
+  } else {
+    throw "madness::ttg::set_default_world() must be called before use";
+  }
+}
+void set_default_world(World& world) {
+  detail::default_world_accessor() = &world;
+}
+void set_default_world(World* world) {
+  detail::default_world_accessor() = world;
+}
+
 template <typename keyT, typename output_terminalsT, typename derivedT,
           typename... input_valueTs>
 class Op : public ::ttg::OpBase,
@@ -214,10 +235,10 @@ class Op : public ::ttg::OpBase,
  public:
   Op(const std::string& name, const std::vector<std::string>& innames,
      const std::vector<std::string>& outnames,
-     std::shared_ptr<WorldDCPmapInterface<keyT>> pmap = std::make_shared<WorldDCDefaultPmap<keyT>>(World::get_default()))
+     std::shared_ptr<WorldDCPmapInterface<keyT>> pmap = std::make_shared<WorldDCDefaultPmap<keyT>>(get_default_world()))
       : ::ttg::OpBase(name, numins, numouts),
-        worldobjT(World::get_default()),
-        world(World::get_default()),
+        worldobjT(get_default_world()),
+        world(get_default_world()),
         pmap(pmap) {
     // Cannot call these in base constructor since terminals not yet constructed
     if (innames.size() != std::tuple_size<input_terminals_type>::value)
@@ -236,10 +257,10 @@ class Op : public ::ttg::OpBase,
   Op(const input_edges_type& inedges, const output_edges_type& outedges,
      const std::string& name, const std::vector<std::string>& innames,
      const std::vector<std::string>& outnames,
-     std::shared_ptr<WorldDCPmapInterface<keyT>> pmap = std::make_shared<WorldDCDefaultPmap<keyT>>(World::get_default()))
+     std::shared_ptr<WorldDCPmapInterface<keyT>> pmap = std::make_shared<WorldDCDefaultPmap<keyT>>(get_default_world()))
       : ::ttg::OpBase(name, numins, numouts),
-        worldobjT(World::get_default()),
-        world(World::get_default()),
+        worldobjT(get_default_world()),
+        world(get_default_world()),
         pmap(pmap) {
     // Cannot call in base constructor since terminals not yet constructed
     if (innames.size() != std::tuple_size<input_terminals_type>::value)

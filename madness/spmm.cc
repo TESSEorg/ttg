@@ -551,6 +551,7 @@ std::tuple<double,double> norms(const SpMatrix& A){
 
 int main(int argc, char** argv) {
   World& world = madness::initialize(argc, argv);
+  set_default_world(world);
   // uncomment to trace execution
   //OpBase::set_trace_all(true);
   // if tracing, best to split output by rank to avoid gibberish
