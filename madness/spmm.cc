@@ -442,6 +442,7 @@ class SpMM {
         }
         return std::make_tuple(a_colidx,true);
       }
+      abort();  // unreachable
     }
 
   };
