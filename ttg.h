@@ -129,8 +129,13 @@ private:
   std::vector<TerminalBase*> inputs;
   std::vector<TerminalBase*> outputs;
   bool trace_instance;  //< If true traces just this instance
+    bool is_composite;         //< True if the operator is composite
+    bool is_within_composite;  //< True if the operator is part of a composite
+    OpBase* containing_composite_op; //< If part of a composite, points to composite operator
 
   // Default copy/move/assign all OK
+
+protected:
 
   void set_input(size_t i, TerminalBase* t) {
     if (i >= inputs.size()) throw("out of range i setting input");
@@ -161,8 +166,6 @@ private:
     junk[0]++;
   }
 
-protected:
-
   template <typename terminalsT, typename namesT>
   void register_input_terminals(terminalsT& terms, const namesT& names) {
     register_terminals(
@@ -177,10 +180,29 @@ protected:
         names, &OpBase::set_output);
   }
 
+  template <std::size_t... IS, typename terminalsT, typename setfuncT>
+  void set_terminals(std::index_sequence<IS...>, terminalsT& terms, const setfuncT setfunc) {
+      int junk[] = {0, ((this->*setfunc)(IS,&std::get<IS>(terms)),0)...};
+    junk[0]++;
+  }
+
+  template <typename terminalsT, typename setfuncT>
+  void set_terminals(const terminalsT& terms, const setfuncT setfunc) {
+      set_terminals(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, setfunc);
+  }
+    
+
  public:
     
   OpBase(const std::string& name, size_t numins, size_t numouts)
-      : name(name), inputs(numins), outputs(numouts), trace_instance(false) {}
+      : name(name)
+      , inputs(numins)
+      , outputs(numouts)
+      , trace_instance(false)
+      , is_composite(false)
+      , is_within_composite(false)
+      , containing_composite_op(0)
+    {}
 
   /// Sets trace for all operations to value and returns previous setting
   static bool set_trace_all(bool value) {
@@ -198,6 +220,14 @@ protected:
   bool get_trace() { return trace || trace_instance; }
   bool tracing() { return get_trace(); }
 
+    void set_is_composite(bool value) {is_composite = value;}
+    bool get_is_composite() const {return is_composite;}
+    void set_is_within_composite(bool value, OpBase* op) {
+        is_within_composite = value;
+        containing_composite_op = op;
+    }
+    bool get_is_within_composite() const {return is_within_composite;}
+    OpBase* get_containing_composite_op() const {return containing_composite_op;}
 
   /// Sets the name of this operation
   void set_name(const std::string& name) { this->name = name; }
@@ -228,6 +258,62 @@ protected:
 
 // With more than one source file this will need to be moved
 bool OpBase::trace = false;
+
+template <typename input_terminalsT, typename output_terminalsT>
+class CompositeOp : public OpBase {
+public:
+    static constexpr int numins = std::tuple_size< input_terminalsT>::value;  // number of input arguments
+    static constexpr int numouts= std::tuple_size<output_terminalsT>::value;  // number of outputs or results
+
+    using input_terminals_type = input_terminalsT;
+    using output_terminals_type = output_terminalsT;
+
+    std::vector<std::unique_ptr<OpBase>> ops;
+    input_terminals_type ins;
+    output_terminals_type outs;
+
+    CompositeOp(const CompositeOp&) = delete; 
+    CompositeOp& operator=(const CompositeOp&) = delete; 
+    CompositeOp(const CompositeOp&&) = delete; // Move should be OK
+
+    template <typename opsT>
+    CompositeOp(opsT&& ops,
+                const input_terminals_type& ins,
+                const output_terminals_type& outs,
+                const std::string& name = "compositeop")
+        : OpBase(name, numins, numouts)
+        , ops(std::forward<opsT>(ops))
+        , ins(ins)
+        , outs(outs)
+    {
+        set_is_composite(true);
+        for (auto& op : ops) op->set_is_within_composite(true, this);
+        set_terminals(ins,  &OpBase::set_input);
+        set_terminals(outs, &OpBase::set_output);
+
+        // traversal is still broken ... need to add checking for composite
+    }
+
+    template <std::size_t i> typename std::tuple_element<i, input_terminals_type>::type& in()
+    {
+        return std::get<i>(ins);
+    }
+    
+    template <std::size_t i> typename std::tuple_element<i, output_terminalsT>::type& out()
+    {
+        return std::get<i>(outs);
+    }               
+};
+
+template <typename opsT, typename input_terminalsT, typename output_terminalsT>
+std::unique_ptr<CompositeOp<input_terminalsT,output_terminalsT>>
+                     make_composite_op(opsT&& ops,
+                                       const input_terminalsT& ins,
+                                       const output_terminalsT& outs,
+                                       const std::string& name = "compositeop")
+{
+    return std::make_unique<CompositeOp<input_terminalsT,output_terminalsT>>(std::forward<opsT>(ops),ins,outs,name);
+}
 
 class Traverse {
   std::set<const OpBase*> seen;

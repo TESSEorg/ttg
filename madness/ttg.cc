@@ -5,6 +5,8 @@
 #include <tuple>
 #include <memory>
 
+#include <madness/world/timers.h>
+
 #include "madness/ttg.h"
 
 using namespace madness;
@@ -32,7 +34,7 @@ class A : public  Op<keyT, std::tuple<Out<keyT,int>,Out<keyT,int>>, A, int> {
         }
     }
 
-    ~A() {std::cout << "A destructor\n";}
+    ~A() {std::cout << " A destructor\n";}
 };
 
 class Producer : public Op<keyT, std::tuple<Out<keyT,int>>, Producer> {
@@ -42,13 +44,13 @@ class Producer : public Op<keyT, std::tuple<Out<keyT,int>>, Producer> {
     
     Producer(const typename baseT::output_edges_type& outedges, const std::string& name)
         : baseT(edges(), outedges, name, {}, {"output"}) {}
-    
+     
     void op(const keyT& key, const std::tuple<>& t, baseT::output_terminals_type& out) {
         std::cout << "produced " << 0 << std::endl;
         ::send<0>((int)(key),0,out);
     }
 
-    ~Producer() {std::cout << "Producer destructor\n";}
+    ~Producer() {std::cout << " Producer destructor\n";}
 };
 
 class Consumer : public Op<keyT, std::tuple<>, Consumer, int> {
@@ -62,13 +64,11 @@ public:
     Consumer(const typename baseT::input_edges_type& inedges, const std::string& name)
         : baseT(inedges, edges(), name, {"input"}, {}) {}
 
-    ~Consumer() {std::cout << "Consumer destructor\n";}
+    ~Consumer() {std::cout << " Consumer destructor\n";}
 };
 
 
-class Everything : public Op<keyT, std::tuple<>, Everything> {
-    using baseT =         Op<keyT, std::tuple<>, Everything>;
-    
+class Everything {
     Producer producer;
     A a;
     Consumer consumer;
@@ -76,11 +76,10 @@ class Everything : public Op<keyT, std::tuple<>, Everything> {
     World& world;
 public:
     Everything()
-        : baseT("everything",{},{})
-        , producer("producer")
+        : producer("producer")
         , a("A")
         , consumer("consumer")
-        , world(madness::World::get_default())
+        , world(::madness::ttg::get_default_world())
     {
         producer.out<0>().connect(a.in<0>());
         a.out<0>().connect(consumer.in<0>());
@@ -111,7 +110,7 @@ public:
         : producer(new Producer("producer"))
         , a(new A("A"))
         , consumer(new Consumer("consumer"))
-        , world(madness::World::get_default())
+        , world(::madness::ttg::get_default_world())
     {
         producer->out(0)->connect(a->in(0));
         a->out(0)->connect(consumer->in(0));
@@ -131,9 +130,7 @@ public:
 };
 
 
-class Everything2 : public Op<keyT, std::tuple<>, Everything2> {
-    using baseT =          Op<keyT, std::tuple<>, Everything2>;
-    
+class Everything2 {
     Edge<keyT,int> P2A, A2A, A2C; // !!!! Edges must be constructed before classes that use them
     Producer producer;
     A a;
@@ -142,12 +139,11 @@ class Everything2 : public Op<keyT, std::tuple<>, Everything2> {
     World& world;
 public:
     Everything2()
-        : baseT("everything", {}, {})
-        , P2A("P2A"), A2A("A2A"), A2C("A2C")
+        : P2A("P2A"), A2A("A2A"), A2C("A2C")
         , producer(P2A, "producer")
         , a(fuse(P2A,A2A), edges(A2C,A2A), "A")
         , consumer(A2C, "consumer")
-        , world(::madness::World::get_default())
+        , world(::madness::ttg::get_default_world())
     {
         world.gop.fence();
     }
@@ -195,16 +191,16 @@ public:
         , wa(wrapt(&a, edges(fuse(P2A,A2A)), edges(A2C,A2A), "A",{"input"},{"result","iterate"}))
         , wc(wrapt(&c, edges(A2C), edges(), "consumer",{"result"},{}))
     {
-        ::madness::World::get_default().gop.fence();
+        ::madness::ttg::get_default_world().gop.fence();
     }
     
     void print() {Print()(wp.get());}
 
     std::string dot() {return Dot()(wp.get());}
     
-    void start() {if (::madness::World::get_default().rank() == 0) wp->invoke(0);}
+    void start() {if (::madness::ttg::get_default_world().rank() == 0) wp->invoke(0);}
     
-    void wait() {::madness::World::get_default().gop.fence();}
+    void wait() {::madness::ttg::get_default_world().gop.fence();}
 };
     
 class Everything4 {
@@ -240,47 +236,82 @@ public:
         , wa(wrap(&a, edges(fuse(P2A,A2A)), edges(A2C,A2A), "A",{"input"},{"result","iterate"}))
         , wc(wrap(&c, edges(A2C), edges(), "consumer",{"result"},{}))
     {
-        ::madness::World::get_default().gop.fence();
+        ::madness::ttg::get_default_world().gop.fence();
     }
     
     void print() {Print()(wp.get());}
 
     std::string dot() {return Dot()(wp.get());}
     
-    void start() {if (::madness::World::get_default().rank() == 0) wp->invoke(0);}
+    void start() {if (::madness::ttg::get_default_world().rank() == 0) wp->invoke(0);}
     
-    void wait() { ::madness::World::get_default().gop.fence();}
+    void wait() {::madness::ttg::get_default_world().gop.fence();}
 };
 
-#if 0
-template <typename input_terminalsT, typename output_terminalsT>
-class CompositeOp {
-
+class EverythingComposite {
+    std::unique_ptr<OpBase> P;
+    std::unique_ptr<OpBase> AC;
+    
+    World& world;
 public:
+    EverythingComposite()
+        : world(::madness::ttg::get_default_world())
+    {
+        auto p = std::make_unique<Producer>("P");
+        auto a = std::make_unique<A>("A");
+        auto c = std::make_unique<Consumer>("C");
 
-    static constexpr int numins = std::tuple_size< input_terminalsT>::value;  // number of input arguments
-    static constexpr int numouts= std::tuple_size<output_terminalsT>::value;  // number of outputs or results
+        madness::print("P out<0>", (void*)(TerminalBase*)&(p->out<0>()));
+        madness::print("A  in<0>", (void*)(TerminalBase*)&(a->in<0>()));
+        madness::print("A out<0>", (void*)(TerminalBase*)&(a->out<0>()));
+        madness::print("C  in<0>", (void*)(TerminalBase*)&(c->in<0>()));
 
-    using input_terminals_type = input_terminalsT;
-    using input_edges_type = typename ::ttg::terminals_to_edges<input_terminalsT>::type;
+        a->out<1>().connect(a->in<0>());
+        a->out<0>().connect(c->in<0>());
+        std::tuple<In<keyT,int>&> q = std::tie((a->in<0>()));
+        madness::print("q  in<0>", (void*)(TerminalBase*)&(std::get<0>(q)));
+        
+        std::vector<std::unique_ptr<OpBase>> ops(2);
+        ops[0] = std::move(a);
+        ops[1] = std::move(c);
+        madness::print("opsin(0)", (void*)(ops[0]->in(0)));
+        
+        auto ac = make_composite_op(std::move(ops),
+                                    q,
+                                    std::make_tuple(),
+                                    "Fred");
 
-    using output_terminals_type = output_terminalsT;
-    using output_edges_type = typename ::ttg::terminals_to_edges<output_terminalsT>::type;
- 
-    template <typename...opTs, >;
-    CompositeOp(std::tuple<std::unique_ptr<opTs>...>&& ops, std::array<
+        madness::print("AC in<0>", (void*)(TerminalBase*)&(ac->in<0>()));
+        p->out<0>().connect(ac->in<0>());
 
+        Verify()(p.get());
+        
+        P = std::move(p);
+        AC = std::move(ac);
 
-
-};
-#endif
-
-
+        world.gop.fence();
+    }
     
+    void print() {Print()(P.get());}
+
+    std::string dot() {return Dot()(P.get());}
+    
+    void start() {if (world.rank() == 0) dynamic_cast<Producer*>(P.get())->invoke(0);}
+    
+    void wait() {world.gop.fence();}
+};
+
+void hi() {
+    std::cout << "hi\n";
+}
 
 int main(int argc, char** argv) {
     initialize(argc, argv);
     World world(SafeMPI::COMM_WORLD);
+    set_default_world(world);
+
+    world.taskq.add(world.rank(), hi);
+    world.gop.fence();
     
     for (int arg=1; arg<argc; ++arg) {
         if (strcmp(argv[arg],"-dx")==0)
@@ -295,7 +326,7 @@ int main(int argc, char** argv) {
       x.print();
       std::cout << x.dot() << std::endl;
       
-      x.start();
+      x.start(); //myusleep(100);
       x.wait();
     }
 
@@ -304,35 +335,48 @@ int main(int argc, char** argv) {
       EverythingBase x;
       x.print();
       std::cout << x.dot() << std::endl;
-      
-      x.start();
+    
+      x.start(); //myusleep(100);
       x.wait();
     }
 
+    // Now try with the composite operator wrapping A and C
+    {
+        EverythingComposite x;
+
+        std::cout << "\nComposite\n";
+        std::cout << x.dot() << std::endl << std::endl;
+        x.start(); //myusleep(100);
+        x.wait();
+        std::cout << "\nComposite done\n";
+    }
+
     // Next compose with manual classes and edges
-    Everything2 y;
-    y.print();
-    std::cout << y.dot() << std::endl;
-    
-    y.start();
-    y.wait();
+    {
+        Everything2 y;
+        y.print();
+        std::cout << y.dot() << std::endl;
+     
+        y.start(); //myusleep(100);
+        y.wait();
+    }
 
     // Next compose with wrappers using tuple API and edges
-    Everything3 z;
-    std::cout << z.dot() << std::endl;
-    z.start();
-    z.wait();
+    {
+        Everything3 z;
+        std::cout << z.dot() << std::endl;
+        z.start(); //myusleep(100);
+        z.wait();
+    }
     
     // Next compose with wrappers using unpacked tuple API and edges
-    Everything4 q;
-    std::cout << q.dot() << std::endl;
-    q.start();
-    q.wait();
+    {
+        Everything4 q;
+        std::cout << q.dot() << std::endl;
+        q.start(); //myusleep(100);
+        q.wait();
+    }
 
     finalize();
     return 0;
 }
-
-
-
-    

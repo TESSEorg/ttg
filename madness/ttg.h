@@ -18,8 +18,24 @@
 #include <madness/world/worldhashmap.h>
 #include <madness/world/worldtypes.h>
 
+#include <madness/world/world_task_queue.h>
+
+/*
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <signal.h>
+
+static inline pid_t gettid() {
+    return syscall(SYS_gettid);
+}
+*/
+
+
 namespace madness {
 namespace ttg {
+
+
 
 namespace detail {
 World*& default_world_accessor() {
@@ -86,7 +102,11 @@ class Op : public ::ttg::OpBase,
 
     OpArgs() : counter(numins), argset(), t() { std::fill(argset.begin(), argset.end(), false); }
 
-    void run(World& world) { derived->op(key, t, derived->output_terminals); }
+    void run(World& world) {
+        //madness::print("starting task");
+        derived->op(key, t, derived->output_terminals);
+        //madness::print("finishing task");
+    }
 
     virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
   };
@@ -105,11 +125,11 @@ class Op : public ::ttg::OpBase,
 
     if (owner != world.rank()) {
       if (tracing())
-        madness::print(world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
+          madness::print( world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
       worldobjT::send(owner, &opT::template set_arg<i>, key, value);
     } else {
       if (tracing())
-        madness::print(world.rank(), ":", get_name(), " : ", key, ": setting argument : ", i);
+          madness::print( world.rank(), ":", get_name(), " : ", key, ": setting argument : ", i);
 
       accessorT acc;
       if (cache.insert(acc, key))
@@ -125,19 +145,13 @@ class Op : public ::ttg::OpBase,
       args->counter--;
       if (args->counter == 0) {
         if (tracing())
-          madness::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+            madness::print( world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
         args->derived = static_cast<derivedT*>(this);
         args->key = key;
 
         world.taskq.add(args);
-
-        // world.taskq.add(static_cast<derivedT*>(this), &derivedT::op, key,
-        // args.t);
-
-        // if (tracing()) std::cout << world.rank() << ":" << get_name() << " :
-        // " << key << ": invoking op " << std::endl;
-        // static_cast<derivedT*>(this)
-
+        //static_cast<derivedT*>(this)->op(key, args->t, output_terminals); // Runs immediately
+        
         cache.erase(key);
       }
     }
@@ -148,23 +162,24 @@ class Op : public ::ttg::OpBase,
     ProcessID owner = pmap->owner(key);
 
     if (owner != world.rank()) {
-      if (tracing())
-        madness::print(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
-      worldobjT::send(owner, &opT::set_arg_empty, key);
+        if (tracing())
+            madness::print(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
+        worldobjT::send(owner, &opT::set_arg_empty, key);
     } else {
-      accessorT acc;
-      if (cache.insert(acc, key))
-        acc->second = new OpArgs();  // It will be deleted by the task q
-      OpArgs* args = acc->second;
-
-      if (tracing())
-        madness::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
-      args->derived = static_cast<derivedT*>(this);
-      args->key = key;
-
-      world.taskq.add(args);
-
-      cache.erase(key);
+        accessorT acc;
+        if (cache.insert(acc, key))
+            acc->second = new OpArgs();  // It will be deleted by the task q
+        OpArgs* args = acc->second;
+        
+        if (tracing())
+            madness::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+        args->derived = static_cast<derivedT*>(this);
+        args->key = key;
+        
+        world.taskq.add(args);
+        //static_cast<derivedT*>(this)->op(key, args->t, output_terminals);// runs immediately
+        
+        cache.erase(key);
     }
   }
 
@@ -180,7 +195,7 @@ class Op : public ::ttg::OpBase,
   // PIMPL for this base class.  However, this instance of the base
   // class is tied to a specific instance of a derived class a
   // pointer to which is captured for invoking derived class
-  // functions.  Thus, not only does the derived class has to be
+  // functions.  Thus, not only does the derived class have to be
   // involved but we would have to do it in a thread safe way
   // including for possibly already running tasks and remote
   // references.  This is not worth the effort ... wherever you are
@@ -282,7 +297,7 @@ class Op : public ::ttg::OpBase,
   }
 
   // Destructor checks for unexecuted tasks
-  ~Op() {
+  virtual ~Op() {
     if (cache.size() != 0) {
       std::cerr << world.rank() << ":"
                 << "warning: unprocessed tasks in destructor of operation '"
