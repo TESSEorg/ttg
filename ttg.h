@@ -257,6 +257,19 @@ protected:
     return outputs[i];
   }
 
+    /// Returns a pointer to the i'th input terminal ... to make API consistent with Op
+    template <std::size_t i>
+    TerminalBase* in() {
+        return in(i);
+    }
+
+    /// Returns a pointer to the i'th output terminal ... to make API consistent with Op
+    template <std::size_t i>
+    TerminalBase* out() {
+        return out(i);
+    }
+    
+
   /// Waits for the entire TTG associated with this op to be completed (collective)
   virtual void fence() = 0;
 
@@ -651,19 +664,22 @@ class Out : public TerminalBase {
   }
 };
 
-    void connect(TerminalBase* out, TerminalBase* in) {
-        out->connect(in);
-    }
-
     template <typename out_terminalT, typename in_terminalT>
     void connect(out_terminalT* out, in_terminalT* in) {
         out->connect(in);
     }
 
-    // template <size_t outindex, size_t inindex, typename producer_op, typename successor_op>
-    // void connect(producer_op* p, successor_op* s) {
-    //     p->out<outindex>()->connect(s->in<inindex>());
-    // }
+    // This should match unique ptrs
+    template <std::size_t outindex, std::size_t inindex, typename producer_op_ptr, typename successor_op_ptr>
+    void connect(producer_op_ptr& p, successor_op_ptr& s) {
+        connect(p-> template out<outindex>() , s-> template in<inindex>());
+    }
+
+    // This should match bare ptrs
+    template <std::size_t outindex, std::size_t inindex, typename producer_op_ptr, typename successor_op_ptr>
+    void connect(producer_op_ptr* p, successor_op_ptr* s) {
+        connect(p-> template out<outindex>() , s-> template in<inindex>());
+    }
 
 
 template <typename keyT, typename valueT>

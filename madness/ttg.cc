@@ -81,9 +81,9 @@ public:
         , consumer("consumer")
         , world(::madness::ttg::get_default_world())
     {
-        producer.out<0>()->connect(a.in<0>());
-        a.out<0>()->connect(consumer.in<0>());
-        a.out<1>()->connect(a.in<0>());
+        connect<0,0>(&producer,&a); //producer.out<0>()->connect(a.in<0>());
+        connect<0,0>(&a,&consumer); //a.out<0>()->connect(consumer.in<0>());
+        connect<1,0>(&a,&a);  //a.out<1>()->connect(a.in<0>());
 
         Verify()(&producer);
         world.gop.fence();
@@ -112,9 +112,9 @@ public:
         , consumer(new Consumer("consumer"))
         , world(::madness::ttg::get_default_world())
     {
-        producer->out(0)->connect(a->in(0));
-        a->out(0)->connect(consumer->in(0));
-        a->out(1)->connect(a->in(0));
+        connect<0,0>(producer,a); //producer->out(0)->connect(a->in(0));
+        connect<0,0>(a,consumer); //a->out(0)->connect(consumer->in(0));
+        connect<1,0>(a,a); //a->out(1)->connect(a->in(0));
 
         Verify()(producer.get());
         world.gop.fence();
@@ -262,8 +262,8 @@ public:
         madness::print("A out<0>", (void*)(TerminalBase*)(a->out<0>()));
         madness::print("C  in<0>", (void*)(TerminalBase*)(c->in<0>()));
         
-        a->out<1>()->connect(a->in<0>());
-        a->out<0>()->connect(c->in<0>());
+        connect<1,0>(a,a); // a->out<1>()->connect(a->in<0>());
+        connect<0,0>(a,c); // a->out<0>()->connect(c->in<0>());
         std::tuple<In<keyT,int>*> q = std::make_tuple(a->in<0>());
         madness::print("q  in<0>", (void*)(TerminalBase*)(std::get<0>(q)));
         
@@ -280,7 +280,7 @@ public:
                                     "Fred");
         
         madness::print("AC in<0>", (void*)(TerminalBase*)(ac->in<0>()));
-        p->out<0>()->connect(ac->in<0>());
+        connect<0,0>(p,ac); //p->out<0>()->connect(ac->in<0>());
         
         Verify()(p.get());
         
