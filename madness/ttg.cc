@@ -81,9 +81,9 @@ public:
         , consumer("consumer")
         , world(::madness::ttg::get_default_world())
     {
-        producer.out<0>().connect(a.in<0>());
-        a.out<0>().connect(consumer.in<0>());
-        a.out<1>().connect(a.in<0>());
+        producer.out<0>()->connect(a.in<0>());
+        a.out<0>()->connect(consumer.in<0>());
+        a.out<1>()->connect(a.in<0>());
 
         Verify()(&producer);
         world.gop.fence();
@@ -257,15 +257,15 @@ public:
         auto a = std::make_unique<A>("A");
         auto c = std::make_unique<Consumer>("C");
         
-        madness::print("P out<0>", (void*)(TerminalBase*)&(p->out<0>()));
-        madness::print("A  in<0>", (void*)(TerminalBase*)&(a->in<0>()));
-        madness::print("A out<0>", (void*)(TerminalBase*)&(a->out<0>()));
-        madness::print("C  in<0>", (void*)(TerminalBase*)&(c->in<0>()));
+        madness::print("P out<0>", (void*)(TerminalBase*)(p->out<0>()));
+        madness::print("A  in<0>", (void*)(TerminalBase*)(a->in<0>()));
+        madness::print("A out<0>", (void*)(TerminalBase*)(a->out<0>()));
+        madness::print("C  in<0>", (void*)(TerminalBase*)(c->in<0>()));
         
-        a->out<1>().connect(a->in<0>());
-        a->out<0>().connect(c->in<0>());
-        std::tuple<In<keyT,int>&> q = std::tie((a->in<0>()));
-        madness::print("q  in<0>", (void*)(TerminalBase*)&(std::get<0>(q)));
+        a->out<1>()->connect(a->in<0>());
+        a->out<0>()->connect(c->in<0>());
+        std::tuple<In<keyT,int>*> q = std::make_tuple(a->in<0>());
+        madness::print("q  in<0>", (void*)(TerminalBase*)(std::get<0>(q)));
         
         //std::array<std::unique_ptr<OpBase>,2> ops{std::move(a),std::move(c)};
         std::vector<std::unique_ptr<OpBase>> ops(2);
@@ -279,8 +279,8 @@ public:
                                     std::make_tuple(),
                                     "Fred");
         
-        madness::print("AC in<0>", (void*)(TerminalBase*)&(ac->in<0>()));
-        p->out<0>().connect(ac->in<0>());
+        madness::print("AC in<0>", (void*)(TerminalBase*)(ac->in<0>()));
+        p->out<0>()->connect(ac->in<0>());
         
         Verify()(p.get());
         

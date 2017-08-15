@@ -47,7 +47,7 @@ private:
   std::vector<TerminalBase*> successors;
 
   TerminalBase(const TerminalBase&) = delete;
-  TerminalBase(TerminalBase&&);
+  TerminalBase(TerminalBase&&) = delete;
 
   friend class OpBase;
   template <typename keyT, typename valueT> friend class In;
@@ -166,6 +166,7 @@ protected:
     junk[0]++;
   }
 
+  // Used by op ... terminalsT will be a tuple of terminals
   template <typename terminalsT, typename namesT>
   void register_input_terminals(terminalsT& terms, const namesT& names) {
     register_terminals(
@@ -173,6 +174,7 @@ protected:
         names, &OpBase::set_input);
   }
 
+  // Used by op ... terminalsT will be a tuple of terminals
   template <typename terminalsT, typename namesT>
   void register_output_terminals(terminalsT& terms, const namesT& names) {
     register_terminals(
@@ -180,12 +182,14 @@ protected:
         names, &OpBase::set_output);
   }
 
+  // Used by composite op ... terminalsT will be a tuple of pointers to terminals
   template <std::size_t... IS, typename terminalsT, typename setfuncT>
   void set_terminals(std::index_sequence<IS...>, terminalsT& terms, const setfuncT setfunc) {
-      int junk[] = {0, ((this->*setfunc)(IS,&std::get<IS>(terms)),0)...};
+      int junk[] = {0, ((this->*setfunc)(IS,std::get<IS>(terms)),0)...};
     junk[0]++;
   }
 
+  // Used by composite op ... terminalsT will be a tuple of pointers to terminals
   template <typename terminalsT, typename setfuncT>
   void set_terminals(const terminalsT& terms, const setfuncT setfunc) {
       set_terminals(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, setfunc);
@@ -268,9 +272,10 @@ public:
     static constexpr int numins = std::tuple_size< input_terminalsT>::value;  // number of input arguments
     static constexpr int numouts= std::tuple_size<output_terminalsT>::value;  // number of outputs or results
 
-    using input_terminals_type = input_terminalsT;
-    using output_terminals_type = output_terminalsT;
+    using input_terminals_type = input_terminalsT;   // should be a tuple of pointers to input terminals
+    using output_terminals_type = output_terminalsT; // should be a tuple of pointers to output terminals
 
+private:
     std::vector<std::unique_ptr<OpBase>> ops;
     input_terminals_type ins;
     output_terminals_type outs;
@@ -279,10 +284,11 @@ public:
     CompositeOp& operator=(const CompositeOp&) = delete; 
     CompositeOp(const CompositeOp&&) = delete; // Move should be OK
 
+public:
     template <typename opsT>
     CompositeOp(opsT&& ops_take_ownership,
-                const input_terminals_type& ins,
-                const output_terminals_type& outs,
+                const input_terminals_type& ins, // tuple of pointers to input terminals
+                const output_terminals_type& outs, // tuple of pointers to output terminals
                 const std::string& name = "compositeop")
         : OpBase(name, numins, numouts)
         , ops(std::forward<opsT>(ops_take_ownership))
@@ -299,12 +305,14 @@ public:
         // traversal is still broken ... need to add checking for composite
     }
 
-    template <std::size_t i> typename std::tuple_element<i, input_terminals_type>::type& in()
+    /// Return a pointer to i'th input terminal 
+    template <std::size_t i> typename std::tuple_element<i, input_terminals_type>::type in()
     {
         return std::get<i>(ins);
     }
     
-    template <std::size_t i> typename std::tuple_element<i, output_terminalsT>::type& out()
+    /// Return a pointer to i'th output terminal 
+    template <std::size_t i> typename std::tuple_element<i, output_terminalsT>::type out()
     {
         return std::get<i>(outs);
     }
@@ -619,16 +627,16 @@ class Out : public TerminalBase {
 
   void connect(TerminalBase* p) {
       if (auto d = dynamic_cast<input_terminal_type*>(p)) {
-          this->connect(*d);
+          this->connect(d);
       }
       else {
           throw "you are trying to connect terminals with incompatible types";
       }
   }
 
-  void connect(input_terminal_type& successor) {
-    successors.push_back(&successor);
-    static_cast<TerminalBase*>(this)->connect_base(&successor);
+  void connect(input_terminal_type* successor) {
+    successors.push_back(successor);
+    static_cast<TerminalBase*>(this)->connect_base(successor);
   }
 
   void send(const keyT& key, const valueT& value) {
@@ -642,6 +650,21 @@ class Out : public TerminalBase {
     for (auto successor : successors) successor->broadcast(keylist, value);
   }
 };
+
+    void connect(TerminalBase* out, TerminalBase* in) {
+        out->connect(in);
+    }
+
+    template <typename out_terminalT, typename in_terminalT>
+    void connect(out_terminalT* out, in_terminalT* in) {
+        out->connect(in);
+    }
+
+    // template <size_t outindex, size_t inindex, typename producer_op, typename successor_op>
+    // void connect(producer_op* p, successor_op* s) {
+    //     p->out<outindex>()->connect(s->in<inindex>());
+    // }
+
 
 template <typename keyT, typename valueT>
 class Edge {
@@ -682,12 +705,12 @@ class Edge {
 
     void try_to_connect_new_in(Out<keyT, valueT>* in) const {
       for (auto out : outs)
-        if (in && out) in->connect(*out);
+        if (in && out) in->connect(out);
     }
 
     void try_to_connect_new_out(In<keyT, valueT>* out) const {
       for (auto in : ins)
-        if (in && out) in->connect(*out);
+        if (in && out) in->connect(out);
     }
 
     ~EdgeImpl() {
@@ -732,8 +755,8 @@ class Edge {
   }
 
   // this is currently just a hack, need to understand better whether this is a good idea
-  Out<keyT, valueT>& in(size_t edge_index = 0, size_t terminal_index = 0) {
-    return *(p.at(edge_index)->ins.at(terminal_index));
+  Out<keyT, valueT>* in(size_t edge_index = 0, size_t terminal_index = 0) {
+    return p.at(edge_index)->ins.at(terminal_index);
   }
 };
 
@@ -743,8 +766,7 @@ template <typename keyT, typename... valuesT>
 auto fuse(const Edge<keyT, valuesT>&... args) {
   using valueT = typename std::tuple_element<
       0, std::tuple<valuesT...>>::type;  // grab first type
-  return Edge<keyT, valueT>(
-      args...);  // This will force all valuesT to be the same
+  return Edge<keyT, valueT>(args...);  // This will force all valuesT to be the same
 }
 
 // Make a tuple of Edges ... needs some type checking injected

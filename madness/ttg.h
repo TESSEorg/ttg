@@ -330,18 +330,18 @@ class Op : public ::ttg::OpBase,
       world.gop.fence();
   }
 
-  // Returns reference to input terminal i to facilitate connection --- terminal
+  // Returns pointer to input terminal i to facilitate connection --- terminal
   // cannot be copied, moved or assigned
   template <std::size_t i>
-  typename std::tuple_element<i, input_terminals_type>::type& in() {
-    return std::get<i>(input_terminals);
+  typename std::tuple_element<i, input_terminals_type>::type* in() {
+    return &std::get<i>(input_terminals);
   }
 
-  // Returns reference to output terminal for purpose of connection --- terminal
+  // Returns pointer to output terminal for purpose of connection --- terminal
   // cannot be copied, moved or assigned
   template <std::size_t i>
-  typename std::tuple_element<i, output_terminalsT>::type& out() {
-    return std::get<i>(output_terminals);
+  typename std::tuple_element<i, output_terminalsT>::type* out() {
+    return &std::get<i>(output_terminals);
   }
 
   // Manual injection of a task with all input arguments specified as a tuple

@@ -294,9 +294,9 @@ class MxM {
         {
             // Must connect manually since any locally defined edge
             // won't be constructed before base class
-            Cijpartial.set_out(&(this->in<0>()));
-            result.set_in(&(this->out<0>()));
-            this->out<1>().connect(this->in<1>());
+            Cijpartial.set_out(this->in<0>());
+            result.set_in(this->out<0>());
+            this->out<1>()->connect(this->in<1>());
             
             // prime the accumulator
             std::vector<tripleT> ijk;
@@ -306,7 +306,7 @@ class MxM {
                 }
             }
             Matrix zero(tilesize,tilesize);
-            this->out<1>().broadcast(ijk,zero);
+            this->out<1>()->broadcast(ijk,zero);
         }
 
         void op(tripleT ijk, const std::tuple<Matrix,Matrix>& t, std::tuple<Out<pairT,Matrix>,Out<tripleT,Matrix>>& out) {
