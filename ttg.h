@@ -253,6 +253,9 @@ protected:
     return outputs[i];
   }
 
+  /// Waits for the entire TTG associated with this op to be completed (collective)
+  virtual void fence() = 0;
+
   virtual ~OpBase() {}
 };
 
@@ -277,19 +280,21 @@ public:
     CompositeOp(const CompositeOp&&) = delete; // Move should be OK
 
     template <typename opsT>
-    CompositeOp(opsT&& ops,
+    CompositeOp(opsT&& ops_take_ownership,
                 const input_terminals_type& ins,
                 const output_terminals_type& outs,
                 const std::string& name = "compositeop")
         : OpBase(name, numins, numouts)
-        , ops(std::forward<opsT>(ops))
+        , ops(std::forward<opsT>(ops_take_ownership))
         , ins(ins)
         , outs(outs)
     {
+        if (ops.size() == 0) throw "CompositeOp: need to wrap at least one op"; // see fence
+        
         set_is_composite(true);
         for (auto& op : ops) op->set_is_within_composite(true, this);
-        set_terminals(ins,  &OpBase::set_input);
-        set_terminals(outs, &OpBase::set_output);
+        set_terminals(ins,  &CompositeOp<input_terminalsT, output_terminalsT>::set_input);
+        set_terminals(outs, &CompositeOp<input_terminalsT, output_terminalsT>::set_output);
 
         // traversal is still broken ... need to add checking for composite
     }
@@ -302,15 +307,23 @@ public:
     template <std::size_t i> typename std::tuple_element<i, output_terminalsT>::type& out()
     {
         return std::get<i>(outs);
-    }               
+    }
+
+    OpBase* get_op(std::size_t i) {
+        return ops.at(i).get();
+    }
+
+    void fence() {
+        ops[0]->fence();
+    }
 };
 
 template <typename opsT, typename input_terminalsT, typename output_terminalsT>
 std::unique_ptr<CompositeOp<input_terminalsT,output_terminalsT>>
-                     make_composite_op(opsT&& ops,
-                                       const input_terminalsT& ins,
-                                       const output_terminalsT& outs,
-                                       const std::string& name = "compositeop")
+    make_composite_op(opsT&& ops,
+                      const input_terminalsT& ins,
+                      const output_terminalsT& outs,
+                      const std::string& name = "compositeop")
 {
     return std::make_unique<CompositeOp<input_terminalsT,output_terminalsT>>(std::forward<opsT>(ops),ins,outs,name);
 }

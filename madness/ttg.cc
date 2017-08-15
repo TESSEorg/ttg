@@ -95,7 +95,7 @@ public:
     
     void start() {if (world.rank() == 0) producer.invoke(0);}
     
-    void wait() {world.gop.fence();}
+    void fence() {world.gop.fence();}
 };
 
 
@@ -126,7 +126,7 @@ public:
     
     void start() {if (world.rank() == 0) dynamic_cast<Producer*>(producer.get())->invoke(0);} // Ugh!
     
-    void wait() {world.gop.fence();}
+    void fence() {world.gop.fence();}
 };
 
 
@@ -140,9 +140,9 @@ class Everything2 {
 public:
     Everything2()
         : P2A("P2A"), A2A("A2A"), A2C("A2C")
-        , producer(P2A, "producer")
-        , a(fuse(P2A,A2A), edges(A2C,A2A), "A")
-        , consumer(A2C, "consumer")
+        , producer(edges(P2A), "producer")
+        , a(edges(fuse(P2A,A2A)), edges(A2C,A2A), "A")
+        , consumer(edges(A2C), "consumer")
         , world(::madness::ttg::get_default_world())
     {
         world.gop.fence();
@@ -154,7 +154,7 @@ public:
     
     void start() {if (world.rank() == 0) producer.invoke(0);}
     
-    void wait() {world.gop.fence();}
+    void fence() {world.gop.fence();}
 };
 
 class Everything3 {
@@ -200,7 +200,7 @@ public:
     
     void start() {if (::madness::ttg::get_default_world().rank() == 0) wp->invoke(0);}
     
-    void wait() {::madness::ttg::get_default_world().gop.fence();}
+    void fence() {::madness::ttg::get_default_world().gop.fence();}
 };
     
 class Everything4 {
@@ -245,60 +245,59 @@ public:
     
     void start() {if (::madness::ttg::get_default_world().rank() == 0) wp->invoke(0);}
     
-    void wait() {::madness::ttg::get_default_world().gop.fence();}
+    void fence() {::madness::ttg::get_default_world().gop.fence();}
 };
 
 class EverythingComposite {
     std::unique_ptr<OpBase> P;
     std::unique_ptr<OpBase> AC;
-    
-    World& world;
 public:
-    EverythingComposite()
-        : world(::madness::ttg::get_default_world())
-    {
+    EverythingComposite() {
         auto p = std::make_unique<Producer>("P");
         auto a = std::make_unique<A>("A");
         auto c = std::make_unique<Consumer>("C");
-
+        
         madness::print("P out<0>", (void*)(TerminalBase*)&(p->out<0>()));
         madness::print("A  in<0>", (void*)(TerminalBase*)&(a->in<0>()));
         madness::print("A out<0>", (void*)(TerminalBase*)&(a->out<0>()));
         madness::print("C  in<0>", (void*)(TerminalBase*)&(c->in<0>()));
-
+        
         a->out<1>().connect(a->in<0>());
         a->out<0>().connect(c->in<0>());
         std::tuple<In<keyT,int>&> q = std::tie((a->in<0>()));
         madness::print("q  in<0>", (void*)(TerminalBase*)&(std::get<0>(q)));
         
+        //std::array<std::unique_ptr<OpBase>,2> ops{std::move(a),std::move(c)};
         std::vector<std::unique_ptr<OpBase>> ops(2);
         ops[0] = std::move(a);
         ops[1] = std::move(c);
         madness::print("opsin(0)", (void*)(ops[0]->in(0)));
+        madness::print("ops size", ops.size());
         
         auto ac = make_composite_op(std::move(ops),
                                     q,
                                     std::make_tuple(),
                                     "Fred");
-
+        
         madness::print("AC in<0>", (void*)(TerminalBase*)&(ac->in<0>()));
         p->out<0>().connect(ac->in<0>());
-
+        
         Verify()(p.get());
         
         P = std::move(p);
         AC = std::move(ac);
-
-        world.gop.fence();
     }
     
     void print() {Print()(P.get());}
-
+    
     std::string dot() {return Dot()(P.get());}
     
-    void start() {if (world.rank() == 0) dynamic_cast<Producer*>(P.get())->invoke(0);}
+    void start() {
+        Producer* p = dynamic_cast<Producer*>(P.get());
+        p->invoke(0);
+    }
     
-    void wait() {world.gop.fence();}
+    void fence() {P->fence();}
 };
 
 void hi() {
@@ -327,7 +326,7 @@ int main(int argc, char** argv) {
       std::cout << x.dot() << std::endl;
       
       x.start(); //myusleep(100);
-      x.wait();
+      x.fence();
     }
 
     // Next compose with base class pointers and verify destruction
@@ -337,7 +336,7 @@ int main(int argc, char** argv) {
       std::cout << x.dot() << std::endl;
     
       x.start(); //myusleep(100);
-      x.wait();
+      x.fence();
     }
 
     // Now try with the composite operator wrapping A and C
@@ -347,7 +346,7 @@ int main(int argc, char** argv) {
         std::cout << "\nComposite\n";
         std::cout << x.dot() << std::endl << std::endl;
         x.start(); //myusleep(100);
-        x.wait();
+        x.fence();
         std::cout << "\nComposite done\n";
     }
 
@@ -358,7 +357,7 @@ int main(int argc, char** argv) {
         std::cout << y.dot() << std::endl;
      
         y.start(); //myusleep(100);
-        y.wait();
+        y.fence();
     }
 
     // Next compose with wrappers using tuple API and edges
@@ -366,7 +365,7 @@ int main(int argc, char** argv) {
         Everything3 z;
         std::cout << z.dot() << std::endl;
         z.start(); //myusleep(100);
-        z.wait();
+        z.fence();
     }
     
     // Next compose with wrappers using unpacked tuple API and edges
@@ -374,7 +373,7 @@ int main(int argc, char** argv) {
         Everything4 q;
         std::cout << q.dot() << std::endl;
         q.start(); //myusleep(100);
-        q.wait();
+        q.fence();
     }
 
     finalize();

@@ -320,6 +320,16 @@ class Op : public ::ttg::OpBase,
     }
   }
 
+  /// Waits for the entire TTG associated with this op to be completed (collective)
+
+  /// This is a collective operation and must be invoked by the main
+  /// thread on all processes.  In the MADNESS implementation it
+  /// fences the entire world associated with the TTG.  If you wish to
+  /// fence TTGs independently, then give each its own world.
+  void fence() {
+      world.gop.fence();
+  }
+
   // Returns reference to input terminal i to facilitate connection --- terminal
   // cannot be copied, moved or assigned
   template <std::size_t i>
