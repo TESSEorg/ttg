@@ -438,9 +438,9 @@ void pretty_print(const Matrix& a) {
 int main(int argc, char** argv) {
     madness::initialize(argc, argv);
     madness::World world(SafeMPI::COMM_WORLD);
-    madness::World::get_default().gop.fence();
+    set_default_world(world);
 
-    if (madness::World::get_default().size() > 1) {
+    if (world.size() > 1) {
         madness::error("Currently only works with one MPI process (multiple threads OK)");
     }
 
@@ -472,7 +472,7 @@ int main(int argc, char** argv) {
 
     control.start();
     
-    madness::World::get_default().gop.fence();
+    world.gop.fence();
 
     // Cross fingers
     //std::cout << " SUMMA result " << std::endl;

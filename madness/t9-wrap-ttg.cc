@@ -289,7 +289,7 @@ public:
 
     double get() const {
         double value = sumsq;
-        madness::World::get_default().gop.sum(value);
+        ::madness::ttg::get_default_world().gop.sum(value);
         return std::sqrt(value);
     }
 };
@@ -322,7 +322,7 @@ double R(const double x) {return (A(x) + B(x))*C(x);}
 int main(int argc, char** argv) {
     madness::initialize(argc, argv);
     madness::World world(SafeMPI::COMM_WORLD);
-    madness::World::get_default().gop.fence();    
+    set_default_world(world);
     
     ctlEdge ctl("start ctl");
     nodeEdge a("a"), b("b"), c("c"), abc("abc"), diffa("diffa"), errdiff("errdiff"), errabc("errabc"),
@@ -364,7 +364,7 @@ int main(int argc, char** argv) {
     // auto pp = make_printer(compa,"compa");
     // auto pp = make_printer(compa,"compa");
 
-    if (madness::World::get_default().rank() == 0) {
+    if (::madness::ttg::get_default_world().rank() == 0) {
         std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
         std::cout << "==== begin dot ====\n";
         std::cout << Dot()(start.get()) << std::endl;
@@ -374,11 +374,11 @@ int main(int argc, char** argv) {
         start->invoke(Key(0,0));
     }
     
-    madness::World::get_default().gop.fence();
+    ::madness::ttg::get_default_world().gop.fence();
 
     double nap=norma->get(), nac=norma2->get(), nar=norma3->get(), nabcerr=normabcerr->get(), ndifferr=normdifferr->get();
 
-    if (madness::World::get_default().rank() == 0) {
+    if (::madness::ttg::get_default_world().rank() == 0) {
         std::cout << "Norm2 of a projected     " << nap << std::endl;
         std::cout << "Norm2 of a compressed    " << nac << std::endl;
         std::cout << "Norm2 of a reconstructed " << nar << std::endl;
