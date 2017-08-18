@@ -320,7 +320,6 @@ class SpMM {
                 const std::vector<std::vector<long>>& a_rowidx_to_colidx,
                 const std::vector<std::vector<long>>& b_colidx_to_rowidx) :
       baseT(edges(a_ijk,b_ijk,c_ijk), edges(c, c_ijk), "SpMM::Multiply", {"a_ijk", "b_ijk", "c_ijk"}, {"c_ij", "c_ijk"}),
-      c_ijk_(c_ijk),
       a_rowidx_to_colidx_(a_rowidx_to_colidx), b_colidx_to_rowidx_(b_colidx_to_rowidx)
       {
         auto& pmap = get_pmap();
@@ -341,8 +340,8 @@ class SpMM {
               if (have_k) {
                 if (tracing())
                   madness::print("Initializing C[", i, "][", j, "] to zero");
-                ::send(Key<3>({i, j, k}), blk_t(0), c_ijk_.in());
-                // this->set_arg<2>(Key<3>({i,j,k}), blk_t(0));
+                this->in<2>()->send(Key<3>({i, j, k}), blk_t(0));
+                //this->set_arg<2>(Key<3>({i,j,k}), blk_t(0));
               } else {
                 if (tracing())
                   madness::print("C[", i, "][", j, "] is empty");
@@ -373,7 +372,6 @@ class SpMM {
         ::send<0>(Key<2>({i,j}), gemm(std::move(std::get<2>(_ijk)), std::get<0>(_ijk), std::get<1>(_ijk)), result);
     }
    private:
-    Edge<Key<3>,blk_t> c_ijk_;
     const std::vector<std::vector<long>>& a_rowidx_to_colidx_;
     const std::vector<std::vector<long>>& b_colidx_to_rowidx_;
 
