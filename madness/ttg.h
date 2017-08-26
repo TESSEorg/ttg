@@ -103,9 +103,9 @@ class Op : public ::ttg::OpBase,
     OpArgs() : counter(numins), argset(), t() { std::fill(argset.begin(), argset.end(), false); }
 
     void run(World& world) {
-        //madness::print("starting task");
-        derived->op(key, t, derived->output_terminals);
-        //madness::print("finishing task");
+        madness::print("starting task");
+        derived->op(key, std::move(t), derived->output_terminals); // !!! NOTE moving t into op
+        madness::print("finishing task");
     }
 
     virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
@@ -115,18 +115,19 @@ class Op : public ::ttg::OpBase,
   using accessorT = typename cacheT::accessor;
   cacheT cache;
 
-  // Used to set the i'th argument
-  template <std::size_t i>
-  void set_arg(const keyT& key, const typename std::tuple_element<
-                                    i, input_values_tuple_type>::type& value) {
-    using valueT = typename std::tuple_element<i, input_terminals_type>::type;
+  // Used to set the i'th argument (T is template to enable && collapsing)
+  template <std::size_t i, typename T>
+  //void set_arg(const keyT& key, const typename std::tuple_element<i, input_values_tuple_type>::type& value) {
+  void set_arg(const keyT& key, T&& value) {
+
+    using valueT = typename std::tuple_element<i, input_terminals_type>::type; // Should be same as T (or const T)
 
     ProcessID owner = pmap->owner(key);
 
     if (owner != world.rank()) {
       if (tracing())
           madness::print( world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
-      worldobjT::send(owner, &opT::template set_arg<i>, key, value);
+      worldobjT::send(owner, &opT::template set_arg<i,const typename std::remove_reference<T>::type&>, key, value);
     } else {
       if (tracing())
           madness::print( world.rank(), ":", get_name(), " : ", key, ": setting argument : ", i);
@@ -140,8 +141,12 @@ class Op : public ::ttg::OpBase,
         madness::print_error(world.rank(), ":", get_name(), " : ", key, ": error argument is already set : ", i);
         throw "bad set arg";
       }
+
+      const char* isref[] = {" ","&"};
+      std::cout << "about to assign arg " << isref[std::is_reference<T>::value] << demangled_type_name<T>() << "\n";
+      
+      std::get<i>(args->t) = std::forward<T>(value);
       args->argset[i] = true;
-      std::get<i>(args->t) = value;
       args->counter--;
       if (args->counter == 0) {
         if (tracing())
@@ -208,14 +213,22 @@ class Op : public ::ttg::OpBase,
   // Registers the callback for the i'th input terminal
   template <typename terminalT, std::size_t i>
   void register_input_callback(terminalT& input) {
-    using callbackT =
-        std::function<void(const typename terminalT::key_type&,
-                           const typename terminalT::value_type&)>;
-    auto callback = [this](const typename terminalT::key_type& key,
-                           const typename terminalT::value_type& value) {
-      set_arg<i>(key, value);
+    //using keyT = typename terminalT::key_type;
+    using valueT = typename terminalT::value_type;      
+    using move_callbackT = std::function<void(const keyT&, valueT&&)>;
+    using send_callbackT = std::function<void(const keyT&, const valueT&)>;
+
+    auto move_callback = [this](const keyT& key, valueT&& value) {
+        std::cout << "move_callback\n";
+        set_arg<i,valueT>(key, std::forward<typename terminalT::value_type>(value));
     };
-    input.set_callback(callbackT(callback));
+
+    auto send_callback = [this](const keyT& key, const valueT& value) {
+        std::cout << "send_callback\n";
+        set_arg<i,const valueT&>(key, value);
+    };
+    
+    input.set_callback(send_callbackT(send_callback), move_callbackT(move_callback));
   }
 
   template <std::size_t... IS>
