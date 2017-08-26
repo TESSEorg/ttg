@@ -569,13 +569,13 @@ namespace ttg {
     }
 
     void send(const keyT& key, const valueT& value) {
-      std::cout << "In::send-constref::\n";
+        //std::cout << "In::send-constref::\n";
       if (!initialized) throw "sending to uninitialzed callback";
       send_callback(key, value);
     }
 
     void send(const keyT& key, valueT&& value) {
-      std::cout << "In::send-move::\n";
+        //std::cout << "In::send-move::\n";
       if (!initialized) throw "sending to uninitialzed callback";
       move_callback(key, std::forward<valueT>(value));
     }
@@ -625,12 +625,12 @@ namespace ttg {
     }
 
     void send(const keyT& key, const valueT& value) {
-      std::cout << "Out::send-const-ref::\n";
+        //std::cout << "Out::send-const-ref::\n";
       for (auto successor : successors) successor->send(key, value);
     }
 
     void send(const keyT& key, valueT&& value) {
-      std::cout << "Out::send-move::\n";
+        //std::cout << "Out::send-move::\n";
       unsigned int N = successors.size();
       for (unsigned int i = 0; i < N - 1; i++) successors[i]->send(key, value);
       if (N) successors[N - 1]->send(key, std::forward<valueT>(value));
@@ -780,25 +780,25 @@ namespace ttg {
 
   template <typename keyT, typename valueT, typename output_terminalT>
   void send(const keyT& key, valueT&& value, output_terminalT& t) {
-    std::cout << "::send move\n";
+      //std::cout << "::send move\n";
     t.send(key, std::forward<valueT>(value));
   }
 
   template <size_t i, typename keyT, typename valueT, typename... output_terminalsT>
   void send(const keyT& key, valueT&& value, std::tuple<output_terminalsT...>& t) {
-    std::cout << "::send<> move\n";
+      //std::cout << "::send<> move\n";
     std::get<i>(t).send(key, std::forward<valueT>(value));
   }
 
   template <typename keyT, typename valueT, typename output_terminalT>
   void send(const keyT& key, const valueT& value, output_terminalT& t) {
-    std::cout << "::send const ref\n";
+      //std::cout << "::send const ref\n";
     t.send(key, value);
   }
 
   template <size_t i, typename keyT, typename valueT, typename... output_terminalsT>
   void send(const keyT& key, const valueT& value, std::tuple<output_terminalsT...>& t) {
-    std::cout << "::send<> const ref\n";
+      //std::cout << "::send<> const ref\n";
     std::get<i>(t).send(key, value);
   }
 

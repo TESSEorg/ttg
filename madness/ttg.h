@@ -90,9 +90,9 @@ namespace madness {
         OpArgs() : counter(numins), argset(), t() { std::fill(argset.begin(), argset.end(), false); }
 
         void run(World& world) {
-          madness::print("starting task");
+            //madness::print("starting task");
           derived->op(key, std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
-          madness::print("finishing task");
+          //madness::print("finishing task");
         }
 
         virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
@@ -126,8 +126,8 @@ namespace madness {
             throw "bad set arg";
           }
 
-          const char* isref[] = {" ", "&"};
-          std::cout << "about to assign arg " << isref[std::is_reference<T>::value] << demangled_type_name<T>() << "\n";
+          //const char* isref[] = {" ", "&"};
+          //std::cout << "about to assign arg " << isref[std::is_reference<T>::value] << demangled_type_name<T>() << "\n";
 
           std::get<i>(args->t) = std::forward<T>(value);
           args->argset[i] = true;
@@ -198,12 +198,12 @@ namespace madness {
         using send_callbackT = std::function<void(const keyT&, const valueT&)>;
 
         auto move_callback = [this](const keyT& key, valueT&& value) {
-          std::cout << "move_callback\n";
+            //std::cout << "move_callback\n";
           set_arg<i, valueT>(key, std::forward<typename terminalT::value_type>(value));
         };
 
         auto send_callback = [this](const keyT& key, const valueT& value) {
-          std::cout << "send_callback\n";
+            //std::cout << "send_callback\n";
           set_arg<i, const valueT&>(key, value);
         };
 
