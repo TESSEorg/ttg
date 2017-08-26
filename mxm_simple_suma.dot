@@ -1,20 +1,19 @@
 digraph G {
-        ranksep=1.5;
         n0x7ffebd3223d0 [shape=record,style=filled,fillcolor=gray90,label="{Control  | { <out0> \<int,int\> ctl} } "];
 n0x7ffebd3223d0:out0:s -> n0x7ffebd3221a0:in0:n;
 n0x7ffebd3223d0:out0:s -> n0x7ffebd321f70:in0:n;
-        n0x7ffebd3221a0 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<int,int\> ctl} |read A  | { <out0> \<std::pair\<unsigned long, unsigned long\>,Matrix\> Aik} } "];
+        n0x7ffebd3221a0 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<int,int\> ctl} |read A  | { <out0> \<pairT,Matrix\> Aik} } "];
 n0x7ffebd3221a0:out0:s -> n0x7ffebd321458:in0:n;
-        n0x7ffebd321458 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<std::pair\<unsigned long, unsigned long\>,Matrix\> Aik} |broadcastA  | { <out0> \<tripleT,Matrix\> broadcast Aik} } "];
+        n0x7ffebd321458 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<pairT,Matrix\> Aik} |broadcastA  | { <out0> \<tripleT,Matrix\> broadcast Aik} } "];
 n0x7ffebd321458:out0:s -> n0x7ffebd3218d8:in0:n;
         n0x7ffebd3218d8 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<tripleT,Matrix\> Aik | <in1> \<tripleT,Matrix\> Bkj} |mxmtask  | { <out0> \<tripleT,Matrix\> Cij} } "];
 n0x7ffebd3218d8:out0:s -> n0x7ffebd321bd0:in0:n;
-        n0x7ffebd321bd0 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<tripleT,Matrix\> Cij partial | <in1> \<tripleT,Matrix\> sum} |reduce  | { <out0> \<std::pair\<unsigned long, unsigned long\>,Matrix\> Cij total | <out1> \<tripleT,Matrix\> sum} } "];
+        n0x7ffebd321bd0 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<tripleT,Matrix\> Cij partial | <in1> \<tripleT,Matrix\> sum} |reduce  | { <out0> \<pairT,Matrix\> Cij total | <out1> \<tripleT,Matrix\> sum} } "];
 n0x7ffebd321bd0:out0:s -> n0x7ffebd321260:in0:n;
 n0x7ffebd321bd0:out1:s -> n0x7ffebd321bd0:in1:n;
-        n0x7ffebd321260 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<std::pair\<unsigned long, unsigned long\>,Matrix\> Matrix tile} |writer  } "];
-        n0x7ffebd321f70 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<int,int\> ctl} |read B  | { <out0> \<std::pair\<unsigned long, unsigned long\>,Matrix\> Bkj} } "];
+        n0x7ffebd321260 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<pairT,Matrix\> Matrix tile} |writer  } "];
+        n0x7ffebd321f70 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<int,int\> ctl} |read B  | { <out0> \<pairT,Matrix\> Bkj} } "];
 n0x7ffebd321f70:out0:s -> n0x7ffebd321698:in0:n;
-        n0x7ffebd321698 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<std::pair\<unsigned long, unsigned long\>,Matrix\> Bkj} |broadcastB  | { <out0> \<tripleT,Matrix\> broadcast Bkj} } "];
+        n0x7ffebd321698 [shape=record,style=filled,fillcolor=gray90,label="{{ <in0> \<pairT,Matrix\> Bkj} |broadcastB  | { <out0> \<tripleT,Matrix\> broadcast Bkj} } "];
 n0x7ffebd321698:out0:s -> n0x7ffebd3218d8:in1:n;
 }
