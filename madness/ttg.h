@@ -331,8 +331,7 @@ namespace madness {
 
     // Class to wrap a callable with signature
     //
-    // void op(const input_keyT&, const std::tuple<input_valuesT...>&,
-    // std::tuple<output_terminalsT...>&)
+    // void op(const input_keyT&, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&)
     //
     template <typename funcT, typename keyT, typename output_terminalsT, typename... input_valuesT>
     class WrapOp : public Op<keyT, output_terminalsT, WrapOp<funcT, keyT, output_terminalsT, input_valuesT...>,
@@ -347,15 +346,14 @@ namespace madness {
              const std::vector<std::string>& innames, const std::vector<std::string>& outnames)
           : baseT(inedges, outedges, name, innames, outnames), func(func) {}
 
-      void op(const keyT& key, const typename baseT::input_values_tuple_type& args, output_terminalsT& out) {
-        func(key, args, out);
+        void op(const keyT& key, typename baseT::input_values_tuple_type&& args, output_terminalsT& out) {
+            func(key, std::forward<typename baseT::input_values_tuple_type>(args), out);
       }
     };
 
     // Class to wrap a callable with signature
     //
-    // void op(const input_keyT&, const std::tuple<input_valuesT...>&,
-    // std::tuple<output_terminalsT...>&)
+    // void op(const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)
     //
     template <typename funcT, typename keyT, typename output_terminalsT, typename... input_valuesT>
     class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, output_terminalsT, input_valuesT...>,
@@ -365,9 +363,11 @@ namespace madness {
       funcT func;
 
       template <std::size_t... S>
-      void call_func_from_tuple(const keyT& key, const typename baseT::input_values_tuple_type& args,
+      void call_func_from_tuple(const keyT& key, typename baseT::input_values_tuple_type&& args,
                                 output_terminalsT& out, std::index_sequence<S...>) {
-        func(key, std::get<S>(args)..., out);
+          func(key,
+               std::forward<typename std::tuple_element<S,typename baseT::input_values_tuple_type>::type>(std::get<S>(args))...,
+               out);
       }
 
      public:
@@ -376,17 +376,16 @@ namespace madness {
                  const std::vector<std::string>& innames, const std::vector<std::string>& outnames)
           : baseT(inedges, outedges, name, innames, outnames), func(func) {}
 
-      void op(const keyT& key, const typename baseT::input_values_tuple_type& args, output_terminalsT& out) {
-        call_func_from_tuple(
-            key, args, out,
-            std::make_index_sequence<std::tuple_size<typename baseT::input_values_tuple_type>::value>{});
+      void op(const keyT& key, typename baseT::input_values_tuple_type&& args, output_terminalsT& out) {
+          call_func_from_tuple(
+                               key, std::forward<typename baseT::input_values_tuple_type>(args), out,
+                               std::make_index_sequence<std::tuple_size<typename baseT::input_values_tuple_type>::value>{});
       };
     };
 
     // Factory function to assist in wrapping a callable with signature
     //
-    // void op(const input_keyT&, const std::tuple<input_valuesT...>&,
-    // std::tuple<output_terminalsT...>&)
+    // void op(const input_keyT&, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&)
     template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
     auto wrapt(const funcT& func, const std::tuple<::ttg::Edge<keyT, input_valuesT>...>& inedges,
                const std::tuple<output_edgesT...>& outedges, const std::string& name = "wrapper",
@@ -397,7 +396,7 @@ namespace madness {
       using input_terminals_type = std::tuple<typename ::ttg::Edge<keyT, input_valuesT>::input_terminal_type...>;
       using output_terminals_type = typename ::ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
       using callable_type =
-          std::function<void(const keyT&, const std::tuple<input_valuesT...>&, output_terminals_type&)>;
+          std::function<void(const keyT&, std::tuple<input_valuesT...>&&, output_terminals_type&)>;
       callable_type f(func);  // pimarily to check types
       using wrapT = WrapOp<funcT, keyT, output_terminals_type, input_valuesT...>;
 
@@ -406,8 +405,7 @@ namespace madness {
 
     // Factory function to assist in wrapping a callable with signature
     //
-    // void op(const input_keyT&, input_valuesT&...,
-    // std::tuple<output_terminalsT...>&)
+    // void op(const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)
     template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
     auto wrap(const funcT& func, const std::tuple<::ttg::Edge<keyT, input_valuesT>...>& inedges,
               const std::tuple<output_edgesT...>& outedges, const std::string& name = "wrapper",

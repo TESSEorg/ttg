@@ -162,12 +162,12 @@ class Everything2 {
 };
 
 class Everything3 {
-  static void p(const keyT& key, const std::tuple<>& t, std::tuple<Out<keyT, int>>& out) {
+  static void p(const keyT& key, std::tuple<>&& t, std::tuple<Out<keyT, int>>& out) {
     std::cout << "produced " << 0 << std::endl;
     send<0>(key, int(key), out);
   }
 
-  static void a(const keyT& key, const std::tuple<int>& t, std::tuple<Out<keyT, int>, Out<keyT, int>>& out) {
+  static void a(const keyT& key, std::tuple<int>&& t, std::tuple<Out<keyT, int>, Out<keyT, int>>& out) {
     int value = std::get<0>(t);
     if (value >= 100) {
       send<0>(key, value, out);
@@ -176,7 +176,7 @@ class Everything3 {
     }
   }
 
-  static void c(const keyT& key, const std::tuple<int>& t, std::tuple<>& out) {
+  static void c(const keyT& key, std::tuple<int>&& t, std::tuple<>& out) {
     std::cout << "consumed " << std::get<0>(t) << std::endl;
   }
 
@@ -214,7 +214,7 @@ class Everything4 {
     send<0>(key, int(key), out);
   }
 
-  static void a(const keyT& key, int value, std::tuple<Out<keyT, int>, Out<keyT, int>>& out) {
+  static void a(const keyT& key, int&& value, std::tuple<Out<keyT, int>, Out<keyT, int>>& out) {
     if (value >= 100) {
       send<0>(key, value, out);
     } else {
@@ -222,7 +222,7 @@ class Everything4 {
     }
   }
 
-  static void c(const keyT& key, int value, std::tuple<>& out) { std::cout << "consumed " << value << std::endl; }
+  static void c(const keyT& key, int&& value, std::tuple<>& out) { std::cout << "consumed " << value << std::endl; }
 
   Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
 

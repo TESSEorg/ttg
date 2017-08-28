@@ -132,7 +132,7 @@ auto make_printer(const Edge<keyT, valueT>& in, const char* str = "") {
 
 template <typename funcT>
 auto make_project(const funcT& func, ctlEdge& ctl, nodeEdge& result, const std::string& name = "project") {
-  auto f = [func](const Key& key, const Control& junk, std::tuple<ctlOut, nodeOut>& out) {
+  auto f = [func](const Key& key, Control&& junk, std::tuple<ctlOut, nodeOut>& out) {
     const double sl = func(key_to_x(key.left_child()));
     const double sr = func(key_to_x(key.right_child()));
     const double s = 0.5 * (sl + sr), d = 0.5 * (sl - sr);
@@ -154,7 +154,7 @@ auto make_project(const funcT& func, ctlEdge& ctl, nodeEdge& result, const std::
 template <typename funcT>
 auto make_binary_op(const funcT& func, nodeEdge left, nodeEdge right, nodeEdge Result,
                     const std::string& name = "binaryop") {
-  auto f = [&func](const Key& key, const Node& left, const Node& right, std::tuple<nodeOut, nodeOut, nodeOut>& out) {
+  auto f = [&func](const Key& key, Node&& left, Node&& right, std::tuple<nodeOut, nodeOut, nodeOut>& out) {
     if (!(left.has_children || right.has_children)) {
       send<2>(key, Node(key, func(left.s, right.s), 0.0, false), out);
     } else {
@@ -170,12 +170,12 @@ auto make_binary_op(const funcT& func, nodeEdge left, nodeEdge right, nodeEdge R
 }
 
 void send_to_output_tree(const Key& key, const Node& node, std::tuple<nodeOut, nodeOut, nodeOut>& out) {
-  send<0>(key.right(), node, out);
+    send<0>(key.right(), node, out); // CANNOT MOVE NODE HERE SINCE USED BELOW!!!!
   send<1>(key, node, out);
   send<2>(key.left(), node, out);
 }
 
-void diff(const Key& key, const Node& left, const Node& center, const Node& right,
+void diff(const Key& key, Node&& left, Node&& center, Node&& right,
           std::tuple<nodeOut, nodeOut, nodeOut, nodeOut>& out) {
   nodeOut &L = std::get<0>(out), &C = std::get<1>(out), &R = std::get<2>(out), &result = std::get<3>(out);
   if (!(left.has_children || center.has_children || right.has_children)) {
