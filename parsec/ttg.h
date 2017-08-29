@@ -53,6 +53,14 @@ static parsec_hook_return_t hook(struct parsec_execution_stream_s* es,
   return PARSEC_HOOK_RETURN_DONE;
 }
 
+namespace ttg {
+namespace overload {
+template<> uint64_t unique_hash<uint64_t, uint64_t>(const uint64_t& t) {
+  return t;
+}
+}
+}
+
 namespace parsec {
 namespace ttg {
 
@@ -142,8 +150,9 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       std::cout << get_name() << " : " << key << ": setting argument : " << i
                 << std::endl;
 
+    using ::ttg::unique_hash;
     data_repo_entry_t* e =
-        data_repo_lookup_entry_and_create(es, input_data, key.hash());
+        data_repo_lookup_entry_and_create(es, input_data, unique_hash<uint64_t>(key));
     if (e->data[i] != NULL) {
       std::cerr << get_name() << " : " << key
                 << ": error argument is already set : " << i << std::endl;
@@ -168,7 +177,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       task->function_template_class_ptr =
           reinterpret_cast<void (*)(void*)>(&Op::static_op);
       task->object_ptr = static_cast<derivedT*>(this);
-      task->key = key.hash();
+      task->key = unique_hash<uint64_t>(key);
 
       if (!parsec_atomic_cas_ptr(&e->generator, NULL, task)) {
         free(task);
@@ -180,7 +189,8 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       for (int ii = 0; ii < self.dependencies_goal; ii++) {
         task->data[ii].data_in = e->data[ii];
       }
-      data_repo_entry_used_once(es, input_data, key.hash());
+      using ::ttg::unique_hash;
+      data_repo_entry_used_once(es, input_data, unique_hash<uint64_t>(key));
       if (tracing())
         std::cout << get_name() << " : " << key << ": invoking op "
                   << std::endl;
@@ -204,7 +214,8 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     task->function_template_class_ptr =
         reinterpret_cast<void (*)(void*)>(&Op::static_op_noarg);
     task->object_ptr = static_cast<derivedT*>(this);
-    task->key = key.hash();
+    using ::ttg::unique_hash;
+    task->key = unique_hash<uint64_t>(key);
     task->data[0].data_in = static_cast<parsec_data_copy_t*>(NULL);
     __parsec_schedule(es, task, 0);
   }
@@ -239,7 +250,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       using send_callbackT = std::function<void(const keyT&, const valueT&)>;
       auto move_callback = [this](const keyT& key, valueT&& value) {
           //std::cout << "move_callback\n";
-          set_arg<i, valueT>(key, std::forward<typename terminalT::value_type>(value));
+          set_arg<i, valueT>(key, std::forward<valueT>(value));
       };
       auto send_callback = [this](const keyT& key, const valueT& value) {
           //std::cout << "send_callback\n";

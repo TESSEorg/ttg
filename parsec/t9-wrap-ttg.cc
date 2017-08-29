@@ -23,12 +23,11 @@ double pow2(double n) { return std::pow(2.0, n); }
 struct Key {
   int n;  // leave this as signed otherwise -n does unexpected things
   unsigned long l;
-    uint64_t hashval;
 
-    Key() : n(0), l(0) { rehash(); }
-    Key(uint64_t h) : n(h >> 48), l(h & 0xFFFFFFFFFFFFul), hashval(h) {}
+    Key() : n(0), l(0) { }
+    Key(uint64_t hash) : n(hash >> 48), l(hash & 0x0000FFFFFFFFFFFF) {}
 
-    Key(unsigned long n, unsigned long l) : n(n), l(l) { rehash(); }
+    Key(unsigned long n, unsigned long l) : n(n), l(l) { }
 
   bool operator==(const Key& b) const { return n == b.n && l == b.l; }
 
@@ -45,16 +44,12 @@ struct Key {
   Key left() const { return Key(n, l == 0ul ? (1ul << n) - 1 : l - 1); }  // periodic b.c.
 
   Key right() const { return Key(n, l == ((1ul << n) - 1) ? 0 : l + 1); }  // periodic b.c.
-
-    void rehash() { hashval = (size_t(n) << 48) + l; }
-
-    uint64_t hash() const { return hashval; }
-
-    /*  template <typename Archive>
-  void serialize(Archive& ar) {
-    ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
-    }*/
 };
+
+template <typename Result = uint64_t>
+Result unique_hash(const Key& key) {
+  return (size_t(key.n) << 48) + key.l;
+}
 
 std::ostream& operator<<(std::ostream& s, const Key& key) {
   s << "Key(" << key.n << "," << key.l << ")";

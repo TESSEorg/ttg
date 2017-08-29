@@ -15,6 +15,14 @@
 
 namespace ttg {
 
+  namespace overload {
+  /// Computes unique hash values for objects of type T.
+  /// Overload for your type.
+  template<typename Output, typename Input>
+  Output unique_hash(const Input &t);
+  }
+  using namespace ::ttg::overload;
+
   namespace detail {
     bool& trace_accessor() {
       static bool trace = false;
