@@ -122,7 +122,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     */
     derivedT* obj = (derivedT*)task->object_ptr;
     obj->op(keyT(task->key),
-            static_cast<const input_values_tuple_type &>(*static_cast<input_values_tuple_type*>(task->data[0].data_in->device_private)),
+            static_cast<input_values_tuple_type &&>(*static_cast<input_values_tuple_type*>(task->data[0].data_in->device_private)),
             obj->output_terminals);
   }
 
