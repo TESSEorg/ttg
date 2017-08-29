@@ -6,7 +6,7 @@
 
 #include "parsec.h"
 #include <mpi.h>
-#include <parsec/execution_unit.h>
+#include <parsec/execution_stream.h>
 
 using namespace parsec::ttg;
 using namespace ::ttg;
@@ -62,7 +62,7 @@ class Consumer : public Op<keyT, std::tuple<>, Consumer, int> {
   void op(const keyT& key, const std::tuple<int>& t,
           baseT::output_terminals_type& out) {
     std::cout << "consumed " << std::get<0>(t) << std::endl;
-    handle->nb_tasks = 0;
+    taskpool->nb_tasks = 0;
   }
 
   Consumer(const typename baseT::input_edges_type& inedges,
@@ -86,9 +86,9 @@ class Everything : public Op<keyT, std::tuple<>, Everything> {
         a("A"),
         consumer("consumer"),
         ctx(context) {
-    producer.out<0>().connect(a.in<0>());
-    a.out<0>().connect(consumer.in<0>());
-    a.out<1>().connect(a.in<0>());
+    producer.out<0>()->connect(a.in<0>());
+    a.out<0>()->connect(a.in<0>());
+    a.out<1>()->connect(consumer.in<0>());
 
     Verify()(&producer);
     // ctx->fence();
@@ -231,22 +231,22 @@ public:
 };
 #endif
 
-parsec_execution_unit_t* eu = NULL;
-parsec_handle_t* handle = NULL;
+parsec_execution_stream_t* es = NULL;
+parsec_taskpool_t* taskpool = NULL;
 
-extern "C" int parsec_ptg_update_runtime_task(parsec_handle_t *handle, int tasks);
+extern "C" int parsec_ptg_update_runtime_task(parsec_taskpool_t *tp, int tasks);
 
 int main(int argc, char** argv) {
     int provided;
     MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
 
     parsec_context_t *parsec = parsec_init(1, NULL, NULL);
-    handle = (parsec_handle_t*)calloc(1, sizeof(parsec_handle_t));
-    handle->handle_id = 1;
-    handle->nb_tasks = 1;
-    handle->nb_pending_actions = 1;
-    handle->update_nb_runtime_task = parsec_ptg_update_runtime_task;
-    eu = parsec->virtual_processes[0]->execution_units[0];
+    taskpool = (parsec_taskpool_t*)calloc(1, sizeof(parsec_taskpool_t));
+    taskpool->taskpool_id = 1;
+    taskpool->nb_tasks = 1;
+    taskpool->nb_pending_actions = 1;
+    taskpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
+    es = parsec->virtual_processes[0]->execution_streams[0];
 
   OpBase::set_trace_all(false);
 
@@ -258,7 +258,7 @@ int main(int argc, char** argv) {
   x.start();
   x.wait();
 
-  parsec_enqueue(parsec, handle);
+  parsec_enqueue(parsec, taskpool);
   int ret = parsec_context_start(parsec);
   parsec_context_wait(parsec);
 

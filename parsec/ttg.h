@@ -20,13 +20,13 @@
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
 
-extern parsec_execution_unit_t* eu;
-extern parsec_handle_t* handle;
+extern parsec_execution_stream_t* es;
+extern parsec_taskpool_t* taskpool;
 
 static int static_global_function_id = 0;
 
 extern "C" {
-typedef struct my_op_s : public parsec_execution_context_t {
+typedef struct my_op_s : public parsec_task_t {
   void (*function_template_class_ptr)(void*);
   void* object_ptr;
   void (*static_set_arg)(int, int);
@@ -34,22 +34,22 @@ typedef struct my_op_s : public parsec_execution_context_t {
   uint32_t in_data_count;
 } my_op_t;
 
-static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
-                                 parsec_execution_context_t* task);
+static parsec_hook_return_t hook(struct parsec_execution_stream_s* es,
+                                 parsec_task_t* task);
 }
 
-static parsec_hook_return_t do_nothing(parsec_execution_unit_t* eu,
-                                       parsec_execution_context_t* task) {
-  (void)eu;
+static parsec_hook_return_t do_nothing(parsec_execution_stream_t* es,
+                                       parsec_task_t* task) {
+  (void)es;
   (void)task;
   return PARSEC_HOOK_RETURN_DONE;
 }
 
-static parsec_hook_return_t hook(struct parsec_execution_unit_s* eu,
-                                 parsec_execution_context_t* task) {
+static parsec_hook_return_t hook(struct parsec_execution_stream_s* es,
+                                 parsec_task_t* task) {
   my_op_t* me = static_cast<my_op_t*>(task);
   me->function_template_class_ptr(task);
-  (void)eu;
+  (void)es;
   return PARSEC_HOOK_RETURN_DONE;
 }
 
@@ -60,7 +60,7 @@ struct ParsecBaseOp {
  protected:
   static std::map<int, ParsecBaseOp*> function_id_to_instance;
   data_repo_t* input_data;
-  parsec_function_t self;
+  parsec_task_class_t self;
 };
 std::map<int, ParsecBaseOp*> ParsecBaseOp::function_id_to_instance = {};
 
@@ -71,6 +71,8 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
 
  public:
+  void fence() { }
+  
   static constexpr int numins =
       sizeof...(input_valueTs);  // number of input arguments
   static constexpr int numouts =
@@ -103,7 +105,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
   };
 
-  static void static_op(parsec_execution_context_t* my_task) {
+  static void static_op(parsec_task_t* my_task) {
     my_op_t* task = static_cast<my_op_t*>(my_task);
     /*
               struct data_repo_entry_s     *data_repo;
@@ -117,7 +119,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
             obj->output_terminals);
   }
 
-  static void static_op_noarg(parsec_execution_context_t* my_task) {
+  static void static_op_noarg(parsec_task_t* my_task) {
     my_op_t* task = static_cast<my_op_t*>(my_task);
     /*
               struct data_repo_entry_s     *data_repo;
@@ -132,9 +134,8 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   cacheT cache;
 
   // Used to set the i'th argument
-  template <std::size_t i>
-  void set_arg(const keyT& key, const typename std::tuple_element<
-                                    i, input_values_tuple_type>::type& value) {
+  template <std::size_t i, typename T>
+  void set_arg(const keyT& key, T&& value) {
     using valueT =
         typename std::tuple_element<i, input_values_tuple_type>::type;
 
@@ -143,7 +144,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
                 << std::endl;
 
     data_repo_entry_t* e =
-        data_repo_lookup_entry_and_create(eu, input_data, (uint64_t)key);
+        data_repo_lookup_entry_and_create(es, input_data, (uint64_t)key);
     if (e->data[i] != NULL) {
       std::cerr << get_name() << " : " << key
                 << ": error argument is already set : " << i << std::endl;
@@ -161,8 +162,8 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
 
       OBJ_CONSTRUCT(task, parsec_list_item_t);
-      task->function = &this->self;
-      task->parsec_handle = handle;
+      task->task_class = &this->self;
+      task->taskpool = taskpool;
       task->status = PARSEC_TASK_STATUS_HOOK;
 
       task->function_template_class_ptr =
@@ -180,11 +181,11 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       for (int ii = 0; ii < self.dependencies_goal; ii++) {
         task->data[ii].data_in = e->data[ii];
       }
-      data_repo_entry_used_once(eu, input_data, (uint64_t)key);
+      data_repo_entry_used_once(es, input_data, (uint64_t)key);
       if (tracing())
         std::cout << get_name() << " : " << key << ": invoking op "
                   << std::endl;
-      __parsec_schedule(eu, static_cast<parsec_execution_context_t*>(task), 0);
+      __parsec_schedule(es, static_cast<parsec_task_t*>(task), 0);
     }
   }
 
@@ -197,8 +198,8 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     my_op_t* task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
 
     OBJ_CONSTRUCT(task, parsec_list_item_t);
-    task->function = &this->self;
-    task->parsec_handle = handle;
+    task->task_class = &this->self;
+    task->taskpool = taskpool;
     task->status = PARSEC_TASK_STATUS_HOOK;
 
     task->function_template_class_ptr =
@@ -206,7 +207,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     task->object_ptr = static_cast<derivedT*>(this);
     task->key = key;
     task->data[0].data_in = static_cast<parsec_data_copy_t*>(NULL);
-    __parsec_schedule(eu, task, 0);
+    __parsec_schedule(es, task, 0);
   }
 
   // Used by invoke to set all arguments associated with a task
@@ -234,14 +235,19 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   // Registers the callback for the i'th input terminal
   template <typename terminalT, std::size_t i>
   void register_input_callback(terminalT& input) {
-    using callbackT =
-        std::function<void(const typename terminalT::key_type&,
-                           const typename terminalT::value_type&)>;
-    auto callback = [this](const typename terminalT::key_type& key,
-                           const typename terminalT::value_type& value) {
-      set_arg<i>(key, value);
-    };
-    input.set_callback(callbackT(callback));
+      using valueT = typename terminalT::value_type;
+      using move_callbackT = std::function<void(const keyT&, valueT&&)>;
+      using send_callbackT = std::function<void(const keyT&, const valueT&)>;
+      auto move_callback = [this](const keyT& key, valueT&& value) {
+          //std::cout << "move_callback\n";
+          set_arg<i, valueT>(key, std::forward<typename terminalT::value_type>(value));
+      };
+      auto send_callback = [this](const keyT& key, const valueT& value) {
+          //std::cout << "send_callback\n";
+          set_arg<i, const valueT&>(key, value);
+      };
+      
+      input.set_callback(send_callbackT(send_callback),move_callbackT(move_callback));
   }
 
   template <std::size_t... IS>
@@ -290,15 +296,15 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
 
     int i;
 
-    memset(&self, 0, sizeof(parsec_function_t));
+    memset(&self, 0, sizeof(parsec_task_class_t));
 
     self.name = name.c_str();
-    self.function_id = static_global_function_id++;
+    self.task_class_id = static_global_function_id++;
     self.nb_parameters = 0;
     self.nb_locals = 0;
     self.nb_flows = std::max((int)numins, (int)numouts);
 
-    function_id_to_instance[self.function_id] = this;
+    function_id_to_instance[self.task_class_id] = this;
 
     self.incarnations = (__parsec_chore_t*)malloc(2 * sizeof(__parsec_chore_t));
     ((__parsec_chore_t*)self.incarnations)[0].type = PARSEC_DEV_CPU;
@@ -381,15 +387,15 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   // Returns reference to input terminal i to facilitate connection --- terminal
   // cannot be copied, moved or assigned
   template <std::size_t i>
-  typename std::tuple_element<i, input_terminals_type>::type& in() {
-    return std::get<i>(input_terminals);
+  typename std::tuple_element<i, input_terminals_type>::type* in() {
+    return &std::get<i>(input_terminals);
   }
 
   // Returns reference to output terminal for purpose of connection --- terminal
   // cannot be copied, moved or assigned
   template <std::size_t i>
-  typename std::tuple_element<i, output_terminalsT>::type& out() {
-    return std::get<i>(output_terminals);
+  typename std::tuple_element<i, output_terminalsT>::type* out() {
+    return &std::get<i>(output_terminals);
   }
 
   // Manual injection of a task with all input arguments specified as a tuple
