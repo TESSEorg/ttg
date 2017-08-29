@@ -118,3 +118,7 @@ target_link_libraries(ttg-parsec INTERFACE parsec ${PARSEC_LIBRARIES} ${MPI_LIBR
 # sanity check
 add_executable (ttgtest-parsec parsec/ttg.cc)
 target_link_libraries(ttgtest-parsec LINK_PUBLIC ttg-parsec)
+
+# Harder test
+add_executable (t9-wrap-parsec parsec/t9-wrap-ttg.cc)
+target_link_libraries(t9-wrap-parsec LINK_PUBLIC ttg-parsec)
