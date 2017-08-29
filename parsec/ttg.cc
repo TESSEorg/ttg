@@ -19,7 +19,7 @@ class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>,
       Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, int>;
 
  public:
-  A(const std::string& name) : baseT(name, {"input"}, {"iterate", "result"}) {}
+  A(const std::string& name) : baseT(name, {"input"}, {"result", "iterate"}) {}
 
   A(const typename baseT::input_edges_type& inedges,
     const typename baseT::output_edges_type& outedges, const std::string& name)
@@ -28,7 +28,7 @@ class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>,
   void op(const keyT& key, const std::tuple<int>& t,
           baseT::output_terminals_type& out) {
     int value = std::get<0>(t);
-    // std::cout << "A got value " << value << std::endl;
+    std::cout << "A got value " << value << std::endl;
     if (value >= 100) {
       ::send<0>(key, value, out);
     } else {
@@ -86,12 +86,12 @@ class Everything : public Op<keyT, std::tuple<>, Everything> {
         a("A"),
         consumer("consumer"),
         ctx(context) {
-    producer.out<0>()->connect(a.in<0>());
-    a.out<0>()->connect(a.in<0>());
-    a.out<1>()->connect(consumer.in<0>());
+      connect<0,0>(&producer, &a);
+      connect<0,0>(&a, &consumer);
+      connect<1,0>(&a, &a);
 
-    Verify()(&producer);
-    // ctx->fence();
+      Verify()(&producer);
+      // ctx->fence();
   }
 
   void print() { Print()(&producer); }
@@ -248,7 +248,7 @@ int main(int argc, char** argv) {
     taskpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
     es = parsec->virtual_processes[0]->execution_streams[0];
 
-  OpBase::set_trace_all(false);
+  OpBase::set_trace_all(true);
 
   // First compose with manual classes and connections
   Everything x(parsec);
