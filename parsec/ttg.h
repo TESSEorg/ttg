@@ -157,7 +157,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     e->data[i] = copy;
 
     my_op_t* task;
-    if (NULL == (task = static_cast<my_op_t*>(e->ttg_task))) {
+    if (NULL == (task = static_cast<my_op_t*>(e->generator))) {
       task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
 
       OBJ_CONSTRUCT(task, parsec_list_item_t);
@@ -170,9 +170,9 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       task->object_ptr = static_cast<derivedT*>(this);
       task->key = key.hash();
 
-      if (!parsec_atomic_cas_ptr(&e->ttg_task, NULL, task)) {
+      if (!parsec_atomic_cas_ptr(&e->generator, NULL, task)) {
         free(task);
-        task = static_cast<my_op_t*>(e->ttg_task);
+        task = static_cast<my_op_t*>(e->generator);
       }
     }
     int count = parsec_atomic_inc_32b(&task->in_data_count);
