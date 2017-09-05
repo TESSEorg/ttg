@@ -185,6 +185,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       }
     }
     int count = parsec_atomic_inc_32b(&task->in_data_count);
+
     if (count == self.dependencies_goal) {
       for (int ii = 0; ii < self.dependencies_goal; ii++) {
         task->data[ii].data_in = e->data[ii];
@@ -354,7 +355,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     *((parsec_flow_t**)&(self.out[i])) = NULL;
 
     self.flags = 0;
-    self.dependencies_goal = (~(uint32_t)0) >> (32 - numins);
+    self.dependencies_goal = numins; /* (~(uint32_t)0) >> (32 - numins); */
 
     input_data = data_repo_create_nothreadsafe(4096, numins);
   }
