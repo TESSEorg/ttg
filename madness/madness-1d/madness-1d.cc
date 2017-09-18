@@ -152,12 +152,11 @@ void init_twoscale(int k) {
 	for (int i = 0; i < 2 * k; ++i) {
 		for (int j = 0; j < 2 * k; ++j) {
 			hg->set_item(i, j, hgInput[i][j]);
-
 			hgT->set_item(i, j, hgInput[j][i]);
 
 		}
 	}
-
+	
 	for (int i = 0; i < 2 * k; ++i) {
 		for (int j = 0; j < k; ++j) {
 			hg0->set_item(i, j, hgInput[i][j]);
@@ -183,16 +182,8 @@ void init_quadrature(int order) {
 	for (int i = 0; i < npt; ++i) {
 		double * p = phi((*quad_x)[i], k);
 		for (int m = 0; m < k; ++m) {
-			// ((*quad_phi)[i])[m] = p[m];
-			//quad_phi->get_item(i, m) = p[m];
 			quad_phi->set_item(i, m, p[m]);
-
-			// ((*quad_phiT)[m])[i] = p[m];
-			//quad_phiT->get_item(m, i) = p[m];
 			quad_phiT->set_item(m, i, p[m]);
-
-			// ((*quad_phiw)[i])[m] = w[i] * p[m];
-			//quad_phiw->get_item(i, m) = w[i] * p[m];
 			quad_phiw->set_item(i, m, w[i] * p[m]);
 		}
 	}
@@ -217,9 +208,7 @@ void make_dc_periodic() {
 			}
 
 	                r0->set_item(i, j, 0.5 * (1.0 - iphase * jphase - 2.0 * Kij) * gammaij);
-	                
 			rm->set_item(i, j, 0.5 * jphase * gammaij);
-
 			rp->set_item(i, j, -0.5 * iphase * gammaij);
 
 	               jphase = -1 * jphase;
@@ -1422,13 +1411,13 @@ int main(int argc, char** argv) {
     } */
 
    // SECOND EXAMPLE
-   /* {
+   {
       Everything_cnc x;
-      x.print();
-      std::cout << x.dot() << std::endl;
+      //x.print();
+      //std::cout << x.dot() << std::endl;
       x.start();
-      x.wait();
-   } */
+      x.fence();
+   }
 
    // THIRD EXAMPLE
    /* {
@@ -1440,23 +1429,23 @@ int main(int argc, char** argv) {
    } */
 
    // FORTH EXAMPLE
-   /* {
+   /*{
       Everything_diff_test x; // previously it was Everything_diff x;
       x.print();
       std::cout << x.dot() << std::endl;
       x.start();
-      x.wait();
-   } */
+      x.fence();
+   }*/
 
    // FIFTH EXAMPLE
-    {
+    /* {
       Everything_gaxpy_test x; // previously it was Everything_diff x;
-      x.print();
-      std::cout << x.dot() << std::endl;
+      //x.print();
+      //std::cout << x.dot() << std::endl;
       x.start();
       //x.wait();
       x.fence();
-   }
+   } */
 
    // SIXTH EXAMPLE
    /* {

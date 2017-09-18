@@ -32,14 +32,10 @@ public:
 		row_size = n;
 		col_size = m;
 		data.resize(row_size * col_size);
-		// data = new Vector*[row_size];
 
 		for (unsigned int i = 0; i < row_size; ++i) {
-			// data[i] = new Vector(col_size);
 			for (unsigned int j = 0; j < col_size; ++j) {
-				// data[i][j] = inputData[i][j];
-				//data.push_back(inputData[i][j]);
-				data[i * row_size + j] = inputData[i][j];
+				data[i * col_size + j] = inputData[i][j];
 			}
 		}
 	}
@@ -53,38 +49,25 @@ public:
 	   return col_size;
 	}
 
+	const unsigned int get_size() const {
+		return row_size * col_size;
+	}
+
 	/* non-modifiable __getitem__ */
 	double get_item(unsigned int index_row, unsigned int index_column) const {
-		// return data[index_row] -> et_item(index_column);
-		if (index_row < 0 || index_row >= row_size)
-			cout << "Matrix::get_item:: the row index is either less than 0 or greater/equal to size" << endl;
 
-		if (index_column < 0 || index_column >= col_size)
-			cout << "Matrix::get_item:: the column index is either less than 0 or greater/equal to size" << endl;
-
-		return data[index_row * row_size + index_column];
+		return data.at(index_row * col_size + index_column);
 	}
  
 	double & get_item(unsigned int index_row, unsigned int index_column) {
-		
-		if (index_row < 0 || index_row >= row_size)
-			cout << "Matrix::get_item:: the row index is either less than 0 or greater/equal to size" << endl;
 
-		if (index_column < 0 || index_column >= col_size)
-			cout << "Matrix::get_item:: the column index is either less than 0 or greater/equal to size" << endl;
-
-		return data[index_row * row_size + index_column];
+		return data.at(index_row * col_size + index_column);
 	}
 
 
         void set_item(const unsigned int index_row, const unsigned int index_col, const double value) {
-		if (index_row < 0 || index_row >= row_size)
-	        	cout << "Matrix::get_item:: the row index is either less than 0 or greater/equal to size" << endl;
-
-	        if (index_col < 0 || index_col >= col_size)
-        	        cout << "Matrix::get_item:: the column index is either less than 0 or greater/equal to size" << endl;
-
-		data[index_row * row_size + index_col] = value;
+	
+		data.at(index_row * col_size + index_col) = value;
 	}
 
 	/* __str__ */
@@ -93,7 +76,7 @@ public:
 		for (unsigned int i = 0; i < row_size; ++i) {
 			for (unsigned int j = 0; j < col_size; ++j) {
 				 //cout << setw(12) << setprecision(6) << fixed << 
-				 cout << j << " = " << data[i * row_size +  j] << " ";
+				 cout << j << " = " << data[i * col_size +  j] << " ";
 			}
 			cout << endl;
 		}
@@ -111,12 +94,9 @@ public:
 
 		data.reserve(row_size * col_size);
 
-		// data = new Vector*[row_size];
 		for (unsigned int i = 0; i < row_size; ++i) {
-			// data[i] = new Vector(col_size);
 			for (unsigned int j = 0; j < col_size; ++j) {
-				//data.push_back(m2.data[i * row_size + j]);
-				data[i * row_size + j] = m2.data[i * row_size + j];
+				data[i * col_size + j] = m2.data[i * col_size + j];
 			}
 		}
 
