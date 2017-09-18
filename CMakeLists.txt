@@ -79,6 +79,10 @@ target_link_libraries(ttg-mad INTERFACE MADworld ${MADNESS_DISABLEPIE_LINKER_FLA
 add_executable (ttgtest-mad madness/ttg.cc)
 target_link_libraries(ttgtest-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
+# madness-1d example
+add_executable(madness-1d madness/madness-1d/madness-1d.cc)
+target_link_libraries(madness-1d LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
 # T9 example
 add_executable (t9-wrap-mad madness/t9-wrap-ttg.cc)
 target_link_libraries(t9-wrap-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})

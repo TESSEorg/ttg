@@ -116,7 +116,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     derivedT* derived;                // Pointer to derived class instance
     keyT key;                         // Task key
 
-    OpArgs() : counter(numins), argset(), t() {}
+    OpArgs() : counter(numins), argset(), t() { std::fill(argset.begin(), argset.end(), false); }
 
     void run() { derived->op(key, t, derived->output_terminals); }
 
