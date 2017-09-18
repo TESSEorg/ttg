@@ -9,7 +9,7 @@
 // Same as t9.cc but using TTG wrapper templates
 
 const double L = 10.0;       // The computational domain is [-L,L]
-const double thresh = 1e-6;  // The threshold for small difference coefficients
+const double thresh = 1e-5;  // The threshold for small difference coefficients
 
 void error(const char* s) {
   std::cerr << s << std::endl;
@@ -327,7 +327,7 @@ int main(int argc, char** argv) {
     taskpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
     es = parsec->virtual_processes[0]->execution_streams[0];
 
-  OpBase::set_trace_all(true);
+    OpBase::set_trace_all(false);
 
   ctlEdge ctl("start ctl");
   nodeEdge a("a"), b("b"), c("c"), abc("abc"), diffa("diffa"), errdiff("errdiff"), errabc("errabc"), a_plus_b("a+b"),

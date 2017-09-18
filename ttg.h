@@ -127,6 +127,7 @@ namespace ttg {
   /// etc.)
   class OpBase {
    private:
+    uint64_t instance_id; //< Unique ID for object
     static bool trace;  //< If true prints trace of all assignments and all op invocations
 
     std::string name;
@@ -138,7 +139,11 @@ namespace ttg {
     OpBase* containing_composite_op;  //< If part of a composite, points to composite operator
 
     // Default copy/move/assign all OK
-
+    static uint64_t next_instance_id() {
+        static uint64_t id = 0;
+        return id++;
+    }
+    
    protected:
     void set_input(size_t i, TerminalBase* t) {
       if (i >= inputs.size()) throw("out of range i setting input");
@@ -195,13 +200,16 @@ namespace ttg {
 
    public:
     OpBase(const std::string& name, size_t numins, size_t numouts)
-        : name(name)
+        : instance_id(next_instance_id())
+        , name(name)
         , inputs(numins)
         , outputs(numouts)
         , trace_instance(false)
         , is_composite(false)
         , is_within_composite(false)
-        , containing_composite_op(0) {}
+        , containing_composite_op(0) {
+        std::cout << name << "@" << (void*)this << " -> " << instance_id << std::endl;
+    }
 
     /// Sets trace for all operations to value and returns previous setting
     static bool set_trace_all(bool value) {
@@ -262,6 +270,10 @@ namespace ttg {
     template <std::size_t i>
     TerminalBase* out() {
       return out(i);
+    }
+
+    uint64_t get_instance_id() const {
+        return instance_id;
     }
 
     /// Waits for the entire TTG associated with this op to be completed (collective)

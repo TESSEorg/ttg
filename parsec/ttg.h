@@ -19,19 +19,19 @@
 #include <parsec/devices/device.h>
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
+#include <stdlib.h>
 
 extern parsec_execution_stream_t* es;
 extern parsec_taskpool_t* taskpool;
 
-static int static_global_function_id = 0;
-
 extern "C" {
 typedef struct my_op_s : public parsec_task_t {
-  void (*function_template_class_ptr)(void*);
-  void* object_ptr;
-  void (*static_set_arg)(int, int);
-  uint64_t key;
-  uint32_t in_data_count;
+    uint32_t in_data_count;
+    void (*function_template_class_ptr)(void*);
+    void *object_ptr;
+    void (*static_set_arg)(int, int);
+    uint64_t key;
+    uint64_t user_tuple __attribute__ ((aligned (32)));
 } my_op_t;
 
 static parsec_hook_return_t hook(struct parsec_execution_stream_s* es,
@@ -42,6 +42,16 @@ static parsec_hook_return_t do_nothing(parsec_execution_stream_t* es,
                                        parsec_task_t* task) {
   (void)es;
   (void)task;
+  return PARSEC_HOOK_RETURN_DONE;
+}
+
+static parsec_hook_return_t count_down_task(parsec_execution_stream_t* es,
+                                            parsec_task_t* task) {
+  (void)es;
+  (void)task;
+  uint32_t b = taskpool->nb_tasks;
+  uint32_t r = parsec_atomic_add_32b((volatile uint32_t*)&taskpool->nb_tasks, -1);
+  printf("%d < %d\n", b, r);
   return PARSEC_HOOK_RETURN_DONE;
 }
 
@@ -66,11 +76,11 @@ namespace ttg {
 
 struct ParsecBaseOp {
  protected:
-  static std::map<int, ParsecBaseOp*> function_id_to_instance;
+    //  static std::map<int, ParsecBaseOp*> function_id_to_instance;
   data_repo_t* input_data;
   parsec_task_class_t self;
 };
-std::map<int, ParsecBaseOp*> ParsecBaseOp::function_id_to_instance = {};
+//std::map<int, ParsecBaseOp*> ParsecBaseOp::function_id_to_instance = {};
 
 template <typename keyT, typename output_terminalsT, typename derivedT,
           typename... input_valueTs>
@@ -79,7 +89,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
 
  public:
-  void fence() { }
+    void fence() { printf("Fence called\n"); parsec_atomic_add_32b((volatile uint32_t*)&taskpool->nb_tasks, -1); }
   
   static constexpr int numins =
       sizeof...(input_valueTs);  // number of input arguments
@@ -112,7 +122,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
 
     virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
   };
-
+  
   static void static_op(parsec_task_t* my_task) {
     my_op_t* task = static_cast<my_op_t*>(my_task);
     /*
@@ -121,9 +131,13 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
               struct parsec_data_copy_s    *data_out;
     */
     derivedT* obj = (derivedT*)task->object_ptr;
+    if (obj->tracing())
+        std::cout << "Executing Object " << ((int)task->task_class->task_class_id) << " " << keyT(task->key) << std::endl;
     obj->op(keyT(task->key),
-            static_cast<input_values_tuple_type &&>(*static_cast<input_values_tuple_type*>(task->data[0].data_in->device_private)),
+            static_cast<input_values_tuple_type &&>(*static_cast<input_values_tuple_type*>((void*)&task->user_tuple)),
             obj->output_terminals);
+    if (obj->tracing())
+        std::cout << "Done Executing Object " << ((int)task->task_class->task_class_id) << ", Key " << keyT(task->key) << std::endl;
   }
 
   static void static_op_noarg(parsec_task_t* my_task) {
@@ -159,31 +173,37 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       throw "bad set arg";
     }
 
-    parsec_data_copy_t* copy = OBJ_NEW(parsec_data_copy_t);
-    valueT* valueCopy = std::allocator<valueT>().allocate(1);
-    auto copy_r = new (valueCopy) valueT(value);
-    copy->device_private = (void*)valueCopy;
-    e->data[i] = copy;
-
     my_op_t* task;
     if (NULL == (task = static_cast<my_op_t*>(e->generator))) {
-      task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
+        posix_memalign((void**)&task, 32, sizeof(my_op_t)+sizeof(input_values_tuple_type));
+        memset((void*)task, 0, sizeof(my_op_t));
 
-      OBJ_CONSTRUCT(task, parsec_list_item_t);
-      task->task_class = &this->self;
-      task->taskpool = taskpool;
-      task->status = PARSEC_TASK_STATUS_HOOK;
+        OBJ_CONSTRUCT(task, parsec_list_item_t);
+        task->task_class = &this->self;
+        task->taskpool = taskpool;
+        task->status = PARSEC_TASK_STATUS_HOOK;
 
-      task->function_template_class_ptr =
-          reinterpret_cast<void (*)(void*)>(&Op::static_op);
-      task->object_ptr = static_cast<derivedT*>(this);
-      task->key = unique_hash<uint64_t>(key);
+        task->function_template_class_ptr =
+            reinterpret_cast<void (*)(void*)>(&Op::static_op);
+        task->object_ptr = static_cast<derivedT*>(this);
+        task->key = unique_hash<uint64_t>(key);
 
-      if (!parsec_atomic_cas_ptr(&e->generator, NULL, task)) {
-        free(task);
-        task = static_cast<my_op_t*>(e->generator);
-      }
+        if (!parsec_atomic_cas_ptr(&e->generator, NULL, task)) {
+            free(task);
+            task = static_cast<my_op_t*>(e->generator);
+        } else {
+            uint32_t b = taskpool->nb_tasks;
+            uint32_t r = parsec_atomic_add_32b((volatile uint32_t*)&taskpool->nb_tasks, 1);
+            printf("%d > %d\n", b, r);
+        }
     }
+    
+    input_values_tuple_type *tuple = static_cast<input_values_tuple_type *>((void*)&task->user_tuple);
+    auto copy_r = new (&std::get<i>(*tuple)) valueT(std::forward<T>(value));
+    parsec_data_copy_t* copy = OBJ_NEW(parsec_data_copy_t);
+    e->data[i] = copy;
+    copy->device_private = (void*)(&std::get<i>(*tuple));
+    
     int count = parsec_atomic_inc_32b(&task->in_data_count);
 
     if (count == self.dependencies_goal) {
@@ -309,13 +329,13 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
 
     memset(&self, 0, sizeof(parsec_task_class_t));
 
-    self.name = name.c_str();
-    self.task_class_id = static_global_function_id++;
+    self.name = get_name().c_str();
+    self.task_class_id = get_instance_id();
     self.nb_parameters = 0;
     self.nb_locals = 0;
     self.nb_flows = std::max((int)numins, (int)numouts);
 
-    function_id_to_instance[self.task_class_id] = this;
+    //    function_id_to_instance[self.task_class_id] = this;
 
     self.incarnations = (__parsec_chore_t*)malloc(2 * sizeof(__parsec_chore_t));
     ((__parsec_chore_t*)self.incarnations)[0].type = PARSEC_DEV_CPU;
@@ -326,6 +346,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     ((__parsec_chore_t*)self.incarnations)[1].hook = NULL;
 
     self.release_task = do_nothing;
+    self.complete_execution = count_down_task;
 
     for (i = 0; i < numins; i++) {
       parsec_flow_t* flow = new parsec_flow_t;

@@ -11,7 +11,7 @@
 using namespace parsec::ttg;
 using namespace ::ttg;
 
-using keyT = double;
+using keyT = uint64_t;
 
 class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>,
                        A, int> {
