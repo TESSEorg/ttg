@@ -46,20 +46,22 @@ void test_serialization(const T& t)
 
   // The rest could be in C ... deliberately use printf below rather than C++ streamio
   void* vt = (void*) &t;
-  printf("%s header_size=%llu, payload_size=%llu\n", d->name, d->header_size(vt), d->payload_size(vt));
+  //printf("%s header_size=%llu, payload_size=%llu\n", d->name, d->header_size(vt), d->payload_size(vt));
 
   // Serialize into a buffer
   char buf[256];
   void* buf_ptr = (void*) buf;
-  d->pack_header(vt, d->header_size(vt), &buf_ptr);
+  d->pack_header(vt, 0, &buf_ptr);
   uint64_t size_of_t = sizeof(T);
-  d->pack_payload(vt, &size_of_t, 0, (void *) buf);
+  d->pack_payload(vt, &size_of_t, 0, &buf_ptr);
+  printf("serialized ");
+  d->print(vt);
 
   T g_obj;
   void* g = (void*)&g_obj;
-  d->unpack_header(g, d->header_size(g), buf);
-  d->unpack_payload(g, sizeof(T), 0, (void*) buf);
-  printf("deserialize ");
+  d->unpack_header(g, 0, (const void*) buf);
+  d->unpack_payload(g, sizeof(T), 0, (const void*) buf);
+  printf("deserialized ");
   d->print(g);
 }
 

@@ -884,14 +884,12 @@ namespace ttg {
 // backend-specific implementations may be available in backend/serialization.h .
 extern "C" struct ttg_data_descriptor {
   const char* name;
-  uint64_t (*payload_size)(const void*);
-  uint64_t (*header_size)(const void*);
-  void (*get_info)(const void* t, uint64_t* hs, uint64_t* ps, int* is_contiguous_mask, void** ptr);
-  void (*pack_header)(const void* t, uint64_t header_size, void**ptr);
-  void (*pack_payload)(const void* t, uint64_t* chunk_size, uint64_t pos, void* ptr);
-  void (*unpack_header)(void* t, uint64_t header_size, const void* header);
-  void (*unpack_payload)(void* t, uint64_t chunk_size, uint64_t pos, void* ptr);
-  void (*print)(const void* t);
+  void (*get_info)(const void* object, uint64_t* hs, uint64_t* ps, int* is_contiguous_mask, void ** buf);
+  void (*pack_header)(const void* object, uint64_t header_size, void** buf);
+  void (*pack_payload)(const void* object, uint64_t* chunk_size, uint64_t pos, void** buf);
+  void (*unpack_header)(void* object, uint64_t header_size, const void* buf);
+  void (*unpack_payload)(void* object, uint64_t chunk_size, uint64_t pos, const void* buf);
+  void (*print)(const void* object);
 };
 
 namespace ttg {
