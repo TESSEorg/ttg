@@ -126,3 +126,9 @@ target_link_libraries(ttgtest-parsec LINK_PUBLIC ttg-parsec)
 # Harder test
 add_executable (t9-wrap-parsec parsec/t9-wrap-ttg.cc)
 target_link_libraries(t9-wrap-parsec LINK_PUBLIC ttg-parsec)
+
+# sparse matmul
+if (EIGEN3_FOUND)
+  add_executable (spmm-parsec parsec/spmm.cc)
+  target_link_libraries(spmm-parsec LINK_PUBLIC ttg-parsec eigen3)
+endif()

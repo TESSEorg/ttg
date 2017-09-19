@@ -16,10 +16,14 @@
 #endif
 #endif
 
-#include "madness/ttg.h"
+#include "parsec/ttg.h"
 
-using namespace madness;
-using namespace madness::ttg;
+#include "parsec.h"
+#include <mpi.h>
+#include <parsec/execution_stream.h>
+
+using namespace parsec;
+using namespace parsec::ttg;
 using namespace ::ttg;
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
@@ -29,85 +33,7 @@ using blk_t = double;
 #endif
 using SpMatrix = Eigen::SparseMatrix<blk_t>;
 
-/////////////////////////////////////////////
-// additional ops are needed to make Eigen::SparseMatrix<btas::Tensor> possible
-#ifdef BTAS_IS_USABLE
-namespace madness {
-  namespace archive {
-
-    template <class Archive, typename T>
-    struct ArchiveLoadImpl<Archive, btas::varray<T>> {
-      static inline void load(const Archive& ar, btas::varray<T>& x) {
-        typename btas::varray<T>::size_type n;
-        ar& n;
-        x.resize(n);
-        for (auto& xi : x) ar& xi;
-      }
-    };
-
-    template <class Archive, typename T>
-    struct ArchiveStoreImpl<Archive, btas::varray<T>> {
-      static inline void store(const Archive& ar, const btas::varray<T>& x) {
-        ar& x.size();
-        for (const auto& xi : x) ar& xi;
-      }
-    };
-
-    template <class Archive, typename T>
-    struct ArchiveLoadImpl<Archive, btas::DEFAULT::index<T>> {
-      static inline void load(const Archive& ar, btas::DEFAULT::index<T>& x) {
-        typename btas::DEFAULT::index<T>::size_type n;
-        ar& n;
-        x.resize(n);
-        for (auto& xi : x) ar& xi;
-      }
-    };
-
-    template <class Archive, typename T>
-    struct ArchiveStoreImpl<Archive, btas::DEFAULT::index<T>> {
-      static inline void store(const Archive& ar, const btas::DEFAULT::index<T>& x) {
-        ar& x.size();
-        for (const auto& xi : x) ar& xi;
-      }
-    };
-
-    template <class Archive, CBLAS_ORDER _Order, typename _Index, typename _Ordinal>
-    struct ArchiveLoadImpl<Archive, btas::RangeNd<_Order, _Index, _Ordinal>> {
-      static inline void load(const Archive& ar, btas::RangeNd<_Order, _Index, _Ordinal>& r) {
-        _Index lobound, upbound;
-        typename btas::RangeNd<_Order, _Index, _Ordinal>::extent_type stride;
-        ar& lobound& upbound& stride;
-        r = btas::RangeNd<_Order, _Index, _Ordinal>(std::move(lobound), std::move(upbound), std::move(stride));
-      }
-    };
-
-    template <class Archive, CBLAS_ORDER _Order, typename _Index, typename _Ordinal>
-    struct ArchiveStoreImpl<Archive, btas::RangeNd<_Order, _Index, _Ordinal>> {
-      static inline void store(const Archive& ar, const btas::RangeNd<_Order, _Index, _Ordinal>& r) {
-        ar& r.lobound() & r.upbound() & r.stride();
-      }
-    };
-
-    template <class Archive, typename _T, class _Range, class _Store>
-    struct ArchiveLoadImpl<Archive, btas::Tensor<_T, _Range, _Store>> {
-      static inline void load(const Archive& ar, btas::Tensor<_T, _Range, _Store>& t) {
-        _Range range;
-        _Store storage;
-        ar& range& storage;
-        t = btas::Tensor<_T, _Range, _Store>(std::move(range), std::move(storage));
-      }
-    };
-
-    template <class Archive, typename _T, class _Range, class _Store>
-    struct ArchiveStoreImpl<Archive, btas::Tensor<_T, _Range, _Store>> {
-      static inline void store(const Archive& ar, const btas::Tensor<_T, _Range, _Store>& t) {
-        ar& t.range() & t.storage();
-      }
-    };
-
-  }  // namespace archive
-}  // namespace madness
-
+#if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 namespace btas {
   template <typename _T, class _Range, class _Store>
   inline btas::Tensor<_T, _Range, _Store> operator*(const btas::Tensor<_T, _Range, _Store>& A,
@@ -141,22 +67,38 @@ struct colmajor_layout<_Scalar, Eigen::RowMajor, _StorageIndex> : public std::fa
 
 template <std::size_t Rank>
 struct Key : public std::array<long, Rank> {
-  static constexpr const long max_key = 1 << 20;
+  static constexpr const long max_index_width = 21;
+  static constexpr const long max_index = 1 << 21;
+  static constexpr const long max_index_square = max_index * max_index;
   Key() = default;
   template <typename Integer>
   Key(std::initializer_list<Integer> ilist) {
     std::copy(ilist.begin(), ilist.end(), this->begin());
+    assert(valid());
   }
-  template <typename Archive>
-  void serialize(Archive& ar) {
-    ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
+  Key(uint64_t hash) {
+    static_assert(Rank == 2 || Rank == 3, "Key<Rank>::Key(hash) only implemented for Rank={2,3}");
+    if (Rank == 2) {
+      (*this)[0] = hash / max_index;
+      (*this)[1] = hash % max_index;
+    }
+    else if (Rank == 3) {
+      (*this)[0] = hash / max_index_square;
+      (*this)[1] = (hash % max_index_square) / max_index;
+      (*this)[2] = hash % max_index;
+    }
   }
-  madness::hashT hash() const {
+  int64_t hash() const {
     static_assert(Rank == 2 || Rank == 3, "Key<Rank>::hash only implemented for Rank={2,3}");
-    // return Rank == 2 ? (*this)[0] * max_key + (*this)[1] : ((*this)[0] * max_key + (*this)[1]) * max_key +
-    // (*this)[2];
-    // will hash ijk same as ij so that contributions from every k to C[i][j] will be computed where C[i][j] resides
-    return (*this)[0] * max_key + (*this)[1];
+    return Rank == 2 ? (*this)[0] * max_index + (*this)[1] : ((*this)[0] * max_index + (*this)[1]) * max_index + (*this)[2];
+  }
+ private:
+  bool valid() {
+    bool result = true;
+    for(auto& idx: *this) {
+      result = result && (idx < max_index);
+    }
+    return result;
   }
 };
 
@@ -168,13 +110,19 @@ std::ostream& operator<<(std::ostream& os, const Key<Rank>& key) {
   return os;
 }
 
-// inputs and result matrices reside on node 0 to allow easy testing
-template <typename Key>
-class Process0Pmap : public WorldDCPmapInterface<Key> {
- public:
-  Process0Pmap() = default;
-  ProcessID owner(const Key&) const override { return 0; }
-};
+namespace ttg {
+namespace overload {
+template<> uint64_t unique_hash<uint64_t, Key<2u>>(const Key<2u>& key) {
+  return key.hash();
+}
+template<> uint64_t unique_hash<uint64_t, Key<3u>>(const Key<3u>& key) {
+  return key.hash();
+}
+template<> uint64_t unique_hash<uint64_t, int>(const int& i) {
+  return static_cast<uint64_t>(i);
+}
+}
+}
 
 // flow data from existing data structure
 class Read_SpMatrix : public Op<int, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatrix, int> {
@@ -182,8 +130,7 @@ class Read_SpMatrix : public Op<int, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatr
   using baseT = Op<int, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatrix, int>;
 
   Read_SpMatrix(const char* label, const SpMatrix& matrix, Edge<int, int>& ctl, Edge<Key<2>, blk_t>& out)
-      : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
-              std::make_shared<Process0Pmap<int>>())
+      : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"})
       , matrix_(matrix) {}
 
   void op(const int& key, const std::tuple<int>& junk, std::tuple<Out<Key<2>, blk_t>>& out) {
@@ -204,7 +151,7 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t> {
   using baseT = Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t>;
 
   Write_SpMatrix(SpMatrix& matrix, Edge<Key<2>, blk_t>& in)
-      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, std::make_shared<Process0Pmap<Key<2>>>())
+      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {})
       , matrix_(matrix) {}
 
   void op(const Key<2>& key, const std::tuple<blk_t>& elem, std::tuple<>&) {
@@ -218,10 +165,11 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t> {
 // sparse mm
 class SpMM {
  public:
-  SpMM(World& world, Edge<Key<2>, blk_t>& a, Edge<Key<2>, blk_t>& b, Edge<Key<2>, blk_t>& c, const SpMatrix& a_mat,
+  SpMM(Edge<Key<2>, blk_t>& a, Edge<Key<2>, blk_t>& b, Edge<Key<2>, blk_t>& c, const SpMatrix& a_mat,
        const SpMatrix& b_mat)
-      : world_(world)
-      , a_(a)
+      :
+//      world_(world),
+      a_(a)
       , b_(b)
       , c_(c)
       , a_ijk_()
@@ -232,11 +180,11 @@ class SpMM {
       , a_colidx_to_rowidx_(make_colidx_to_rowidx(a_mat))
       , b_rowidx_to_colidx_(make_rowidx_to_colidx(b_mat)) {
     // data is on rank 0, broadcast metadata from there
-    ProcessID root = 0;
-    world_.gop.broadcast_serializable(a_rowidx_to_colidx_, root);
-    world_.gop.broadcast_serializable(b_rowidx_to_colidx_, root);
-    world_.gop.broadcast_serializable(a_colidx_to_rowidx_, root);
-    world_.gop.broadcast_serializable(b_colidx_to_rowidx_, root);
+//    ProcessID root = 0;
+//    world_.gop.broadcast_serializable(a_rowidx_to_colidx_, root);
+//    world_.gop.broadcast_serializable(b_rowidx_to_colidx_, root);
+//    world_.gop.broadcast_serializable(a_colidx_to_rowidx_, root);
+//    world_.gop.broadcast_serializable(b_colidx_to_rowidx_, root);
 
     bcast_a_ = std::make_unique<BcastA>(a, a_ijk_, b_rowidx_to_colidx_);
     bcast_b_ = std::make_unique<BcastB>(b, b_ijk_, a_colidx_to_rowidx_);
@@ -249,7 +197,7 @@ class SpMM {
     using baseT = Op<Key<2>, std::tuple<Out<Key<3>, blk_t>>, BcastA, blk_t>;
 
     BcastA(Edge<Key<2>, blk_t>& a, Edge<Key<3>, blk_t>& a_ijk, const std::vector<std::vector<long>>& b_rowidx_to_colidx)
-        : baseT(edges(a), edges(a_ijk), "SpMM::bcast_a", {"a_ik"}, {"a_ijk"}, std::make_shared<Process0Pmap<Key<2>>>())
+        : baseT(edges(a), edges(a_ijk), "SpMM::bcast_a", {"a_ik"}, {"a_ijk"})
         , b_rowidx_to_colidx_(b_rowidx_to_colidx) {}
 
     void op(const Key<2>& key, const std::tuple<blk_t>& a_ik, std::tuple<Out<Key<3>, blk_t>>& a_ijk) {
@@ -274,7 +222,7 @@ class SpMM {
     using baseT = Op<Key<2>, std::tuple<Out<Key<3>, blk_t>>, BcastB, blk_t>;
 
     BcastB(Edge<Key<2>, blk_t>& b, Edge<Key<3>, blk_t>& b_ijk, const std::vector<std::vector<long>>& a_colidx_to_rowidx)
-        : baseT(edges(b), edges(b_ijk), "SpMM::bcast_b", {"b_kj"}, {"b_ijk"}, std::make_shared<Process0Pmap<Key<2>>>())
+        : baseT(edges(b), edges(b_ijk), "SpMM::bcast_b", {"b_kj"}, {"b_ijk"})
         , a_colidx_to_rowidx_(a_colidx_to_rowidx) {}
 
     void op(const Key<2>& key, const std::tuple<blk_t>& b_kj, std::tuple<Out<Key<3>, blk_t>>& b_ijk) {
@@ -306,8 +254,8 @@ class SpMM {
                 {"c_ij", "c_ijk"})
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
-      auto& pmap = get_pmap();
-      auto& world = get_world();
+//      auto& pmap = get_pmap();
+//      auto& world = get_world();
       // for each i and j that belongs to this node
       // determine first k that contributes, initialize input {i,j,first_k} flow to 0
       for (long i = 0; i != a_rowidx_to_colidx_.size(); ++i) {
@@ -316,8 +264,9 @@ class SpMM {
           if (b_colidx_to_rowidx_[j].empty()) continue;
 
           // assuming here {i,j,k} for all k map to same node
-          ProcessID owner = pmap->owner(Key<3>({i, j, 0l}));
-          if (owner == world.rank()) {
+          //ProcessID owner = pmap->owner(Key<3>({i, j, 0l}));
+          //if (owner == world.rank()) {
+          if (true) {
             long k;
             bool have_k;
             std::tie(k, have_k) = compute_first_k(i, j);
@@ -419,7 +368,6 @@ class SpMM {
   };
 
  private:
-  World& world_;
   Edge<Key<2>, blk_t>& a_;
   Edge<Key<2>, blk_t>& b_;
   Edge<Key<2>, blk_t>& c_;
@@ -469,7 +417,7 @@ class Control : public Op<int, std::tuple<Out<int, int>>, Control> {
 
  public:
   Control(Edge<int, int>& ctl)
-      : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}, std::make_shared<Process0Pmap<int>>()) {}
+      : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}) {}
 
   void op(const int& key, const std::tuple<>&, std::tuple<Out<int, int>>& out) { ::send<0>(0, 0, out); }
 
@@ -509,13 +457,26 @@ std::tuple<double, double> norms(const SpMatrix& A) {
   return std::make_tuple(norm_2_square, norm_inf);
 }
 
+parsec_execution_stream_t* es = NULL;
+parsec_taskpool_t* taskpool = NULL;
+
+extern "C" int parsec_ptg_update_runtime_task(parsec_taskpool_t *tp, int tasks);
+
 int main(int argc, char** argv) {
-  World& world = madness::initialize(argc, argv);
-  set_default_world(world);
-  // uncomment to trace execution
-   OpBase::set_trace_all(true);
-  // if tracing, best to split output by rank to avoid gibberish
-  // redirectio(world, true);
+  int provided;
+  MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  parsec_context_t *parsec = parsec_init(1, NULL, NULL);
+  taskpool = (parsec_taskpool_t*)calloc(1, sizeof(parsec_taskpool_t));
+  taskpool->taskpool_id = 1;
+  taskpool->nb_tasks = 1;
+  taskpool->nb_pending_actions = 1;
+  taskpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
+  es = parsec->virtual_processes[0]->execution_streams[0];
+
+  OpBase::set_trace_all(true);
 
   const int n = 2;
   const int m = 3;
@@ -523,7 +484,7 @@ int main(int argc, char** argv) {
   SpMatrix A(n, k), B(k, m), C(n, m);
 
   // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
-  if (world.rank() == 0) {
+  if (rank == 0) {
     using triplet_t = Eigen::Triplet<blk_t>;
     std::vector<triplet_t> A_elements;
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
@@ -571,17 +532,20 @@ int main(int argc, char** argv) {
   Read_SpMatrix a("A", A, ctl, eA);
   Read_SpMatrix b("B", B, ctl, eB);
   Write_SpMatrix c(C, eC);
-  SpMM a_times_b(world, eA, eB, eC, A, B);
+//  SpMM a_times_b(world, eA, eB, eC, A, B);
+  SpMM a_times_b(eA, eB, eC, A, B);
 
   // ready, go! need only 1 kick, so must be done by 1 thread only
-  if (world.rank() == 0) control.start();
+  if (rank == 0) control.start();
 
-  // no way to check for completion yet, so just wait
-  world.gop.fence();
-  world.gop.fence();
+  parsec_enqueue(parsec, taskpool);
+  int ret = parsec_context_start(parsec);
+  parsec_context_wait(parsec);
+
+  control.fence();
 
   // rank 0 only: validate against the reference output
-  if (world.rank() == 0) {
+  if (rank == 0) {
     SpMatrix Cref = A * B;
 
     double norm_2_square, norm_inf;
@@ -590,7 +554,8 @@ int main(int argc, char** argv) {
     std::cout << "||Cref - C||_\\infty = " << norm_inf << std::endl;
   }
 
-  madness::finalize();
+  parsec_fini(&parsec);
+  MPI_Finalize();
 
   return 0;
 }

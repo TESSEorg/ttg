@@ -5,6 +5,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <sstream>
 #include <string>
@@ -33,6 +34,27 @@ namespace ttg {
   bool tracing() { return detail::trace_accessor(); }
   void trace_on() { detail::trace_accessor() = true; }
   void trace_off() { detail::trace_accessor() = false; }
+
+  namespace detail {
+  inline std::ostream &print_helper(std::ostream &out) {
+    return out;
+  }
+  template<typename T, typename... Ts>
+  inline std::ostream &print_helper(std::ostream &out,
+                                    const T &t, const Ts &... ts) {
+    out << ' ' << t;
+    return print_helper(out, ts...);
+  }
+  }
+
+  template<typename T, typename... Ts>
+  void print(const T& t, const Ts&... ts) {
+    static std::mutex mutex;
+    std::lock_guard<std::mutex> lock(mutex);
+    std::cout << t;
+    detail::print_helper(std::cout, ts...) << std::endl;
+  }
+
 
   class OpBase;  // forward decl
   template <typename keyT, typename valueT>

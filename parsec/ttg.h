@@ -134,7 +134,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     if (obj->tracing())
         std::cout << "Executing Object " << ((int)task->task_class->task_class_id) << " " << keyT(task->key) << std::endl;
     obj->op(keyT(task->key),
-            static_cast<input_values_tuple_type &&>(*static_cast<input_values_tuple_type*>((void*)&task->user_tuple)),
+            std::move(*static_cast<input_values_tuple_type*>((void*)&task->user_tuple)),
             obj->output_terminals);
     if (obj->tracing())
         std::cout << "Done Executing Object " << ((int)task->task_class->task_class_id) << ", Key " << keyT(task->key) << std::endl;
