@@ -45,12 +45,15 @@ namespace ttg {
     out << ' ' << t;
     return print_helper(out, ts...);
   }
+  std::mutex& print_mutex_accessor() {
+    static std::mutex mutex;
+    return mutex;
   }
+  }  // namespace detail
 
   template<typename T, typename... Ts>
   void print(const T& t, const Ts&... ts) {
-    static std::mutex mutex;
-    std::lock_guard<std::mutex> lock(mutex);
+    std::lock_guard<std::mutex> lock(detail::print_mutex_accessor());
     std::cout << t;
     detail::print_helper(std::cout, ts...) << std::endl;
   }
