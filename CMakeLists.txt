@@ -54,11 +54,20 @@ endif(EIGEN3_FOUND)
 
 ################################## TTG API
 
+set(ttg-headers ttg.h serialization.h)
+add_library(ttg INTERFACE)
+target_compile_features(ttg INTERFACE cxx_return_type_deduction)
+
+# serialization
+add_executable (serialization serialization.cc)
+target_link_libraries(serialization LINK_PUBLIC ttg)
+
 ################
 ####### MADNESS
 ################
-set(ttg-mad_headers madness/ttg.h ttg.h demangle.h)
+set(ttg-mad_headers madness/ttg.h demangle.h)
 add_library(ttg-mad INTERFACE)
+target_link_libraries(ttg-mad INTERFACE ttg)
 target_include_directories(ttg-mad INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
@@ -100,8 +109,9 @@ endif()
 ################
 ####### PaRSEC
 ################
-set(ttg-parsec_headers parsec/ttg.h ttg.h demangle.h)
+set(ttg-parsec_headers parsec/ttg.h demangle.h)
 add_library(ttg-parsec INTERFACE)
+target_link_libraries(ttg-parsec INTERFACE ttg)
 target_include_directories(ttg-parsec INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>

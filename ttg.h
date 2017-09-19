@@ -878,4 +878,32 @@ namespace ttg {
 
 }  // namespace ttg
 
+// This provides an efficent API for serializing/deserializing a data type.
+// An object of this type will need to be provided for each serializable type.
+// The default implementation, in serialization.h, works only for primitive/POD data types;
+// backend-specific implementations may be available in backend/serialization.h .
+extern "C" struct ttg_data_descriptor {
+  const char* name;
+  uint64_t (*payload_size)(const void*);
+  uint64_t (*header_size)(const void*);
+  void (*get_info)(const void* t, uint64_t* hs, uint64_t* ps, int* is_contiguous_mask, void** ptr);
+  void (*pack_header)(const void* t, uint64_t header_size, void**ptr);
+  void (*pack_payload)(const void* t, uint64_t* chunk_size, uint64_t pos, void* ptr);
+  void (*unpack_header)(void* t, uint64_t header_size, const void* header);
+  void (*unpack_payload)(void* t, uint64_t chunk_size, uint64_t pos, void* ptr);
+  void (*print)(const void* t);
+};
+
+namespace ttg {
+
+template <typename T, typename Enabler>
+struct default_data_descriptor;
+
+// Returns a pointer to a constant static instance initialized
+// once at run time.
+template<typename T>
+const ttg_data_descriptor* get_data_descriptor();
+
+}  // namespace ttg
+
 #endif  // TTG_H_INCLUDED
