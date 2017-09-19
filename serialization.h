@@ -11,7 +11,7 @@ template <typename T>
 struct default_data_descriptor<T, std::enable_if_t<std::is_pod<T>::value>> {
   static uint64_t payload_size(const void* /* object */)
   {
-    return static_cast<int64_t>(sizeof(T));
+    return static_cast<uint64_t>(sizeof(T));
   }
 
   static uint64_t header_size(const void* /* object */) {return static_cast<uint64_t>(0);}

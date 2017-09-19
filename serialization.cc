@@ -26,6 +26,15 @@ std::ostream& operator<<(std::ostream& s, const std::array<Fred,N>& freds) {
   return s;
 }
 
+template <std::size_t N>
+std::ostream& operator<<(std::ostream& s, Fred (&freds)[N]) {
+  s << "{ ";
+  for(auto& f: freds)
+    s << " Fred(" << f.get() << ") ";
+  s << " }";
+  return s;
+}
+
 // Test code written as if calling from C
 template<typename T>
 void test_serialization(const T& t)
@@ -43,13 +52,13 @@ void test_serialization(const T& t)
   char buf[256];
   void* buf_ptr = (void*) buf;
   d->pack_header(vt, d->header_size(vt), &buf_ptr);
-  uint64_t size_of_vt = sizeof(vt);
-  d->pack_payload(vt, &size_of_vt, 0, (void *) buf);
+  uint64_t size_of_t = sizeof(T);
+  d->pack_payload(vt, &size_of_t, 0, (void *) buf);
 
   T g_obj;
   void* g = (void*)&g_obj;
   d->unpack_header(g, d->header_size(g), buf);
-  d->unpack_payload(g, sizeof(vt), 0, (void*) buf);
+  d->unpack_payload(g, sizeof(T), 0, (void*) buf);
   printf("deserialize ");
   d->print(g);
 }
@@ -58,9 +67,7 @@ int main(int argc, char** argv) {
   test_serialization(99);
   test_serialization(Fred(33));
   test_serialization(99.0);
-  auto z = std::array < Fred, 3 > {{Fred(55), Fred(66), Fred(77)}};
-  std::cout << z << std::endl;
-  test_serialization(z);
+  test_serialization(std::array < Fred, 3 > {{Fred(55), Fred(66), Fred(77)}});
   int a[4] = {1, 2, 3, 4};
   test_serialization(a);
   Fred b[4] = {Fred(1), Fred(2), Fred(3), Fred(4)};
