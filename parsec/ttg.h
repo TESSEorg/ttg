@@ -519,7 +519,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       using output_terminals_type = typename ::ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
       using callable_type =
           std::function<void(const keyT&, std::tuple<input_valuesT...>&&, output_terminals_type&)>;
-      callable_type f(func);  // pimarily to check types
+      callable_type f(func);  // primarily to check types
       using wrapT = WrapOp<funcT, keyT, output_terminals_type, input_valuesT...>;
 
       return std::make_unique<wrapT>(func, inedges, outedges, name, innames, outnames);
