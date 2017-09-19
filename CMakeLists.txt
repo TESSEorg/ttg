@@ -127,7 +127,8 @@ target_compile_options(ttg-parsec INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG
 find_package(PARSEC MODULE COMPONENTS MPI)
 link_directories(${PARSEC_LIBRARY_DIRS})
 target_include_directories(ttg-parsec INTERFACE ${PARSEC_INCLUDE_DIRS})
-target_link_libraries(ttg-parsec INTERFACE parsec ${PARSEC_LIBRARIES} ${MPI_LIBRARY} ${MPI_EXTRA_LIBRARY})
+target_link_libraries(ttg-parsec INTERFACE parsec ${PARSEC_LIBRARIES} ${MPI_LIBRARY})
+#target_link_libraries(ttg-parsec INTERFACE parsec ${PARSEC_LIBRARIES} ${MPI_LIBRARY} ${MPI_EXTRA_LIBRARY})
 
 # sanity check
 add_executable (ttgtest-parsec parsec/ttg.cc)
