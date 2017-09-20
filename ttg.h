@@ -835,21 +835,9 @@ namespace ttg {
     std::get<i>(t).send(key, std::forward<valueT>(value));
   }
 
-  template <typename keyT, typename valueT, typename output_terminalT>
-  void send(const keyT& key, const valueT& value, output_terminalT& t) {
-      //std::cout << "::send const ref\n";
-    t.send(key, value);
-  }
-
-  template <size_t i, typename keyT, typename valueT, typename... output_terminalsT>
-  void send(const keyT& key, const valueT& value, std::tuple<output_terminalsT...>& t) {
-      //std::cout << "::send<> const ref\n";
-    std::get<i>(t).send(key, value);
-  }
-
   template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT>
-  void broadcast(const rangeT& keylist, const valueT& value, std::tuple<output_terminalsT...>& t) {
-    std::get<i>(t).broadcast(keylist, value);
+  void broadcast(const rangeT& keylist, valueT&& value, std::tuple<output_terminalsT...>& t) {
+    std::get<i>(t).broadcast(keylist, std::forward<valueT>(value));
   }
 
   // Make type of tuple of edges from type of tuple of terminals
