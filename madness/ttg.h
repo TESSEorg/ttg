@@ -138,7 +138,7 @@ namespace madness {
             args->key = key;
 
             world.taskq.add(args);
-            // static_cast<derivedT*>(this)->op(key, args->t, output_terminals); // Runs immediately
+            //static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
 
             cache.erase(key);
           }
@@ -162,7 +162,7 @@ namespace madness {
           args->key = key;
 
           world.taskq.add(args);
-          // static_cast<derivedT*>(this)->op(key, args->t, output_terminals);// runs immediately
+          //static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals);// runs immediately
 
           cache.erase(key);
         }
