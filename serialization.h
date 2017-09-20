@@ -53,14 +53,31 @@ struct default_data_descriptor<T, std::enable_if_t<std::is_pod<T>::value>> {
 
 #if __has_include(<madness/world/archive.h>)
 
+#include <type_traits>
+
 #include <madness/world/archive.h>
 #include <madness/world/buffer_archive.h>
 
 namespace ttg {
 
-// The default implementation is only provided for POD data types
+namespace detail {
+// this is in C++17
+#if __cplusplus >= 201703L
+using std::void_t;
+#else
+template<class...> using void_t = void;
+#endif
+template<class, class = void>
+struct is_madness_serializable : std::false_type {};
+
+template<class T>
+struct is_madness_serializable<T, void_t<decltype(std::declval<madness::archive::BufferOutputArchive&>() &
+                                         std::declval<T>())>> : std::true_type {};
+}
+
+// The default implementation for non-POD data types that support MADNESS serialization
 template <typename T>
-struct default_data_descriptor<T, std::enable_if_t<!std::is_pod<T>::value /* && madness::is_serializable<T>::value */>> {
+struct default_data_descriptor<T, std::enable_if_t<!std::is_pod<T>::value && detail::is_madness_serializable<T>::value>> {
 
   static uint64_t header_size(const void* object) { return static_cast<uint64_t>(0); }
 
