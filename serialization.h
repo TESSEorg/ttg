@@ -15,6 +15,37 @@
 
 namespace ttg {
 
+namespace detail {
+
+#if __cplusplus >= 201703L
+using std::void_t;
+#else
+template<class...> using void_t = void;
+#endif
+
+template<class, class = void>
+struct is_printable : std::false_type {};
+
+template<class T>
+struct is_printable<T, void_t<decltype(std::declval<std::ostream&>() <<
+    std::declval<T>())>> : std::true_type {};
+
+template <typename T, typename Enabler = void>
+struct printer_helper {
+  static void print(const void* object) {
+    std::cout << "[unprintable object]" << std::endl;
+  }
+};
+
+template <typename T>
+struct printer_helper<T, std::enable_if_t<is_printable<T>::value>> {
+  static void print(const void* object) {
+    std::cout << *(static_cast<const T*>(object)) << std::endl;
+  }
+};
+
+}  // namespace detail
+
 template<typename T, typename Enabler = void>
 struct default_data_descriptor;
 
@@ -54,6 +85,7 @@ struct default_data_descriptor<T, std::enable_if_t<std::is_pod<T>::value>> {
   static void unpack_payload(void *object, uint64_t chunk_size, uint64_t pos, const void *buf) {
     std::memcpy(object, buf, chunk_size);
   }
+
 };
 
 }  // namespace ttg
@@ -68,19 +100,14 @@ struct default_data_descriptor<T, std::enable_if_t<std::is_pod<T>::value>> {
 namespace ttg {
 
 namespace detail {
-// this is in C++17
-#if __cplusplus >= 201703L
-using std::void_t;
-#else
-template<class...> using void_t = void;
-#endif
+
 template<class, class = void>
 struct is_madness_serializable : std::false_type {};
 
 template<class T>
 struct is_madness_serializable<T, void_t<decltype(std::declval<madness::archive::BufferOutputArchive&>() &
                                          std::declval<T>())>> : std::true_type {};
-}
+}  // namespace detail
 
 // The default implementation for non-POD data types that support MADNESS serialization
 template <typename T>
@@ -124,6 +151,7 @@ struct default_data_descriptor<T, std::enable_if_t<!std::is_pod<T>::value && det
     madness::archive::BufferInputArchive ar(buf, chunk_size);
     ar & (*(T*)object);
   }
+
 };
 
 }  // namespace ttg
@@ -142,7 +170,8 @@ get_data_descriptor() {
                                         &default_data_descriptor<T>::pack_header,
                                         &default_data_descriptor<T>::pack_payload,
                                         &default_data_descriptor<T>::unpack_header,
-                                        &default_data_descriptor<T>::unpack_payload};
+                                        &default_data_descriptor<T>::unpack_payload,
+                                        &detail::printer_helper<T>::print};
   return &d;
 }
 

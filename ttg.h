@@ -889,6 +889,7 @@ extern "C" struct ttg_data_descriptor {
   void (*pack_payload)(const void* object, uint64_t* chunk_size, uint64_t pos, void** buf);
   void (*unpack_header)(void* object, uint64_t header_size, const void* buf);
   void (*unpack_payload)(void* object, uint64_t chunk_size, uint64_t pos, const void* buf);
+  void (*print)(const void* object);
 };
 
 namespace ttg {
