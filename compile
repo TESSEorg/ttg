@@ -1,4 +1,0 @@
-PARSEC_SRC=/Users/bosilca/unstable/tesse/tesse
-PARSEC_BIN=/Users/bosilca/unstable/tesse/tesse/build/debug
-
-mpicxx -g edge3.cc -o edge3 -std=c++14 -I/Users/bosilca/unstable/tesse/tesse/parsec/include -I/Users/bosilca/unstable/tesse/tesse/build/debug/parsec/include -I/Users/bosilca/unstable/tesse/tesse -I/Users/bosilca/opt/include -L/Users/bosilca/unstable/tesse/tesse/build/debug/parsec -lparsec -lparsec-base -L/Users/bosilca/opt/lib -lhwloc

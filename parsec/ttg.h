@@ -196,7 +196,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
                         << std::endl;
       }
       obj->op(keyT(task->key),
-              static_cast<input_values_tuple_type &&>(*static_cast<input_values_tuple_type*>((void*)&task->user_tuple)),
+              std::move(*static_cast<input_values_tuple_type*>((void*)&task->user_tuple)),
               obj->output_terminals);
       if (obj->tracing())
           PrintThread{} << obj->get_name() << " : " << keyT(task->key) << ": done executing"
@@ -271,11 +271,20 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     }
     
     input_values_tuple_type *tuple = static_cast<input_values_tuple_type *>((void*)&task->user_tuple);
-
-    auto copy_r = new (&std::get<i>(*tuple)) valueT(std::forward<T>(value));
+    new (&std::get<i>(*tuple)) valueT(std::forward<T>(value));
     parsec_data_copy_t* copy = OBJ_NEW(parsec_data_copy_t);
     task->parsec_task.data[i].data_in = copy;
     copy->device_private = (void*)(&std::get<i>(*tuple));
+    // uncomment this if you want to test deserialization ... also comment out the placement new above
+//    auto* ddesc = ::ttg::get_data_descriptor<valueT>();
+//    void* value_ptr = (void*)&value;
+//    uint64_t hs, ps;
+//    int is_contiguous;
+//    void* buf;
+//    (*(ddesc->get_info))(value_ptr, &hs, &ps, &is_contiguous, &buf);
+//    assert(is_contiguous);
+//    (*(ddesc->unpack_header))(copy->device_private, hs, value_ptr);
+//    (*(ddesc->unpack_payload))(copy->device_private, ps, 0, value_ptr);
 
     int count = parsec_atomic_inc_32b(&task->in_data_count);
     assert(count <= self.dependencies_goal);
@@ -603,7 +612,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       using output_terminals_type = typename ::ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
       using callable_type =
           std::function<void(const keyT&, std::tuple<input_valuesT...>&&, output_terminals_type&)>;
-      callable_type f(func);  // pimarily to check types
+      callable_type f(func);  // primarily to check types
       using wrapT = WrapOp<funcT, keyT, output_terminals_type, input_valuesT...>;
 
       return std::make_unique<wrapT>(func, inedges, outedges, name, innames, outnames);

@@ -15,55 +15,41 @@ if (EIGEN3_FOUND)
                INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
 endif (EIGEN3_FOUND)
 
-################################## "flow" API
-set(flow_headers flow.h edge.h)
-add_library(flow INTERFACE)
-target_include_directories(flow INTERFACE
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-  )
-target_compile_features(flow INTERFACE cxx_return_type_deduction)
-install(FILES ${flow_headers}
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-        COMPONENT flow)
-# Use current CMAKE_CXX_FLAGS to compile targets dependent on this library
-string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
-target_compile_options(flow INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
-
-# helloworlds
-add_executable (helloworld helloworld.cc)
-target_link_libraries(helloworld LINK_PUBLIC flow)
-add_executable (helloworld_wrap helloworld_wrap.cc)
-target_link_libraries(helloworld_wrap LINK_PUBLIC flow)
-
-# tree algorithms
-add_executable (t9 t9.cc)
-target_link_libraries(t9 LINK_PUBLIC flow)
-add_executable (t9-wrap t9-wrap.cc)
-target_link_libraries(t9-wrap LINK_PUBLIC flow)
-
-# dense summa
-add_executable (mxm_simple_suma mxm_simple_suma.cc)
-target_link_libraries(mxm_simple_suma LINK_PUBLIC flow)
-
-# sparse matmul
-if (EIGEN3_FOUND)
-  add_executable (spmm spmm.cc)
-  target_link_libraries(spmm LINK_PUBLIC eigen3 flow)
-endif(EIGEN3_FOUND)
-
 ################################## TTG API
+
+########################
+####### Runtime-neutral
+########################
+add_library(ttg INTERFACE)
+target_include_directories(ttg INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+        )
+target_compile_features(ttg INTERFACE cxx_return_type_deduction)
+set(ttg-headers
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/serialization.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/demangle.h
+        )
+target_sources(ttg INTERFACE ${ttg-headers})
+install(FILES ${ttg-headers}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        COMPONENT ttg)
 
 ################
 ####### MADNESS
 ################
-set(ttg-mad_headers madness/ttg.h ttg.h demangle.h)
 add_library(ttg-mad INTERFACE)
+target_link_libraries(ttg-mad INTERFACE ttg)
 target_include_directories(ttg-mad INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   )
 target_compile_features(ttg-mad INTERFACE cxx_return_type_deduction)
+set(ttg-mad_headers
+        ${CMAKE_CURRENT_SOURCE_DIR}/madness/ttg.h
+        )
+target_sources(ttg-mad INTERFACE ${ttg-mad_headers})
 install(FILES ${ttg-mad_headers}
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         COMPONENT ttg-mad)
@@ -97,16 +83,24 @@ if (EIGEN3_FOUND)
   target_link_libraries(spmm-mad LINK_PUBLIC ttg-mad eigen3 ${MADNESS_DISABLEPIE_LINKER_FLAG})
 endif()
 
+# serialization
+add_executable (serialization serialization.cc)
+target_link_libraries(serialization LINK_PUBLIC ttg MADworld ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
 ################
 ####### PaRSEC
 ################
-set(ttg-parsec_headers parsec/ttg.h ttg.h demangle.h)
 add_library(ttg-parsec INTERFACE)
+target_link_libraries(ttg-parsec INTERFACE ttg)
 target_include_directories(ttg-parsec INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   )
 target_compile_features(ttg-parsec INTERFACE cxx_return_type_deduction)
+set(ttg-parsec_headers
+        ${CMAKE_CURRENT_SOURCE_DIR}/parsec/ttg.h
+        )
+target_sources(ttg-parsec INTERFACE ${ttg-parsec_headers})
 install(FILES ${ttg-parsec_headers}
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         COMPONENT ttg-parsec)
@@ -126,3 +120,9 @@ target_link_libraries(ttgtest-parsec LINK_PUBLIC ttg-parsec)
 # Harder test
 add_executable (t9-wrap-parsec parsec/t9-wrap-ttg.cc)
 target_link_libraries(t9-wrap-parsec LINK_PUBLIC ttg-parsec)
+
+# sparse matmul
+if (EIGEN3_FOUND)
+  add_executable (spmm-parsec parsec/spmm.cc)
+  target_link_libraries(spmm-parsec LINK_PUBLIC ttg-parsec eigen3)
+endif()

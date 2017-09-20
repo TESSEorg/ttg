@@ -5,6 +5,7 @@
 #include "parsec.h"
 #include <mpi.h>
 #include <parsec/execution_stream.h>
+#include "../serialization.h"
 
 // Same as t9.cc but using TTG wrapper templates
 
@@ -24,7 +25,7 @@ struct Key {
   int n;  // leave this as signed otherwise -n does unexpected things
   unsigned long l;
 
-    Key() : n(0), l(0) { }
+    Key() = default;
     Key(uint64_t hash) : n(hash >> 48), l(hash & 0x0000FFFFFFFFFFFF) {}
 
     Key(unsigned long n, unsigned long l) : n(n), l(l) { }
@@ -69,7 +70,7 @@ struct Node {
   double d;
   bool has_children;
 
-  Node() : key(), s(0.0), d(0.0), has_children(false) {}
+  Node() = default;
 
   Node(const Key& key, double s, double d, bool has_children) : key(key), s(s), d(d), has_children(has_children) {}
 

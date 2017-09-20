@@ -5,6 +5,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <sstream>
 #include <string>
@@ -33,6 +34,30 @@ namespace ttg {
   bool tracing() { return detail::trace_accessor(); }
   void trace_on() { detail::trace_accessor() = true; }
   void trace_off() { detail::trace_accessor() = false; }
+
+  namespace detail {
+  inline std::ostream &print_helper(std::ostream &out) {
+    return out;
+  }
+  template<typename T, typename... Ts>
+  inline std::ostream &print_helper(std::ostream &out,
+                                    const T &t, const Ts &... ts) {
+    out << ' ' << t;
+    return print_helper(out, ts...);
+  }
+  std::mutex& print_mutex_accessor() {
+    static std::mutex mutex;
+    return mutex;
+  }
+  }  // namespace detail
+
+  template<typename T, typename... Ts>
+  void print(const T& t, const Ts&... ts) {
+    std::lock_guard<std::mutex> lock(detail::print_mutex_accessor());
+    std::cout << t;
+    detail::print_helper(std::cout, ts...) << std::endl;
+  }
+
 
   class OpBase;  // forward decl
   template <typename keyT, typename valueT>
@@ -810,21 +835,9 @@ namespace ttg {
     std::get<i>(t).send(key, std::forward<valueT>(value));
   }
 
-  template <typename keyT, typename valueT, typename output_terminalT>
-  void send(const keyT& key, const valueT& value, output_terminalT& t) {
-      //std::cout << "::send const ref\n";
-    t.send(key, value);
-  }
-
-  template <size_t i, typename keyT, typename valueT, typename... output_terminalsT>
-  void send(const keyT& key, const valueT& value, std::tuple<output_terminalsT...>& t) {
-      //std::cout << "::send<> const ref\n";
-    std::get<i>(t).send(key, value);
-  }
-
   template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT>
-  void broadcast(const rangeT& keylist, const valueT& value, std::tuple<output_terminalsT...>& t) {
-    std::get<i>(t).broadcast(keylist, value);
+  void broadcast(const rangeT& keylist, valueT&& value, std::tuple<output_terminalsT...>& t) {
+    std::get<i>(t).broadcast(keylist, std::forward<valueT>(value));
   }
 
   // Make type of tuple of edges from type of tuple of terminals
@@ -850,6 +863,32 @@ namespace ttg {
   struct edges_to_input_terminals<std::tuple<edgesT...>> {
     typedef std::tuple<typename edgesT::input_terminal_type...> type;
   };
+
+}  // namespace ttg
+
+// This provides an efficent API for serializing/deserializing a data type.
+// An object of this type will need to be provided for each serializable type.
+// The default implementation, in serialization.h, works only for primitive/POD data types;
+// backend-specific implementations may be available in backend/serialization.h .
+extern "C" struct ttg_data_descriptor {
+  const char* name;
+  void (*get_info)(const void* object, uint64_t* hs, uint64_t* ps, int* is_contiguous_mask, void ** buf);
+  void (*pack_header)(const void* object, uint64_t header_size, void** buf);
+  void (*pack_payload)(const void* object, uint64_t* chunk_size, uint64_t pos, void** buf);
+  void (*unpack_header)(void* object, uint64_t header_size, const void* buf);
+  void (*unpack_payload)(void* object, uint64_t chunk_size, uint64_t pos, const void* buf);
+  void (*print)(const void* object);
+};
+
+namespace ttg {
+
+template <typename T, typename Enabler>
+struct default_data_descriptor;
+
+// Returns a pointer to a constant static instance initialized
+// once at run time.
+template<typename T>
+const ttg_data_descriptor* get_data_descriptor();
 
 }  // namespace ttg
 
