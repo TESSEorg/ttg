@@ -1,7 +1,6 @@
 #include <array>
 
 #include "./ttg.h"
-#include "./serialization.h"
 
 class Fred {
   int value;
@@ -35,12 +34,21 @@ std::ostream& operator<<(std::ostream& s, Fred (&freds)[N]) {
   return s;
 }
 
+template <typename T>
+std::ostream& operator<<(std::ostream& s, const std::vector<T>& vec) {
+  s << "{ ";
+  for(auto& v: vec)
+    s << " " << v << " ";
+  s << " }";
+  return s;
+}
+
+#include "./serialization.h"
+
 // Test code written as if calling from C
 template<typename T>
 void test_serialization(const T& t)
 {
-  static_assert(std::is_pod<T>::value, "ouch");
-
   // This line has to be in a piece of C++ that knows the type T
   const ttg_data_descriptor* d = ttg::get_data_descriptor<T>();
 
@@ -74,6 +82,7 @@ int main(int argc, char** argv) {
   test_serialization(a);
   Fred b[4] = {Fred(1), Fred(2), Fred(3), Fred(4)};
   test_serialization(b);
+  test_serialization(std::vector <int>{1,2,3});
 
   return 0;
 }

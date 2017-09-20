@@ -58,10 +58,6 @@ set(ttg-headers ttg.h serialization.h)
 add_library(ttg INTERFACE)
 target_compile_features(ttg INTERFACE cxx_return_type_deduction)
 
-# serialization
-add_executable (serialization serialization.cc)
-target_link_libraries(serialization LINK_PUBLIC ttg)
-
 ################
 ####### MADNESS
 ################
@@ -105,6 +101,10 @@ if (EIGEN3_FOUND)
   add_executable (spmm-mad madness/spmm.cc)
   target_link_libraries(spmm-mad LINK_PUBLIC ttg-mad eigen3 ${MADNESS_DISABLEPIE_LINKER_FLAG})
 endif()
+
+# serialization
+add_executable (serialization serialization.cc)
+target_link_libraries(serialization LINK_PUBLIC ttg MADworld ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
 ################
 ####### PaRSEC
