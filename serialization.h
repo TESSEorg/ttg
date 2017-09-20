@@ -1,6 +1,8 @@
 #ifndef CXXAPI_SERIALIZATION_H_H
 #define CXXAPI_SERIALIZATION_H_H
 
+#include <cstring> // for std::memcpy
+
 /**
    \file serialization.h
 
