@@ -1,12 +1,23 @@
 #ifndef CXXAPI_SERIALIZATION_H_H
 #define CXXAPI_SERIALIZATION_H_H
 
+/**
+   \file serialization.h
+
+   \brief Provides (de)serialization of C++ data invocable from C primarily to interface with PaRSEC
+
+   The default implementation is only provided for POD data types but is efficient in the sense that
+   it does enable zero-copy remote data transfers.   For other data types, optimized implementations 
+   must be provided as needed or, if available, the MADNESS serialization can be used but this will
+   always make a copy and requires that the entire object fit in the message buffer.
+
+ **/
+
 namespace ttg {
 
 template<typename T, typename Enabler = void>
 struct default_data_descriptor;
 
-// The default implementation is only provided for POD data types
 template<typename T>
 struct default_data_descriptor<T, std::enable_if_t<std::is_pod<T>::value>> {
 
@@ -42,10 +53,6 @@ struct default_data_descriptor<T, std::enable_if_t<std::is_pod<T>::value>> {
 
   static void unpack_payload(void *object, uint64_t chunk_size, uint64_t pos, const void *buf) {
     std::memcpy(object, buf, chunk_size);
-  }
-
-  static void print(const void *object) {
-    std::cout << *(T *) object << std::endl;
   }
 };
 
@@ -117,10 +124,6 @@ struct default_data_descriptor<T, std::enable_if_t<!std::is_pod<T>::value && det
     madness::archive::BufferInputArchive ar(buf, chunk_size);
     ar & (*(T*)object);
   }
-
-  static void print(const void *object) {
-    std::cout << *(T*)object << std::endl;
-  }
 };
 
 }  // namespace ttg
@@ -130,8 +133,7 @@ struct default_data_descriptor<T, std::enable_if_t<!std::is_pod<T>::value && det
 namespace ttg {
 
 // Returns a pointer to a constant static instance initialized
-// once at run time.  Call this from a piece of C++ code (see
-// example below) and return the pointer to C.
+// once at run time. 
 template <typename T>
 const ttg_data_descriptor*
 get_data_descriptor() {
@@ -140,8 +142,7 @@ get_data_descriptor() {
                                         &default_data_descriptor<T>::pack_header,
                                         &default_data_descriptor<T>::pack_payload,
                                         &default_data_descriptor<T>::unpack_header,
-                                        &default_data_descriptor<T>::unpack_payload,
-                                        &default_data_descriptor<T>::print};
+                                        &default_data_descriptor<T>::unpack_payload};
   return &d;
 }
 
