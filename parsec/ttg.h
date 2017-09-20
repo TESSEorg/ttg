@@ -12,27 +12,41 @@
 #include <string>
 #include <tuple>
 #include <vector>
+#include <mutex>
 
 #include <parsec.h>
 #include <parsec/data_internal.h>
-#include <parsec/datarepo.h>
+#include <parsec/class/parsec_hash_table.h>
 #include <parsec/devices/device.h>
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
+#include <parsec/execution_stream.h>
+#include <parsec/interfaces/interface.h>
 #include <stdlib.h>
-
-extern parsec_execution_stream_t* es;
-extern parsec_taskpool_t* taskpool;
+#include <string.h>
 
 extern "C" {
-typedef struct my_op_s : public parsec_task_t {
+typedef struct my_op_s {
+    parsec_task_t parsec_task;
     uint32_t in_data_count;
+    parsec_hash_table_item_t op_ht_item;
     void (*function_template_class_ptr)(void*);
     void *object_ptr;
     void (*static_set_arg)(int, int);
     uint64_t key;
-    uint64_t user_tuple __attribute__ ((aligned (32)));
+    void *user_tuple; /* user_tuple starts here, but overshoots the data structure
+                       * It is declared as a void * so that the field is aligned with
+                       * an addressable byte. */
 } my_op_t;
+
+namespace parsec {
+namespace ttg {
+    
+extern parsec_taskpool_t* taskpool;
+extern parsec_context_t *parsec;
+
+}
+}
 
 static parsec_hook_return_t hook(struct parsec_execution_stream_s* es,
                                  parsec_task_t* task);
@@ -45,22 +59,12 @@ static parsec_hook_return_t do_nothing(parsec_execution_stream_t* es,
   return PARSEC_HOOK_RETURN_DONE;
 }
 
-static parsec_hook_return_t count_down_task(parsec_execution_stream_t* es,
-                                            parsec_task_t* task) {
-  (void)es;
-  (void)task;
-  uint32_t b = taskpool->nb_tasks;
-  uint32_t r = parsec_atomic_add_32b((volatile uint32_t*)&taskpool->nb_tasks, -1);
-  printf("%d < %d\n", b, r);
-  return PARSEC_HOOK_RETURN_DONE;
-}
-
 static parsec_hook_return_t hook(struct parsec_execution_stream_s* es,
                                  parsec_task_t* task) {
-  my_op_t* me = static_cast<my_op_t*>(task);
-  me->function_template_class_ptr(task);
-  (void)es;
-  return PARSEC_HOOK_RETURN_DONE;
+    my_op_t* me = (my_op_t*)task;
+    me->function_template_class_ptr(task);
+    (void)es;
+    return PARSEC_HOOK_RETURN_DONE;
 }
 
 namespace ttg {
@@ -71,25 +75,86 @@ template<> uint64_t unique_hash<uint64_t, uint64_t>(const uint64_t& t) {
 }
 }
 
+static uint32_t parsec_tasks_hash_fct(uintptr_t key, uint32_t hash_size, void *data)
+{
+    /* Use all the bits of the 64 bits key, project on the lowest base bits (0 <= hash < 1024) */
+    (void)data;
+    int b = 0, base = 10; /* We start at 10, as size is 1024 at least */
+    uint32_t mask = 0x3FFULL; /* same thing: assume size is 1024 at least */
+    uint32_t h = key;
+    while( hash_size != (1u<<base) ) { assert(base < 32); base++; mask = (mask<<1)|1; }
+    while( b < 64 ) {
+        b += base;
+        h ^= key >> b;
+    }
+    return (uint32_t)( key & mask);
+}
+
+class PrintThread: public std::ostringstream
+{
+public:
+    PrintThread() = default;
+
+    ~PrintThread()
+    {
+        std::lock_guard<std::mutex> guard(_mutexPrint);
+        std::cout << this->str();
+        std::cout.flush();
+    }
+
+private:
+    static std::mutex _mutexPrint;
+};
+
+std::mutex PrintThread::_mutexPrint{};
 namespace parsec {
 namespace ttg {
-
+ 
 struct ParsecBaseOp {
  protected:
     //  static std::map<int, ParsecBaseOp*> function_id_to_instance;
-  data_repo_t* input_data;
-  parsec_task_class_t self;
+    parsec_hash_table_t tasks_table;
+    parsec_task_class_t self;
 };
 //std::map<int, ParsecBaseOp*> ParsecBaseOp::function_id_to_instance = {};
 
+static void init(int cores, int *argc, char **argv[])
+{
+    parsec = parsec_init(cores, argc, argv);
+    taskpool = (parsec_taskpool_t*)calloc(1, sizeof(parsec_taskpool_t));
+    taskpool->taskpool_id = 1;
+    taskpool->nb_tasks = 1;
+    taskpool->nb_pending_actions = 1;
+    taskpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
+}
+
+static void fini(void)
+{
+    parsec_fini(&parsec);
+}
+
+static void start(void)
+{
+    parsec_enqueue(parsec, taskpool);
+    int ret = parsec_context_start(parsec);
+}
+
+extern volatile uint32_t created;
+extern volatile uint32_t sent_to_sched;
+ 
 template <typename keyT, typename output_terminalsT, typename derivedT,
           typename... input_valueTs>
 class Op : public ::ttg::OpBase, ParsecBaseOp {
  private:
   using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
+  parsec_mempool_t mempools;
+  std::map< std::pair<int,int>, int > mempools_index;
 
  public:
-    void fence() { printf("Fence called\n"); parsec_atomic_add_32b((volatile uint32_t*)&taskpool->nb_tasks, -1); }
+    void fence() {
+        parsec_atomic_dec_32b((volatile uint32_t*)&taskpool->nb_tasks);
+        parsec_context_wait(parsec);
+    }
   
   static constexpr int numins =
       sizeof...(input_valueTs);  // number of input arguments
@@ -124,31 +189,24 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   };
   
   static void static_op(parsec_task_t* my_task) {
-    my_op_t* task = static_cast<my_op_t*>(my_task);
-    /*
-              struct data_repo_entry_s     *data_repo;
-              struct parsec_data_copy_s    *data_in;
-              struct parsec_data_copy_s    *data_out;
-    */
-    derivedT* obj = (derivedT*)task->object_ptr;
-    if (obj->tracing())
-        std::cout << "Executing Object " << ((int)task->task_class->task_class_id) << " " << keyT(task->key) << std::endl;
-    obj->op(keyT(task->key),
-            static_cast<input_values_tuple_type &&>(*static_cast<input_values_tuple_type*>((void*)&task->user_tuple)),
-            obj->output_terminals);
-    if (obj->tracing())
-        std::cout << "Done Executing Object " << ((int)task->task_class->task_class_id) << ", Key " << keyT(task->key) << std::endl;
+      my_op_t* task = (my_op_t*)my_task;
+      derivedT* obj = (derivedT*)task->object_ptr;
+      if (obj->tracing()) {
+          PrintThread{} << obj->get_name() << " : " << keyT(task->key) << ": executing"
+                        << std::endl;
+      }
+      obj->op(keyT(task->key),
+              static_cast<input_values_tuple_type &&>(*static_cast<input_values_tuple_type*>((void*)&task->user_tuple)),
+              obj->output_terminals);
+      if (obj->tracing())
+          PrintThread{} << obj->get_name() << " : " << keyT(task->key) << ": done executing"
+                        << std::endl;
   }
 
   static void static_op_noarg(parsec_task_t* my_task) {
-    my_op_t* task = static_cast<my_op_t*>(my_task);
-    /*
-              struct data_repo_entry_s     *data_repo;
-              struct parsec_data_copy_s    *data_in;
-              struct parsec_data_copy_s    *data_out;
-    */
-    derivedT* obj = (derivedT*)task->object_ptr;
-    obj->op(keyT(task->key), std::tuple<>(), obj->output_terminals);
+      my_op_t* task = (my_op_t*)my_task;
+      derivedT* obj = (derivedT*)task->object_ptr;
+      obj->op(keyT(task->key), std::tuple<>(), obj->output_terminals);
   }
 
   using cacheT = std::map<keyT, OpArgs>;
@@ -161,61 +219,75 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
         typename std::tuple_element<i, input_values_tuple_type>::type;
 
     if (tracing())
-      std::cout << get_name() << " : " << key << ": setting argument : " << i
-                << std::endl;
+        PrintThread{} << get_name() << " : " << key << ": setting argument : " << i
+                      << std::endl;
 
     using ::ttg::unique_hash;
-    data_repo_entry_t* e =
-        data_repo_lookup_entry_and_create(es, input_data, unique_hash<uint64_t>(key));
-    if (e->data[i] != NULL) {
-      std::cerr << get_name() << " : " << key
-                << ": error argument is already set : " << i << std::endl;
-      throw "bad set arg";
+    uint64_t hk = unique_hash<uint64_t>(key);
+    my_op_t *task = NULL;
+    if( NULL == (task = (my_op_t*)parsec_hash_table_find(&tasks_table, hk)) ) {
+        my_op_t *newtask;
+        parsec_execution_stream_s *es = parsec_my_execution_stream();
+        parsec_thread_mempool_t *mempool = &mempools.thread_mempools[ mempools_index[std::pair<int,int>(es->virtual_process->vp_id, es->th_id)] ];
+        newtask = (my_op_t *) parsec_thread_mempool_allocate(mempool);
+        memset((void*)newtask, 0, sizeof(my_op_t));
+        newtask->parsec_task.mempool_owner = mempool;
+        
+        OBJ_CONSTRUCT(&newtask->parsec_task, parsec_list_item_t);
+        newtask->parsec_task.task_class = &this->self;
+        newtask->parsec_task.taskpool = taskpool;
+        newtask->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
+        newtask->in_data_count = 0;
+
+        newtask->function_template_class_ptr =
+            reinterpret_cast<void (*)(void*)>(&Op::static_op);
+        newtask->object_ptr = static_cast<derivedT*>(this);
+        newtask->key = hk;
+
+        parsec_mfence();
+        parsec_hash_table_lock_bucket(&tasks_table, hk);
+        if( NULL != (task = (my_op_t*)parsec_hash_table_nolock_find(&tasks_table, hk)) ) {
+            parsec_hash_table_unlock_bucket(&tasks_table, hk);
+            free(newtask);
+        } else {
+            newtask->op_ht_item.key = hk;
+            parsec_hash_table_nolock_insert(&tasks_table, &newtask->op_ht_item);
+            parsec_hash_table_unlock_bucket(&tasks_table, hk);
+            parsec_atomic_inc_32b(&created);
+            parsec_atomic_inc_32b((volatile uint32_t*)&taskpool->nb_tasks);
+            task = newtask;
+            if(tracing())
+                PrintThread{} << get_name() << " : " << key << ": creating task"
+                              << std::endl;
+        }
     }
 
-    my_op_t* task;
-    if (NULL == (task = static_cast<my_op_t*>(e->generator))) {
-        posix_memalign((void**)&task, 32, sizeof(my_op_t)+sizeof(input_values_tuple_type));
-        memset((void*)task, 0, sizeof(my_op_t));
+    assert(task->key == hk);
 
-        OBJ_CONSTRUCT(task, parsec_list_item_t);
-        task->task_class = &this->self;
-        task->taskpool = taskpool;
-        task->status = PARSEC_TASK_STATUS_HOOK;
-
-        task->function_template_class_ptr =
-            reinterpret_cast<void (*)(void*)>(&Op::static_op);
-        task->object_ptr = static_cast<derivedT*>(this);
-        task->key = unique_hash<uint64_t>(key);
-
-        if (!parsec_atomic_cas_ptr(&e->generator, NULL, task)) {
-            free(task);
-            task = static_cast<my_op_t*>(e->generator);
-        } else {
-            uint32_t b = taskpool->nb_tasks;
-            uint32_t r = parsec_atomic_add_32b((volatile uint32_t*)&taskpool->nb_tasks, 1);
-            printf("%d > %d\n", b, r);
-        }
+    if( NULL != task->parsec_task.data[i].data_in ) {
+        std::cerr << get_name() << " : " << key
+                << ": error argument is already set : " << i << std::endl;
+        throw "bad set arg";
     }
     
     input_values_tuple_type *tuple = static_cast<input_values_tuple_type *>((void*)&task->user_tuple);
+
     auto copy_r = new (&std::get<i>(*tuple)) valueT(std::forward<T>(value));
     parsec_data_copy_t* copy = OBJ_NEW(parsec_data_copy_t);
-    e->data[i] = copy;
+    task->parsec_task.data[i].data_in = copy;
     copy->device_private = (void*)(&std::get<i>(*tuple));
-    
-    int count = parsec_atomic_inc_32b(&task->in_data_count);
 
+    int count = parsec_atomic_inc_32b(&task->in_data_count);
+    assert(count <= self.dependencies_goal);
+    
     if (count == self.dependencies_goal) {
-      for (int ii = 0; ii < self.dependencies_goal; ii++) {
-        task->data[ii].data_in = e->data[ii];
-      }
-      using ::ttg::unique_hash;
-      data_repo_entry_used_once(es, input_data, unique_hash<uint64_t>(key));
+      parsec_atomic_inc_32b(&sent_to_sched);
+      parsec_execution_stream_t *es = parsec_my_execution_stream();
       if (tracing())
-        std::cout << get_name() << " : " << key << ": invoking op "
-                  << std::endl;
-      __parsec_schedule(es, static_cast<parsec_task_t*>(task), 0);
+          PrintThread{} << get_name() << " : " << key << ": invoking op"
+                        << std::endl;
+      __parsec_schedule(es, &task->parsec_task, 0);
+      parsec_hash_table_remove(&tasks_table, hk);
     }
   }
 
@@ -225,20 +297,25 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
     // create PaRSEC task
     // and give it to the scheduler
-    my_op_t* task = static_cast<my_op_t*>(calloc(1, sizeof(my_op_t)));
+    my_op_t *task;
+    parsec_execution_stream_s *es = parsec_my_execution_stream();
+    parsec_thread_mempool_t *mempool = &mempools.thread_mempools[ mempools_index[std::pair<int,int>(es->virtual_process->vp_id, es->th_id)] ];
+    task = (my_op_t *) parsec_thread_mempool_allocate(mempool);
+    memset((void*)task, 0, sizeof(my_op_t));
+    task->parsec_task.mempool_owner = mempool;
 
     OBJ_CONSTRUCT(task, parsec_list_item_t);
-    task->task_class = &this->self;
-    task->taskpool = taskpool;
-    task->status = PARSEC_TASK_STATUS_HOOK;
+    task->parsec_task.task_class = &this->self;
+    task->parsec_task.taskpool = taskpool;
+    task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
 
     task->function_template_class_ptr =
         reinterpret_cast<void (*)(void*)>(&Op::static_op_noarg);
     task->object_ptr = static_cast<derivedT*>(this);
     using ::ttg::unique_hash;
     task->key = unique_hash<uint64_t>(key);
-    task->data[0].data_in = static_cast<parsec_data_copy_t*>(NULL);
-    __parsec_schedule(es, task, 0);
+    task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t*>(NULL);
+    __parsec_schedule(es, &task->parsec_task, 0);
   }
 
   // Used by invoke to set all arguments associated with a task
@@ -345,8 +422,8 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     ((__parsec_chore_t*)self.incarnations)[1].evaluate = NULL;
     ((__parsec_chore_t*)self.incarnations)[1].hook = NULL;
 
-    self.release_task = do_nothing;
-    self.complete_execution = count_down_task;
+    self.release_task = parsec_release_task_to_mempool_update_nbtasks;
+    self.complete_execution = do_nothing;
 
     for (i = 0; i < numins; i++) {
       parsec_flow_t* flow = new parsec_flow_t;
@@ -378,7 +455,16 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     self.flags = 0;
     self.dependencies_goal = numins; /* (~(uint32_t)0) >> (32 - numins); */
 
-    input_data = data_repo_create_nothreadsafe(4096, numins);
+    int k = 0;
+    for(int i = 0; i < parsec->nb_vp; i++) {
+        for(int j = 0; j < parsec->virtual_processes[i]->nb_cores; j++) {
+            mempools_index[ std::pair<int,int>(i,j) ] = k++;
+        }
+    }
+    parsec_mempool_construct(&mempools, OBJ_CLASS(parsec_task_t), sizeof(my_op_t)+sizeof(input_values_tuple_type),
+                             offsetof(parsec_task_t, mempool_owner), k);
+    
+    parsec_hash_table_init(&tasks_table, offsetof(my_op_t, op_ht_item), 1024, parsec_tasks_hash_fct, NULL);
   }
 
   Op(const input_edges_type& inedges, const output_edges_type& outedges,
@@ -414,6 +500,8 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
         std::cerr << ")" << std::endl;
       }
     }
+    parsec_hash_table_fini(&tasks_table);
+    parsec_mempool_destruct(&mempools);
   }
 
   // Returns reference to input terminal i to facilitate connection --- terminal
@@ -432,13 +520,19 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
 
   // Manual injection of a task with all input arguments specified as a tuple
   void invoke(const keyT& key, const input_values_tuple_type& args) {
-    set_args(std::make_index_sequence<
-                 std::tuple_size<input_values_tuple_type>::value>{},
-             key, args);
+      // That task is going to complete, so count it as to execute
+      parsec_atomic_inc_32b((volatile uint32_t*)&taskpool->nb_tasks);
+      set_args(std::make_index_sequence<
+               std::tuple_size<input_values_tuple_type>::value>{},
+               key, args);
   }
 
   // Manual injection of a task that has no arguments
-  void invoke(const keyT& key) { set_arg_empty(key); }
+  void invoke(const keyT& key) {
+      // That task is going to complete, so count it as to execute
+      parsec_atomic_inc_32b((volatile uint32_t*)&taskpool->nb_tasks);
+      set_arg_empty(key);
+  }
 };
 
     // Class to wrap a callable with signature

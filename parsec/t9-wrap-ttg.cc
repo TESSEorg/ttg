@@ -9,7 +9,7 @@
 // Same as t9.cc but using TTG wrapper templates
 
 const double L = 10.0;       // The computational domain is [-L,L]
-const double thresh = 1e-5;  // The threshold for small difference coefficients
+const double thresh = 1e-6;  // The threshold for small difference coefficients
 
 void error(const char* s) {
   std::cerr << s << std::endl;
@@ -310,22 +310,19 @@ double C(const double x) { return std::exp(-x * x) * std::sin(x); }
 
 double R(const double x) { return (A(x) + B(x)) * C(x); }
 
-parsec_execution_stream_t* es = NULL;
-parsec_taskpool_t* taskpool = NULL;
+parsec_taskpool_t* parsec::ttg::taskpool = NULL;
+parsec_context_t*  parsec::ttg::parsec = NULL;
 
+volatile uint32_t parsec::ttg::created = 0;
+volatile uint32_t parsec::ttg::sent_to_sched = 0;
+ 
 extern "C" int parsec_ptg_update_runtime_task(parsec_taskpool_t *tp, int tasks);
 
 int main(int argc, char** argv) {
     int provided;
     MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
 
-    parsec_context_t *parsec = parsec_init(1, NULL, NULL);
-    taskpool = (parsec_taskpool_t*)calloc(1, sizeof(parsec_taskpool_t));
-    taskpool->taskpool_id = 1;
-    taskpool->nb_tasks = 1;
-    taskpool->nb_pending_actions = 1;
-    taskpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
-    es = parsec->virtual_processes[0]->execution_streams[0];
+    parsec::ttg::init(2, &argc, &argv);
 
     OpBase::set_trace_all(false);
 
@@ -378,13 +375,11 @@ int main(int argc, char** argv) {
     // This kicks off the entire computation
     start->invoke(Key(0, 0));
     //}
-    
-  parsec_enqueue(parsec, taskpool);
-  int ret = parsec_context_start(parsec);
-  parsec_context_wait(parsec);
+
+    parsec::ttg::start();
 
     //  ::madness::ttg::get_default_world().gop.fence();
-    start->fence();
+  start->fence();
     
   double nap = norma->get(), nac = norma2->get(), nar = norma3->get(), nabcerr = normabcerr->get(),
          ndifferr = normdifferr->get();
@@ -397,7 +392,7 @@ int main(int argc, char** argv) {
     std::cout << "Norm2 of error in diff   " << ndifferr << std::endl;
     //  }
 
-    parsec_fini(&parsec);
+    // parsec::ttg::fini();
     MPI_Finalize();
 
   return 0;
