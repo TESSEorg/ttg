@@ -32,8 +32,8 @@ namespace ttg {
 
 class World {
  public:
-  World() {
-    ctx = parsec_init(1, NULL, NULL);
+  World(int *argc, char **argv[], int ncores) {
+    ctx = parsec_init(ncores, argc, argv);
     tpool = (parsec_taskpool_t *) calloc(1, sizeof(parsec_taskpool_t));
     tpool->taskpool_id = 1;
     tpool->nb_tasks = 1;
@@ -59,20 +59,45 @@ class World {
   void execute() {
     parsec_enqueue(ctx, tpool);
     int ret = parsec_context_start(ctx);
-    parsec_context_wait(ctx);
   }
 
   void fence() {
-    parsec_atomic_add_32b((volatile uint32_t *) &tpool->nb_tasks, -1);
+    parsec_atomic_dec_32b((volatile uint32_t*)&tpool->nb_tasks);
+    parsec_context_wait(ctx);
   }
 
-  parsec_execution_stream_t *execution_stream() { return es; }
-  parsec_taskpool_t *taskpool() { return tpool; }
+  auto* context() { return ctx; }
+  auto* execution_stream() { return es; }
+  auto* taskpool() { return tpool; }
+
+  void increment_created() {
+    parsec_atomic_inc_32b(&created_counter());
+  }
+  void increment_sent_to_sched() {
+    parsec_atomic_inc_32b(&sent_to_sched_counter());
+  }
+
+  uint32_t created() const {
+    return this->created_counter();
+  }
+  uint32_t sent_to_sched() const {
+    return this->sent_to_sched();
+  }
 
  private:
   parsec_context_t *ctx = nullptr;
   parsec_execution_stream_t *es = nullptr;
   parsec_taskpool_t *tpool = nullptr;
+
+  volatile uint32_t& created_counter() const {
+    static volatile uint32_t created = 0;
+    return created;
+  }
+  volatile uint32_t& sent_to_sched_counter() const {
+    static volatile uint32_t sent_to_sched = 0;
+    return sent_to_sched;
+  }
+
 };
 
 namespace detail {
@@ -107,15 +132,6 @@ typedef struct my_op_s {
                        * It is declared as a void * so that the field is aligned with
                        * an addressable byte. */
 } my_op_t;
-
-namespace parsec {
-namespace ttg {
-    
-extern parsec_taskpool_t* taskpool;
-extern parsec_context_t *parsec;
-
-}
-}
 
 static parsec_hook_return_t hook(struct parsec_execution_stream_s* es,
                                  parsec_task_t* task);
@@ -179,10 +195,11 @@ std::mutex PrintThread::_mutexPrint{};
 namespace parsec {
 namespace ttg {
 
-inline void ttg_initialize(int argc, char** argv) {
+template <typename ... RestOfArgs>
+inline void ttg_initialize(int argc, char** argv, int taskpool_size, RestOfArgs&&...) {
   int provided;
   MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
-  set_default_world(new World);
+  set_default_world(new World(&argc,&argv,taskpool_size));
 }
 inline void ttg_finalize() {
   World* default_world = &get_default_world();
@@ -219,30 +236,6 @@ struct ParsecBaseOp {
 };
 //std::map<int, ParsecBaseOp*> ParsecBaseOp::function_id_to_instance = {};
 
-static void init(int cores, int *argc, char **argv[])
-{
-    parsec = parsec_init(cores, argc, argv);
-    taskpool = (parsec_taskpool_t*)calloc(1, sizeof(parsec_taskpool_t));
-    taskpool->taskpool_id = 1;
-    taskpool->nb_tasks = 1;
-    taskpool->nb_pending_actions = 1;
-    taskpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
-}
-
-static void fini(void)
-{
-    parsec_fini(&parsec);
-}
-
-static void start(void)
-{
-    parsec_enqueue(parsec, taskpool);
-    int ret = parsec_context_start(parsec);
-}
-
-extern volatile uint32_t created;
-extern volatile uint32_t sent_to_sched;
- 
 template <typename keyT, typename output_terminalsT, typename derivedT,
           typename... input_valueTs>
 class Op : public ::ttg::OpBase, ParsecBaseOp {
@@ -257,11 +250,6 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   };
 
  public:
-    void fence() {
-        parsec_atomic_dec_32b((volatile uint32_t*)&world.taskpool()->nb_tasks);
-        parsec_context_wait(parsec);
-    }
-  
   static constexpr int numins =
       sizeof...(input_valueTs);  // number of input arguments
   static constexpr int numouts =
@@ -383,7 +371,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
             newtask->op_ht_item.key = hk;
             parsec_hash_table_nolock_insert(&tasks_table, &newtask->op_ht_item);
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
-            parsec_atomic_inc_32b(&created);
+            world.increment_created();
             parsec_atomic_inc_32b((volatile uint32_t*)&world.taskpool()->nb_tasks);
             task = newtask;
             if(tracing())
@@ -420,7 +408,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     assert(count <= self.dependencies_goal);
     
     if (count == self.dependencies_goal) {
-      parsec_atomic_inc_32b(&sent_to_sched);
+      world.increment_sent_to_sched();
       parsec_execution_stream_t *es = world.execution_stream();
       if (tracing())
           PrintThread{} << get_name() << " : " << key << ": invoking op"
@@ -599,8 +587,9 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     self.dependencies_goal = numins; /* (~(uint32_t)0) >> (32 - numins); */
 
     int k = 0;
-    for(int i = 0; i < parsec->nb_vp; i++) {
-        for(int j = 0; j < parsec->virtual_processes[i]->nb_cores; j++) {
+    auto* context = world.context();
+    for(int i = 0; i < context->nb_vp; i++) {
+        for(int j = 0; j < context->virtual_processes[i]->nb_cores; j++) {
             mempools_index[ std::pair<int,int>(i,j) ] = k++;
         }
     }
@@ -664,7 +653,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   // Manual injection of a task with all input arguments specified as a tuple
   void invoke(const keyT& key, const input_values_tuple_type& args) {
       // That task is going to complete, so count it as to execute
-      parsec_atomic_inc_32b((volatile uint32_t*)&taskpool->nb_tasks);
+      parsec_atomic_inc_32b((volatile uint32_t*)&world.taskpool()->nb_tasks);
       set_args(std::make_index_sequence<
                std::tuple_size<input_values_tuple_type>::value>{},
                key, args);
@@ -673,7 +662,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   // Manual injection of a task that has no arguments
   void invoke(const keyT& key) {
       // That task is going to complete, so count it as to execute
-      parsec_atomic_inc_32b((volatile uint32_t*)&taskpool->nb_tasks);
+      parsec_atomic_inc_32b((volatile uint32_t*)&world.taskpool()->nb_tasks);
       set_arg_empty(key);
   }
 };

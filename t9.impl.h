@@ -303,72 +303,74 @@ double C(const double x) { return std::exp(-x * x) * std::sin(x); }
 double R(const double x) { return (A(x) + B(x)) * C(x); }
 
 int main(int argc, char** argv) {
-  ttg_initialize(argc, argv);
+  ttg_initialize(argc, argv, 2);
+  {
 
-  ctlEdge ctl("start ctl");
-  nodeEdge a("a"), b("b"), c("c"), abc("abc"), diffa("diffa"), errdiff("errdiff"), errabc("errabc"), a_plus_b("a+b"),
-      a_plus_b_times_c("(a+b)*c"), deriva("deriva"), compa("compa"), recona("recona");
+    ctlEdge ctl("start ctl");
+    nodeEdge a("a"), b("b"), c("c"), abc("abc"), diffa("diffa"), errdiff("errdiff"), errabc("errabc"), a_plus_b("a+b"),
+        a_plus_b_times_c("(a+b)*c"), deriva("deriva"), compa("compa"), recona("recona");
 
-  // The following can indeed be specified in any order!
-  auto p1 = make_project(&A, ctl, a, "project A");
-  auto p2 = make_project(&B, ctl, b, "project B");
-  auto p3 = make_project(&C, ctl, c, "project C");
-  auto p4 = make_project(&R, ctl, abc, "project ABC");
-  auto p5 = make_project(&diffA, ctl, diffa, "project dA/dx");
+    // The following can indeed be specified in any order!
+    auto p1 = make_project(&A, ctl, a, "project A");
+    auto p2 = make_project(&B, ctl, b, "project B");
+    auto p3 = make_project(&C, ctl, c, "project C");
+    auto p4 = make_project(&R, ctl, abc, "project ABC");
+    auto p5 = make_project(&diffA, ctl, diffa, "project dA/dx");
 
-  auto b1 = make_binary_op(add, a, b, a_plus_b, "a+b");
-  auto b2 = make_binary_op(mul, a_plus_b, c, a_plus_b_times_c, "(a+b)*c");
-  auto b3 = make_binary_op(sub, a_plus_b_times_c, abc, errabc, "(a+b)*c - abc");
-  auto b4 = make_binary_op(sub, diffa, deriva, errdiff, "dA/dx analytic - numeric");
+    auto b1 = make_binary_op(add, a, b, a_plus_b, "a+b");
+    auto b2 = make_binary_op(mul, a_plus_b, c, a_plus_b_times_c, "(a+b)*c");
+    auto b3 = make_binary_op(sub, a_plus_b_times_c, abc, errabc, "(a+b)*c - abc");
+    auto b4 = make_binary_op(sub, diffa, deriva, errdiff, "dA/dx analytic - numeric");
 
-  auto d = make_diff(a, deriva, "dA/dx numeric");
+    auto d = make_diff(a, deriva, "dA/dx numeric");
 
-  auto norma = make_norm2(a);
-  auto normabcerr = make_norm2(errabc);
-  auto normdifferr = make_norm2(errdiff);
+    auto norma = make_norm2(a);
+    auto normabcerr = make_norm2(errabc);
+    auto normdifferr = make_norm2(errdiff);
 
-  auto comp1 = make_compress(a, compa, "compress(A)");
-  auto norma2 = make_norm2(compa);
+    auto comp1 = make_compress(a, compa, "compress(A)");
+    auto norma2 = make_norm2(compa);
 
-  auto recon1 = make_reconstruct(compa, recona, "reconstruct(A)");
-  auto norma3 = make_norm2(recona);
+    auto recon1 = make_reconstruct(compa, recona, "reconstruct(A)");
+    auto norma3 = make_norm2(recona);
 
-  auto start = make_start(ctl);
+    auto start = make_start(ctl);
 
-  // auto printer = make_printer(a);
-  // auto printer2 = make_printer(b);
-  // auto printer = make_printer(a_plus_b);
-  // auto printer2 = make_printer(err);
-  // auto printer4 = make_printer(deriva,"numerical deriv");
-  // auto printer5 = make_printer(diffa, "    exact deriv");
-  // auto printer6 = make_printer(err,"differr");
-  // auto pp = make_printer(compa,"compa");
-  // auto pp = make_printer(compa,"compa");
+    // auto printer = make_printer(a);
+    // auto printer2 = make_printer(b);
+    // auto printer = make_printer(a_plus_b);
+    // auto printer2 = make_printer(err);
+    // auto printer4 = make_printer(deriva,"numerical deriv");
+    // auto printer5 = make_printer(diffa, "    exact deriv");
+    // auto printer6 = make_printer(err,"differr");
+    // auto pp = make_printer(compa,"compa");
+    // auto pp = make_printer(compa,"compa");
 
-  if (ttg_default_execution_context().rank() == 0) {
-    std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
-    std::cout << "==== begin dot ====\n";
-    std::cout << Dot()(start.get()) << std::endl;
-    std::cout << "====  end dot  ====\n";
+    if (ttg_default_execution_context().rank() == 0) {
+      std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
+      std::cout << "==== begin dot ====\n";
+      std::cout << Dot()(start.get()) << std::endl;
+      std::cout << "====  end dot  ====\n";
 
-    // This kicks off the entire computation
-    start->invoke(Key(0, 0));
+      // This kicks off the entire computation
+      start->invoke(Key(0, 0));
+    }
+
+    ttg_execute(ttg_default_execution_context());
+    ttg_fence(ttg_default_execution_context());
+
+    double nap = norma->get(), nac = norma2->get(), nar = norma3->get(), nabcerr = normabcerr->get(),
+        ndifferr = normdifferr->get();
+
+    if (ttg_default_execution_context().rank() == 0) {
+      std::cout << "Norm2 of a projected     " << nap << std::endl;
+      std::cout << "Norm2 of a compressed    " << nac << std::endl;
+      std::cout << "Norm2 of a reconstructed " << nar << std::endl;
+      std::cout << "Norm2 of error in abc    " << nabcerr << std::endl;
+      std::cout << "Norm2 of error in diff   " << ndifferr << std::endl;
+    }
+
   }
-
-  ttg_execute(ttg_default_execution_context());
-  ttg_fence(ttg_default_execution_context());
-
-  double nap = norma->get(), nac = norma2->get(), nar = norma3->get(), nabcerr = normabcerr->get(),
-         ndifferr = normdifferr->get();
-
-  if (ttg_default_execution_context().rank() == 0) {
-    std::cout << "Norm2 of a projected     " << nap << std::endl;
-    std::cout << "Norm2 of a compressed    " << nac << std::endl;
-    std::cout << "Norm2 of a reconstructed " << nar << std::endl;
-    std::cout << "Norm2 of error in abc    " << nabcerr << std::endl;
-    std::cout << "Norm2 of error in diff   " << ndifferr << std::endl;
-  }
-
   ttg_finalize();
 
   return 0;

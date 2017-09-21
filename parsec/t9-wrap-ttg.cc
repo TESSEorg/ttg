@@ -311,12 +311,6 @@ double C(const double x) { return std::exp(-x * x) * std::sin(x); }
 
 double R(const double x) { return (A(x) + B(x)) * C(x); }
 
-parsec_taskpool_t* parsec::ttg::taskpool = NULL;
-parsec_context_t*  parsec::ttg::parsec = NULL;
-
-volatile uint32_t parsec::ttg::created = 0;
-volatile uint32_t parsec::ttg::sent_to_sched = 0;
- 
 extern "C" int parsec_ptg_update_runtime_task(parsec_taskpool_t *tp, int tasks);
 
 int main(int argc, char** argv) {
