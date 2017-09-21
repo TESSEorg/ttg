@@ -20,17 +20,6 @@
 
 #include <madness/world/world_task_queue.h>
 
-/*
-#include <signal.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
-#include <unistd.h>
-
-static inline pid_t gettid() {
-    return syscall(SYS_gettid);
-}
-*/
-
 namespace madness {
   namespace ttg {
 
@@ -41,21 +30,47 @@ namespace madness {
       }
     }  // namespace detail
 
-    World& get_default_world() {
+    inline World& get_default_world() {
       if (detail::default_world_accessor() != nullptr) {
         return *detail::default_world_accessor();
       } else {
         throw "madness::ttg::set_default_world() must be called before use";
       }
     }
-    void set_default_world(World& world) { detail::default_world_accessor() = &world; }
-    void set_default_world(World* world) { detail::default_world_accessor() = world; }
+    inline void set_default_world(World& world) { detail::default_world_accessor() = &world; }
+    inline void set_default_world(World* world) { detail::default_world_accessor() = world; }
+
+    inline void ttg_initialize(int argc, char** argv) {
+      madness::initialize(argc, argv);
+      madness::World world(SafeMPI::COMM_WORLD);
+      set_default_world(world);
+    }
+    inline void ttg_finalize() {
+      madness::finalize();
+    }
+    inline World& ttg_default_execution_context() {
+      return get_default_world();
+    }
+    inline void ttg_execute(World& world) {
+      // World executes tasks eagerly
+    }
+    inline void ttg_fence(World& world) {
+      world.gop.fence();
+    }
+    template <typename T> void ttg_sum(World& world, T& value) {
+      world.gop.sum(value);
+    }
 
     template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
     class Op : public ::ttg::OpBase, public WorldObject<Op<keyT, output_terminalsT, derivedT, input_valueTs...>> {
      private:
       World& world;
       std::shared_ptr<WorldDCPmapInterface<keyT>> pmap;
+
+      // MADNESS tasks pass data directly, as values
+      template <typename T> struct data_wrapper {
+        using type = T;
+      };
 
      protected:
       World& get_world() { return world; }
@@ -69,12 +84,30 @@ namespace madness {
       static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or
                                                                                  // results
 
-      using input_values_tuple_type = std::tuple<input_valueTs...>;
+      template <typename T> using data_wrapper_t = typename data_wrapper<T>::type;
+      template <typename Wrapper> static auto&& unwrap(Wrapper&& wrapper) {
+        return std::forward<Wrapper>(wrapper);
+      }
+      template <typename T> static auto&& wrap(T&& data) {
+        return std::forward<T>(data);
+      }
+
+      using input_values_tuple_type = std::tuple<data_wrapper_t<input_valueTs>...>;
       using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
       using input_edges_type = std::tuple<::ttg::Edge<keyT, input_valueTs>...>;
 
       using output_terminals_type = output_terminalsT;
       using output_edges_type = typename ::ttg::terminals_to_edges<output_terminalsT>::type;
+
+      template <std::size_t i> static auto& get(input_values_tuple_type& intuple) {
+        return unwrap(std::get<i>(intuple));
+      };
+      template <std::size_t i> static const auto& get(const input_values_tuple_type& intuple) {
+        return unwrap(std::get<i>(intuple));
+      };
+      template <std::size_t i> static auto&& get(input_values_tuple_type&& intuple) {
+        return unwrap(std::get<i>(intuple));
+      };
 
      private:
       input_terminals_type input_terminals;
@@ -129,7 +162,7 @@ namespace madness {
           //const char* isref[] = {" ", "&"};
           //std::cout << "about to assign arg " << isref[std::is_reference<T>::value] << demangled_type_name<T>() << "\n";
 
-          std::get<i>(args->t) = std::forward<T>(value);
+          Op::get<i>(args->t) = wrap(std::forward<T>(value));
           args->argset[i] = true;
           args->counter--;
           if (args->counter == 0) {
@@ -171,7 +204,7 @@ namespace madness {
       // Used by invoke to set all arguments associated with a task
       template <size_t... IS>
       void set_args(std::index_sequence<IS...>, const keyT& key, const input_values_tuple_type& args) {
-        int junk[] = {0, (set_arg<IS>(key, std::get<IS>(args)), 0)...};
+        int junk[] = {0, (set_arg<IS>(key, Op::get<IS>(args)), 0)...};
         junk[0]++;
       }
 
@@ -366,7 +399,7 @@ namespace madness {
       void call_func_from_tuple(const keyT& key, typename baseT::input_values_tuple_type&& args,
                                 output_terminalsT& out, std::index_sequence<S...>) {
           func(key,
-               std::forward<typename std::tuple_element<S,typename baseT::input_values_tuple_type>::type>(std::get<S>(args))...,
+               std::forward<typename std::tuple_element<S,typename baseT::input_values_tuple_type>::type>(baseT::template get<S>(args))...,
                out);
       }
 

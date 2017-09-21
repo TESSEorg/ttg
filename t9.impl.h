@@ -1,16 +1,8 @@
 #include <cmath>
 #include <iostream>
-#include "parsec/ttg.h"
-
-#include "parsec.h"
-#include <mpi.h>
-#include <parsec/execution_stream.h>
-#include "../serialization.h"
-
-// Same as t9.cc but using TTG wrapper templates
 
 const double L = 10.0;       // The computational domain is [-L,L]
-const double thresh = 1e-5;  // The threshold for small difference coefficients
+const double thresh = 1e-6;  // The threshold for small difference coefficients
 
 void error(const char* s) {
   std::cerr << s << std::endl;
@@ -24,11 +16,12 @@ double pow2(double n) { return std::pow(2.0, n); }
 struct Key {
   int n;  // leave this as signed otherwise -n does unexpected things
   unsigned long l;
+  uint64_t hashvalue;
 
-    Key() = default;
-    Key(uint64_t hash) : n(hash >> 48), l(hash & 0x0000FFFFFFFFFFFF) {}
+  Key() = default;
+  Key(uint64_t hash) : n(hash >> 48), l(hash & 0x0000FFFFFFFFFFFF), hashvalue(hash) {}
 
-    Key(unsigned long n, unsigned long l) : n(n), l(l) { }
+  Key(unsigned long n, unsigned long l) : n(n), l(l) { rehash(); }
 
   bool operator==(const Key& b) const { return n == b.n && l == b.l; }
 
@@ -45,6 +38,10 @@ struct Key {
   Key left() const { return Key(n, l == 0ul ? (1ul << n) - 1 : l - 1); }  // periodic b.c.
 
   Key right() const { return Key(n, l == ((1ul << n) - 1) ? 0 : l + 1); }  // periodic b.c.
+
+  void rehash() { hashvalue = (size_t(n) << 48) + l; }
+
+  uint64_t hash() const { return hashvalue; }
 };
 
 template <typename Result = uint64_t>
@@ -85,11 +82,6 @@ struct Node {
     if (this->key.n > key.n) error("not a child of this node");
     return s;  // With Haar and current normalization convention nothing needed
   }
-    /*
-  template <typename Archive>
-  void serialize(Archive& ar) {
-    ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
-    }*/
 };
 
 std::ostream& operator<<(std::ostream& s, const Node& node) {
@@ -108,9 +100,8 @@ std::ostream& operator<<(std::ostream& s, const Control& ctl) {
   return s;
 }
 
-using namespace parsec;
-using namespace parsec::ttg;
-using namespace ::ttg;
+#include TTG_RUNTIME_H
+IMPORT_TTG_RUNTIME_NS
 
 using nodeEdge = Edge<Key, Node>;
 using doubleEdge = Edge<Key, double>;
@@ -265,7 +256,7 @@ auto make_reconstruct(const nodeEdge& in, nodeEdge& out, const std::string& name
 class Norm2 : public Op<Key, std::tuple<>, Norm2, Node> {
   using baseT = Op<Key, std::tuple<>, Norm2, Node>;
   double sumsq;
-    //madness::SCALABLE_MUTEX_TYPE charon;
+  std::mutex charon;
 
  public:
   Norm2(const nodeEdge& in, const std::string& name = "norm2")
@@ -273,15 +264,15 @@ class Norm2 : public Op<Key, std::tuple<>, Norm2, Node> {
 
   // Lazy implementation of reduce operation ... just accumulates to local variable instead of summing up tree
   void op(const Key& key, const std::tuple<Node>& t, std::tuple<>& output) {
-      //madness::ScopedMutex<madness::SCALABLE_MUTEX_TYPE> obolus(charon);
-      // TODO: parsec locks
-    const Node& node = std::get<0>(t);
+    std::lock_guard<std::mutex> obolus(charon);  // <<<<<<<<<< mutex
+    const Node& node = baseT::get<0>(t);
     const double boxsize = 2.0 * L * pow2(-key.n);
     sumsq += (node.s * node.s + node.d * node.d) * boxsize;
   }
 
   double get() const {
     double value = sumsq;
+    ttg_sum(ttg_default_execution_context(), value);
     return std::sqrt(value);
   }
 };
@@ -311,24 +302,8 @@ double C(const double x) { return std::exp(-x * x) * std::sin(x); }
 
 double R(const double x) { return (A(x) + B(x)) * C(x); }
 
-parsec_execution_stream_t* es = NULL;
-parsec_taskpool_t* taskpool = NULL;
-
-extern "C" int parsec_ptg_update_runtime_task(parsec_taskpool_t *tp, int tasks);
-
 int main(int argc, char** argv) {
-    int provided;
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
-
-    parsec_context_t *parsec = parsec_init(1, NULL, NULL);
-    taskpool = (parsec_taskpool_t*)calloc(1, sizeof(parsec_taskpool_t));
-    taskpool->taskpool_id = 1;
-    taskpool->nb_tasks = 1;
-    taskpool->nb_pending_actions = 1;
-    taskpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
-    es = parsec->virtual_processes[0]->execution_streams[0];
-
-    OpBase::set_trace_all(false);
+  ttg_initialize(argc, argv);
 
   ctlEdge ctl("start ctl");
   nodeEdge a("a"), b("b"), c("c"), abc("abc"), diffa("diffa"), errdiff("errdiff"), errabc("errabc"), a_plus_b("a+b"),
@@ -370,7 +345,7 @@ int main(int argc, char** argv) {
   // auto pp = make_printer(compa,"compa");
   // auto pp = make_printer(compa,"compa");
 
-  //if (::madness::ttg::get_default_world().rank() == 0) {
+  if (ttg_default_execution_context().rank() == 0) {
     std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
     std::cout << "==== begin dot ====\n";
     std::cout << Dot()(start.get()) << std::endl;
@@ -378,27 +353,23 @@ int main(int argc, char** argv) {
 
     // This kicks off the entire computation
     start->invoke(Key(0, 0));
-    //}
-    
-  parsec_enqueue(parsec, taskpool);
-  int ret = parsec_context_start(parsec);
-  parsec_context_wait(parsec);
+  }
 
-    start->fence();
-    
+  ttg_execute(ttg_default_execution_context());
+  ttg_fence(ttg_default_execution_context());
+
   double nap = norma->get(), nac = norma2->get(), nar = norma3->get(), nabcerr = normabcerr->get(),
          ndifferr = normdifferr->get();
 
-  //if (::madness::ttg::get_default_world().rank() == 0) {
+  if (ttg_default_execution_context().rank() == 0) {
     std::cout << "Norm2 of a projected     " << nap << std::endl;
     std::cout << "Norm2 of a compressed    " << nac << std::endl;
     std::cout << "Norm2 of a reconstructed " << nar << std::endl;
     std::cout << "Norm2 of error in abc    " << nabcerr << std::endl;
     std::cout << "Norm2 of error in diff   " << ndifferr << std::endl;
-    //  }
+  }
 
-    parsec_fini(&parsec);
-    MPI_Finalize();
+  ttg_finalize();
 
   return 0;
 }

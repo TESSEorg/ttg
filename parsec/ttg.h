@@ -21,8 +21,74 @@
 #include <parsec/scheduling.h>
 #include <stdlib.h>
 
-extern parsec_execution_stream_t* es;
-extern parsec_taskpool_t* taskpool;
+extern "C" int parsec_ptg_update_runtime_task(parsec_taskpool_t *tp, int tasks);
+
+namespace parsec {
+namespace ttg {
+
+class World {
+ public:
+  World() {
+    ctx = parsec_init(1, NULL, NULL);
+    tpool = (parsec_taskpool_t *) calloc(1, sizeof(parsec_taskpool_t));
+    tpool->taskpool_id = 1;
+    tpool->nb_tasks = 1;
+    tpool->nb_pending_actions = 1;
+    tpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
+    es = ctx->virtual_processes[0]->execution_streams[0];
+  }
+
+  ~World() {
+    parsec_fini(&ctx);
+  }
+
+  MPI_Comm comm() const {
+    return MPI_COMM_WORLD;
+  }
+
+  int rank() const {
+    int rank;
+    MPI_Comm_rank(comm(), &rank);
+    return rank;
+  }
+
+  void execute() {
+    parsec_enqueue(ctx, tpool);
+    int ret = parsec_context_start(ctx);
+    parsec_context_wait(ctx);
+  }
+
+  void fence() {
+    parsec_atomic_add_32b((volatile uint32_t *) &tpool->nb_tasks, -1);
+  }
+
+  parsec_execution_stream_t *execution_stream() { return es; }
+  parsec_taskpool_t *taskpool() { return tpool; }
+
+ private:
+  parsec_context_t *ctx = nullptr;
+  parsec_execution_stream_t *es = nullptr;
+  parsec_taskpool_t *tpool = nullptr;
+};
+
+namespace detail {
+World *&default_world_accessor() {
+  static World *world_ptr = nullptr;
+  return world_ptr;
+}
+}  // namespace detail
+
+inline World &get_default_world() {
+  if (detail::default_world_accessor() != nullptr) {
+    return *detail::default_world_accessor();
+  } else {
+    throw "parsec::ttg::set_default_world() must be called before use";
+  }
+}
+inline void set_default_world(World &world) { detail::default_world_accessor() = &world; }
+inline void set_default_world(World *world) { detail::default_world_accessor() = world; }
+}  // namespace ttg
+}  // namespace parsec
 
 extern "C" {
 typedef struct my_op_s : public parsec_task_t {
@@ -49,8 +115,8 @@ static parsec_hook_return_t count_down_task(parsec_execution_stream_t* es,
                                             parsec_task_t* task) {
   (void)es;
   (void)task;
-  uint32_t b = taskpool->nb_tasks;
-  uint32_t r = parsec_atomic_add_32b((volatile uint32_t*)&taskpool->nb_tasks, -1);
+  uint32_t b = ::parsec::ttg::get_default_world().taskpool()->nb_tasks;
+  uint32_t r = parsec_atomic_add_32b((volatile uint32_t*)&::parsec::ttg::get_default_world().taskpool()->nb_tasks, -1);
   printf("%d < %d\n", b, r);
   return PARSEC_HOOK_RETURN_DONE;
 }
@@ -74,6 +140,38 @@ template<> uint64_t unique_hash<uint64_t, uint64_t>(const uint64_t& t) {
 namespace parsec {
 namespace ttg {
 
+inline void ttg_initialize(int argc, char** argv) {
+  int provided;
+  MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+  set_default_world(new World);
+}
+inline void ttg_finalize() {
+  World* default_world = &get_default_world();
+  delete default_world;
+  set_default_world(nullptr);
+  MPI_Finalize();
+}
+inline World& ttg_default_execution_context() {
+  return get_default_world();
+}
+inline void ttg_execute(World& world) {
+  world.execute();
+}
+inline void ttg_fence(World& world) {
+  world.fence();
+}
+inline void ttg_sum(World &world, double &value) {
+  double result = 0.0;
+  MPI_Allreduce(
+      &value,
+      &result,
+      1,
+      MPI_DOUBLE,
+      MPI_SUM,
+      world.comm());
+  value = result;
+}
+
 struct ParsecBaseOp {
  protected:
     //  static std::map<int, ParsecBaseOp*> function_id_to_instance;
@@ -88,16 +186,27 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
  private:
   using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
 
+  // PaRSEC for now passes data by value, will use datacopy handles
+  template <typename T> struct data_wrapper {
+    using type = T;
+  };
+
  public:
-    void fence() { printf("Fence called\n"); parsec_atomic_add_32b((volatile uint32_t*)&taskpool->nb_tasks, -1); }
-  
   static constexpr int numins =
       sizeof...(input_valueTs);  // number of input arguments
   static constexpr int numouts =
       std::tuple_size<output_terminalsT>::value;  // number of outputs or
                                                   // results
 
-  using input_values_tuple_type = std::tuple<input_valueTs...>;
+  template <typename T> using data_wrapper_t = typename data_wrapper<T>::type;
+  template <typename Wrapper> static auto&& unwrap(Wrapper&& wrapper) {
+    return std::forward<Wrapper>(wrapper);
+  }
+  template <typename T> static auto&& wrap(T&& data) {
+    return std::forward<T>(data);
+  }
+
+  using input_values_tuple_type = std::tuple<data_wrapper_t<input_valueTs>...>;
   using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
   using input_edges_type = std::tuple<::ttg::Edge<keyT, input_valueTs>...>;
 
@@ -105,10 +214,26 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   using output_edges_type =
       typename ::ttg::terminals_to_edges<output_terminalsT>::type;
 
+  template <std::size_t i> static auto& get(input_values_tuple_type& intuple) {
+    return unwrap(std::get<i>(intuple));
+  };
+  template <std::size_t i> static const auto& get(const input_values_tuple_type& intuple) {
+    return unwrap(std::get<i>(intuple));
+  };
+  template <std::size_t i> static auto&& get(input_values_tuple_type&& intuple) {
+    return unwrap(std::get<i>(intuple));
+  };
+
  private:
   input_terminals_type input_terminals;
   output_terminalsT output_terminals;
 
+  World& world;
+
+ protected:
+  World& get_world() { return world; }
+
+ private:
   struct OpArgs {
     int counter;                      // Tracks the number of arguments set
     std::array<bool, numins> argset;  // Tracks if a given arg is already set;
@@ -166,7 +291,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
 
     using ::ttg::unique_hash;
     data_repo_entry_t* e =
-        data_repo_lookup_entry_and_create(es, input_data, unique_hash<uint64_t>(key));
+        data_repo_lookup_entry_and_create(world.execution_stream(), input_data, unique_hash<uint64_t>(key));
     if (e->data[i] != NULL) {
       std::cerr << get_name() << " : " << key
                 << ": error argument is already set : " << i << std::endl;
@@ -180,7 +305,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
 
         OBJ_CONSTRUCT(task, parsec_list_item_t);
         task->task_class = &this->self;
-        task->taskpool = taskpool;
+        task->taskpool = world.taskpool();
         task->status = PARSEC_TASK_STATUS_HOOK;
 
         task->function_template_class_ptr =
@@ -192,14 +317,14 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
             free(task);
             task = static_cast<my_op_t*>(e->generator);
         } else {
-            uint32_t b = taskpool->nb_tasks;
-            uint32_t r = parsec_atomic_add_32b((volatile uint32_t*)&taskpool->nb_tasks, 1);
+            uint32_t b = world.taskpool()->nb_tasks;
+            uint32_t r = parsec_atomic_add_32b((volatile uint32_t*)&world.taskpool()->nb_tasks, 1);
             printf("%d > %d\n", b, r);
         }
     }
     
     input_values_tuple_type *tuple = static_cast<input_values_tuple_type *>((void*)&task->user_tuple);
-    new (&std::get<i>(*tuple)) valueT(std::forward<T>(value));
+    new (&Op::get<i>(*tuple)) data_wrapper_t<valueT>(wrap(std::forward<T>(value)));
     parsec_data_copy_t* copy = OBJ_NEW(parsec_data_copy_t);
     e->data[i] = copy;
     copy->device_private = (void*)(&std::get<i>(*tuple));
@@ -221,11 +346,11 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
         task->data[ii].data_in = e->data[ii];
       }
       using ::ttg::unique_hash;
-      data_repo_entry_used_once(es, input_data, unique_hash<uint64_t>(key));
+      data_repo_entry_used_once(world.execution_stream(), input_data, unique_hash<uint64_t>(key));
       if (tracing())
         std::cout << get_name() << " : " << key << ": invoking op "
                   << std::endl;
-      __parsec_schedule(es, static_cast<parsec_task_t*>(task), 0);
+      __parsec_schedule(world.execution_stream(), static_cast<parsec_task_t*>(task), 0);
     }
   }
 
@@ -239,7 +364,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
 
     OBJ_CONSTRUCT(task, parsec_list_item_t);
     task->task_class = &this->self;
-    task->taskpool = taskpool;
+    task->taskpool = world.taskpool();
     task->status = PARSEC_TASK_STATUS_HOOK;
 
     task->function_template_class_ptr =
@@ -248,14 +373,14 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     using ::ttg::unique_hash;
     task->key = unique_hash<uint64_t>(key);
     task->data[0].data_in = static_cast<parsec_data_copy_t*>(NULL);
-    __parsec_schedule(es, task, 0);
+    __parsec_schedule(world.execution_stream(), task, 0);
   }
 
   // Used by invoke to set all arguments associated with a task
   template <size_t... IS>
   void set_args(std::index_sequence<IS...>, const keyT& key,
                 const input_values_tuple_type& args) {
-    int junk[] = {0, (set_arg<IS>(key, std::get<IS>(args)), 0)...};
+    int junk[] = {0, (set_arg<IS>(key, Op::get<IS>(args)), 0)...};
     junk[0]++;
   }
 
@@ -320,10 +445,14 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     junk[0]++;
   }
 
+  void fence() override {
+    get_default_world().fence();
+  }
+
  public:
   Op(const std::string& name, const std::vector<std::string>& innames,
      const std::vector<std::string>& outnames)
-      : ::ttg::OpBase(name, numins, numouts) {
+      : ::ttg::OpBase(name, numins, numouts), world(get_default_world()) {
     // Cannot call these in base constructor since terminals not yet constructed
     if (innames.size() != std::tuple_size<input_terminals_type>::value)
       throw "parsec::ttg::OP: #input names != #input terminals";
@@ -488,7 +617,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       void call_func_from_tuple(const keyT& key, typename baseT::input_values_tuple_type&& args,
                                 output_terminalsT& out, std::index_sequence<S...>) {
           func(key,
-               std::forward<typename std::tuple_element<S,typename baseT::input_values_tuple_type>::type>(std::get<S>(args))...,
+               std::forward<typename std::tuple_element<S,typename baseT::input_values_tuple_type>::type>(baseT::template get<S>(args))...,
                out);
       }
 

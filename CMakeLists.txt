@@ -73,6 +73,10 @@ target_link_libraries(madness-1d LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER
 add_executable (t9-wrap-mad madness/t9-wrap-ttg.cc)
 target_link_libraries(t9-wrap-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
+# same T9 example, but using runtime-agnostic implementation
+add_executable (t9-mad madness/t9.cc t9.impl.h)
+target_link_libraries(t9-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
 # dense matmul
 add_executable (mxm-summa-mad madness/mxm-summa.cc)
 target_link_libraries(mxm-summa-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
@@ -121,6 +125,10 @@ target_link_libraries(ttgtest-parsec LINK_PUBLIC ttg-parsec)
 # Harder test
 add_executable (t9-wrap-parsec parsec/t9-wrap-ttg.cc)
 target_link_libraries(t9-wrap-parsec LINK_PUBLIC ttg-parsec)
+
+# same T9 example, but using runtime-agnostic implementation
+add_executable (t9-parsec parsec/t9.cc t9.impl.h)
+target_link_libraries(t9-parsec LINK_PUBLIC ttg-parsec)
 
 # sparse matmul
 if (EIGEN3_FOUND)
