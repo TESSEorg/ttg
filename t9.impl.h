@@ -263,7 +263,7 @@ class Norm2 : public Op<Key, std::tuple<>, Norm2, Node> {
       : baseT(edges(in), edges(), name, {"nodes"}, {}), sumsq(0.0) {}
 
   // Lazy implementation of reduce operation ... just accumulates to local variable instead of summing up tree
-  void op(const Key& key, const std::tuple<Node>& t, std::tuple<>& output) {
+  template <typename InputTuple> void op(const Key& key, InputTuple&& t, std::tuple<>& output) {
     std::lock_guard<std::mutex> obolus(charon);  // <<<<<<<<<< mutex
     const Node& node = baseT::get<0>(t);
     const double boxsize = 2.0 * L * pow2(-key.n);

@@ -67,11 +67,6 @@ namespace madness {
       World& world;
       std::shared_ptr<WorldDCPmapInterface<keyT>> pmap;
 
-      // MADNESS tasks pass data directly, as values
-      template <typename T> struct data_wrapper {
-        using type = T;
-      };
-
      protected:
       World& get_world() { return world; }
       std::shared_ptr<WorldDCPmapInterface<keyT>>& get_pmap() { return pmap; }
@@ -84,7 +79,8 @@ namespace madness {
       static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or
                                                                                  // results
 
-      template <typename T> using data_wrapper_t = typename data_wrapper<T>::type;
+      // MADNESS tasks pass data directly, as values
+      template <typename T> using data_wrapper_t = T;
       template <typename Wrapper> static auto&& unwrap(Wrapper&& wrapper) {
         return std::forward<Wrapper>(wrapper);
       }

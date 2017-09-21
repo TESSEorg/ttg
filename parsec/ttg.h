@@ -244,11 +244,6 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   parsec_mempool_t mempools;
   std::map< std::pair<int,int>, int > mempools_index;
 
-  // PaRSEC for now passes data by value, will use datacopy handles
-  template <typename T> struct data_wrapper {
-    using type = T;
-  };
-
  public:
   static constexpr int numins =
       sizeof...(input_valueTs);  // number of input arguments
@@ -256,7 +251,8 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       std::tuple_size<output_terminalsT>::value;  // number of outputs or
                                                   // results
 
-  template <typename T> using data_wrapper_t = typename data_wrapper<T>::type;
+  // PaRSEC for now passes data by value, will use datacopy handles
+  template <typename T> using data_wrapper_t = T;
   template <typename Wrapper> static auto&& unwrap(Wrapper&& wrapper) {
     return std::forward<Wrapper>(wrapper);
   }
