@@ -62,8 +62,8 @@ message(STATUS "MADNESS_FOUND=${MADNESS_FOUND}")
 target_link_libraries(ttg-mad INTERFACE MADworld ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
 # sanity check
-add_executable (ttgtest-mad madness/ttg.cc)
-target_link_libraries(ttgtest-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+add_executable (test-mad madness/test.cc)
+target_link_libraries(test-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
 # madness-1d example
 add_executable(madness-1d madness/madness-1d/madness-1d.cc)
@@ -118,8 +118,8 @@ target_include_directories(ttg-parsec INTERFACE ${PARSEC_INCLUDE_DIRS})
 target_link_libraries(ttg-parsec INTERFACE parsec ${PARSEC_LIBRARIES} ${MPI_C_LIBRARIES})
 
 # sanity check
-add_executable (ttgtest-parsec parsec/ttg.cc)
-target_link_libraries(ttgtest-parsec LINK_PUBLIC ttg-parsec)
+add_executable (test-parsec parsec/test.cc)
+target_link_libraries(test-parsec LINK_PUBLIC ttg-parsec)
 
 # Harder test
 add_executable (t9-wrap-parsec parsec/t9-wrap-ttg.cc)

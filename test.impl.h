@@ -1,17 +1,9 @@
-
-#define WORLD_INSTANTIATE_STATIC_TEMPLATES
-#include "parsec/ttg.h"
-#include <iostream>
-#include <tuple>
-
-#include "parsec.h"
-#include <mpi.h>
-#include <parsec/execution_stream.h>
-
-using namespace parsec::ttg;
-using namespace ::ttg;
+#include <cstdint>
 
 using keyT = uint64_t;
+
+#include TTG_RUNTIME_H
+IMPORT_TTG_RUNTIME_NS
 
 class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>,
                        A, int> {
@@ -25,9 +17,9 @@ class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>,
     const typename baseT::output_edges_type& outedges, const std::string& name)
       : baseT(inedges, outedges, name, {"input"}, {"result", "iterate"}) {}
 
-  void op(const keyT& key, const std::tuple<int>& t,
+  void op(const keyT& key, baseT::input_values_tuple_type&& t,
           baseT::output_terminals_type& out) {
-    int value = std::get<0>(t);
+    int value = baseT::get<0>(t);
     std::cout << "A got value " << value << std::endl;
     if (value >= 100) {
       ::send<0>(key, value, out);
@@ -47,7 +39,7 @@ class Producer : public Op<keyT, std::tuple<Out<keyT, int>>, Producer> {
            const std::string& name)
       : baseT(edges(), outedges, name, {}, {"output"}) {}
 
-  void op(const keyT& key, const std::tuple<>& t,
+  void op(const keyT& key, baseT::input_values_tuple_type&& t,
           baseT::output_terminals_type& out) {
     std::cout << "produced " << 0 << std::endl;
     ::send<0>((int)(key), 0, out);
@@ -59,10 +51,9 @@ class Consumer : public Op<keyT, std::tuple<>, Consumer, int> {
 
  public:
   Consumer(const std::string& name) : baseT(name, {"input"}, {}) {}
-  void op(const keyT& key, const std::tuple<int>& t,
+  void op(const keyT& key, baseT::input_values_tuple_type&& t,
           baseT::output_terminals_type& out) {
-    std::cout << "consumed " << std::get<0>(t) << std::endl;
-    taskpool->nb_tasks = 0;
+    std::cout << "consumed " << baseT::get<0>(t) << std::endl;
   }
 
   Consumer(const typename baseT::input_edges_type& inedges,
@@ -77,15 +68,12 @@ class Everything : public Op<keyT, std::tuple<>, Everything> {
   A a;
   Consumer consumer;
 
-  parsec_context_t* ctx;
-
  public:
-  Everything(parsec_context_t* context)
+  Everything()
       : baseT("everything", {}, {}),
         producer("producer"),
         a("A"),
-        consumer("consumer"),
-        ctx(context) {
+        consumer("consumer") {
       connect<0,0>(&producer, &a);
       connect<0,0>(&a, &consumer);
       connect<1,0>(&a, &a);
@@ -101,10 +89,6 @@ class Everything : public Op<keyT, std::tuple<>, Everything> {
   void start() {
     // if (my rank = 0)
     producer.invoke(0);
-  }
-
-  void wait() {
-    // ctx->fence();
   }
 };
 
@@ -231,36 +215,20 @@ public:
 };
 #endif
 
-parsec_execution_stream_t* es = NULL;
-parsec_taskpool_t* taskpool = NULL;
-
-extern "C" int parsec_ptg_update_runtime_task(parsec_taskpool_t *tp, int tasks);
-
 int main(int argc, char** argv) {
-    int provided;
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+  ttg_initialize(argc, argv, 2);
+  {
+    OpBase::set_trace_all(true);
 
-    parsec_context_t *parsec = parsec_init(1, NULL, NULL);
-    taskpool = (parsec_taskpool_t*)calloc(1, sizeof(parsec_taskpool_t));
-    taskpool->taskpool_id = 1;
-    taskpool->nb_tasks = 1;
-    taskpool->nb_pending_actions = 1;
-    taskpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
-    es = parsec->virtual_processes[0]->execution_streams[0];
+    // First compose with manual classes and connections
+    Everything x;
+    x.print();
+    std::cout << x.dot() << std::endl;
 
-  OpBase::set_trace_all(true);
+    x.start();
 
-  // First compose with manual classes and connections
-  Everything x(parsec);
-  x.print();
-  std::cout << x.dot() << std::endl;
-
-  x.start();
-  x.wait();
-
-  parsec_enqueue(parsec, taskpool);
-  int ret = parsec_context_start(parsec);
-  parsec_context_wait(parsec);
+    ttg_execute(ttg_default_execution_context());
+    ttg_fence(ttg_default_execution_context());
 
 #if 0
     // Next compose with manual classes and edges
@@ -283,8 +251,8 @@ int main(int argc, char** argv) {
     q.start();
     q.wait();
 #endif
+  }
+  ttg_finalize();
 
-    parsec_fini(&parsec);
-    MPI_Finalize();
-    return 0;
+  return 0;
 }

@@ -251,13 +251,40 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       std::tuple_size<output_terminalsT>::value;  // number of outputs or
                                                   // results
 
-  // PaRSEC for now passes data by value, will use datacopy handles
-  template <typename T> using data_wrapper_t = T;
+  // PaRSEC for now passes data as tuple of shared_ptr, will use datacopies later
+  //template <typename T> using data_wrapper_t = T;
+  template <typename T> using data_wrapper_t = std::shared_ptr<T>;
+  template <typename T> struct data_wrapper_traits {
+    using type = T;
+  };
+  template <typename T> struct data_wrapper_traits<data_wrapper_t<T>> {
+    using type = T;
+  };
+  template <typename T> struct data_wrapper_traits<data_wrapper_t<T>&> {
+    using type = T&;
+  };
+  template <typename T> struct data_wrapper_traits<const data_wrapper_t<T>&> {
+    using type = const T&;
+  };
+  template <typename T> struct data_wrapper_traits<data_wrapper_t<T>&&> {
+    using type = T&&;
+  };
+  template <typename T> struct data_wrapper_traits<const data_wrapper_t<T>&&> {
+    using type = const T&&;
+  };
+  template <typename T> using data_unwrapped_t = typename data_wrapper_traits<T>::type;
+
   template <typename Wrapper> static auto&& unwrap(Wrapper&& wrapper) {
-    return std::forward<Wrapper>(wrapper);
+    return *wrapper;
   }
-  template <typename T> static auto&& wrap(T&& data) {
-    return std::forward<T>(data);
+  template <typename T> static data_wrapper_t<std::decay_t<T>> wrap(T&& data) {
+    return std::make_shared<std::decay_t<T>>(std::forward<T>(data));
+  }
+  template <typename T> static data_wrapper_t<T> wrap(data_wrapper_t<T>&& data) {
+    return std::move(data);
+  }
+  template <typename T> static const data_wrapper_t<T>& wrap(const data_wrapper_t<T>& data) {
+    return data;
   }
 
   using input_values_tuple_type = std::tuple<data_wrapper_t<input_valueTs>...>;
@@ -330,7 +357,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   template <std::size_t i, typename T>
   void set_arg(const keyT& key, T&& value) {
     using valueT =
-        typename std::tuple_element<i, input_values_tuple_type>::type;
+    data_unwrapped_t<typename std::tuple_element<i, input_values_tuple_type>::type>;
 
     if (tracing())
         PrintThread{} << get_name() << " : " << key << ": setting argument : " << i
@@ -700,7 +727,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       void call_func_from_tuple(const keyT& key, typename baseT::input_values_tuple_type&& args,
                                 output_terminalsT& out, std::index_sequence<S...>) {
           func(key,
-               std::forward<typename std::tuple_element<S,typename baseT::input_values_tuple_type>::type>(baseT::template get<S>(args))...,
+               std::forward<typename baseT::template data_wrapper_traits<typename std::tuple_element<S,typename baseT::input_values_tuple_type>::type>::type>(baseT::template get<S>(args))...,
                out);
       }
 
