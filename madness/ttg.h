@@ -41,8 +41,7 @@ namespace madness {
     inline void set_default_world(World* world) { detail::default_world_accessor() = world; }
 
     template <typename ... RestOfArgs> inline void ttg_initialize(int argc, char** argv, RestOfArgs&&...) {
-      madness::initialize(argc, argv);
-      madness::World world(SafeMPI::COMM_WORLD);
+      World& world = madness::initialize(argc, argv);
       set_default_world(world);
     }
     inline void ttg_finalize() {
