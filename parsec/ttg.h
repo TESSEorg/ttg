@@ -250,9 +250,8 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       std::tuple_size<output_terminalsT>::value;  // number of outputs or
                                                   // results
 
-  // PaRSEC for now passes data as tuple of shared_ptr, will use datacopies later
-  //template <typename T> using data_wrapper_t = T;
-  template <typename T> using data_wrapper_t = std::shared_ptr<T>;
+  // PaRSEC for now passes data as tuple of ptrs (datacopies have these pointers also)
+  template <typename T> using data_wrapper_t = T*;
   template <typename T> struct data_wrapper_traits {
     using type = T;
   };
@@ -277,7 +276,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     return *wrapper;
   }
   template <typename T> static data_wrapper_t<std::decay_t<T>> wrap(T&& data) {
-    return std::make_shared<std::decay_t<T>>(std::forward<T>(data));
+    return new std::decay_t<T>(std::forward<T>(data));
   }
   template <typename T> static data_wrapper_t<T> wrap(data_wrapper_t<T>&& data) {
     return std::move(data);
@@ -420,7 +419,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     new (&std::get<i>(*tuple)) data_wrapper_t<valueT>(wrap(std::forward<T>(value)));
     parsec_data_copy_t* copy = OBJ_NEW(parsec_data_copy_t);
     task->parsec_task.data[i].data_in = copy;
-    copy->device_private = (void*)(&std::get<i>(*tuple));
+    copy->device_private = (void*)(std::get<i>(*tuple));  // tuple holds pointers already
     // uncomment this if you want to test deserialization ... also comment out the placement new above
 //    auto* ddesc = ::ttg::get_data_descriptor<valueT>();
 //    void* value_ptr = (void*)&value;
