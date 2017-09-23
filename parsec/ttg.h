@@ -417,7 +417,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     assert(task->user_tuple != nullptr);
     input_values_tuple_type *tuple = static_cast<input_values_tuple_type *>(task->user_tuple);
 
-    new (&Op::get<i>(*tuple)) data_wrapper_t<valueT>(wrap(std::forward<T>(value)));
+    new (&std::get<i>(*tuple)) data_wrapper_t<valueT>(wrap(std::forward<T>(value)));
     parsec_data_copy_t* copy = OBJ_NEW(parsec_data_copy_t);
     task->parsec_task.data[i].data_in = copy;
     copy->device_private = (void*)(&std::get<i>(*tuple));

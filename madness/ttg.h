@@ -157,7 +157,7 @@ namespace madness {
           //const char* isref[] = {" ", "&"};
           //std::cout << "about to assign arg " << isref[std::is_reference<T>::value] << demangled_type_name<T>() << "\n";
 
-          Op::get<i>(args->t) = wrap(std::forward<T>(value));
+          std::get<i>(args->t) = wrap(std::forward<T>(value));
           args->argset[i] = true;
           args->counter--;
           if (args->counter == 0) {
