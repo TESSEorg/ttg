@@ -128,9 +128,8 @@ typedef struct my_op_s {
     void *object_ptr;
     void (*static_set_arg)(int, int);
     uint64_t key;
-    void *user_tuple; /* user_tuple starts here, but overshoots the data structure
-                       * It is declared as a void * so that the field is aligned with
-                       * an addressable byte. */
+    void *user_tuple; /* user_tuple will past the end of my_op_s (to allow for proper alignment)
+                       * This points to the beginning of the tuple. */
 } my_op_t;
 
 static parsec_hook_return_t hook(struct parsec_execution_stream_s* es,
@@ -337,7 +336,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
                         << std::endl;
       }
       obj->op(keyT(task->key),
-              std::move(*static_cast<input_values_tuple_type*>((void*)&task->user_tuple)),
+              std::move(*static_cast<input_values_tuple_type*>(task->user_tuple)),
               obj->output_terminals);
       if (obj->tracing())
           PrintThread{} << obj->get_name() << " : " << keyT(task->key) << ": done executing"
@@ -366,12 +365,13 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     using ::ttg::unique_hash;
     uint64_t hk = unique_hash<uint64_t>(key);
     my_op_t *task = NULL;
+    constexpr const std::size_t alignment_of_input_tuple = std::alignment_of<input_values_tuple_type>::value;
     if( NULL == (task = (my_op_t*)parsec_hash_table_find(&tasks_table, hk)) ) {
         my_op_t *newtask;
         parsec_execution_stream_s *es = world.execution_stream();
         parsec_thread_mempool_t *mempool = &mempools.thread_mempools[ mempools_index[std::pair<int,int>(es->virtual_process->vp_id, es->th_id)] ];
         newtask = (my_op_t *) parsec_thread_mempool_allocate(mempool);
-        memset((void*)newtask, 0, sizeof(my_op_t));
+        memset((void*)newtask, 0, sizeof(my_op_t) + sizeof(input_values_tuple_type) + alignment_of_input_tuple);
         newtask->parsec_task.mempool_owner = mempool;
         
         OBJ_CONSTRUCT(&newtask->parsec_task, parsec_list_item_t);
@@ -410,8 +410,13 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
                 << ": error argument is already set : " << i << std::endl;
         throw "bad set arg";
     }
-    
-    input_values_tuple_type *tuple = static_cast<input_values_tuple_type *>((void*)&task->user_tuple);
+
+    void * task_body_tail_ptr = static_cast<void*>(&task + sizeof(task));
+    std::size_t task_body_tail_size = sizeof(input_values_tuple_type) + alignment_of_input_tuple;
+    task->user_tuple = std::align(alignment_of_input_tuple, sizeof(input_values_tuple_type), task_body_tail_ptr, task_body_tail_size);
+    assert(task->user_tuple != nullptr);
+    input_values_tuple_type *tuple = static_cast<input_values_tuple_type *>(task->user_tuple);
+
     new (&Op::get<i>(*tuple)) data_wrapper_t<valueT>(wrap(std::forward<T>(value)));
     parsec_data_copy_t* copy = OBJ_NEW(parsec_data_copy_t);
     task->parsec_task.data[i].data_in = copy;
@@ -616,7 +621,8 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
             mempools_index[ std::pair<int,int>(i,j) ] = k++;
         }
     }
-    parsec_mempool_construct(&mempools, OBJ_CLASS(parsec_task_t), sizeof(my_op_t)+sizeof(input_values_tuple_type),
+    // + alignment_of_input_tuple to allow alignment of input_values_tuple_type
+    parsec_mempool_construct(&mempools, OBJ_CLASS(parsec_task_t), sizeof(my_op_t) + sizeof(input_values_tuple_type) + alignof(input_values_tuple_type),
                              offsetof(parsec_task_t, mempool_owner), k);
     
     parsec_hash_table_init(&tasks_table, offsetof(my_op_t, op_ht_item), 1024, parsec_tasks_hash_fct, NULL);
