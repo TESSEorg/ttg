@@ -411,7 +411,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
         throw "bad set arg";
     }
 
-    void * task_body_tail_ptr = static_cast<void*>(&task + sizeof(task));
+    void * task_body_tail_ptr = static_cast<void*>(task + sizeof(my_op_t));
     std::size_t task_body_tail_size = sizeof(input_values_tuple_type) + alignment_of_input_tuple;
     task->user_tuple = std::align(alignment_of_input_tuple, sizeof(input_values_tuple_type), task_body_tail_ptr, task_body_tail_size);
     assert(task->user_tuple != nullptr);
