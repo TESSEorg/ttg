@@ -45,7 +45,7 @@ namespace ttg {
     out << ' ' << t;
     return print_helper(out, ts...);
   }
-  std::mutex& print_mutex_accessor() {
+  inline std::mutex& print_mutex_accessor() {
     static std::mutex mutex;
     return mutex;
   }
