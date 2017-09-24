@@ -677,8 +677,10 @@ namespace ttg {
     void send(const keyT& key, valueT&& value) {
         //std::cout << "Out::send-move::\n";
       unsigned int N = successors.size();
-      for (unsigned int i = 0; i < N - 1; i++) successors[i]->send(key, value);
-      if (N) successors[N - 1]->send(key, std::forward<valueT>(value));
+      if (N > 0) {
+        for (unsigned int i = 0; i < N - 1; i++) successors[i]->send(key, value);
+        successors[N - 1]->send(key, std::forward<valueT>(value));
+      }
     }
 
     // An optimized implementation will need a separate callback for broadcast
