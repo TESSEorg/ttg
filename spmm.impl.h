@@ -26,6 +26,93 @@ using blk_t = double;
 using SpMatrix = Eigen::SparseMatrix<blk_t>;
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
+
+#if __has_include(<madness/world/archive.h>)
+
+#include <madness/world/archive.h>
+
+/////////////////////////////////////////////
+// additional ops are needed to make Eigen::SparseMatrix<btas::Tensor> possible
+namespace madness {
+  namespace archive {
+
+    template <class Archive, typename T>
+    struct ArchiveLoadImpl<Archive, btas::varray<T>> {
+      static inline void load(const Archive& ar, btas::varray<T>& x) {
+        typename btas::varray<T>::size_type n;
+        ar& n;
+        x.resize(n);
+        for (auto& xi : x) ar& xi;
+      }
+    };
+
+    template <class Archive, typename T>
+    struct ArchiveStoreImpl<Archive, btas::varray<T>> {
+      static inline void store(const Archive& ar, const btas::varray<T>& x) {
+        ar& x.size();
+        for (const auto& xi : x) ar& xi;
+      }
+    };
+
+    template <class Archive, typename T>
+    struct ArchiveLoadImpl<Archive, btas::DEFAULT::index<T>> {
+      static inline void load(const Archive& ar, btas::DEFAULT::index<T>& x) {
+        typename btas::DEFAULT::index<T>::size_type n;
+        ar& n;
+        x.resize(n);
+        for (auto& xi : x) ar& xi;
+      }
+    };
+
+    template <class Archive, typename T>
+    struct ArchiveStoreImpl<Archive, btas::DEFAULT::index<T>> {
+      static inline void store(const Archive& ar, const btas::DEFAULT::index<T>& x) {
+        ar& x.size();
+        for (const auto& xi : x) ar& xi;
+      }
+    };
+
+    template <class Archive, CBLAS_ORDER _Order, typename _Index, typename _Ordinal>
+    struct ArchiveLoadImpl<Archive, btas::RangeNd<_Order, _Index, _Ordinal>> {
+      static inline void load(const Archive& ar, btas::RangeNd<_Order, _Index, _Ordinal>& r) {
+        _Index lobound, upbound;
+        typename btas::RangeNd<_Order, _Index, _Ordinal>::extent_type stride;
+        ar& lobound& upbound& stride;
+        r = btas::RangeNd<_Order, _Index, _Ordinal>(std::move(lobound), std::move(upbound), std::move(stride));
+      }
+    };
+
+    template <class Archive, CBLAS_ORDER _Order, typename _Index, typename _Ordinal>
+    struct ArchiveStoreImpl<Archive, btas::RangeNd<_Order, _Index, _Ordinal>> {
+      static inline void store(const Archive& ar, const btas::RangeNd<_Order, _Index, _Ordinal>& r) {
+        ar& r.lobound() & r.upbound() & r.stride();
+      }
+    };
+
+    template <class Archive, typename _T, class _Range, class _Store>
+    struct ArchiveLoadImpl<Archive, btas::Tensor<_T, _Range, _Store>> {
+      static inline void load(const Archive& ar, btas::Tensor<_T, _Range, _Store>& t) {
+        _Range range;
+        _Store storage;
+        ar& range& storage;
+        t = btas::Tensor<_T, _Range, _Store>(std::move(range), std::move(storage));
+      }
+    };
+
+    template <class Archive, typename _T, class _Range, class _Store>
+    struct ArchiveStoreImpl<Archive, btas::Tensor<_T, _Range, _Store>> {
+      static inline void store(const Archive& ar, const btas::Tensor<_T, _Range, _Store>& t) {
+        ar& t.range() & t.storage();
+      }
+    };
+
+  }  // namespace archive
+}  // namespace madness
+
+#else  // __has_include(<madness/world/archive.h>)
+# error "Did not find madness/world/archive.h , likely misconfigured or broken"
+#endif
+
 namespace btas {
   template <typename _T, class _Range, class _Store>
   inline btas::Tensor<_T, _Range, _Store> operator*(const btas::Tensor<_T, _Range, _Store>& A,
