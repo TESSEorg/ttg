@@ -708,10 +708,10 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       funcT func;
 
      public:
-      WrapOp(const funcT& func, const typename baseT::input_edges_type& inedges,
+      template <typename funcT_> WrapOp(funcT_&& func, const typename baseT::input_edges_type& inedges,
              const typename baseT::output_edges_type& outedges, const std::string& name,
              const std::vector<std::string>& innames, const std::vector<std::string>& outnames)
-          : baseT(inedges, outedges, name, innames, outnames), func(func) {}
+          : baseT(inedges, outedges, name, innames, outnames), func(std::forward<funcT_>(func)) {}
 
         void op(const keyT& key, typename baseT::input_values_tuple_type&& args, output_terminalsT& out) {
             func(key, std::forward<typename baseT::input_values_tuple_type>(args), out);
@@ -738,10 +738,10 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       }
 
      public:
-      WrapOpArgs(const funcT& func, const typename baseT::input_edges_type& inedges,
+      template <typename funcT_> WrapOpArgs(funcT_&& func, const typename baseT::input_edges_type& inedges,
                  const typename baseT::output_edges_type& outedges, const std::string& name,
                  const std::vector<std::string>& innames, const std::vector<std::string>& outnames)
-          : baseT(inedges, outedges, name, innames, outnames), func(func) {}
+          : baseT(inedges, outedges, name, innames, outnames), func(std::forward<funcT_>(func)) {}
 
       void op(const keyT& key, typename baseT::input_values_tuple_type&& args, output_terminalsT& out) {
           call_func_from_tuple(
@@ -754,7 +754,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     //
     // void op(const input_keyT&, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&)
     template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
-    auto wrapt(const funcT& func, const std::tuple<::ttg::Edge<keyT, input_valuesT>...>& inedges,
+    auto wrapt(funcT&& func, const std::tuple<::ttg::Edge<keyT, input_valuesT>...>& inedges,
                const std::tuple<output_edgesT...>& outedges, const std::string& name = "wrapper",
                const std::vector<std::string>& innames = std::vector<std::string>(
                    std::tuple_size<std::tuple<::ttg::Edge<keyT, input_valuesT>...>>::value, "input"),
@@ -764,17 +764,17 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       using output_terminals_type = typename ::ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
       using callable_type =
           std::function<void(const keyT&, std::tuple<input_valuesT...>&&, output_terminals_type&)>;
-      callable_type f(func);  // primarily to check types
+      callable_type f(std::forward<funcT>(func));  // primarily to check types
       using wrapT = WrapOp<funcT, keyT, output_terminals_type, input_valuesT...>;
 
-      return std::make_unique<wrapT>(func, inedges, outedges, name, innames, outnames);
+      return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
     }
 
     // Factory function to assist in wrapping a callable with signature
     //
     // void op(const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)
     template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
-    auto wrap(const funcT& func, const std::tuple<::ttg::Edge<keyT, input_valuesT>...>& inedges,
+    auto wrap(funcT&& func, const std::tuple<::ttg::Edge<keyT, input_valuesT>...>& inedges,
               const std::tuple<output_edgesT...>& outedges, const std::string& name = "wrapper",
               const std::vector<std::string>& innames = std::vector<std::string>(
                   std::tuple_size<std::tuple<::ttg::Edge<keyT, input_valuesT>...>>::value, "input"),
@@ -784,7 +784,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
       using output_terminals_type = typename ::ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
       using wrapT = WrapOpArgs<funcT, keyT, output_terminals_type, input_valuesT...>;
 
-      return std::make_unique<wrapT>(func, inedges, outedges, name, innames, outnames);
+      return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
     }
 
     
