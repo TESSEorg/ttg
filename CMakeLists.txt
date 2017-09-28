@@ -6,6 +6,10 @@ include(GNUInstallDirs)
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
 
+# need Boost.CallableTraits (header only) for wrap.h (= for TTG) to work
+# Boost.CallableTraits will be released in 12/2017 , see README.md
+find_package(Boost 1.66 REQUIRED)
+
 # sparse tensor algorithms need Eigen
 find_package(Eigen3)
 message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
@@ -15,8 +19,6 @@ if (EIGEN3_FOUND)
                INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
 endif (EIGEN3_FOUND)
 # block-sparse tensor algorithms also need BTAS and (header-only) Boost.Iterator and Boost.Containers
-find_package(Boost)
-message (STATUS "Boost_FOUND=${Boost_FOUND}")
 if (Boost_FOUND)
   find_package(BTAS)
   message (STATUS "BTAS_FOUND=${BTAS_FOUND}")
@@ -52,7 +54,7 @@ install(FILES ${ttg-headers}
 ####### MADNESS
 ################
 add_library(ttg-mad INTERFACE)
-target_link_libraries(ttg-mad INTERFACE ttg)
+target_link_libraries(ttg-mad INTERFACE ttg Boost::boost)
 target_include_directories(ttg-mad INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
@@ -60,6 +62,7 @@ target_include_directories(ttg-mad INTERFACE
 target_compile_features(ttg-mad INTERFACE cxx_return_type_deduction)
 set(ttg-mad_headers
         ${CMAKE_CURRENT_SOURCE_DIR}/madness/ttg.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/wrap.h
         )
 target_sources(ttg-mad INTERFACE ${ttg-mad_headers})
 install(FILES ${ttg-mad_headers}
@@ -93,7 +96,7 @@ if (EIGEN3_FOUND)
   if (BTAS_FOUND)
     add_executable (bspmm-mad madness/spmm.cc spmm.impl.h)
     target_compile_definitions(bspmm-mad PUBLIC -DBLOCK_SPARSE_GEMM=1)
-    target_link_libraries(bspmm-mad LINK_PUBLIC ttg-mad eigen3 BTAS Boost::boost ${MADNESS_DISABLEPIE_LINKER_FLAG})
+    target_link_libraries(bspmm-mad LINK_PUBLIC ttg-mad eigen3 BTAS ${MADNESS_DISABLEPIE_LINKER_FLAG})
   endif (BTAS_FOUND)
 endif()
 
@@ -105,7 +108,7 @@ target_link_libraries(serialization LINK_PUBLIC ttg MADworld ${MADNESS_DISABLEPI
 ####### PaRSEC
 ################
 add_library(ttg-parsec INTERFACE)
-target_link_libraries(ttg-parsec INTERFACE ttg)
+target_link_libraries(ttg-parsec INTERFACE ttg Boost::boost)
 target_include_directories(ttg-parsec INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
@@ -113,6 +116,7 @@ target_include_directories(ttg-parsec INTERFACE
 target_compile_features(ttg-parsec INTERFACE cxx_return_type_deduction)
 set(ttg-parsec_headers
         ${CMAKE_CURRENT_SOURCE_DIR}/parsec/ttg.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/wrap.h
         )
 target_sources(ttg-parsec INTERFACE ${ttg-parsec_headers})
 install(FILES ${ttg-parsec_headers}

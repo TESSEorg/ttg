@@ -12,6 +12,8 @@
 #include <tuple>
 #include <vector>
 
+#include <boost/callable_traits.hpp>  // needed for wrap.h
+
 #include "demangle.h"
 
 namespace ttg {

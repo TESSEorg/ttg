@@ -134,7 +134,7 @@ class Everything2 {
   }  // Ugh!
 };
 
-#if 0
+#if 1
 class Everything3 {
   static void p(const keyT& key, std::tuple<>&& t, std::tuple<Out<keyT, int>>& out) {
     ::ttg::print("produced ", 0);
@@ -308,22 +308,18 @@ int main(int argc, char **argv) {
     y.print();
     std::cout << y.dot() << std::endl;
 
+#if 1
     y.start();  // myusleep(100);
 
-#if 0
     // Next compose with wrappers using tuple API and edges
-    {
-      Everything3 z;
-      std::cout << z.dot() << std::endl;
-      z.start();  // myusleep(100);
-    }
+    Everything3 z;
+    std::cout << z.dot() << std::endl;
+    z.start();  // myusleep(100);
 
     // Next compose with wrappers using unpacked tuple API and edges
-    {
-      Everything4 q;
-      std::cout << q.dot() << std::endl;
-      q.start();  // myusleep(100);
-    }
+    Everything4 q;
+    std::cout << q.dot() << std::endl;
+    q.start();  // myusleep(100);
 #endif
     ttg_fence(ttg_default_execution_context());
 

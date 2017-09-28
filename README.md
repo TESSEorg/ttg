@@ -1,6 +1,10 @@
 # tesse-cxx
 Prototype TESSE C++ API, with MADNESS and PaRSEC as backends. These instructions refer to the latest version of the API, Template Task Graph (TTG).
 
+# prerequisites
+- C++14 compiler
+- Boost 1.66 (__to be released in 12/2017!__, for now clone boost.org sources as explained [here](https://github.com/boostorg/boost/wiki/Getting-Started)
+
 # compile
 GNU C++ (6.x) and Clang (Apple LLVM 8.0.0) compilers work. To avoid polluting the source tree, make a build directory,
 and from there do:
@@ -8,6 +12,7 @@ and from there do:
 
 ## useful cmake command-line arguments:
 - `CMAKE_CXX_COMPILER`, e.g. `-DCMAKE_CXX_COMPILER=clang++` to use clang
+- `BOOST_ROOT`, e.g. `-DBOOST_ROOT=path` (to ensure that `path` is correct look for `path/boost/version.hpp` exists)
 
 ## notes on PaRSEC
 - run CMake with `-DBUILD_DPLASMA=OFF -DSUPPORT_FORTRAN=OFF -DPARSEC_WITH_DEVEL_HEADERS=ON`, then `make install`
