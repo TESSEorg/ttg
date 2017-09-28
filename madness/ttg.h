@@ -83,6 +83,9 @@ namespace madness {
       template <typename Wrapper> static auto&& unwrap(Wrapper&& wrapper) {
         return std::forward<Wrapper>(wrapper);
       }
+      template <typename Result, typename Wrapper> static Result unwrap_to(Wrapper&& wrapper) {
+        return static_cast<Result>(std::forward<Wrapper>(wrapper));
+      }
       template <typename T> static auto&& wrap(T&& data) {
         return std::forward<T>(data);
       }
@@ -94,6 +97,15 @@ namespace madness {
       using output_terminals_type = output_terminalsT;
       using output_edges_type = typename ::ttg::terminals_to_edges<output_terminalsT>::type;
 
+      template <std::size_t i, typename resultT> static resultT get(input_values_tuple_type& intuple) {
+        return unwrap_to<resultT>(std::get<i>(intuple));
+      };
+      template <std::size_t i, typename resultT> static resultT get(const input_values_tuple_type& intuple) {
+        return unwrap_to<resultT>(std::get<i>(intuple));
+      };
+      template <std::size_t i, typename resultT> static resultT get(input_values_tuple_type&& intuple) {
+        return unwrap_to<resultT>(std::get<i>(intuple));
+      };
       template <std::size_t i> static auto& get(input_values_tuple_type& intuple) {
         return unwrap(std::get<i>(intuple));
       };

@@ -284,6 +284,11 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   static auto &&unwrap(Wrapper &&wrapper) {
     return *wrapper;
   }
+  // extend this to tell PaRSEC how the data is being used (even is this is to increment the counter only)
+  template<typename Result, typename Wrapper>
+  static Result unwrap_to(Wrapper &&wrapper) {
+    return static_cast<Result>(unwrap(std::forward<Wrapper>(wrapper)));
+  }
   template<typename T>
   static data_wrapper_t<std::decay_t<T>> wrap(T &&data) {
     return new std::decay_t<T>(std::forward<T>(data));
@@ -305,6 +310,16 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   using output_edges_type =
   typename ::ttg::terminals_to_edges<output_terminalsT>::type;
 
+  // these are aware of result type, can communicate this info back to PaRSEC
+  template <std::size_t i, typename resultT> static resultT get(input_values_tuple_type& intuple) {
+    return unwrap_to<resultT>(std::get<i>(intuple));
+  };
+  template <std::size_t i, typename resultT> static resultT get(const input_values_tuple_type& intuple) {
+    return unwrap_to<resultT>(std::get<i>(intuple));
+  };
+  template <std::size_t i, typename resultT> static resultT get(input_values_tuple_type&& intuple) {
+    return unwrap_to<resultT>(std::get<i>(intuple));
+  };
   template<std::size_t i>
   static auto &get(input_values_tuple_type &intuple) {
     return unwrap(std::get<i>(intuple));

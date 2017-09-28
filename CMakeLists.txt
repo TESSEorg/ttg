@@ -43,9 +43,11 @@ target_compile_features(ttg INTERFACE cxx_return_type_deduction)
 set(ttg-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg.h
         ${CMAKE_CURRENT_SOURCE_DIR}/serialization.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/wrap.h
         ${CMAKE_CURRENT_SOURCE_DIR}/demangle.h
         )
 target_sources(ttg INTERFACE ${ttg-headers})
+target_link_libraries(ttg INTERFACE Boost::boost)
 install(FILES ${ttg-headers}
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         COMPONENT ttg)
@@ -62,7 +64,6 @@ target_include_directories(ttg-mad INTERFACE
 target_compile_features(ttg-mad INTERFACE cxx_return_type_deduction)
 set(ttg-mad_headers
         ${CMAKE_CURRENT_SOURCE_DIR}/madness/ttg.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/wrap.h
         )
 target_sources(ttg-mad INTERFACE ${ttg-mad_headers})
 install(FILES ${ttg-mad_headers}
@@ -116,7 +117,6 @@ target_include_directories(ttg-parsec INTERFACE
 target_compile_features(ttg-parsec INTERFACE cxx_return_type_deduction)
 set(ttg-parsec_headers
         ${CMAKE_CURRENT_SOURCE_DIR}/parsec/ttg.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/wrap.h
         )
 target_sources(ttg-parsec INTERFACE ${ttg-parsec_headers})
 install(FILES ${ttg-parsec_headers}

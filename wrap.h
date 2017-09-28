@@ -14,6 +14,16 @@ class WrapOp : public Op<keyT, output_terminalsT, WrapOp<funcT, keyT, output_ter
   Op<keyT, output_terminalsT, WrapOp<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...>;
   funcT func;
 
+  template<typename Key, typename Tuple, std::size_t... S>
+  void call_func(Key &&key, Tuple &&args,
+              output_terminalsT &out, std::index_sequence<S...>) {
+    // this is the tuple of values
+    using func_args_t = std::remove_reference_t<std::tuple_element_t<1,boost::callable_traits::args_t<funcT>>>;
+    func(std::forward<Key>(key),
+         std::forward_as_tuple(baseT::template get<S, std::tuple_element_t<S,func_args_t>>(std::forward<Tuple>(args))...),
+         out);
+  }
+
  public:
   template<typename funcT_>
   WrapOp(funcT_ &&func, const typename baseT::input_edges_type &inedges,
@@ -22,7 +32,9 @@ class WrapOp : public Op<keyT, output_terminalsT, WrapOp<funcT, keyT, output_ter
       : baseT(inedges, outedges, name, innames, outnames), func(std::forward<funcT_>(func)) {}
 
   void op(const keyT &key, typename baseT::input_values_tuple_type &&args, output_terminalsT &out) {
-    func(key, std::forward<typename baseT::input_values_tuple_type>(args), out);
+    call_func(key, std::forward<typename baseT::input_values_tuple_type>(args), out,
+           std::make_index_sequence<std::tuple_size<typename baseT::input_values_tuple_type>::value>{});
+    //func(key, std::forward<typename baseT::input_values_tuple_type>(args), out);
   }
 };
 
@@ -38,11 +50,11 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
   funcT func;
 
   template<typename Key, typename Tuple, std::size_t... S>
-  void call_func_from_tuple(Key &&key, Tuple &&args,
-                            output_terminalsT &out, std::index_sequence<S...>) {
+  void call_func(Key &&key, Tuple &&args,
+              output_terminalsT &out, std::index_sequence<S...>) {
     using func_args_t = boost::callable_traits::args_t<funcT>;
     func(std::forward<Key>(key),
-         static_cast<std::tuple_element_t<S+1,func_args_t>>(baseT::template get<S>(std::forward<Tuple>(args)))...,
+         baseT::template get<S, std::tuple_element_t<S+1,func_args_t>>(std::forward<Tuple>(args))...,
          out);
   }
 
@@ -55,7 +67,7 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
 
   template<typename Key>
   void op(Key &&key, typename baseT::input_values_tuple_type &&args, output_terminalsT &out) {
-    call_func_from_tuple(
+    call_func(
         std::forward<Key>(key), std::forward<typename baseT::input_values_tuple_type>(args), out,
         std::make_index_sequence<std::tuple_size<typename baseT::input_values_tuple_type>::value>{});
   };
