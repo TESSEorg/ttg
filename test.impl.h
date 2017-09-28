@@ -136,13 +136,14 @@ class Everything2 {
 
 #if 1
 class Everything3 {
-  static void p(const keyT& key, std::tuple<>&& t, std::tuple<Out<keyT, int>>& out) {
+  static void p(const keyT &key, std::tuple<> &&t, std::tuple<Out < keyT, int>>
+  & out) {
     ::ttg::print("produced ", 0);
     send<0>(key, int(key), out);
   }
 
-  static void a(const keyT& key, std::tuple<int>&& t, std::tuple<Out<keyT, int>, Out<keyT, int>>& out) {
-    int value = std::get<0>(t);
+  static void a(const keyT &key, std::tuple<int> &&t, std::tuple<Out < keyT, int>, Out<keyT, int>>
+  & out) {
     if (value >= 100) {
       send<0>(key, value, out);
     } else {
@@ -150,7 +151,7 @@ class Everything3 {
     }
   }
 
-  static void c(const keyT& key, std::tuple<int>&& t, std::tuple<>& out) {
+  static void c(const keyT &key, std::tuple<int> &&t, std::tuple<> &out) {
     ::ttg::print("consumed ", std::get<0>(t));
   }
 
@@ -162,12 +163,12 @@ class Everything3 {
 
  public:
   Everything3()
-      : P2A("P2A")
-      , A2A("A2A")
-      , A2C("A2C")
-      , wp(wrapt<keyT>(&p, edges(), edges(P2A), "producer", {}, {"start"}))
-      , wa(wrapt(&a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
-      , wc(wrapt(&c, edges(A2C), edges(), "consumer", {"result"}, {})) {
+      : P2A("P2A"),
+        A2A("A2A"),
+        A2C("A2C"),
+        wp(wrapt<keyT>(&p, edges(), edges(P2A), "producer", {}, {"start"})),
+        wa(wrapt(&a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"})),
+        wc(wrapt(&c, edges(A2C), edges(), "consumer", {"result"}, {})) {
   }
 
   void print() { Print()(wp.get()); }
@@ -180,12 +181,14 @@ class Everything3 {
 };
 
 class Everything4 {
-  static void p(const keyT& key, std::tuple<Out<keyT, int>>& out) {
+  static void p(const keyT &key, std::tuple<Out < keyT, int>>
+  & out) {
     ::ttg::print("produced ", 0);
     send<0>(key, int(key), out);
   }
 
-  static void a(const keyT& key, int&& value, std::tuple<Out<keyT, int>, Out<keyT, int>>& out) {
+  static void a(const keyT &key, int &&value, std::tuple<Out < keyT, int>, Out<keyT, int>>
+  & out) {
     if (value >= 100) {
       send<0>(key, value, out);
     } else {
@@ -193,7 +196,7 @@ class Everything4 {
     }
   }
 
-  static void c(const keyT& key, int&& value, std::tuple<>& out) {
+  static void c(const keyT &key, int &&value, std::tuple<> &out) {
     ::ttg::print("consumed ", value);
   }
 
@@ -205,12 +208,12 @@ class Everything4 {
 
  public:
   Everything4()
-      : P2A("P2A")
-      , A2A("A2A")
-      , A2C("A2C")
-      , wp(wrap<keyT>(&p, edges(), edges(P2A), "producer", {}, {"start"}))
-      , wa(wrap(&a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
-      , wc(wrap(&c, edges(A2C), edges(), "consumer", {"result"}, {})) {
+      : P2A("P2A"),
+        A2A("A2A"),
+        A2C("A2C"),
+        wp(wrap<keyT>(&p, edges(), edges(P2A), "producer", {}, {"start"})),
+        wa(wrap(&a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"})),
+        wc(wrap(&c, edges(A2C), edges(), "consumer", {"result"}, {})) {
   }
 
   void print() { Print()(wp.get()); }
