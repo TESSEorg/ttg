@@ -144,6 +144,7 @@ class Everything3 {
 
   static void a(const keyT &key, std::tuple<int> &&t, std::tuple<Out < keyT, int>, Out<keyT, int>>
   & out) {
+    const auto value = std::get<0>(t);
     if (value >= 100) {
       send<0>(key, value, out);
     } else {
