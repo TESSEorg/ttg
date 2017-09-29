@@ -52,7 +52,7 @@ template<typename T, typename Enabler = void>
 struct default_data_descriptor;
 
 template<typename T>
-struct default_data_descriptor<T, std::enable_if_t<std::is_pod<T>::value>> {
+struct default_data_descriptor<T, std::enable_if_t<std::is_trivially_copyable<T>::value>> {
 
   static uint64_t header_size(const void *object) { return static_cast<uint64_t>(0); }
 
@@ -113,7 +113,7 @@ struct is_madness_serializable<T, void_t<decltype(std::declval<madness::archive:
 
 // The default implementation for non-POD data types that support MADNESS serialization
 template <typename T>
-struct default_data_descriptor<T, std::enable_if_t<!std::is_pod<T>::value && detail::is_madness_serializable<T>::value>> {
+struct default_data_descriptor<T, std::enable_if_t<!std::is_trivially_copyable<T>::value && detail::is_madness_serializable<T>::value>> {
 
   static uint64_t header_size(const void* object) { return static_cast<uint64_t>(0); }
 
