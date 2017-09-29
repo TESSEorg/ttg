@@ -282,6 +282,17 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
 
   template<typename Wrapper>
   static auto &&unwrap(Wrapper &&wrapper) {
+
+    // what will be the return type? Either const or non-const lvalue ref
+    // * (T*&) => T&
+    // * (const T*&) => const T&
+    // * (T*&&) => T&
+    // * (const T*&&) => const T&
+    // so the input type alone is not enough, will have to cast to the desired type in unwrap_to
+    // or have to use a struct instead of a pointer and overload indirection operator (operator*)
+    // probably not a godo way forward since it appears that operator* always return an lvalue ref.
+    // not produce an rvalue ref need an explicit cast.
+
     return *wrapper;
   }
   // extend this to tell PaRSEC how the data is being used (even is this is to increment the counter only)
