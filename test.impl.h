@@ -139,7 +139,7 @@ class Everything3 {
   static void p(const keyT &key, std::tuple<> &&t, std::tuple<Out < keyT, int>>
   & out) {
     ::ttg::print("produced ", 0);
-    send<0>(key, int(key), out);
+    send<0>(key, int(0), out);
   }
 
   static void a(const keyT &key, std::tuple<int> &&t, std::tuple<Out < keyT, int>, Out<keyT, int>>
@@ -185,7 +185,7 @@ class Everything4 {
   static void p(const keyT &key, std::tuple<Out < keyT, int>>
   & out) {
     ::ttg::print("produced ", 0);
-    send<0>(key, int(key), out);
+    send<0>(key, int(0), out);
   }
 
   static void a(const keyT &key, int &&value, std::tuple<Out < keyT, int>, Out<keyT, int>>
@@ -311,8 +311,6 @@ int main(int argc, char **argv) {
     Everything2 y;
     y.print();
     std::cout << y.dot() << std::endl;
-
-#if 1
     y.start();  // myusleep(100);
 
     // Next compose with wrappers using tuple API and edges
@@ -324,7 +322,7 @@ int main(int argc, char **argv) {
     Everything4 q;
     std::cout << q.dot() << std::endl;
     q.start();  // myusleep(100);
-#endif
+
     ttg_fence(ttg_default_execution_context());
 
   }

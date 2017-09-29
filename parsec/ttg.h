@@ -289,8 +289,9 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   static Result unwrap_to(Wrapper &&wrapper) {
     return static_cast<Result>(unwrap(std::forward<Wrapper>(wrapper)));
   }
+  // this wraps a (moved) copy T must be copyable and/or movable (depends on the use)
   template<typename T>
-  static data_wrapper_t<std::decay_t<T>> wrap(T &&data) {
+  static data_wrapper_t<std::decay_t<T>> wrap(T&& data) {
     return new std::decay_t<T>(std::forward<T>(data));
   }
   template<typename T>
