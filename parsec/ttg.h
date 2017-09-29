@@ -253,6 +253,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   // results
 
   // PaRSEC for now passes data as tuple of ptrs (datacopies have these pointers also)
+  // N.B. perhaps make data_wrapper_t<T> = parsec_data_copy_t (rather, a T-dependent wrapper around it to automate the casts that will be inevitably needed)
   template<typename T> using data_wrapper_t = T *;
   template<typename T>
   struct data_wrapper_traits {
@@ -302,7 +303,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   }
   // this wraps a (moved) copy T must be copyable and/or movable (depends on the use)
   template<typename T>
-  static data_wrapper_t<std::decay_t<T>> wrap(T&& data) {
+  static data_wrapper_t<std::decay_t<T>> wrap(T &&data) {
     return new std::decay_t<T>(std::forward<T>(data));
   }
   template<typename T>
@@ -323,13 +324,16 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   typename ::ttg::terminals_to_edges<output_terminalsT>::type;
 
   // these are aware of result type, can communicate this info back to PaRSEC
-  template <std::size_t i, typename resultT> static resultT get(input_values_tuple_type& intuple) {
+  template<std::size_t i, typename resultT>
+  static resultT get(input_values_tuple_type &intuple) {
     return unwrap_to<resultT>(std::get<i>(intuple));
   };
-  template <std::size_t i, typename resultT> static resultT get(const input_values_tuple_type& intuple) {
+  template<std::size_t i, typename resultT>
+  static resultT get(const input_values_tuple_type &intuple) {
     return unwrap_to<resultT>(std::get<i>(intuple));
   };
-  template <std::size_t i, typename resultT> static resultT get(input_values_tuple_type&& intuple) {
+  template<std::size_t i, typename resultT>
+  static resultT get(input_values_tuple_type &&intuple) {
     return unwrap_to<resultT>(std::get<i>(intuple));
   };
   template<std::size_t i>
@@ -461,7 +465,9 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
     assert(task->user_tuple != nullptr);
     input_values_tuple_type *tuple = static_cast<input_values_tuple_type *>(task->user_tuple);
 
-    // is value is an actual value rather than wrapper (pointer) need in wrap distinguish between data held by datacopy and data not owned by PaRSEC
+    // Q. do we need to worry about someone calling set_arg "directly", i.e. through BaseOp::send and passing their
+    // own (non-PaRSEC) value rather than value owned by PaRSEC?
+    // N.B. wrap(data_wrapper_t) does nothing, so no double wrapping here
     std::get<i>(*tuple) = data_wrapper_t<valueT>(wrap(std::forward<T>(value)));
     parsec_data_copy_t *copy = OBJ_NEW(parsec_data_copy_t);
     task->parsec_task.data[i].data_in = copy;

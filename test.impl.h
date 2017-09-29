@@ -134,7 +134,6 @@ class Everything2 {
   }  // Ugh!
 };
 
-#if 1
 class Everything3 {
   static void p(const keyT &key, std::tuple<> &&t, std::tuple<Out < keyT, int>>
   & out) {
@@ -225,7 +224,6 @@ class Everything4 {
     if (ttg_default_execution_context().rank() == 0) wp->invoke(0);
   }
 };
-#endif
 
 class EverythingComposite {
   std::unique_ptr<OpBase> P;
