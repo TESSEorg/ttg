@@ -143,7 +143,7 @@ auto make_project(const funcT& func, ctlEdge& ctl, nodeEdge& result, const std::
 template <typename funcT>
 auto make_binary_op(const funcT& func, nodeEdge left, nodeEdge right, nodeEdge Result,
                     const std::string& name = "binaryop") {
-  auto f = [func](const Key& key, Node&& left, Node&& right, std::tuple<nodeOut, nodeOut, nodeOut>& out) {
+  auto f = [&func](const Key& key, Node&& left, Node&& right, std::tuple<nodeOut, nodeOut, nodeOut>& out) {
     if (!(left.has_children || right.has_children)) {
       send<2>(key, Node(key, func(left.s, right.s), 0.0, false), out);
     } else {
