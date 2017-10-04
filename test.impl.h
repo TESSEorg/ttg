@@ -345,6 +345,8 @@ int try_main(int argc, char **argv) {
       ttg.submit(execution_context);
     }
 #endif
+
+    ttg_fence(ttg_default_execution_context());
   }
   ttg_finalize();
   return 0;
