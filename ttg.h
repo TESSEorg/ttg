@@ -609,8 +609,8 @@ class In : public TerminalBase {
   // valueT can be T or const T
   static_assert(std::is_same<std::remove_const_t<valueT>,std::decay_t<valueT>>::value, "In<keyT,valueT> assumes std::remove_const<T> is a non-decayable type");
   typedef Edge<keyT, valueT> edge_type;
-  using send_callback_type = std::function<void(const keyT &, const valueT &)>;
-  using move_callback_type = std::function<void(const keyT &, valueT &&)>;
+  using send_callback_type = std::function<void(const keyT &, const std::decay_t<valueT> &)>;
+  using move_callback_type = std::function<void(const keyT &, std::decay_t<valueT> &&)>;
   static constexpr bool is_an_input_terminal = true;
 
  private:

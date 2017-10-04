@@ -90,7 +90,7 @@ namespace madness {
         return std::forward<T>(data);
       }
 
-      using input_values_tuple_type = std::tuple<data_wrapper_t<input_valueTs>...>;
+      using input_values_tuple_type = std::tuple<data_wrapper_t<std::decay_t<input_valueTs>>...>;
       using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
       using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
 
@@ -233,14 +233,14 @@ namespace madness {
       // Registers the callback for the i'th input terminal
       template <typename terminalT, std::size_t i>
       void register_input_callback(terminalT& input) {
-        // using keyT = typename terminalT::key_type;
-        using valueT = typename terminalT::value_type;
+        static_assert(std::is_same<keyT, typename terminalT::key_type>::value, "Op::register_input_callback(terminalT) -- incompatible terminalT");
+        using valueT = std::decay_t<typename terminalT::value_type>;
         using move_callbackT = std::function<void(const keyT&, valueT&&)>;
         using send_callbackT = std::function<void(const keyT&, const valueT&)>;
 
         auto move_callback = [this](const keyT& key, valueT&& value) {
             //std::cout << "move_callback\n";
-          set_arg<i, valueT>(key, std::forward<typename terminalT::value_type>(value));
+          set_arg<i, valueT>(key, std::forward<valueT>(value));
         };
 
         auto send_callback = [this](const keyT& key, const valueT& value) {
