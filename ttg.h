@@ -85,7 +85,6 @@ class TerminalBase {
   std::string name;            //< Name of terminal
   std::string key_type_str;    //< String describing key type
   std::string value_type_str;  //< String describing value type
-  Type type;                   //< Terminal type
 
   std::vector<TerminalBase *> successors_;
 
@@ -110,7 +109,6 @@ class TerminalBase {
     this->name = name;
     this->key_type_str = key_type_str;
     this->value_type_str = value_type_str;
-    this->type = type;
   }
 
   /// Add directed connection (this --> successor) in internal representation of the TTG.
@@ -153,10 +151,7 @@ class TerminalBase {
   }
 
   /// Returns the terminal type
-  Type get_type() const {
-    if (!op) throw "ttg::TerminalBase:get_type() but op is null";
-    return type;
-  }
+  virtual Type get_type() const = 0;
 
   /// Get connections to successors
   const std::vector<TerminalBase *> &get_connections() const { return successors_; }
@@ -624,7 +619,7 @@ class In : public TerminalBase {
   In &operator=(const In &other) = delete;
   In &operator=(const In &&other) = delete;
 
-  void connect(TerminalBase *p) { throw "to connect terminals use out->connect(in) rather than in->connect(out)"; }
+  void connect(TerminalBase *p) override { throw "to connect terminals use out->connect(in) rather than in->connect(out)"; }
 
  public:
   In() : initialized(false) {}
@@ -659,6 +654,10 @@ class In : public TerminalBase {
     if (!initialized) throw "broadcasting to uninitialzed callback";
     for (auto key : keylist) send(key, value);
   }
+
+  Type get_type() const override {
+    return std::is_const<valueT>::value ? TerminalBase::Type::Read : TerminalBase::Type::Consume;
+  }
 };
 
 // Output terminal
@@ -683,7 +682,7 @@ class Out : public TerminalBase {
   Out() {}
 
   /// \note will check data types unless macro \c NDEBUG is defined
-  void connect(TerminalBase *in) {
+  void connect(TerminalBase *in) override {
 #ifndef NDEBUG
     if (in->get_type() == TerminalBase::Type::Read) {
       typedef In<keyT, std::add_const_t<valueT>> input_terminal_type;
@@ -706,11 +705,9 @@ class Out : public TerminalBase {
     for (auto successor : successors()) {
       assert(successor->get_type() != TerminalBase::Type::Write);
       if (successor->get_type() == TerminalBase::Type::Read) {
-        typedef In<keyT, std::add_const_t<valueT>> input_terminal_type;
-        static_cast<input_terminal_type *>(successor)->send(key, value);
+        static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
       } else if (successor->get_type() == TerminalBase::Type::Consume) {
-        typedef In<keyT, valueT> input_terminal_type;
-        static_cast<input_terminal_type *>(successor)->send(key, value);
+        static_cast<In<keyT, valueT> *>(successor)->send(key, value);
       }
     }
   }
@@ -731,18 +728,15 @@ class Out : public TerminalBase {
         if (i != move_terminal) {
           TerminalBase *successor = successors()[i];
           if (successor->get_type() == TerminalBase::Type::Read) {
-            typedef In<keyT, std::add_const_t<valueT>> input_terminal_type;
-            static_cast<input_terminal_type *>(successor)->send(key, value);
+            static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
           } else if (successor->get_type() == TerminalBase::Type::Consume) {
-            typedef In<keyT, valueT> input_terminal_type;
-            static_cast<input_terminal_type *>(successor)->send(key, value);
+            static_cast<In<keyT, valueT> *>(successor)->send(key, value);
           }
         }
       }
       {
         TerminalBase *successor = successors()[move_terminal];
-        typedef In<keyT, valueT> input_terminal_type;
-        static_cast<input_terminal_type *>(successor)->send(key, std::forward<valueT>(value));
+        static_cast<In<keyT, valueT> *>(successor)->send(key, std::forward<valueT>(value));
       }
     }
   }
@@ -754,13 +748,15 @@ class Out : public TerminalBase {
     for (auto successor : successors()) {
       assert(successor->get_type() != TerminalBase::Type::Write);
       if (successor->get_type() == TerminalBase::Type::Read) {
-        typedef In<keyT, std::add_const_t<valueT>> input_terminal_type;
-        static_cast<input_terminal_type *>(successor)->send(keylist, value);
+        static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->broadcast(keylist, value);
       } else if (successor->get_type() == TerminalBase::Type::Consume) {
-        typedef In<keyT, valueT> input_terminal_type;
-        static_cast<input_terminal_type *>(successor)->send(keylist, value);
+        static_cast<In<keyT, valueT> *>(successor)->broadcast(keylist, value);
       }
     }
+  }
+
+  Type get_type() const override {
+    return TerminalBase::Type::Write;
   }
 };
 
