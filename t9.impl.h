@@ -137,13 +137,13 @@ auto make_project(const funcT& func, ctlEdge& ctl, nodeEdge& result, const std::
     }
   };
   ctlEdge refine("refine");
-  return wrap(f, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
+  return wrap(std::move(f), edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
 }
 
 template <typename funcT>
 auto make_binary_op(const funcT& func, nodeEdge left, nodeEdge right, nodeEdge Result,
                     const std::string& name = "binaryop") {
-  auto f = [&func](const Key& key, Node&& left, Node&& right, std::tuple<nodeOut, nodeOut, nodeOut>& out) {
+  auto f = [func](const Key& key, Node&& left, Node&& right, std::tuple<nodeOut, nodeOut, nodeOut>& out) {
     if (!(left.has_children || right.has_children)) {
       send<2>(key, Node(key, func(left.s, right.s), 0.0, false), out);
     } else {
@@ -154,7 +154,7 @@ auto make_binary_op(const funcT& func, nodeEdge left, nodeEdge right, nodeEdge R
     }
   };
   nodeEdge L("L"), R("R");
-  return wrap(f, edges(fuse(left, L), fuse(right, R)), edges(L, R, Result), name, {"left", "right"},
+  return wrap(std::move(f), edges(fuse(left, L), fuse(right, R)), edges(L, R, Result), name, {"left", "right"},
               {"refineL", "refineR", "result"});
 }
 
