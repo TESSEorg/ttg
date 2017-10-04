@@ -92,7 +92,7 @@ namespace madness {
 
       using input_values_tuple_type = std::tuple<data_wrapper_t<input_valueTs>...>;
       using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
-      using input_edges_type = std::tuple<::ttg::Edge<keyT, input_valueTs>...>;
+      using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
 
       using output_terminals_type = output_terminalsT;
       using output_edges_type = typename ::ttg::terminals_to_edges<output_terminalsT>::type;
@@ -146,7 +146,8 @@ namespace madness {
       template <std::size_t i, typename T>
       // void set_arg(const keyT& key, const typename std::tuple_element<i, input_values_tuple_type>::type& value) {
       void set_arg(const keyT& key, T&& value) {
-        using valueT = typename std::tuple_element<i, input_terminals_type>::type;  // Should be same as T (or const T)
+        using valueT = typename std::tuple_element<i, input_values_tuple_type>::type;  // Should be T or const T
+        static_assert(std::is_same<std::decay_t<T>, std::decay_t<valueT>>::value, "Op::set_arg(key,value) given value of type incompatible with Op");
 
         ProcessID owner = pmap->owner(key);
 
@@ -167,9 +168,9 @@ namespace madness {
           }
 
           //const char* isref[] = {" ", "&"};
-          //std::cout << "about to assign arg " << isref[std::is_reference<T>::value] << demangled_type_name<T>() << "\n";
+          //std::cout << "about to assign arg " << isref[std::is_reference<T>::value] << detail::demangled_type_name<T>() << "\n";
 
-          std::get<i>(args->t) = wrap(std::forward<T>(value));
+          this->get<i, std::decay_t<valueT>&>(args->t) = wrap(std::forward<T>(value));
           args->argset[i] = true;
           args->counter--;
           if (args->counter == 0) {

@@ -83,7 +83,6 @@ auto wrapt(funcT &&func, const std::tuple<::ttg::Edge<keyT, input_valuesT>...> &
                std::tuple_size<std::tuple<::ttg::Edge<keyT, input_valuesT>...>>::value, "input"),
            const std::vector<std::string> &outnames =
            std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
-  using input_terminals_type = std::tuple<typename ::ttg::Edge<keyT, input_valuesT>::input_terminal_type...>;
   using output_terminals_type = typename ::ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
   using callable_type =
   std::function<void(const keyT &, std::tuple<input_valuesT...> &&, output_terminals_type &)>;
@@ -103,7 +102,6 @@ auto wrap(funcT &&func, const std::tuple<::ttg::Edge<keyT, input_valuesT>...> &i
               std::tuple_size<std::tuple<::ttg::Edge<keyT, input_valuesT>...>>::value, "input"),
           const std::vector<std::string> &outnames =
           std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
-  using input_terminals_type = std::tuple<typename ::ttg::Edge<keyT, input_valuesT>::input_terminal_type...>;
   using output_terminals_type = typename ::ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
   using wrapT = WrapOpArgs<funcT, keyT, output_terminals_type, input_valuesT...>;
 

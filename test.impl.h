@@ -5,9 +5,9 @@ using keyT = uint64_t;
 #include TTG_RUNTIME_H
 IMPORT_TTG_RUNTIME_NS
 
-class A : public Op<keyT, std::tuple<Out < keyT, int>, Out < keyT, int>>
-, A, int> {
-using baseT = Op<keyT, std::tuple<Out < keyT, int>, Out < keyT, int>>, A, int>;
+class A : public Op<keyT, std::tuple<Out<keyT, int>, Out < keyT, int>>, A, const int
+> {
+using baseT = Op<keyT, std::tuple<Out<keyT, int>, Out < keyT, int>>, A, const int>;
 
 public:
 A(const std::string &name) : baseT(name, {"input"}, {"iterate", "result"}) {}
@@ -17,7 +17,8 @@ A(const typename baseT::input_edges_type &inedges, const typename baseT::output_
     : baseT(inedges, outedges, name, {"input"}, {"result", "iterate"}) {}
 
 void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
-  int value = baseT::get<0>(t);
+  // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int
+  auto& value = baseT::get<0>(t);
   ::ttg::print("A got value ", value);
   if (value >= 100) {
     ::send<0>(key, value, out);
@@ -47,8 +48,8 @@ void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_termi
 ~Producer() { std::cout << " Producer destructor\n"; }
 };
 
-class Consumer : public Op<keyT, std::tuple<>, Consumer, int> {
-  using baseT = Op<keyT, std::tuple<>, Consumer, int>;
+class Consumer : public Op<keyT, std::tuple<>, Consumer, const int> {
+  using baseT = Op<keyT, std::tuple<>, Consumer, const int>;
 
  public:
   Consumer(const std::string &name) : baseT(name, {"input"}, {}) {}
@@ -141,7 +142,7 @@ class Everything3 {
     send<0>(key, int(0), out);
   }
 
-  static void a(const keyT &key, std::tuple<int> &&t, std::tuple<Out < keyT, int>, Out<keyT, int>>
+  static void a(const keyT &key, std::tuple<const int> &&t, std::tuple<Out < keyT, int>, Out<keyT, int>>
   & out) {
     const auto value = std::get<0>(t);
     if (value >= 100) {
@@ -151,7 +152,7 @@ class Everything3 {
     }
   }
 
-  static void c(const keyT &key, std::tuple<int> &&t, std::tuple<> &out) {
+  static void c(const keyT &key, std::tuple<const int> &&t, std::tuple<> &out) {
     ::ttg::print("consumed ", std::get<0>(t));
   }
 
@@ -181,14 +182,14 @@ class Everything3 {
 };
 
 class Everything4 {
-  static void p(const keyT &key, std::tuple<Out < keyT, int>>
-  & out) {
+  static void p(const keyT &key, std::tuple<Out<keyT, int>>
+  &out) {
     ::ttg::print("produced ", 0);
     send<0>(key, int(0), out);
   }
 
-  static void a(const keyT &key, int &&value, std::tuple<Out < keyT, int>, Out<keyT, int>>
-  & out) {
+  static void a(const keyT &key, const int &value, std::tuple<Out<keyT, int>, Out<keyT, int>>
+  &out) {
     if (value >= 100) {
       send<0>(key, value, out);
     } else {
@@ -196,7 +197,7 @@ class Everything4 {
     }
   }
 
-  static void c(const keyT &key, int &&value, std::tuple<> &out) {
+  static void c(const keyT &key, const int &value, std::tuple<> &out) {
     ::ttg::print("consumed ", value);
   }
 
@@ -242,7 +243,7 @@ class EverythingComposite {
 
     connect<1, 0>(a, a);  // a->out<1>()->connect(a->in<0>());
     connect<0, 0>(a, c);  // a->out<0>()->connect(c->in<0>());
-    std::tuple<In<keyT, int> *> q = std::make_tuple(a->in<0>());
+    const auto q = std::make_tuple(a->in<0>());
     ::ttg::print("q  in<0>", (void *) (TerminalBase *) (std::get<0>(q)));
 
     // std::array<std::unique_ptr<OpBase>,2> ops{std::move(a),std::move(c)};
@@ -275,7 +276,7 @@ class EverythingComposite {
 
 void hi() { ::ttg::print("hi"); }
 
-int main(int argc, char **argv) {
+int try_main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
   {
 
@@ -321,10 +322,44 @@ int main(int argc, char **argv) {
     std::cout << q.dot() << std::endl;
     q.start();  // myusleep(100);
 
-    ttg_fence(ttg_default_execution_context());
-
+    // can we compose directly (with free functions/lambdas) and type-safely like this?
+#if 0
+    {
+      ttg.let([]() {
+           std::cout << "produced 0" << std::endl;
+           return {"A", 0, 0};
+          })
+         .let([](auto &&key, auto &&value) {
+           if (key <= 100) {
+             return {"A", key + 1, value + 1};
+           }
+           else {
+             return {"B", 0, value};
+           }
+          })
+         .attach_inputs("A")
+         .let([](auto &&key, auto &&value) {
+           std::cout << "consumed" << value << std::endl;
+          })
+         .attach_inputs("B");
+      ttg.submit(execution_context);
+    }
+#endif
   }
   ttg_finalize();
   return 0;
 }
 
+int main(int argc, char **argv) {
+  try {
+    try_main(argc, argv);
+  }
+  catch (std::exception &x) {
+    std::cerr << "Caught a std::exception: " << x.what() << std::endl;
+    return 1;
+  }
+  catch (...) {
+    std::cerr << "Caught an unknown exception: " << std::endl;
+    return 1;
+  }
+}

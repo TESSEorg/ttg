@@ -303,8 +303,8 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
   }
   // this wraps a (moved) copy T must be copyable and/or movable (depends on the use)
   template<typename T>
-  static data_wrapper_t<std::decay_t<T>> wrap(T &&data) {
-    return new std::decay_t<T>(std::forward<T>(data));
+  static data_wrapper_t<std::remove_reference_t<T>> wrap(T &&data) {
+    return new std::remove_reference_t<T>(std::forward<T>(data));
   }
   template<typename T>
   static data_wrapper_t<T> wrap(data_wrapper_t<T> &&data) {
@@ -317,7 +317,7 @@ class Op : public ::ttg::OpBase, ParsecBaseOp {
 
   using input_values_tuple_type = std::tuple<data_wrapper_t<input_valueTs>...>;
   using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
-  using input_edges_type = std::tuple<::ttg::Edge<keyT, input_valueTs>...>;
+  using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
 
   using output_terminals_type = output_terminalsT;
   using output_edges_type =
