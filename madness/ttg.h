@@ -57,14 +57,14 @@ namespace madness {
     }
 
     namespace detail {
-      /// the default keymap implementation maps key to madness::Hash(key) % nproc
+      /// the default keymap implementation maps key to madness::Hash{}(key) % nproc
       template <typename keyT>
       class default_keymap {
        public:
-        default_keymap(World &world) : nproc(world.mpi.nproc()) {}
+        default_keymap(World &world = get_default_world()) : nproc(world.mpi.nproc()) {}
         template <typename... Args>
         auto operator()(const keyT &key) const {
-          return madness::Hash<keyT>()(key) % nproc;
+          return madness::Hash<keyT>{}(key) % nproc;
         }
 
        private:
@@ -76,7 +76,7 @@ namespace madness {
     class Op : public ::ttg::OpBase, public WorldObject<Op<keyT, output_terminalsT, derivedT, input_valueTs...>> {
      private:
       World &world;
-      std::function<std::int64_t(const keyT&)> keymap;
+      std::function<std::int64_t(const keyT &)> keymap;
 
      protected:
       World &get_world() { return world; }
@@ -299,12 +299,14 @@ namespace madness {
      public:
       template <typename keymapT = detail::default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-         World& world,
-         keymapT &&keymap = keymapT())
+         World &world, keymapT &&keymap_ = keymapT())
           : ::ttg::OpBase(name, numins, numouts)
           , worldobjT(world)
           , world(world)
-          , keymap(std::forward<keymapT>(keymap)) {
+          // if using default keymap, rebind to the given world
+          , keymap(std::is_same<keymapT, detail::default_keymap<keyT>>::value
+                       ? decltype(keymap)(detail::default_keymap<keyT>(world))
+                       : decltype(keymap)(std::forward<keymapT>(keymap_))) {
         // Cannot call these in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value)
           throw "madness::ttg::Op: #input names != #input terminals";
@@ -321,17 +323,20 @@ namespace madness {
 
       template <typename keymapT = detail::default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-         keymapT &&keymap = keymapT(get_default_world())) :
-          Op(name, innames, outnames, get_default_world(), std::forward<keymapT>(keymap)) {}
+         keymapT &&keymap = keymapT(get_default_world()))
+          : Op(name, innames, outnames, get_default_world(), std::forward<keymapT>(keymap)) {}
 
       template <typename keymapT = detail::default_keymap<keyT>>
       Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
-         const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-         keymapT &&keymap = keymapT(get_default_world()))
+         const std::vector<std::string> &innames, const std::vector<std::string> &outnames, World &world,
+         keymapT &&keymap_ = keymapT())
           : ::ttg::OpBase(name, numins, numouts)
           , worldobjT(get_default_world())
           , world(get_default_world())
-          , keymap(std::forward<keymapT>(keymap)) {
+          // if using default keymap, rebind to the given world
+          , keymap(std::is_same<keymapT, detail::default_keymap<keyT>>::value
+                   ? decltype(keymap)(detail::default_keymap<keyT>(world))
+                   : decltype(keymap)(std::forward<keymapT>(keymap_))) {
         // Cannot call in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value)
           throw "madness::ttg::Op: #input names != #input terminals";
@@ -348,6 +353,12 @@ namespace madness {
 
         this->process_pending();
       }
+
+      template <typename keymapT = detail::default_keymap<keyT>>
+      Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
+         const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
+         keymapT &&keymap = keymapT(get_default_world()))
+          : Op(inedges, outedges, name, innames, outnames, get_default_world(), std::forward<keymapT>(keymap)) {}
 
       // Destructor checks for unexecuted tasks
       virtual ~Op() {
