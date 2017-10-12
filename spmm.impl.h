@@ -110,7 +110,7 @@ namespace madness {
 }  // namespace madness
 
 #else  // __has_include(<madness/world/archive.h>)
-# error "Did not find madness/world/archive.h , likely misconfigured or broken"
+#error "Did not find madness/world/archive.h , likely misconfigured or broken"
 #endif
 
 namespace btas {
@@ -160,8 +160,7 @@ struct Key : public std::array<long, Rank> {
     if (Rank == 2) {
       (*this)[0] = hash / max_index;
       (*this)[1] = hash % max_index;
-    }
-    else if (Rank == 3) {
+    } else if (Rank == 3) {
       (*this)[0] = hash / max_index_square;
       (*this)[1] = (hash % max_index_square) / max_index;
       (*this)[2] = hash % max_index;
@@ -169,17 +168,29 @@ struct Key : public std::array<long, Rank> {
   }
   int64_t hash() const {
     static_assert(Rank == 2 || Rank == 3, "Key<Rank>::hash only implemented for Rank={2,3}");
-    return Rank == 2 ? (*this)[0] * max_index + (*this)[1] : ((*this)[0] * max_index + (*this)[1]) * max_index + (*this)[2];
+    return Rank == 2 ? (*this)[0] * max_index + (*this)[1]
+                     : ((*this)[0] * max_index + (*this)[1]) * max_index + (*this)[2];
   }
+
  private:
   bool valid() {
     bool result = true;
-    for(auto& idx: *this) {
+    for (auto& idx : *this) {
       result = result && (idx < max_index);
     }
     return result;
   }
 };
+
+namespace std {
+  template <std::size_t Rank>
+  struct hash<Key<Rank>> {
+    hash() = default;
+    typedef Key<Rank> argument_type;
+    typedef std::size_t result_type;
+    result_type operator()(argument_type const& s) const noexcept { return s.hash(); }
+  };
+}  // namespace std
 
 template <std::size_t Rank>
 std::ostream& operator<<(std::ostream& os, const Key<Rank>& key) {
@@ -190,18 +201,21 @@ std::ostream& operator<<(std::ostream& os, const Key<Rank>& key) {
 }
 
 namespace ttg {
-namespace overload {
-template<> uint64_t unique_hash<uint64_t, Key<2u>>(const Key<2u>& key) {
-  return key.hash();
-}
-template<> uint64_t unique_hash<uint64_t, Key<3u>>(const Key<3u>& key) {
-  return key.hash();
-}
-template<> uint64_t unique_hash<uint64_t, int>(const int& i) {
-  return static_cast<uint64_t>(i);
-}
-}
-}
+  namespace overload {
+    template <>
+    uint64_t unique_hash<uint64_t, Key<2u>>(const Key<2u>& key) {
+      return key.hash();
+    }
+    template <>
+    uint64_t unique_hash<uint64_t, Key<3u>>(const Key<3u>& key) {
+      return key.hash();
+    }
+    template <>
+    uint64_t unique_hash<uint64_t, int>(const int& i) {
+      return static_cast<uint64_t>(i);
+    }
+  }  // namespace overload
+}  // namespace ttg
 
 // flow data from existing data structure
 class Read_SpMatrix : public Op<int, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatrix, int> {
@@ -230,8 +244,7 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t> {
   using baseT = Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t>;
 
   Write_SpMatrix(SpMatrix& matrix, Edge<Key<2>, blk_t>& in)
-      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {})
-      , matrix_(matrix) {}
+      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}), matrix_(matrix) {}
 
   void op(const Key<2>& key, baseT::input_values_tuple_type&& elem, std::tuple<>&) {
     matrix_.insert(key[0], key[1]) = baseT::get<0>(elem);
@@ -246,8 +259,7 @@ class SpMM {
  public:
   SpMM(Edge<Key<2>, blk_t>& a, Edge<Key<2>, blk_t>& b, Edge<Key<2>, blk_t>& c, const SpMatrix& a_mat,
        const SpMatrix& b_mat)
-      :
-//      world_(world),
+      :  //      world_(world),
       a_(a)
       , b_(b)
       , c_(c)
@@ -259,11 +271,11 @@ class SpMM {
       , a_colidx_to_rowidx_(make_colidx_to_rowidx(a_mat))
       , b_rowidx_to_colidx_(make_rowidx_to_colidx(b_mat)) {
     // data is on rank 0, broadcast metadata from there
-//    ProcessID root = 0;
-//    world_.gop.broadcast_serializable(a_rowidx_to_colidx_, root);
-//    world_.gop.broadcast_serializable(b_rowidx_to_colidx_, root);
-//    world_.gop.broadcast_serializable(a_colidx_to_rowidx_, root);
-//    world_.gop.broadcast_serializable(b_colidx_to_rowidx_, root);
+    //    ProcessID root = 0;
+    //    world_.gop.broadcast_serializable(a_rowidx_to_colidx_, root);
+    //    world_.gop.broadcast_serializable(b_rowidx_to_colidx_, root);
+    //    world_.gop.broadcast_serializable(a_colidx_to_rowidx_, root);
+    //    world_.gop.broadcast_serializable(b_colidx_to_rowidx_, root);
 
     bcast_a_ = std::make_unique<BcastA>(a, a_ijk_, b_rowidx_to_colidx_);
     bcast_b_ = std::make_unique<BcastB>(b, b_ijk_, a_colidx_to_rowidx_);
@@ -333,8 +345,8 @@ class SpMM {
                 {"c_ij", "c_ijk"})
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
-//      auto& pmap = get_pmap();
-//      auto& world = get_world();
+      //      auto& pmap = get_pmap();
+      //      auto& world = get_world();
       // for each i and j that belongs to this node
       // determine first k that contributes, initialize input {i,j,first_k} flow to 0
       for (long i = 0; i != a_rowidx_to_colidx_.size(); ++i) {
@@ -343,8 +355,8 @@ class SpMM {
           if (b_colidx_to_rowidx_[j].empty()) continue;
 
           // assuming here {i,j,k} for all k map to same node
-          //ProcessID owner = pmap->owner(Key<3>({i, j, 0l}));
-          //if (owner == world.rank()) {
+          // ProcessID owner = pmap->owner(Key<3>({i, j, 0l}));
+          // if (owner == world.rank()) {
           if (true) {
             long k;
             bool have_k;
@@ -376,10 +388,11 @@ class SpMM {
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow
       if (have_next_k) {
-        ::send<1>(Key<3>({i, j, next_k}), gemm(std::move(baseT::get<2>(_ijk)), baseT::get<0>(_ijk), baseT::get<1>(_ijk)),
-                  result);
+        ::send<1>(Key<3>({i, j, next_k}),
+                  gemm(std::move(baseT::get<2>(_ijk)), baseT::get<0>(_ijk), baseT::get<1>(_ijk)), result);
       } else
-        ::send<0>(Key<2>({i, j}), gemm(std::move(baseT::get<2>(_ijk)), baseT::get<0>(_ijk), baseT::get<1>(_ijk)), result);
+        ::send<0>(Key<2>({i, j}), gemm(std::move(baseT::get<2>(_ijk)), baseT::get<0>(_ijk), baseT::get<1>(_ijk)),
+                  result);
     }
 
    private:
@@ -495,8 +508,7 @@ class Control : public Op<int, std::tuple<Out<int, int>>, Control> {
   using baseT = Op<int, std::tuple<Out<int, int>>, Control>;
 
  public:
-  Control(Edge<int, int>& ctl)
-      : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}) {}
+  Control(Edge<int, int>& ctl) : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}) {}
 
   void op(const int& key, const std::tuple<>&, std::tuple<Out<int, int>>& out) { ::send<0>(0, 0, out); }
 
@@ -595,7 +607,7 @@ int main(int argc, char** argv) {
     Read_SpMatrix a("A", A, ctl, eA);
     Read_SpMatrix b("B", B, ctl, eB);
     Write_SpMatrix c(C, eC);
-//  SpMM a_times_b(world, eA, eB, eC, A, B);
+    //  SpMM a_times_b(world, eA, eB, eC, A, B);
     SpMM a_times_b(eA, eB, eC, A, B);
 
     // ready, go! need only 1 kick, so must be done by 1 thread only

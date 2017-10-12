@@ -62,9 +62,8 @@ namespace madness {
       class default_keymap {
        public:
         default_keymap(World &world = get_default_world()) : nproc(world.mpi.nproc()) {}
-        template <typename... Args>
-        auto operator()(const keyT &key) const {
-          return madness::Hash<keyT>{}(key) % nproc;
+        int64_t operator()(const keyT &key) const {
+          return static_cast<int64_t>(madness::Hash<keyT>{}(key) % nproc);
         }
 
        private:

@@ -116,10 +116,7 @@ namespace parsec {
       class default_keymap {
        public:
         default_keymap(World &world = get_default_world()) : nproc(world.size()) {}
-        template <typename... Args>
-        auto operator()(const keyT &key) const {
-          return std::hash<keyT>{}(key) % nproc;
-        }
+        int64_t operator()(const keyT &key) const { return static_cast<int64_t>(std::hash<keyT>{}(key) % nproc); }
 
        private:
         int nproc;
