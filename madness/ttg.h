@@ -57,13 +57,13 @@ namespace madness {
     }
 
     namespace detail {
-      // default pmap implementation
+      /// the default pmap implementation maps key to madness::Hash(key) % nproc
       template <typename keyT>
-      class default_pmap {
+      class default_keymap {
        public:
-        default_pmap(World &world) : nproc(world.mpi.nproc()) {}
+        default_keymap(World &world) : nproc(world.mpi.nproc()) {}
         template <typename... Args>
-        std::size_t operator()(const keyT &key, Args &&... args) const {
+        auto operator()(const keyT &key) const {
           return madness::Hash<keyT>()(key) % nproc;
         }
 
@@ -71,28 +71,27 @@ namespace madness {
         int nproc;
       };
 
-      /// this wraps callable mapperT with signature "std::size_t mapperT(const key&)" into WorldDCPmapInterface
-      template <typename keyT, typename mapperT>
-      class WorldDCPmapWrapper : public WorldDCPmapInterface<keyT> {
+      /// this wraps callable keymapT with signature "auto keymapT(const keyU&)" into WorldDCPmapInterface
+      template <typename keyT, typename keymapT>
+      class keymap_wrapper : public WorldDCPmapInterface<keyT> {
        public:
-        template <typename Mapper>
-        WorldDCPmapWrapper(World &world, Mapper &&mapper) : world(world), mapper(std::forward<Mapper>(mapper)) {}
+        template <typename keymapU>
+        keymap_wrapper(keymapU &&keymap) : keymap(std::forward<keymapU>(keymap)) {}
 
-        ProcessID owner(const keyT &key) const { return static_cast<ProcessID>(mapper(key, world)); }
+        ProcessID owner(const keyT &key) const { return static_cast<ProcessID>(keymap(key)); }
 
        private:
-        World &world;
-        mapperT mapper;
+        keymapT keymap;
       };
 
-      template <typename mapperT>
-      WorldDCPmapWrapper<
-          std::decay_t<typename std::tuple_element<0, boost::callable_traits::args_t<std::decay_t<mapperT>>>::type>,
-          std::decay_t<mapperT>>
-      wrap_mapper(World &world, mapperT &&mapper) {
-        return WorldDCPmapWrapper<
-            std::decay_t<typename std::tuple_element<0, boost::callable_traits::args_t<std::decay_t<mapperT>>>::type>,
-            std::decay_t<mapperT>>(world, std::forward<mapperT>(mapper));
+      template <typename keymapT>
+      keymap_wrapper<
+          std::decay_t<typename std::tuple_element<0, boost::callable_traits::args_t<std::decay_t<keymapT>>>::type>,
+          std::decay_t<keymapT>>
+      wrap_key_mapper(World &world, keymapT &&keymap) {
+        return keymap_wrapper<
+            std::decay_t<typename std::tuple_element<0, boost::callable_traits::args_t<std::decay_t<keymapT>>>::type>,
+            std::decay_t<keymapT>>(world, std::forward<keymapT>(keymap));
       }
     }  // namespace detail
 
@@ -322,14 +321,14 @@ namespace madness {
       }
 
      public:
-      template <typename mapperT = detail::default_pmap<keyT>>
+      template <typename keymapT = detail::default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-         mapperT &&pmap = mapperT(get_default_world()))
+         World& world,
+         keymapT &&keymap = keymapT())
           : ::ttg::OpBase(name, numins, numouts)
-          , worldobjT(get_default_world())
-          , world(get_default_world())
-          , pmap(std::make_shared<detail::WorldDCPmapWrapper<keyT, std::decay_t<mapperT>>>(
-                get_default_world(), std::forward<mapperT>(pmap))) {
+          , worldobjT(world)
+          , world(world)
+          , pmap(std::make_shared<detail::keymap_wrapper<keyT, std::decay_t<keymapT>>>(std::forward<keymapT>(keymap))) {
         // Cannot call these in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value)
           throw "madness::ttg::Op: #input names != #input terminals";
@@ -344,15 +343,19 @@ namespace madness {
         this->process_pending();
       }
 
-      template <typename mapperT = detail::default_pmap<keyT>>
+      template <typename keymapT = detail::default_keymap<keyT>>
+      Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
+         keymapT &&keymap = keymapT(get_default_world())) :
+          Op(name, innames, outnames, get_default_world(), std::forward<keymapT>(keymap)) {}
+
+      template <typename keymapT = detail::default_keymap<keyT>>
       Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
          const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-         mapperT &&pmap = mapperT(get_default_world()))
+         keymapT &&keymap = keymapT(get_default_world()))
           : ::ttg::OpBase(name, numins, numouts)
           , worldobjT(get_default_world())
           , world(get_default_world())
-          , pmap(std::make_shared<detail::WorldDCPmapWrapper<keyT, std::decay_t<mapperT>>>(
-                get_default_world(), std::forward<mapperT>(pmap))) {
+          , pmap(std::make_shared<detail::keymap_wrapper<keyT, std::decay_t<keymapT>>>(std::forward<keymapT>(keymap))) {
         // Cannot call in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value)
           throw "madness::ttg::Op: #input names != #input terminals";
