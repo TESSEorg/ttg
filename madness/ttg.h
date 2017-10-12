@@ -57,7 +57,7 @@ namespace madness {
     }
 
     namespace detail {
-      /// the default pmap implementation maps key to madness::Hash(key) % nproc
+      /// the default keymap implementation maps key to madness::Hash(key) % nproc
       template <typename keyT>
       class default_keymap {
        public:
@@ -70,40 +70,16 @@ namespace madness {
        private:
         int nproc;
       };
-
-      /// this wraps callable keymapT with signature "auto keymapT(const keyU&)" into WorldDCPmapInterface
-      template <typename keyT, typename keymapT>
-      class keymap_wrapper : public WorldDCPmapInterface<keyT> {
-       public:
-        template <typename keymapU>
-        keymap_wrapper(keymapU &&keymap) : keymap(std::forward<keymapU>(keymap)) {}
-
-        ProcessID owner(const keyT &key) const { return static_cast<ProcessID>(keymap(key)); }
-
-       private:
-        keymapT keymap;
-      };
-
-      template <typename keymapT>
-      keymap_wrapper<
-          std::decay_t<typename std::tuple_element<0, boost::callable_traits::args_t<std::decay_t<keymapT>>>::type>,
-          std::decay_t<keymapT>>
-      wrap_key_mapper(World &world, keymapT &&keymap) {
-        return keymap_wrapper<
-            std::decay_t<typename std::tuple_element<0, boost::callable_traits::args_t<std::decay_t<keymapT>>>::type>,
-            std::decay_t<keymapT>>(world, std::forward<keymapT>(keymap));
-      }
     }  // namespace detail
 
     template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
     class Op : public ::ttg::OpBase, public WorldObject<Op<keyT, output_terminalsT, derivedT, input_valueTs...>> {
      private:
       World &world;
-      std::shared_ptr<WorldDCPmapInterface<keyT>> pmap;
+      std::function<std::int64_t(const keyT&)> keymap;
 
      protected:
       World &get_world() { return world; }
-      std::shared_ptr<WorldDCPmapInterface<keyT>> &get_pmap() { return pmap; }
 
       using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
       using worldobjT = WorldObject<opT>;
@@ -195,7 +171,7 @@ namespace madness {
         static_assert(std::is_same<std::decay_t<T>, std::decay_t<valueT>>::value,
                       "Op::set_arg(key,value) given value of type incompatible with Op");
 
-        ProcessID owner = pmap->owner(key);
+        const auto owner = keymap(key);
 
         if (owner != world.rank()) {
           if (tracing())
@@ -236,7 +212,7 @@ namespace madness {
 
       // Used to generate tasks with no input arguments
       void set_arg_empty(const keyT &key) {
-        ProcessID owner = pmap->owner(key);
+        const auto owner = keymap(key);
 
         if (owner != world.rank()) {
           if (tracing()) madness::print(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
@@ -328,7 +304,7 @@ namespace madness {
           : ::ttg::OpBase(name, numins, numouts)
           , worldobjT(world)
           , world(world)
-          , pmap(std::make_shared<detail::keymap_wrapper<keyT, std::decay_t<keymapT>>>(std::forward<keymapT>(keymap))) {
+          , keymap(std::forward<keymapT>(keymap)) {
         // Cannot call these in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value)
           throw "madness::ttg::Op: #input names != #input terminals";
@@ -355,7 +331,7 @@ namespace madness {
           : ::ttg::OpBase(name, numins, numouts)
           , worldobjT(get_default_world())
           , world(get_default_world())
-          , pmap(std::make_shared<detail::keymap_wrapper<keyT, std::decay_t<keymapT>>>(std::forward<keymapT>(keymap))) {
+          , keymap(std::forward<keymapT>(keymap)) {
         // Cannot call in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value)
           throw "madness::ttg::Op: #input names != #input terminals";
