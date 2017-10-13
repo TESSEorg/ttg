@@ -115,7 +115,7 @@ namespace parsec {
     template <typename keyT>
     struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
      public:
-      default_keymap(World& world) : ::ttg::detail::default_keymap_impl<keyT>(world.size()) {}
+      default_keymap(World &world) : ::ttg::detail::default_keymap_impl<keyT>(world.size()) {}
     };
 
   }  // namespace ttg
@@ -556,6 +556,25 @@ namespace parsec {
         junk[0]++;
       }
 
+      template <typename input_terminals_tupleT, std::size_t... IS, typename flowsT>
+      void _initialize_flows(std::index_sequence<IS...>, flowsT &&flows) {
+        int junk[] = {
+            0,
+            (*(const_cast<std::remove_const_t<decltype(flows[IS]->flow_flags)> *>(&(flows[IS]->flow_flags))) =
+                 (std::is_const<typename std::tuple_element<IS, input_terminals_tupleT>::type>::value ? FLOW_ACCESS_READ
+                                                                                                      : FLOW_ACCESS_RW),
+             0)...};
+        junk[0]++;
+      }
+
+      template <typename T>
+      struct type_printer;
+      template <typename input_terminals_tupleT, typename flowsT>
+      void initialize_flows(flowsT &&flows) {
+        _initialize_flows<input_terminals_tupleT>(
+            std::make_index_sequence<std::tuple_size<input_terminals_tupleT>::value>{}, flows);
+      }
+
       void fence() override { get_default_world().fence(); }
 
      public:
@@ -606,7 +625,8 @@ namespace parsec {
           parsec_flow_t *flow = new parsec_flow_t;
           flow->name = strdup((std::string("flow in") + std::to_string(i)).c_str());
           flow->sym_type = SYM_INOUT;
-          flow->flow_flags = FLOW_ACCESS_RW;
+          // see initialize_flows below
+          // flow->flow_flags = FLOW_ACCESS_RW;
           flow->dep_in[0] = NULL;
           flow->dep_out[0] = NULL;
           flow->flow_index = i;
@@ -614,12 +634,13 @@ namespace parsec {
           *((parsec_flow_t **)&(self.in[i])) = flow;
         }
         *((parsec_flow_t **)&(self.in[i])) = NULL;
+        initialize_flows<input_terminals_type>(self.in);
 
         for (i = 0; i < numouts; i++) {
           parsec_flow_t *flow = new parsec_flow_t;
           flow->name = strdup((std::string("flow out") + std::to_string(i)).c_str());
           flow->sym_type = SYM_INOUT;
-          flow->flow_flags = FLOW_ACCESS_READ;
+          flow->flow_flags = FLOW_ACCESS_READ;  // does PaRSEC use this???
           flow->dep_in[0] = NULL;
           flow->dep_out[0] = NULL;
           flow->flow_index = i;
