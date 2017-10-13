@@ -262,6 +262,14 @@ struct Key {
 
 };
 
+namespace std {
+// specialize std::hash for Key
+template <>
+struct hash<Key> {
+  std::size_t operator()(const Key& s) const noexcept { return s.hash(); }
+};
+}  // namespace std
+
 std::ostream& operator<<(std::ostream&s, const Key& key) {
     s << "Key(" << key.n << "," << key.l << ")";
     return s;

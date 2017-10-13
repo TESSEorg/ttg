@@ -44,6 +44,14 @@ struct Key {
   uint64_t hash() const { return hashvalue; }
 };
 
+namespace std {
+// specialize std::hash for Key
+template <>
+struct hash<Key> {
+  std::size_t operator()(const Key& s) const noexcept { return s.hash(); }
+};
+}  // namespace std
+
 template <typename Result = uint64_t>
 Result unique_hash(const Key& key) {
   return (size_t(key.n) << 48) + key.l;

@@ -1,5 +1,4 @@
 #define WORLD_INSTANTIATE_STATIC_TEMPLATES
-#include <madness/world/worldhash.h>
 #include <madness/world/worldmutex.h>
 
 #define TTG_RUNTIME_H "madness/ttg.h"

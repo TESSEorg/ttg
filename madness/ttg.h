@@ -1,6 +1,7 @@
 #ifndef MADNESS_TTG_H_INCLUDED
 #define MADNESS_TTG_H_INCLUDED
 
+#include "../meta.h"
 #include "../ttg.h"
 
 #include <array>
@@ -56,26 +57,20 @@ namespace madness {
       world.gop.sum(value);
     }
 
-    namespace detail {
-      /// the default keymap implementation maps key to madness::Hash{}(key) % nproc
-      template <typename keyT>
-      class default_keymap {
-       public:
-        default_keymap(World &world = get_default_world()) : nproc(world.mpi.nproc()) {}
-        int64_t operator()(const keyT &key) const {
-          return static_cast<int64_t>(madness::Hash<keyT>{}(key) % nproc);
-        }
-
-       private:
-        int nproc;
-      };
-    }  // namespace detail
+    template <typename keyT>
+    struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
+     public:
+      // clang-format off
+                                              // vvvvvvvvvvvvv the only place where are madness-specific
+      default_keymap(World& world) : ::ttg::detail::default_keymap_impl<keyT>(world.mpi.size()) {}
+      // clang-format on
+    };
 
     template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
     class Op : public ::ttg::OpBase, public WorldObject<Op<keyT, output_terminalsT, derivedT, input_valueTs...>> {
      private:
       World &world;
-      std::function<std::int64_t(const keyT &)> keymap;
+      std::function<std::size_t(const keyT &)> keymap;
 
      protected:
       World &get_world() { return world; }
@@ -158,7 +153,7 @@ namespace madness {
         virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
       };
 
-      using cacheT = ConcurrentHashMap<keyT, OpArgs *>;
+      using cacheT = ConcurrentHashMap<keyT, OpArgs *, std::hash<keyT>>;
       using accessorT = typename cacheT::accessor;
       cacheT cache;
 
@@ -296,15 +291,15 @@ namespace madness {
       }
 
      public:
-      template <typename keymapT = detail::default_keymap<keyT>>
+      template <typename keymapT = default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
          World &world, keymapT &&keymap_ = keymapT())
           : ::ttg::OpBase(name, numins, numouts)
           , worldobjT(world)
           , world(world)
           // if using default keymap, rebind to the given world
-          , keymap(std::is_same<keymapT, detail::default_keymap<keyT>>::value
-                       ? decltype(keymap)(detail::default_keymap<keyT>(world))
+          , keymap(std::is_same<keymapT, default_keymap<keyT>>::value
+                       ? decltype(keymap)(default_keymap<keyT>(world))
                        : decltype(keymap)(std::forward<keymapT>(keymap_))) {
         // Cannot call these in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value)
@@ -320,12 +315,12 @@ namespace madness {
         this->process_pending();
       }
 
-      template <typename keymapT = detail::default_keymap<keyT>>
+      template <typename keymapT = default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
          keymapT &&keymap = keymapT(get_default_world()))
           : Op(name, innames, outnames, get_default_world(), std::forward<keymapT>(keymap)) {}
 
-      template <typename keymapT = detail::default_keymap<keyT>>
+      template <typename keymapT = default_keymap<keyT>>
       Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
          const std::vector<std::string> &innames, const std::vector<std::string> &outnames, World &world,
          keymapT &&keymap_ = keymapT())
@@ -333,9 +328,9 @@ namespace madness {
           , worldobjT(get_default_world())
           , world(get_default_world())
           // if using default keymap, rebind to the given world
-          , keymap(std::is_same<keymapT, detail::default_keymap<keyT>>::value
-                   ? decltype(keymap)(detail::default_keymap<keyT>(world))
-                   : decltype(keymap)(std::forward<keymapT>(keymap_))) {
+          , keymap(std::is_same<keymapT, default_keymap<keyT>>::value
+                       ? decltype(keymap)(default_keymap<keyT>(world))
+                       : decltype(keymap)(std::forward<keymapT>(keymap_))) {
         // Cannot call in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value)
           throw "madness::ttg::Op: #input names != #input terminals";
@@ -353,7 +348,7 @@ namespace madness {
         this->process_pending();
       }
 
-      template <typename keymapT = detail::default_keymap<keyT>>
+      template <typename keymapT = default_keymap<keyT>>
       Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
          const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
          keymapT &&keymap = keymapT(get_default_world()))

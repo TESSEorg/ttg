@@ -1,6 +1,7 @@
 #ifndef PARSEC_TTG_H_INCLUDED
 #define PARSEC_TTG_H_INCLUDED
 
+#include "../meta.h"
 #include "../ttg.h"
 
 #include <array>
@@ -110,18 +111,12 @@ namespace parsec {
     inline void set_default_world(World &world) { detail::default_world_accessor() = &world; }
     inline void set_default_world(World *world) { detail::default_world_accessor() = world; }
 
-    namespace detail {
-      /// the default keymap implementation maps key to std::hash{}(key) % nproc
-      template <typename keyT>
-      class default_keymap {
-       public:
-        default_keymap(World &world = get_default_world()) : nproc(world.size()) {}
-        int64_t operator()(const keyT &key) const { return static_cast<int64_t>(std::hash<keyT>{}(key) % nproc); }
-
-       private:
-        int nproc;
-      };
-    }  // namespace detail
+    /// the default keymap implementation maps key to std::hash{}(key) % nproc
+    template <typename keyT>
+    struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
+     public:
+      default_keymap(World& world) : ::ttg::detail::default_keymap_impl<keyT>(world.size()) {}
+    };
 
   }  // namespace ttg
 }  // namespace parsec
@@ -344,7 +339,7 @@ namespace parsec {
       output_terminalsT output_terminals;
 
       World &world;
-      std::function<std::int64_t(const keyT &)> keymap;
+      std::function<std::size_t(const keyT &)> keymap;
 
      protected:
       World &get_world() { return world; }
@@ -564,14 +559,14 @@ namespace parsec {
       void fence() override { get_default_world().fence(); }
 
      public:
-      template <typename keymapT = detail::default_keymap<keyT>>
+      template <typename keymapT = default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
          World &world, keymapT &&keymap_ = keymapT())
           : ::ttg::OpBase(name, numins, numouts)
           , world(world)
           // if using default keymap, rebind to the given world
-          , keymap(std::is_same<keymapT, detail::default_keymap<keyT>>::value
-                       ? decltype(keymap)(detail::default_keymap<keyT>(world))
+          , keymap(std::is_same<keymapT, default_keymap<keyT>>::value
+                       ? decltype(keymap)(default_keymap<keyT>(world))
                        : decltype(keymap)(std::forward<keymapT>(keymap_))) {
         // Cannot call these in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value)
@@ -651,12 +646,12 @@ namespace parsec {
         parsec_hash_table_init(&tasks_table, offsetof(my_op_t, op_ht_item), 1024, parsec_tasks_hash_fct, NULL);
       }
 
-      template <typename keymapT = detail::default_keymap<keyT>>
+      template <typename keymapT = default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
          keymapT &&keymap = keymapT(get_default_world()))
           : Op(name, innames, outnames, get_default_world(), std::forward<keymapT>(keymap)) {}
 
-      template <typename keymapT = detail::default_keymap<keyT>>
+      template <typename keymapT = default_keymap<keyT>>
       Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
          const std::vector<std::string> &innames, const std::vector<std::string> &outnames, World &world,
          keymapT &&keymap_ = keymapT())
@@ -664,7 +659,7 @@ namespace parsec {
         connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numins>{}, inedges);
         connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
       }
-      template <typename keymapT = detail::default_keymap<keyT>>
+      template <typename keymapT = default_keymap<keyT>>
       Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
          const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
          keymapT &&keymap = keymapT(get_default_world()))
