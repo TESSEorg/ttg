@@ -199,7 +199,7 @@ namespace madness {
             world.taskq.add(args);
             // static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
 
-            cache.erase(key);
+            cache.erase(acc);
           }
         }
       }
@@ -223,7 +223,7 @@ namespace madness {
           world.taskq.add(args);
           // static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals);// runs immediately
 
-          cache.erase(key);
+          cache.erase(acc);
         }
       }
 
