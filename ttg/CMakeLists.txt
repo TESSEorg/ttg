@@ -1,21 +1,24 @@
 ########################
 ####### Runtime-neutral
 ########################
-add_library(ttg INTERFACE)
-target_include_directories(ttg INTERFACE
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-        )
-set(ttg-headers
+set(ttg-sources
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg.h
         ${CMAKE_CURRENT_SOURCE_DIR}/wrap.h
         ${CMAKE_CURRENT_SOURCE_DIR}/util/demangle.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/util/meta.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/serialization.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/bug.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/bug.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/backtrace.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/backtrace.cpp
         )
-target_sources(ttg INTERFACE ${ttg-headers})
-target_link_libraries(ttg INTERFACE Boost::boost)
-install(FILES ${ttg-headers}
+add_library(ttg ${ttg-sources})
+target_include_directories(ttg PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+        )
+target_link_libraries(ttg PUBLIC Boost::boost)
+install(FILES ${ttg-sources}
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         COMPONENT ttg)
 
