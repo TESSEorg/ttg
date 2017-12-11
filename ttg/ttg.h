@@ -14,8 +14,8 @@
 
 #include <boost/callable_traits.hpp>  // needed for wrap.h
 
-#include "demangle.h"
-#include "meta.h"
+#include "util/demangle.h"
+#include "util/meta.h"
 
 namespace ttg {
 

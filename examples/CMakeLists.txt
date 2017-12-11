@@ -1,0 +1,47 @@
+if (${MADNESS_FOUND})
+  # sanity check
+  add_executable (test-mad madness/test.cc test.impl.h)
+  target_link_libraries(test-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
+  # madness-1d example (not yet runtime-agnostic)
+  add_executable(madness-1d madness/madness-1d/madness-1d.cc)
+  target_link_libraries(madness-1d LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
+  # T9 example
+  add_executable (t9-mad madness/t9.cc t9.impl.h)
+  target_link_libraries(t9-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
+  # sparse matmul
+  if (EIGEN3_FOUND)
+    add_executable (spmm-mad madness/spmm.cc spmm.impl.h)
+    target_link_libraries(spmm-mad LINK_PUBLIC ttg-mad eigen3 ${MADNESS_DISABLEPIE_LINKER_FLAG})
+    # block-sparse needs BTAS
+    if (BTAS_FOUND)
+      add_executable (bspmm-mad madness/spmm.cc spmm.impl.h)
+      target_compile_definitions(bspmm-mad PUBLIC -DBLOCK_SPARSE_GEMM=1)
+      target_link_libraries(bspmm-mad LINK_PUBLIC ttg-mad eigen3 BTAS ${MADNESS_DISABLEPIE_LINKER_FLAG})
+    endif (BTAS_FOUND)
+  endif()
+endif(${MADNESS_FOUND})
+
+if (${PARSEC_FOUND})
+  # sanity check
+  add_executable (test-parsec parsec/test.cc test.impl.h)
+  target_link_libraries(test-parsec LINK_PUBLIC ttg-parsec)
+
+  # T9 example
+  add_executable (t9-parsec parsec/t9.cc t9.impl.h)
+  target_link_libraries(t9-parsec LINK_PUBLIC ttg-parsec)
+
+  # sparse matmul
+  if (EIGEN3_FOUND)
+    add_executable (spmm-parsec parsec/spmm.cc spmm.impl.h)
+    target_link_libraries(spmm-parsec LINK_PUBLIC ttg-parsec eigen3)
+    # block-sparse needs BTAS and MADNESS (for serialization only)
+    if (BTAS_FOUND AND MADNESS_FOUND)
+      add_executable (bspmm-parsec parsec/spmm.cc spmm.impl.h)
+      target_compile_definitions(bspmm-parsec PUBLIC -DBLOCK_SPARSE_GEMM=1)
+      target_link_libraries(bspmm-parsec LINK_PUBLIC ttg-parsec eigen3 BTAS Boost::boost MADworld)
+    endif (BTAS_FOUND AND MADNESS_FOUND)
+  endif()
+endif(${PARSEC_FOUND})

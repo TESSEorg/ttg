@@ -9,8 +9,7 @@
 #include <utility>
 
 
-//#include "madness/ttg.h"
-#include "../ttg.h"
+#include "../ttg/madness/ttg.h"
 
 #include "Vector.h"
 #include "Matrix.h"

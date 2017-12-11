@@ -2,7 +2,7 @@
 
 #include <iostream>
 #include <tuple>
-#include "madness/ttg.h"
+#include "../ttg/madness/ttg.h"
 
 using namespace madness;
 using namespace madness::ttg;

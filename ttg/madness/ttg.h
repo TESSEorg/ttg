@@ -1,7 +1,7 @@
 #ifndef MADNESS_TTG_H_INCLUDED
 #define MADNESS_TTG_H_INCLUDED
 
-#include "../meta.h"
+#include "../util/meta.h"
 #include "../ttg.h"
 
 #include <array>

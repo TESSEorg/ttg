@@ -1,4 +1,7 @@
 #include <cstdint>
+#include <memory>
+
+//#include <mpqc/util/misc/bug.h>
 
 using keyT = uint64_t;
 
@@ -278,6 +281,14 @@ void hi() { ::ttg::print("hi"); }
 
 int try_main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
+
+//  using mpqc::Debugger;
+//  auto debugger = std::make_shared<Debugger>();
+//  Debugger::set_default_debugger(debugger);
+//  debugger->set_exec(argv[0]);
+//  debugger->set_prefix(ttg_default_execution_context().rank());
+//  debugger->set_cmd("xterm -title \"$(PREFIX)$(EXEC)\" -e lldb -p $(PID) &");
+
   {
 
     OpBase::set_trace_all(false);
@@ -347,6 +358,7 @@ int try_main(int argc, char **argv) {
 #endif
 
     ttg_fence(ttg_default_execution_context());
+    std::cout << "\nFence done\n";
   }
   ttg_finalize();
   return 0;

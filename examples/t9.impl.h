@@ -2,7 +2,7 @@
 #include <iostream>
 
 const double L = 10.0;       // The computational domain is [-L,L]
-const double thresh = 1e-6;  // The threshold for small difference coefficients
+const double thresh = 1e-4;  // The threshold for small difference coefficients
 
 void error(const char* s) {
   std::cerr << s << std::endl;
