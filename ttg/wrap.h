@@ -19,8 +19,10 @@ class WrapOp : public Op<keyT, output_terminalsT, WrapOp<funcT, keyT, output_ter
               output_terminalsT &out, std::index_sequence<S...>) {
     // this is the tuple of values
     using func_args_t = std::remove_reference_t<std::tuple_element_t<1,boost::callable_traits::args_t<funcT>>>;
+    // NB cannot use std::forward_as_tuple since that makes a tuple of refs!
+    func_args_t unwrapped_args(baseT::template get<S, std::tuple_element_t<S,func_args_t>>(std::forward<Tuple>(args))...);
     func(std::forward<Key>(key),
-         std::forward_as_tuple(baseT::template get<S, std::tuple_element_t<S,func_args_t>>(std::forward<Tuple>(args))...),
+         std::move(unwrapped_args),
          out);
   }
 
@@ -46,6 +48,8 @@ struct WrapOpUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<input_values
 using type = WrapOp<funcT, keyT, output_terminalsT, std::remove_reference_t<input_valuesT>...>;
 };
 
+template <typename> struct type_printer;
+
 // Class to wrap a callable with signature
 //
 // void op(const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)
@@ -62,7 +66,8 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
               output_terminalsT &out, std::index_sequence<S...>) {
     using func_args_t = boost::callable_traits::args_t<funcT>;
     func(std::forward<Key>(key),
-         baseT::template get<S, std::tuple_element_t<S+1,func_args_t>>(std::forward<Tuple>(args))...,
+//         baseT::template get<S, std::tuple_element_t<S+1,func_args_t>>(std::forward<Tuple>(args))...,
+         std::get<S>(std::forward<Tuple>(args))...,
          out);
   }
 
@@ -106,52 +111,18 @@ auto wrapt(funcT &&func, const std::tuple<::ttg::Edge<keyT, input_valuesT>...> &
   using func_args_t = boost::callable_traits::args_t<funcT>;
   constexpr const auto num_args = std::tuple_size<func_args_t>::value;
   static_assert(num_args == 3, "ttg::wrapt(func, ...): func must take 3 arguments");
-  // not sure if we need this level of type checking ...
-  // TODO determine the generic signature of func
-  static_assert(std::is_same<typename std::tuple_element<0,func_args_t>::type, const keyT&>::value, "ttg::wrapt(func, inedges): first argument of func must be const keyT&");
-  static_assert(std::is_same<typename std::tuple_element<num_args-1,func_args_t>::type, output_terminals_type&>::value, "ttg::wrapt(func, inedges): last argument of func must be std::tuple<output_terminals>&");
   // 2. input_args_t = {input_valuesT&&...}
   using input_args_t = std::decay_t<typename std::tuple_element<1,func_args_t>::type>;
+  using decayed_input_args_t = ::ttg::meta::decayed_tuple_t<input_args_t>;
   using wrapT = typename WrapOpUnwrapTuple<funcT, keyT, output_terminals_type, input_args_t>::type;
+  // not sure if we need this level of type checking ...
+  // TODO determine the generic signature of func
+  static_assert(std::is_same<typename std::tuple_element<0,func_args_t>::type, const keyT&>::value, "ttg::wrapt(func, inedges, outedges): first argument of func must be const keyT&");
+  static_assert(std::is_same<decayed_input_args_t, std::tuple<input_valuesT...>>::value, "ttg::wrapt(func, inedges, outedges): inedges value types do not match argument types of func");
+  static_assert(std::is_same<typename std::tuple_element<num_args-1,func_args_t>::type, output_terminals_type&>::value, "ttg::wrapt(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
 
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
-
-namespace meta {
-template<typename Tuple, std::size_t N, typename Enabler = void>
-struct drop_first_n;
-
-template<typename ... Ts>
-struct drop_first_n<std::tuple<Ts...>, std::size_t(0)> {
-  using type = std::tuple<Ts...>;
-};
-
-template<typename T, typename ... Ts, std::size_t N>
-struct drop_first_n<std::tuple<T, Ts...>, N, std::enable_if_t<N != 0>> {
-  using type = typename drop_first_n<std::tuple<Ts...>, N - 1>::type;
-};
-
-template <typename ResultTuple, typename InputTuple, std::size_t N, typename Enabler = void>
-struct take_first_n_helper;
-
-template <typename ... Ts, typename ... Us>
-struct take_first_n_helper<std::tuple<Ts...>, std::tuple<Us...>, std::size_t(0)> {
-  using type = std::tuple<Ts...>;
-};
-
-template <typename ... Ts, typename U, typename ... Us, std::size_t N>
-struct take_first_n_helper<std::tuple<Ts...>, std::tuple<U, Us...>, N, std::enable_if_t<N != 0>> {
-  using type = typename take_first_n_helper<std::tuple<Ts..., U>, std::tuple<Us...>, N-1>::type;
-};
-
-template <typename Tuple, std::size_t N>
-struct take_first_n {
-  using type = typename take_first_n_helper<std::tuple<>, Tuple, N>::type;
-};
-
-}
-
-template <typename T> struct type_printer;
 
 // Factory function to assist in wrapping a callable with signature
 //
@@ -170,13 +141,15 @@ auto wrap(funcT &&func, const std::tuple<::ttg::Edge<keyT, input_edge_valuesT>..
   using func_args_t = boost::callable_traits::args_t<funcT>;
   constexpr const auto num_args = std::tuple_size<func_args_t>::value;
   static_assert(num_args == sizeof...(input_edge_valuesT) + 2, "ttg::wrap(func, inedges): func's # of args != # of inedges");
+  // 2. input_args_t = {input_valuesT&&...}
+  using input_args_t = typename ::ttg::meta::take_first_n<typename ::ttg::meta::drop_first_n<func_args_t, std::size_t(1)>::type, std::tuple_size<func_args_t>::value-2>::type;
+  using decayed_input_args_t = ::ttg::meta::decayed_tuple_t<input_args_t>;
+  using wrapT = typename WrapOpArgsUnwrapTuple<funcT, keyT, output_terminals_type, input_args_t>::type;
   // not sure if we need this level of type checking ...
   // TODO determine the generic signature of func
-  static_assert(std::is_same<typename std::tuple_element<0,func_args_t>::type, const keyT&>::value, "ttg::wrap(func, inedges): first argument of func must be const keyT&");
-  static_assert(std::is_same<typename std::tuple_element<num_args-1,func_args_t>::type, output_terminals_type&>::value, "ttg::wrap(func, inedges): last argument of func must be std::tuple<output_terminals>&");
-  // 2. input_args_t = {input_valuesT&&...}
-  using input_args_t = typename meta::take_first_n<typename meta::drop_first_n<func_args_t, std::size_t(1)>::type, std::tuple_size<func_args_t>::value-2>::type;
-  using wrapT = typename WrapOpArgsUnwrapTuple<funcT, keyT, output_terminals_type, input_args_t>::type;
+  static_assert(std::is_same<typename std::tuple_element<0,func_args_t>::type, const keyT&>::value, "ttg::wrap(func, inedges, outedges): first argument of func must be const keyT&");
+  static_assert(std::is_same<decayed_input_args_t, std::tuple<input_edge_valuesT...>>::value, "ttg::wrap(func, inedges, outedges): inedges value types do not match argument types of func");
+  static_assert(std::is_same<typename std::tuple_element<num_args-1,func_args_t>::type, output_terminals_type&>::value, "ttg::wrap(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
 
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
