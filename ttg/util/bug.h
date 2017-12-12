@@ -28,6 +28,7 @@
 #ifndef MPQC4_SRC_MPQC_UTIL_MISC_BUG_H_
 #define MPQC4_SRC_MPQC_UTIL_MISC_BUG_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
