@@ -66,8 +66,7 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
               output_terminalsT &out, std::index_sequence<S...>) {
     using func_args_t = boost::callable_traits::args_t<funcT>;
     func(std::forward<Key>(key),
-//         baseT::template get<S, std::tuple_element_t<S+1,func_args_t>>(std::forward<Tuple>(args))...,
-         std::get<S>(std::forward<Tuple>(args))...,
+         baseT::template get<S, std::tuple_element_t<S+1,func_args_t>>(std::forward<Tuple>(args))...,
          out);
   }
 
