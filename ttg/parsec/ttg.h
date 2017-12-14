@@ -206,17 +206,20 @@ class PrintThread : public std::ostringstream {
 std::mutex PrintThread::_mutexPrint{};
 namespace parsec {
   namespace ttg {
-
-    static std::map<uint64_t, void (*)(void *, size_t)> static_set_arg_map;
+    typedef void (*static_set_arg_fct_type)(void *, size_t, ::ttg::OpBase*);
+    static std::map<uint64_t, 
+                    std::pair<static_set_arg_fct_type,
+                              ::ttg::OpBase* > > static_id_to_op_map;
 
     static void static_unpack_msg(void *data, size_t size) {
-        void (*static_set_arg_fct)(void *, size_t);
+        void (*static_set_arg_fct)(void *, size_t, ::ttg::OpBase *);
         typedef struct {
             uint64_t op_id;
         } msg_header_t;
         msg_header_t *msg = static_cast<msg_header_t*>(data);
-        static_set_arg_fct = static_set_arg_map.at( msg->op_id );
-        static_set_arg_fct(data, size);
+        auto op_pair = static_id_to_op_map.at( msg->op_id );
+        static_set_arg_fct = op_pair.first;
+        static_set_arg_fct(data, size, op_pair.second);
     }
 
     template <typename... RestOfArgs>
@@ -367,6 +370,7 @@ namespace parsec {
      private:
       input_terminals_type input_terminals;
       output_terminalsT output_terminals;
+        std::array<void (Op::*)(void*, std::size_t), numins> set_arg_from_msg_fcts;
 
       World &world;
       std::function<int(const keyT &)> keymap;
@@ -380,6 +384,13 @@ namespace parsec {
       World &get_world() { return world; }
 
      private:
+
+
+      template <std::size_t...IS>
+      static auto make_set_args_fcts(std::index_sequence<IS...>) {
+          using resultT = decltype(set_arg_from_msg_fcts);
+          return resultT{{&Op::set_arg_from_msg<IS>...}};
+      }
 
       static void static_op(parsec_task_t *my_task) {
         my_op_t *task = (my_op_t *)my_task;
@@ -400,17 +411,17 @@ namespace parsec {
       }
 
      protected:
-      static void static_set_arg(void *data, std::size_t size) {
+      static void static_set_arg(void *data, std::size_t size, ::ttg::OpBase *bop) {
           typedef struct {
               uint64_t op_id;
               std::size_t param_id;
-              keyT key;
           } header_t;
-          static_assert(size >= sizeof(header_t),
-                        "Trying to unpack as message that does not hold enough bytes to represent a single header");
+          assert(size >= sizeof(header_t) &&
+                 "Trying to unpack as message that does not hold enough bytes to represent a single header");
           header_t *hd = static_cast<header_t*>(data);
-          derivedT *obj = reinterpret_cast<derivedT*>(static_id_to_op_map.at( header->op_id ));
-          obj->set_arg_from_msg<header->param_id>(data, size);
+          derivedT *obj = reinterpret_cast<derivedT*>(bop);
+          auto member = obj->set_arg_from_msg_fcts[hd->param_id];
+          (obj->*member)(data, size);
       }
         
       template <std::size_t i>
@@ -422,15 +433,15 @@ namespace parsec {
               keyT key;
               T val;
           } msg_t;
-          static_assert(size == sizeof(msg_t),
-                        "Trying to unpack as message that does not hold the right number of bytes for this type");
+          assert(size == sizeof(msg_t) &&
+                 "Trying to unpack as message that does not hold the right number of bytes for this type");
           msg_t *msg = static_cast<msg_t*>(data);
           set_arg<i, T>(msg->key, std::forward<T>(msg->val));
       }
         
       // Used to set the i'th argument
       template <std::size_t i, typename T>
-      void set_arg(const keyT &key, T &&value) {
+      void set_arg_local(const keyT &key, T &&value) {
         using valueT = data_unwrapped_t<typename std::tuple_element<i, input_values_tuple_type>::type>;
 
         auto owner = keymap(key);
@@ -441,7 +452,7 @@ namespace parsec {
                 keyT key;
                 T val;
             } msg_t;
-            msg_t msg = {get_instance_id(), i, key, value};
+            msg_t msg{get_instance_id(), i, key, value};
             // Pass msg to comm engine to send it to owner
             return;
         }
@@ -530,6 +541,18 @@ namespace parsec {
           parsec_hash_table_remove(&tasks_table, hk);
           __parsec_schedule(es, &task->parsec_task, 0);
         }
+      }
+
+      // Used to set the i'th argument
+      template <std::size_t i, typename T>
+      void set_arg(const keyT &key, T &&value) {
+        auto owner = keymap(key);
+        if( owner == ttg_default_execution_context().rank() ) {
+            set_arg_local<i>(key, std::forward<T>(value));
+            return;
+        }
+        // the target task is remote. Pack the infroamtion and sent it to
+        // the corresponding peer.
       }
 
       // Used to generate tasks with no input arguments
@@ -674,7 +697,8 @@ namespace parsec {
           // if using default keymap, rebind to the given world
           , keymap(std::is_same<keymapT, default_keymap<keyT>>::value
                        ? decltype(keymap)(default_keymap<keyT>(world))
-                       : decltype(keymap)(std::forward<keymapT>(keymap_))) {
+                       : decltype(keymap)(std::forward<keymapT>(keymap_)))
+                                          , set_arg_from_msg_fcts(make_set_args_fcts(std::make_index_sequence<numins>{})) {
         // Cannot call these in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value)
           throw "parsec::ttg::OP: #input names != #input terminals";
@@ -823,7 +847,13 @@ namespace parsec {
 
       // Register the static_op function to associate it to instance_id
       void register_static_op_function(void) {
-          static_set_arg_map.insert( std::pair<uint64_t, void (*)(void *, size_t)>(get_instance_id(), &Op::static_set_arg) );
+          static_id_to_op_map.insert( std::pair<uint64_t, 
+                                                std::pair<void (*)(void *, size_t, 
+                                                                   ::ttg::OpBase *), 
+                                                ::ttg::OpBase*>>
+                                      (get_instance_id(), 
+                                       std::pair<void (*)(void *, size_t, ::ttg::OpBase *),
+                                                 ::ttg::OpBase*>(&Op::static_set_arg, this) ));
       }
     };
 
