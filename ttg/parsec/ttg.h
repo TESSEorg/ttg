@@ -23,10 +23,12 @@
 #include <parsec/interfaces/interface.h>
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
+#include <parsec/remote_dep.h>
 #include <cstdlib>
 #include <cstring>
 
 extern "C" int parsec_ptg_update_runtime_task(parsec_taskpool_t *tp, int tasks);
+extern "C" int remote_dep_dequeue_send(int rank, parsec_remote_deps_t* deps);
 
 namespace parsec {
   namespace ttg {
@@ -426,36 +428,23 @@ namespace parsec {
         
       template <std::size_t i>
       void set_arg_from_msg(void *data, std::size_t size) {
-          using T = typename std::tuple_element<i, input_terminals_type>::type;
+          using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
           typedef struct {
               uint64_t op_id;
               std::size_t param_id;
               keyT key;
-              T val;
+              valueT val;
           } msg_t;
           assert(size == sizeof(msg_t) &&
                  "Trying to unpack as message that does not hold the right number of bytes for this type");
           msg_t *msg = static_cast<msg_t*>(data);
-          set_arg<i, T>(msg->key, std::forward<T>(msg->val));
+          set_arg<i, valueT>(msg->key, std::forward<valueT>(msg->val));
       }
         
       // Used to set the i'th argument
       template <std::size_t i, typename T>
       void set_arg_local(const keyT &key, T &&value) {
         using valueT = data_unwrapped_t<typename std::tuple_element<i, input_values_tuple_type>::type>;
-
-        auto owner = keymap(key);
-        if( owner != get_default_world().rank() ) {
-            typedef struct {
-                uint64_t op_id;
-                std::size_t param_id;
-                keyT key;
-                T val;
-            } msg_t;
-            msg_t msg{get_instance_id(), i, key, value};
-            // Pass msg to comm engine to send it to owner
-            return;
-        }
 
         if (tracing()) PrintThread{} << get_name() << " : " << key << ": setting argument : " << i << std::endl;
 
@@ -546,6 +535,7 @@ namespace parsec {
       // Used to set the i'th argument
       template <std::size_t i, typename T>
       void set_arg(const keyT &key, T &&value) {
+        using valueT = data_unwrapped_t<typename std::tuple_element<i, input_values_tuple_type>::type>;
         auto owner = keymap(key);
         if( owner == ttg_default_execution_context().rank() ) {
             set_arg_local<i>(key, std::forward<T>(value));
@@ -553,6 +543,35 @@ namespace parsec {
         }
         // the target task is remote. Pack the infroamtion and sent it to
         // the corresponding peer.
+        typedef struct {
+            uint64_t op_id;
+            std::size_t param_id;
+            keyT key;
+            valueT val;
+        } msg_t;
+        msg_t msg{get_instance_id(), i, key, value};
+        parsec_remote_deps_t* deps = (parsec_remote_deps_t*)remote_deps_allocate(&parsec_remote_dep_context.freelist);
+        deps->root = get_default_world().rank();
+        deps->outgoing_mask = (1 << i);
+        deps->max_priority = 0;
+        deps->taskpool = world.taskpool();
+        struct remote_dep_output_param_s* output = &deps->output[0];
+        int _array_pos = owner / (8 * sizeof(uint32_t));
+        int _array_mask = 1 << (owner % (8 * sizeof(uint32_t)));
+        output->rank_bits[_array_pos] |= _array_mask;
+        output->deps_mask |= (1 << i);
+        output->count_bits = 1;
+        output->priority = 0;
+
+        deps->msg.deps = (remote_dep_datakey_t)deps;
+        deps->msg.output_mask = (1 << i);
+        deps->msg.tag = 10;  // TODO: change me
+        deps->msg.taskpool_id = deps->taskpool->taskpool_id;
+        deps->msg.task_class_id = this->self.task_class_id;
+        deps->msg.length = (sizeof(msg_t) + sizeof(int) - 1) / sizeof(int);
+        memcpy(deps->msg.locals, &msg, sizeof(msg_t));
+
+        remote_dep_dequeue_send(owner, deps);
       }
 
       // Used to generate tasks with no input arguments
