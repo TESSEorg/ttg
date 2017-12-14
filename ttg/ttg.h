@@ -267,7 +267,7 @@ namespace ttg {
         , is_composite(false)
         , is_within_composite(false)
         , containing_composite_op(0) {
-      std::cout << name << "@" << (void *)this << " -> " << instance_id << std::endl;
+        //std::cout << name << "@" << (void *)this << " -> " << instance_id << std::endl;
     }
 
     /// Sets trace for all operations to value and returns previous setting

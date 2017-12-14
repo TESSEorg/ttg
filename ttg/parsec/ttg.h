@@ -417,10 +417,10 @@ namespace parsec {
             free(newtask);
           } else {
             newtask->op_ht_item.key = hk;
+            parsec_atomic_inc_32b((volatile uint32_t *)&world.taskpool()->nb_tasks);
+            world.increment_created();
             parsec_hash_table_nolock_insert(&tasks_table, &newtask->op_ht_item);
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
-            world.increment_created();
-            parsec_atomic_inc_32b((volatile uint32_t *)&world.taskpool()->nb_tasks);
             task = newtask;
             if (tracing()) PrintThread{} << get_name() << " : " << key << ": creating task" << std::endl;
           }
@@ -466,8 +466,8 @@ namespace parsec {
           world.increment_sent_to_sched();
           parsec_execution_stream_t *es = world.execution_stream();
           if (tracing()) PrintThread{} << get_name() << " : " << key << ": invoking op" << std::endl;
-          __parsec_schedule(es, &task->parsec_task, 0);
           parsec_hash_table_remove(&tasks_table, hk);
+          __parsec_schedule(es, &task->parsec_task, 0);
         }
       }
 
