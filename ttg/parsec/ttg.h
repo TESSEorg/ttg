@@ -207,6 +207,18 @@ std::mutex PrintThread::_mutexPrint{};
 namespace parsec {
   namespace ttg {
 
+    static std::map<uint64_t, void (*)(void *, size_t)> static_set_arg_map;
+
+    static void static_unpack_msg(void *data, size_t size) {
+        void (*static_set_arg_fct)(void *, size_t);
+        typedef struct {
+            uint64_t op_id;
+        } msg_header_t;
+        msg_header_t *msg = static_cast<msg_header_t*>(data);
+        static_set_arg_fct = static_set_arg_map.at( msg->op_id );
+        static_set_arg_fct(data, size);
+    }
+
     template <typename... RestOfArgs>
     inline void ttg_initialize(int argc, char **argv, int taskpool_size, RestOfArgs &&...) {
       int provided;
@@ -388,10 +400,51 @@ namespace parsec {
       }
 
      protected:
+      static void static_set_arg(void *data, std::size_t size) {
+          typedef struct {
+              uint64_t op_id;
+              std::size_t param_id;
+              keyT key;
+          } header_t;
+          static_assert(size >= sizeof(header_t),
+                        "Trying to unpack as message that does not hold enough bytes to represent a single header");
+          header_t *hd = static_cast<header_t*>(data);
+          derivedT *obj = reinterpret_cast<derivedT*>(static_id_to_op_map.at( header->op_id ));
+          obj->set_arg_from_msg<header->param_id>(data, size);
+      }
+        
+      template <std::size_t i>
+      void set_arg_from_msg(void *data, std::size_t size) {
+          using T = typename std::tuple_element<i, input_terminals_type>::type;
+          typedef struct {
+              uint64_t op_id;
+              std::size_t param_id;
+              keyT key;
+              T val;
+          } msg_t;
+          static_assert(size == sizeof(msg_t),
+                        "Trying to unpack as message that does not hold the right number of bytes for this type");
+          msg_t *msg = static_cast<msg_t*>(data);
+          set_arg<i, T>(msg->key, std::forward<T>(msg->val));
+      }
+        
       // Used to set the i'th argument
       template <std::size_t i, typename T>
       void set_arg(const keyT &key, T &&value) {
         using valueT = data_unwrapped_t<typename std::tuple_element<i, input_values_tuple_type>::type>;
+
+        auto owner = keymap(key);
+        if( owner != get_default_world().rank() ) {
+            typedef struct {
+                uint64_t op_id;
+                std::size_t param_id;
+                keyT key;
+                T val;
+            } msg_t;
+            msg_t msg = {get_instance_id(), i, key, value};
+            // Pass msg to comm engine to send it to owner
+            return;
+        }
 
         if (tracing()) PrintThread{} << get_name() << " : " << key << ": setting argument : " << i << std::endl;
 
@@ -633,6 +686,8 @@ namespace parsec {
 
         register_input_callbacks(std::make_index_sequence<numins>{});
 
+        register_static_op_function();
+
         int i;
 
         memset(&self, 0, sizeof(parsec_task_class_t));
@@ -765,6 +820,11 @@ namespace parsec {
       /// keymap accessor
       /// @return the keymap
       const decltype(keymap) &get_keymap() const { return keymap; }
+
+      // Register the static_op function to associate it to instance_id
+      void register_static_op_function(void) {
+          static_set_arg_map.insert( std::pair<uint64_t, void (*)(void *, size_t)>(get_instance_id(), &Op::static_set_arg) );
+      }
     };
 
 #include "../wrap.h"
