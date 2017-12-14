@@ -181,6 +181,7 @@ void Debugger::resolve_cmd_alias() {
 void Debugger::set_cmd(const char *cmd) {
   if (cmd) {
     cmd_ = cmd;
+    resolve_cmd_alias();
   } else {
     cmd_.resize(0);
   }

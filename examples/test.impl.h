@@ -1,7 +1,7 @@
 #include <cstdint>
 #include <memory>
 
-#include "../ttg/util/bug.h"
+//#include "../ttg/util/bug.h"
 
 using keyT = uint64_t;
 
@@ -282,12 +282,13 @@ void hi() { ::ttg::print("hi"); }
 int try_main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
 
-  using mpqc::Debugger;
-  auto debugger = std::make_shared<Debugger>();
-  Debugger::set_default_debugger(debugger);
-  debugger->set_exec(argv[0]);
-  debugger->set_prefix(ttg_default_execution_context().rank());
-  debugger->set_cmd("xterm -title \"$(PREFIX)$(EXEC)\" -e lldb -p $(PID) &");
+//  using mpqc::Debugger;
+//  auto debugger = std::make_shared<Debugger>();
+//  Debugger::set_default_debugger(debugger);
+//  debugger->set_exec(argv[0]);
+//  debugger->set_prefix(ttg_default_execution_context().rank());
+//  debugger->set_cmd("lldb_xterm");
+//  debugger->set_cmd("gdb_xterm");
 
   {
 
