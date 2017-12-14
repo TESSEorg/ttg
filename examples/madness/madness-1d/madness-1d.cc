@@ -9,8 +9,7 @@
 #include <utility>
 
 
-//#include "madness/ttg.h"
-#include "../ttg.h"
+#include "../ttg/madness/ttg.h"
 
 #include "Vector.h"
 #include "Matrix.h"
@@ -261,6 +260,14 @@ struct Key {
     void serialize(Archive& ar) {ar & madness::archive::wrap((unsigned char*) this, sizeof(*this));}
 
 };
+
+namespace std {
+// specialize std::hash for Key
+template <>
+struct hash<Key> {
+  std::size_t operator()(const Key& s) const noexcept { return s.hash(); }
+};
+}  // namespace std
 
 std::ostream& operator<<(std::ostream&s, const Key& key) {
     s << "Key(" << key.n << "," << key.l << ")";

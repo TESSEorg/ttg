@@ -1,16 +1,8 @@
 #include <cmath>
 #include <iostream>
-#include "parsec/ttg.h"
-
-#include "parsec.h"
-#include <mpi.h>
-#include <parsec/execution_stream.h>
-#include "../serialization.h"
-
-// Same as t9.cc but using TTG wrapper templates
 
 const double L = 10.0;       // The computational domain is [-L,L]
-const double thresh = 1e-6;  // The threshold for small difference coefficients
+const double thresh = 1e-4;  // The threshold for small difference coefficients
 
 void error(const char* s) {
   std::cerr << s << std::endl;
@@ -24,11 +16,12 @@ double pow2(double n) { return std::pow(2.0, n); }
 struct Key {
   int n;  // leave this as signed otherwise -n does unexpected things
   unsigned long l;
+  uint64_t hashvalue;
 
-    Key() = default;
-    Key(uint64_t hash) : n(hash >> 48), l(hash & 0x0000FFFFFFFFFFFF) {}
+  Key() = default;
+  Key(uint64_t hash) : n(hash >> 48), l(hash & 0x0000FFFFFFFFFFFF), hashvalue(hash) {}
 
-    Key(unsigned long n, unsigned long l) : n(n), l(l) { }
+  Key(unsigned long n, unsigned long l) : n(n), l(l) { rehash(); }
 
   bool operator==(const Key& b) const { return n == b.n && l == b.l; }
 
@@ -45,7 +38,19 @@ struct Key {
   Key left() const { return Key(n, l == 0ul ? (1ul << n) - 1 : l - 1); }  // periodic b.c.
 
   Key right() const { return Key(n, l == ((1ul << n) - 1) ? 0 : l + 1); }  // periodic b.c.
+
+  void rehash() { hashvalue = (size_t(n) << 48) + l; }
+
+  uint64_t hash() const { return hashvalue; }
 };
+
+namespace std {
+// specialize std::hash for Key
+template <>
+struct hash<Key> {
+  std::size_t operator()(const Key& s) const noexcept { return s.hash(); }
+};
+}  // namespace std
 
 template <typename Result = uint64_t>
 Result unique_hash(const Key& key) {
@@ -85,11 +90,6 @@ struct Node {
     if (this->key.n > key.n) error("not a child of this node");
     return s;  // With Haar and current normalization convention nothing needed
   }
-    /*
-  template <typename Archive>
-  void serialize(Archive& ar) {
-    ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
-    }*/
 };
 
 std::ostream& operator<<(std::ostream& s, const Node& node) {
@@ -108,9 +108,8 @@ std::ostream& operator<<(std::ostream& s, const Control& ctl) {
   return s;
 }
 
-using namespace parsec;
-using namespace parsec::ttg;
-using namespace ::ttg;
+#include TTG_RUNTIME_H
+IMPORT_TTG_RUNTIME_NS
 
 using nodeEdge = Edge<Key, Node>;
 using doubleEdge = Edge<Key, double>;
@@ -146,7 +145,7 @@ auto make_project(const funcT& func, ctlEdge& ctl, nodeEdge& result, const std::
     }
   };
   ctlEdge refine("refine");
-  return wrap(f, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
+  return wrap(std::move(f), edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
 }
 
 template <typename funcT>
@@ -163,7 +162,7 @@ auto make_binary_op(const funcT& func, nodeEdge left, nodeEdge right, nodeEdge R
     }
   };
   nodeEdge L("L"), R("R");
-  return wrap(f, edges(fuse(left, L), fuse(right, R)), edges(L, R, Result), name, {"left", "right"},
+  return wrap(std::move(f), edges(fuse(left, L), fuse(right, R)), edges(L, R, Result), name, {"left", "right"},
               {"refineL", "refineR", "result"});
 }
 
@@ -265,23 +264,23 @@ auto make_reconstruct(const nodeEdge& in, nodeEdge& out, const std::string& name
 class Norm2 : public Op<Key, std::tuple<>, Norm2, Node> {
   using baseT = Op<Key, std::tuple<>, Norm2, Node>;
   double sumsq;
-    //madness::SCALABLE_MUTEX_TYPE charon;
+  std::mutex charon;
 
  public:
   Norm2(const nodeEdge& in, const std::string& name = "norm2")
       : baseT(edges(in), edges(), name, {"nodes"}, {}), sumsq(0.0) {}
 
   // Lazy implementation of reduce operation ... just accumulates to local variable instead of summing up tree
-  void op(const Key& key, const std::tuple<Node>& t, std::tuple<>& output) {
-      //madness::ScopedMutex<madness::SCALABLE_MUTEX_TYPE> obolus(charon);
-      // TODO: parsec locks
-    const Node& node = std::get<0>(t);
+  template <typename InputTuple> void op(const Key& key, InputTuple&& t, std::tuple<>& output) {
+    std::lock_guard<std::mutex> obolus(charon);  // <<<<<<<<<< mutex
+    const Node& node = baseT::get<0>(t);
     const double boxsize = 2.0 * L * pow2(-key.n);
     sumsq += (node.s * node.s + node.d * node.d) * boxsize;
   }
 
   double get() const {
     double value = sumsq;
+    ttg_sum(ttg_default_execution_context(), value);
     return std::sqrt(value);
   }
 };
@@ -311,90 +310,76 @@ double C(const double x) { return std::exp(-x * x) * std::sin(x); }
 
 double R(const double x) { return (A(x) + B(x)) * C(x); }
 
-parsec_taskpool_t* parsec::ttg::taskpool = NULL;
-parsec_context_t*  parsec::ttg::parsec = NULL;
-
-volatile uint32_t parsec::ttg::created = 0;
-volatile uint32_t parsec::ttg::sent_to_sched = 0;
- 
-extern "C" int parsec_ptg_update_runtime_task(parsec_taskpool_t *tp, int tasks);
-
 int main(int argc, char** argv) {
-    int provided;
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+  ttg_initialize(argc, argv, 2);
+  {
 
-    parsec::ttg::init(2, &argc, &argv);
+    ctlEdge ctl("start ctl");
+    nodeEdge a("a"), b("b"), c("c"), abc("abc"), diffa("diffa"), errdiff("errdiff"), errabc("errabc"), a_plus_b("a+b"),
+        a_plus_b_times_c("(a+b)*c"), deriva("deriva"), compa("compa"), recona("recona");
 
-    OpBase::set_trace_all(false);
+    // The following can indeed be specified in any order!
+    auto p1 = make_project(&A, ctl, a, "project A");
+    auto p2 = make_project(&B, ctl, b, "project B");
+    auto p3 = make_project(&C, ctl, c, "project C");
+    auto p4 = make_project(&R, ctl, abc, "project ABC");
+    auto p5 = make_project(&diffA, ctl, diffa, "project dA/dx");
 
-  ctlEdge ctl("start ctl");
-  nodeEdge a("a"), b("b"), c("c"), abc("abc"), diffa("diffa"), errdiff("errdiff"), errabc("errabc"), a_plus_b("a+b"),
-      a_plus_b_times_c("(a+b)*c"), deriva("deriva"), compa("compa"), recona("recona");
+    auto b1 = make_binary_op(add, a, b, a_plus_b, "a+b");
+    auto b2 = make_binary_op(mul, a_plus_b, c, a_plus_b_times_c, "(a+b)*c");
+    auto b3 = make_binary_op(sub, a_plus_b_times_c, abc, errabc, "(a+b)*c - abc");
+    auto b4 = make_binary_op(sub, diffa, deriva, errdiff, "dA/dx analytic - numeric");
 
-  // The following can indeed be specified in any order!
-  auto p1 = make_project(&A, ctl, a, "project A");
-  auto p2 = make_project(&B, ctl, b, "project B");
-  auto p3 = make_project(&C, ctl, c, "project C");
-  auto p4 = make_project(&R, ctl, abc, "project ABC");
-  auto p5 = make_project(&diffA, ctl, diffa, "project dA/dx");
+    auto d = make_diff(a, deriva, "dA/dx numeric");
 
-  auto b1 = make_binary_op(add, a, b, a_plus_b, "a+b");
-  auto b2 = make_binary_op(mul, a_plus_b, c, a_plus_b_times_c, "(a+b)*c");
-  auto b3 = make_binary_op(sub, a_plus_b_times_c, abc, errabc, "(a+b)*c - abc");
-  auto b4 = make_binary_op(sub, diffa, deriva, errdiff, "dA/dx analytic - numeric");
+    auto norma = make_norm2(a);
+    auto normabcerr = make_norm2(errabc);
+    auto normdifferr = make_norm2(errdiff);
 
-  auto d = make_diff(a, deriva, "dA/dx numeric");
+    auto comp1 = make_compress(a, compa, "compress(A)");
+    auto norma2 = make_norm2(compa);
 
-  auto norma = make_norm2(a);
-  auto normabcerr = make_norm2(errabc);
-  auto normdifferr = make_norm2(errdiff);
+    auto recon1 = make_reconstruct(compa, recona, "reconstruct(A)");
+    auto norma3 = make_norm2(recona);
 
-  auto comp1 = make_compress(a, compa, "compress(A)");
-  auto norma2 = make_norm2(compa);
+    auto start = make_start(ctl);
 
-  auto recon1 = make_reconstruct(compa, recona, "reconstruct(A)");
-  auto norma3 = make_norm2(recona);
+    // auto printer = make_printer(a);
+    // auto printer2 = make_printer(b);
+    // auto printer = make_printer(a_plus_b);
+    // auto printer2 = make_printer(err);
+    // auto printer4 = make_printer(deriva,"numerical deriv");
+    // auto printer5 = make_printer(diffa, "    exact deriv");
+    // auto printer6 = make_printer(err,"differr");
+    // auto pp = make_printer(compa,"compa");
+    // auto pp = make_printer(compa,"compa");
 
-  auto start = make_start(ctl);
+    if (ttg_default_execution_context().rank() == 0) {
+      std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
+      std::cout << "==== begin dot ====\n";
+      std::cout << Dot()(start.get()) << std::endl;
+      std::cout << "====  end dot  ====\n";
 
-  // auto printer = make_printer(a);
-  // auto printer2 = make_printer(b);
-  // auto printer = make_printer(a_plus_b);
-  // auto printer2 = make_printer(err);
-  // auto printer4 = make_printer(deriva,"numerical deriv");
-  // auto printer5 = make_printer(diffa, "    exact deriv");
-  // auto printer6 = make_printer(err,"differr");
-  // auto pp = make_printer(compa,"compa");
-  // auto pp = make_printer(compa,"compa");
+      // This kicks off the entire computation
+      start->invoke(Key(0, 0));
+    }
 
-  //if (::madness::ttg::get_default_world().rank() == 0) {
-    std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
-    std::cout << "==== begin dot ====\n";
-    std::cout << Dot()(start.get()) << std::endl;
-    std::cout << "====  end dot  ====\n";
+    ttg_execute(ttg_default_execution_context());
+    ttg_fence(ttg_default_execution_context());
 
-    // This kicks off the entire computation
-    start->invoke(Key(0, 0));
-    //}
+    double nap = norma->get(), nac = norma2->get(), nar = norma3->get(), nabcerr = normabcerr->get(),
+        ndifferr = normdifferr->get();
 
-    parsec::ttg::start();
+    if (ttg_default_execution_context().rank() == 0) {
+      std::cout << "Norm2 of a projected     " << nap << std::endl;
+      std::cout << "Norm2 of a compressed    " << nac << std::endl;
+      std::cout << "Norm2 of a reconstructed " << nar << std::endl;
+      std::cout << "Norm2 of error in abc    " << nabcerr << std::endl;
+      std::cout << "Norm2 of error in diff   " << ndifferr << std::endl;
+    }
 
-    //  ::madness::ttg::get_default_world().gop.fence();
-  start->fence();
-    
-  double nap = norma->get(), nac = norma2->get(), nar = norma3->get(), nabcerr = normabcerr->get(),
-         ndifferr = normdifferr->get();
-
-  //if (::madness::ttg::get_default_world().rank() == 0) {
-    std::cout << "Norm2 of a projected     " << nap << std::endl;
-    std::cout << "Norm2 of a compressed    " << nac << std::endl;
-    std::cout << "Norm2 of a reconstructed " << nar << std::endl;
-    std::cout << "Norm2 of error in abc    " << nabcerr << std::endl;
-    std::cout << "Norm2 of error in diff   " << ndifferr << std::endl;
-    //  }
-
-    // parsec::ttg::fini();
-    MPI_Finalize();
+  }
+  ttg_finalize();
 
   return 0;
 }

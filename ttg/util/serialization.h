@@ -1,7 +1,9 @@
-#ifndef CXXAPI_SERIALIZATION_H_H
-#define CXXAPI_SERIALIZATION_H_H
+#ifndef CXXAPI_SERIALIZATION_H
+#define CXXAPI_SERIALIZATION_H
 
 #include <cstring> // for std::memcpy
+
+#include "meta.h"
 
 /**
    \file serialization.h
@@ -19,17 +21,11 @@ namespace ttg {
 
 namespace detail {
 
-#if __cplusplus >= 201703L
-using std::void_t;
-#else
-template<class...> using void_t = void;
-#endif
-
 template<class, class = void>
 struct is_printable : std::false_type {};
 
 template<class T>
-struct is_printable<T, void_t<decltype(std::declval<std::ostream&>() <<
+struct is_printable<T, ::ttg::meta::void_t<decltype(std::declval<std::ostream&>() <<
     std::declval<T>())>> : std::true_type {};
 
 template <typename T, typename Enabler = void>
@@ -52,7 +48,7 @@ template<typename T, typename Enabler = void>
 struct default_data_descriptor;
 
 template<typename T>
-struct default_data_descriptor<T, std::enable_if_t<std::is_pod<T>::value>> {
+struct default_data_descriptor<T, std::enable_if_t<std::is_trivially_copyable<T>::value>> {
 
   static uint64_t header_size(const void *object) { return static_cast<uint64_t>(0); }
 
@@ -107,13 +103,13 @@ template<class, class = void>
 struct is_madness_serializable : std::false_type {};
 
 template<class T>
-struct is_madness_serializable<T, void_t<decltype(std::declval<madness::archive::BufferOutputArchive&>() &
+struct is_madness_serializable<T, ::ttg::meta::void_t<decltype(std::declval<madness::archive::BufferOutputArchive&>() &
                                          std::declval<T>())>> : std::true_type {};
 }  // namespace detail
 
 // The default implementation for non-POD data types that support MADNESS serialization
 template <typename T>
-struct default_data_descriptor<T, std::enable_if_t<!std::is_pod<T>::value && detail::is_madness_serializable<T>::value>> {
+struct default_data_descriptor<T, std::enable_if_t<!std::is_trivially_copyable<T>::value && detail::is_madness_serializable<T>::value>> {
 
   static uint64_t header_size(const void* object) { return static_cast<uint64_t>(0); }
 
@@ -179,4 +175,4 @@ get_data_descriptor() {
 
 }  // namespace ttg
 
-#endif //CXXAPI_SERIALIZATION_H_H
+#endif //CXXAPI_SERIALIZATION_H
