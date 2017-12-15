@@ -89,7 +89,8 @@ class Everything {
     producer.make_executable();
     a.make_executable();
     consumer.make_executable();
-    producer.invoke();
+    if( ttg_default_execution_context().rank() == 0 )
+        producer.invoke();
   }
 };
 
@@ -335,7 +336,8 @@ class EverythingComposite {
     Producer *p = dynamic_cast<Producer *>(P.get());
     P->make_executable();
     AC->make_executable();
-    p->invoke();
+    if( ttg_default_execution_context().rank() == 0 )
+        p->invoke();
   }  // Ugh!
 };
 
@@ -486,6 +488,7 @@ int try_main(int argc, char **argv) {
 
     x.start();  // myusleep(100);
 
+#if 0
     // Next compose with base class pointers and verify destruction
     EverythingBase x1;
     x1.print();
@@ -516,8 +519,7 @@ int try_main(int argc, char **argv) {
     Everything4 q;
     std::cout << q.dot() << std::endl;
     q.start();  // myusleep(100);
-
-// can we compose directly (with free functions/lambdas) and type-safely like this?
+#endif
 #if 0
     {
       ttg.let([]() {
