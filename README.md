@@ -2,6 +2,7 @@
 Prototype TESSE C++ API, with MADNESS and PaRSEC as backends. These instructions refer to the latest version of the API, Template Task Graph (TTG).
 
 # prerequisites
+- CMake, version 3.6 or more recent
 - C++14 compiler
 - Boost 1.66 (__to be released in 12/2017!__ ) ... until the release occurs get boost as follows (more instructions   [here](https://github.com/boostorg/boost/wiki/Getting-Started)
 ):
