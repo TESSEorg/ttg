@@ -47,5 +47,5 @@ To compile (block-)sparse SUMMA must:
 - __block-sparse only__ obtain and install BTAS header-only tensor library from https://github.com/BTAS/BTAS ;
   clone and pass the path to BTAS source to CMake as `-DBTAS_INSTALL_DIR=<path to BTAS>`
 - to build element-sparse SUMMA example: `make spmm-mad`
-- to build block-sparse SUMMA example: `make spmm-mad`
+- to build block-sparse SUMMA example: `make bspmm-mad`
 
