@@ -68,8 +68,15 @@ namespace parsec {
       }
 
       void fence() {
-        parsec_atomic_dec_32b((volatile uint32_t *)&tpool->nb_tasks);
-        parsec_context_wait(ctx);
+          int ws, mr;
+          MPI_Comm_size(MPI_COMM_WORLD, &ws);
+          if(ws > 1) {
+              MPI_Comm_rank(MPI_COMM_WORLD, &mr);
+              fprintf(stderr, "On rank %d: (very) poor man's fence: giving 10s to complete before entering the wait\n", mr);
+              sleep(10);
+          }
+          parsec_taskpool_update_runtime_nbtask(tpool, -1);
+          parsec_context_wait(ctx);
       }
 
       auto *context() { return ctx; }
