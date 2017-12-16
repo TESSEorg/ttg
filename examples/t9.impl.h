@@ -354,6 +354,10 @@ int main(int argc, char** argv) {
     // auto pp = make_printer(compa,"compa");
     // auto pp = make_printer(compa,"compa");
 
+    // ready to run!
+    auto connected = make_graph_executable(start.get());
+    assert(connected);
+
     if (ttg_default_execution_context().rank() == 0) {
       std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
       std::cout << "==== begin dot ====\n";

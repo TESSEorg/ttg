@@ -610,6 +610,10 @@ int main(int argc, char** argv) {
     //  SpMM a_times_b(world, eA, eB, eC, A, B);
     SpMM a_times_b(eA, eB, eC, A, B);
 
+    // ready to run!
+    auto connected = make_graph_executable(&control);
+    assert(connected);
+
     // ready, go! need only 1 kick, so must be done by 1 thread only
     if (ttg_default_execution_context().rank() == 0) control.start();
 

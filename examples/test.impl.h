@@ -85,6 +85,9 @@ class Everything {
   std::string dot() { return Dot()(&producer); }
 
   void start() {
+    producer.make_executable();
+    a.make_executable();
+    consumer.make_executable();
     producer.invoke(0);
   }
 };
@@ -109,6 +112,9 @@ class EverythingBase {
   std::string dot() { return Dot()(producer.get()); }
 
   void start() {
+    producer->make_executable();
+    a->make_executable();
+    consumer->make_executable();
     if (ttg_default_execution_context().rank() == 0) dynamic_cast<Producer *>(producer.get())->invoke(0);
   }  // Ugh!
 };
@@ -134,6 +140,9 @@ class Everything2 {
   std::string dot() { return Dot()(&producer); }
 
   void start() {
+    producer.make_executable();
+    a.make_executable();
+    consumer.make_executable();
     if (ttg_default_execution_context().rank() == 0) producer.invoke(0);
   }  // Ugh!
 };
@@ -180,6 +189,9 @@ class Everything3 {
   std::string dot() { return Dot()(wp.get()); }
 
   void start() {
+    wp->make_executable();
+    wa->make_executable();
+    wc->make_executable();
     if (ttg_default_execution_context().rank() == 0) wp->invoke(0);
   }
 };
@@ -225,6 +237,9 @@ class Everything4 {
   std::string dot() { return Dot()(wp.get()); }
 
   void start() {
+    wp->make_executable();
+    wa->make_executable();
+    wc->make_executable();
     if (ttg_default_execution_context().rank() == 0) wp->invoke(0);
   }
 };
@@ -272,7 +287,9 @@ class EverythingComposite {
   std::string dot() { return Dot()(P.get()); }
 
   void start() {
-    Producer * p = dynamic_cast<Producer *>(P.get());
+    Producer *p = dynamic_cast<Producer *>(P.get());
+    P->make_executable();
+    AC->make_executable();
     p->invoke(0);
   }  // Ugh!
 };

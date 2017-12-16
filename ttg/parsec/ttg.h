@@ -737,6 +737,11 @@ namespace parsec {
         parsec_atomic_inc_32b((volatile uint32_t *)&world.taskpool()->nb_tasks);
         set_arg_empty(key);
       }
+
+      void make_executable() override {
+        OpBase::make_executable();
+      }
+      
     };
 
 #include "../wrap.h"

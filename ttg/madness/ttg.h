@@ -311,8 +311,6 @@ namespace madness {
         register_output_terminals(output_terminals, outnames);
 
         register_input_callbacks(std::make_index_sequence<numins>{});
-
-        this->process_pending();
       }
 
       template <typename keymapT = default_keymap<keyT>>
@@ -344,8 +342,6 @@ namespace madness {
 
         connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numins>{}, inedges);
         connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
-
-        this->process_pending();
       }
 
       template <typename keymapT = default_keymap<keyT>>
@@ -373,6 +369,11 @@ namespace madness {
             std::cerr << ")" << std::endl;
           }
         }
+      }
+
+      void make_executable() {
+        this->process_pending();
+        OpBase::make_executable();
       }
 
       /// Waits for the entire TTG associated with this op to be completed (collective)

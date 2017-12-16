@@ -84,7 +84,7 @@ namespace ttg {
   template <typename keyT, typename valueT>
   class Out;  // forward decl
 
-  /// Provides basic information and DAG connectivity (eventually statistics,
+  /// Provides basic information and graph connectivity (eventually statistics,
   /// etc.)
   class TerminalBase {
    public:
@@ -179,7 +179,7 @@ namespace ttg {
     virtual ~TerminalBase() {}
   };
 
-  /// Provides basic information and DAG connectivity (eventually statistics,
+  /// Provides basic information and graph connectivity (eventually statistics,
   /// etc.)
   class OpBase {
    private:
@@ -193,6 +193,8 @@ namespace ttg {
     bool is_composite;                //< True if the operator is composite
     bool is_within_composite;         //< True if the operator is part of a composite
     OpBase *containing_composite_op;  //< If part of a composite, points to composite operator
+
+    bool executable;
 
     // Default copy/move/assign all OK
     static uint64_t next_instance_id() {
@@ -266,7 +268,8 @@ namespace ttg {
         , trace_instance(false)
         , is_composite(false)
         , is_within_composite(false)
-        , containing_composite_op(0) {
+        , containing_composite_op(0)
+        , executable(false) {
         //std::cout << name << "@" << (void *)this << " -> " << instance_id << std::endl;
     }
 
@@ -336,13 +339,26 @@ namespace ttg {
     /// Waits for the entire TTG associated with this op to be completed (collective)
     virtual void fence() = 0;
 
+    /// Queries if this ready to execute
+    /// @return true is this object is executable
+    bool is_executable() const { return executable; }
+
+    /// Marks this executable
+    /// @return nothing
+    virtual void make_executable() = 0;
+
     virtual ~OpBase() {}
   };
 
   // With more than one source file this will need to be moved
   bool OpBase::trace = false;
 
-  template <typename input_terminalsT, typename output_terminalsT>
+  void OpBase::make_executable() {
+    executable = true;
+  }
+
+
+template <typename input_terminalsT, typename output_terminalsT>
   class CompositeOp : public OpBase {
    public:
     static constexpr int numins = std::tuple_size<input_terminalsT>::value;    // number of input arguments
@@ -392,6 +408,8 @@ namespace ttg {
     OpBase *get_op(std::size_t i) { return ops.at(i).get(); }
 
     void fence() { ops[0]->fence(); }
+
+    void make_executable() { for(auto &op : ops) op->make_executable(); }
   };
 
   template <typename opsT, typename input_terminalsT, typename output_terminalsT>
@@ -400,23 +418,25 @@ namespace ttg {
     return std::make_unique<CompositeOp<input_terminalsT, output_terminalsT>>(std::forward<opsT>(ops), ins, outs, name);
   }
 
+  namespace detail {
+  /// Traverses a graph of ops in depth-first manner following out edges
   class Traverse {
-    std::set<const OpBase *> seen;
+    std::set<OpBase *> seen;
 
-    bool visited(const OpBase *p) { return !seen.insert(p).second; }
+    bool visited(OpBase *p) { return !seen.insert(p).second; }
 
    public:
-    virtual void opfunc(const OpBase *op) = 0;
+    virtual void opfunc(OpBase *op) = 0;
 
-    virtual void infunc(const TerminalBase *in) = 0;
+    virtual void infunc(TerminalBase *in) = 0;
 
-    virtual void outfunc(const TerminalBase *out) = 0;
+    virtual void outfunc(TerminalBase *out) = 0;
 
     void reset() { seen.clear(); }
 
     // Returns true if no null pointers encountered (i.e., if all
     // encountered terminals/operations are connected)
-    bool traverse(const OpBase *op) {
+    bool traverse(OpBase *op) {
       if (!op) {
         std::cout << "ttg::Traverse: got a null op!\n";
         return false;
@@ -462,47 +482,109 @@ namespace ttg {
       return status;
     }
   };
+  }
 
-  class Verify : private Traverse {
-    void opfunc(const OpBase *op) {}
-    void infunc(const TerminalBase *in) {}
-    void outfunc(const TerminalBase *out) {}
+  /// @brief Traverses a graph of ops in depth-first manner following out edges
+  /// @tparam OpVisitor A Callable type that visits each Op
+  /// @tparam InVisitor A Callable type that visits each In terminal
+  /// @tparam OutVisitor A Callable type that visits each Out terminal
+  template <typename OpVisitor, typename InVisitor, typename OutVisitor>
+  class Traverse : private detail::Traverse {
+   public:
+    static_assert(std::is_void<::ttg::meta::void_t<decltype(std::declval<OpVisitor>()(std::declval<OpBase *>()))>>::value,
+                  "Traverse<OpVisitor,...>: OpVisitor(const OpBase *op) must be a valid expression");
+    static_assert(std::is_void<::ttg::meta::void_t<decltype(std::declval<InVisitor>()(std::declval<TerminalBase *>()))>>::value,
+                  "Traverse<,InVisitor,>: InVisitor(const TerminalBase *op) must be a valid expression");
+    static_assert(std::is_void<::ttg::meta::void_t<decltype(std::declval<OutVisitor>()(std::declval<TerminalBase *>()))>>::value,
+                  "Traverse<...,OutVisitor>: OutVisitor(const TerminalBase *op) must be a valid expression");
+
+    template <typename OpVisitor_, typename InVisitor_, typename OutVisitor_>
+    Traverse(OpVisitor_&& op_v, InVisitor_&& in_v, OutVisitor_&& out_v) :
+        op_visitor_(std::forward<OpVisitor_>(op_v)),
+        in_visitor_(std::forward<InVisitor_>(in_v)),
+        out_visitor_(std::forward<OutVisitor_>(out_v))
+    {};
+
+    const  OpVisitor&  op_visitor() const { return  op_visitor_; }
+    const  InVisitor&  in_visitor() const { return  in_visitor_; }
+    const OutVisitor& out_visitor() const { return out_visitor_; }
+
+    bool operator()(OpBase* op) {
+      reset();
+      const bool result = traverse(op);
+      reset();
+      return result;
+    }
+
+   private:
+    OpVisitor op_visitor_;
+    InVisitor in_visitor_;
+    OutVisitor out_visitor_;
+
+    void opfunc(OpBase *op) { op_visitor_(op); }
+
+    void infunc(TerminalBase *in) { in_visitor_(in); }
+
+    void outfunc(TerminalBase *out) { out_visitor_(out); }
+  };
+
+  template <typename OpVisitor, typename InVisitor, typename OutVisitor>
+  auto make_traverse(OpVisitor&& op_v, InVisitor&& in_v, OutVisitor&& out_v) {
+    return Traverse<std::remove_reference_t<OpVisitor>,
+                    std::remove_reference_t<InVisitor>,
+                    std::remove_reference_t<OutVisitor>>{
+        std::forward<OpVisitor>(op_v),
+        std::forward<InVisitor>(in_v),
+        std::forward<OutVisitor>(out_v)
+    };
+  };
+
+  /// @brief Verifies graph connectivity
+  class Verify : private detail::Traverse {
+    void opfunc(OpBase *op) {}
+    void infunc(TerminalBase *in) {}
+    void outfunc(TerminalBase *out) {}
 
    public:
+    /// Traverses graph starting at @c op
+    /// @return true if traversal from this Op does not reveal dangling (non-connected) Out terminals
     bool operator()(const OpBase *op) {
       reset();
-      bool status = traverse(op);
+      bool status = traverse(const_cast<OpBase*>(op));
       reset();
       return status;
     }
   };
 
-  class Print : private Traverse {
-    void opfunc(const OpBase *op) {
+  /// Prints the graph to std::cout in an ad hoc format
+  class Print : private detail::Traverse {
+    void opfunc(OpBase *op) {
       std::cout << "op: " << (void *)op << " " << op->get_name() << " numin " << op->get_inputs().size() << " numout "
                 << op->get_outputs().size() << std::endl;
     }
 
-    void infunc(const TerminalBase *in) {
+    void infunc(TerminalBase *in) {
       std::cout << "  in: " << in->get_index() << " " << in->get_name() << " " << in->get_key_type_str() << " "
                 << in->get_value_type_str() << std::endl;
     }
 
-    void outfunc(const TerminalBase *out) {
+    void outfunc(TerminalBase *out) {
       std::cout << " out: " << out->get_index() << " " << out->get_name() << " " << out->get_key_type_str() << " "
                 << out->get_value_type_str() << std::endl;
     }
 
    public:
+    /// @return true if traversal from this Op does not reveal dangling (non-connected) Out terminals
     bool operator()(const OpBase *op) {
       reset();
-      bool status = traverse(op);
+      bool status = traverse(const_cast<OpBase*>(op));
       reset();
       return status;
     }
   };
 
-  class Dot : private Traverse {
+  /// Prints the graph to a std::string in the format understood by GraphViz's dot program
+  class Dot : private detail::Traverse {
     std::stringstream buf;
 
     // Insert backslash before characters that dot is interpreting
@@ -524,7 +606,7 @@ namespace ttg {
       return s.str();
     }
 
-    void opfunc(const OpBase *op) {
+    void opfunc(OpBase *op) {
       std::string opnm = nodename(op);
 
       buf << "        " << opnm << " [shape=record,style=filled,fillcolor=gray90,label=\"{";
@@ -581,11 +663,12 @@ namespace ttg {
       }
     }
 
-    void infunc(const TerminalBase *in) {}
+    void infunc(TerminalBase *in) {}
 
-    void outfunc(const TerminalBase *out) {}
+    void outfunc(TerminalBase *out) {}
 
    public:
+    /// @return string containing the graph specification in the format understood by GraphViz's dot program
     std::string operator()(const OpBase *op) {
       reset();
       buf.str(std::string());
@@ -593,7 +676,7 @@ namespace ttg {
 
       buf << "digraph G {\n";
       buf << "        ranksep=1.5;\n";
-      traverse(op);
+      traverse(const_cast<OpBase*>(op));
       buf << "}\n";
 
       reset();
@@ -605,7 +688,18 @@ namespace ttg {
     }
   };
 
-  template <typename keyT, typename valueT>
+  /// applies @c make_executable method to every op in the graph
+  /// return true if there are no dangling out terminals
+  bool make_graph_executable(OpBase* op) {
+    return ::ttg::make_traverse(
+        [](auto x) { x->make_executable(); },
+        [](auto x) {},
+        [](auto x) {}
+    )(op);
+  }
+
+
+template <typename keyT, typename valueT>
   class Edge;  // Forward decl.
 
   template <typename keyT, typename valueT>
@@ -844,7 +938,7 @@ namespace ttg {
       ~EdgeImpl() {
         if (ins.size() == 0 || outs.size() == 0) {
           std::cerr << "Edge: destroying edge pimpl with either in or out not "
-                       "assigned --- DAG may be incomplete"
+                       "assigned --- graph may be incomplete"
                     << std::endl;
         }
       }
