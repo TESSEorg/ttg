@@ -45,11 +45,11 @@ struct Key {
 };
 
 namespace std {
-// specialize std::hash for Key
-template <>
-struct hash<Key> {
-  std::size_t operator()(const Key& s) const noexcept { return s.hash(); }
-};
+  // specialize std::hash for Key
+  template <>
+  struct hash<Key> {
+    std::size_t operator()(const Key& s) const noexcept { return s.hash(); }
+  };
 }  // namespace std
 
 template <typename Result = uint64_t>
@@ -167,7 +167,7 @@ auto make_binary_op(const funcT& func, nodeEdge left, nodeEdge right, nodeEdge R
 }
 
 void send_to_output_tree(const Key& key, const Node& node, std::tuple<nodeOut, nodeOut, nodeOut>& out) {
-    send<0>(key.right(), node, out); // CANNOT MOVE NODE HERE SINCE USED BELOW!!!!
+  send<0>(key.right(), node, out);  // CANNOT MOVE NODE HERE SINCE USED BELOW!!!!
   send<1>(key, node, out);
   send<2>(key.left(), node, out);
 }
@@ -271,7 +271,8 @@ class Norm2 : public Op<Key, std::tuple<>, Norm2, Node> {
       : baseT(edges(in), edges(), name, {"nodes"}, {}), sumsq(0.0) {}
 
   // Lazy implementation of reduce operation ... just accumulates to local variable instead of summing up tree
-  template <typename InputTuple> void op(const Key& key, InputTuple&& t, std::tuple<>& output) {
+  template <typename InputTuple>
+  void op(const Key& key, InputTuple&& t, std::tuple<>& output) {
     std::lock_guard<std::mutex> obolus(charon);  // <<<<<<<<<< mutex
     const Node& node = baseT::get<0>(t);
     const double boxsize = 2.0 * L * pow2(-key.n);
@@ -313,7 +314,6 @@ double R(const double x) { return (A(x) + B(x)) * C(x); }
 int main(int argc, char** argv) {
   ttg_initialize(argc, argv, 2);
   {
-
     ctlEdge ctl("start ctl");
     nodeEdge a("a"), b("b"), c("c"), abc("abc"), diffa("diffa"), errdiff("errdiff"), errabc("errabc"), a_plus_b("a+b"),
         a_plus_b_times_c("(a+b)*c"), deriva("deriva"), compa("compa"), recona("recona");
@@ -372,7 +372,7 @@ int main(int argc, char** argv) {
     ttg_fence(ttg_default_execution_context());
 
     double nap = norma->get(), nac = norma2->get(), nar = norma3->get(), nabcerr = normabcerr->get(),
-        ndifferr = normdifferr->get();
+           ndifferr = normdifferr->get();
 
     if (ttg_default_execution_context().rank() == 0) {
       std::cout << "Norm2 of a projected     " << nap << std::endl;
@@ -381,7 +381,6 @@ int main(int argc, char** argv) {
       std::cout << "Norm2 of error in abc    " << nabcerr << std::endl;
       std::cout << "Norm2 of error in diff   " << ndifferr << std::endl;
     }
-
   }
   ttg_finalize();
 

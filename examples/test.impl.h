@@ -8,47 +8,45 @@ using keyT = uint64_t;
 #include TTG_RUNTIME_H
 IMPORT_TTG_RUNTIME_NS
 
-class A : public Op<keyT, std::tuple<Out<keyT, int>, Out < keyT, int>>, A, const int
-> {
-using baseT = Op<keyT, std::tuple<Out<keyT, int>, Out < keyT, int>>, A, const int>;
+class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int> {
+  using baseT = Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int>;
 
-public:
-A(const std::string &name) : baseT(name, {"input"}, {"iterate", "result"}) {}
+ public:
+  A(const std::string &name) : baseT(name, {"input"}, {"iterate", "result"}) {}
 
-A(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
-  const std::string &name)
-    : baseT(inedges, outedges, name, {"input"}, {"result", "iterate"}) {}
+  A(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
+    const std::string &name)
+      : baseT(inedges, outedges, name, {"input"}, {"result", "iterate"}) {}
 
-void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
-  // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int
-  auto& value = baseT::get<0>(t);
-  ::ttg::print("A got value ", value);
-  if (value >= 100) {
-    ::send<0>(key, value, out);
-  } else {
-    ::send<1>(key + 1, value + 1, out);
+  void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
+    // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int
+    auto &value = baseT::get<0>(t);
+    ::ttg::print("A got value ", value);
+    if (value >= 100) {
+      ::send<0>(key, value, out);
+    } else {
+      ::send<1>(key + 1, value + 1, out);
+    }
   }
-}
 
-~A() { std::cout << " A destructor\n"; }
+  ~A() { std::cout << " A destructor\n"; }
 };
 
-class Producer : public Op<keyT, std::tuple<Out < keyT, int>>, Producer
-> {
-using baseT = Op<keyT, std::tuple<Out < keyT, int>>, Producer>;
+class Producer : public Op<keyT, std::tuple<Out<keyT, int>>, Producer> {
+  using baseT = Op<keyT, std::tuple<Out<keyT, int>>, Producer>;
 
-public:
-Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
+ public:
+  Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
 
-Producer(const typename baseT::output_edges_type &outedges, const std::string &name)
-    : baseT(edges(), outedges, name, {}, {"output"}) {}
+  Producer(const typename baseT::output_edges_type &outedges, const std::string &name)
+      : baseT(edges(), outedges, name, {}, {"output"}) {}
 
-void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
-  ::ttg::print("produced ", 0);
-  ::send<0>((int) (key), 0, out);
-}
+  void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
+    ::ttg::print("produced ", 0);
+    ::send<0>((int)(key), 0, out);
+  }
 
-~Producer() { std::cout << " Producer destructor\n"; }
+  ~Producer() { std::cout << " Producer destructor\n"; }
 };
 
 class Consumer : public Op<keyT, std::tuple<>, Consumer, const int> {
@@ -98,8 +96,7 @@ class EverythingBase {
   std::unique_ptr<OpBase> consumer;
 
  public:
-  EverythingBase()
-      : producer(new Producer("producer")), a(new A("A")), consumer(new Consumer("consumer")) {
+  EverythingBase() : producer(new Producer("producer")), a(new A("A")), consumer(new Consumer("consumer")) {
     connect<0, 0>(producer, a);  // producer->out(0)->connect(a->in(0));
     connect<0, 0>(a, consumer);  // a->out(0)->connect(consumer->in(0));
     connect<1, 0>(a, a);         // a->out(1)->connect(a->in(0));
@@ -127,13 +124,12 @@ class Everything2 {
 
  public:
   Everything2()
-      : P2A("P2A"),
-        A2A("A2A"),
-        A2C("A2C"),
-        producer(edges(P2A), "producer"),
-        a(edges(fuse(P2A, A2A)), edges(A2C, A2A), "A"),
-        consumer(edges(A2C), "consumer") {
-  }
+      : P2A("P2A")
+      , A2A("A2A")
+      , A2C("A2C")
+      , producer(edges(P2A), "producer")
+      , a(edges(fuse(P2A, A2A)), edges(A2C, A2A), "A")
+      , consumer(edges(A2C), "consumer") {}
 
   void print() { Print()(&producer); }
 
@@ -148,14 +144,12 @@ class Everything2 {
 };
 
 class Everything3 {
-  static void p(const keyT &key, std::tuple<> &&t, std::tuple<Out < keyT, int>>
-  & out) {
+  static void p(const keyT &key, std::tuple<> &&t, std::tuple<Out<keyT, int>> &out) {
     ::ttg::print("produced ", 0);
     send<0>(key, int(0), out);
   }
 
-  static void a(const keyT &key, std::tuple<const int> &&t, std::tuple<Out < keyT, int>, Out<keyT, int>>
-  & out) {
+  static void a(const keyT &key, std::tuple<const int> &&t, std::tuple<Out<keyT, int>, Out<keyT, int>> &out) {
     const auto value = std::get<0>(t);
     if (value >= 100) {
       send<0>(key, value, out);
@@ -176,13 +170,12 @@ class Everything3 {
 
  public:
   Everything3()
-      : P2A("P2A"),
-        A2A("A2A"),
-        A2C("A2C"),
-        wp(wrapt<keyT>(&p, edges(), edges(P2A), "producer", {}, {"start"})),
-        wa(wrapt(&a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"})),
-        wc(wrapt(&c, edges(A2C), edges(), "consumer", {"result"}, {})) {
-  }
+      : P2A("P2A")
+      , A2A("A2A")
+      , A2C("A2C")
+      , wp(wrapt<keyT>(&p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wa(wrapt(&a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
+      , wc(wrapt(&c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
 
   void print() { Print()(wp.get()); }
 
@@ -197,14 +190,12 @@ class Everything3 {
 };
 
 class Everything4 {
-  static void p(const keyT &key, std::tuple<Out<keyT, int>>
-  &out) {
+  static void p(const keyT &key, std::tuple<Out<keyT, int>> &out) {
     ::ttg::print("produced ", 0);
     send<0>(key, int(0), out);
   }
 
-  static void a(const keyT &key, const int &value, std::tuple<Out<keyT, int>, Out<keyT, int>>
-  &out) {
+  static void a(const keyT &key, const int &value, std::tuple<Out<keyT, int>, Out<keyT, int>> &out) {
     if (value >= 100) {
       send<0>(key, value, out);
     } else {
@@ -212,9 +203,7 @@ class Everything4 {
     }
   }
 
-  static void c(const keyT &key, const int &value, std::tuple<> &out) {
-    ::ttg::print("consumed ", value);
-  }
+  static void c(const keyT &key, const int &value, std::tuple<> &out) { ::ttg::print("consumed ", value); }
 
   Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
 
@@ -224,13 +213,12 @@ class Everything4 {
 
  public:
   Everything4()
-      : P2A("P2A"),
-        A2A("A2A"),
-        A2C("A2C"),
-        wp(wrap<keyT>(&p, edges(), edges(P2A), "producer", {}, {"start"})),
-        wa(wrap(&a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"})),
-        wc(wrap(&c, edges(A2C), edges(), "consumer", {"result"}, {})) {
-  }
+      : P2A("P2A")
+      , A2A("A2A")
+      , A2C("A2C")
+      , wp(wrap<keyT>(&p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wa(wrap(&a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
+      , wc(wrap(&c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
 
   void print() { Print()(wp.get()); }
 
@@ -254,26 +242,26 @@ class EverythingComposite {
     auto a = std::make_unique<A>("A");
     auto c = std::make_unique<Consumer>("C");
 
-    ::ttg::print("P out<0>", (void *) (TerminalBase *) (p->out<0>()));
-    ::ttg::print("A  in<0>", (void *) (TerminalBase *) (a->in<0>()));
-    ::ttg::print("A out<0>", (void *) (TerminalBase *) (a->out<0>()));
-    ::ttg::print("C  in<0>", (void *) (TerminalBase *) (c->in<0>()));
+    ::ttg::print("P out<0>", (void *)(TerminalBase *)(p->out<0>()));
+    ::ttg::print("A  in<0>", (void *)(TerminalBase *)(a->in<0>()));
+    ::ttg::print("A out<0>", (void *)(TerminalBase *)(a->out<0>()));
+    ::ttg::print("C  in<0>", (void *)(TerminalBase *)(c->in<0>()));
 
     connect<1, 0>(a, a);  // a->out<1>()->connect(a->in<0>());
     connect<0, 0>(a, c);  // a->out<0>()->connect(c->in<0>());
     const auto q = std::make_tuple(a->in<0>());
-    ::ttg::print("q  in<0>", (void *) (TerminalBase *) (std::get<0>(q)));
+    ::ttg::print("q  in<0>", (void *)(TerminalBase *)(std::get<0>(q)));
 
     // std::array<std::unique_ptr<OpBase>,2> ops{std::move(a),std::move(c)};
     std::vector<std::unique_ptr<OpBase>> ops(2);
     ops[0] = std::move(a);
     ops[1] = std::move(c);
-    ::ttg::print("opsin(0)", (void *) (ops[0]->in(0)));
+    ::ttg::print("opsin(0)", (void *)(ops[0]->in(0)));
     ::ttg::print("ops size", ops.size());
 
     auto ac = make_composite_op(std::move(ops), q, std::make_tuple(), "Fred");
 
-    ::ttg::print("AC in<0>", (void *) (TerminalBase *) (ac->in<0>()));
+    ::ttg::print("AC in<0>", (void *)(TerminalBase *)(ac->in<0>()));
     connect<0, 0>(p, ac);  // p->out<0>()->connect(ac->in<0>());
 
     Verify()(p.get());
@@ -299,16 +287,15 @@ void hi() { ::ttg::print("hi"); }
 int try_main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
 
-//  using mpqc::Debugger;
-//  auto debugger = std::make_shared<Debugger>();
-//  Debugger::set_default_debugger(debugger);
-//  debugger->set_exec(argv[0]);
-//  debugger->set_prefix(ttg_default_execution_context().rank());
-//  debugger->set_cmd("lldb_xterm");
-//  debugger->set_cmd("gdb_xterm");
+  //  using mpqc::Debugger;
+  //  auto debugger = std::make_shared<Debugger>();
+  //  Debugger::set_default_debugger(debugger);
+  //  debugger->set_exec(argv[0]);
+  //  debugger->set_prefix(ttg_default_execution_context().rank());
+  //  debugger->set_cmd("lldb_xterm");
+  //  debugger->set_cmd("gdb_xterm");
 
   {
-
     OpBase::set_trace_all(false);
 
     ttg_execute(ttg_default_execution_context());
@@ -351,7 +338,7 @@ int try_main(int argc, char **argv) {
     std::cout << q.dot() << std::endl;
     q.start();  // myusleep(100);
 
-    // can we compose directly (with free functions/lambdas) and type-safely like this?
+// can we compose directly (with free functions/lambdas) and type-safely like this?
 #if 0
     {
       ttg.let([]() {
@@ -385,12 +372,10 @@ int try_main(int argc, char **argv) {
 int main(int argc, char **argv) {
   try {
     try_main(argc, argv);
-  }
-  catch (std::exception &x) {
+  } catch (std::exception &x) {
     std::cerr << "Caught a std::exception: " << x.what() << std::endl;
     return 1;
-  }
-  catch (...) {
+  } catch (...) {
     std::cerr << "Caught an unknown exception: " << std::endl;
     return 1;
   }
