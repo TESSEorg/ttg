@@ -65,7 +65,9 @@ namespace ttg {
       out << ' ' << t;
       return print_helper(out, ts...);
     }
-    inline std::mutex &print_mutex_accessor() {
+    //
+    enum class StdOstreamTag { Cout, Cerr };
+    template <StdOstreamTag> inline std::mutex &print_mutex_accessor() {
       static std::mutex mutex;
       return mutex;
     }
@@ -73,9 +75,16 @@ namespace ttg {
 
   template <typename T, typename... Ts>
   void print(const T &t, const Ts &... ts) {
-    std::lock_guard<std::mutex> lock(detail::print_mutex_accessor());
+    std::lock_guard<std::mutex> lock(detail::print_mutex_accessor<detail::StdOstreamTag::Cout>());
     std::cout << t;
     detail::print_helper(std::cout, ts...) << std::endl;
+  }
+
+  template <typename T, typename... Ts>
+  void print_error(const T &t, const Ts &... ts) {
+    std::lock_guard<std::mutex> lock(detail::print_mutex_accessor<detail::StdOstreamTag::Cerr>());
+    std::cerr << t;
+    detail::print_helper(std::cerr, ts...) << std::endl;
   }
 
   class OpBase;  // forward decl

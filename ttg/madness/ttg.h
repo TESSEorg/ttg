@@ -146,9 +146,9 @@ namespace madness {
         OpArgs() : counter(numins), argset(), t() { std::fill(argset.begin(), argset.end(), false); }
 
         void run(World &world) {
-          // madness::print("starting task");
+          // ::ttg::print("starting task");
           derived->op(key, std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
-          // madness::print("finishing task");
+          // ::ttg::print("finishing task");
         }
 
         virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
@@ -169,19 +169,18 @@ namespace madness {
         const auto owner = keymap(key);
 
         if (owner != world.rank()) {
-          if (tracing())
-            madness::print(world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
           worldobjT::send(owner, &opT::template set_arg<i, const typename std::remove_reference<T>::type &>, key,
                           value);
         } else {
-          if (tracing()) madness::print(world.rank(), ":", get_name(), " : ", key, ": setting argument : ", i);
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": setting argument : ", i);
 
           accessorT acc;
           if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
           OpArgs *args = acc->second;
 
           if (args->argset[i]) {
-            madness::print_error(world.rank(), ":", get_name(), " : ", key, ": error argument is already set : ", i);
+            ::ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error argument is already set : ", i);
             throw "bad set arg";
           }
 
@@ -193,7 +192,7 @@ namespace madness {
           args->argset[i] = true;
           args->counter--;
           if (args->counter == 0) {
-            if (tracing()) madness::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+            if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
             args->derived = static_cast<derivedT *>(this);
             args->key = key;
 
@@ -210,14 +209,14 @@ namespace madness {
         const auto owner = keymap(key);
 
         if (owner != world.rank()) {
-          if (tracing()) madness::print(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
           worldobjT::send(owner, &opT::set_arg_empty, key);
         } else {
           accessorT acc;
           if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
           OpArgs *args = acc->second;
 
-          if (tracing()) madness::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
           args->derived = static_cast<derivedT *>(this);
           args->key = key;
 
@@ -452,10 +451,11 @@ namespace madness {
     /// must be called from main thread before setting watchpoints
     inline void initialize_watchpoints() {
 #if defined(HAVE_INTEL_TBB)
-      madness::print_error(ttg_default_execution_context().rank(), "WARNING: watchpoints are only supported with MADWorld using the legacy threadpool");
+      ::ttg::print_error(ttg_default_execution_context().rank(),
+                         "WARNING: watchpoints are only supported with MADWorld using the legacy threadpool");
 #endif
 #if !defined(__APPLE__)
-      madness::print_error(ttg_default_execution_context().rank(), "WARNING: watchpoints are only supported on macOS");
+      ::ttg::print_error(ttg_default_execution_context().rank(), "WARNING: watchpoints are only supported on macOS");
 #endif
       ::ttg::detail::MemoryWatchpoint_x86_64::Pool::initialize_instance(detail::watchpoints_threads());
     }
