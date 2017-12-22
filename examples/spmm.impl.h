@@ -38,71 +38,71 @@ namespace madness {
 
     template <class Archive, typename T>
     struct ArchiveLoadImpl<Archive, btas::varray<T>> {
-      static inline void load(const Archive& ar, btas::varray<T>& x) {
+      static inline void load(const Archive &ar, btas::varray<T> &x) {
         typename btas::varray<T>::size_type n;
-        ar& n;
+        ar &n;
         x.resize(n);
-        for (auto& xi : x) ar& xi;
+        for (auto &xi : x) ar &xi;
       }
     };
 
     template <class Archive, typename T>
     struct ArchiveStoreImpl<Archive, btas::varray<T>> {
-      static inline void store(const Archive& ar, const btas::varray<T>& x) {
-        ar& x.size();
-        for (const auto& xi : x) ar& xi;
+      static inline void store(const Archive &ar, const btas::varray<T> &x) {
+        ar &x.size();
+        for (const auto &xi : x) ar &xi;
       }
     };
 
     template <class Archive, typename T>
     struct ArchiveLoadImpl<Archive, btas::DEFAULT::index<T>> {
-      static inline void load(const Archive& ar, btas::DEFAULT::index<T>& x) {
-        typename btas::DEFAULT::index<T>::size_type n;
-        ar& n;
+      static inline void load(const Archive &ar, btas::DEFAULT::index<T> &x) {
+        typename btas::DEFAULT::index<T>::size_type n = 0;
+        ar &n;
         x.resize(n);
-        for (auto& xi : x) ar& xi;
+        for (auto &xi : x) ar &xi;
       }
     };
 
     template <class Archive, typename T>
     struct ArchiveStoreImpl<Archive, btas::DEFAULT::index<T>> {
-      static inline void store(const Archive& ar, const btas::DEFAULT::index<T>& x) {
-        ar& x.size();
-        for (const auto& xi : x) ar& xi;
+      static inline void store(const Archive &ar, const btas::DEFAULT::index<T> &x) {
+        ar &x.size();
+        for (const auto &xi : x) ar &xi;
       }
     };
 
     template <class Archive, CBLAS_ORDER _Order, typename _Index, typename _Ordinal>
     struct ArchiveLoadImpl<Archive, btas::RangeNd<_Order, _Index, _Ordinal>> {
-      static inline void load(const Archive& ar, btas::RangeNd<_Order, _Index, _Ordinal>& r) {
+      static inline void load(const Archive &ar, btas::RangeNd<_Order, _Index, _Ordinal> &r) {
         _Index lobound, upbound;
         typename btas::RangeNd<_Order, _Index, _Ordinal>::extent_type stride;
-        ar& lobound& upbound& stride;
+        ar &lobound &upbound &stride;
         r = btas::RangeNd<_Order, _Index, _Ordinal>(std::move(lobound), std::move(upbound), std::move(stride));
       }
     };
 
     template <class Archive, CBLAS_ORDER _Order, typename _Index, typename _Ordinal>
     struct ArchiveStoreImpl<Archive, btas::RangeNd<_Order, _Index, _Ordinal>> {
-      static inline void store(const Archive& ar, const btas::RangeNd<_Order, _Index, _Ordinal>& r) {
-        ar& r.lobound() & r.upbound() & r.stride();
+      static inline void store(const Archive &ar, const btas::RangeNd<_Order, _Index, _Ordinal> &r) {
+        ar &r.lobound() & r.upbound() & r.stride();
       }
     };
 
     template <class Archive, typename _T, class _Range, class _Store>
     struct ArchiveLoadImpl<Archive, btas::Tensor<_T, _Range, _Store>> {
-      static inline void load(const Archive& ar, btas::Tensor<_T, _Range, _Store>& t) {
+      static inline void load(const Archive &ar, btas::Tensor<_T, _Range, _Store> &t) {
         _Range range;
         _Store storage;
-        ar& range& storage;
+        ar &range &storage;
         t = btas::Tensor<_T, _Range, _Store>(std::move(range), std::move(storage));
       }
     };
 
     template <class Archive, typename _T, class _Range, class _Store>
     struct ArchiveStoreImpl<Archive, btas::Tensor<_T, _Range, _Store>> {
-      static inline void store(const Archive& ar, const btas::Tensor<_T, _Range, _Store>& t) {
-        ar& t.range() & t.storage();
+      static inline void store(const Archive &ar, const btas::Tensor<_T, _Range, _Store> &t) {
+        ar &t.range() & t.storage();
       }
     };
 
@@ -115,16 +115,16 @@ namespace madness {
 
 namespace btas {
   template <typename _T, class _Range, class _Store>
-  inline btas::Tensor<_T, _Range, _Store> operator*(const btas::Tensor<_T, _Range, _Store>& A,
-                                                    const btas::Tensor<_T, _Range, _Store>& B) {
+  inline btas::Tensor<_T, _Range, _Store> operator*(const btas::Tensor<_T, _Range, _Store> &A,
+                                                    const btas::Tensor<_T, _Range, _Store> &B) {
     btas::Tensor<_T, _Range, _Store> C;
     btas::contract(1.0, A, {1, 2}, B, {2, 3}, 0.0, C, {1, 3});
     return C;
   }
 
   template <typename _T, class _Range, class _Store>
-  btas::Tensor<_T, _Range, _Store> gemm(btas::Tensor<_T, _Range, _Store>&& C, const btas::Tensor<_T, _Range, _Store>& A,
-                                        const btas::Tensor<_T, _Range, _Store>& B) {
+  btas::Tensor<_T, _Range, _Store> gemm(btas::Tensor<_T, _Range, _Store> &&C, const btas::Tensor<_T, _Range, _Store> &A,
+                                        const btas::Tensor<_T, _Range, _Store> &B) {
     using array = btas::DEFAULT::index<int>;
     if (C.empty()) {
       C = btas::Tensor<_T, _Range, _Store>(btas::Range(A.range().extent(0), B.range().extent(1)), 0.0);
@@ -175,7 +175,7 @@ struct Key : public std::array<long, Rank> {
  private:
   bool valid() {
     bool result = true;
-    for (auto& idx : *this) {
+    for (auto &idx : *this) {
       result = result && (idx < max_index);
     }
     return result;
@@ -188,12 +188,12 @@ namespace std {
     hash() = default;
     typedef Key<Rank> argument_type;
     typedef std::size_t result_type;
-    result_type operator()(argument_type const& s) const noexcept { return s.hash(); }
+    result_type operator()(argument_type const &s) const noexcept { return s.hash(); }
   };
 }  // namespace std
 
 template <std::size_t Rank>
-std::ostream& operator<<(std::ostream& os, const Key<Rank>& key) {
+std::ostream &operator<<(std::ostream &os, const Key<Rank> &key) {
   os << "{";
   for (size_t i = 0; i != Rank; ++i) os << key[i] << (i + 1 != Rank ? "," : "");
   os << "}";
@@ -203,15 +203,15 @@ std::ostream& operator<<(std::ostream& os, const Key<Rank>& key) {
 namespace ttg {
   namespace overload {
     template <>
-    uint64_t unique_hash<uint64_t, Key<2u>>(const Key<2u>& key) {
+    uint64_t unique_hash<uint64_t, Key<2u>>(const Key<2u> &key) {
       return key.hash();
     }
     template <>
-    uint64_t unique_hash<uint64_t, Key<3u>>(const Key<3u>& key) {
+    uint64_t unique_hash<uint64_t, Key<3u>>(const Key<3u> &key) {
       return key.hash();
     }
     template <>
-    uint64_t unique_hash<uint64_t, int>(const int& i) {
+    uint64_t unique_hash<uint64_t, int>(const int &i) {
       return static_cast<uint64_t>(i);
     }
   }  // namespace overload
@@ -227,7 +227,7 @@ class Read_SpMatrix : public Op<int, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatr
               [](auto key){ return 0; })
       , matrix_(matrix) {}
 
-  void op(const int& key, baseT::input_values_tuple_type&& junk, std::tuple<Out<Key<2>, blk_t>>& out) {
+  void op(const int &key, baseT::input_values_tuple_type &&junk, std::tuple<Out<Key<2>, blk_t>> &out) {
     for (int k = 0; k < matrix_.outerSize(); ++k) {
       for (SpMatrix::InnerIterator it(matrix_, k); it; ++it) {
         ::send<0>(Key<2>({it.row(), it.col()}), it.value(), out);
@@ -236,7 +236,7 @@ class Read_SpMatrix : public Op<int, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatr
   }
 
  private:
-  const SpMatrix& matrix_;
+  const SpMatrix &matrix_;
 };
 
 // flow (move?) data into an existing SpMatrix on rank 0
@@ -247,12 +247,12 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t> {
   Write_SpMatrix(SpMatrix &matrix, Edge<Key<2>, blk_t> &in)
       : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, [](auto key){ return 0; }), matrix_(matrix) {}
 
-  void op(const Key<2>& key, baseT::input_values_tuple_type&& elem, std::tuple<>&) {
+  void op(const Key<2> &key, baseT::input_values_tuple_type &&elem, std::tuple<> &) {
     matrix_.insert(key[0], key[1]) = baseT::get<0>(elem);
   }
 
  private:
-  SpMatrix& matrix_;
+  SpMatrix &matrix_;
 };
 
 // sparse mm
@@ -284,16 +284,16 @@ class SpMM {
    public:
     using baseT = Op<Key<2>, std::tuple<Out<Key<3>, blk_t>>, BcastA, blk_t>;
 
-    BcastA(Edge<Key<2>, blk_t>& a, Edge<Key<3>, blk_t>& a_ijk, const std::vector<std::vector<long>>& b_rowidx_to_colidx)
+    BcastA(Edge<Key<2>, blk_t> &a, Edge<Key<3>, blk_t> &a_ijk, const std::vector<std::vector<long>> &b_rowidx_to_colidx)
         : baseT(edges(a), edges(a_ijk), "SpMM::bcast_a", {"a_ik"}, {"a_ijk"})
         , b_rowidx_to_colidx_(b_rowidx_to_colidx) {}
 
-    void op(const Key<2>& key, baseT::input_values_tuple_type&& a_ik, std::tuple<Out<Key<3>, blk_t>>& a_ijk) {
+    void op(const Key<2> &key, baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, blk_t>> &a_ijk) {
       const auto i = key[0];
       const auto k = key[1];
       // broadcast a_ik to all existing {i,j,k}
       std::vector<Key<3>> ijk_keys;
-      for (auto& j : b_rowidx_to_colidx_[k]) {
+      for (auto &j : b_rowidx_to_colidx_[k]) {
         if (tracing()) ::ttg::print("Broadcasting A[", i, "][", k, "] to j=", j);
         ijk_keys.emplace_back(Key<3>({i, j, k}));
       }
@@ -301,7 +301,7 @@ class SpMM {
     }
 
    private:
-    const std::vector<std::vector<long>>& b_rowidx_to_colidx_;
+    const std::vector<std::vector<long>> &b_rowidx_to_colidx_;
   };  // class BcastA
 
   /// broadcast B[k][j] to all {i,j,k} such that A[i][k] exists
@@ -309,16 +309,16 @@ class SpMM {
    public:
     using baseT = Op<Key<2>, std::tuple<Out<Key<3>, blk_t>>, BcastB, blk_t>;
 
-    BcastB(Edge<Key<2>, blk_t>& b, Edge<Key<3>, blk_t>& b_ijk, const std::vector<std::vector<long>>& a_colidx_to_rowidx)
+    BcastB(Edge<Key<2>, blk_t> &b, Edge<Key<3>, blk_t> &b_ijk, const std::vector<std::vector<long>> &a_colidx_to_rowidx)
         : baseT(edges(b), edges(b_ijk), "SpMM::bcast_b", {"b_kj"}, {"b_ijk"})
         , a_colidx_to_rowidx_(a_colidx_to_rowidx) {}
 
-    void op(const Key<2>& key, baseT::input_values_tuple_type&& b_kj, std::tuple<Out<Key<3>, blk_t>>& b_ijk) {
+    void op(const Key<2> &key, baseT::input_values_tuple_type &&b_kj, std::tuple<Out<Key<3>, blk_t>> &b_ijk) {
       const auto k = key[0];
       const auto j = key[1];
       // broadcast b_kj to *jk
       std::vector<Key<3>> ijk_keys;
-      for (auto& i : a_colidx_to_rowidx_[k]) {
+      for (auto &i : a_colidx_to_rowidx_[k]) {
         if (tracing()) ::ttg::print("Broadcasting B[", k, "][", j, "] to i=", i);
         ijk_keys.emplace_back(Key<3>({i, j, k}));
       }
@@ -326,7 +326,7 @@ class SpMM {
     }
 
    private:
-    const std::vector<std::vector<long>>& a_colidx_to_rowidx_;
+    const std::vector<std::vector<long>> &a_colidx_to_rowidx_;
   };  // class BcastA
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
@@ -335,9 +335,9 @@ class SpMM {
    public:
     using baseT = Op<Key<3>, std::tuple<Out<Key<2>, blk_t>, Out<Key<3>, blk_t>>, MultiplyAdd, blk_t, blk_t, blk_t>;
 
-    MultiplyAdd(Edge<Key<3>, blk_t>& a_ijk, Edge<Key<3>, blk_t>& b_ijk, Edge<Key<3>, blk_t>& c_ijk,
-                Edge<Key<2>, blk_t>& c, const std::vector<std::vector<long>>& a_rowidx_to_colidx,
-                const std::vector<std::vector<long>>& b_colidx_to_rowidx)
+    MultiplyAdd(Edge<Key<3>, blk_t> &a_ijk, Edge<Key<3>, blk_t> &b_ijk, Edge<Key<3>, blk_t> &c_ijk,
+                Edge<Key<2>, blk_t> &c, const std::vector<std::vector<long>> &a_rowidx_to_colidx,
+                const std::vector<std::vector<long>> &b_colidx_to_rowidx)
         : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM::Multiply", {"a_ijk", "b_ijk", "c_ijk"},
                 {"c_ij", "c_ijk"})
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
@@ -394,8 +394,8 @@ class SpMM {
     }
 
    private:
-    const std::vector<std::vector<long>>& a_rowidx_to_colidx_;
-    const std::vector<std::vector<long>>& b_colidx_to_rowidx_;
+    const std::vector<std::vector<long>> &a_rowidx_to_colidx_;
+    const std::vector<std::vector<long>> &b_colidx_to_rowidx_;
 
     // given {i,j} return first k such that A[i][k] and B[k][j] exist
     std::tuple<long, bool> compute_first_k(long i, long j) {
@@ -470,7 +470,7 @@ class SpMM {
   std::unique_ptr<MultiplyAdd> multiplyadd_;
 
   // result[i][j] gives the j-th nonzero row for column i in matrix mat
-  std::vector<std::vector<long>> make_colidx_to_rowidx(const SpMatrix& mat) {
+  std::vector<std::vector<long>> make_colidx_to_rowidx(const SpMatrix &mat) {
     std::vector<std::vector<long>> colidx_to_rowidx;
     for (int k = 0; k < mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
       for (SpMatrix::InnerIterator it(mat, k); it; ++it) {
@@ -484,7 +484,7 @@ class SpMM {
     return colidx_to_rowidx;
   }
   // result[i][j] gives the j-th nonzero column for row i in matrix mat
-  std::vector<std::vector<long>> make_rowidx_to_colidx(const SpMatrix& mat) {
+  std::vector<std::vector<long>> make_rowidx_to_colidx(const SpMatrix &mat) {
     std::vector<std::vector<long>> rowidx_to_colidx;
     for (int k = 0; k < mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
       for (SpMatrix::InnerIterator it(mat, k); it; ++it) {
@@ -503,16 +503,16 @@ class Control : public Op<int, std::tuple<Out<int, int>>, Control> {
   using baseT = Op<int, std::tuple<Out<int, int>>, Control>;
 
  public:
-  Control(Edge<int, int>& ctl) : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}) {}
+  Control(Edge<int, int> &ctl) : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}) {}
 
-  void op(const int& key, const std::tuple<>&, std::tuple<Out<int, int>>& out) { ::send<0>(0, 0, out); }
+  void op(const int &key, const std::tuple<> &, std::tuple<Out<int, int>> &out) { ::send<0>(0, 0, out); }
 
   void start() { invoke(0); }
 };
 
 #ifdef BTAS_IS_USABLE
 template <typename _T, class _Range, class _Store>
-std::tuple<_T, _T> norms(const btas::Tensor<_T, _Range, _Store>& t) {
+std::tuple<_T, _T> norms(const btas::Tensor<_T, _Range, _Store> &t) {
   _T norm_2_square = 0.0;
   _T norm_inf = 0.0;
   for (auto k : t) {
@@ -525,7 +525,7 @@ std::tuple<_T, _T> norms(const btas::Tensor<_T, _Range, _Store>& t) {
 
 std::tuple<double, double> norms(double t) { return std::make_tuple(t * t, std::abs(t)); }
 
-std::tuple<double, double> norms(const SpMatrix& A) {
+std::tuple<double, double> norms(const SpMatrix &A) {
   double norm_2_square = 0.0;
   double norm_inf = 0.0;
   for (int i = 0; i < A.outerSize(); ++i) {
@@ -543,7 +543,7 @@ std::tuple<double, double> norms(const SpMatrix& A) {
   return std::make_tuple(norm_2_square, norm_inf);
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
   {
     OpBase::set_trace_all(true);
