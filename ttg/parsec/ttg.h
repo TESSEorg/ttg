@@ -215,6 +215,11 @@ namespace parsec {
       MPI_Allreduce(&value, &result, 1, MPI_DOUBLE, MPI_SUM, world.comm());
       value = result;
     }
+    /// broadcast
+    /// @tparam T a serializable type
+    template <typename T> void ttg_broadcast(World &world, T& data, int source_rank) {
+      assert(world.size() == 1);
+    }
 
     struct ParsecBaseOp {
      protected:

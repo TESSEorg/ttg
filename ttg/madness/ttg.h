@@ -57,6 +57,12 @@ namespace madness {
     void ttg_sum(World &world, T &value) {
       world.gop.sum(value);
     }
+    /// broadcast
+    /// @tparam T a serializable type
+    template <typename T>
+    void ttg_broadcast(World &world, T &data, int source_rank) {
+      world.gop.broadcast_serializable(data, source_rank);
+    }
 
     template <typename keyT>
     struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
@@ -405,27 +411,31 @@ namespace madness {
 
       // Manual injection of a task that has no arguments
       void invoke(const keyT &key) { set_arg_empty(key); }
+
+      /// keymap accessor
+      /// @return the keymap
+      const decltype(keymap) &get_keymap() const { return keymap; }
     };
 
 #include "../wrap.h"
 
     // clang-format off
-    /*
-     * This allows programmatic control of watchpoints. Requires MADWorld using legacy ThreadPool and macOS. Example:
-     * @code
-     *   double x = 0.0;
-     *   ::madness::ttg::initialize_watchpoints();
-     *   ::madness::ttg::watchpoint_set(&x, ::ttg::detail::MemoryWatchpoint_x86_64::kWord,
-     *     ::ttg::detail::MemoryWatchpoint_x86_64::kWhenWritten);
-     *   x = 1.0;  // this will generate SIGTRAP ...
-     *   ttg_default_execution_context().taskq.add([&x](){ x = 1.0; });  // and so will this ...
-     *   ::madness::ttg::watchpoint_set(&x, ::ttg::detail::MemoryWatchpoint_x86_64::kWord,
-     *     ::ttg::detail::MemoryWatchpoint_x86_64::kWhenWrittenOrRead);
-     *   ttg_default_execution_context().taskq.add([&x](){
-     *       std::cout << x << std::endl; });  // and even this!
-     *
-     * @endcode
-     */
+/*
+ * This allows programmatic control of watchpoints. Requires MADWorld using legacy ThreadPool and macOS. Example:
+ * @code
+ *   double x = 0.0;
+ *   ::madness::ttg::initialize_watchpoints();
+ *   ::madness::ttg::watchpoint_set(&x, ::ttg::detail::MemoryWatchpoint_x86_64::kWord,
+ *     ::ttg::detail::MemoryWatchpoint_x86_64::kWhenWritten);
+ *   x = 1.0;  // this will generate SIGTRAP ...
+ *   ttg_default_execution_context().taskq.add([&x](){ x = 1.0; });  // and so will this ...
+ *   ::madness::ttg::watchpoint_set(&x, ::ttg::detail::MemoryWatchpoint_x86_64::kWord,
+ *     ::ttg::detail::MemoryWatchpoint_x86_64::kWhenWrittenOrRead);
+ *   ttg_default_execution_context().taskq.add([&x](){
+ *       std::cout << x << std::endl; });  // and even this!
+ *
+ * @endcode
+ */
     // clang-format on
 
     namespace detail {

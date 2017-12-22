@@ -217,13 +217,14 @@ namespace ttg {
   }  // namespace overload
 }  // namespace ttg
 
-// flow data from existing data structure
+// flow data from an existing SpMatrix on rank 0
 class Read_SpMatrix : public Op<int, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatrix, int> {
  public:
   using baseT = Op<int, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatrix, int>;
 
-  Read_SpMatrix(const char* label, const SpMatrix& matrix, Edge<int, int>& ctl, Edge<Key<2>, blk_t>& out)
-      : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"})
+  Read_SpMatrix(const char *label, const SpMatrix &matrix, Edge<int, int> &ctl, Edge<Key<2>, blk_t> &out)
+      : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
+              [](auto key){ return 0; })
       , matrix_(matrix) {}
 
   void op(const int& key, baseT::input_values_tuple_type&& junk, std::tuple<Out<Key<2>, blk_t>>& out) {
@@ -238,13 +239,13 @@ class Read_SpMatrix : public Op<int, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatr
   const SpMatrix& matrix_;
 };
 
-// flow (move?) data into a data structure
+// flow (move?) data into an existing SpMatrix on rank 0
 class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t> {
  public:
   using baseT = Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t>;
 
-  Write_SpMatrix(SpMatrix& matrix, Edge<Key<2>, blk_t>& in)
-      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}), matrix_(matrix) {}
+  Write_SpMatrix(SpMatrix &matrix, Edge<Key<2>, blk_t> &in)
+      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, [](auto key){ return 0; }), matrix_(matrix) {}
 
   void op(const Key<2>& key, baseT::input_values_tuple_type&& elem, std::tuple<>&) {
     matrix_.insert(key[0], key[1]) = baseT::get<0>(elem);
@@ -257,13 +258,9 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t> {
 // sparse mm
 class SpMM {
  public:
-  SpMM(Edge<Key<2>, blk_t>& a, Edge<Key<2>, blk_t>& b, Edge<Key<2>, blk_t>& c, const SpMatrix& a_mat,
-       const SpMatrix& b_mat)
-      :  //      world_(world),
-      a_(a)
-      , b_(b)
-      , c_(c)
-      , a_ijk_()
+  SpMM(Edge<Key<2>, blk_t> &a, Edge<Key<2>, blk_t> &b, Edge<Key<2>, blk_t> &c, const SpMatrix &a_mat,
+       const SpMatrix &b_mat)
+      : a_ijk_()
       , b_ijk_()
       , c_ijk_()
       , a_rowidx_to_colidx_(make_rowidx_to_colidx(a_mat))
@@ -271,11 +268,11 @@ class SpMM {
       , a_colidx_to_rowidx_(make_colidx_to_rowidx(a_mat))
       , b_rowidx_to_colidx_(make_rowidx_to_colidx(b_mat)) {
     // data is on rank 0, broadcast metadata from there
-    //    ProcessID root = 0;
-    //    world_.gop.broadcast_serializable(a_rowidx_to_colidx_, root);
-    //    world_.gop.broadcast_serializable(b_rowidx_to_colidx_, root);
-    //    world_.gop.broadcast_serializable(a_colidx_to_rowidx_, root);
-    //    world_.gop.broadcast_serializable(b_colidx_to_rowidx_, root);
+    int root = 0;
+    ttg_broadcast(ttg_default_execution_context(), a_rowidx_to_colidx_, root);
+    ttg_broadcast(ttg_default_execution_context(), b_rowidx_to_colidx_, root);
+    ttg_broadcast(ttg_default_execution_context(), a_colidx_to_rowidx_, root);
+    ttg_broadcast(ttg_default_execution_context(), b_colidx_to_rowidx_, root);
 
     bcast_a_ = std::make_unique<BcastA>(a, a_ijk_, b_rowidx_to_colidx_);
     bcast_b_ = std::make_unique<BcastB>(b, b_ijk_, a_colidx_to_rowidx_);
@@ -345,8 +342,8 @@ class SpMM {
                 {"c_ij", "c_ijk"})
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
-      //      auto& pmap = get_pmap();
-      //      auto& world = get_world();
+      auto &keymap = this->get_keymap();
+
       // for each i and j that belongs to this node
       // determine first k that contributes, initialize input {i,j,first_k} flow to 0
       for (long i = 0; i != a_rowidx_to_colidx_.size(); ++i) {
@@ -355,26 +352,27 @@ class SpMM {
           if (b_colidx_to_rowidx_[j].empty()) continue;
 
           // assuming here {i,j,k} for all k map to same node
-          // ProcessID owner = pmap->owner(Key<3>({i, j, 0l}));
-          // if (owner == world.rank()) {
-          if (true) {
-            long k;
-            bool have_k;
-            std::tie(k, have_k) = compute_first_k(i, j);
-            if (have_k) {
-              if (tracing()) ::ttg::print("Initializing C[", i, "][", j, "] to zero");
-              this->in<2>()->send(Key<3>({i, j, k}), blk_t(0));
-              // this->set_arg<2>(Key<3>({i,j,k}), blk_t(0));
-            } else {
-              if (tracing()) ::ttg::print("C[", i, "][", j, "] is empty");
+          auto owner = keymap(Key<3>({i, j, 0l}));
+          if (owner == ttg_default_execution_context().rank()) {
+            if (true) {
+              long k;
+              bool have_k;
+              std::tie(k, have_k) = compute_first_k(i, j);
+              if (have_k) {
+                if (tracing()) ::ttg::print("Initializing C[", i, "][", j, "] to zero");
+                this->in<2>()->send(Key<3>({i, j, k}), blk_t(0));
+                // this->set_arg<2>(Key<3>({i,j,k}), blk_t(0));
+              } else {
+                if (tracing()) ::ttg::print("C[", i, "][", j, "] is empty");
+              }
             }
           }
         }
       }
     }
 
-    void op(const Key<3>& key, baseT::input_values_tuple_type&& _ijk,
-            std::tuple<Out<Key<2>, blk_t>, Out<Key<3>, blk_t>>& result) {
+    void op(const Key<3> &key, baseT::input_values_tuple_type &&_ijk,
+            std::tuple<Out<Key<2>, blk_t>, Out<Key<3>, blk_t>> &result) {
       const auto i = key[0];
       const auto j = key[1];
       const auto k = key[2];
@@ -460,9 +458,6 @@ class SpMM {
   };
 
  private:
-  Edge<Key<2>, blk_t>& a_;
-  Edge<Key<2>, blk_t>& b_;
-  Edge<Key<2>, blk_t>& c_;
   Edge<Key<3>, blk_t> a_ijk_;
   Edge<Key<3>, blk_t> b_ijk_;
   Edge<Key<3>, blk_t> c_ijk_;
