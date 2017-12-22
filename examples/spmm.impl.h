@@ -380,8 +380,8 @@ class SpMM {
       bool have_next_k;
       std::tie(next_k, have_next_k) = compute_next_k(i, j, k);
       if (tracing()) {
-        ::ttg::print("Multiplying A[", i, "][", k, "] by B[", k, "][", j, "]");
-        ::ttg::print("  next_k? ", (have_next_k ? std::to_string(next_k) : "does not exist"));
+        ::ttg::print("Multiplying A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
+                     (have_next_k ? std::to_string(next_k) : "does not exist"));
       }
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow

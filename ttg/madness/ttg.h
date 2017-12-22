@@ -67,10 +67,7 @@ namespace madness {
     template <typename keyT>
     struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
      public:
-      // clang-format off
-                                              // vvvvvvvvvvvvv the only place where are madness-specific
-      default_keymap(World& world) : ::ttg::detail::default_keymap_impl<keyT>(world.mpi.size()) {}
-      // clang-format on
+      default_keymap(World &world) : ::ttg::detail::default_keymap_impl<keyT>(world.mpi.size()) {}
     };
 
     template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
@@ -85,7 +82,6 @@ namespace madness {
       using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
       using worldobjT = WorldObject<opT>;
 
-     public:
       static constexpr int numins = sizeof...(input_valueTs);                    // number of input arguments
       static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or
       // results
@@ -377,6 +373,7 @@ namespace madness {
         }
       }
 
+      /// implementation of OpBase::make_executable()
       void make_executable() {
         this->process_pending();
         OpBase::make_executable();
