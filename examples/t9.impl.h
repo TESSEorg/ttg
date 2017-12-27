@@ -145,7 +145,7 @@ auto make_project(const funcT& func, ctlEdge& ctl, nodeEdge& result, const std::
     }
   };
   ctlEdge refine("refine");
-  return wrap(std::move(f), edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
+  return wrap(f, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
 }
 
 template <typename funcT>
@@ -162,7 +162,7 @@ auto make_binary_op(const funcT& func, nodeEdge left, nodeEdge right, nodeEdge R
     }
   };
   nodeEdge L("L"), R("R");
-  return wrap(std::move(f), edges(fuse(left, L), fuse(right, R)), edges(L, R, Result), name, {"left", "right"},
+  return wrap(f, edges(fuse(left, L), fuse(right, R)), edges(L, R, Result), name, {"left", "right"},
               {"refineL", "refineR", "result"});
 }
 
@@ -194,8 +194,8 @@ void diff(const Key& key, Node&& left, Node&& center, Node&& right,
 auto make_diff(nodeEdge in, nodeEdge out, const std::string& name = "diff") {
   nodeEdge L("L"), C("C"), R("R");
   return std::make_tuple(
-      wrap(&send_to_output_tree, edges(in), edges(L, C, R), "send_to_output_tree", {"input"}, {"L", "C", "R"}),
-      wrap(&diff, edges(L, C, R), edges(L, C, R, out), name, {"L", "C", "R"}, {"L", "C", "R", "result"}));
+      wrap(send_to_output_tree, edges(in), edges(L, C, R), "send_to_output_tree", {"input"}, {"L", "C", "R"}),
+      wrap(diff, edges(L, C, R), edges(L, C, R, out), name, {"L", "C", "R"}, {"L", "C", "R", "result"}));
 }
 
 void do_compress(const Key& key, double left, double right, std::tuple<doubleOut, doubleOut, nodeOut>& out) {
@@ -236,8 +236,8 @@ void send_leaves_up(const Key& key, const Node& node, std::tuple<doubleOut, doub
 auto make_compress(const nodeEdge& in, nodeEdge& out, const std::string& name = "compress") {
   doubleEdge L("L"), R("R");
   return std::make_tuple(
-      wrap(&send_leaves_up, edges(in), edges(L, R, out), "send_leaves_up", {"input"}, {"L", "R", "result"}),
-      wrap(&do_compress, edges(L, R), edges(L, R, out), name, {"leftchild", "rightchild"}, {"L", "R", "result"}));
+      wrap(send_leaves_up, edges(in), edges(L, R, out), "send_leaves_up", {"input"}, {"L", "R", "result"}),
+      wrap(do_compress, edges(L, R), edges(L, R, out), name, {"leftchild", "rightchild"}, {"L", "R", "result"}));
 }
 
 void start_reconstruct(const Key& key, const Node& node, std::tuple<doubleOut>& out) {
@@ -256,8 +256,8 @@ void do_reconstruct(const Key& key, double s, const Node& node, std::tuple<doubl
 
 auto make_reconstruct(const nodeEdge& in, nodeEdge& out, const std::string& name = "reconstruct") {
   doubleEdge S("S");  // passes scaling functions down
-  return std::make_tuple(wrap(&start_reconstruct, edges(in), edges(S), "start reconstruct", {"nodes"}, {"node0"}),
-                         wrap(&do_reconstruct, edges(S, in), edges(S, out), name, {"s", "nodes"}, {"s", "result"}));
+  return std::make_tuple(wrap(start_reconstruct, edges(in), edges(S), "start reconstruct", {"nodes"}, {"node0"}),
+                         wrap(do_reconstruct, edges(S, in), edges(S, out), name, {"s", "nodes"}, {"s", "result"}));
 }
 
 // cannot easily replace this with wrapper due to persistent state

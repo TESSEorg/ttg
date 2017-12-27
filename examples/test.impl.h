@@ -164,18 +164,18 @@ class Everything3 {
 
   Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
 
-  decltype(wrapt<keyT>(&p, edges(), edges(P2A))) wp;
-  decltype(wrapt(&a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
-  decltype(wrapt(&c, edges(A2C), edges())) wc;
+  decltype(wrapt<keyT>(p, edges(), edges(P2A))) wp;
+  decltype(wrapt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
+  decltype(wrapt(c, edges(A2C), edges())) wc;
 
  public:
   Everything3()
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrapt<keyT>(&p, edges(), edges(P2A), "producer", {}, {"start"}))
-      , wa(wrapt(&a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
-      , wc(wrapt(&c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
+      , wp(wrapt<keyT>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wa(wrapt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
+      , wc(wrapt(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
 
   void print() { Print()(wp.get()); }
 
@@ -207,18 +207,18 @@ class Everything4 {
 
   Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
 
-  decltype(wrap<keyT>(&p, edges(), edges(P2A))) wp;
-  decltype(wrap(&a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
-  decltype(wrap(&c, edges(A2C), edges())) wc;
+  decltype(wrap<keyT>(p, edges(), edges(P2A))) wp;
+  decltype(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
+  decltype(wrap(c, edges(A2C), edges())) wc;
 
  public:
   Everything4()
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrap<keyT>(&p, edges(), edges(P2A), "producer", {}, {"start"}))
-      , wa(wrap(&a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
-      , wc(wrap(&c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
+      , wp(wrap<keyT>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
+      , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
 
   void print() { Print()(wp.get()); }
 
