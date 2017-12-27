@@ -286,7 +286,7 @@ class Norm2 : public Op<Key, std::tuple<>, Norm2, Node> {
   }
 };
 
-auto make_norm2(const nodeEdge& in) { return std::unique_ptr<Norm2>(new Norm2(in)); }  // for dull uniformity
+auto make_norm2(const nodeEdge& in) { return std::make_unique<Norm2>(in); }  // for dull uniformity
 
 auto make_start(const ctlEdge& ctl) {
   auto func = [](const Key& key, std::tuple<ctlOut>& out) { send<0>(key, Control(), out); };
