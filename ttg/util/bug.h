@@ -86,7 +86,7 @@ namespace ttg {
         /// main thread) and pthread_create for other threads; only pointers to these unique objects can be used in
         /// subsequent calls.
         static void initialize_instance(const std::vector<const pthread_t *> &threads) {
-          get_instance() = std::make_shared<Pool>(threads);
+          get_instance() = std::shared_ptr<Pool>(new Pool(threads));
         }
 
         /// accesses the unique pool; asserts that the default instance has been initialized by calling initialize()
