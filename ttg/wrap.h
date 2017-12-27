@@ -12,7 +12,7 @@ class WrapOp : public Op<keyT, output_terminalsT, WrapOp<funcT, keyT, output_ter
                          input_valuesT...> {
   using baseT =
   Op<keyT, output_terminalsT, WrapOp<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...>;
-  funcT func;
+  std::function<boost::callable_traits::function_type_t<funcT>> func;
 
   template<typename Key, typename Tuple, std::size_t... S>
   void call_func(Key &&key, Tuple &&args,
@@ -59,7 +59,7 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
                              input_valuesT...> {
   using baseT =
   Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...>;
-  funcT func;
+  std::function<boost::callable_traits::function_type_t<funcT>> func;
 
   template<typename Key, typename Tuple, std::size_t... S>
   void call_func(Key &&key, Tuple &&args,
