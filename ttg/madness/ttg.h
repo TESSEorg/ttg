@@ -67,6 +67,7 @@ namespace madness {
     template <typename keyT>
     struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
      public:
+      default_keymap() = default;
       default_keymap(World &world) : ::ttg::detail::default_keymap_impl<keyT>(world.mpi.size()) {}
     };
 
@@ -160,6 +161,7 @@ namespace madness {
       using accessorT = typename cacheT::accessor;
       cacheT cache;
 
+     protected:
       // Used to set the i'th argument (T is template to enable && collapsing)
       template <std::size_t i, typename T>
       // void set_arg(const keyT& key, const typename std::tuple_element<i, input_values_tuple_type>::type& value) {
@@ -236,6 +238,7 @@ namespace madness {
         junk[0]++;
       }
 
+     private:
       // Copy/assign/move forbidden ... we could make it work using
       // PIMPL for this base class.  However, this instance of the base
       // class is tied to a specific instance of a derived class a

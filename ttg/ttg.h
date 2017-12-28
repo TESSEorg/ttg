@@ -37,6 +37,7 @@ namespace ttg {
     template <typename keyT>
     struct default_keymap_impl<keyT,
                                ::ttg::meta::void_t<decltype(std::declval<std::hash<keyT>>()(std::declval<const keyT&>()))>> {
+      default_keymap_impl() = default;
       default_keymap_impl(std::size_t world_size) : world_size(world_size) {}
       // clang-format on
       std::size_t operator()(const keyT &key) const { return std::hash<keyT>{}(key) % world_size; }

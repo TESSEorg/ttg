@@ -8,6 +8,8 @@ using keyT = uint64_t;
 #include TTG_RUNTIME_H
 IMPORT_TTG_RUNTIME_NS
 
+#include "../ttg/util/reduce.h"
+
 class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int> {
   using baseT = Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int>;
 
@@ -284,6 +286,40 @@ class EverythingComposite {
 
 void hi() { ::ttg::print("hi"); }
 
+class ReductionTest {
+  static void generator(const int& key, std::tuple<Out<int, int>> &out) {
+    const auto value = std::rand();
+    ::ttg::print("ReductionTest: produced ", value, " on rank ", ttg_default_execution_context().rank());
+    send<0>(key, value, out);
+  }
+  static void consumer(const int &key, const int &value, std::tuple<> &out) { ::ttg::print("ReductionTest: consumed ", value); }
+
+  Edge<int, int> G2R, R2C;  // !!!! Edges must be constructed before classes that use them
+
+  decltype(wrap<int>(generator, edges(), edges(G2R))) wg;
+  BinaryTreeReduce<int, decltype(std::plus<int>{}), int> reduction;
+  decltype(wrap(consumer, edges(R2C), edges())) wc;
+
+ public:
+  ReductionTest()
+      : G2R("G2R")
+      , R2C("R2C")
+      , wg(wrap<int>(generator, edges(), edges(G2R), "producer", {}, {"start"}))
+      , reduction(G2R, R2C, 0, 0, std::plus<int>{})
+      , wc(wrap(consumer, edges(R2C), edges(), "consumer", {"result"}, {})) {}
+
+  void print() { Print()(wg.get()); }
+
+  std::string dot() { return Dot()(wg.get()); }
+
+  void start() {
+    wg->make_executable();
+    reduction.make_executable();
+    wc->make_executable();
+    wg->invoke(ttg_default_execution_context().rank());
+  }
+};
+
 int try_main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
 
@@ -361,6 +397,9 @@ int try_main(int argc, char **argv) {
       ttg.submit(execution_context);
     }
 #endif
+
+    ReductionTest t;
+    t.start();
 
     ttg_fence(ttg_default_execution_context());
     std::cout << "\nFence done\n";

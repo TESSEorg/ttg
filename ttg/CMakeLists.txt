@@ -11,7 +11,7 @@ set(ttg-sources
         ${CMAKE_CURRENT_SOURCE_DIR}/util/bug.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/util/backtrace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/util/backtrace.cpp
-        )
+        util/reduce.h)
 add_library(ttg ${ttg-sources})
 target_include_directories(ttg PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>

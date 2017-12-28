@@ -385,6 +385,7 @@ namespace parsec {
       using cacheT = std::map<keyT, OpArgs>;
       cacheT cache;
 
+     protected:
       // Used to set the i'th argument
       template <std::size_t i, typename T>
       void set_arg(const keyT &key, T &&value) {
@@ -509,6 +510,7 @@ namespace parsec {
         junk[0]++;
       }
 
+     private:
       // Copy/assign/move forbidden ... we could make it work using
       // PIMPL for this base class.  However, this instance of the base
       // class is tied to a specific instance of a derived class a
