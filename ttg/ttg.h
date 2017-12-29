@@ -601,7 +601,7 @@ template <typename input_terminalsT, typename output_terminalsT>
     std::string escape(const std::string &in) {
       std::stringstream s;
       for (char c : in) {
-        if (c == '<' || c == '>' || c == '"')
+        if (c == '<' || c == '>' || c == '"' || c == '|')
           s << "\\" << c;
         else
           s << c;
@@ -628,7 +628,7 @@ template <typename input_terminalsT, typename output_terminalsT>
           if (count != in->get_index()) throw "ttg::Dot: lost count of ins";
           buf << " <in" << count << ">"
               << " " << escape("<" + in->get_key_type_str() + "," + in->get_value_type_str() + ">") << " "
-              << in->get_name();
+              << escape(in->get_name());
         } else {
           buf << " <in" << count << ">"
               << " unknown ";
