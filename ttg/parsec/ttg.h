@@ -748,7 +748,10 @@ namespace parsec {
       void make_executable() override {
         OpBase::make_executable();
       }
-      
+
+      /// keymap accessor
+      /// @return the keymap
+      const decltype(keymap) &get_keymap() const { return keymap; }
     };
 
 #include "../wrap.h"
