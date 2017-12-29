@@ -9,6 +9,7 @@ using keyT = uint64_t;
 IMPORT_TTG_RUNTIME_NS
 
 #include "../ttg/util/reduce.h"
+#include "../ttg/util/broadcast.h"
 
 class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int> {
   using baseT = Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int>;
@@ -320,6 +321,43 @@ class ReductionTest {
   }
 };
 
+class BroadcastTest {
+  static void generator(const int& key, std::tuple<Out<int, int>> &out) {
+    const auto value = std::rand();
+    ::ttg::print("BroadcastTest: produced ", value, " on rank ", ttg_default_execution_context().rank());
+    send<0>(key, value, out);
+  }
+  static void consumer(const int &key, const int &value, std::tuple<> &out) { ::ttg::print("BroadcastTest: consumed ", value, " on rank ", ttg_default_execution_context().rank()); }
+
+  Edge<int, int> G2B, B2C;
+
+  int root;
+
+  decltype(wrap<int>(generator, edges(), edges(G2B))) wg;
+  BinaryTreeBroadcast<int, int> broadcast;
+  decltype(wrap(consumer, edges(B2C), edges())) wc;
+
+ public:
+  BroadcastTest(int root = 0)
+      : G2B("G2B")
+      , B2C("B2C")
+      , root(root), wg(wrap<int>(generator, edges(), edges(G2B), "producer", {}, {"start"}))
+      , broadcast(G2B, B2C, {ttg_default_execution_context().rank()}, root)
+      , wc(wrap(consumer, edges(B2C), edges(), "consumer", {"result"}, {})) {}
+
+  void print() { Print()(wg.get()); }
+
+  std::string dot() { return Dot()(wg.get()); }
+
+  void start() {
+    wg->make_executable();
+    broadcast.make_executable();
+    wc->make_executable();
+    if (ttg_default_execution_context().rank() == root)
+      wg->invoke(root);
+  }
+};
+
 int try_main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
 
@@ -400,6 +438,9 @@ int try_main(int argc, char **argv) {
 
     ReductionTest t;
     t.start();
+
+    BroadcastTest b;
+    b.start();
 
     ttg_fence(ttg_default_execution_context());
     std::cout << "\nFence done\n";
