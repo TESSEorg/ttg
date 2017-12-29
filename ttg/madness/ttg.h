@@ -75,7 +75,7 @@ namespace madness {
     class Op : public ::ttg::OpBase, public WorldObject<Op<keyT, output_terminalsT, derivedT, input_valueTs...>> {
      private:
       World &world;
-      std::function<std::size_t(const keyT &)> keymap;
+      std::function<int(const keyT &)> keymap;
 
      protected:
       World &get_world() { return world; }

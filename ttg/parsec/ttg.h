@@ -344,7 +344,7 @@ namespace parsec {
       output_terminalsT output_terminals;
 
       World &world;
-      std::function<std::size_t(const keyT &)> keymap;
+      std::function<int(const keyT &)> keymap;
 
      protected:
       World &get_world() { return world; }
