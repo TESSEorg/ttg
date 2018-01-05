@@ -115,6 +115,7 @@ namespace parsec {
     template <typename keyT>
     struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
      public:
+      default_keymap() = default;
       default_keymap(World &world) : ::ttg::detail::default_keymap_impl<keyT>(world.size()) {}
     };
 
@@ -153,7 +154,11 @@ static parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_ta
 namespace ttg {
   namespace overload {
     template <>
-    uint64_t unique_hash<uint64_t, uint64_t>(const uint64_t &t) {
+    inline uint64_t unique_hash<uint64_t, uint64_t>(const uint64_t &t) {
+      return t;
+    }
+    template <>
+    inline uint64_t unique_hash<uint64_t, int>(const int &t) {
       return t;
     }
   }  // namespace overload
