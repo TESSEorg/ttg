@@ -722,15 +722,18 @@ template <typename keyT, typename valueT>
     // valueT can be T or const T
     static_assert(std::is_same<std::remove_const_t<valueT>, std::decay_t<valueT>>::value,
                   "In<keyT,valueT> assumes std::remove_const<T> is a non-decayable type");
-    typedef Edge<keyT, valueT> edge_type;
+    using edge_type = Edge<keyT, valueT>;
     using send_callback_type = std::function<void(const keyT &, const std::decay_t<valueT> &)>;
     using move_callback_type = std::function<void(const keyT &, std::decay_t<valueT> &&)>;
+    using setsize_callback_type = std::function<void(const keyT &, std::size_t)>;
+    using finalize_callback_type = std::function<void(const keyT &)>;
     static constexpr bool is_an_input_terminal = true;
 
    private:
-    bool initialized;
     send_callback_type send_callback;
     move_callback_type move_callback;
+    setsize_callback_type setsize_callback;
+    finalize_callback_type finalize_callback;
 
     // No moving, copying, assigning permitted
     In(In &&other) = delete;
@@ -743,28 +746,26 @@ template <typename keyT, typename valueT>
     }
 
    public:
-    In() : initialized(false) {}
+    In() {}
 
-    In(const send_callback_type &send_callback, const move_callback_type &move_callback)
-        : initialized(true), send_callback(send_callback), move_callback(move_callback) {}
-
-    // callback (std::function) is used to erase the operator type and argument
-    // index
-    void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback) {
-      initialized = true;
+    void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback,
+                      const setsize_callback_type &setsize_callback = setsize_callback_type{},
+                      const finalize_callback_type &finalize_callback = finalize_callback_type{}) {
       this->send_callback = send_callback;
       this->move_callback = move_callback;
+      this->setsize_callback = setsize_callback;
+      this->finalize_callback = finalize_callback;
     }
 
     void send(const keyT &key, const valueT &value) {
       // std::cout << "In::send-constref::\n";
-      if (!initialized) throw "sending to uninitialzed callback";
+      if (!send_callback) throw std::runtime_error("send callback not initialized");;
       send_callback(key, value);
     }
 
     void send(const keyT &key, valueT &&value) {
       // std::cout << "In::send-move::\n";
-      if (!initialized) throw "sending to uninitialzed callback";
+      if (!move_callback) throw std::runtime_error("move callback not initialized");;
       move_callback(key, std::forward<valueT>(value));
     }
 
@@ -772,8 +773,19 @@ template <typename keyT, typename valueT>
     // with a specific value for rangeT
     template <typename rangeT>
     void broadcast(const rangeT &keylist, const valueT &value) {
-      if (!initialized) throw "broadcasting to uninitialzed callback";
       for (auto key : keylist) send(key, value);
+    }
+
+    void set_size(const keyT &key, std::size_t size) {
+      // std::cout << "In::set_size::\n";
+      if (!setsize_callback) throw std::runtime_error("set_size callback not initialized");
+      setsize_callback(key);
+    }
+
+    void finalize(const keyT &key) {
+      // std::cout << "In::finalize::\n";
+      if (!finalize_callback) throw std::runtime_error("finalize callback not initialized");
+      finalize_callback(key);
     }
 
     Type get_type() const override {
