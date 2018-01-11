@@ -186,8 +186,9 @@ namespace madness {
             if (this->get<i>(args->t).probe()) {
               auto&& current_value = this->get<i, std::decay_t<valueT>&&>(args->t);
               auto received_value = value;
-              // std::move() squashes type errors for const T
-              this->get<i, Future<std::decay_t<valueT>> &>(args->t).set(reducer(std::move(current_value), std::move(received_value)));
+              // std::move() for args to reducer squashes type errors for const T
+              // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
+              this->get<i, Future<std::decay_t<valueT>> &>(args->t).get() = std::move(reducer(std::move(current_value), std::move(received_value)));
             }
             else {
               this->get<i, Future<std::decay_t<valueT>> &>(args->t).set(std::forward<T>(value));
@@ -196,7 +197,7 @@ namespace madness {
             // this assumes that the stream size is set before data starts flowing ... strong-typing streams will solve this
             if (args->stream_size[i] != 0) {
               args->nargs[i]--;
-              if (args->nargs[i])
+              if (args->nargs[i] == 0)
                 args->counter--;
             }
           }
@@ -250,6 +251,7 @@ namespace madness {
         junk[0]++;
       }
 
+     public:
       /// sets stream size for input \c i
       /// \param size positive integer that specifies the stream size
       template <std::size_t i>
@@ -484,6 +486,11 @@ namespace madness {
             std::cerr << ")" << std::endl;
           }
         }
+      }
+
+      template <std::size_t i, typename Reducer>
+      void set_input_reducer(Reducer&& reducer) {
+        std::get<i>(input_reducers) = reducer;
       }
 
       /// implementation of OpBase::make_executable()

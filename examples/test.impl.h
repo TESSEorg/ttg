@@ -235,6 +235,51 @@ class Everything4 {
   }
 };
 
+class Everything5 {
+  static void p(const keyT &key, std::tuple<Out<keyT, int>> &out) {
+    ::ttg::print("produced ", 0);
+    send<0>(key, int(0), out);
+  }
+
+  static void a(const keyT &key, const int &value, std::tuple<Out<keyT, int>, Out<keyT, int>> &out) {
+    if (value < 100) {
+      send<1>(key + 1, value + 1, out);
+      send<0>(0, value, out);
+    }
+  }
+
+  static void c(const keyT &key, const int &value, std::tuple<> &out) { ::ttg::print("consumed ", value); }
+
+  Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
+
+  decltype(wrap<keyT>(p, edges(), edges(P2A))) wp;
+  decltype(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
+  decltype(wrap(c, edges(A2C), edges())) wc;
+
+ public:
+  Everything5()
+      : P2A("P2A")
+      , A2A("A2A")
+      , A2C("A2C")
+      , wp(wrap<keyT>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
+      , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {
+    wc->set_input_reducer<0>([](int&& a, int&& b) { return a + b;});
+    wc->set_argstream_size<0>(0, 100);
+  }
+
+  void print() { Print()(wp.get()); }
+
+  std::string dot() { return Dot()(wp.get()); }
+
+  void start() {
+    wp->make_executable();
+    wa->make_executable();
+    wc->make_executable();
+    if (ttg_default_execution_context().rank() == 0) wp->invoke(0);
+  }
+};
+
 class EverythingComposite {
   std::unique_ptr<OpBase> P;
   std::unique_ptr<OpBase> AC;
@@ -435,6 +480,12 @@ int try_main(int argc, char **argv) {
       ttg.submit(execution_context);
     }
 #endif
+
+
+    // Everything5 = Everything4 with consumer summing all values from A using a stream reducer
+    Everything5 q5;
+    std::cout << q5.dot() << std::endl;
+    q5.start();  // myusleep(100);
 
     ReductionTest t;
     t.start();
