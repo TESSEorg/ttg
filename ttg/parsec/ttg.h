@@ -1,8 +1,8 @@
 #ifndef PARSEC_TTG_H_INCLUDED
 #define PARSEC_TTG_H_INCLUDED
 
-#include "../util/meta.h"
 #include "../ttg.h"
+#include "../util/meta.h"
 
 #include <array>
 #include <cassert>
@@ -222,7 +222,8 @@ namespace parsec {
     }
     /// broadcast
     /// @tparam T a serializable type
-    template <typename T> void ttg_broadcast(World &world, T& data, int source_rank) {
+    template <typename T>
+    void ttg_broadcast(World &world, T &data, int source_rank) {
       assert(world.size() == 1);
     }
 
@@ -750,9 +751,7 @@ namespace parsec {
         set_arg_empty(key);
       }
 
-      void make_executable() override {
-        OpBase::make_executable();
-      }
+      void make_executable() override { OpBase::make_executable(); }
 
       /// keymap accessor
       /// @return the keymap

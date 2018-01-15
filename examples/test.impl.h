@@ -8,8 +8,8 @@ using keyT = uint64_t;
 #include TTG_RUNTIME_H
 IMPORT_TTG_RUNTIME_NS
 
-#include "../ttg/util/reduce.h"
 #include "../ttg/util/broadcast.h"
+#include "../ttg/util/reduce.h"
 
 class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int> {
   using baseT = Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int>;
@@ -264,7 +264,7 @@ class Everything5 {
       , wp(wrap<keyT>(p, edges(), edges(P2A), "producer", {}, {"start"}))
       , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
       , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {
-    wc->set_input_reducer<0>([](int&& a, int&& b) { return a + b;});
+    wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
     wc->set_argstream_size<0>(0, 100);
   }
 
@@ -333,12 +333,14 @@ class EverythingComposite {
 void hi() { ::ttg::print("hi"); }
 
 class ReductionTest {
-  static void generator(const int& key, std::tuple<Out<int, int>> &out) {
+  static void generator(const int &key, std::tuple<Out<int, int>> &out) {
     const auto value = std::rand();
     ::ttg::print("ReductionTest: produced ", value, " on rank ", ttg_default_execution_context().rank());
     send<0>(key, value, out);
   }
-  static void consumer(const int &key, const int &value, std::tuple<> &out) { ::ttg::print("ReductionTest: consumed ", value); }
+  static void consumer(const int &key, const int &value, std::tuple<> &out) {
+    ::ttg::print("ReductionTest: consumed ", value);
+  }
 
   Edge<int, int> G2R, R2C;  // !!!! Edges must be constructed before classes that use them
 
@@ -367,12 +369,14 @@ class ReductionTest {
 };
 
 class BroadcastTest {
-  static void generator(const int& key, std::tuple<Out<int, int>> &out) {
+  static void generator(const int &key, std::tuple<Out<int, int>> &out) {
     const auto value = std::rand();
     ::ttg::print("BroadcastTest: produced ", value, " on rank ", ttg_default_execution_context().rank());
     send<0>(key, value, out);
   }
-  static void consumer(const int &key, const int &value, std::tuple<> &out) { ::ttg::print("BroadcastTest: consumed ", value, " on rank ", ttg_default_execution_context().rank()); }
+  static void consumer(const int &key, const int &value, std::tuple<> &out) {
+    ::ttg::print("BroadcastTest: consumed ", value, " on rank ", ttg_default_execution_context().rank());
+  }
 
   Edge<int, int> G2B, B2C;
 
@@ -386,7 +390,8 @@ class BroadcastTest {
   BroadcastTest(int root = 0)
       : G2B("G2B")
       , B2C("B2C")
-      , root(root), wg(wrap<int>(generator, edges(), edges(G2B), "producer", {}, {"start"}))
+      , root(root)
+      , wg(wrap<int>(generator, edges(), edges(G2B), "producer", {}, {"start"}))
       , broadcast(G2B, B2C, {ttg_default_execution_context().rank()}, root)
       , wc(wrap(consumer, edges(B2C), edges(), "consumer", {"result"}, {})) {}
 
@@ -398,33 +403,31 @@ class BroadcastTest {
     wg->make_executable();
     broadcast.make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == root)
-      wg->invoke(root);
+    if (ttg_default_execution_context().rank() == root) wg->invoke(root);
   }
 };
 
 // Computes Fibonacci numbers up to some value
 class Fibonacci {
-
   // compute all numbers up to this value
   static constexpr const int max() { return 1000; }
 
   // computes next value: F_{n+2} = F_{n+1} + F_{n}, seeded by F_1 = 1, F_0 = 0
-  static void next(const int & F_np1 /* aka key */, const int &F_n, std::tuple<Out<int, int>, Out<int, int>> &outs) {
+  static void next(const int &F_np1 /* aka key */, const int &F_n, std::tuple<Out<int, int>, Out<int, int>> &outs) {
     // if this is first call reduce F_np1 and F_n also
-    if (F_np1 == 1 && F_n == 0)
-      send<1>(0, F_np1 + F_n, outs);
+    if (F_np1 == 1 && F_n == 0) send<1>(0, F_np1 + F_n, outs);
 
     const auto F_np2 = F_np1 + F_n;
     if (F_np2 < max()) {
       send<0>(F_np2, F_np1, outs);
       send<1>(0, F_np2, outs);
-    }
-    else
+    } else
       finalize<1>(0, outs);
   }
 
-  static void consume(const int &key, const int &value, std::tuple<> &out) { ::ttg::print("sum of Fibonacci numbers up to ", max(), " = ", value); }
+  static void consume(const int &key, const int &value, std::tuple<> &out) {
+    ::ttg::print("sum of Fibonacci numbers up to ", max(), " = ", value);
+  }
 
   Edge<int, int> N2N, N2C;  // !!!! Edges must be constructed before classes that use them
 
@@ -437,7 +440,7 @@ class Fibonacci {
       , N2C("N2C")
       , wa(wrap(next, edges(N2N), edges(N2N, N2C), "next", {"input"}, {"iterate", "sum"}))
       , wc(wrap(consume, edges(N2C), edges(), "consumer", {"result"}, {})) {
-    wc->set_input_reducer<0>([](int&& a, int&& b) { return a + b;});
+    wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
   }
 
   void print() { Print()(wa.get()); }

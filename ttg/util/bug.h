@@ -53,11 +53,11 @@ namespace ttg {
       enum DebugRegister { kDR0 = 0, kDR1 = 1, kDR2 = 2, kDR3 = 3 };
 
       enum Size {
-        kByte = 0,        // 1 byte  - 00
-        kHalfWord = 1,    // 2 bytes - 01
-        kWord = 3,        // 4 bytes - 11
-//        kDoubleWord = 2,  // 8 bytes - 10  NOT SUPPORTED BY SOME CHIPS!
-        kSizeMask = 3     // mask      11
+        kByte = 0,      // 1 byte  - 00
+        kHalfWord = 1,  // 2 bytes - 01
+        kWord = 3,      // 4 bytes - 11
+                        //        kDoubleWord = 2,  // 8 bytes - 10  NOT SUPPORTED BY SOME CHIPS!
+        kSizeMask = 3   // mask      11
       };
 
       enum BreakState {

@@ -30,8 +30,7 @@ namespace ttg {
     /// @param[in] child_key the key of the child
     /// @return the parent key (-1 if there is no parent)
     int parent_key(const int child_key) const {
-      const auto child_rank =
-          (child_key + size_ - root_) % size_;  // cyclically shifted key such that root's key is 0
+      const auto child_rank = (child_key + size_ - root_) % size_;  // cyclically shifted key such that root's key is 0
       const auto parent_key =
           (child_rank == 0 ? -1 : (((child_rank - 1) >> 1) + root_) % size_);  // Parent's key in binary tree
       return parent_key;
@@ -40,9 +39,9 @@ namespace ttg {
     /// @return the pair of child keys (-1 if there is no child)
     std::pair<int, int> child_keys(const int parent_key) const {
       const auto parent_rank =
-          (parent_key + size_ - root_) % size_;  // cyclically shifted key such that root's key is 0
-      int child0 = (parent_rank << 1) + 1 + root_;     // Left child
-      int child1 = child0 + 1;                         // Right child
+          (parent_key + size_ - root_) % size_;     // cyclically shifted key such that root's key is 0
+      int child0 = (parent_rank << 1) + 1 + root_;  // Left child
+      int child1 = child0 + 1;                      // Right child
       const int size_plus_root = size_ + root_;
       if (child0 < size_plus_root)
         child0 %= size_;

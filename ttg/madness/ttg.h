@@ -78,7 +78,8 @@ namespace madness {
       std::function<int(const keyT &)> keymap;
       // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
       // TODO unary/streaming input terminals should have different types (with embedded stream reducer type)
-      std::tuple<std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs> &&)>...>
+      std::tuple<
+          std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs> &&)>...>
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
      protected:
@@ -116,11 +117,11 @@ namespace madness {
       using output_edges_type = typename ::ttg::terminals_to_edges<output_terminalsT>::type;
 
       template <std::size_t i, typename resultT, typename InTuple>
-      static resultT get(InTuple&& intuple) {
+      static resultT get(InTuple &&intuple) {
         return unwrap_to<resultT>(std::get<i>(intuple));
       };
       template <std::size_t i, typename InTuple>
-      static auto &get(InTuple&& intuple) {
+      static auto &get(InTuple &&intuple) {
         return unwrap(std::get<i>(intuple));
       };
 
@@ -129,14 +130,14 @@ namespace madness {
       output_terminalsT output_terminals;
 
       struct OpArgs : TaskInterface {
-        int counter;                      // Tracks the number of arguments finalized
+        int counter;                            // Tracks the number of arguments finalized
         std::array<std::size_t, numins> nargs;  // Tracks the number of expected values (0 = finalized)
         std::array<std::size_t, numins>
-            stream_size;            // Expected number of values to receive, only used for streaming inputs
-                                    // (0 = unbounded stream)
+            stream_size;             // Expected number of values to receive, only used for streaming inputs
+                                     // (0 = unbounded stream)
         input_futures_tuple_type t;  // The input values
-        derivedT *derived;          // Pointer to derived class instance
-        keyT key;                   // Task key
+        derivedT *derived;           // Pointer to derived class instance
+        keyT key;                    // Task key
 
         OpArgs() : counter(numins), nargs(), stream_size(), t() { std::fill(nargs.begin(), nargs.end(), 1); }
 
@@ -176,7 +177,8 @@ namespace madness {
           OpArgs *args = acc->second;
 
           if (args->nargs[i] == 0) {
-            ::ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error argument is already finalized : ", i);
+            ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
+                               ": error argument is already finalized : ", i);
             throw "bad set arg";
           }
 
@@ -184,24 +186,23 @@ namespace madness {
           if (reducer) {  // is this a streaming input? reduce the received value
             // have a value already? reduce, otherwise set
             if (this->get<i>(args->t).probe()) {
-              auto&& current_value = this->get<i, std::decay_t<valueT>&&>(args->t);
+              auto &&current_value = this->get<i, std::decay_t<valueT> &&>(args->t);
               auto received_value = value;
               // std::move() for args to reducer squashes type errors for const T
               // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
-              this->get<i, Future<std::decay_t<valueT>> &>(args->t).get() = std::move(reducer(std::move(current_value), std::move(received_value)));
-            }
-            else {
+              this->get<i, Future<std::decay_t<valueT>> &>(args->t).get() =
+                  std::move(reducer(std::move(current_value), std::move(received_value)));
+            } else {
               this->get<i, Future<std::decay_t<valueT>> &>(args->t).set(std::forward<T>(value));
             }
             // update the counter if the stream is bounded
-            // this assumes that the stream size is set before data starts flowing ... strong-typing streams will solve this
+            // this assumes that the stream size is set before data starts flowing ... strong-typing streams will solve
+            // this
             if (args->stream_size[i] != 0) {
               args->nargs[i]--;
-              if (args->nargs[i] == 0)
-                args->counter--;
+              if (args->nargs[i] == 0) args->counter--;
             }
-          }
-          else {  // this is a nonstreaming input => set the value
+          } else {  // this is a nonstreaming input => set the value
             this->get<i, Future<std::decay_t<valueT>> &>(args->t).set(std::forward<T>(value));
             args->nargs[i]--;
             args->counter--;
@@ -263,11 +264,12 @@ namespace madness {
         // body
         const auto owner = keymap(key);
         if (owner != world.rank()) {
-          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream size for terminal ", i);
-          worldobjT::send(owner, &opT::template set_argstream_size<i>, key,
-                          size);
+          if (tracing())
+            ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream size for terminal ", i);
+          worldobjT::send(owner, &opT::template set_argstream_size<i>, key, size);
         } else {
-          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": setting stream size for terminal ", i);
+          if (tracing())
+            ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": setting stream size for terminal ", i);
 
           accessorT acc;
           if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
@@ -300,18 +302,22 @@ namespace madness {
         // body
         const auto owner = keymap(key);
         if (owner != world.rank()) {
-          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
+          if (tracing())
+            ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
           worldobjT::send(owner, &opT::template finalize_argstream<i>, key);
         } else {
-          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
+          if (tracing())
+            ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
 
           accessorT acc;
-          assert(cache.find(acc, key) && "Op::finalize_argstream called but no values had been received yet for this key");
+          assert(cache.find(acc, key) &&
+                 "Op::finalize_argstream called but no values had been received yet for this key");
           OpArgs *args = acc->second;
 
           // check if stream is already bounded
           if (args->stream_size[i] > 0) {
-            ::ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error finalize called on bounded stream: ", i);
+            ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
+                               ": error finalize called on bounded stream: ", i);
             throw std::runtime_error("Op::finalize called for a bounded stream");
           }
 
@@ -489,7 +495,7 @@ namespace madness {
       }
 
       template <std::size_t i, typename Reducer>
-      void set_input_reducer(Reducer&& reducer) {
+      void set_input_reducer(Reducer &&reducer) {
         std::get<i>(input_reducers) = reducer;
       }
 
