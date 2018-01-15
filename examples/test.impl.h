@@ -403,6 +403,54 @@ class BroadcastTest {
   }
 };
 
+// Computes Fibonacci numbers up to some value
+class Fibonacci {
+
+  // compute all numbers up to this value
+  static constexpr const int max() { return 1000; }
+
+  // computes next value: F_{n+2} = F_{n+1} + F_{n}, seeded by F_1 = 1, F_0 = 0
+  static void next(const int & F_np1 /* aka key */, const int &F_n, std::tuple<Out<int, int>, Out<int, int>> &outs) {
+    // if this is first call reduce F_np1 and F_n also
+    if (F_np1 == 1 && F_n == 0)
+      send<1>(0, F_np1 + F_n, outs);
+
+    const auto F_np2 = F_np1 + F_n;
+    if (F_np2 < max()) {
+      send<0>(F_np2, F_np1, outs);
+      send<1>(0, F_np2, outs);
+    }
+    else
+      finalize<1>(0, outs);
+  }
+
+  static void consume(const int &key, const int &value, std::tuple<> &out) { ::ttg::print("sum of Fibonacci numbers up to ", max(), " = ", value); }
+
+  Edge<int, int> N2N, N2C;  // !!!! Edges must be constructed before classes that use them
+
+  decltype(wrap(next, edges(N2N), edges(N2N, N2C))) wa;
+  decltype(wrap(consume, edges(N2C), edges())) wc;
+
+ public:
+  Fibonacci()
+      : N2N("N2N")
+      , N2C("N2C")
+      , wa(wrap(next, edges(N2N), edges(N2N, N2C), "next", {"input"}, {"iterate", "sum"}))
+      , wc(wrap(consume, edges(N2C), edges(), "consumer", {"result"}, {})) {
+    wc->set_input_reducer<0>([](int&& a, int&& b) { return a + b;});
+  }
+
+  void print() { Print()(wa.get()); }
+
+  std::string dot() { return Dot()(wa.get()); }
+
+  void start() {
+    wa->make_executable();
+    wc->make_executable();
+    if (ttg_default_execution_context().rank() == 0) wa->invoke(1, 0);
+  }
+};
+
 int try_main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
 
@@ -486,6 +534,10 @@ int try_main(int argc, char **argv) {
     Everything5 q5;
     std::cout << q5.dot() << std::endl;
     q5.start();  // myusleep(100);
+
+    Fibonacci fi;
+    std::cout << fi.dot() << std::endl << std::endl;
+    fi.start();
 
     ReductionTest t;
     t.start();
