@@ -1040,29 +1040,13 @@ template <typename keyT, typename valueT>
     return std::make_tuple(args...);
   }
 
-  // template <typename keyT, typename valueT,
-  //           typename output_terminalT>
-  // void send(const keyT& key, valueT& value,
-  //           output_terminalT& t) {
-  //     t.send(key, value);
-  // }
-
-  // template <size_t i, typename keyT, typename valueT,
-  //           typename... output_terminalsT>
-  // void send(const keyT& key, valueT& value,
-  //           std::tuple<output_terminalsT...>& t) {
-  //     std::get<i>(t).send(key, value);
-  // }
-
   template <typename keyT, typename valueT, typename output_terminalT>
   void send(const keyT &key, valueT &&value, output_terminalT &t) {
-    // std::cout << "::send move\n";
     t.send(key, std::forward<valueT>(value));
   }
 
   template <size_t i, typename keyT, typename valueT, typename... output_terminalsT>
   void send(const keyT &key, valueT &&value, std::tuple<output_terminalsT...> &t) {
-    // std::cout << "::send<> move\n";
     std::get<i>(t).send(key, std::forward<valueT>(value));
   }
 
