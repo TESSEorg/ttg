@@ -891,6 +891,28 @@ template <typename keyT, typename valueT>
       }
     }
 
+    void set_size(const keyT &key, std::size_t size) {
+      for (auto successor : successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->set_size(key, size);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          static_cast<In<keyT, valueT> *>(successor)->set_size(key, size);
+        }
+      }
+    }
+
+    void finalize(const keyT &key) {
+      for (auto successor : successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->finalize(key);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          static_cast<In<keyT, valueT> *>(successor)->finalize(key);
+        }
+      }
+    }
+
     Type get_type() const override { return TerminalBase::Type::Write; }
   };
 
@@ -1047,6 +1069,26 @@ template <typename keyT, typename valueT>
   template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT>
   void broadcast(const rangeT &keylist, valueT &&value, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).broadcast(keylist, std::forward<valueT>(value));
+  }
+
+  template <typename keyT, typename output_terminalT>
+  void set_size(const keyT &key, const std::size_t size, output_terminalT &t) {
+    t.set_size(key, size);
+  }
+
+  template <size_t i, typename keyT, typename... output_terminalsT>
+  void set_size(const keyT &key, const std::size_t size, std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).set_size(key, size);
+  }
+
+  template <typename keyT, typename output_terminalT>
+  void finalize(const keyT &key, output_terminalT &t) {
+    t.finalize(key);
+  }
+
+  template <size_t i, typename keyT, typename... output_terminalsT>
+  void finalize(const keyT &key, std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).finalize(key);
   }
 
   // Make type of tuple of edges from type of tuple of terminals
