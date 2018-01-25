@@ -146,7 +146,7 @@ typedef struct my_op_s {
   void (*function_template_class_ptr)(void *);
   void *object_ptr;
   void (*static_set_arg)(int, int);
-  uint64_t key;
+  parsec_key_t key;
   void *user_tuple; /* user_tuple will past the end of my_op_s (to allow for proper alignment)
                      * This points to the beginning of the tuple. */
 } my_op_t;
@@ -180,23 +180,24 @@ namespace ttg {
   }  // namespace overload
 }  // namespace ttg
 
-static uint32_t parsec_tasks_hash_fct(uintptr_t key, uint32_t hash_size, void *data) {
+static uint64_t parsec_tasks_hash_fct(parsec_key_t key, int nb_bits, void *data) {
   /* Use all the bits of the 64 bits key, project on the lowest base bits (0 <= hash < 1024) */
+  int b = 0;
+  uint64_t mask = ~0ULL >> (64 - nb_bits);
+  uint64_t h = (uint64_t)key;
   (void)data;
-  int b = 0, base = 10;     /* We start at 10, as size is 1024 at least */
-  uint32_t mask = 0x3FFULL; /* same thing: assume size is 1024 at least */
-  uint32_t h = key;
-  while (hash_size != (1u << base)) {
-    assert(base < 32);
-    base++;
-    mask = (mask << 1) | 1;
-  }
   while (b < 64) {
-    b += base;
-    h ^= key >> b;
+    b += nb_bits;
+    h ^= (uint64_t)key >> b;
   }
-  return (uint32_t)(key & mask);
+  return (uint64_t)(h & mask);
 }
+
+static parsec_key_fn_t parsec_tasks_hash_fcts = {
+    .key_equal = parsec_hash_table_generic_64bits_key_equal,
+    .key_print = parsec_hash_table_generic_64bits_key_print,
+    .key_hash  = parsec_tasks_hash_fct
+};
 
 class PrintThread : public std::ostringstream {
  public:
@@ -405,18 +406,18 @@ namespace parsec {
         my_op_t *task = (my_op_t *)my_task;
         derivedT *obj = (derivedT *)task->object_ptr;
         if (obj->tracing()) {
-          PrintThread{} << obj->get_name() << " : " << keyT(task->key) << ": executing" << std::endl;
+          PrintThread{} << obj->get_name() << " : " << keyT((uintptr_t)task->key) << ": executing" << std::endl;
         }
-        obj->op(keyT(task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
+        obj->op(keyT((uintptr_t)task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
                 obj->output_terminals);
         if (obj->tracing())
-          PrintThread{} << obj->get_name() << " : " << keyT(task->key) << ": done executing" << std::endl;
+          PrintThread{} << obj->get_name() << " : " << keyT((uintptr_t)task->key) << ": done executing" << std::endl;
       }
 
       static void static_op_noarg(parsec_task_t *my_task) {
         my_op_t *task = (my_op_t *)my_task;
         derivedT *obj = (derivedT *)task->object_ptr;
-        obj->op(keyT(task->key), std::tuple<>(), obj->output_terminals);
+        obj->op(keyT((uintptr_t)task->key), std::tuple<>(), obj->output_terminals);
       }
 
      protected:
@@ -456,7 +457,7 @@ namespace parsec {
         if (tracing()) PrintThread{} << get_name() << " : " << key << ": setting argument : " << i << std::endl;
 
         using ::ttg::unique_hash;
-        uint64_t hk = unique_hash<uint64_t>(key);
+        parsec_key_t hk = unique_hash<parsec_key_t>(key);
         my_op_t *task = NULL;
         constexpr const std::size_t alignment_of_input_tuple = std::alignment_of<input_values_tuple_type>::value;
         if (NULL == (task = (my_op_t *)parsec_hash_table_find(&tasks_table, hk))) {
@@ -602,7 +603,7 @@ namespace parsec {
         task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
         task->object_ptr = static_cast<derivedT *>(this);
         using ::ttg::unique_hash;
-        task->key = unique_hash<uint64_t>(key);
+        task->key = unique_hash<parsec_key_t>(key);
         task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
         __parsec_schedule(es, &task->parsec_task, 0);
       }
@@ -804,7 +805,7 @@ namespace parsec {
                                  sizeof(my_op_t) + sizeof(input_values_tuple_type) + alignof(input_values_tuple_type),
                                  offsetof(parsec_task_t, mempool_owner), k);
 
-        parsec_hash_table_init(&tasks_table, offsetof(my_op_t, op_ht_item), 1024, parsec_tasks_hash_fct, NULL);
+        parsec_hash_table_init(&tasks_table, offsetof(my_op_t, op_ht_item), 1024, parsec_tasks_hash_fcts, NULL);
       }
 
       template <typename keymapT = default_keymap<keyT>>
