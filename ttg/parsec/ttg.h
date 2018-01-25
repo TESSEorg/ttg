@@ -39,7 +39,7 @@ namespace parsec {
         ctx = parsec_init(ncores, argc, argv);
         tpool = (parsec_taskpool_t *)calloc(1, sizeof(parsec_taskpool_t));
         tpool->taskpool_id = 1;
-        tpool->nb_tasks = 1;
+        tpool->nb_tasks = 0;
         tpool->nb_pending_actions = 1;
         tpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
         es = ctx->virtual_processes[0]->execution_streams[0];
@@ -75,7 +75,6 @@ namespace parsec {
               fprintf(stderr, "On rank %d: (very) poor man's fence: giving 10s to complete before entering the wait\n", mr);
               sleep(10);
           }
-          parsec_taskpool_update_runtime_nbtask(tpool, -1);
           parsec_context_wait(ctx);
       }
 
@@ -805,7 +804,7 @@ namespace parsec {
                                  sizeof(my_op_t) + sizeof(input_values_tuple_type) + alignof(input_values_tuple_type),
                                  offsetof(parsec_task_t, mempool_owner), k);
 
-        parsec_hash_table_init(&tasks_table, offsetof(my_op_t, op_ht_item), 1024, parsec_tasks_hash_fcts, NULL);
+        parsec_hash_table_init(&tasks_table, offsetof(my_op_t, op_ht_item), 10, parsec_tasks_hash_fcts, NULL);
       }
 
       template <typename keymapT = default_keymap<keyT>>
