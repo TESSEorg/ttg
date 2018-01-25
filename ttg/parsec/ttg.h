@@ -195,7 +195,7 @@ static uint64_t parsec_tasks_hash_fct(parsec_key_t key, int nb_bits, void *data)
 static parsec_key_fn_t parsec_tasks_hash_fcts = {
     .key_equal = parsec_hash_table_generic_64bits_key_equal,
     .key_print = parsec_hash_table_generic_64bits_key_print,
-    .key_hash  = parsec_tasks_hash_fct
+    .key_hash  = parsec_hash_table_generic_64bits_key_hash
 };
 
 class PrintThread : public std::ostringstream {
