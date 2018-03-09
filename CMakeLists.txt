@@ -14,8 +14,7 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
 #### prerequites
 ##########################
 
-# need Boost.CallableTraits (header only) for wrap.h (= for TTG) to work
-# Boost.CallableTraits will be released in 12/2017 , see README.md
+# need Boost.CallableTraits (header only, part of Boost 1.66 released in Dec 2017) for wrap.h to work
 find_package(Boost 1.66 REQUIRED)
 
 # sparse tensor algorithms need Eigen
