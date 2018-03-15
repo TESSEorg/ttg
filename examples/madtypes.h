@@ -34,6 +34,8 @@ namespace mad {
         }
     }
 
+    // BS _const stuff needs cleaning up somehow likely by moving const from outside tuple to inside 
+
     /// Makes an array of pointers to elements (of same type) in tuple in the open range \c [Begin,End).
     template <std::size_t Begin, std::size_t End, typename... T>
     static inline auto subtuple_to_array_of_ptrs(std::tuple<T...>& t) {

@@ -11,6 +11,8 @@
 
 namespace mad {
 
+
+    /// Applies two-scale filter (sum coeffs of children to sum+difference coeffs of parent)
     template <typename T, size_t K, Dimension NDIM>
     void filter(const FixedTensor<T,2*K,NDIM>& in, FixedTensor<T,2*K,NDIM>& out) {
         auto& hgT = FunctionData<T,K,NDIM>::get_hgT();
@@ -18,6 +20,7 @@ namespace mad {
 
     }
     
+    /// Applies inverse of two-scale filter (sum+difference coeffs of parent to sum coeffs of children)
     template <typename T, size_t K, Dimension NDIM>
     void unfilter(const FixedTensor<T,2*K,NDIM>& in, FixedTensor<T,2*K,NDIM>& out) {
         auto& hg = FunctionData<T,K,NDIM>::get_hg();
@@ -25,6 +28,7 @@ namespace mad {
 
     }
     
+    /// In given box return the truncation tolerance for given threshold
     template <typename T, Dimension NDIM>
     T truncate_tol(const Key<NDIM>& key, const T thresh) {
         return thresh; // nothing clever for now
@@ -81,10 +85,11 @@ namespace mad {
     public: // temporarily make everything public while we figure out what we are doing
         static constexpr bool is_function_node = true;
         Key<NDIM> key; //< Key associated with this node to facilitate computation from otherwise unknown parent/child
+        mutable T sum; //< If recurring up tree (e.g., in compress) can use this to also compute a scalar reduction
         bool is_leaf; //< True if node is leaf on tree (i.e., no children).
         FixedTensor<T,K,NDIM> coeffs; //< if !is_leaf these are junk (and need not be communicated)
         FunctionReconstructedNode() = default; // Default initializer does nothing so that class is POD
-        FunctionReconstructedNode(const Key<NDIM>& key) : key(key) {}
+        FunctionReconstructedNode(const Key<NDIM>& key) : key(key), sum(0.0) {}
         T normf() const {return (is_leaf ? coeffs.normf() : 0.0);}
         bool has_children() const {return !is_leaf;}
     };

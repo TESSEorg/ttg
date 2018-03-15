@@ -125,7 +125,27 @@ namespace detail {
         using Rout = rnodeOut<T,K,1>;
         using Rin = FunctionReconstructedNode<T,K,1>;
         using compress_out_type = std::tuple<Rout,Rout,cnodeOut<T,K,1>>;
-        using compress_in_type  = std::tuple<Rin,Rin>;
+        using compress_in_type  = std::tuple<Rin, Rin>;
+        template <typename compfuncT>
+        using compwrap_type = WrapOp<compfuncT, Key<1>, compress_out_type, Rin, Rin>;
+    };
+
+    template <typename T, size_t K>  struct tree_types<T,K,2>{
+        using Rout = rnodeOut<T,K,2>;
+        using Rin = FunctionReconstructedNode<T,K,2>;
+        using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,cnodeOut<T,K,2>>;
+        using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin>;
+        template <typename compfuncT>
+        using compwrap_type = WrapOp<compfuncT, Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
+    };
+    
+    template <typename T, size_t K>  struct tree_types<T,K,3>{
+        using Rout = rnodeOut<T,K,3>;
+        using Rin = FunctionReconstructedNode<T,K,3>;
+        using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,Rout,Rout,Rout,Rout,cnodeOut<T,K,3>>;
+        using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
+        template <typename compfuncT>
+        using compwrap_type = WrapOp<compfuncT, Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
     };
 };    
 
@@ -134,6 +154,7 @@ void send_leaves_up(const Key<NDIM>& key,
                     const std::tuple<FunctionReconstructedNode<T,K,NDIM>>& inputs,
                     typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
     const FunctionReconstructedNode<T,K,NDIM>& node = std::get<0>(inputs);
+    node.sum = 0.0;   // 
     if (!node.has_children()) { // We are only interested in the leaves
         if (key.level() == 0) {  // Tree is just one node
             throw "not yet";
@@ -155,20 +176,18 @@ template <typename T, size_t K, Dimension NDIM>
 void do_compress(const Key<NDIM>& key,
                  const typename ::detail::tree_types<T,K,NDIM>::compress_in_type& in,
                  typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
- 
     auto& child_slices = FunctionData<T,K,NDIM>::get_child_slices();
     FunctionCompressedNode<T,K,NDIM> result(key); // The eventual result
     auto& d = result.coeffs;
-    
+
+    T sumsq = 0.0;
     {   // Collect child coeffs and leaf info
         FixedTensor<T,2*K,NDIM> s;
-        //auto ins = ::mad::tuple_to_array_of_ptrs(in);
-        //using rnode = FunctionReconstructedNode<T,K,NDIM>;
         auto ins = ::mad::tuple_to_array_of_ptrs_const(in); /// Ugh ... cannot get const to match
-        assert(ins.size() == Key<NDIM>::num_children);
         for (size_t i : range(Key<NDIM>::num_children)) {
             s(child_slices[i]) = ins[i]->coeffs;
             result.is_leaf[i] = ins[i]->is_leaf;
+            sumsq += ins[i]->sum; // Accumulate sumsq from child difference coeffs
         }
         filter<T,K,NDIM>(s,d);  // Apply twoscale transformation
     }
@@ -177,9 +196,13 @@ void do_compress(const Key<NDIM>& key,
     if (key.level() > 0) {
         FunctionReconstructedNode<T,K,NDIM> p(key);
         p.coeffs = d(child_slices[0]);
+        d(child_slices[0]) = 0.0;
+        p.sum = d.sumabssq() + sumsq; // Accumulate sumsq of difference coeffs from this node and children
         auto outs = ::mad::subtuple_to_array_of_ptrs<0,Key<NDIM>::num_children>(out);
         outs[key.childindex()]->send(key.parent(), p);
-        d(child_slices[0]) = 0.0;
+    }
+    else {
+        std::cout << "At root of compressed tree: total normsq is " << sumsq + d.sumabssq() << std::endl;
     }
 
     // Send result to output tree
@@ -204,8 +227,9 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
     using sendfuncT = decltype(&send_leaves_up<T,K,NDIM>);
     using sendwrapT = WrapOp<sendfuncT, Key<NDIM>, typename ::detail::tree_types<T,K,NDIM>::compress_out_type, FunctionReconstructedNode<T,K,NDIM> >;
     using compfuncT = decltype(&do_compress<T,K,NDIM>);
-    using compwrapT = WrapOp<compfuncT, Key<NDIM>, typename ::detail::tree_types<T,K,NDIM>::compress_out_type, FunctionReconstructedNode<T,K,NDIM>, FunctionReconstructedNode<T,K,NDIM> >; // IN 1D only!
+    using compwrapT = typename ::detail::tree_types<T,K,NDIM>::template compwrap_type<compfuncT>;
     
+    // Make names for terminals that connect child boxes
     std::vector<std::string> outnames;
     for (auto i : range(num_children)) {
         outnames.push_back(std::string("child:")+int2bitstring(i,NDIM));
@@ -280,7 +304,7 @@ int main(int argc, char** argv) {
     // test_gaussian<float,8,3>(1e-6);
 
     using T = float;
-    constexpr size_t K = 3;
+    constexpr size_t K = 8;
     constexpr size_t NDIM = 1;
     GLinitialize();
     FunctionData<T,K,NDIM>::initialize();
