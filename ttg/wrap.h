@@ -33,6 +33,12 @@ class WrapOp : public Op<keyT, output_terminalsT, WrapOp<funcT, keyT, output_ter
          const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
       : baseT(inedges, outedges, name, innames, outnames), func(std::forward<funcT_>(f)) {}
 
+  template<typename funcT_>
+  WrapOp(funcT_ &&f,
+         const std::string &name,
+         const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
+      : baseT(name, innames, outnames), func(std::forward<funcT_>(f)) {}
+
   void op(const keyT &key, typename baseT::input_values_tuple_type &&args, output_terminalsT &out) {
     call_func(key, std::forward<typename baseT::input_values_tuple_type>(args), out,
            std::make_index_sequence<std::tuple_size<typename baseT::input_values_tuple_type>::value>{});
@@ -71,11 +77,17 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
   }
 
  public:
+
   template<typename funcT_>
   WrapOpArgs(funcT_ &&f, const typename baseT::input_edges_type &inedges,
              const typename baseT::output_edges_type &outedges, const std::string &name,
              const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
       : baseT(inedges, outedges, name, innames, outnames), func(std::forward<funcT_>(f)) {}
+
+  template<typename funcT_>
+  WrapOpArgs(funcT_ &&f, const std::string &name,
+             const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
+      : baseT(name, innames, outnames), func(std::forward<funcT_>(f)) {}
 
   template<typename Key>
   void op(Key &&key, typename baseT::input_values_tuple_type &&args, output_terminalsT &out) {
