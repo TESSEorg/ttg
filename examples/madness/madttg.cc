@@ -149,6 +149,7 @@ namespace detail {
     };
 };    
 
+// Stream leaf nodes up the tree as a prelude to compressing
 template <typename T, size_t K, Dimension NDIM>
 void send_leaves_up(const Key<NDIM>& key,
                     const std::tuple<FunctionReconstructedNode<T,K,NDIM>>& inputs,
@@ -172,6 +173,7 @@ void send_leaves_up(const Key<NDIM>& key,
 }
 
 
+// With data streaming up the tree run compression
 template <typename T, size_t K, Dimension NDIM>
 void do_compress(const Key<NDIM>& key,
                  const typename ::detail::tree_types<T,K,NDIM>::compress_in_type& in,
@@ -209,16 +211,19 @@ void do_compress(const Key<NDIM>& key,
     send<Key<NDIM>::num_children>(key,result,out);
 }
 
+
+/// Return a string with the binary encoding of the lowest \c width bits of the given integer \c i
 std::string int2bitstring(size_t i, size_t width) {
     std::string s="";
     for (auto d : range(width)) {
-        s += (i&0x1) ? "1" : "0";
+        s = ((i&0x1) ? "1" : "0") + s;
         i>>=1;
         d=d; 
     }
     return s;
 }
 
+/// Make a composite operator that implements compression for a single function
 template <typename T, size_t K, Dimension NDIM>
 auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std::string& name = "compress") {
 
@@ -305,7 +310,7 @@ int main(int argc, char** argv) {
 
     using T = float;
     constexpr size_t K = 8;
-    constexpr size_t NDIM = 1;
+    constexpr size_t NDIM = 3;
     GLinitialize();
     FunctionData<T,K,NDIM>::initialize();
     Domain<NDIM>::set_cube(-6.0,6.0);
