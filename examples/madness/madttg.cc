@@ -55,10 +55,12 @@ template <Dimension NDIM> using ctlOut = Out<Key<NDIM>, Control>;
 
 std::mutex printer_guard;
 template <typename keyT, typename valueT>
-auto make_printer(const Edge<keyT, valueT>& in, const char* str = "") {
-    auto func = [str](const keyT& key, const valueT& value, std::tuple<>& out) {
-        std::lock_guard<std::mutex> obolus(printer_guard);
-        std::cout << str << " (" << key << "," << value << ")" << std::endl;
+auto make_printer(const Edge<keyT, valueT>& in, const char* str = "", const bool doprint=true) {
+    auto func = [str,doprint](const keyT& key, const valueT& value, std::tuple<>& out) {
+        if (doprint) {
+            std::lock_guard<std::mutex> obolus(printer_guard);
+            std::cout << str << " (" << key << "," << value << ")" << std::endl;
+        }
     };
     return wrap(func, edges(in), edges(), "printer", {"input"});
 }
@@ -226,9 +228,9 @@ std::string int2bitstring(size_t i, size_t width) {
 /// Make a composite operator that implements compression for a single function
 template <typename T, size_t K, Dimension NDIM>
 auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std::string& name = "compress") {
-
+    
     constexpr size_t num_children = Key<NDIM>::num_children;
- 
+    
     using sendfuncT = decltype(&send_leaves_up<T,K,NDIM>);
     using sendwrapT = WrapOp<sendfuncT, Key<NDIM>, typename ::detail::tree_types<T,K,NDIM>::compress_out_type, FunctionReconstructedNode<T,K,NDIM> >;
     using compfuncT = decltype(&do_compress<T,K,NDIM>);
@@ -241,14 +243,14 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
     }
     std::vector<std::string> innames=outnames;
     outnames.push_back("output");
-
+    
     auto s = std::unique_ptr<sendwrapT>(new sendwrapT(&send_leaves_up<T,K,NDIM>, "send_leaves_up", {"input"}, outnames));
     auto c = std::unique_ptr<compwrapT>(new compwrapT(&do_compress<T,K,NDIM>, "do_compress", innames, outnames));
-
+    
     in.set_out(s-> template in<0>()); // Connect input to s
     out.set_in(s-> template out<num_children>()); // Connect s result to output 
     out.set_in(c-> template out<num_children>()); // Connect c result to output
-
+    
     // Connect send_leaves_up to do_compress and recurrence for do_compress
     for (auto i : range(num_children)) {
         connect(i,i,s.get(),c.get()); // this via base class terminals
@@ -260,9 +262,55 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
     std::vector<std::unique_ptr<OpBase>> ops(2);
     ops[0] = std::move(s); 
     ops[1] = std::move(c);
-        
+    
     return make_composite_op(std::move(ops), ins, outs, name);
 }
+
+template <typename T, size_t K, Dimension NDIM>
+void do_reconstruct(const Key<NDIM>& key,
+                    std::tuple<FunctionCompressedNode<T,K,NDIM>,FixedTensor<T,K,NDIM>>&& t,
+                    std::tuple<Out<Key<NDIM>,FixedTensor<T,K,NDIM>>,rnodeOut<T,K,NDIM>>& out) {
+    const auto& child_slices = FunctionData<T,K,NDIM>::get_child_slices();
+    auto& node = std::get<0>(t);
+    const auto& from_parent = std::get<1>(t);
+    if (key.level() != 0) node.coeffs(child_slices[0]) = from_parent;
+ 
+    FixedTensor<T,2*K,NDIM> s;
+    unfilter<T,K,NDIM>(node.coeffs, s);
+ 
+    FunctionReconstructedNode<T,K,NDIM> r(key);
+    r.coeffs = T(0.0);
+    r.is_leaf = false;
+    ::send<1>(key, r, out); // Send empty interior node to result tree
+ 
+    KeyChildren<NDIM> children(key);
+    for (auto it=children.begin(); it!=children.end(); ++it) {
+        const Key<NDIM> child= *it;
+        r.key = child;
+        r.coeffs = s(child_slices[it.index()]);
+        r.is_leaf = node.is_leaf[it.index()];
+        if (r.is_leaf) {
+            ::send<1>(child, r, out);
+        }
+        else {
+            ::send<0>(child, r.coeffs, out);
+        }
+    }
+}
+
+template <typename T, size_t K, Dimension NDIM>
+auto make_reconstruct(const cnodeEdge<T,K,NDIM>& in, rnodeEdge<T,K,NDIM>& out, const std::string& name = "reconstruct") {
+    Edge<Key<NDIM>,FixedTensor<T,K,NDIM>> S("S");  // passes scaling functions down
+ 
+    auto s = wrapt(&do_reconstruct<T,K,NDIM>, edges(in, S), edges(S, out), name, {"input", "s"}, {"s", "output"});
+ 
+    if (get_default_world().rank() == 0) {
+        s->template in<1>()->send(Key<NDIM>{0,{0}}, FixedTensor<T,K,NDIM>()); // Prime the flow of scaling functions
+    }
+ 
+    return s;
+}
+
 
 // For checking we haven't broken something while developing
 template <typename T>
@@ -308,48 +356,46 @@ int main(int argc, char** argv) {
     // test_gaussian<float,8,3>(1e-5);
     // test_gaussian<float,8,3>(1e-6);
 
-    using T = float;
-    constexpr size_t K = 8;
-    constexpr size_t NDIM = 3;
-    GLinitialize();
-    FunctionData<T,K,NDIM>::initialize();
-    Domain<NDIM>::set_cube(-6.0,6.0);
-    
-    FunctionFunctor<T, NDIM> ff(g<T,NDIM>);
+    {    
+        using T = float;
+        constexpr size_t K = 8;
+        constexpr size_t NDIM = 3;
+        GLinitialize();
+        FunctionData<T,K,NDIM>::initialize();
+        Domain<NDIM>::set_cube(-6.0,6.0);
+        
+        FunctionFunctor<T, NDIM> ff(g<T,NDIM>);
+        
+        ctlEdge<NDIM> ctl("start");
+        rnodeEdge<T,K,NDIM> a("a"), c("c");
+        cnodeEdge<T,K,NDIM> b("b");
 
-    ctlEdge<NDIM> ctl("start");
-    rnodeEdge<T,K,NDIM> a("a");
-    cnodeEdge<T,K,NDIM> b("b");
-    auto start = make_start(ctl);
-    auto p1 = make_project(ff, T(1e-6), ctl, a, "project A");
-
-    double aa = 1;
-    auto compress = make_compress<T,K,NDIM>(a, b);
-    aa += 1;
-    
-    auto printer = make_printer(a);
-    auto printer2 = make_printer(b);
-    auto connected = make_graph_executable(start.get());
-    assert(connected);
-    if (ttg_default_execution_context().rank() == 0) {
-      std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
-      std::cout << "==== begin dot ====\n";
-      std::cout << Dot()(start.get()) << std::endl;
-      std::cout << "====  end dot  ====\n";
-
-      // This kicks off the entire computation
-      start->invoke(Key<NDIM>(0, {0}));
+        auto start = make_start(ctl);
+        auto p1 = make_project(ff, T(1e-6), ctl, a, "project A");
+        auto compress = make_compress<T,K,NDIM>(a, b);
+        auto recon = make_reconstruct<T,K,NDIM>(b,c);
+        //recon->set_trace_instance(true);
+        
+        auto printer =   make_printer(a,"projected    ", false);
+        auto printer2 =  make_printer(b,"compressed   ", false);
+        auto printer3 =  make_printer(c,"reconstructed", false);
+        auto connected = make_graph_executable(start.get());
+        assert(connected);
+        if (ttg_default_execution_context().rank() == 0) {
+            std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
+            std::cout << "==== begin dot ====\n";
+            std::cout << Dot()(start.get()) << std::endl;
+            std::cout << "====  end dot  ====\n";
+            
+            // This kicks off the entire computation
+            start->invoke(Key<NDIM>(0, {0}));
+        }
+        
+        ttg_execute(ttg_default_execution_context());
+        ttg_fence(ttg_default_execution_context());
     }
-
-    ttg_execute(ttg_default_execution_context());
-    ttg_fence(ttg_default_execution_context());
-
-    // //using funcT = std::function<void (const Key<1>&, std::tuple<int,double>&&, std::tuple<Out<Key<1>,double>>&)>;
-    // // auto xxx = wrapx(funcT(fred)); // yes
-
-    // using funcT = decltype(&fred);
-    // using wrapT = WrapOp<funcT, Key<1>, std::tuple<Out<Key<1>,double>>, int, double>;
-    // auto xxx = std::unique_ptr<wrapT>(new wrapT(&fred, "fred", {"a","b"}, {"c"}));
+    
+    get_default_world().gop.fence();
 
     ttg_finalize();
     

@@ -52,6 +52,16 @@ namespace mad {
 
         iterator begin() const {assert(count>=0); return iterator(start,step); }
         iterator end() const {assert(count>=0); return iterator(finish,step); }
+
+        Slice& operator=(const Slice& other) {
+            if (this != &other) {
+                start = other.start;
+                finish = other.finish;
+                step = other.step;
+                count = other.count;
+            }
+            return *this;
+        }
     };
 
     static constexpr long END = Slice::END;

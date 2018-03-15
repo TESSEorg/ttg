@@ -89,7 +89,7 @@ namespace mad {
         bool is_leaf; //< True if node is leaf on tree (i.e., no children).
         FixedTensor<T,K,NDIM> coeffs; //< if !is_leaf these are junk (and need not be communicated)
         FunctionReconstructedNode() = default; // Default initializer does nothing so that class is POD
-        FunctionReconstructedNode(const Key<NDIM>& key) : key(key), sum(0.0) {}
+        FunctionReconstructedNode(const Key<NDIM>& key) : key(key), sum(0.0), is_leaf(false) {}
         T normf() const {return (is_leaf ? coeffs.normf() : 0.0);}
         bool has_children() const {return !is_leaf;}
     };

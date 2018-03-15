@@ -17,6 +17,7 @@ namespace mad {
         inline static SimpleTensor<T,2*K,2*K> HGT; // Two scale filter applied from right to scaling function coeffs
         inline static std::array<T,K> x, w; // Quadrature points and weights on level 0
         inline static std::array<std::array<Slice,NDIM>, Key<NDIM>::num_children> child_slices; // Maps index of child into sub-cube of parent coeffs
+        inline static std::array<Slice,NDIM> child0_slice; // Slice for first child which is also scaling function coeffs in full tensor of difference coefficients
         inline static SimpleTensor<T,K,K> rm, r0, rp; // blocks of the ABGV central derivative operator
 
         static void make_abgv_diff_operator() {
@@ -93,6 +94,7 @@ namespace mad {
             }
             detail::GLget(x,w);
             child_slices = make_child_slices();
+            child0_slice = child_slices[0];
             make_abgv_diff_operator();
             initialized = true;
         }
@@ -104,6 +106,7 @@ namespace mad {
         static const auto& get_x() {assert(initialized); return x;}
         static const auto& get_w() {assert(initialized); return w;}
         static const auto& get_child_slices() {assert(initialized); return child_slices;}
+        static const auto& get_child0_slice() {assert(initialized); return child0_slice;}
         static const auto& get_rm() {assert(initialized); return rm;}
         static const auto& get_r0() {assert(initialized); return r0;}
         static const auto& get_rp() {assert(initialized); return rp;}
