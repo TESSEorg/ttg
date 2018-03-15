@@ -947,7 +947,7 @@ template <typename keyT, typename valueT>
 
       ~EdgeImpl() {
         if (ins.size() == 0 || outs.size() == 0) {
-          std::cerr << "Edge: destroying edge pimpl with either in or out not "
+            std::cerr << "Edge: destroying edge pimpl ('" << name << "') with either in or out not "
                        "assigned --- graph may be incomplete"
                     << std::endl;
         }
