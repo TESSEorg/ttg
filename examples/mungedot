@@ -1,0 +1,41 @@
+#!/usr/bin/env python2
+
+import sys
+import os
+
+replacements = {
+    "mad::Key\<1u\>" : "Key1",
+    "mad::Key\<2u\>" : "Key2",
+    "mad::Key\<3u\>" : "Key3",
+    "mad::FunctionReconstructedNode" : "rNode",
+    "mad::FunctionCompressedNode" : "rNode",
+    ", " : ",",
+    }
+
+if len(sys.argv) != 2 or sys.argv[1] == "--help":
+    print("Usage: mungedot dotfilename")
+    sys.exit(0)
+
+filename = sys.argv[1]
+tempname = filename+".tmp"
+tmp = open(tempname,"w")
+for line in open(filename,"r"):
+    for old,new in replacements.items():
+        line = line.replace(old,new)
+    tmp.write(line)
+tmp.close()
+
+os.rename(filename,filename+".bak")
+os.rename(tempname,filename)
+
+
+
+
+
+
+
+
+    
+
+    
+             
