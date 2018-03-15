@@ -94,7 +94,7 @@ namespace mad {
     public: // temporarily make everything public while we figure out what we are doing
         static constexpr bool is_function_node = true;
         Key<NDIM> key; //< Key associated with this node to facilitate computation from otherwise unknown parent/child
-        bool is_leaf[Key<NDIM>::num_children]; //< True if that child is leaf on tree
+        std::array<bool,Key<NDIM>::num_children> is_leaf; //< True if that child is leaf on tree
         FixedTensor<T,2*K,NDIM> coeffs; //< Always significant
         FunctionCompressedNode() = default; // Default initializer does nothing so that class is POD
         FunctionCompressedNode(const Key<NDIM>& key) : key(key) {}

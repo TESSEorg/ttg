@@ -123,7 +123,7 @@ namespace detail {
     // Can get clever and do this recursively once we know what we want
     template <typename T, size_t K>  struct tree_types<T,K,1>{
         using Rout = rnodeOut<T,K,1>;
-        using Rin = In<Key<1>,FunctionReconstructedNode<T,K,1>>;
+        using Rin = FunctionReconstructedNode<T,K,1>;
         using compress_out_type = std::tuple<Rout,Rout,cnodeOut<T,K,1>>;
         using compress_in_type  = std::tuple<Rin,Rin>;
     };
@@ -131,8 +131,9 @@ namespace detail {
 
 template <typename T, size_t K, Dimension NDIM>
 void send_leaves_up(const Key<NDIM>& key,
-                    FunctionReconstructedNode<T,K,NDIM>&& node,
+                    const std::tuple<FunctionReconstructedNode<T,K,NDIM>>& inputs,
                     typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
+    const FunctionReconstructedNode<T,K,NDIM>& node = std::get<0>(inputs);
     if (!node.has_children()) { // We are only interested in the leaves
         if (key.level() == 0) {  // Tree is just one node
             throw "not yet";
@@ -162,8 +163,8 @@ void do_compress(const Key<NDIM>& key,
     {   // Collect child coeffs and leaf info
         FixedTensor<T,2*K,NDIM> s;
         //auto ins = ::mad::tuple_to_array_of_ptrs(in);
-        using rnode = FunctionReconstructedNode<T,K,NDIM>;
-        auto ins = ::mad::tuple_to_array_of_ptrs<rnode,rnode>(in);
+        //using rnode = FunctionReconstructedNode<T,K,NDIM>;
+        auto ins = ::mad::tuple_to_array_of_ptrs_const(in); /// Ugh ... cannot get const to match
         assert(ins.size() == Key<NDIM>::num_children);
         for (size_t i : range(Key<NDIM>::num_children)) {
             s(child_slices[i]) = ins[i]->coeffs;
@@ -195,10 +196,6 @@ std::string int2bitstring(size_t i, size_t width) {
     return s;
 }
 
-void connect(size_t outnum, size_t innum, std::unique_ptr<OpBase>& producer, std::unique_ptr<OpBase>& consumer) {
-    connect(producer->out(outnum), consumer->in(innum));
-}
-
 template <typename T, size_t K, Dimension NDIM>
 auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std::string& name = "compress") {
 
@@ -216,22 +213,24 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
     std::vector<std::string> innames=outnames;
     outnames.push_back("output");
 
-    // auto s = std::unique_ptr<sendwrapT>(new sendwrapT(&send_leaves_up<T,K,NDIM>, "send_leaves_up", {"input"}, outnames));
-    // auto c = std::unique_ptr<compwrapT>(new compwrapT(&do_compress<T,K,NDIM>, "do_compress", innames, outnames));
-    auto s = std::unique_ptr<OpBase>(new sendwrapT(&send_leaves_up<T,K,NDIM>, "send_leaves_up", {"input"}, outnames));
-    auto c = std::unique_ptr<OpBase>(new compwrapT(&do_compress<T,K,NDIM>, "do_compress", innames, outnames));
+    auto s = std::unique_ptr<sendwrapT>(new sendwrapT(&send_leaves_up<T,K,NDIM>, "send_leaves_up", {"input"}, outnames));
+    auto c = std::unique_ptr<compwrapT>(new compwrapT(&do_compress<T,K,NDIM>, "do_compress", innames, outnames));
 
-    // in.set_out(s-> template in<0>()); // Connect input to s
-    // out.set_in(s-> template out<num_children>()); // Connect s result to output 
-    // out.set_in(c-> template out<num_children>()); // Connect c result to output
+    in.set_out(s-> template in<0>()); // Connect input to s
+    out.set_in(s-> template out<num_children>()); // Connect s result to output 
+    out.set_in(c-> template out<num_children>()); // Connect c result to output
 
+    // Connect send_leaves_up to do_compress and recurrence for do_compress
     for (auto i : range(num_children)) {
-        connect(i,i,s,c); // this via base class terminals
+        connect(i,i,s.get(),c.get()); // this via base class terminals
+        connect(i,i,c.get(),c.get());
     }
     
     auto ins = std::make_tuple(s-> template in<0>());
     auto outs = std::make_tuple(c-> template out<num_children>());
-    std::vector<std::unique_ptr<OpBase>> ops = {std::move(s),std::move(c)};
+    std::vector<std::unique_ptr<OpBase>> ops(2);
+    ops[0] = std::move(s); 
+    ops[1] = std::move(c);
         
     return make_composite_op(std::move(ops), ins, outs, name);
 }
@@ -296,7 +295,7 @@ int main(int argc, char** argv) {
     auto p1 = make_project(ff, T(1e-6), ctl, a, "project A");
 
     double aa = 1;
-    make_compress<T,K,NDIM>(a, b);
+    auto compress = make_compress<T,K,NDIM>(a, b);
     aa += 1;
     
     auto printer = make_printer(a);

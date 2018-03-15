@@ -28,7 +28,7 @@ namespace mad {
         }
 
         template <std::size_t Begin, std::size_t End, typename... Ts, std::size_t... I>
-        static inline auto subtuple_to_array_of_ptrs_(const std::tuple<Ts...>& t, std::index_sequence<I...>) {
+        static inline auto subtuple_to_array_of_ptrs_const(const std::tuple<Ts...>& t, std::index_sequence<I...>) {
             using arrayT = typename std::tuple_element<Begin, std::tuple<const Ts*...>>::type;
             return make_array_crude<arrayT, End - Begin>(&std::get<I + Begin>(t)...);
         }
@@ -42,21 +42,21 @@ namespace mad {
 
     /// Makes an array of pointers to elements (of same type) in tuple in the open range \c [Begin,End).
     template <std::size_t Begin, std::size_t End, typename... T>
-    static inline auto subtuple_to_array_of_ptrs(const std::tuple<T...>& t) {
-        return detail::subtuple_to_array_of_ptrs_<Begin, End>(t, std::make_index_sequence<End - Begin>());
+    static inline auto subtuple_to_array_of_ptrs_const(const std::tuple<T...>& t) {
+        return detail::subtuple_to_array_of_ptrs_const<Begin, End>(t, std::make_index_sequence<End - Begin>());
     }
 
     /// Makes an array of pointers to elements (of same type) in tuple
     template <typename... T>
     static inline auto tuple_to_array_of_ptrs(std::tuple<T...>& t) {
-        return detail::subtuple_to_array_of_ptrs_<0, std::tuple_size<T...>::value>
+        return detail::subtuple_to_array_of_ptrs_<0, std::tuple_size<std::tuple<T...>>::value>
             (t, std::make_index_sequence<std::tuple_size<std::tuple<T...>>::value>());
     }
 
     /// Makes an array of pointers to elements (of same type) in tuple
     template <typename... T>
-    static inline auto tuple_to_array_of_ptrs(const std::tuple<T...>& t) {
-        return detail::subtuple_to_array_of_ptrs_<0, std::tuple_size<T...>::value>
+    static inline auto tuple_to_array_of_ptrs_const(const std::tuple<T...>& t) {
+        return detail::subtuple_to_array_of_ptrs_const<0, std::tuple_size<std::tuple<T...>>::value>
             (t, std::make_index_sequence<std::tuple_size<std::tuple<T...>>::value>());
     }
 }
