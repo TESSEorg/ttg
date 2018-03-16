@@ -112,6 +112,7 @@ namespace ttg {
     OpBase *op;                  //< Pointer to containing operation
     size_t n;                    //< Index of terminal
     std::string name;            //< Name of terminal
+    bool connected;              //< True if is connected
     std::string key_type_str;    //< String describing key type
     std::string value_type_str;  //< String describing value type
 
@@ -127,7 +128,7 @@ namespace ttg {
     friend class Out;
 
    protected:
-    TerminalBase() : op(0), n(0), name("") {}
+      TerminalBase() : op(0), n(0), name(""), connected(false) {}
 
     void set(OpBase *op, size_t index, const std::string &name, const std::string &key_type_str,
              const std::string &value_type_str, Type type) {
@@ -140,7 +141,7 @@ namespace ttg {
 
     /// Add directed connection (this --> successor) in internal representation of the TTG.
     /// This is called by the derived class's connect method
-    void connect_base(TerminalBase *successor) { successors_.push_back(successor); }
+    void connect_base(TerminalBase *successor) { successors_.push_back(successor); connected = true; successor->connected = true;}
 
     const std::vector<TerminalBase *> &successors() const { return successors_; }
 
@@ -180,6 +181,9 @@ namespace ttg {
 
     /// Get connections to successors
     const std::vector<TerminalBase *> &get_connections() const { return successors_; }
+
+    /// Returns true if this terminal (input or output) is connected
+    bool is_connected() const {return connected;}
 
     /// Connect this (a TTG output terminal) to a TTG input terminal.
     /// The base class method forwards to the the derived class connect method and so
@@ -458,23 +462,35 @@ namespace ttg {
 
         opfunc(op);
 
-        for (auto in : op->get_inputs()) {
+      int count = 0;
+      for (auto in : op->get_inputs()) {
           if (!in) {
-            std::cout << "ttg::Traverse: got a null in!\n";
-            status = false;
+              std::cout << "ttg::Traverse: got a null in!\n";
+              status = false;
           } else {
-            infunc(in);
+              infunc(in);
+              if (!in->is_connected()) {
+                  std::cout << "ttg::Traverse: " << op->get_name() << " input terminal #" << count << " " << in->get_name() << " is not connected\n";
+                  status = false;
+              }
           }
-        }
+          count++;
+      }
 
-        for (auto out : op->get_outputs()) {
+      count = 0;
+      for (auto out : op->get_outputs()) {
           if (!out) {
-            std::cout << "ttg::Traverse: got a null out!\n";
-            status = false;
+              std::cout << "ttg::Traverse: got a null out!\n";
+              status = false;
           } else {
-            outfunc(out);
+              outfunc(out);
+              if (!out->is_connected()) {
+                  std::cout << "ttg::Traverse: " << op->get_name() << " output terminal #" << count << " " << out->get_name() << " is not connected\n";
+                  status = false;
+              }
           }
-        }
+          count++;
+      }
 
         for (auto out : op->get_outputs()) {
           if (out) {
@@ -698,8 +714,12 @@ namespace ttg {
 
   /// applies @c make_executable method to every op in the graph
   /// return true if there are no dangling out terminals
-  bool make_graph_executable(OpBase *op) {
-    return ::ttg::make_traverse([](auto x) { x->make_executable(); }, [](auto x) {}, [](auto x) {})(op);
+  bool make_graph_executable(OpBase* op) {
+    return ::ttg::make_traverse(
+                                [](auto x) {x->make_executable(); },
+        [](auto x) {},
+        [](auto x) {}
+    )(op);
   }
 
   template <typename keyT, typename valueT>
@@ -911,21 +931,27 @@ namespace ttg {
     Type get_type() const override { return TerminalBase::Type::Write; }
   };
 
+  /// Connect output terminal to successor input terminal
   template <typename out_terminalT, typename in_terminalT>
   void connect(out_terminalT *out, in_terminalT *in) {
     out->connect(in);
   }
 
-  // This should match unique ptrs
+  /// Connected producer output terminal outindex to consumer input terminal inindex (via unique or otherwise wrapped pointers to Ops)
   template <std::size_t outindex, std::size_t inindex, typename producer_op_ptr, typename successor_op_ptr>
   void connect(producer_op_ptr &p, successor_op_ptr &s) {
     connect(p->template out<outindex>(), s->template in<inindex>());
   }
 
-  // This should match bare ptrs
+  /// Connected producer output terminal outindex to consumer input terminal inindex (via bare pointers to Ops)
   template <std::size_t outindex, std::size_t inindex, typename producer_op_ptr, typename successor_op_ptr>
   void connect(producer_op_ptr *p, successor_op_ptr *s) {
     connect(p->template out<outindex>(), s->template in<inindex>());
+  }
+
+  /// Connected producer output terminal outindex to consumer input terminal inindex (via OpBase pointers)
+  void connect(size_t outindex, size_t inindex, OpBase* producer, OpBase* consumer) {
+      connect(producer->out(outindex), consumer->in(inindex));
   }
 
   template <typename keyT, typename valueT>
@@ -976,7 +1002,7 @@ namespace ttg {
 
       ~EdgeImpl() {
         if (ins.size() == 0 || outs.size() == 0) {
-          std::cerr << "Edge: destroying edge pimpl with either in or out not "
+            std::cerr << "Edge: destroying edge pimpl ('" << name << "') with either in or out not "
                        "assigned --- graph may be incomplete"
                     << std::endl;
         }

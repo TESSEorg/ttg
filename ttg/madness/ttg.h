@@ -163,7 +163,7 @@ namespace madness {
         static_assert(std::is_same<std::decay_t<T>, std::decay_t<valueT>>::value,
                       "Op::set_arg(key,value) given value of type incompatible with Op");
 
-        const auto owner = keymap(key);
+        const int owner = keymap(key);
 
         if (owner != world.rank()) {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
@@ -224,7 +224,7 @@ namespace madness {
 
       // Used to generate tasks with no input arguments
       void set_arg_empty(const keyT &key) {
-        const auto owner = keymap(key);
+        const int owner = keymap(key);
 
         if (owner != world.rank()) {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
@@ -513,26 +513,24 @@ namespace madness {
       /// fence TTGs independently, then give each its own world.
       void fence() { world.gop.fence(); }
 
-      // Returns pointer to input terminal i to facilitate connection --- terminal
-      // cannot be copied, moved or assigned
+      /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned
       template <std::size_t i>
       typename std::tuple_element<i, input_terminals_type>::type *in() {
         return &std::get<i>(input_terminals);
       }
 
-      // Returns pointer to output terminal for purpose of connection --- terminal
-      // cannot be copied, moved or assigned
+      /// Returns pointer to output terminal for purpose of connection --- terminal cannot be copied, moved or assigned
       template <std::size_t i>
       typename std::tuple_element<i, output_terminalsT>::type *out() {
         return &std::get<i>(output_terminals);
       }
 
-      // Manual injection of a task with all input arguments specified as a tuple
+      /// Manual injection of a task with all input arguments specified as a tuple
       void invoke(const keyT &key, const input_values_tuple_type &args) {
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, key, args);
       }
 
-      // Manual injection of a task that has no arguments
+      /// Manual injection of a task that has no arguments
       void invoke(const keyT &key) { set_arg_empty(key); }
 
       /// keymap accessor
@@ -563,7 +561,7 @@ namespace madness {
 
     namespace detail {
       inline const std::vector<const pthread_t *> &watchpoints_threads() {
-        static pthread_t main_thread_id = pthread_self();
+          //static pthread_t main_thread_id = pthread_self();
         static std::vector<const pthread_t *> threads;
         // can set watchpoints only with the legacy MADNESS threadpool
         // TODO improve this when shortsighted MADNESS macro names are strengthened, i.e. HAVE_INTEL_TBB ->
