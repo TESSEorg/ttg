@@ -42,12 +42,13 @@ void iteration(const int& iter, const std::pair<double,double>& xy, std::tuple<O
 
 auto make_start(Edge<int,std::pair<double,double>>& out, double x, double yguess) {
     using outT = std::tuple<Out<int,std::pair<double,double>>>;
-    auto f = [x,yguess](int, const std::tuple<>& junk, outT& out) {
+    auto f = [x,yguess](const int& key, const std::tuple<>& junk, outT& out) {
         ::send<0>(0,std::make_pair(x,yguess),out);
     };
-    using funcT = decltype(f);
-    using wrapopT = WrapOp<funcT, int, outT>;
-    return std::unique_ptr<wrapopT>(new wrapopT(f, edges(), edges(out), "start", {}, {"guess"}));
+    // using funcT = decltype(f);
+    // using wrapopT = WrapOp<funcT, int, outT>;
+    // return std::unique_ptr<wrapopT>(new wrapopT(f, edges(), edges(out), "start", {}, {"guess"}));
+    return wrapt<int>(f, edges(), edges(out), "start", {}, {"guess"});
 }
 
 int main(int argc, char** argv) {
