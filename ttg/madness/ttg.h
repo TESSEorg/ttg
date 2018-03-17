@@ -561,7 +561,6 @@ namespace madness {
 
     namespace detail {
       inline const std::vector<const pthread_t *> &watchpoints_threads() {
-          //static pthread_t main_thread_id = pthread_self();
         static std::vector<const pthread_t *> threads;
         // can set watchpoints only with the legacy MADNESS threadpool
         // TODO improve this when shortsighted MADNESS macro names are strengthened, i.e. HAVE_INTEL_TBB ->
@@ -569,6 +568,7 @@ namespace madness {
         // TODO also exclude the case of a PARSEC-based backend
 #ifndef HAVE_INTEL_TBB
         if (threads.empty()) {
+          static pthread_t main_thread_id = pthread_self();
           threads.push_back(&main_thread_id);
           for (int t = 0; t != madness::ThreadPool::size(); ++t) {
             threads.push_back(&(madness::ThreadPool::get_threads()[t].get_id()));
