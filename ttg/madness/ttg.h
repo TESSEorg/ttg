@@ -109,7 +109,6 @@ namespace madness {
       }
 
       using input_values_tuple_type = std::tuple<data_wrapper_t<std::decay_t<input_valueTs>>...>;
-      using input_futures_tuple_type = std::tuple<Future<data_wrapper_t<std::decay_t<input_valueTs>>>...>;
       using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
       using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
 
@@ -130,12 +129,13 @@ namespace madness {
       output_terminalsT output_terminals;
 
       struct OpArgs : TaskInterface {
+       public:
         int counter;                            // Tracks the number of arguments finalized
         std::array<std::size_t, numins> nargs;  // Tracks the number of expected values (0 = finalized)
         std::array<std::size_t, numins>
             stream_size;             // Expected number of values to receive, only used for streaming inputs
                                      // (0 = unbounded stream)
-        input_futures_tuple_type t;  // The input values
+        input_values_tuple_type t;   // The input values
         derivedT *derived;           // Pointer to derived class instance
         keyT key;                    // Task key
 
@@ -148,6 +148,17 @@ namespace madness {
         }
 
         virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
+
+       private:
+        madness::Spinlock lock_;                          // sychronizes access to data
+       public:
+        void lock() {
+          lock_.lock();
+        }
+        void unlock() {
+          lock_.unlock();
+        }
+
       };
 
       using cacheT = ConcurrentHashMap<keyT, OpArgs *, std::hash<keyT>>;
@@ -184,16 +195,17 @@ namespace madness {
 
           auto reducer = std::get<i>(input_reducers);
           if (reducer) {  // is this a streaming input? reduce the received value
-            // have a value already? reduce, otherwise set
-            if (this->get<i>(args->t).probe()) {
-              auto &&current_value = this->get<i, std::decay_t<valueT> &&>(args->t);
-              auto received_value = value;
-              // std::move() for args to reducer squashes type errors for const T
-              // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
-              this->get<i, Future<std::decay_t<valueT>> &>(args->t).get() =
-                  std::move(reducer(std::move(current_value), std::move(received_value)));
+            // N.B. Right now reductions are done eagerly, without spawning tasks
+            //      this means we must lock
+            args->lock();
+            // have a value already? if not, set, otherwise reduce
+            if ((args->stream_size[i] == 0 && args->nargs[i] == 1) || (args->stream_size[i] == args->nargs[i])) {
+              this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<T>(value);
             } else {
-              this->get<i, Future<std::decay_t<valueT>> &>(args->t).set(std::forward<T>(value));
+              valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
+              // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
+              this->get<i, std::decay_t<valueT> &>(args->t) =
+                  std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->t), std::move(value_copy)));
             }
             // update the counter if the stream is bounded
             // this assumes that the stream size is set before data starts flowing ... strong-typing streams will solve
@@ -202,8 +214,9 @@ namespace madness {
               args->nargs[i]--;
               if (args->nargs[i] == 0) args->counter--;
             }
+            args->unlock();
           } else {  // this is a nonstreaming input => set the value
-            this->get<i, Future<std::decay_t<valueT>> &>(args->t).set(std::forward<T>(value));
+            this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<T>(value);
             args->nargs[i]--;
             args->counter--;
           }
@@ -275,6 +288,8 @@ namespace madness {
           if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
           OpArgs *args = acc->second;
 
+          args->lock();
+
           // check if stream is already bounded
           if (args->stream_size[i] > 0) {
             ::ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error stream is already bounded : ", i);
@@ -290,6 +305,8 @@ namespace madness {
           // commit changes
           args->stream_size[i] = size;
           args->nargs[i] = size;
+
+          args->unlock();
         }
       }
 
