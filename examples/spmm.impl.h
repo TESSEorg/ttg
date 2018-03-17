@@ -210,10 +210,6 @@ namespace ttg {
     uint64_t unique_hash<uint64_t, Key<3u>>(const Key<3u> &key) {
       return key.hash();
     }
-    template <>
-    uint64_t unique_hash<uint64_t, int>(const int &i) {
-      return static_cast<uint64_t>(i);
-    }
   }  // namespace overload
 }  // namespace ttg
 

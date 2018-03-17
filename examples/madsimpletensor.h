@@ -151,8 +151,6 @@ namespace mad {
         size_t num_elements; // number of elements in the sliced tensor
         
         SliceTensor() = delete; // no default constuctor
-        SliceTensor(const SliceTensor&) = delete; // not copyable
-        SliceTensor(SliceTensor&&) = delete; // not moveable
 
         // Computes index in dimension d for underlying tensor using slice info
         inline size_t index(size_t d, size_t i) const {return slices[d].start+i*slices[d].step;}
