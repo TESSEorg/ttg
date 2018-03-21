@@ -155,6 +155,7 @@ auto make_residual(Edge<kiT,xyT>&& xy, Edge<kiT,xyT>& xynew, Edge<sumreskeyT,kT>
         const iT i = ki.second;
         if (i == 0) ::send<0>(sumreskeyT(0), k, out);
         ::send<1>(i, err*err, out);
+        //::send<1>(i, (err*err)>1e-10?1:0, out); // Counts #converged
     };
     return wrap<kiT>(f, edges(xy,xynew), edges(k,errsq), "residual", {"xy","xynew"}, {"k","errsq"});
 }
@@ -170,7 +171,8 @@ auto make_sum_result(Edge<sumreskeyT,kT>& k, Edge<sumreskeyT,yT>& sumresult, Edg
 auto make_converged(Edge<kT,yT>& errsqsum, Edge<kT,bool>& converged) { 
     auto f = [](const kT& k, const yT& errsqsum, std::tuple<Out<kT,bool>>& out) {
         bool converged = (errsqsum < 1e-10);
-        ::ttg::print("iteration ", k, " residual ", std::sqrt(errsqsum), " converged ", converged?"yes":"no");
+        ::ttg::print(" residual ", std::sqrt(errsqsum), " converged ", converged?"yes":"no");
+        //::ttg::print(" residual ", (errsqsum), " converged ", converged?"yes":"no");
         ::send<0>(k,converged, out);
     };
     return wrap<kT>(f, edges(errsqsum), edges(converged), "convtest", {"errsqsum"}, {"converged"});
@@ -211,6 +213,13 @@ auto make_printer(const Edge<keyT, valueT>& in, const char* str = "") {
     return wrap(func, edges(in), edges(), "printer", {"input"});
 }
 
+/// Discards output
+template <typename keyT, typename valueT>
+auto make_dev_null(const Edge<keyT, valueT>& in) {
+    auto func = [](const keyT& key, const valueT& value, std::tuple<>& out) {};
+    return wrap(func, edges(in), edges(), "devnull", {"input"});
+}
+
 int main(int argc, char** argv) 
 {
     ttg_initialize(argc, argv, 2);
@@ -231,7 +240,7 @@ int main(int argc, char** argv)
         Edge<sumreskeyT,yT> sumresult;
         Edge<sumreskeyT,kT> k;
         
-        const size_t N = 99;
+        const size_t N = 9000;
         
         auto start = make_start(x, N);
         auto guess = make_guess(x, xyguess);
@@ -242,7 +251,8 @@ int main(int argc, char** argv)
         auto conv = make_converged(errsqsum, converged);
         auto bcastop = make_broadcast(converged, bcast, N);
         auto loop = make_loop(bcast, xynew, xy, result);
-        auto printer = make_printer(result, "result: ");
+        //auto printer = make_printer(result, "result: ");
+        auto devnull = make_dev_null(result);
         
         auto connected = make_graph_executable(start.get());
         assert(connected);
