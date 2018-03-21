@@ -8,7 +8,7 @@
 
 #include "madrange.h"
 
-namespace mad {
+namespace mra {
 
     /// Implements simple Kahan or compensated summation
     template <typename T>

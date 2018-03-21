@@ -5,7 +5,7 @@
 #include <cassert>
 #include <mkl.h>
 
-namespace mad {
+namespace mra {
 
     namespace detail {
     

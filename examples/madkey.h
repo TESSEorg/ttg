@@ -6,7 +6,7 @@
 #include "madhash.h"
 #include "madmisc.h"
 
-namespace mad {
+namespace mra {
     
     /// Extracts the n'th bit as 0 or 1
     inline static Translation get_bit(size_t bits, Dimension n) {return ((bits>>n) & 0x1ul);}
@@ -252,9 +252,9 @@ namespace mad {
 
 namespace std {
     /// Ensures key satifies std::hash protocol
-    template <mad::Dimension NDIM>
-    struct hash<mad::Key<NDIM>> {
-        size_t operator()(const mad::Key<NDIM>& s) const noexcept { return s.hash(); }
+    template <mra::Dimension NDIM>
+    struct hash<mra::Key<NDIM>> {
+        size_t operator()(const mra::Key<NDIM>& s) const noexcept { return s.hash(); }
     };
 }
 

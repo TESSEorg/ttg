@@ -13,7 +13,7 @@
 #include "madtypes.h"
 #include "madrange.h"
 
-namespace mad {
+namespace mra {
     /// Slice now acts like Python slice or Elemental Range (so end point is NOT inclusive, and must say END to indicate END)
     class Slice {
     public:
@@ -526,7 +526,7 @@ namespace mad {
     }
 
     template <typename T, size_t...K>
-    std::ostream& operator<<(std::ostream& s, const mad::SimpleTensor<T,K...>& t) {
+    std::ostream& operator<<(std::ostream& s, const mra::SimpleTensor<T,K...>& t) {
         if (t.size() == 0) {
             s << "[empty tensor]\n";
             return s;

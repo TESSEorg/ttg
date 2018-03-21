@@ -10,7 +10,7 @@
 #include "madtypes.h"
 #include "madkey.h"
 
-namespace mad {
+namespace mra {
     
     template <Dimension NDIM>
     struct Domain {

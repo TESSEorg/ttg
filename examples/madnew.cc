@@ -19,7 +19,7 @@
 #include "madfunctionnode.h"
 #include "madfunctionfunctor.h"
 
-using namespace mad;
+using namespace mra;
 
 // Sums Frobenius norm up the tree for testing
 template <typename functorT, typename T, size_t K, Dimension NDIM>

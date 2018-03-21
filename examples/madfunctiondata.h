@@ -5,7 +5,7 @@
 #include "maddomain.h"
 #include "madsimpletensor.h"
 
-namespace mad {
+namespace mra {
 
     /// Convenient co-location of frequently used data
     template <typename T, size_t K, size_t NDIM>

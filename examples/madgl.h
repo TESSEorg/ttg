@@ -8,7 +8,7 @@
 #include "maddomain.h"
 #include "madsimpletensor.h"
 
-namespace mad {
+namespace mra {
 
     namespace detail {
         /// Get the points and weights for the Gauss-Legendre quadrature on [0,1].  x and w should be arrays length at least N.

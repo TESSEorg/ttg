@@ -3,7 +3,7 @@
 
 #include "madtypes.h"
 
-namespace mad {
+namespace mra {
 
     namespace detail {
         static inline uint64_t rot(uint64_t x)

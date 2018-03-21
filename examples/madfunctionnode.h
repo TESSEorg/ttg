@@ -9,7 +9,7 @@
 #include "madsimpletensor.h"
 #include "madfunctiondata.h"
 
-namespace mad {
+namespace mra {
 
 
     /// Applies two-scale filter (sum coeffs of children to sum+difference coeffs of parent)

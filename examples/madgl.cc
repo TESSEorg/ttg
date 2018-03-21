@@ -7,7 +7,7 @@
 #include "madrange.h"
 #include "madgl.h"
 
-namespace mad {
+namespace mra {
 
     static bool initialized = false; // Must be initialized (GLinitialize())  single threaded before use
     static double nn1[64]; // nn1[n] = n/(n+1) ... used to speed evaluation of Legendre polyn recursion
@@ -192,14 +192,14 @@ namespace mad {
 }
 
 // int main() {
-//     mad::GLinitialize();
+//     mra::GLinitialize();
 //     std::array<double,64> x, w;
 //     std::array<float,64> xf, wf;
-//     mad::GLget(x,w);
+//     mra::GLget(x,w);
 //     std::cout << x << std::endl;
 //     std::cout << w << std::endl;
 
-//     mad::GLget(xf,wf);
+//     mra::GLget(xf,wf);
 //     std::cout << xf << std::endl;
 //     std::cout << wf << std::endl;
 

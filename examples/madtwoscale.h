@@ -3,7 +3,7 @@
 
 #include "madsimpletensor.h"
 
-namespace mad {
+namespace mra {
 
     namespace detail {
         

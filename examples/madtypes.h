@@ -1,7 +1,7 @@
 #ifndef MADTYPES_H_INCL
 #define MADTYPES_H_INCL
 
-namespace mad {
+namespace mra {
 
     using Level = uint32_t; //< Type of level in adaptive tree (>=0)
     using Translation = uint32_t; //< Type of translation in adaptive tree (>=0)

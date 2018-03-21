@@ -29,7 +29,7 @@ using namespace ::ttg;
 #include "madfunctionnode.h"
 #include "madfunctionfunctor.h"
 
-using namespace mad;
+using namespace mra;
 
 template <size_t NDIM>
 struct KeyProcMap {
@@ -168,7 +168,7 @@ void send_leaves_up(const Key<NDIM>& key,
             // set have no children for all children;
             // result.send(key, c);
         } else {
-            auto outs = ::mad::subtuple_to_array_of_ptrs<0,Key<NDIM>::num_children>(out);
+            auto outs = ::mra::subtuple_to_array_of_ptrs<0,Key<NDIM>::num_children>(out);
             outs[key.childindex()]->send(key.parent(),node);
         }
     }
@@ -187,7 +187,7 @@ void do_compress(const Key<NDIM>& key,
     T sumsq = 0.0;
     {   // Collect child coeffs and leaf info
         FixedTensor<T,2*K,NDIM> s;
-        auto ins = ::mad::tuple_to_array_of_ptrs_const(in); /// Ugh ... cannot get const to match
+        auto ins = ::mra::tuple_to_array_of_ptrs_const(in); /// Ugh ... cannot get const to match
         for (size_t i : range(Key<NDIM>::num_children)) {
             s(child_slices[i]) = ins[i]->coeffs;
             result.is_leaf[i] = ins[i]->is_leaf;
@@ -202,7 +202,7 @@ void do_compress(const Key<NDIM>& key,
         p.coeffs = d(child_slices[0]);
         d(child_slices[0]) = 0.0;
         p.sum = d.sumabssq() + sumsq; // Accumulate sumsq of difference coeffs from this node and children
-        auto outs = ::mad::subtuple_to_array_of_ptrs<0,Key<NDIM>::num_children>(out);
+        auto outs = ::mra::subtuple_to_array_of_ptrs<0,Key<NDIM>::num_children>(out);
         outs[key.childindex()]->send(key.parent(), p);
     }
     else {

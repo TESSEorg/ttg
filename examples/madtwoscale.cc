@@ -6,7 +6,7 @@
 
 #include "madtwoscale.h"
 
-namespace mad {
+namespace mra {
     
     static const size_t MAXK = 60;
     
@@ -349,7 +349,7 @@ namespace mad {
 }
 
 // int main() {
-//     std::cout << "OK = " << mad::twoscale_check() << std::endl;
+//     std::cout << "OK = " << mra::twoscale_check() << std::endl;
 //     return 0;
 // }
 

@@ -1,7 +1,7 @@
 #ifndef MADRANGE_H_INCL
 #define MADRANGE_H_INCL
 
-namespace mad {
+namespace mra {
 
     /// A simple unsigned integer range (0,...,n-1) to support iteration a la Python range(n)
     class RangeSimple {

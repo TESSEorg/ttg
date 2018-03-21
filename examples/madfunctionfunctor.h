@@ -4,7 +4,7 @@
 #include "madtypes.h"
 #include "madsimpletensor.h"
 
-namespace mad {
+namespace mra {
     
     /// \code
     ///template <typename T, Dimension NDIM>
