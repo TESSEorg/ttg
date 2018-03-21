@@ -83,7 +83,7 @@ namespace ttg {
 
   template <typename T, typename... Ts>
   void print_error(const T &t, const Ts &... ts) {
-    std::lock_guard<std::mutex> lock(detail::print_mutex_accessor<detail::StdOstreamTag::Cerr>());
+    std::lock_guard<std::mutex> lock(detail::print_mutex_accessor<detail::StdOstreamTag::Cout>()); // don't mix cerr and cout
     std::cerr << t;
     detail::print_helper(std::cerr, ts...) << std::endl;
   }
@@ -218,12 +218,12 @@ namespace ttg {
 
    protected:
     void set_input(size_t i, TerminalBase *t) {
-      if (i >= inputs.size()) throw("out of range i setting input");
+      if (i >= inputs.size()) throw(name+":OpBase: out of range i setting input");
       inputs[i] = t;
     }
 
     void set_output(size_t i, TerminalBase *t) {
-      if (i >= outputs.size()) throw("out of range i setting output");
+      if (i >= outputs.size()) throw(name+":OpBase: out of range i setting output");
       outputs[i] = t;
     }
 
@@ -326,13 +326,13 @@ namespace ttg {
 
     /// Returns a pointer to the i'th input terminal
     TerminalBase *in(size_t i) {
-      if (i >= inputs.size()) throw "opbase: you are requesting an input terminal that does not exist";
+      if (i >= inputs.size()) throw name + ":OpBase: you are requesting an input terminal that does not exist";
       return inputs[i];
     }
 
     /// Returns a pointer to the i'th output terminal
     TerminalBase *out(size_t i) {
-      if (i >= outputs.size()) throw "opbase: you are requesting an output terminal that does not exist";
+      if (i >= outputs.size()) throw name + "OpBase: you are requesting an output terminal that does not exist";
       return outputs[i];
     }
 
@@ -397,7 +397,7 @@ template <typename input_terminalsT, typename output_terminalsT>
                 const output_terminals_type &outs,  // tuple of pointers to output terminals
                 const std::string &name = "compositeop")
         : OpBase(name, numins, numouts), ops(std::forward<opsT>(ops_take_ownership)), ins(ins), outs(outs) {
-      if (ops.size() == 0) throw "CompositeOp: need to wrap at least one op";  // see fence
+      if (ops.size() == 0) throw name + ":CompositeOp: need to wrap at least one op";  // see fence
 
       set_is_composite(true);
       for (auto &op : ops) op->set_is_within_composite(true, this);
@@ -755,7 +755,7 @@ template <typename keyT, typename valueT>
     In &operator=(const In &&other) = delete;
 
     void connect(TerminalBase *p) override {
-      throw "to connect terminals use out->connect(in) rather than in->connect(out)";
+      throw "Edge: to connect terminals use out->connect(in) rather than in->connect(out)";
     }
 
    public:

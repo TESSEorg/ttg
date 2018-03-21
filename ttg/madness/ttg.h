@@ -307,10 +307,12 @@ namespace madness {
                        ? decltype(keymap)(default_keymap<keyT>(world))
                        : decltype(keymap)(std::forward<keymapT>(keymap_))) {
         // Cannot call these in base constructor since terminals not yet constructed
-        if (innames.size() != std::tuple_size<input_terminals_type>::value)
-          throw "madness::ttg::Op: #input names != #input terminals";
+          if (innames.size() != std::tuple_size<input_terminals_type>::value) {
+              ::ttg::print_error(world.rank(), ":", get_name(),  "#input_names", innames.size(), "!= #input_terminals", std::tuple_size<input_terminals_type>::value);
+              throw this->get_name()+":madness::ttg::Op: #input names != #input terminals";
+          }
         if (outnames.size() != std::tuple_size<output_terminalsT>::value)
-          throw "madness::ttg::Op: #output names != #output terminals";
+            throw this->get_name()+":madness::ttg::Op: #output names != #output terminals";
 
         register_input_terminals(input_terminals, innames);
         register_output_terminals(output_terminals, outnames);
@@ -335,10 +337,12 @@ namespace madness {
                        ? decltype(keymap)(default_keymap<keyT>(world))
                        : decltype(keymap)(std::forward<keymapT>(keymap_))) {
         // Cannot call in base constructor since terminals not yet constructed
-        if (innames.size() != std::tuple_size<input_terminals_type>::value)
-          throw "madness::ttg::Op: #input names != #input terminals";
+          if (innames.size() != std::tuple_size<input_terminals_type>::value) {
+              ::ttg::print_error(world.rank(), ":", get_name(),  "#input_names", innames.size(), "!= #input_terminals", std::tuple_size<input_terminals_type>::value);
+              throw this->get_name()+":madness::ttg::Op: #input names != #input terminals";
+          }
         if (outnames.size() != std::tuple_size<output_terminalsT>::value)
-          throw "madness::ttg::Op: #output names != #output terminals";
+          throw this->get_name()+":madness::ttg::Op: #output names != #output terminals";
 
         register_input_terminals(input_terminals, innames);
         register_output_terminals(output_terminals, outnames);
