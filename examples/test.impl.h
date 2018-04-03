@@ -8,8 +8,8 @@ using keyT = uint64_t;
 #include TTG_RUNTIME_H
 IMPORT_TTG_RUNTIME_NS
 
-#include "../ttg/util/reduce.h"
 #include "../ttg/util/broadcast.h"
+#include "../ttg/util/reduce.h"
 
 class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int> {
   using baseT = Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int>;
@@ -235,6 +235,51 @@ class Everything4 {
   }
 };
 
+class Everything5 {
+  static void p(const keyT &key, std::tuple<Out<keyT, int>> &out) {
+    ::ttg::print("produced ", 0);
+    send<0>(key, int(0), out);
+  }
+
+  static void a(const keyT &key, const int &value, std::tuple<Out<keyT, int>, Out<keyT, int>> &out) {
+    if (value < 100) {
+      send<1>(key + 1, value + 1, out);
+      send<0>(0, value, out);
+    }
+  }
+
+  static void c(const keyT &key, const int &value, std::tuple<> &out) { ::ttg::print("consumed ", value); }
+
+  Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
+
+  decltype(wrap<keyT>(p, edges(), edges(P2A))) wp;
+  decltype(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
+  decltype(wrap(c, edges(A2C), edges())) wc;
+
+ public:
+  Everything5()
+      : P2A("P2A")
+      , A2A("A2A")
+      , A2C("A2C")
+      , wp(wrap<keyT>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
+      , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {
+    wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
+    wc->set_argstream_size<0>(0, 100);
+  }
+
+  void print() { Print()(wp.get()); }
+
+  std::string dot() { return Dot()(wp.get()); }
+
+  void start() {
+    wp->make_executable();
+    wa->make_executable();
+    wc->make_executable();
+    if (ttg_default_execution_context().rank() == 0) wp->invoke(0);
+  }
+};
+
 class EverythingComposite {
   std::unique_ptr<OpBase> P;
   std::unique_ptr<OpBase> AC;
@@ -288,12 +333,14 @@ class EverythingComposite {
 void hi() { ::ttg::print("hi"); }
 
 class ReductionTest {
-  static void generator(const int& key, std::tuple<Out<int, int>> &out) {
+  static void generator(const int &key, std::tuple<Out<int, int>> &out) {
     const auto value = std::rand();
     ::ttg::print("ReductionTest: produced ", value, " on rank ", ttg_default_execution_context().rank());
     send<0>(key, value, out);
   }
-  static void consumer(const int &key, const int &value, std::tuple<> &out) { ::ttg::print("ReductionTest: consumed ", value); }
+  static void consumer(const int &key, const int &value, std::tuple<> &out) {
+    ::ttg::print("ReductionTest: consumed ", value);
+  }
 
   Edge<int, int> G2R, R2C;  // !!!! Edges must be constructed before classes that use them
 
@@ -322,12 +369,14 @@ class ReductionTest {
 };
 
 class BroadcastTest {
-  static void generator(const int& key, std::tuple<Out<int, int>> &out) {
+  static void generator(const int &key, std::tuple<Out<int, int>> &out) {
     const auto value = std::rand();
     ::ttg::print("BroadcastTest: produced ", value, " on rank ", ttg_default_execution_context().rank());
     send<0>(key, value, out);
   }
-  static void consumer(const int &key, const int &value, std::tuple<> &out) { ::ttg::print("BroadcastTest: consumed ", value, " on rank ", ttg_default_execution_context().rank()); }
+  static void consumer(const int &key, const int &value, std::tuple<> &out) {
+    ::ttg::print("BroadcastTest: consumed ", value, " on rank ", ttg_default_execution_context().rank());
+  }
 
   Edge<int, int> G2B, B2C;
 
@@ -341,7 +390,8 @@ class BroadcastTest {
   BroadcastTest(int root = 0)
       : G2B("G2B")
       , B2C("B2C")
-      , root(root), wg(wrap<int>(generator, edges(), edges(G2B), "producer", {}, {"start"}))
+      , root(root)
+      , wg(wrap<int>(generator, edges(), edges(G2B), "producer", {}, {"start"}))
       , broadcast(G2B, B2C, {ttg_default_execution_context().rank()}, root)
       , wc(wrap(consumer, edges(B2C), edges(), "consumer", {"result"}, {})) {}
 
@@ -353,8 +403,54 @@ class BroadcastTest {
     wg->make_executable();
     broadcast.make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == root)
-      wg->invoke(root);
+    if (ttg_default_execution_context().rank() == root) wg->invoke(root);
+  }
+};
+
+// Computes Fibonacci numbers up to some value
+class Fibonacci {
+  // compute all numbers up to this value
+  static constexpr const int max() { return 1000; }
+
+  // computes next value: F_{n+2} = F_{n+1} + F_{n}, seeded by F_1 = 1, F_0 = 0
+  static void next(const int &F_np1 /* aka key */, const int &F_n, std::tuple<Out<int, int>, Out<int, int>> &outs) {
+    // if this is first call reduce F_np1 and F_n also
+    if (F_np1 == 1 && F_n == 0) send<1>(0, F_np1 + F_n, outs);
+
+    const auto F_np2 = F_np1 + F_n;
+    if (F_np2 < max()) {
+      send<0>(F_np2, F_np1, outs);
+      send<1>(0, F_np2, outs);
+    } else
+      finalize<1>(0, outs);
+  }
+
+  static void consume(const int &key, const int &value, std::tuple<> &out) {
+    ::ttg::print("sum of Fibonacci numbers up to ", max(), " = ", value);
+  }
+
+  Edge<int, int> N2N, N2C;  // !!!! Edges must be constructed before classes that use them
+
+  decltype(wrap(next, edges(N2N), edges(N2N, N2C))) wa;
+  decltype(wrap(consume, edges(N2C), edges())) wc;
+
+ public:
+  Fibonacci()
+      : N2N("N2N")
+      , N2C("N2C")
+      , wa(wrap(next, edges(N2N), edges(N2N, N2C), "next", {"input"}, {"iterate", "sum"}))
+      , wc(wrap(consume, edges(N2C), edges(), "consumer", {"result"}, {})) {
+    wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
+  }
+
+  void print() { Print()(wa.get()); }
+
+  std::string dot() { return Dot()(wa.get()); }
+
+  void start() {
+    wa->make_executable();
+    wc->make_executable();
+    if (ttg_default_execution_context().rank() == 0) wa->invoke(1, 0);
   }
 };
 
@@ -435,6 +531,16 @@ int try_main(int argc, char **argv) {
       ttg.submit(execution_context);
     }
 #endif
+
+
+    // Everything5 = Everything4 with consumer summing all values from A using a stream reducer
+    Everything5 q5;
+    std::cout << q5.dot() << std::endl;
+    q5.start();  // myusleep(100);
+
+    Fibonacci fi;
+    std::cout << fi.dot() << std::endl << std::endl;
+    fi.start();
 
     ReductionTest t;
     t.start();

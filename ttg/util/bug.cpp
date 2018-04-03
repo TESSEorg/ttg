@@ -98,9 +98,9 @@ void Debugger::init() {
 }
 
 namespace {
-static void handler(int sig) {
-  if (signals[sig]) signals[sig]->got_signal(sig);
-}
+  static void handler(int sig) {
+    if (signals[sig]) signals[sig]->got_signal(sig);
+  }
 }  // namespace
 
 void Debugger::handle(int sig) {
@@ -233,19 +233,15 @@ void Debugger::debug(const char *reason) {
     debugger_ready_ = 0;
     const auto system_retvalue = system(cmd.c_str());
     if (system_retvalue != 0) {  // call to system() failed
-      std::cout << prefix_
-                    << "Failed debugger launch: system() did not succeed ..."
-                    << endl;
+      std::cout << prefix_ << "Failed debugger launch: system() did not succeed ..." << endl;
     } else {  // call to system() succeeded
       // wait until the debugger is ready
       if (sleep_) {
-        std::cout << prefix_ << "Sleeping " << sleep_
-                      << " seconds to wait for debugger ..." << endl;
+        std::cout << prefix_ << "Sleeping " << sleep_ << " seconds to wait for debugger ..." << endl;
         sleep(sleep_);
       }
       if (wait_for_debugger_) {
-        std::cout << prefix_
-                      << ": Spinning until debugger_ready_ is set ..." << endl;
+        std::cout << prefix_ << ": Spinning until debugger_ready_ is set ..." << endl;
         while (!debugger_ready_)
           ;
       }
@@ -299,20 +295,13 @@ void Debugger::set_wait_for_debugger(int v) { wait_for_debugger_ = v; }
 
 void Debugger::set_exit_on_signal(int v) { exit_on_signal_ = v; }
 
-void Debugger::set_default_debugger(const std::shared_ptr<Debugger> &d) {
-  default_debugger_ = d;
-}
+void Debugger::set_default_debugger(const std::shared_ptr<Debugger> &d) { default_debugger_ = d; }
 
-std::shared_ptr<Debugger> Debugger::default_debugger() {
-  return default_debugger_;
-}
+std::shared_ptr<Debugger> Debugger::default_debugger() { return default_debugger_; }
 
-#define SIMPLE_STACK \
-  (defined(linux) && defined(i386)) || (defined(__OSF1__) && defined(i860))
+#define SIMPLE_STACK (defined(linux) && defined(i386)) || (defined(__OSF1__) && defined(i860))
 
-void Debugger::traceback(const char *reason) {
-  Debugger::__traceback(prefix_, reason);
-}
+void Debugger::traceback(const char *reason) { Debugger::__traceback(prefix_, reason); }
 
 void Debugger::__traceback(const std::string &prefix, const char *reason) {
   detail::Backtrace result(prefix);
@@ -337,8 +326,7 @@ void Debugger::__traceback(const std::string &prefix, const char *reason) {
   std::cout << endl;
 
   if (result.empty())
-    std::cout << prefix << "backtrace returned no state information"
-                  << std::endl;
+    std::cout << prefix << "backtrace returned no state information" << std::endl;
   else
     std::cout << result.str(nframes_to_skip) << std::endl;
 }
@@ -347,16 +335,16 @@ void Debugger::__traceback(const std::string &prefix, const char *reason) {
 
 namespace mpqc {
 
-void launch_gdb_xterm() {
-  auto debugger = std::make_shared<mpqc::Debugger>();
-  debugger->debug("Starting gdb ...");
-}
+  void launch_gdb_xterm() {
+    auto debugger = std::make_shared<mpqc::Debugger>();
+    debugger->debug("Starting gdb ...");
+  }
 
-void launch_lldb_xterm() {
-  auto debugger = std::make_shared<mpqc::Debugger>();
-  debugger->set_cmd("xterm -title \"$(PREFIX)$(EXEC)\" -e lldb -p $(PID) &");
-  debugger->debug("Starting gdb ...");
-}
+  void launch_lldb_xterm() {
+    auto debugger = std::make_shared<mpqc::Debugger>();
+    debugger->set_cmd("xterm -title \"$(PREFIX)$(EXEC)\" -e lldb -p $(PID) &");
+    debugger->debug("Starting gdb ...");
+  }
 
 }  // namespace mpqc
 

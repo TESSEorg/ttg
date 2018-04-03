@@ -11,12 +11,19 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
 
 ##########################
-#### prerequites
+#### prerequisites
 ##########################
 
-# need Boost.CallableTraits (header only) for wrap.h (= for TTG) to work
-# Boost.CallableTraits will be released in 12/2017 , see README.md
+# need Boost.CallableTraits (header only, part of Boost 1.66 released in Dec 2017) for wrap.h to work
 find_package(Boost 1.66 REQUIRED)
+
+# MRA code needs CBLAS
+find_package(CBLAS)
+if (CBLAS_FOUND)
+  message(STATUS "** CBLAS_LIBRARIES = ${CBLAS_LIBRARIES}")
+  message(STATUS "** CBLAS_INCLUDE_DIR = ${CBLAS_INCLUDE_DIR}")
+  message(STATUS "** CBLAS_INCLUDE_FILE = ${CBLAS_INCLUDE_FILE}")
+endif()
 
 # sparse tensor algorithms need Eigen
 find_package(Eigen3)
@@ -38,7 +45,7 @@ if (Boost_FOUND)
 endif()
 
 ##########################
-#### prerequite runtimes
+#### prerequisite runtimes
 ##########################
 # MADNESS
 find_package(MADNESS 0.10.1 CONFIG QUIET COMPONENTS world HINTS ${MADNESS_ROOT_DIR})

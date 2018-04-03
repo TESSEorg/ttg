@@ -35,8 +35,8 @@ namespace ttg {
     template <typename keyT, typename Enabler = void>
     struct default_keymap_impl;
     template <typename keyT>
-    struct default_keymap_impl<keyT,
-                               ::ttg::meta::void_t<decltype(std::declval<std::hash<keyT>>()(std::declval<const keyT&>()))>> {
+    struct default_keymap_impl<
+        keyT, ::ttg::meta::void_t<decltype(std::declval<std::hash<keyT>>()(std::declval<const keyT &>()))>> {
       default_keymap_impl() = default;
       default_keymap_impl(int world_size) : world_size(world_size) {}
       // clang-format on
@@ -68,7 +68,8 @@ namespace ttg {
     }
     //
     enum class StdOstreamTag { Cout, Cerr };
-    template <StdOstreamTag> inline std::mutex &print_mutex_accessor() {
+    template <StdOstreamTag>
+    inline std::mutex &print_mutex_accessor() {
       static std::mutex mutex;
       return mutex;
     }
@@ -284,7 +285,7 @@ namespace ttg {
         , is_within_composite(false)
         , containing_composite_op(0)
         , executable(false) {
-        //std::cout << name << "@" << (void *)this << " -> " << instance_id << std::endl;
+      // std::cout << name << "@" << (void *)this << " -> " << instance_id << std::endl;
     }
 
     /// Sets trace for all operations to value and returns previous setting
@@ -367,12 +368,9 @@ namespace ttg {
   // With more than one source file this will need to be moved
   bool OpBase::trace = false;
 
-  void OpBase::make_executable() {
-    executable = true;
-  }
+  void OpBase::make_executable() { executable = true; }
 
-
-template <typename input_terminalsT, typename output_terminalsT>
+  template <typename input_terminalsT, typename output_terminalsT>
   class CompositeOp : public OpBase {
    public:
     static constexpr int numins = std::tuple_size<input_terminalsT>::value;    // number of input arguments
@@ -423,7 +421,9 @@ template <typename input_terminalsT, typename output_terminalsT>
 
     void fence() { ops[0]->fence(); }
 
-    void make_executable() { for(auto &op : ops) op->make_executable(); }
+    void make_executable() {
+      for (auto &op : ops) op->make_executable();
+    }
   };
 
   template <typename opsT, typename input_terminalsT, typename output_terminalsT>
@@ -433,34 +433,34 @@ template <typename input_terminalsT, typename output_terminalsT>
   }
 
   namespace detail {
-  /// Traverses a graph of ops in depth-first manner following out edges
-  class Traverse {
-    std::set<OpBase *> seen;
+    /// Traverses a graph of ops in depth-first manner following out edges
+    class Traverse {
+      std::set<OpBase *> seen;
 
-    bool visited(OpBase *p) { return !seen.insert(p).second; }
+      bool visited(OpBase *p) { return !seen.insert(p).second; }
 
-   public:
-    virtual void opfunc(OpBase *op) = 0;
+     public:
+      virtual void opfunc(OpBase *op) = 0;
 
-    virtual void infunc(TerminalBase *in) = 0;
+      virtual void infunc(TerminalBase *in) = 0;
 
-    virtual void outfunc(TerminalBase *out) = 0;
+      virtual void outfunc(TerminalBase *out) = 0;
 
-    void reset() { seen.clear(); }
+      void reset() { seen.clear(); }
 
-    // Returns true if no null pointers encountered (i.e., if all
-    // encountered terminals/operations are connected)
-    bool traverse(OpBase *op) {
-      if (!op) {
-        std::cout << "ttg::Traverse: got a null op!\n";
-        return false;
-      }
+      // Returns true if no null pointers encountered (i.e., if all
+      // encountered terminals/operations are connected)
+      bool traverse(OpBase *op) {
+        if (!op) {
+          std::cout << "ttg::Traverse: got a null op!\n";
+          return false;
+        }
 
-      if (visited(op)) return true;
+        if (visited(op)) return true;
 
-      bool status = true;
+        bool status = true;
 
-      opfunc(op);
+        opfunc(op);
 
       int count = 0;
       for (auto in : op->get_inputs()) {
@@ -492,23 +492,23 @@ template <typename input_terminalsT, typename output_terminalsT>
           count++;
       }
 
-      for (auto out : op->get_outputs()) {
-        if (out) {
-          for (auto successor : out->get_connections()) {
-            if (!successor) {
-              std::cout << "ttg::Traverse: got a null successor!\n";
-              status = false;
-            } else {
-              status = status && traverse(successor->get_op());
+        for (auto out : op->get_outputs()) {
+          if (out) {
+            for (auto successor : out->get_connections()) {
+              if (!successor) {
+                std::cout << "ttg::Traverse: got a null successor!\n";
+                status = false;
+              } else {
+                status = status && traverse(successor->get_op());
+              }
             }
           }
         }
-      }
 
-      return status;
-    }
-  };
-  }
+        return status;
+      }
+    };
+  }  // namespace detail
 
   /// @brief Traverses a graph of ops in depth-first manner following out edges
   /// @tparam OpVisitor A Callable type that visits each Op
@@ -517,25 +517,27 @@ template <typename input_terminalsT, typename output_terminalsT>
   template <typename OpVisitor, typename InVisitor, typename OutVisitor>
   class Traverse : private detail::Traverse {
    public:
-    static_assert(std::is_void<::ttg::meta::void_t<decltype(std::declval<OpVisitor>()(std::declval<OpBase *>()))>>::value,
-                  "Traverse<OpVisitor,...>: OpVisitor(const OpBase *op) must be a valid expression");
-    static_assert(std::is_void<::ttg::meta::void_t<decltype(std::declval<InVisitor>()(std::declval<TerminalBase *>()))>>::value,
-                  "Traverse<,InVisitor,>: InVisitor(const TerminalBase *op) must be a valid expression");
-    static_assert(std::is_void<::ttg::meta::void_t<decltype(std::declval<OutVisitor>()(std::declval<TerminalBase *>()))>>::value,
-                  "Traverse<...,OutVisitor>: OutVisitor(const TerminalBase *op) must be a valid expression");
+    static_assert(
+        std::is_void<::ttg::meta::void_t<decltype(std::declval<OpVisitor>()(std::declval<OpBase *>()))>>::value,
+        "Traverse<OpVisitor,...>: OpVisitor(const OpBase *op) must be a valid expression");
+    static_assert(
+        std::is_void<::ttg::meta::void_t<decltype(std::declval<InVisitor>()(std::declval<TerminalBase *>()))>>::value,
+        "Traverse<,InVisitor,>: InVisitor(const TerminalBase *op) must be a valid expression");
+    static_assert(
+        std::is_void<::ttg::meta::void_t<decltype(std::declval<OutVisitor>()(std::declval<TerminalBase *>()))>>::value,
+        "Traverse<...,OutVisitor>: OutVisitor(const TerminalBase *op) must be a valid expression");
 
     template <typename OpVisitor_, typename InVisitor_, typename OutVisitor_>
-    Traverse(OpVisitor_&& op_v, InVisitor_&& in_v, OutVisitor_&& out_v) :
-        op_visitor_(std::forward<OpVisitor_>(op_v)),
-        in_visitor_(std::forward<InVisitor_>(in_v)),
-        out_visitor_(std::forward<OutVisitor_>(out_v))
-    {};
+    Traverse(OpVisitor_ &&op_v, InVisitor_ &&in_v, OutVisitor_ &&out_v)
+        : op_visitor_(std::forward<OpVisitor_>(op_v))
+        , in_visitor_(std::forward<InVisitor_>(in_v))
+        , out_visitor_(std::forward<OutVisitor_>(out_v)){};
 
-    const  OpVisitor&  op_visitor() const { return  op_visitor_; }
-    const  InVisitor&  in_visitor() const { return  in_visitor_; }
-    const OutVisitor& out_visitor() const { return out_visitor_; }
+    const OpVisitor &op_visitor() const { return op_visitor_; }
+    const InVisitor &in_visitor() const { return in_visitor_; }
+    const OutVisitor &out_visitor() const { return out_visitor_; }
 
-    bool operator()(OpBase* op) {
+    bool operator()(OpBase *op) {
       reset();
       const bool result = traverse(op);
       reset();
@@ -555,14 +557,10 @@ template <typename input_terminalsT, typename output_terminalsT>
   };
 
   template <typename OpVisitor, typename InVisitor, typename OutVisitor>
-  auto make_traverse(OpVisitor&& op_v, InVisitor&& in_v, OutVisitor&& out_v) {
-    return Traverse<std::remove_reference_t<OpVisitor>,
-                    std::remove_reference_t<InVisitor>,
-                    std::remove_reference_t<OutVisitor>>{
-        std::forward<OpVisitor>(op_v),
-        std::forward<InVisitor>(in_v),
-        std::forward<OutVisitor>(out_v)
-    };
+  auto make_traverse(OpVisitor &&op_v, InVisitor &&in_v, OutVisitor &&out_v) {
+    return Traverse<std::remove_reference_t<OpVisitor>, std::remove_reference_t<InVisitor>,
+                    std::remove_reference_t<OutVisitor>>{std::forward<OpVisitor>(op_v), std::forward<InVisitor>(in_v),
+                                                         std::forward<OutVisitor>(out_v)};
   };
 
   /// @brief Verifies graph connectivity
@@ -576,7 +574,7 @@ template <typename input_terminalsT, typename output_terminalsT>
     /// @return true if traversal from this Op does not reveal dangling (non-connected) Out terminals
     bool operator()(const OpBase *op) {
       reset();
-      bool status = traverse(const_cast<OpBase*>(op));
+      bool status = traverse(const_cast<OpBase *>(op));
       reset();
       return status;
     }
@@ -603,7 +601,7 @@ template <typename input_terminalsT, typename output_terminalsT>
     /// @return true if traversal from this Op does not reveal dangling (non-connected) Out terminals
     bool operator()(const OpBase *op) {
       reset();
-      bool status = traverse(const_cast<OpBase*>(op));
+      bool status = traverse(const_cast<OpBase *>(op));
       reset();
       return status;
     }
@@ -702,7 +700,7 @@ template <typename input_terminalsT, typename output_terminalsT>
 
       buf << "digraph G {\n";
       buf << "        ranksep=1.5;\n";
-      traverse(const_cast<OpBase*>(op));
+      traverse(const_cast<OpBase *>(op));
       buf << "}\n";
 
       reset();
@@ -724,8 +722,7 @@ template <typename input_terminalsT, typename output_terminalsT>
     )(op);
   }
 
-
-template <typename keyT, typename valueT>
+  template <typename keyT, typename valueT>
   class Edge;  // Forward decl.
 
   template <typename keyT, typename valueT>
@@ -738,15 +735,18 @@ template <typename keyT, typename valueT>
     // valueT can be T or const T
     static_assert(std::is_same<std::remove_const_t<valueT>, std::decay_t<valueT>>::value,
                   "In<keyT,valueT> assumes std::remove_const<T> is a non-decayable type");
-    typedef Edge<keyT, valueT> edge_type;
+    using edge_type = Edge<keyT, valueT>;
     using send_callback_type = std::function<void(const keyT &, const std::decay_t<valueT> &)>;
     using move_callback_type = std::function<void(const keyT &, std::decay_t<valueT> &&)>;
+    using setsize_callback_type = std::function<void(const keyT &, std::size_t)>;
+    using finalize_callback_type = std::function<void(const keyT &)>;
     static constexpr bool is_an_input_terminal = true;
 
    private:
-    bool initialized;
     send_callback_type send_callback;
     move_callback_type move_callback;
+    setsize_callback_type setsize_callback;
+    finalize_callback_type finalize_callback;
 
     // No moving, copying, assigning permitted
     In(In &&other) = delete;
@@ -759,28 +759,28 @@ template <typename keyT, typename valueT>
     }
 
    public:
-    In() : initialized(false) {}
+    In() {}
 
-    In(const send_callback_type &send_callback, const move_callback_type &move_callback)
-        : initialized(true), send_callback(send_callback), move_callback(move_callback) {}
-
-    // callback (std::function) is used to erase the operator type and argument
-    // index
-    void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback) {
-      initialized = true;
+    void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback,
+                      const setsize_callback_type &setsize_callback = setsize_callback_type{},
+                      const finalize_callback_type &finalize_callback = finalize_callback_type{}) {
       this->send_callback = send_callback;
       this->move_callback = move_callback;
+      this->setsize_callback = setsize_callback;
+      this->finalize_callback = finalize_callback;
     }
 
     void send(const keyT &key, const valueT &value) {
       // std::cout << "In::send-constref::\n";
-      if (!initialized) throw "sending to uninitialzed callback";
+      if (!send_callback) throw std::runtime_error("send callback not initialized");
+      ;
       send_callback(key, value);
     }
 
     void send(const keyT &key, valueT &&value) {
       // std::cout << "In::send-move::\n";
-      if (!initialized) throw "sending to uninitialzed callback";
+      if (!move_callback) throw std::runtime_error("move callback not initialized");
+      ;
       move_callback(key, std::forward<valueT>(value));
     }
 
@@ -788,8 +788,19 @@ template <typename keyT, typename valueT>
     // with a specific value for rangeT
     template <typename rangeT>
     void broadcast(const rangeT &keylist, const valueT &value) {
-      if (!initialized) throw "broadcasting to uninitialzed callback";
       for (auto key : keylist) send(key, value);
+    }
+
+    void set_size(const keyT &key, std::size_t size) {
+      // std::cout << "In::set_size::\n";
+      if (!setsize_callback) throw std::runtime_error("set_size callback not initialized");
+      setsize_callback(key);
+    }
+
+    void finalize(const keyT &key) {
+      // std::cout << "In::finalize::\n";
+      if (!finalize_callback) throw std::runtime_error("finalize callback not initialized");
+      finalize_callback(key);
     }
 
     Type get_type() const override {
@@ -891,6 +902,28 @@ template <typename keyT, typename valueT>
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->broadcast(keylist, value);
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
           static_cast<In<keyT, valueT> *>(successor)->broadcast(keylist, value);
+        }
+      }
+    }
+
+    void set_size(const keyT &key, std::size_t size) {
+      for (auto successor : successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->set_size(key, size);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          static_cast<In<keyT, valueT> *>(successor)->set_size(key, size);
+        }
+      }
+    }
+
+    void finalize(const keyT &key) {
+      for (auto successor : successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->finalize(key);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          static_cast<In<keyT, valueT> *>(successor)->finalize(key);
         }
       }
     }
@@ -1028,35 +1061,39 @@ template <typename keyT, typename valueT>
     return std::make_tuple(args...);
   }
 
-  // template <typename keyT, typename valueT,
-  //           typename output_terminalT>
-  // void send(const keyT& key, valueT& value,
-  //           output_terminalT& t) {
-  //     t.send(key, value);
-  // }
-
-  // template <size_t i, typename keyT, typename valueT,
-  //           typename... output_terminalsT>
-  // void send(const keyT& key, valueT& value,
-  //           std::tuple<output_terminalsT...>& t) {
-  //     std::get<i>(t).send(key, value);
-  // }
-
   template <typename keyT, typename valueT, typename output_terminalT>
   void send(const keyT &key, valueT &&value, output_terminalT &t) {
-    // std::cout << "::send move\n";
     t.send(key, std::forward<valueT>(value));
   }
 
   template <size_t i, typename keyT, typename valueT, typename... output_terminalsT>
   void send(const keyT &key, valueT &&value, std::tuple<output_terminalsT...> &t) {
-    // std::cout << "::send<> move\n";
     std::get<i>(t).send(key, std::forward<valueT>(value));
   }
 
   template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT>
   void broadcast(const rangeT &keylist, valueT &&value, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).broadcast(keylist, std::forward<valueT>(value));
+  }
+
+  template <typename keyT, typename output_terminalT>
+  void set_size(const keyT &key, const std::size_t size, output_terminalT &t) {
+    t.set_size(key, size);
+  }
+
+  template <size_t i, typename keyT, typename... output_terminalsT>
+  void set_size(const keyT &key, const std::size_t size, std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).set_size(key, size);
+  }
+
+  template <typename keyT, typename output_terminalT>
+  void finalize(const keyT &key, output_terminalT &t) {
+    t.finalize(key);
+  }
+
+  template <size_t i, typename keyT, typename... output_terminalsT>
+  void finalize(const keyT &key, std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).finalize(key);
   }
 
   // Make type of tuple of edges from type of tuple of terminals

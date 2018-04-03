@@ -210,10 +210,6 @@ namespace ttg {
     uint64_t unique_hash<uint64_t, Key<3u>>(const Key<3u> &key) {
       return key.hash();
     }
-    template <>
-    uint64_t unique_hash<uint64_t, int>(const int &i) {
-      return static_cast<uint64_t>(i);
-    }
   }  // namespace overload
 }  // namespace ttg
 
@@ -224,7 +220,7 @@ class Read_SpMatrix : public Op<int, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatr
 
   Read_SpMatrix(const char *label, const SpMatrix &matrix, Edge<int, int> &ctl, Edge<Key<2>, blk_t> &out)
       : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
-              [](auto key){ return 0; })
+              [](auto key) { return 0; })
       , matrix_(matrix) {}
 
   void op(const int &key, baseT::input_values_tuple_type &&junk, std::tuple<Out<Key<2>, blk_t>> &out) {
@@ -245,7 +241,7 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t> {
   using baseT = Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t>;
 
   Write_SpMatrix(SpMatrix &matrix, Edge<Key<2>, blk_t> &in)
-      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, [](auto key){ return 0; }), matrix_(matrix) {}
+      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, [](auto key) { return 0; }), matrix_(matrix) {}
 
   void op(const Key<2> &key, baseT::input_values_tuple_type &&elem, std::tuple<> &) {
     matrix_.insert(key[0], key[1]) = baseT::get<0>(elem);

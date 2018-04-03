@@ -3,25 +3,31 @@
 
 #include <iostream>
 #include <cassert>
-#include <mkl.h>
+#include CBLAS_HEADER
 
 namespace mra {
 
     namespace detail {
-    
+
+#ifdef MKL_INT
+        using cblas_int = MKL_INT;
+#else
+        using cblas_int = int;
+#endif
+
         // Need to add complex and mixed versions (the latter might require using the Fortran BLAS API)
 
-        static inline void gemm (const CBLAS_LAYOUT Layout, const CBLAS_TRANSPOSE transa, const CBLAS_TRANSPOSE transb,
-                                 const MKL_INT m, const MKL_INT n, const MKL_INT k,
-                                 const float alpha, const float *a, const MKL_INT lda, const float *b, const MKL_INT ldb,
-                                 const float beta, float *c, const MKL_INT ldc) {
+        static inline void gemm (const CBLAS_ORDER Layout, const CBLAS_TRANSPOSE transa, const CBLAS_TRANSPOSE transb,
+                                 const cblas_int m, const cblas_int n, const cblas_int k,
+                                 const float alpha, const float *a, const cblas_int lda, const float *b, const cblas_int ldb,
+                                 const float beta, float *c, const cblas_int ldc) {
             cblas_sgemm(Layout, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
         }
         
-        static inline void gemm (const CBLAS_LAYOUT Layout, const CBLAS_TRANSPOSE transa, const CBLAS_TRANSPOSE transb,
-                                 const MKL_INT m, const MKL_INT n, const MKL_INT k,
-                                 const double alpha, const double *a, const MKL_INT lda, const double *b, const MKL_INT ldb,
-                                 const double beta, double *c, const MKL_INT ldc) {
+        static inline void gemm (const CBLAS_ORDER Layout, const CBLAS_TRANSPOSE transa, const CBLAS_TRANSPOSE transb,
+                                 const cblas_int m, const cblas_int n, const cblas_int k,
+                                 const double alpha, const double *a, const cblas_int lda, const double *b, const cblas_int ldb,
+                                 const double beta, double *c, const cblas_int ldc) {
             cblas_dgemm(Layout, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
         }
     }

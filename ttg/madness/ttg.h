@@ -76,6 +76,11 @@ namespace madness {
      private:
       World &world;
       std::function<int(const keyT &)> keymap;
+      // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
+      // TODO unary/streaming input terminals should have different types (with embedded stream reducer type)
+      std::tuple<
+          std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs> &&)>...>
+          input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
      protected:
       World &get_world() { return world; }
@@ -110,28 +115,12 @@ namespace madness {
       using output_terminals_type = output_terminalsT;
       using output_edges_type = typename ::ttg::terminals_to_edges<output_terminalsT>::type;
 
-      template <std::size_t i, typename resultT>
-      static resultT get(input_values_tuple_type &intuple) {
+      template <std::size_t i, typename resultT, typename InTuple>
+      static resultT get(InTuple &&intuple) {
         return unwrap_to<resultT>(std::get<i>(intuple));
       };
-      template <std::size_t i, typename resultT>
-      static resultT get(const input_values_tuple_type &intuple) {
-        return unwrap_to<resultT>(std::get<i>(intuple));
-      };
-      template <std::size_t i, typename resultT>
-      static resultT get(input_values_tuple_type &&intuple) {
-        return unwrap_to<resultT>(std::get<i>(intuple));
-      };
-      template <std::size_t i>
-      static auto &get(input_values_tuple_type &intuple) {
-        return unwrap(std::get<i>(intuple));
-      };
-      template <std::size_t i>
-      static const auto &get(const input_values_tuple_type &intuple) {
-        return unwrap(std::get<i>(intuple));
-      };
-      template <std::size_t i>
-      static auto &&get(input_values_tuple_type &&intuple) {
+      template <std::size_t i, typename InTuple>
+      static auto &get(InTuple &&intuple) {
         return unwrap(std::get<i>(intuple));
       };
 
@@ -140,13 +129,17 @@ namespace madness {
       output_terminalsT output_terminals;
 
       struct OpArgs : TaskInterface {
-        int counter;                      // Tracks the number of arguments set
-        std::array<bool, numins> argset;  // Tracks if a given arg is already set;
-        input_values_tuple_type t;        // The input values
-        derivedT *derived;                // Pointer to derived class instance
-        keyT key;                         // Task key
+       public:
+        int counter;                            // Tracks the number of arguments finalized
+        std::array<std::size_t, numins> nargs;  // Tracks the number of expected values (0 = finalized)
+        std::array<std::size_t, numins>
+            stream_size;             // Expected number of values to receive, only used for streaming inputs
+                                     // (0 = unbounded stream)
+        input_values_tuple_type t;   // The input values
+        derivedT *derived;           // Pointer to derived class instance
+        keyT key;                    // Task key
 
-        OpArgs() : counter(numins), argset(), t() { std::fill(argset.begin(), argset.end(), false); }
+        OpArgs() : counter(numins), nargs(), stream_size(), t() { std::fill(nargs.begin(), nargs.end(), 1); }
 
         void run(World &world) {
           // ::ttg::print("starting task");
@@ -155,6 +148,17 @@ namespace madness {
         }
 
         virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
+
+       private:
+        madness::Spinlock lock_;                          // sychronizes access to data
+       public:
+        void lock() {
+          lock_.lock();
+        }
+        void unlock() {
+          lock_.unlock();
+        }
+
       };
 
       using cacheT = ConcurrentHashMap<keyT, OpArgs *, std::hash<keyT>>;
@@ -177,24 +181,47 @@ namespace madness {
           worldobjT::send(owner, &opT::template set_arg<i, const typename std::remove_reference<T>::type &>, key,
                           value);
         } else {
-          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": setting argument : ", i);
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
 
           accessorT acc;
           if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
           OpArgs *args = acc->second;
 
-          if (args->argset[i]) {
-            ::ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error argument is already set : ", i);
+          if (args->nargs[i] == 0) {
+            ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
+                               ": error argument is already finalized : ", i);
             throw "bad set arg";
           }
 
-          // const char* isref[] = {" ", "&"};
-          // std::cout << "about to assign arg " << isref[std::is_reference<T>::value] <<
-          // detail::demangled_type_name<T>() << "\n";
+          auto reducer = std::get<i>(input_reducers);
+          if (reducer) {  // is this a streaming input? reduce the received value
+            // N.B. Right now reductions are done eagerly, without spawning tasks
+            //      this means we must lock
+            args->lock();
+            // have a value already? if not, set, otherwise reduce
+            if ((args->stream_size[i] == 0 && args->nargs[i] == 1) || (args->stream_size[i] == args->nargs[i])) {
+              this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<T>(value);
+            } else {
+              valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
+              // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
+              this->get<i, std::decay_t<valueT> &>(args->t) =
+                  std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->t), std::move(value_copy)));
+            }
+            // update the counter if the stream is bounded
+            // this assumes that the stream size is set before data starts flowing ... strong-typing streams will solve
+            // this
+            if (args->stream_size[i] != 0) {
+              args->nargs[i]--;
+              if (args->nargs[i] == 0) args->counter--;
+            }
+            args->unlock();
+          } else {  // this is a nonstreaming input => set the value
+            this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<T>(value);
+            args->nargs[i]--;
+            args->counter--;
+          }
 
-          this->get<i, std::decay_t<valueT> &>(args->t) = wrap(std::forward<T>(value));
-          args->argset[i] = true;
-          args->counter--;
+          // ready to run the task?
           if (args->counter == 0) {
             if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
             args->derived = static_cast<derivedT *>(this);
@@ -238,6 +265,102 @@ namespace madness {
         junk[0]++;
       }
 
+     public:
+      /// sets stream size for input \c i
+      /// \param size positive integer that specifies the stream size
+      template <std::size_t i>
+      void set_argstream_size(const keyT &key, std::size_t size) {
+        // preconditions
+        assert(std::get<i>(input_reducers) && "Op::set_argstream_size called on nonstreaming input terminal");
+        assert(size > 0 && "Op::set_argstream_size(key,size) called with size=0");
+
+        // body
+        const auto owner = keymap(key);
+        if (owner != world.rank()) {
+          if (tracing())
+            ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream size for terminal ", i);
+          worldobjT::send(owner, &opT::template set_argstream_size<i>, key, size);
+        } else {
+          if (tracing())
+            ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": setting stream size for terminal ", i);
+
+          accessorT acc;
+          if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
+          OpArgs *args = acc->second;
+
+          args->lock();
+
+          // check if stream is already bounded
+          if (args->stream_size[i] > 0) {
+            ::ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error stream is already bounded : ", i);
+            throw std::runtime_error("Op::set_argstream_size called for a bounded stream");
+          }
+
+          // check if stream is already finalized
+          if (args->nargs[i] == 0) {
+            ::ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error stream is already finalized : ", i);
+            throw std::runtime_error("Op::set_argstream_size called for a finalized stream");
+          }
+
+          // commit changes
+          args->stream_size[i] = size;
+          args->nargs[i] = size;
+
+          args->unlock();
+        }
+      }
+
+      /// finalizes stream for input \c i
+      template <std::size_t i>
+      void finalize_argstream(const keyT &key) {
+        // preconditions
+        assert(std::get<i>(input_reducers) && "Op::finalize_argstream called on nonstreaming input terminal");
+
+        // body
+        const auto owner = keymap(key);
+        if (owner != world.rank()) {
+          if (tracing())
+            ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
+          worldobjT::send(owner, &opT::template finalize_argstream<i>, key);
+        } else {
+          if (tracing())
+            ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
+
+          accessorT acc;
+          assert(cache.find(acc, key) &&
+                 "Op::finalize_argstream called but no values had been received yet for this key");
+          OpArgs *args = acc->second;
+
+          // check if stream is already bounded
+          if (args->stream_size[i] > 0) {
+            ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
+                               ": error finalize called on bounded stream: ", i);
+            throw std::runtime_error("Op::finalize called for a bounded stream");
+          }
+
+          // check if stream is already finalized
+          if (args->nargs[i] == 0) {
+            ::ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error stream is already finalized : ", i);
+            throw std::runtime_error("Op::finalized called for a finalized stream");
+          }
+
+          // commit changes
+          args->nargs[i] = 0;
+          args->counter--;
+          // ready to run the task?
+          if (args->counter == 0) {
+            if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+            args->derived = static_cast<derivedT *>(this);
+            args->key = key;
+
+            world.taskq.add(args);
+            // static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
+
+            cache.erase(acc);
+          }
+        }
+      }
+
      private:
       // Copy/assign/move forbidden ... we could make it work using
       // PIMPL for this base class.  However, this instance of the base
@@ -259,8 +382,10 @@ namespace madness {
         static_assert(std::is_same<keyT, typename terminalT::key_type>::value,
                       "Op::register_input_callback(terminalT) -- incompatible terminalT");
         using valueT = std::decay_t<typename terminalT::value_type>;
-        using move_callbackT = std::function<void(const keyT &, valueT &&)>;
-        using send_callbackT = std::function<void(const keyT &, const valueT &)>;
+        using send_callbackT = typename ::ttg::In<keyT, valueT>::send_callback_type;
+        using move_callbackT = typename ::ttg::In<keyT, valueT>::move_callback_type;
+        using setsize_callbackT = typename ::ttg::In<keyT, valueT>::setsize_callback_type;
+        using finalize_callbackT = typename ::ttg::In<keyT, valueT>::finalize_callback_type;
 
         auto move_callback = [this](const keyT &key, valueT &&value) {
           // std::cout << "move_callback\n";
@@ -272,7 +397,17 @@ namespace madness {
           set_arg<i, const valueT &>(key, value);
         };
 
-        input.set_callback(send_callbackT(send_callback), move_callbackT(move_callback));
+        auto setsize_callback = [this](const keyT &key, std::size_t size) {
+          // std::cout << "send_callback\n";
+          set_argstream_size<i>(key, size);
+        };
+
+        auto finalize_callback = [this](const keyT &key) {
+          // std::cout << "send_callback\n";
+          finalize_argstream<i>(key);
+        };
+
+        input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
       }
 
       template <std::size_t... IS>
@@ -374,10 +509,15 @@ namespace madness {
             }
             std::cerr << world.rank() << ":"
                       << "   unused: " << item.first << " : ( ";
-            for (std::size_t i = 0; i < numins; i++) std::cerr << (item.second->argset[i] ? "T" : "F") << " ";
+            for (std::size_t i = 0; i < numins; i++) std::cerr << (item.second->nargs[i] == 0 ? "T" : "F") << " ";
             std::cerr << ")" << std::endl;
           }
         }
+      }
+
+      template <std::size_t i, typename Reducer>
+      void set_input_reducer(Reducer &&reducer) {
+        std::get<i>(input_reducers) = reducer;
       }
 
       /// implementation of OpBase::make_executable()
@@ -442,7 +582,6 @@ namespace madness {
 
     namespace detail {
       inline const std::vector<const pthread_t *> &watchpoints_threads() {
-          //static pthread_t main_thread_id = pthread_self();
         static std::vector<const pthread_t *> threads;
         // can set watchpoints only with the legacy MADNESS threadpool
         // TODO improve this when shortsighted MADNESS macro names are strengthened, i.e. HAVE_INTEL_TBB ->
@@ -450,6 +589,7 @@ namespace madness {
         // TODO also exclude the case of a PARSEC-based backend
 #ifndef HAVE_INTEL_TBB
         if (threads.empty()) {
+          static pthread_t main_thread_id = pthread_self();
           threads.push_back(&main_thread_id);
           for (int t = 0; t != madness::ThreadPool::size(); ++t) {
             threads.push_back(&(madness::ThreadPool::get_threads()[t].get_id()));
