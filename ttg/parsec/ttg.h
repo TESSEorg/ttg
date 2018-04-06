@@ -62,6 +62,7 @@ namespace parsec {
       void execute() {
         parsec_enqueue(ctx, tpool);
         int ret = parsec_context_start(ctx);
+        if(ret != 0) throw std::runtime_error("TTG: parsec_context_start failed");
       }
 
       void fence() {
@@ -77,7 +78,7 @@ namespace parsec {
       void increment_sent_to_sched() { parsec_atomic_inc_32b(&sent_to_sched_counter()); }
 
       uint32_t created() const { return this->created_counter(); }
-      uint32_t sent_to_sched() const { return this->sent_to_sched(); }
+      uint32_t sent_to_sched() const { return this->sent_to_sched_counter(); }
 
      private:
       parsec_context_t *ctx = nullptr;
