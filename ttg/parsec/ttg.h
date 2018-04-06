@@ -126,6 +126,12 @@ extern "C" {
 typedef struct my_op_s {
   parsec_task_t parsec_task;
   uint32_t in_data_count;
+  // TODO need to augment PaRSEC backend's my_op_s by stream size info, etc.  ... in_data_count will need to be replaced by something like this
+//  int counter;                            // Tracks the number of arguments set
+//  std::array<std::size_t, numins> nargs;  // Tracks the number of expected values (0 = finalized)
+//  std::array<std::size_t, numins>
+//      stream_size;                        // Expected number of values to receive, only used for streaming inputs
+//  // (0 = unbounded stream)
   parsec_hash_table_item_t op_ht_item;
   void (*function_template_class_ptr)(void *);
   void *object_ptr;
@@ -352,23 +358,15 @@ namespace parsec {
       World &world;
       std::function<int(const keyT &)> keymap;
 
+      // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
+      std::tuple<
+          std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs> &&)>...>
+          input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
+
      protected:
       World &get_world() { return world; }
 
      private:
-      struct OpArgs {
-        int counter;                      // Tracks the number of arguments set
-        std::array<bool, numins> argset;  // Tracks if a given arg is already set;
-        input_values_tuple_type t;        // The input values
-        derivedT *derived;                // Pointer to derived class instance
-        keyT key;                         // Task key
-
-        OpArgs() : counter(numins), argset(), t() { std::fill(argset.begin(), argset.end(), false); }
-
-        void run() { derived->op(key, t, derived->output_terminals); }
-
-        virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
-      };
 
       static void static_op(parsec_task_t *my_task) {
         my_op_t *task = (my_op_t *)my_task;
@@ -387,9 +385,6 @@ namespace parsec {
         derivedT *obj = (derivedT *)task->object_ptr;
         obj->op(keyT(task->key), std::tuple<>(), obj->output_terminals);
       }
-
-      using cacheT = std::map<keyT, OpArgs>;
-      cacheT cache;
 
      protected:
       // Used to set the i'th argument
@@ -514,6 +509,32 @@ namespace parsec {
       void set_args(std::index_sequence<IS...>, const keyT &key, const input_values_tuple_type &args) {
         int junk[] = {0, (set_arg<IS>(key, Op::get<IS>(args)), 0)...};
         junk[0]++;
+      }
+
+     public:
+
+      /// sets stream size for input \c i
+      /// \param size positive integer that specifies the stream size
+      template <std::size_t i>
+      void set_argstream_size(const keyT &key, std::size_t size) {
+        // preconditions
+        assert(std::get<i>(input_reducers) && "Op::set_argstream_size called on nonstreaming input terminal");
+        assert(size > 0 && "Op::set_argstream_size(key,size) called with size=0");
+
+        // body
+        const auto owner = keymap(key);
+        abort();  // TODO implement set_argstream_size
+      }
+
+      /// finalizes stream for input \c i
+      template <std::size_t i>
+      void finalize_argstream(const keyT &key) {
+        // preconditions
+        assert(std::get<i>(input_reducers) && "Op::finalize_argstream called on nonstreaming input terminal");
+
+        // body
+        const auto owner = keymap(key);
+        abort();  // TODO implement set_argstream_size
       }
 
      private:
@@ -701,26 +722,13 @@ namespace parsec {
 
       // Destructor checks for unexecuted tasks
       ~Op() {
-        if (cache.size() != 0) {
-          int rank = 0;
-          std::cerr << rank << ":"
-                    << "warning: unprocessed tasks in destructor of operation '" << get_name() << "'" << std::endl;
-          std::cerr << rank << ":"
-                    << "   T => argument assigned     F => argument unassigned" << std::endl;
-          int nprint = 0;
-          for (auto item : cache) {
-            if (nprint++ > 10) {
-              std::cerr << "   etc." << std::endl;
-              break;
-            }
-            std::cerr << rank << ":"
-                      << "   unused: " << item.first << " : ( ";
-            for (std::size_t i = 0; i < numins; i++) std::cerr << (item.second.argset[i] ? "T" : "F") << " ";
-            std::cerr << ")" << std::endl;
-          }
-        }
         parsec_hash_table_fini(&tasks_table);
         parsec_mempool_destruct(&mempools);
+      }
+
+      template <std::size_t i, typename Reducer>
+      void set_input_reducer(Reducer &&reducer) {
+        std::get<i>(input_reducers) = reducer;
       }
 
       // Returns reference to input terminal i to facilitate connection --- terminal

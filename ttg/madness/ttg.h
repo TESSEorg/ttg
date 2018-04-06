@@ -77,7 +77,6 @@ namespace madness {
       World &world;
       std::function<int(const keyT &)> keymap;
       // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
-      // TODO unary/streaming input terminals should have different types (with embedded stream reducer type)
       std::tuple<
           std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs> &&)>...>
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
