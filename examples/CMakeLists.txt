@@ -7,6 +7,10 @@ if (${MADNESS_FOUND})
   add_executable(madness-1d madness/madness-1d/madness-1d.cc)
   target_link_libraries(madness-1d LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
+  # reciprocal solver example (not yet runtime-agnostic)
+  add_executable (reciprocal-mad madness/reciprocal.cc)
+  target_link_libraries(reciprocal-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
   # T9 example
   add_executable (t9-mad madness/t9.cc t9.impl.h)
   target_link_libraries(t9-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
@@ -25,8 +29,8 @@ if (${MADNESS_FOUND})
 
   # MRA on ttg (not yet runtime-agnostic)
   if (CBLAS_FOUND)
-    add_executable (madttg-mad madness/madttg.cc madgl.cc  madtwoscale.cc maddomain.h  madfunctiondata.h	madfunctionfunctor.h  madfunctionnode.h  madgl.h  madhash.h  madkey.h  madmisc.h  madmxm.h  madrange.h	madsimpletensor.h  madtwoscale.h  madtypes.h)
-    target_link_libraries(madttg-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG} ${CBLAS_LIBRARIES})
+    add_executable (madttg-mad madness/madttg.cc madgl.cc madtwoscale.cc maddomain.h madfunctiondata.h madfunctionfunctor.h madfunctionnode.h madgl.h madhash.h madkey.h madmisc.h madmxm.h madrange.h madsimpletensor.h madtwoscale.h madtypes.h)
+    target_link_libraries(madttg-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG} ${CBLAS_LIBRARIES} -lpthread -lm -ldl)
     target_include_directories(madttg-mad PUBLIC . ${CBLAS_INCLUDE_DIR})
     target_compile_definitions(madttg-mad PUBLIC -DCBLAS_HEADER="${CBLAS_INCLUDE_FILE}")
   endif()
