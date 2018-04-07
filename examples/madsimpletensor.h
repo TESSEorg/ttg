@@ -85,6 +85,10 @@ namespace mra {
         template <size_t v0, size_t ... Values> struct Product {static const size_t value = v0*Product<Values...>::value;};
         template <size_t v0> struct Product<v0> {static constexpr size_t value = v0;};
 
+        // Raise the first argument to the power of the second
+        template <size_t x, size_t N> struct Power {static const size_t value = x * Power<x,N-1>::value;};
+        template <size_t x> struct Power<x,0> {static const size_t value = 1;};
+
         // Compute the maximum value of the template parameters
         template <size_t v0, size_t ... Values> struct Max {static const size_t value = std::max(v0,Product<Values...>::value);};
         template <size_t v0> struct Max<v0> {static constexpr size_t value = v0;};

@@ -31,7 +31,7 @@ using namespace ::ttg;
 
 using namespace mra;
 
-template <size_t NDIM>
+template <Dimension NDIM>
 struct KeyProcMap {
     const size_t size;
     KeyProcMap() : size(get_default_world().size()) {}
@@ -91,7 +91,7 @@ auto wrapx(std::function<void (const keyT&,  std::tuple<input_valuesT...>&&, out
 /// Returns an std::unique_ptr to the object
 template <typename functorT, typename T, size_t K, Dimension NDIM>
 auto make_project(functorT& f,
-                  const T thresh,
+                  const T thresh, /// should be scalar value not complex
                   ctlEdge<NDIM>& ctl,
                   rnodeEdge<T,K,NDIM>& result,
                   const std::string& name = "project") {
@@ -100,15 +100,15 @@ auto make_project(functorT& f,
         FunctionReconstructedNode<T,K,NDIM> node(key); // Our eventual result
         auto& coeffs = node.coeffs; // Need to clean up OO design
         
-        if (key.level() < f.initial_level()) {
+        if (key.level() < initial_level(f)) {
             for (auto child : children(key)) send<0>(child, Control(), out);
             node.is_leaf = false;
         }
-        else if (f.is_negligible(Domain<NDIM>:: template bounding_box<T>(key),truncate_tol(key,thresh))) {
+        else if (is_negligible<functorT,T,NDIM>(f, Domain<NDIM>:: template bounding_box<T>(key),truncate_tol(key,thresh))) {
             node.is_leaf = true;
         }
         else {
-            node.is_leaf = fcoeffs<functorT,T,K,NDIM>(f, key, thresh, coeffs);
+            node.is_leaf = fcoeffs<functorT,T,K>(f, key, thresh, coeffs); // cannot deduce K
             if (!node.is_leaf) {
                 for (auto child : children(key)) send<0>(child,Control(),out); // should be broadcast ?
             }
@@ -218,9 +218,8 @@ void do_compress(const Key<NDIM>& key,
 std::string int2bitstring(size_t i, size_t width) {
     std::string s="";
     for (auto d : range(width)) {
-        s = ((i&0x1) ? "1" : "0") + s;
-        i>>=1;
-        d=d; 
+        s = (((i>>d)&0x1) ? "1" : "0") + s;
+        //i>>=1;
     }
     return s;
 }
@@ -331,6 +330,50 @@ T g(const Coordinate<T,NDIM>& r) {
     return fac*std::exp(-expnt*rsq);
 }
 
+// Test gaussian functor
+template <typename T, Dimension NDIM>
+class Gaussian {
+    const T expnt;
+    const Coordinate<T,NDIM> origin;
+    const T fac;
+public:
+    Gaussian(T expnt, const Coordinate<T,NDIM>& origin) : expnt(expnt), origin(origin), fac(std::pow(T(2.0*expnt/M_PI),T(0.25*NDIM))) {}
+    
+    template <size_t K>
+    void operator()(const SimpleTensor<T,1,K>& x, std::array<T,K>& values) const {
+        static_assert(NDIM==1);
+        for (size_t i=0; i<K; i++) {
+            const T xx = x(0,i)-origin(0);
+            const T rsq = xx*xx;
+            values[i] = fac*std::exp(-expnt*rsq);
+        }
+    }
+
+    template <size_t K2NDIM>
+    void operator()(const SimpleTensor<T,2,K2NDIM>& x, std::array<T,K2NDIM>& values) const {
+        static_assert(NDIM==2);
+        for (size_t i=0; i<K2NDIM; i++) {
+            const T xx = x(0,i)-origin(0);
+            const T yy = x(1,i)-origin(1);
+            const T rsq = xx*xx + yy*yy;
+            values[i] = fac*std::exp(-expnt*rsq);
+        }
+    }
+
+    template <size_t K2NDIM>
+    void operator()(const SimpleTensor<T,3,K2NDIM>& x, std::array<T,K2NDIM>& values) const {
+        static_assert(NDIM==3);
+        for (size_t i=0; i<K2NDIM; i++) {
+            const T xx = x(0,i)-origin(0);
+            const T yy = x(1,i)-origin(1);
+            const T zz = x(2,i)-origin(2);
+            const T rsq = xx*xx + yy*yy + zz*zz;
+            values[i] = fac*std::exp(-expnt*rsq);
+        }
+    }
+};
+
+
 // // Test the numerics
 // template <typename T, size_t K, Dimension NDIM>
 // void test_gaussian(T thresh) {
@@ -343,8 +386,6 @@ T g(const Coordinate<T,NDIM>& r) {
 // }
 
 int main(int argc, char** argv) {
-    SimpleTensor<float,1> sdjflkasjfdlk;
-    
     ttg_initialize(argc, argv, 2);
     std::cout << "Hello from madttg\n";
   
@@ -357,14 +398,17 @@ int main(int argc, char** argv) {
     // test_gaussian<float,8,3>(1e-6);
 
     {    
+
         using T = float;
-        constexpr size_t K = 8;
-        constexpr size_t NDIM = 3;
+        constexpr size_t K = 6;
+        constexpr Dimension NDIM = 3;
+        
         GLinitialize();
         FunctionData<T,K,NDIM>::initialize();
         Domain<NDIM>::set_cube(-6.0,6.0);
         
-        FunctionFunctor<T, NDIM> ff(g<T,NDIM>);
+        //auto ff = &g<T,NDIM>;
+        auto ff = Gaussian<T,NDIM>(T(3.0), {T(0.0),T(0.0),T(0.0)});
         
         ctlEdge<NDIM> ctl("start");
         rnodeEdge<T,K,NDIM> a("a"), c("c");

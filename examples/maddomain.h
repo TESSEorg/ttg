@@ -28,7 +28,7 @@ namespace mra {
         inline static double cell_volume;
         inline static bool initialized = false;
         
-        static void set(size_t d, double lo, double hi) {
+        static void set(Dimension d, double lo, double hi) {
             assert(d<NDIM);
             assert(hi>lo);
             
@@ -45,19 +45,19 @@ namespace mra {
         }
         
         /// Returns the simulation domain in dimension d as a pair of values (first=lo, second=hi)
-        static const std::pair<double,double>& get(size_t d) {
+        static const std::pair<double,double>& get(Dimension d) {
             assert(d<NDIM);
             assert(initialized);
             return cell[d];
         }
         
-        static double get_width(size_t d) {
+        static double get_width(Dimension d) {
             assert(d<NDIM);
             assert(initialized);
             return cell_width[d];
         }
         
-        static double get_reciprocal_width(size_t d) {
+        static double get_reciprocal_width(Dimension d) {
             assert(d<NDIM);
             assert(initialized);
             return cell_reciprocal_width[d];
@@ -74,7 +74,7 @@ namespace mra {
         static void user_to_sim(const Coordinate<T,NDIM>& xuser, Coordinate<T,NDIM>& xsim) {
             static_assert(std::is_same<T,double>::value || std::is_same<T,float>::value, "Domain data only for float or double");
             assert(initialized);
-            for (size_t d=0; d<NDIM; ++d)
+            for (Dimension d=0; d<NDIM; ++d)
                 xsim[d] = (xuser[d] - cell[d].first) * cell_reciprocal_width[d];
             return xsim;
         }
@@ -84,7 +84,7 @@ namespace mra {
         static void sim_to_user(const Coordinate<T,NDIM>& xsim, Coordinate<T,NDIM>& xuser) {
             static_assert(std::is_same<T,double>::value || std::is_same<T,float>::value, "Domain data only for float or double");
             assert(initialized);
-            for (size_t d=0; d<NDIM; ++d) {
+            for (Dimension d=0; d<NDIM; ++d) {
                 xuser[d] = xsim[d]*cell_width[d] + cell[d].first;
             }
         }
@@ -97,7 +97,7 @@ namespace mra {
             Coordinate<T,NDIM> lo, hi;
             const T h = std::pow(T(0.5),T(key.level()));
             const std::array<Translation,NDIM>& l = key.translation();
-            for (size_t d=0; d<NDIM; ++d) {
+            for (Dimension d=0; d<NDIM; ++d) {
                 T box_width = h*cell_width[d];
                 lo[d] = cell[d].first + box_width*l[d];
                 hi[d] = lo[d] + box_width;
@@ -109,12 +109,12 @@ namespace mra {
         /// @param[in] pt point in simulation coordinates
         /// @param[in] n the level of the box
         template <typename T>
-        static Key<NDIM> sim_to_key(const Coordinate<T,NDIM>& pt, size_t n){
+        static Key<NDIM> sim_to_key(const Coordinate<T,NDIM>& pt, Level n){
             static_assert(std::is_same<T,double>::value || std::is_same<T,float>::value, "Domain data only for float or double");
             assert(initialized);
             std::array<Translation,NDIM> l;
             T twon = std::pow(T(2.0), T(n));
-            for (size_t d=0; d<NDIM; ++d) {
+            for (Dimension d=0; d<NDIM; ++d) {
                 l[d] = Translation(twon*pt[d]);
             }
             return Key<NDIM>(n,l);

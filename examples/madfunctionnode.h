@@ -3,11 +3,15 @@
 
 #include <cmath>
 #include <iostream>
+#include <type_traits>
+
+#include <boost/callable_traits.hpp>
 
 #include "madtypes.h"
 #include "maddomain.h"
 #include "madsimpletensor.h"
 #include "madfunctiondata.h"
+#include "madfunctionfunctor.h"
 
 namespace mra {
 
@@ -34,25 +38,71 @@ namespace mra {
         return thresh; // nothing clever for now
     }
     
+    /// Computes square of distance between two coordinates
+    template <typename T>
+    T distancesq(const Coordinate<T,1>& p, const Coordinate<T,1>& q) {
+        T x = p[0]-q[0];
+        return x*x;
+    }
+
+    template <typename T>
+    T distancesq(const Coordinate<T,2>& p, const Coordinate<T,2>& q) {
+        T x = p[0]-q[0], y = p[1]-q[1];
+        return x*x + y*y;
+    }
+
+    template <typename T>
+    T distancesq(const Coordinate<T,3>& p, const Coordinate<T,3>& q) {
+        T x = p[0]-q[0], y = p[1]-q[1], z=p[2]-q[2];
+        return x*x + y*y + z*z;
+    }
+    
     /// Evaluate the function within one cube with screening
     template <typename functorT, typename T, size_t K, Dimension NDIM>
     void fcube(const functorT& f, const Key<NDIM>& key, const T thresh, FixedTensor<T,K,NDIM>& values) {
-        if (f.is_negligible(Domain<NDIM>:: template bounding_box<T>(key),truncate_tol(key,thresh))) {
+        if (is_negligible(f,Domain<NDIM>:: template bounding_box<T>(key),truncate_tol(key,thresh))) {
             values = 0.0;
         }
         else {
-            SimpleTensor<T,NDIM,K> x; // When have object structure will move outside
+            constexpr size_t K2NDIM = detail::Power<K,NDIM>::value;
+            SimpleTensor<T,NDIM,K> x; // When have object structure can move outside
             FunctionData<T,K,NDIM>::make_quadrature_pts(key,x);
-            f(x,values);
+
+            constexpr bool call_coord = std::is_invocable_r<void, decltype(f), Coordinate<T,NDIM>>(); // f(coord)
+            constexpr bool call_1d = (NDIM==1) && std::is_invocable_r<void, decltype(f), T>(); // f(x)
+            constexpr bool call_2d = (NDIM==2) && std::is_invocable_r<void, decltype(f), T, T>(); // f(x)
+            constexpr bool call_3d = (NDIM==3) && std::is_invocable_r<void, decltype(f), T, T, T>(); // f(x)
+            constexpr bool call_vec = std::is_invocable_r<void, decltype(f), SimpleTensor<T,NDIM,K2NDIM>, std::array<T,K2NDIM>&>(); // vector API
+            //constexpr bool call_vec = true;
+            
+            static_assert(call_coord || call_1d || call_2d || call_3d || call_vec, "no working call");
+            if constexpr (call_coord) {
+                eval_cube(f, x, values);
+            }
+            else {
+                SimpleTensor<T,NDIM,K2NDIM> xvec; 
+                make_xvec(x,xvec);
+                if constexpr (call_1d || call_2d || call_3d) {
+                    eval_cube_vec(f, xvec, values);
+                }
+                else if constexpr (call_vec) {
+                    f(xvec,values.data());
+                }
+                else {
+                    throw "how did we get here?";
+                }
+            }
         }
     }
     
     /// Project the scaling coefficients using screening and test norm of difference coeffs.  Return true if difference coeffs negligible.
     template <typename functorT, typename T, size_t K, Dimension NDIM>
     bool fcoeffs(const functorT& f, const Key<NDIM>& key, const T thresh, FixedTensor<T,K,NDIM>& s) {
-        if (f.is_negligible(Domain<NDIM>:: template bounding_box<T>(key),truncate_tol(key,thresh))) {
+        bool status;
+        
+        if (is_negligible(f,Domain<NDIM>:: template bounding_box<T>(key),truncate_tol(key,thresh))) {
             s = 0.0;
-            return true;
+            status = true;
         }
         else {
             auto& child_slices = FunctionData<T,K,NDIM>::get_child_slices();
@@ -76,8 +126,9 @@ namespace mra {
             filter<T,K,NDIM>(values,r);
             s = r(child_slices[0]); // extract sum coeffs
             r(child_slices[0]) = 0.0; // zero sum coeffs so can easily compute norm of difference coeffs
-            return (r.normf() < truncate_tol(key,thresh)); // test norm of difference coeffs
+            status = (r.normf() < truncate_tol(key,thresh)); // test norm of difference coeffs
         }
+        return status;
     }
 
     template <typename T, size_t K, Dimension NDIM>
