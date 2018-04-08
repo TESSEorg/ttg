@@ -245,7 +245,7 @@ namespace mra {
     
     template <Dimension NDIM>
     std::ostream& operator<<(std::ostream& s, const Key<NDIM>& key) {
-        s << "Key<" << NDIM << ">(" << key.level() << "," << key.translation() << ")";
+        s << "Key<" << size_t(NDIM) << ">(" << size_t(key.level()) << "," << key.translation() << ")";
         return s;
     }    
 }
