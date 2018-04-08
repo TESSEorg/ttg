@@ -240,7 +240,7 @@ int main(int argc, char** argv)
         Edge<sumreskeyT,yT> sumresult;
         Edge<sumreskeyT,kT> k;
         
-        const size_t N = 9000;
+        const size_t N = 90000;
         
         auto start = make_start(x, N);
         auto guess = make_guess(x, xyguess);
