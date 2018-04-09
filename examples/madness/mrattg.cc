@@ -388,7 +388,7 @@ public:
 int main(int argc, char** argv) {
     ttg_initialize(argc, argv, 2);
     std::cout << "Hello from madttg\n";
-  
+    
     // test_gaussian<double,5,3>(1e-6);
     // test_gaussian<float,8,3>(1e-1);
     // test_gaussian<float,8,3>(1e-2);
@@ -396,6 +396,57 @@ int main(int argc, char** argv) {
     // test_gaussian<float,8,3>(1e-4);
     // test_gaussian<float,8,3>(1e-5);
     // test_gaussian<float,8,3>(1e-6);
+
+    {
+        SimpleTensor<float,3,4,5> x;
+        x = 1.0;
+        apply_unaryop(x, [](float& x){x=99.0f;});
+        std::cout << "x\n" << x << std::endl;
+
+        auto s = x(_,_,_);
+        apply_unaryop(s, [](float& x){x=33.0f;});
+        std::cout << "s\n" << s << std::endl;
+
+        auto z = x(Slice(1,2),Slice(1,2),Slice(1,2));
+        std::cout << "z\n" << z << std::endl;
+        apply_unaryop(z, [](float& x){x=-1.0f;});
+        std::cout << "z\n" << z << std::endl;
+        std::cout << "x\n" << x << std::endl;
+
+
+        auto t = x(Slice(1,2),Slice(1,3),Slice(1,4));
+        apply_unaryop(t, [](float& x){x=55.0f;});
+        std::cout << "x\n" << x << std::endl;
+
+        SimpleTensor<float,1,2,3> q;
+        q = 0.0;
+        std::cout << "t\n" << t << std::endl;
+        std::cout << "q\n" << q << std::endl;
+        q = t;
+        std::cout << "q\n" << q << std::endl;
+    }
+    {
+        SimpleTensor<float,3,4> x;
+        x = 1.0;
+        apply_unaryop(x, [](float& x){x=99.0f;});
+        std::cout << x << std::endl;
+
+        auto s = x(_,_);
+        apply_unaryop(s, [](float& x){x=33.0f;});
+        std::cout << s << std::endl;
+    }
+    {
+        SimpleTensor<float,3> x;
+        x = 1.0;
+        apply_unaryop(x, [](float& x){x=99.0f;});
+        std::cout << x << std::endl;
+        
+        auto s = x(_);
+        apply_unaryop(s, [](float& x){x=33.0f;});
+        std::cout << s << std::endl;
+    }
+
+    //return 0;
 
     {    
 

@@ -66,7 +66,8 @@ namespace mra {
 
     static constexpr long END = Slice::END;
     static const Slice _(0,END,1);	/// Entire dimension
-    class ___{}; /// Entire tensor
+    class Everything{};
+    static constexpr Everything ___; /// Entire tensor
     static const Slice reverse(-1,END,-1); /// Reversed dimension
 
     inline static std::ostream& operator<<(std::ostream& stream, const Slice& s) {
@@ -115,7 +116,7 @@ namespace mra {
         struct base_tensor_iterator {
             size_t count;
             const tensorT* t;
-            std::array<size_t,num_dimensions> indx = {};
+            std::array<size_t,std::max(size_t(1),num_dimensions)> indx = {};
             
             base_tensor_iterator (size_t count, const tensorT* t)
                 : count(count)
@@ -125,7 +126,7 @@ namespace mra {
             void inc() {
                 assert(count < t->size());
                 count++;
-                for (int d=num_dimensions-1; d>=0; --d) { // must be signed loop variable!
+                for (int d=int(num_dimensions)-1; d>=0; --d) { // must be signed loop variable!
                     indx[d]++;
                     if (indx[d]<t->dim(d)) {
                         break;
@@ -135,11 +136,132 @@ namespace mra {
                 }
             }
 
-            const std::array<size_t,num_dimensions>& index() const {return indx;}
+            const auto& index() const {return indx;}
         };
     }
 
-    // !!! Needs refactoring to use actual strides and access underlying data so can optimize iteration
+    template <typename tensorT>
+    void apply_unaryop(tensorT& t, const auto& op) {
+        if constexpr (t.is_contiguous()) { // by definition not a slice tensor
+            std::for_each(t.data().begin(), t.data().end(), op);
+        }
+        else if (t.stride(t.ndim()-1) == 1) { // inner loop is contiguous
+            if constexpr (t.ndim() == 1) {
+                const size_t n = t.dim(t.ndim()-1);
+                auto p = t.ptr();
+                for (size_t i=0; i<n; ++i) op(p[i]);                
+            }
+            else if constexpr (t.ndim() >= 2) {
+                const size_t dimi = t.dim(t.ndim()-1);
+                const size_t dimj = t.dim(t.ndim()-2);
+                const size_t stridei = t.stride(t.ndim()-1);
+                const size_t stridej = t.stride(t.ndim()-2);
+                if (stridei == 1) {
+                    for (auto it=t.xbegin(); it!=t.xend(); ++it) {
+                        auto p = t.ptr(it);
+                        for (size_t j=0; j<dimj; ++j, p+=stridej) {
+                            for (size_t i=0; i<dimi; ++i) {
+                                op(p[i]);
+                            }
+                        }
+                    }
+                }
+                else {
+                    for (auto it=t.xbegin(); it!=t.xend(); ++it) {
+                        auto p = t.ptr(it);
+                        for (size_t j=0; j<dimj; ++j, p+=stridej) {
+                            auto q = p;
+                            for (size_t i=0; i<dimi; ++i, q+=stridei) {
+                                op(*q);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else { // general but slowest iteration
+            std::cout << "in slow apply_unaryop ... what are you doing?\n";
+            std::for_each(t.begin(), t.end(), op);
+        }        
+    }
+
+    
+    template <typename tensorA, typename tensorB>
+    void apply_binaryop(tensorA& a, tensorB& b, const auto& op) {
+        assert(a.conforms(b));
+        if constexpr (a.is_contiguous() && b.is_contiguous()) { // by definition not a slice tensor
+                std::cout << "bina ... not been here yet?\n";
+            auto pa = a.ptr();
+            auto pb = b.ptr();
+            for (size_t i=0; i<a.size(); i++) op(pa[i],pb[i]);
+        }
+        else if (a.stride(a.ndim()-1) == 1 && b.stride(b.ndim()-1) == 1) { // inner loop is contiguous
+            if constexpr (a.ndim() == 1) {
+                std::cout << "binb ... not been here yet?\n";
+                const size_t n = a.dim(a.ndim()-1);
+                auto pa = a.ptr();
+                auto pb = b.ptr();
+                for (size_t i=0; i<n; ++i) op(pa[i],pb[i]);                
+            }
+            else if constexpr (a.ndim() >= 2) {
+                const size_t dimi = a.dim(a.ndim()-1);
+                const size_t dimj = a.dim(a.ndim()-2);
+                const size_t strideia = a.stride(a.ndim()-1);
+                const size_t strideja = a.stride(a.ndim()-2);
+                const size_t strideib = b.stride(b.ndim()-1);
+                const size_t stridejb = b.stride(b.ndim()-2);
+                auto ita = a.xbegin();
+                auto itb = b.xbegin();
+                const auto enda = a.xend();
+                const auto endb = b.xend();
+                if (strideia == 1 && strideib == 1) {
+                    //std::cout << "binc\n";
+                    while (ita != enda) {
+                        auto pa = a.ptr(ita);
+                        auto pb = b.ptr(itb);
+                        for (size_t j=0; j<dimj; ++j, pa+=strideja, pb+=stridejb) {
+                            for (size_t i=0; i<dimi; ++i) {
+                                op(pa[i],pb[i]);
+                            }
+                        }
+                        ++ita;
+                        ++itb;
+                    }
+                }
+                else {
+                    std::cout << "bind ... not been here yet?\n";
+                    while (ita != enda) {
+                        auto pa = a.ptr(ita);
+                        auto pb = b.ptr(itb);
+                        for (size_t j=0; j<dimj; ++j, pa+=strideja, pb+=stridejb) {
+                            auto qa = pa;
+                            auto qb = pb;
+                            for (size_t i=0; i<dimi; ++i, qa+=strideia, qb+=strideib) {
+                                op(qa[i],qb[i]);
+                            }
+                        }
+                        ++ita;
+                        ++itb;
+                    }
+                }
+                assert(itb == endb); // should be true if they really do conform
+            }
+        }
+        else { // general but slowest iteration
+            std::cout << "in slow apply_binaryop ... what are you doing?\n";
+            auto ita = a.begin();
+            auto itb = b.begin();
+            const auto enda = a.end();
+            const auto endb = b.end();
+            while (ita != enda) {
+                op(*ita,*itb);
+                ++ita;
+                ++itb;
+            }
+            assert(itb == endb); // should be true if they really do conform
+        }        
+    }
+
     template <typename tensorT>
     class SliceTensor {
 
@@ -170,25 +292,27 @@ namespace mra {
         access(std::index_sequence<D...>, const std::array<size_t,num_dimensions>& indices) const {return t(index(D,indices[D])...);}
         
         using ST = SliceTensor<tensorT>;
-        struct iterator : public detail::base_tensor_iterator<ST,num_dimensions> {
-            iterator (size_t count, ST* t) : detail::base_tensor_iterator<ST,num_dimensions>(count, t) {}
-            data_type& operator*() {return this->t-> template access<data_type&>(std::make_index_sequence<num_dimensions>{},this->indx);}
+        template<size_t ndimactive>
+        struct iterator : public detail::base_tensor_iterator<ST,ndimactive> {
+            iterator (size_t count, ST* t) : detail::base_tensor_iterator<ST,ndimactive>(count, t) {}
+            data_type& operator*() {return this->t-> template access<data_type&>(std::make_index_sequence<ndimactive>{},this->indx);}
             iterator& operator++() {this->inc(); return *this;}
             bool operator!=(const iterator& other) {return this->count != other.count;}
             bool operator==(const iterator& other) {return this->count == other.count;}
         };
         
-        struct const_iterator : public detail::base_tensor_iterator<ST,num_dimensions> {
-            const_iterator (size_t count, const ST* t) : detail::base_tensor_iterator<ST,num_dimensions>(count, t) {}
-            data_type operator*() const {return this->t-> template access<data_type>(std::make_index_sequence<num_dimensions>{},this->indx);}
+        template<size_t ndimactive>
+        struct const_iterator : public detail::base_tensor_iterator<ST,ndimactive> {
+            const_iterator (size_t count, const ST* t) : detail::base_tensor_iterator<ST,ndimactive>(count, t) {}
+            data_type operator*() const {return this->t-> template access<data_type>(std::make_index_sequence<ndimactive>{},this->indx);}
             const_iterator& operator++() {this->inc(); return *this;}
             bool operator!=(const const_iterator& other) {return this->count != other.count;}
             bool operator==(const const_iterator& other) {return this->count == other.count;}
         };
         
-        iterator finish{0,0};
-        const_iterator cfinish{0,0};
-        
+        iterator<num_dimensions> finish{0,0};
+        const_iterator<num_dimensions> cfinish{0,0};
+
     public:
         SliceTensor(tensorT& t, const std::array<Slice,num_dimensions>& slices)
             : t(t)
@@ -200,17 +324,29 @@ namespace mra {
                 num_elements *= this->slices[d].count;
                 dimensions[d] = this->slices[d].count;
             }
-            finish = iterator{num_elements,0};
-            cfinish = const_iterator{num_elements,0};
+            finish = iterator<num_dimensions>{num_elements,0};
+            cfinish = const_iterator<num_dimensions>{num_elements,0};
         }
         
+        /// Returns number of dimensions at compile time
         static constexpr size_t ndim() {return num_dimensions;}
 
+        /// Returns number of elements in the tensor at runtime
         size_t size() const {return num_elements;}
 
-        size_t dim(size_t d) const {return slices[d].count;}
+        /// Returns size of dimension d at runtime
+        size_t dim(size_t d) const {return slices[d].count;}        
 
+        /// Returns array containing size of each dimension at runtime
         const std::array<size_t, num_dimensions>& dims() const {return dimensions;}
+
+        /// Returns stride of dimension d in *underlying* data at runtime
+        size_t stride(size_t d) const {
+            return t.stride(d)*slices[d].step;
+        }
+
+        /// Returns true if data is contiguous (presently always false)
+        static constexpr bool is_contiguous() {return false;}
 
         template <typename...Args, typename X=data_type>
         typename std::enable_if<std::is_const<tensorT>::value,X>::type
@@ -238,45 +374,89 @@ namespace mra {
         template <typename otherT, typename X=SliceTensor<tensorT>>
         typename std::enable_if<otherT::is_tensor && !std::is_const<tensorT>::value,X&>::type
         operator=(const otherT& other) {
-            assert(conforms(other));
-            auto lit=this->begin();
-            auto rit=other.begin();
-            while (lit != this->end() || rit != other.end()) {
-                *lit = *rit;
-                ++lit;
-                ++rit;
-            }
-            assert(lit==this->end() && rit==other.end());
+            // assert(conforms(other));
+            // auto lit=this->begin();
+            // auto rit=other.begin();
+            // while (lit != this->end() || rit != other.end()) {
+            //     *lit = *rit;
+            //     ++lit;
+            //     ++rit;
+            // }
+            // assert(lit==this->end() && rit==other.end());
+            apply_binaryop(*this,other,[](data_type& a, const typename SliceTensor<otherT>::data_type& b) {a=b;});
             return *this;
+        }        
+
+        /// Start for forward iteration through elements in row-major order --- this is convenient but not efficient
+        iterator<num_dimensions> begin() {return iterator<num_dimensions>(0,this);}
+
+        /// End for forward iteration through elements in row-major order --- this is convenient but not efficient
+        const iterator<num_dimensions>& end() {return finish;}
+
+        /// Start for forward iteration through elements in row-major order --- this is convenient but not efficient
+        const_iterator<num_dimensions> begin() const {return const_iterator<num_dimensions>(0,this);}
+
+        /// End for forward iteration through elements in row-major order --- this is convenient but not efficient
+        const const_iterator<num_dimensions>& end() const {return cfinish;}
+
+        /// Optimized iteration --- start for forward iteration through all but inner two dimensions
+        iterator<num_dimensions-2> xbegin() {
+            static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
+            return iterator<num_dimensions-2>(0,this);
         }
 
-        /// Start for forward iteration through elements in row-major order --- this is convenient but not efficient
-        template <typename X=iterator>
-        typename std::enable_if<!std::is_const<tensorT>::value,X>::type
-        begin() {return iterator(0,this);}
+        /// Optimized iteration --- end for forward iteration  through all but inner two dimensions
+        iterator<num_dimensions-2> xend() {
+            static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
+            size_t count = num_elements/dim(num_dimensions-1)/dim(num_dimensions-2);
+            return {count,0};
+        }
 
-        /// End for forward iteration through elements in row-major order --- this is convenient but not efficient
-        template <typename X=const iterator&>
-        typename std::enable_if<!std::is_const<tensorT>::value,X>::type
-        end() {return finish;}
+        /// Optimized iteration --- start for forward iteration through all but inner two dimensions
+        const_iterator<num_dimensions-2> xbegin() const {
+            static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
+            return const_iterator<num_dimensions-2>(0,this);
+        }
 
-        /// Start for forward iteration through elements in row-major order --- this is convenient but not efficient
-        template <typename X=const_iterator>
-        typename std::enable_if<std::is_const<tensorT>::value,X>::type
-        begin() const {return const_iterator(0,this);}
+        /// Optimized iteration --- end for forward iteration  through all but inner two dimensions
+        const const_iterator<num_dimensions-2> xend() const {
+            static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
+            size_t count = num_elements/dim(num_dimensions-1)/dim(num_dimensions-2);
+            return {count,0};
+        }
 
-        /// End for forward iteration through elements in row-major order --- this is convenient but not efficient
-        template <typename X=const const_iterator&>
-        typename std::enable_if<std::is_const<tensorT>::value,X>::type
-        end() const {return cfinish;}
+        /// Optimized iteration ... returns address of first element in underlying data which will likely not be contiguous
+        data_type* ptr() {
+            auto p = t.ptr();
+            for (auto d : range(num_dimensions)) p += slices[d].start*stride(d);
+            return p;
+        }
 
-        /// Start for forward iteration through elements in row-major order --- this is convenient but not efficient
-        const_iterator begin() const {return const_iterator(0,this);}
+        /// Optimized iteration ... returns address of first element in underlying data which will likely not be contiguous
+        const data_type* ptr() const {
+            auto p = t.ptr();
+            for (auto d : range(num_dimensions)) p += slices[d].start*stride(d);
+            return p;
+        }
 
-        /// End for forward iteration through elements in row-major order --- this is convenient but not efficient
-        const const_iterator& end() const {return cfinish;}
+        /// Optimized iteration ... given optimized (ndim-2) iterator returns address of first element in underlying data which will likely not be contiguous
+        data_type* ptr(auto& it) {
+            static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
+            auto p = t.ptr() + slices[num_dimensions-2].start*stride(num_dimensions-2) + slices[num_dimensions-1].start*stride(num_dimensions-1);
+            auto& indx = it.index();
+            for (auto d : range(num_dimensions-2)) p += (slices[d].start + indx[d]) * t.stride(d);
+            return p;
+        }
+
+        /// Optimized iteration ... given optimized (ndim-2) iterator returns address of first element in underlying data which will likely not be contiguous
+        const data_type* ptr(auto& it) const {
+            static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
+            auto p = t.ptr() + slices[num_dimensions-2].start*stride(num_dimensions-2) + slices[num_dimensions-1].start*stride(num_dimensions-1);
+            auto& indx = it.index();
+            for (auto d : range(num_dimensions-2)) p += (slices[d].start + indx[d]) * t.stride(d);
+            return p;
+        }
     };
-        
 
     template <typename T, size_t ... Dims>
     class SimpleTensor {
@@ -304,24 +484,29 @@ namespace mra {
         
         template <size_t...D,typename...Args> static size_t sum_offset(std::index_sequence<D...>, Args...args) {return (offset<D>(args)+...);}
 
-        struct iterator : public detail::base_tensor_iterator<SimpleTensor<T,Dims...>,num_dimensions> {
-            iterator (size_t count, SimpleTensor<T,Dims...>* t) : detail::base_tensor_iterator<SimpleTensor<T,Dims...>,num_dimensions>(count, t) {}
+        template <size_t ndimactive>
+        struct iterator : public detail::base_tensor_iterator<SimpleTensor<T,Dims...>,ndimactive> {
+            iterator (size_t count, SimpleTensor<T,Dims...>* t) : detail::base_tensor_iterator<SimpleTensor<T,Dims...>,ndimactive>(count, t) {}
             T& operator*() {return const_cast<SimpleTensor<T,Dims...>*>(this->t)->a[this->count];}
             iterator& operator++() {this->inc(); return *this;}
             bool operator!=(const iterator& other) {return this->count != other.count;}
             bool operator==(const iterator& other) {return this->count == other.count;}
         };
 
-        struct const_iterator : public detail::base_tensor_iterator<SimpleTensor<T,Dims...>,num_dimensions> {
-            const_iterator (size_t count, const SimpleTensor<T,Dims...>* t) : detail::base_tensor_iterator<SimpleTensor<T,Dims...>,num_dimensions>(count, t) {}
+        template <size_t ndimactive>
+        struct const_iterator : public detail::base_tensor_iterator<SimpleTensor<T,Dims...>,ndimactive> {
+            const_iterator (size_t count, const SimpleTensor<T,Dims...>* t) : detail::base_tensor_iterator<SimpleTensor<T,Dims...>,ndimactive>(count, t) {}
             T operator*() const {return this->t->a[this->count];}
             const_iterator& operator++() {this->inc(); return *this;}
             bool operator!=(const const_iterator& other) {return this->count != other.count;}
             bool operator==(const const_iterator& other) {return this->count == other.count;}
         };
         
-        inline static iterator finish = {num_elements,0};
-        inline static const_iterator cfinish = {num_elements,0};
+        inline static iterator<num_dimensions> finish = {num_elements,0};
+        inline static const_iterator<num_dimensions> cfinish = {num_elements,0};
+
+        inline static iterator<num_dimensions-2> finish2 = {num_elements/Dim<num_dimensions-1>::value/Dim<num_dimensions-2>::value,0};
+        inline static const_iterator<num_dimensions-2> cfinish2 = {num_elements/Dim<num_dimensions-1>::value/Dim<num_dimensions-2>::value,0};
 
     public:
         /// Default constructor does not initialize data --- need this to be POD
@@ -341,6 +526,9 @@ namespace mra {
         
         /// Returns number of dimensions in the tensor
         static constexpr size_t ndim() {return num_dimensions;}
+
+        /// Returns true if data is contiguous (presently always true)
+        static constexpr bool is_contiguous() {return true;}
         
         /// Returns array with size of each dimension
         static constexpr const std::array<size_t, num_dimensions>& dims() {return dimensions;}
@@ -418,8 +606,6 @@ namespace mra {
             return SliceTensor<SimpleTensor<T,Dims...>>(*this, slices);
         }
 
-        // Direct access (next 4 methods) needs to be protected from general use (should be SliceTensor only?)
-        
         /// Access data directly (const accessor)
         const std::array<T,num_elements>& data() const {return a;}
 
@@ -447,7 +633,7 @@ namespace mra {
         }
 
         /// Fill with value
-        SimpleTensor<T,Dims...>& operator=(T value) {for (size_t i=0; i<num_elements; ++i) a[i] = value; return *this;}
+        SimpleTensor<T,Dims...>& operator=(T value) {a.fill(value); return *this;} //for (size_t i=0; i<num_elements; ++i) a[i] = value; 
 
         /// Deep copy (with possible type conversion) from identically shaped SimpleTensor
         template <typename R>
@@ -465,29 +651,73 @@ namespace mra {
         /// Deep copy (with possible type conversion) from identically shaped SliceTensor ... desperately needs optimized iterator
         template <typename otherT>
         SimpleTensor<T,Dims...>& operator=(const SliceTensor<otherT>& other) {
-            assert(this->conforms(other));
-            auto lit=this->begin();
-            auto rit=other.begin();
-            while (lit != this->end() || rit != other.end()) {
-                *lit = *rit;
-                ++lit;
-                ++rit;
-            }
-            assert(lit==this->end() && rit==other.end());
+            // assert(this->conforms(other));
+            // auto lit=this->begin();
+            // auto rit=other.begin();
+            // while (lit != this->end() || rit != other.end()) {
+            //     *lit = *rit;
+            //     ++lit;
+            //     ++rit;
+            // }
+            // assert(lit==this->end() && rit==other.end());
+            apply_binaryop(*this,other,[](data_type& a, const typename SliceTensor<otherT>::data_type& b) {a=b;});
             return *this;
         }
 
         /// Start for forward iteration through elements in row-major order --- this is convenient but not efficient
-        iterator begin() {return iterator(0,this);}
+        iterator<num_dimensions> begin() {return iterator<num_dimensions>(0,this);}
 
         /// End for forward iteration through elements in row-major order --- this is convenient but not efficient
-        const iterator& end() {return finish;}
+        const iterator<num_dimensions>& end() {return finish;}
 
         /// Start for forward iteration through elements in row-major order --- this is convenient but not efficient
-        const_iterator begin() const {return const_iterator(0,this);}
+        const_iterator<num_dimensions> begin() const {return const_iterator<num_dimensions>(0,this);}
 
         /// End for forward iteration through elements in row-major order --- this is convenient but not efficient
-        const const_iterator& end() const {return cfinish;}
+        const const_iterator<num_dimensions>& end() const {return cfinish;}
+
+        /// Optimized iteration --- start for forward iteration through all but inner dimension
+        iterator<num_dimensions-2> xbegin() {
+            static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
+            return iterator<num_dimensions-2>(0,this);
+        }
+
+        /// Optimized iteration --- end for forward iteration  through all but inner dimension
+        const iterator<num_dimensions-2> xend() {
+            static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
+            return finish2;
+        }
+
+        /// Optimized iteration --- start for forward iteration through all but inner dimension
+        const_iterator<num_dimensions-2> xbegin() const {
+            static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
+            return const_iterator<num_dimensions-2>(0,this);
+        }
+
+        /// Optimized iteration --- end for forward iteration  through all but inner dimension
+        const const_iterator<num_dimensions-2>& xend() const {
+            static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
+            return cfinish2;
+        }
+
+        /// Optimized iteration ... given optimized (ndim-2) iterator returns address of first element in underlying data which will likely not be contiguous
+        data_type* ptr(auto& it) {
+            static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
+            auto p = ptr();
+            auto& indx = it.index();
+            for (auto d : range(num_dimensions-2)) p += indx[d] * stride(d);
+            return p;
+        }
+
+        /// Optimized iteration ... given optimized (ndim-2) iterator returns address of first element in underlying data which will likely not be contiguous
+        const data_type* ptr(auto& it) const {
+            static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
+            auto p = ptr();
+            auto& indx = it.index();
+            for (auto d : range(num_dimensions-2)) p += indx[d] * stride(d);
+            return p;
+        }
+        
     };
 
     namespace detail {
@@ -527,13 +757,17 @@ namespace mra {
         }
     }
 
-    template <typename T, size_t...K>
-    std::ostream& operator<<(std::ostream& s, const mra::SimpleTensor<T,K...>& t) {
+    template <typename tensorT>
+    typename std::enable_if<tensorT::is_tensor,std::ostream>::type&
+    operator<<(std::ostream& s, const tensorT& t) {
         if (t.size() == 0) {
             s << "[empty tensor]\n";
             return s;
         }
-        size_t maxdim = detail::Max<K...>::value;
+        
+        const Dimension ndim = t.ndim();
+        size_t maxdim = 0;
+        for (auto d : range(ndim)) maxdim = std::max(maxdim,t.dim(d));
         size_t index_width;
         if (maxdim < 10)
             index_width = 1;
@@ -550,7 +784,6 @@ namespace mra {
         long oldprec = s.precision();
         long oldwidth = s.width();
         
-        const Dimension ndim = t.ndim();
         const Dimension lastdim = ndim-1;
         const size_t lastdimsize = t.dim(lastdim);
 
