@@ -29,6 +29,8 @@ using namespace ::ttg;
 #include "mrafunctionnode.h"
 #include "mrafunctionfunctor.h"
 
+#include "mkl.h" // assume for now but need to wrap
+
 using namespace mra;
 
 template <Dimension NDIM>
@@ -102,9 +104,11 @@ auto make_project(functorT& f,
         
         if (key.level() < initial_level(f)) {
             for (auto child : children(key)) send<0>(child, Control(), out);
+            coeffs = T(1e7); // set to obviously bad value to detect incorrect use
             node.is_leaf = false;
         }
         else if (is_negligible<functorT,T,NDIM>(f, Domain<NDIM>:: template bounding_box<T>(key),truncate_tol(key,thresh))) {
+            coeffs = T(0.0);
             node.is_leaf = true;
         }
         else {
@@ -336,158 +340,164 @@ class Gaussian {
     const T expnt;
     const Coordinate<T,NDIM> origin;
     const T fac;
+    const T maxr;
+    Level initlev;
 public:
-    Gaussian(T expnt, const Coordinate<T,NDIM>& origin) : expnt(expnt), origin(origin), fac(std::pow(T(2.0*expnt/M_PI),T(0.25*NDIM))) {}
-    
-    template <size_t K>
-    void operator()(const SimpleTensor<T,1,K>& x, std::array<T,K>& values) const {
-        static_assert(NDIM==1);
-        for (size_t i=0; i<K; i++) {
-            const T xx = x(0,i)-origin(0);
-            const T rsq = xx*xx;
-            values[i] = fac*std::exp(-expnt*rsq);
-        }
+    Gaussian(T expnt, const Coordinate<T,NDIM>& origin)
+        : expnt(expnt)
+        , origin(origin)
+        , fac(std::pow(T(2.0*expnt/M_PI),T(0.25*NDIM)))
+        , maxr(std::sqrt(std::log(fac/1e-12)/expnt))
+    {
+        // Pick initial level such that average gap between quadrature points
+        // will find a significant value
+        const int N = 6; // looking for where exp(-a*x^2) < 10**-N
+        const int K = 6; // typically the lowest order of the polyn
+        const T log10 = std::log(10.0);
+        const T log2 = std::log(2.0);
+        const T L = Domain<NDIM>::get_max_width();
+        const T a = expnt*L*L;
+        double n = std::log(a/(4*K*K*(N*log10+std::log(fac))))/(2*log2);
+        std::cout << expnt << " " << a << " " << n << std::endl;
+        initlev = Level(n<2 ? 2.0 : std::ceil(n));
     }
 
-    template <size_t K2NDIM>
-    void operator()(const SimpleTensor<T,2,K2NDIM>& x, std::array<T,K2NDIM>& values) const {
-        static_assert(NDIM==2);
-        for (size_t i=0; i<K2NDIM; i++) {
-            const T xx = x(0,i)-origin(0);
-            const T yy = x(1,i)-origin(1);
-            const T rsq = xx*xx + yy*yy;
-            values[i] = fac*std::exp(-expnt*rsq);
-        }
+    // T operator()(const Coordinate<T,NDIM>& r) const {
+    //     T rsq = 0.0;
+    //     for (auto x : r) rsq += x*x;
+    //     return fac*std::exp(-expnt*rsq);
+    // }
+
+    template <size_t N>
+    void operator()(const SimpleTensor<T,NDIM,N>& x, std::array<T,N>& values) const {
+        distancesq(origin, x, values);
+        vscale(N, -expnt, &values[0]);
+        vexp(N, &values[0], &values[0]);
+        vscale(N, fac, &values[0]);
     }
 
-    template <size_t K2NDIM>
-    void operator()(const SimpleTensor<T,3,K2NDIM>& x, std::array<T,K2NDIM>& values) const {
-        static_assert(NDIM==3);
-        for (size_t i=0; i<K2NDIM; i++) {
-            const T xx = x(0,i)-origin(0);
-            const T yy = x(1,i)-origin(1);
-            const T zz = x(2,i)-origin(2);
-            const T rsq = xx*xx + yy*yy + zz*zz;
-            values[i] = fac*std::exp(-expnt*rsq);
+    Level initial_level() const {
+        return this->initlev;
+    }
+
+    bool is_negligible(const std::pair<Coordinate<T,NDIM>,Coordinate<T,NDIM>>& box, T thresh) const {
+        auto& lo = box.first;
+        auto& hi = box.second;
+        T rsq = 0.0;
+        T maxw = 0.0; // max width of box
+        for (Dimension d : range(NDIM)) {
+            maxw = std::max(maxw,hi(d)-lo(d));
+            T x = T(0.5)*(hi(d)+lo(d)) - origin(d);
+            rsq += x*x;
         }
+        static const T diagndim = T(0.5)*std::sqrt(T(NDIM));
+        T boxradplusr = maxw*diagndim + maxr;
+        //::ttg::print(box, boxradplusr, bool(boxradplusr*boxradplusr < rsq));
+        return (boxradplusr*boxradplusr < rsq);
     }
 };
 
 
-// // Test the numerics
-// template <typename T, size_t K, Dimension NDIM>
-// void test_gaussian(T thresh) {
-//     Domain<NDIM>::set_cube(-5.0,5.0);
-//     FunctionData<T,K,NDIM>::initialize();
-//     FunctionFunctor<T, NDIM> ff(g<T,NDIM>);
-//     Key<NDIM> root(0,{});
-//     T normsq = project_function_node<decltype(ff), T, K, NDIM>(ff,root,thresh);
-//     std::cout << "normsq error " << normsq-1.0 << std::endl;
-// }
+template <typename T, size_t K, Dimension NDIM>
+void test0() {
+    FunctionData<T,K,NDIM>::initialize();
+    Domain<NDIM>::set_cube(-6.0,6.0);
+    
+    //auto ff = &g<T,NDIM>;
+    auto ff = Gaussian<T,NDIM>(T(3.0), {T(0.0),T(0.0),T(0.0)});
+    
+    ctlEdge<NDIM> ctl("start");
+    rnodeEdge<T,K,NDIM> a("a"), c("c");
+    cnodeEdge<T,K,NDIM> b("b");
+    
+    auto start = make_start(ctl);
+    auto p1 = make_project(ff, T(1e-6), ctl, a, "project A");
+    auto compress = make_compress<T,K,NDIM>(a, b);
+    auto recon = make_reconstruct<T,K,NDIM>(b,c);
+    //recon->set_trace_instance(true);
+    
+    auto printer =   make_printer(a,"projected    ", false);
+    auto printer2 =  make_printer(b,"compressed   ", false);
+    auto printer3 =  make_printer(c,"reconstructed", false);
+    auto connected = make_graph_executable(start.get());
+    assert(connected);
+    if (ttg_default_execution_context().rank() == 0) {
+        std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
+        std::cout << "==== begin dot ====\n";
+        std::cout << Dot()(start.get()) << std::endl;
+        std::cout << "====  end dot  ====\n";
+        
+        // This kicks off the entire computation
+        start->invoke(Key<NDIM>(0, {0}));
+    }
+    
+    ttg_execute(ttg_default_execution_context());
+    ttg_fence(ttg_default_execution_context());
+}    
+
+
+template <typename T, size_t K, Dimension NDIM>
+void test1() {
+    FunctionData<T,K,NDIM>::initialize();
+    Domain<NDIM>::set_cube(-6.0,6.0);
+    
+    //auto ff = &g<T,NDIM>;
+    auto ff = Gaussian<T,NDIM>(T(30000.0), {T(0.0),T(0.0),T(0.0)});
+    
+    ctlEdge<NDIM> ctl("start");
+    auto start = make_start(ctl);
+    std::vector<std::unique_ptr<OpBase>> ops;
+    for (auto i : range(3)) {
+        rnodeEdge<T,K,NDIM> a("a"), c("c");
+        cnodeEdge<T,K,NDIM> b("b");
+    
+        auto p1 = make_project(ff, T(1e-6), ctl, a, "project A");
+        auto compress = make_compress<T,K,NDIM>(a, b);
+        auto recon = make_reconstruct<T,K,NDIM>(b,c);
+    
+        auto printer =   make_printer(a,"projected    ", false);
+        auto printer2 =  make_printer(b,"compressed   ", false);
+        auto printer3 =  make_printer(c,"reconstructed", false);
+
+        ops.push_back(std::move(p1));
+        ops.push_back(std::move(compress));
+        ops.push_back(std::move(recon));
+        ops.push_back(std::move(printer));
+        ops.push_back(std::move(printer2));
+        ops.push_back(std::move(printer3));
+    }
+
+    auto connected = make_graph_executable(start.get());
+    assert(connected);
+    if (ttg_default_execution_context().rank() == 0) {
+        std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
+        std::cout << "==== begin dot ====\n";
+        std::cout << Dot()(start.get()) << std::endl;
+        std::cout << "====  end dot  ====\n";
+        
+        // This kicks off the entire computation
+        start->invoke(Key<NDIM>(0, {0}));
+    }
+    
+    ttg_execute(ttg_default_execution_context());
+    ttg_fence(ttg_default_execution_context());
+}    
 
 int main(int argc, char** argv) {
     ttg_initialize(argc, argv, 2);
     std::cout << "Hello from madttg\n";
-    
-    // test_gaussian<double,5,3>(1e-6);
-    // test_gaussian<float,8,3>(1e-1);
-    // test_gaussian<float,8,3>(1e-2);
-    // test_gaussian<float,8,3>(1e-3);
-    // test_gaussian<float,8,3>(1e-4);
-    // test_gaussian<float,8,3>(1e-5);
-    // test_gaussian<float,8,3>(1e-6);
+
+    //vmlSetMode(VML_HA | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // default
+    //vmlSetMode(VML_EP | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // err is 10x default
+    vmlSetMode(VML_HA | VML_FTZDAZ_ON | VML_ERRMODE_DEFAULT); // err is same as default little faster
+    //vmlSetMode(VML_EP | VML_FTZDAZ_ON  | VML_ERRMODE_DEFAULT); // err is 10x default
+
+    GLinitialize();
 
     {
-        SimpleTensor<float,3,4,5> x;
-        x = 1.0;
-        apply_unaryop(x, [](float& x){x=99.0f;});
-        std::cout << "x\n" << x << std::endl;
-
-        auto s = x(_,_,_);
-        apply_unaryop(s, [](float& x){x=33.0f;});
-        std::cout << "s\n" << s << std::endl;
-
-        auto z = x(Slice(1,2),Slice(1,2),Slice(1,2));
-        std::cout << "z\n" << z << std::endl;
-        apply_unaryop(z, [](float& x){x=-1.0f;});
-        std::cout << "z\n" << z << std::endl;
-        std::cout << "x\n" << x << std::endl;
-
-
-        auto t = x(Slice(1,2),Slice(1,3),Slice(1,4));
-        apply_unaryop(t, [](float& x){x=55.0f;});
-        std::cout << "x\n" << x << std::endl;
-
-        SimpleTensor<float,1,2,3> q;
-        q = 0.0;
-        std::cout << "t\n" << t << std::endl;
-        std::cout << "q\n" << q << std::endl;
-        q = t;
-        std::cout << "q\n" << q << std::endl;
-    }
-    {
-        SimpleTensor<float,3,4> x;
-        x = 1.0;
-        apply_unaryop(x, [](float& x){x=99.0f;});
-        std::cout << x << std::endl;
-
-        auto s = x(_,_);
-        apply_unaryop(s, [](float& x){x=33.0f;});
-        std::cout << s << std::endl;
-    }
-    {
-        SimpleTensor<float,3> x;
-        x = 1.0;
-        apply_unaryop(x, [](float& x){x=99.0f;});
-        std::cout << x << std::endl;
-        
-        auto s = x(_);
-        apply_unaryop(s, [](float& x){x=33.0f;});
-        std::cout << s << std::endl;
-    }
-
-    //return 0;
-
-    {    
-
-        using T = float;
-        constexpr size_t K = 6;
-        constexpr Dimension NDIM = 3;
-        
-        GLinitialize();
-        FunctionData<T,K,NDIM>::initialize();
-        Domain<NDIM>::set_cube(-6.0,6.0);
-        
-        //auto ff = &g<T,NDIM>;
-        auto ff = Gaussian<T,NDIM>(T(3.0), {T(0.0),T(0.0),T(0.0)});
-        
-        ctlEdge<NDIM> ctl("start");
-        rnodeEdge<T,K,NDIM> a("a"), c("c");
-        cnodeEdge<T,K,NDIM> b("b");
-
-        auto start = make_start(ctl);
-        auto p1 = make_project(ff, T(1e-6), ctl, a, "project A");
-        auto compress = make_compress<T,K,NDIM>(a, b);
-        auto recon = make_reconstruct<T,K,NDIM>(b,c);
-        //recon->set_trace_instance(true);
-        
-        auto printer =   make_printer(a,"projected    ", false);
-        auto printer2 =  make_printer(b,"compressed   ", false);
-        auto printer3 =  make_printer(c,"reconstructed", true);
-        auto connected = make_graph_executable(start.get());
-        assert(connected);
-        if (ttg_default_execution_context().rank() == 0) {
-            std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
-            std::cout << "==== begin dot ====\n";
-            std::cout << Dot()(start.get()) << std::endl;
-            std::cout << "====  end dot  ====\n";
-            
-            // This kicks off the entire computation
-            start->invoke(Key<NDIM>(0, {0}));
-        }
-        
-        ttg_execute(ttg_default_execution_context());
-        ttg_fence(ttg_default_execution_context());
+        //test0<float,6,3>();
+        test1<float,6,3>();
+        //test1<double,6,3>();
     }
     
     get_default_world().gop.fence();

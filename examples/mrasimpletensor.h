@@ -140,8 +140,8 @@ namespace mra {
         };
     }
 
-    template <typename tensorT>
-    void apply_unaryop(tensorT& t, const auto& op) {
+    template <typename tensorT, typename opT>
+    void apply_unaryop(tensorT& t, const opT& op) {
         if constexpr (t.is_contiguous()) { // by definition not a slice tensor
             std::for_each(t.data().begin(), t.data().end(), op);
         }
@@ -186,8 +186,8 @@ namespace mra {
     }
 
     
-    template <typename tensorA, typename tensorB>
-    void apply_binaryop(tensorA& a, tensorB& b, const auto& op) {
+    template <typename tensorA, typename tensorB, typename opT>
+    void apply_binaryop(tensorA& a, tensorB& b, const opT& op) {
         assert(a.conforms(b));
         if constexpr (a.is_contiguous() && b.is_contiguous()) { // by definition not a slice tensor
                 std::cout << "bina ... not been here yet?\n";
@@ -440,7 +440,8 @@ namespace mra {
         }
 
         /// Optimized iteration ... given optimized (ndim-2) iterator returns address of first element in underlying data which will likely not be contiguous
-        data_type* ptr(auto& it) {
+        template <typename iteratorT>
+        data_type* ptr(iteratorT& it) {
             static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
             auto p = t.ptr() + slices[num_dimensions-2].start*stride(num_dimensions-2) + slices[num_dimensions-1].start*stride(num_dimensions-1);
             auto& indx = it.index();
@@ -449,7 +450,8 @@ namespace mra {
         }
 
         /// Optimized iteration ... given optimized (ndim-2) iterator returns address of first element in underlying data which will likely not be contiguous
-        const data_type* ptr(auto& it) const {
+        template <typename iteratorT>
+        const data_type* ptr(iteratorT& it) const {
             static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
             auto p = t.ptr() + slices[num_dimensions-2].start*stride(num_dimensions-2) + slices[num_dimensions-1].start*stride(num_dimensions-1);
             auto& indx = it.index();
@@ -701,7 +703,8 @@ namespace mra {
         }
 
         /// Optimized iteration ... given optimized (ndim-2) iterator returns address of first element in underlying data which will likely not be contiguous
-        data_type* ptr(auto& it) {
+        template <typename iteratorT>
+        data_type* ptr(iteratorT& it) {
             static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
             auto p = ptr();
             auto& indx = it.index();
@@ -710,7 +713,8 @@ namespace mra {
         }
 
         /// Optimized iteration ... given optimized (ndim-2) iterator returns address of first element in underlying data which will likely not be contiguous
-        const data_type* ptr(auto& it) const {
+        template <typename iteratorT>
+        const data_type* ptr(iteratorT& it) const {
             static_assert(num_dimensions>=2, "trying to use optimized iteration with too few dimensions");
             auto p = ptr();
             auto& indx = it.index();

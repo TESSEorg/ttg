@@ -26,7 +26,7 @@ namespace mra {
         std::function<T(const Coordinate<T,NDIM>&)> f;
         
     public:
-        static const Level default_initial_level = 2; //< needs to become user configurable
+        static const Level default_initial_level = 3; //< needs to become user configurable
         
         template <typename functionT>
         FunctionFunctor(functionT f) : f(f) {}
@@ -115,19 +115,17 @@ namespace mra {
     namespace detail {
         template <class functorT> using initial_level_t =
             decltype(std::declval<const functorT>().initial_level());
-        
         template <class functorT> using supports_initial_level =
-            ::mra::detail::is_detected<initial_level_t,functorT>;
+            ::mra::is_detected<initial_level_t,functorT>;
         
         template <class functorT, class pairT> using is_negligible_t =
             decltype(std::declval<const functorT>().is_negligible(std::declval<pairT>(),std::declval<double>()));
-
         template <class functorT, class pairT> using supports_is_negligible =
-            ::mra::detail::is_detected<is_negligible_t,functorT,pairT>;
+            ::mra::is_detected<is_negligible_t,functorT,pairT>;
     }
     
     template <typename functionT> Level initial_level(const functionT& f) {
-        if constexpr (detail::supports_initial_level<functionT>::value) return f.initial_level();
+        if constexpr (detail::supports_initial_level<functionT>()) return f.initial_level();
         else return 2; // <<<<<<<<<<<<<<< needs updating to make user configurable
     }
     

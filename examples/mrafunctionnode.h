@@ -56,7 +56,40 @@ namespace mra {
         T x = p[0]-q[0], y = p[1]-q[1], z=p[2]-q[2];
         return x*x + y*y + z*z;
     }
+
+    template <typename T, size_t N>
+    void distancesq(const Coordinate<T,3>& p, const SimpleTensor<T,1,N>& q, std::array<T,N>& rsq) {
+        const T x = p(0);
+        for (size_t i=0; i<N; i++) {
+            T xx = q(0,i) - x;
+            rsq[i] = xx*xx;
+        }
+    }
     
+    template <typename T, size_t N>
+    void distancesq(const Coordinate<T,3>& p, const SimpleTensor<T,2,N>& q, std::array<T,N>& rsq) {
+        const T x = p(0);
+        const T y = p(1);
+        for (size_t i=0; i<N; i++) {
+            T xx = q(0,i) - x;
+            T yy = q(1,i) - y;
+            rsq[i] = xx*xx + yy*yy;
+        }
+    }
+    
+    template <typename T, size_t N>
+    void distancesq(const Coordinate<T,3>& p, const SimpleTensor<T,3,N>& q, std::array<T,N>& rsq) {
+        const T x = p(0);
+        const T y = p(1);
+        const T z = p(2);
+        for (size_t i=0; i<N; i++) {
+            T xx = q(0,i) - x;
+            T yy = q(1,i) - y;
+            T zz = q(2,i) - z;
+            rsq[i] = xx*xx + yy*yy + zz*zz;
+        }
+    }
+
     /// Evaluate the function within one cube with screening
     template <typename functorT, typename T, size_t K, Dimension NDIM>
     void fcube(const functorT& f, const Key<NDIM>& key, const T thresh, FixedTensor<T,K,NDIM>& values) {
@@ -68,29 +101,29 @@ namespace mra {
             SimpleTensor<T,NDIM,K> x; // When have object structure can move outside
             FunctionData<T,K,NDIM>::make_quadrature_pts(key,x);
 
-            constexpr bool call_coord = std::is_invocable_r<void, decltype(f), Coordinate<T,NDIM>>(); // f(coord)
-            constexpr bool call_1d = (NDIM==1) && std::is_invocable_r<void, decltype(f), T>(); // f(x)
-            constexpr bool call_2d = (NDIM==2) && std::is_invocable_r<void, decltype(f), T, T>(); // f(x)
-            constexpr bool call_3d = (NDIM==3) && std::is_invocable_r<void, decltype(f), T, T, T>(); // f(x)
+            constexpr bool call_coord = std::is_invocable_r<T, decltype(f), Coordinate<T,NDIM>>(); // f(coord)
+            constexpr bool call_1d = (NDIM==1) && std::is_invocable_r<T, decltype(f), T>(); // f(x)
+            constexpr bool call_2d = (NDIM==2) && std::is_invocable_r<T, decltype(f), T, T>(); // f(x,y)
+            constexpr bool call_3d = (NDIM==3) && std::is_invocable_r<T, decltype(f), T, T, T>(); // f(x,y,z)
             constexpr bool call_vec = std::is_invocable_r<void, decltype(f), SimpleTensor<T,NDIM,K2NDIM>, std::array<T,K2NDIM>&>(); // vector API
-            //constexpr bool call_vec = true;
             
             static_assert(call_coord || call_1d || call_2d || call_3d || call_vec, "no working call");
-            if constexpr (call_coord) {
+
+            if constexpr (call_1d || call_2d || call_3d || call_vec) {
+                SimpleTensor<T,NDIM,K2NDIM> xvec; 
+                make_xvec(x,xvec);
+                if constexpr (call_vec) {
+                    f(xvec,values.data());
+                }                
+                else if constexpr (call_1d || call_2d || call_3d) {
+                    eval_cube_vec(f, xvec, values);
+                }
+            }
+            else if constexpr (call_coord) {
                 eval_cube(f, x, values);
             }
             else {
-                SimpleTensor<T,NDIM,K2NDIM> xvec; 
-                make_xvec(x,xvec);
-                if constexpr (call_1d || call_2d || call_3d) {
-                    eval_cube_vec(f, xvec, values);
-                }
-                else if constexpr (call_vec) {
-                    f(xvec,values.data());
-                }
-                else {
-                    throw "how did we get here?";
-                }
+                throw "how did we get here?";
             }
         }
     }

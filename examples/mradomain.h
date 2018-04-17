@@ -39,6 +39,8 @@ namespace mra {
             for (double x : cell_width) cell_volume *= x;
             initialized = true;
         }
+
+        static void uninitialize() {initialized=false;}
         
         static void set_cube(double lo, double hi) {
             for (auto d : range(NDIM)) set(d, lo, hi);
@@ -51,10 +53,18 @@ namespace mra {
             return cell[d];
         }
         
+        /// Returns the width of dimension d
         static double get_width(Dimension d) {
             assert(d<NDIM);
             assert(initialized);
             return cell_width[d];
+        }
+
+        /// Returns the maximum width of any dimension
+        static double get_max_width() {
+            double w = 0.0;
+            for (auto d : range(NDIM)) w = std::max(w,get_width(d));
+            return w;
         }
         
         static double get_reciprocal_width(Dimension d) {
