@@ -107,10 +107,16 @@ namespace madness {
         return std::forward<T>(data);
       }
 
+      // This to support op fusion
+      inline static __thread struct {
+        uint64_t key_hash = 0; // hash of current key
+        size_t call_depth = 0; // how deep calls are nested
+      } threaddata;
+
       using input_values_tuple_type = std::tuple<data_wrapper_t<std::decay_t<input_valueTs>>...>;
       using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
       using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
-
+ 
       using output_terminals_type = output_terminalsT;
       using output_edges_type = typename ::ttg::terminals_to_edges<output_terminalsT>::type;
 
@@ -142,7 +148,14 @@ namespace madness {
 
         void run(World &world) {
           // ::ttg::print("starting task");
+
+            opT::threaddata.key_hash = std::hash<keyT>()(key);
+            opT::threaddata.call_depth++;
+            
           derived->op(key, std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
+          
+            opT::threaddata.call_depth--;
+          
           // ::ttg::print("finishing task");
         }
 
@@ -226,8 +239,15 @@ namespace madness {
             args->derived = static_cast<derivedT *>(this);
             args->key = key;
 
-            world.taskq.add(args);
-            // static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
+            if (std::hash<keyT>{}(key) == threaddata.key_hash && threaddata.call_depth<6) { // Needs to be externally configurable
+                //::ttg::print("directly invoking:", key, threaddata.call_depth);
+                static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
+            }
+            else {
+                //::ttg::print("enqueuing task", key, threaddata.call_depth);
+                world.taskq.add(args);
+            }
+            
 
             cache.erase(acc);
           }
