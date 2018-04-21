@@ -156,7 +156,7 @@ namespace madness {
           
             opT::threaddata.call_depth--;
           
-          // ::ttg::print("finishing task");
+          //::ttg::print("finishing task",opT::threaddata.call_depth);
         }
 
         virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
@@ -239,12 +239,18 @@ namespace madness {
             args->derived = static_cast<derivedT *>(this);
             args->key = key;
 
-            if (std::hash<keyT>{}(key) == threaddata.key_hash && threaddata.call_depth<6) { // Needs to be externally configurable
-                //::ttg::print("directly invoking:", key, threaddata.call_depth);
+            auto curhash = std::hash<keyT>{}(key);
+
+            if (curhash == threaddata.key_hash && threaddata.call_depth<6) { // Needs to be externally configurable
+                
+                //::ttg::print("directly invoking:", get_name(), key, curhash, threaddata.key_hash, threaddata.call_depth);
+                opT::threaddata.call_depth++;
                 static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
+                opT::threaddata.call_depth--;
+                
             }
             else {
-                //::ttg::print("enqueuing task", key, threaddata.call_depth);
+                //::ttg::print("enqueuing task", get_name(), key, curhash, threaddata.key_hash, threaddata.call_depth);
                 world.taskq.add(args);
             }
             
@@ -401,10 +407,10 @@ namespace madness {
         static_assert(std::is_same<keyT, typename terminalT::key_type>::value,
                       "Op::register_input_callback(terminalT) -- incompatible terminalT");
         using valueT = std::decay_t<typename terminalT::value_type>;
-        using send_callbackT = typename ::ttg::In<keyT, valueT>::send_callback_type;
-        using move_callbackT = typename ::ttg::In<keyT, valueT>::move_callback_type;
-        using setsize_callbackT = typename ::ttg::In<keyT, valueT>::setsize_callback_type;
-        using finalize_callbackT = typename ::ttg::In<keyT, valueT>::finalize_callback_type;
+        // using send_callbackT = typename ::ttg::In<keyT, valueT>::send_callback_type;
+        // using move_callbackT = typename ::ttg::In<keyT, valueT>::move_callback_type;
+        // using setsize_callbackT = typename ::ttg::In<keyT, valueT>::setsize_callback_type;
+        // using finalize_callbackT = typename ::ttg::In<keyT, valueT>::finalize_callback_type;
 
         auto move_callback = [this](const keyT &key, valueT &&value) {
           // std::cout << "move_callback\n";

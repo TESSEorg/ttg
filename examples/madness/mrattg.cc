@@ -314,6 +314,10 @@ auto make_reconstruct(const cnodeEdge<T,K,NDIM>& in, rnodeEdge<T,K,NDIM>& out, c
     return s;
 }
 
+template <typename keyT, typename valueT>
+auto make_sink(const Edge<keyT,valueT>& e) {
+    return std::make_unique<OpSink<keyT,valueT>>(e);
+}
 
 // For checking we haven't broken something while developing
 template <typename T>
@@ -455,9 +459,12 @@ void test1() {
         auto compress = make_compress<T,K,NDIM>(a, b);
         auto recon = make_reconstruct<T,K,NDIM>(b,c);
     
-        auto printer =   make_printer(a,"projected    ", false);
-        auto printer2 =  make_printer(b,"compressed   ", false);
-        auto printer3 =  make_printer(c,"reconstructed", false);
+        // auto printer =   make_printer(a,"projected    ", false);
+        // auto printer2 =  make_printer(b,"compressed   ", false);
+        // auto printer3 =  make_printer(c,"reconstructed", false);
+        auto printer =   make_sink(a);
+        auto printer2 =  make_sink(b);
+        auto printer3 =  make_sink(c);
 
         ops.push_back(std::move(p1));
         ops.push_back(std::move(compress));

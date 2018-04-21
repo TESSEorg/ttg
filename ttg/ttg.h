@@ -370,6 +370,7 @@ namespace ttg {
 
   void OpBase::make_executable() { executable = true; }
 
+
   template <typename input_terminalsT, typename output_terminalsT>
   class CompositeOp : public OpBase {
    public:
@@ -1111,6 +1112,64 @@ namespace ttg {
   struct edges_to_output_terminals<std::tuple<edgesT...>> {
     typedef std::tuple<typename edgesT::output_terminal_type...> type;
   };
+
+  /// A data sink for one input
+    template <typename keyT, typename input_valueT>
+    class OpSink : public ::ttg::OpBase {
+        static constexpr int numins = 1;
+        static constexpr int numouts = 0;
+        
+        using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueT>>;
+        using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueT>>>;
+        using output_terminals_type = std::tuple<>;
+        
+    private:
+        input_terminals_type input_terminals;
+        output_terminals_type output_terminals;
+        
+        OpSink(const OpSink &other) = delete;
+        OpSink &operator=(const OpSink &other) = delete;
+        OpSink(OpSink &&other) = delete;
+        OpSink &operator=(OpSink &&other) = delete;
+        
+        template <typename terminalT>
+        void register_input_callback(terminalT &input) {
+            using valueT = std::decay_t<typename terminalT::value_type>;
+            auto move_callback = [this](const keyT &key, valueT &&value) {};
+            auto send_callback = [this](const keyT &key, const valueT &value) {};
+            auto setsize_callback = [this](const keyT &key, std::size_t size) {};
+            auto finalize_callback = [this](const keyT &key) {};
+            
+            input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
+        }
+        
+    public:
+        OpSink(const std::string& inname="junk") : ::ttg::OpBase("sink", numins, numouts) {
+            register_input_terminals(input_terminals, std::vector<std::string>{inname});
+            register_input_callback(std::get<0>(input_terminals));
+        }
+        
+        OpSink(const input_edges_type &inedges, const std::string& inname="junk") : ::ttg::OpBase("sink", numins, numouts) {
+            register_input_terminals(input_terminals, std::vector<std::string>{inname});
+            register_input_callback(std::get<0>(input_terminals));
+            std::get<0>(inedges).set_out(&std::get<0>(input_terminals));
+        }
+        
+        virtual ~OpSink() {}
+
+        void fence() {}
+        
+        void make_executable() {
+            OpBase::make_executable();
+        }
+        
+        /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned
+        template <std::size_t i>
+        typename std::tuple_element<i, input_terminals_type>::type *in() {
+            static_assert(i==0);
+            return &std::get<i>(input_terminals);
+        }
+    };
 
 }  // namespace ttg
 
