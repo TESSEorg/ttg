@@ -33,12 +33,35 @@ using namespace ::ttg;
 
 using namespace mra;
 
+/// Random process map
 template <Dimension NDIM>
 struct KeyProcMap {
     const size_t size;
     KeyProcMap() : size(get_default_world().size()) {}
     std::size_t operator()(const Key<NDIM>& key) const {return key.hash() % size;}
 };
+
+
+// /// A pmap that locates children on odd levels with their even level parents .. needs a litte fixing
+// template <typename keyT>
+// class LevelPmap : public WorldDCPmapInterface<keyT> {
+// private:
+//     const int nproc;
+// public:
+//     LevelPmap() : nproc(0) {};
+    
+//     LevelPmap(World& world) : nproc(world.nproc()) {}
+    
+//     /// Find the owner of a given key
+//     ProcessID owner(const keyT& key) const {
+//         Level n = key.level();
+//         if (n == 0) return 0;
+//         hashT hash;
+//         if (n <= 3 || (n&0x1)) hash = key.hash();
+//         else hash = key.parent().hash();
+//         return hash%nproc;
+//     }
+// };
 
 
 /// An empty class used for pure control flows
