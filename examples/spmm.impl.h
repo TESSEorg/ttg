@@ -214,16 +214,16 @@ namespace ttg {
 }  // namespace ttg
 
 // flow data from an existing SpMatrix on rank 0
-class Read_SpMatrix : public Op<int, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatrix, int> {
+class Read_SpMatrix : public Op<Void, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatrix, Void> {
  public:
-  using baseT = Op<int, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatrix, int>;
+  using baseT = Op<Void, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatrix, Void>;
 
-  Read_SpMatrix(const char *label, const SpMatrix &matrix, Edge<int, int> &ctl, Edge<Key<2>, blk_t> &out)
+  Read_SpMatrix(const char *label, const SpMatrix &matrix, Edge<> &ctl, Edge<Key<2>, blk_t> &out)
       : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
               [](auto key) { return 0; })
       , matrix_(matrix) {}
 
-  void op(const int &key, baseT::input_values_tuple_type &&junk, std::tuple<Out<Key<2>, blk_t>> &out) {
+  void op(std::tuple<Out<Key<2>, blk_t>> &out) {
     for (int k = 0; k < matrix_.outerSize(); ++k) {
       for (SpMatrix::InnerIterator it(matrix_, k); it; ++it) {
         ::send<0>(Key<2>({it.row(), it.col()}), it.value(), out);
@@ -495,15 +495,15 @@ class SpMM {
   }
 };
 
-class Control : public Op<int, std::tuple<Out<int, int>>, Control> {
-  using baseT = Op<int, std::tuple<Out<int, int>>, Control>;
+class Control : public Op<Void, std::tuple<Out<>>, Control> {
+  using baseT = Op<Void, std::tuple<Out<>>, Control>;
 
  public:
-  Control(Edge<int, int> &ctl) : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}) {}
+  Control(Edge<> &ctl) : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}) {}
 
-  void op(const int &key, const std::tuple<> &, std::tuple<Out<int, int>> &out) { ::send<0>(0, 0, out); }
+  void op(std::tuple<Out<>> &out) { ::send<0>(out); }
 
-  void start() { invoke(0); }
+  void start() { invoke(); }
 };
 
 #ifdef BTAS_IS_USABLE
@@ -592,7 +592,7 @@ int main(int argc, char **argv) {
     }
 
     // flow graph needs to exist on every node
-    Edge<int, int> ctl("control");
+    Edge<Void, Void> ctl("control");
     Control control(ctl);
     Edge<Key<2>, blk_t> eA, eB, eC;
     Read_SpMatrix a("A", A, ctl, eA);
