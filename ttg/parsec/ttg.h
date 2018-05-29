@@ -82,23 +82,23 @@ namespace parsec {
       auto *execution_stream() { return es; }
       auto *taskpool() { return tpool; }
 
-      void increment_created() { parsec_atomic_inc_32b(&created_counter()); }
-      void increment_sent_to_sched() { parsec_atomic_inc_32b(&sent_to_sched_counter()); }
+      void increment_created() { parsec_atomic_fetch_inc_int32(&created_counter()); }
+      void increment_sent_to_sched() { parsec_atomic_fetch_inc_int32(&sent_to_sched_counter()); }
 
-      uint32_t created() const { return this->created_counter(); }
-      uint32_t sent_to_sched() const { return this->sent_to_sched_counter(); }
+      int32_t created() const { return this->created_counter(); }
+      int32_t sent_to_sched() const { return this->sent_to_sched_counter(); }
 
      private:
       parsec_context_t *ctx = nullptr;
       parsec_execution_stream_t *es = nullptr;
       parsec_taskpool_t *tpool = nullptr;
 
-      volatile uint32_t &created_counter() const {
-        static volatile uint32_t created = 0;
+      volatile int32_t &created_counter() const {
+        static volatile int32_t created = 0;
         return created;
       }
-      volatile uint32_t &sent_to_sched_counter() const {
-        static volatile uint32_t sent_to_sched = 0;
+      volatile int32_t &sent_to_sched_counter() const {
+        static volatile int32_t sent_to_sched = 0;
         return sent_to_sched;
       }
     };
@@ -134,7 +134,7 @@ namespace parsec {
 extern "C" {
 typedef struct my_op_s {
   parsec_task_t parsec_task;
-  uint32_t in_data_count;
+  int32_t in_data_count;
   // TODO need to augment PaRSEC backend's my_op_s by stream size info, etc.  ... in_data_count will need to be replaced by something like this
 //  int counter;                            // Tracks the number of arguments set
 //  std::array<std::size_t, numins> nargs;  // Tracks the number of expected values (0 = finalized)
@@ -485,7 +485,7 @@ namespace parsec {
             free(newtask);
           } else {
             newtask->op_ht_item.key = hk;
-            parsec_atomic_inc_32b((volatile uint32_t *)&world.taskpool()->nb_tasks);
+            parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
             world.increment_created();
             parsec_hash_table_nolock_insert(&tasks_table, &newtask->op_ht_item);
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
@@ -527,7 +527,7 @@ namespace parsec {
         //    (*(ddesc->unpack_header))(copy->device_private, hs, value_ptr);
         //    (*(ddesc->unpack_payload))(copy->device_private, ps, 0, value_ptr);
 
-        int count = parsec_atomic_inc_32b(&task->in_data_count);
+        int32_t count = parsec_atomic_fetch_inc_int32(&task->in_data_count)+1;
         assert(count <= self.dependencies_goal);
 
         if (count == self.dependencies_goal) {
@@ -854,14 +854,14 @@ namespace parsec {
       // Manual injection of a task with all input arguments specified as a tuple
       void invoke(const keyT &key, const input_values_tuple_type &args) {
         // That task is going to complete, so count it as to execute
-        parsec_atomic_inc_32b((volatile uint32_t *)&world.taskpool()->nb_tasks);
+        parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, key, args);
       }
 
       // Manual injection of a task that has no arguments
       void invoke(const keyT &key) {
         // That task is going to complete, so count it as to execute
-        parsec_atomic_inc_32b((volatile uint32_t *)&world.taskpool()->nb_tasks);
+        parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
         set_arg_empty(key);
       }
 
