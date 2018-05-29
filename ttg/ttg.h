@@ -18,7 +18,30 @@
 #include "util/meta.h"
 
 namespace ttg {
+/// type analog of void
+struct Void {};
 
+static_assert(meta::is_empty_tuple_v<std::tuple<>>,"ouch");
+static_assert(meta::is_empty_tuple_v<std::tuple<Void>>,"ouch");
+
+bool operator==(const Void&, const Void&) { return true; }
+
+bool operator!=(const Void&, const Void&) { return false; }
+
+std::ostream& operator<<(std::ostream& os, const ttg::Void&) {
+  return os;
+}
+
+}  // namespace ttg
+
+namespace std {
+template <>
+struct hash<ttg::Void> {
+  int64_t operator()(const ttg::Void&) const { return 0; }
+};
+}
+
+namespace ttg {
   namespace overload {
     /// Computes unique hash values for objects of type T.
     /// Overload for your type.
@@ -723,10 +746,10 @@ namespace ttg {
     )(op);
   }
 
-  template <typename keyT, typename valueT>
+  template <typename keyT = Void, typename valueT = Void>
   class Edge;  // Forward decl.
 
-  template <typename keyT, typename valueT>
+  template <typename keyT = Void, typename valueT = Void>
   class In : public TerminalBase {
    public:
     typedef valueT value_type;
@@ -810,7 +833,7 @@ namespace ttg {
   };
 
   // Output terminal
-  template <typename keyT, typename valueT>
+  template <typename keyT = Void, typename valueT = Void>
   class Out : public TerminalBase {
    public:
     typedef valueT value_type;
@@ -1067,9 +1090,19 @@ namespace ttg {
     t.send(key, std::forward<valueT>(value));
   }
 
+  template <typename keyT, typename valueT, typename output_terminalT>
+  void send(output_terminalT &t) {
+    t.send(Void{}, Void{});
+  }
+
   template <size_t i, typename keyT, typename valueT, typename... output_terminalsT>
-  void send(const keyT &key, valueT &&value, std::tuple<output_terminalsT...> &t) {
+  std::enable_if_t<!std::is_same_v<keyT,Void> || !std::is_same_v<valueT,Void>,void> send(const keyT &key, valueT &&value, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).send(key, std::forward<valueT>(value));
+  }
+
+  template <size_t i, typename... output_terminalsT>
+  void send(std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).send(Void{}, Void{});
   }
 
   template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT>

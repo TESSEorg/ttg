@@ -149,12 +149,20 @@ namespace madness {
         void run(World &world) {
           // ::ttg::print("starting task");
 
-            opT::threaddata.key_hash = std::hash<keyT>()(key);
-            opT::threaddata.call_depth++;
+          opT::threaddata.key_hash = std::hash<keyT>()(key);
+          opT::threaddata.call_depth++;
             
-          derived->op(key, std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
-          
-            opT::threaddata.call_depth--;
+          if constexpr (!std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+            derived->op(key, std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
+          } else if constexpr (!std::is_same_v<keyT,::ttg::Void> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+            derived->op(key, derived->output_terminals);
+          } else if constexpr (std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+            derived->op(std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
+          } else {
+            derived->op(derived->output_terminals);  // !!! NOTE moving t into op
+          }
+
+          opT::threaddata.call_depth--;
           
           //::ttg::print("finishing task",opT::threaddata.call_depth);
         }
@@ -245,7 +253,15 @@ namespace madness {
                 
                 //::ttg::print("directly invoking:", get_name(), key, curhash, threaddata.key_hash, threaddata.call_depth);
                 opT::threaddata.call_depth++;
-                static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
+                if constexpr (!std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+                  static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
+                } else if constexpr (!std::is_same_v<keyT,::ttg::Void> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+                  static_cast<derivedT *>(this)->op(key, output_terminals); // Runs immediately
+                } else if constexpr (std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+                  static_cast<derivedT *>(this)->op(std::move(args->t), output_terminals); // Runs immediately
+                } else {
+                  static_cast<derivedT *>(this)->op(output_terminals); // Runs immediately
+                }
                 opT::threaddata.call_depth--;
                 
             }
@@ -261,7 +277,7 @@ namespace madness {
       }
 
       // Used to generate tasks with no input arguments
-      void set_arg_empty(const keyT &key) {
+      template <typename Key = keyT> std::enable_if_t<!std::is_same_v<Key,::ttg::Void>,void> set_arg_empty(const Key &key) {
         const int owner = keymap(key);
 
         if (owner != world.rank()) {
@@ -280,6 +296,24 @@ namespace madness {
           // static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals);// runs immediately
 
           cache.erase(acc);
+        }
+      }
+
+      // Used to generate tasks with no input arguments
+      template <typename Key = keyT>
+      std::enable_if_t<std::is_same_v<Key,::ttg::Void>,void> set_arg_empty() {
+        const int owner = keymap(::ttg::Void{});
+
+        if (owner != world.rank()) {
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : forwarding no-arg task: ");
+          worldobjT::send(owner, &opT::set_arg_empty<::ttg::Void>);
+        } else {
+          auto task = new OpArgs();  // It will be deleted by the task q
+
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
+          task->derived = static_cast<derivedT *>(this);
+
+          world.taskq.add(task);
         }
       }
 
@@ -577,7 +611,10 @@ namespace madness {
       }
 
       /// Manual injection of a task that has no arguments
-      void invoke(const keyT &key) { set_arg_empty(key); }
+      template <typename Key = keyT> std::enable_if_t<!std::is_same_v<Key,::ttg::Void>,void> invoke(const Key &key) { set_arg_empty(key); }
+
+      /// Manual injection of a task that has no key or arguments
+      template <typename Key = keyT> std::enable_if_t<std::is_same_v<Key,::ttg::Void>,void> invoke() { set_arg_empty(); }
 
       /// keymap accessor
       /// @return the keymap
