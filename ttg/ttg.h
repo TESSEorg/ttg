@@ -19,7 +19,7 @@
 
 namespace ttg {
 /// type analog of void
-struct Void {};
+class Void {};
 
 static_assert(meta::is_empty_tuple_v<std::tuple<>>,"ouch");
 static_assert(meta::is_empty_tuple_v<std::tuple<Void>>,"ouch");

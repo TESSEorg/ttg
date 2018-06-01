@@ -5,12 +5,17 @@
 
 // Class to wrap a callable with signature
 //
-// void op(const input_keyT&, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&)
+// void op(auto&& key, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&)
 //
 template <typename funcT, typename keyT, typename output_terminalsT, typename... input_valuesT>
 class WrapOp
     : public Op<keyT, output_terminalsT, WrapOp<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...> {
   using baseT = Op<keyT, output_terminalsT, WrapOp<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...>;
+
+  using input_values_tuple_type = typename baseT::input_values_tuple_type;
+  using input_edges_type = typename baseT::input_edges_type;
+  using output_edges_type = typename baseT::output_edges_type;
+
   std::function<boost::callable_traits::function_type_t<funcT>> func;
 
   template <typename Key, typename Tuple, std::size_t... S>
@@ -23,9 +28,15 @@ class WrapOp
     func(std::forward<Key>(key), std::move(unwrapped_args), out);
   }
 
+  template <typename Key>
+  void call_func(Key &&key, output_terminalsT &out) {
+    using func_args_t = std::remove_reference_t<std::tuple_element_t<1, boost::callable_traits::args_t<funcT>>>;
+    func(std::forward<Key>(key), func_args_t{}, out);
+  }
+
  public:
   template <typename funcT_>
-  WrapOp(funcT_ &&f, const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
+  WrapOp(funcT_ &&f, const input_edges_type &inedges, const output_edges_type &outedges,
          const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
       : baseT(inedges, outedges, name, innames, outnames), func(std::forward<funcT_>(f)) {}
 
@@ -35,10 +46,20 @@ class WrapOp
          const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
       : baseT(name, innames, outnames), func(std::forward<funcT_>(f)) {}
 
-  void op(const keyT &key, typename baseT::input_values_tuple_type &&args, output_terminalsT &out) {
-    call_func(key, std::forward<typename baseT::input_values_tuple_type>(args), out,
-              std::make_index_sequence<std::tuple_size<typename baseT::input_values_tuple_type>::value>{});
-    // func(key, std::forward<typename baseT::input_values_tuple_type>(args), out);
+  template<typename Key, typename ArgsTuple>
+  std::enable_if_t<std::is_same_v<ArgsTuple,input_values_tuple_type> &&
+      !::ttg::meta::is_empty_tuple_v<ArgsTuple> &&
+      !::ttg::meta::is_Void_v<Key>,void>
+  op(Key&& key, ArgsTuple &&args_tuple, output_terminalsT &out) {
+    call_func(std::forward<Key>(key), std::forward<ArgsTuple>(args_tuple), out,
+              std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{});
+  }
+
+  template<typename Key, typename ArgsTuple = input_values_tuple_type>
+  std::enable_if_t<::ttg::meta::is_empty_tuple_v<ArgsTuple> &&
+      !::ttg::meta::is_Void_v<Key>,void>
+  op(Key&& key, output_terminalsT &out) {
+    call_func(std::forward<Key>(key), out);
   }
 };
 
@@ -55,26 +76,47 @@ struct type_printer;
 
 // Class to wrap a callable with signature
 //
-// void op(const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)
+// void op(auto&& key, input_valuesT&&..., std::tuple<output_terminalsT...>&)
 //
 template <typename funcT, typename keyT, typename output_terminalsT, typename... input_valuesT>
 class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, output_terminalsT, input_valuesT...>,
                              input_valuesT...> {
   using baseT =
       Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...>;
+
+  using input_values_tuple_type = typename baseT::input_values_tuple_type;
+  using input_edges_type = typename baseT::input_edges_type;
+  using output_edges_type = typename baseT::output_edges_type;
+
   std::function<boost::callable_traits::function_type_t<funcT>> func;
 
   template <typename Key, typename Tuple, std::size_t... S>
-  void call_func(Key &&key, Tuple &&args, output_terminalsT &out, std::index_sequence<S...>) {
+  void call_func(Key &&key, Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
     using func_args_t = boost::callable_traits::args_t<funcT>;
     func(std::forward<Key>(key),
-         baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args))..., out);
+         baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
+  }
+
+  template <typename Tuple, std::size_t... S>
+  void call_func(Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
+    using func_args_t = boost::callable_traits::args_t<funcT>;
+    func(baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
+  }
+
+  template <typename Key>
+  void call_func(Key &&key, output_terminalsT &out) {
+    func(std::forward<Key>(key), out);
+  }
+
+  template <typename OutputTerminals>
+  void call_func(OutputTerminals & out) {
+    func(out);
   }
 
  public:
 
   template <typename funcT_>
-  WrapOpArgs(funcT_ &&f, const typename baseT::input_edges_type &inedges,
+  WrapOpArgs(funcT_ &&f, const input_edges_type &inedges,
              const typename baseT::output_edges_type &outedges, const std::string &name,
              const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
       : baseT(inedges, outedges, name, innames, outnames), func(std::forward<funcT_>(f)) {}
@@ -84,11 +126,38 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
              const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
       : baseT(name, innames, outnames), func(std::forward<funcT_>(f)) {}
 
-  template<typename Key>
-  void op(Key &&key, typename baseT::input_values_tuple_type &&args, output_terminalsT &out) {
-    call_func(std::forward<Key>(key), std::forward<typename baseT::input_values_tuple_type>(args), out,
-              std::make_index_sequence<std::tuple_size<typename baseT::input_values_tuple_type>::value>{});
+  template<typename Key, typename ArgsTuple>
+  std::enable_if_t<std::is_same_v<ArgsTuple,input_values_tuple_type> &&
+      !::ttg::meta::is_empty_tuple_v<ArgsTuple> &&
+      !::ttg::meta::is_Void_v<Key>,void>
+      op(Key &&key, ArgsTuple &&args_tuple, output_terminalsT &out) {
+    call_func(std::forward<Key>(key), std::forward<ArgsTuple>(args_tuple), out,
+              std::make_index_sequence<std::tuple_size<ArgsTuple>::value>{});
   };
+
+  template<typename ArgsTuple, typename Key = keyT>
+  std::enable_if_t<std::is_same_v<ArgsTuple,input_values_tuple_type> &&
+      !::ttg::meta::is_empty_tuple_v<ArgsTuple> &&
+      ::ttg::meta::is_Void_v<Key>,void>
+  op(ArgsTuple &&args_tuple, output_terminalsT &out) {
+    call_func(std::forward<ArgsTuple>(args_tuple), out,
+              std::make_index_sequence<std::tuple_size<ArgsTuple>::value>{});
+  };
+
+  template<typename Key, typename ArgsTuple = input_values_tuple_type>
+  std::enable_if_t<::ttg::meta::is_empty_tuple_v<ArgsTuple> &&
+      !::ttg::meta::is_Void_v<Key>,void>
+  op(Key &&key, output_terminalsT &out) {
+    call_func(std::forward<Key>(key), out);
+  };
+
+  template<typename Key = keyT, typename ArgsTuple = input_values_tuple_type>
+  std::enable_if_t<::ttg::meta::is_empty_tuple_v<ArgsTuple> &&
+      ::ttg::meta::is_Void_v<Key>,void>
+  op(output_terminalsT &out) {
+    call_func(out);
+  };
+
 };
 
 template <typename funcT, typename keyT, typename output_terminalsT, typename input_values_tupleT>
