@@ -44,7 +44,7 @@ class Producer : public Op<keyT, std::tuple<Out<keyT, int>>, Producer> {
   Producer(const typename baseT::output_edges_type &outedges, const std::string &name)
       : baseT(edges(), outedges, name, {}, {"output"}) {}
 
-  void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
+  void op(const keyT &key, baseT::output_terminals_type &out) {
     ::ttg::print("produced ", 0);
     ::send<0>((int)(key), 0, out);
   }

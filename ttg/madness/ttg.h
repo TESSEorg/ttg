@@ -42,7 +42,24 @@ namespace madness {
     inline void set_default_world(World &world) { detail::default_world_accessor() = &world; }
     inline void set_default_world(World *world) { detail::default_world_accessor() = world; }
 
-    template <typename... RestOfArgs>
+#if 0
+    class Control;
+    class Graph;
+  /// Graph is a collection of Op objects
+  class Graph {
+   public:
+    Graph() {
+      world_ = get_default_world();
+    }
+    Graph(World& w) : world_(w) {}
+
+
+   private:
+    World& world_;
+  };
+#endif
+
+  template <typename... RestOfArgs>
     inline void ttg_initialize(int argc, char **argv, RestOfArgs &&...) {
       World &world = madness::initialize(argc, argv);
       set_default_world(world);
@@ -282,7 +299,7 @@ namespace madness {
 
         if (owner != world.rank()) {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
-          worldobjT::send(owner, &opT::set_arg_empty, key);
+          worldobjT::send(owner, &opT::set_arg_empty<keyT>, key);
         } else {
           accessorT acc;
           if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q

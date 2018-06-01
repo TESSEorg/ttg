@@ -5,6 +5,8 @@
 
 namespace ttg {
 
+  class Void;
+
   namespace meta {
 
 #if __cplusplus >= 201703L
@@ -69,6 +71,10 @@ namespace ttg {
     template <typename Tuple>
     using decayed_tuple_t = typename decayed_tuple<Tuple>::type;
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // is_empty_tuple
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     // true if tuple contains empty types, e.g. is_empty_tuple<std::tuple<>> or is_empty_tuple<std::tuple<Void>>
     template <typename T, typename Enabler = void>
     struct is_empty_tuple : std::false_type {};
@@ -80,7 +86,15 @@ namespace ttg {
     template <typename Tuple>
     inline constexpr bool is_empty_tuple_v = is_empty_tuple<Tuple>::value;
 
-  }  // namespace meta
+    static_assert(!is_empty_tuple_v<std::tuple<int>>, "ouch");
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // is_Void_v
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <typename T>
+    constexpr bool is_Void_v = std::is_same_v<std::decay_t<T>,Void>;
+
+}  // namespace meta
 
 }  // namespace ttg
 
