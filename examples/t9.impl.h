@@ -359,7 +359,7 @@ int main(int argc, char** argv) {
     assert(connected);
 
     if (ttg_default_execution_context().rank() == 0) {
-      std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
+      std::cout << "Is everything connected? " << verify(start.get()) << std::endl;
       std::cout << "==== begin dot ====\n";
       std::cout << Dot()(start.get()) << std::endl;
       std::cout << "====  end dot  ====\n";

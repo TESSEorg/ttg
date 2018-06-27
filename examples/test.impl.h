@@ -78,12 +78,12 @@ class Everything {
     connect<0, 0>(&a, &consumer);  // a.out<0>()->connect(consumer.in<0>());
     connect<1, 0>(&a, &a);         // a.out<1>()->connect(a.in<0>());
 
-    Verify()(&producer);
+    verify(&producer);
   }
 
-  void print() { Print()(&producer); }
+  void print() { print_ttg(&producer); }
 
-  std::string dot() { return Dot()(&producer); }
+  std::string dot() { return Dot{}(&producer); }
 
   void start() {
     producer.make_executable();
@@ -104,12 +104,12 @@ class EverythingBase {
     connect<0, 0>(a, consumer);  // a->out(0)->connect(consumer->in(0));
     connect<1, 0>(a, a);         // a->out(1)->connect(a->in(0));
 
-    Verify()(producer.get());
+    verify(producer.get());
   }
 
-  void print() { Print()(producer.get()); }
+  void print() { print_ttg(producer.get()); }
 
-  std::string dot() { return Dot()(producer.get()); }
+  std::string dot() { return Dot{}(producer.get()); }
 
   void start() {
     producer->make_executable();
@@ -134,9 +134,9 @@ class Everything2 {
       , a(edges(fuse(P2A, A2A)), edges(A2C, A2A), "A")
       , consumer(edges(A2C), "consumer") {}
 
-  void print() { Print()(&producer); }
+  void print() { print_ttg(&producer); }
 
-  std::string dot() { return Dot()(&producer); }
+  std::string dot() { return Dot{}(&producer); }
 
   void start() {
     producer.make_executable();
@@ -180,9 +180,9 @@ class Everything3 {
       , wa(wrapt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
       , wc(wrapt(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
 
-  void print() { Print()(wp.get()); }
+  void print() { print_ttg(wp.get()); }
 
-  std::string dot() { return Dot()(wp.get()); }
+  std::string dot() { return Dot{}(wp.get()); }
 
   void start() {
     wp->make_executable();
@@ -223,9 +223,9 @@ class Everything4 {
       , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
       , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
 
-  void print() { Print()(wp.get()); }
+  void print() { print_ttg(wp.get()); }
 
-  std::string dot() { return Dot()(wp.get()); }
+  std::string dot() { return Dot{}(wp.get()); }
 
   void start() {
     wp->make_executable();
@@ -268,9 +268,9 @@ class Everything5 {
     wc->set_argstream_size<0>(0, 100);
   }
 
-  void print() { Print()(wp.get()); }
+  void print() { print_ttg(wp.get()); }
 
-  std::string dot() { return Dot()(wp.get()); }
+  std::string dot() { return Dot{}(wp.get()); }
 
   void start() {
     wp->make_executable();
@@ -312,15 +312,15 @@ class EverythingComposite {
     ::ttg::print("AC in<0>", (void *)(TerminalBase *)(ac->in<0>()));
     connect<0, 0>(p, ac);  // p->out<0>()->connect(ac->in<0>());
 
-    Verify()(p.get());
+    verify(p.get());
 
     P = std::move(p);
     AC = std::move(ac);
   }
 
-  void print() { Print()(P.get()); }
+  void print() { print_ttg(P.get()); }
 
-  std::string dot() { return Dot()(P.get()); }
+  std::string dot() { return Dot{}(P.get()); }
 
   void start() {
     Producer *p = dynamic_cast<Producer *>(P.get());
@@ -356,9 +356,9 @@ class ReductionTest {
       , reduction(G2R, R2C, 0, 0, std::plus<int>{})
       , wc(wrap(consumer, edges(R2C), edges(), "consumer", {"result"}, {})) {}
 
-  void print() { Print()(wg.get()); }
+  void print() { print_ttg(wg.get()); }
 
-  std::string dot() { return Dot()(wg.get()); }
+  std::string dot() { return Dot{}(wg.get()); }
 
   void start() {
     wg->make_executable();
@@ -395,9 +395,9 @@ class BroadcastTest {
       , broadcast(G2B, B2C, {ttg_default_execution_context().rank()}, root)
       , wc(wrap(consumer, edges(B2C), edges(), "consumer", {"result"}, {})) {}
 
-  void print() { Print()(wg.get()); }
+  void print() { print_ttg(wg.get()); }
 
-  std::string dot() { return Dot()(wg.get()); }
+  std::string dot() { return Dot{}(wg.get()); }
 
   void start() {
     wg->make_executable();
@@ -443,9 +443,9 @@ class Fibonacci {
     wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
   }
 
-  void print() { Print()(wa.get()); }
+  void print() { print_ttg(wa.get()); }
 
-  std::string dot() { return Dot()(wa.get()); }
+  std::string dot() { return Dot{}(wa.get()); }
 
   void start() {
     wa->make_executable();
