@@ -592,7 +592,7 @@ int main(int argc, char **argv) {
     }
 
     // flow graph needs to exist on every node
-    Edge<Void, Void> ctl("control");
+    Edge<> ctl("control");
     Control control(ctl);
     Edge<Key<2>, blk_t> eA, eB, eC;
     Read_SpMatrix a("A", A, ctl, eA);
