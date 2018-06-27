@@ -11,8 +11,8 @@ IMPORT_TTG_RUNTIME_NS
 #include "../ttg/util/broadcast.h"
 #include "../ttg/util/reduce.h"
 
-class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int> {
-  using baseT = Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int>;
+class A : public Op<keyT, std::tuple<Out<Void, int>, Out<keyT, int>>, A, const int> {
+  using baseT = Op<keyT, std::tuple<Out<Void, int>, Out<keyT, int>>, A, const int>;
 
  public:
   A(const std::string &name) : baseT(name, {"input"}, {"iterate", "result"}) {}
@@ -26,7 +26,7 @@ class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const i
     auto &value = baseT::get<0>(t);
     ::ttg::print("A got value ", value);
     if (value >= 100) {
-      ::send<0>(key, value, out);
+      ::sendv<0>(value, out);
     } else {
       ::send<1>(key + 1, value + 1, out);
     }
@@ -35,8 +35,8 @@ class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const i
   ~A() { std::cout << " A destructor\n"; }
 };
 
-class Producer : public Op<keyT, std::tuple<Out<keyT, int>>, Producer> {
-  using baseT = Op<keyT, std::tuple<Out<keyT, int>>, Producer>;
+class Producer : public Op<Void, std::tuple<Out<keyT, int>>, Producer> {
+  using baseT = Op<Void, std::tuple<Out<keyT, int>>, Producer>;
 
  public:
   Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
@@ -44,20 +44,20 @@ class Producer : public Op<keyT, std::tuple<Out<keyT, int>>, Producer> {
   Producer(const typename baseT::output_edges_type &outedges, const std::string &name)
       : baseT(edges(), outedges, name, {}, {"output"}) {}
 
-  void op(const keyT &key, baseT::output_terminals_type &out) {
+  void op(baseT::output_terminals_type &out) {
     ::ttg::print("produced ", 0);
-    ::send<0>((int)(key), 0, out);
+    ::send<0>(0, 0, out);
   }
 
   ~Producer() { std::cout << " Producer destructor\n"; }
 };
 
-class Consumer : public Op<keyT, std::tuple<>, Consumer, const int> {
-  using baseT = Op<keyT, std::tuple<>, Consumer, const int>;
+class Consumer : public Op<Void, std::tuple<>, Consumer, const int> {
+  using baseT = Op<Void, std::tuple<>, Consumer, const int>;
 
  public:
   Consumer(const std::string &name) : baseT(name, {"input"}, {}) {}
-  void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
+  void op(baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
     ::ttg::print("consumed ", baseT::get<0>(t));
   }
 
@@ -89,7 +89,7 @@ class Everything {
     producer.make_executable();
     a.make_executable();
     consumer.make_executable();
-    producer.invoke(0);
+    producer.invoke();
   }
 };
 
@@ -115,12 +115,14 @@ class EverythingBase {
     producer->make_executable();
     a->make_executable();
     consumer->make_executable();
-    if (ttg_default_execution_context().rank() == 0) dynamic_cast<Producer *>(producer.get())->invoke(0);
+    if (ttg_default_execution_context().rank() == 0) dynamic_cast<Producer *>(producer.get())->invoke();
   }  // Ugh!
 };
 
 class Everything2 {
-  Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
+  // !!!! Edges must be constructed before classes that use them
+  Edge<keyT, int> P2A, A2A;
+  Edge<Void, int> A2C;
   Producer producer;
   A a;
   Consumer consumer;
@@ -142,7 +144,7 @@ class Everything2 {
     producer.make_executable();
     a.make_executable();
     consumer.make_executable();
-    if (ttg_default_execution_context().rank() == 0) producer.invoke(0);
+    if (ttg_default_execution_context().rank() == 0) producer.invoke();
   }  // Ugh!
 };
 
@@ -326,7 +328,7 @@ class EverythingComposite {
     Producer *p = dynamic_cast<Producer *>(P.get());
     P->make_executable();
     AC->make_executable();
-    p->invoke(0);
+    p->invoke();
   }  // Ugh!
 };
 

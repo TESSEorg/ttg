@@ -1089,14 +1089,41 @@ namespace ttg {
     t.send(key, std::forward<valueT>(value));
   }
 
+  // TODO decide whether we need this ... (how common will be pure control flow?)
+  template <typename keyT, typename output_terminalT>
+  void sendk(const keyT &key, output_terminalT &t) {
+    t.send(key, Void{});
+  }
+
+  // TODO if sendk is removed, rename to send
+  template <typename valueT, typename output_terminalT>
+  void sendv(valueT &&value, output_terminalT &t) {
+    t.send(Void{}, std::forward<valueT>(value));
+  }
+
   template <typename keyT, typename valueT, typename output_terminalT>
   void send(output_terminalT &t) {
     t.send(Void{}, Void{});
   }
 
   template <size_t i, typename keyT, typename valueT, typename... output_terminalsT>
-  std::enable_if_t<!std::is_same_v<keyT,Void> || !std::is_same_v<valueT,Void>,void> send(const keyT &key, valueT &&value, std::tuple<output_terminalsT...> &t) {
+  std::enable_if_t<!std::is_same_v<keyT,Void> || !std::is_same_v<valueT,Void>,void>
+      send(const keyT &key, valueT &&value, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).send(key, std::forward<valueT>(value));
+  }
+
+  // TODO decide whether we need this ... (how common will be pure control flow?)
+  template <size_t i, typename keyT, typename... output_terminalsT>
+  std::enable_if_t<!std::is_same_v<keyT,Void>,void>
+  sendk(const keyT &key, std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).send(key);
+  }
+
+  // TODO if sendk is removed, rename to send
+  template <size_t i, typename valueT, typename... output_terminalsT>
+  std::enable_if_t<!std::is_same_v<valueT,Void>,void>
+  sendv(valueT &&value, std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).send(Void{}, std::forward<valueT>(value));
   }
 
   template <size_t i, typename... output_terminalsT>
