@@ -149,27 +149,29 @@ class Everything2 {
 };
 
 class Everything3 {
-  static void p(const keyT &key, std::tuple<> &&t, std::tuple<Out<keyT, int>> &out) {
+  static void p(std::tuple<> &&, std::tuple<Out<keyT, int>> &out) {
     ::ttg::print("produced ", 0);
-    send<0>(key, int(0), out);
+    send<0>(0, int(0), out);
   }
 
-  static void a(const keyT &key, std::tuple<const int> &&t, std::tuple<Out<keyT, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, std::tuple<const int> &&t, std::tuple<Out<Void, int>, Out<keyT, int>> &out) {
     const auto value = std::get<0>(t);
     if (value >= 100) {
-      send<0>(key, value, out);
+      sendv<0>(value, out);
     } else {
       send<1>(key + 1, value + 1, out);
     }
   }
 
-  static void c(const keyT &key, std::tuple<const int> &&t, std::tuple<> &out) {
+  static void c(std::tuple<const int> &&t, std::tuple<> &out) {
     ::ttg::print("consumed ", std::get<0>(t));
   }
 
-  Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
+  // !!!! Edges must be constructed before classes that use them
+  Edge<keyT, int> P2A, A2A;
+  Edge<Void, int> A2C;
 
-  decltype(wrapt<keyT>(p, edges(), edges(P2A))) wp;
+  decltype(wrapt<Void>(p, edges(), edges(P2A))) wp;
   decltype(wrapt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
   decltype(wrapt(c, edges(A2C), edges())) wc;
 
@@ -178,7 +180,7 @@ class Everything3 {
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrapt<keyT>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wp(wrapt<Void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
       , wa(wrapt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
       , wc(wrapt(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
 
@@ -190,29 +192,31 @@ class Everything3 {
     wp->make_executable();
     wa->make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == 0) wp->invoke(0);
+    if (ttg_default_execution_context().rank() == 0) wp->invoke();
   }
 };
 
 class Everything4 {
-  static void p(const keyT &key, std::tuple<Out<keyT, int>> &out) {
+  static void p(std::tuple<Out<keyT, int>> &out) {
     ::ttg::print("produced ", 0);
-    send<0>(key, int(0), out);
+    send<0>(0, 0, out);
   }
 
-  static void a(const keyT &key, const int &value, std::tuple<Out<keyT, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, const int &value, std::tuple<Out<Void, int>, Out<keyT, int>> &out) {
     if (value >= 100) {
-      send<0>(key, value, out);
+      sendv<0>(value, out);
     } else {
       send<1>(key + 1, value + 1, out);
     }
   }
 
-  static void c(const keyT &key, const int &value, std::tuple<> &out) { ::ttg::print("consumed ", value); }
+  static void c(const int &value, std::tuple<> &out) { ::ttg::print("consumed ", value); }
 
-  Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
+  // !!!! Edges must be constructed before classes that use them
+  Edge<keyT, int> P2A, A2A;
+  Edge<Void, int> A2C;
 
-  decltype(wrap<keyT>(p, edges(), edges(P2A))) wp;
+  decltype(wrap<Void>(p, edges(), edges(P2A))) wp;
   decltype(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
   decltype(wrap(c, edges(A2C), edges())) wc;
 
@@ -221,9 +225,10 @@ class Everything4 {
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrap<keyT>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wp(wrap<Void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
       , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
-      , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
+      , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {}))
+  {}
 
   void print() { print_ttg(wp.get()); }
 
@@ -233,28 +238,30 @@ class Everything4 {
     wp->make_executable();
     wa->make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == 0) wp->invoke(0);
+    if (ttg_default_execution_context().rank() == 0) wp->invoke();
   }
 };
 
 class Everything5 {
-  static void p(const keyT &key, std::tuple<Out<keyT, int>> &out) {
+  static void p(std::tuple<Out<keyT, int>> &out) {
     ::ttg::print("produced ", 0);
-    send<0>(key, int(0), out);
+    send<0>(0, 0, out);
   }
 
-  static void a(const keyT &key, const int &value, std::tuple<Out<keyT, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, const int &value, std::tuple<Out<Void, int>, Out<keyT, int>> &out) {
     if (value < 100) {
       send<1>(key + 1, value + 1, out);
-      send<0>(0, value, out);
+      sendv<0>(value, out);
     }
   }
 
-  static void c(const keyT &key, const int &value, std::tuple<> &out) { ::ttg::print("consumed ", value); }
+  static void c(const int &value, std::tuple<> &out) { ::ttg::print("consumed ", value); }
 
-  Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
+  // !!!! Edges must be constructed before classes that use them
+  Edge<keyT, int> P2A, A2A;
+  Edge<Void, int> A2C;
 
-  decltype(wrap<keyT>(p, edges(), edges(P2A))) wp;
+  decltype(wrap<Void>(p, edges(), edges(P2A))) wp;
   decltype(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
   decltype(wrap(c, edges(A2C), edges())) wc;
 
@@ -263,11 +270,11 @@ class Everything5 {
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrap<keyT>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wp(wrap<Void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
       , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
       , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {
     wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
-    wc->set_argstream_size<0>(0, 100);
+    wc->set_argstream_size<0>(100);
   }
 
   void print() { print_ttg(wp.get()); }
@@ -278,7 +285,7 @@ class Everything5 {
     wp->make_executable();
     wa->make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == 0) wp->invoke(0);
+    if (ttg_default_execution_context().rank() == 0) wp->invoke();
   }
 };
 
