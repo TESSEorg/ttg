@@ -344,6 +344,14 @@ namespace madness {
      public:
       /// sets stream size for input \c i
       /// \param size positive integer that specifies the stream size
+      template <std::size_t i, bool key_is_void = ::ttg::meta::is_Void_v<keyT>>
+      std::enable_if_t<key_is_void,void> set_argstream_size(std::size_t size) {
+        // TODO: adapt key-based set_argstream_size
+        this->set_argstream_size<i>(::ttg::Void{}, size);
+      }
+
+        /// sets stream size for input \c i
+      /// \param size positive integer that specifies the stream size
       template <std::size_t i>
       void set_argstream_size(const keyT &key, std::size_t size) {
         // preconditions
@@ -355,7 +363,10 @@ namespace madness {
         if (owner != world.rank()) {
           if (tracing())
             ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream size for terminal ", i);
-          worldobjT::send(owner, &opT::template set_argstream_size<i>, key, size);
+          if constexpr (::ttg::meta::is_Void_v<keyT>)
+            worldobjT::send(owner, &opT::template set_argstream_size<i, true>, size);
+          else
+            worldobjT::send(owner, &opT::template set_argstream_size<i>, key, size);
         } else {
           if (tracing())
             ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": setting stream size for terminal ", i);
