@@ -23,7 +23,7 @@ using blk_t = btas::Tensor<double>;
 #else
 using blk_t = double;
 #endif
-using SpMatrix = Eigen::SparseMatrix<blk_t>;
+template <typename T = blk_t> using SpMatrix = Eigen::SparseMatrix<T>;
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 
@@ -214,48 +214,52 @@ namespace ttg {
 }  // namespace ttg
 
 // flow data from an existing SpMatrix on rank 0
-class Read_SpMatrix : public Op<Void, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatrix, Void> {
+template <typename Blk = blk_t>
+class Read_SpMatrix : public Op<Void, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, Void> {
  public:
-  using baseT = Op<Void, std::tuple<Out<Key<2>, blk_t>>, Read_SpMatrix, Void>;
+  using baseT = Op<Void, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, Void>;
 
-  Read_SpMatrix(const char *label, const SpMatrix &matrix, Edge<> &ctl, Edge<Key<2>, blk_t> &out)
+  Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<> &ctl, Edge<Key<2>, Blk> &out)
       : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
               [](auto key) { return 0; })
       , matrix_(matrix) {}
 
-  void op(std::tuple<Out<Key<2>, blk_t>> &out) {
+  void op(std::tuple<Out<Key<2>, Blk>> &out) {
     for (int k = 0; k < matrix_.outerSize(); ++k) {
-      for (SpMatrix::InnerIterator it(matrix_, k); it; ++it) {
+      for (typename SpMatrix<Blk>::InnerIterator it(matrix_, k); it; ++it) {
         ::send<0>(Key<2>({it.row(), it.col()}), it.value(), out);
       }
     }
   }
 
  private:
-  const SpMatrix &matrix_;
+  const SpMatrix<Blk> &matrix_;
 };
 
 // flow (move?) data into an existing SpMatrix on rank 0
-class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t> {
+template <typename Blk = blk_t>
+class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk> {
  public:
-  using baseT = Op<Key<2>, std::tuple<>, Write_SpMatrix, blk_t>;
+  using baseT = Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>;
 
-  Write_SpMatrix(SpMatrix &matrix, Edge<Key<2>, blk_t> &in)
+  Write_SpMatrix(SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &in)
       : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, [](auto key) { return 0; }), matrix_(matrix) {}
 
-  void op(const Key<2> &key, baseT::input_values_tuple_type &&elem, std::tuple<> &) {
-    matrix_.insert(key[0], key[1]) = baseT::get<0>(elem);
+  void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
+    matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
+  }
   }
 
  private:
-  SpMatrix &matrix_;
+  SpMatrix<Blk> &matrix_;
 };
 
 // sparse mm
+template <typename Blk = blk_t>
 class SpMM {
  public:
-  SpMM(Edge<Key<2>, blk_t> &a, Edge<Key<2>, blk_t> &b, Edge<Key<2>, blk_t> &c, const SpMatrix &a_mat,
-       const SpMatrix &b_mat)
+  SpMM(Edge<Key<2>, Blk> &a, Edge<Key<2>, Blk> &b, Edge<Key<2>, Blk> &c, const SpMatrix<Blk> &a_mat,
+       const SpMatrix<Blk> &b_mat)
       : a_ijk_()
       , b_ijk_()
       , c_ijk_()
@@ -276,15 +280,15 @@ class SpMM {
   }
 
   /// broadcast A[i][k] to all {i,j,k} such that B[j][k] exists
-  class BcastA : public Op<Key<2>, std::tuple<Out<Key<3>, blk_t>>, BcastA, blk_t> {
+  class BcastA : public Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, Blk> {
    public:
-    using baseT = Op<Key<2>, std::tuple<Out<Key<3>, blk_t>>, BcastA, blk_t>;
+    using baseT = Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, Blk>;
 
-    BcastA(Edge<Key<2>, blk_t> &a, Edge<Key<3>, blk_t> &a_ijk, const std::vector<std::vector<long>> &b_rowidx_to_colidx)
+    BcastA(Edge<Key<2>, Blk> &a, Edge<Key<3>, Blk> &a_ijk, const std::vector<std::vector<long>> &b_rowidx_to_colidx)
         : baseT(edges(a), edges(a_ijk), "SpMM::bcast_a", {"a_ik"}, {"a_ijk"})
         , b_rowidx_to_colidx_(b_rowidx_to_colidx) {}
 
-    void op(const Key<2> &key, baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, blk_t>> &a_ijk) {
+    void op(const Key<2> &key, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, Blk>> &a_ijk) {
       const auto i = key[0];
       const auto k = key[1];
       // broadcast a_ik to all existing {i,j,k}
@@ -293,7 +297,7 @@ class SpMM {
         if (tracing()) ::ttg::print("Broadcasting A[", i, "][", k, "] to j=", j);
         ijk_keys.emplace_back(Key<3>({i, j, k}));
       }
-      ::broadcast<0>(ijk_keys, baseT::get<0>(a_ik), a_ijk);
+      ::broadcast<0>(ijk_keys, baseT::template get<0>(a_ik), a_ijk);
     }
 
    private:
@@ -301,15 +305,15 @@ class SpMM {
   };  // class BcastA
 
   /// broadcast B[k][j] to all {i,j,k} such that A[i][k] exists
-  class BcastB : public Op<Key<2>, std::tuple<Out<Key<3>, blk_t>>, BcastB, blk_t> {
+  class BcastB : public Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, Blk> {
    public:
-    using baseT = Op<Key<2>, std::tuple<Out<Key<3>, blk_t>>, BcastB, blk_t>;
+    using baseT = Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, Blk>;
 
-    BcastB(Edge<Key<2>, blk_t> &b, Edge<Key<3>, blk_t> &b_ijk, const std::vector<std::vector<long>> &a_colidx_to_rowidx)
+    BcastB(Edge<Key<2>, Blk> &b, Edge<Key<3>, Blk> &b_ijk, const std::vector<std::vector<long>> &a_colidx_to_rowidx)
         : baseT(edges(b), edges(b_ijk), "SpMM::bcast_b", {"b_kj"}, {"b_ijk"})
         , a_colidx_to_rowidx_(a_colidx_to_rowidx) {}
 
-    void op(const Key<2> &key, baseT::input_values_tuple_type &&b_kj, std::tuple<Out<Key<3>, blk_t>> &b_ijk) {
+    void op(const Key<2> &key, typename baseT::input_values_tuple_type &&b_kj, std::tuple<Out<Key<3>, Blk>> &b_ijk) {
       const auto k = key[0];
       const auto j = key[1];
       // broadcast b_kj to *jk
@@ -318,7 +322,7 @@ class SpMM {
         if (tracing()) ::ttg::print("Broadcasting B[", k, "][", j, "] to i=", i);
         ijk_keys.emplace_back(Key<3>({i, j, k}));
       }
-      ::broadcast<0>(ijk_keys, baseT::get<0>(b_kj), b_ijk);
+      ::broadcast<0>(ijk_keys, baseT::template get<0>(b_kj), b_ijk);
     }
 
    private:
@@ -327,12 +331,12 @@ class SpMM {
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
   class MultiplyAdd
-      : public Op<Key<3>, std::tuple<Out<Key<2>, blk_t>, Out<Key<3>, blk_t>>, MultiplyAdd, blk_t, blk_t, blk_t> {
+      : public Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, Blk, Blk, Blk> {
    public:
-    using baseT = Op<Key<3>, std::tuple<Out<Key<2>, blk_t>, Out<Key<3>, blk_t>>, MultiplyAdd, blk_t, blk_t, blk_t>;
+    using baseT = Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, Blk, Blk, Blk>;
 
-    MultiplyAdd(Edge<Key<3>, blk_t> &a_ijk, Edge<Key<3>, blk_t> &b_ijk, Edge<Key<3>, blk_t> &c_ijk,
-                Edge<Key<2>, blk_t> &c, const std::vector<std::vector<long>> &a_rowidx_to_colidx,
+    MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk,
+                Edge<Key<2>, Blk> &c, const std::vector<std::vector<long>> &a_rowidx_to_colidx,
                 const std::vector<std::vector<long>> &b_colidx_to_rowidx)
         : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM::Multiply", {"a_ijk", "b_ijk", "c_ijk"},
                 {"c_ij", "c_ijk"})
@@ -356,8 +360,8 @@ class SpMM {
               std::tie(k, have_k) = compute_first_k(i, j);
               if (have_k) {
                 if (tracing()) ::ttg::print("Initializing C[", i, "][", j, "] to zero");
-                this->in<2>()->send(Key<3>({i, j, k}), blk_t(0));
-                // this->set_arg<2>(Key<3>({i,j,k}), blk_t(0));
+                this->template in<2>()->send(Key<3>({i, j, k}), Blk(0));
+                // this->set_arg<2>(Key<3>({i,j,k}), Blk(0));
               } else {
                 if (tracing()) ::ttg::print("C[", i, "][", j, "] is empty");
               }
@@ -367,8 +371,8 @@ class SpMM {
       }
     }
 
-    void op(const Key<3> &key, baseT::input_values_tuple_type &&_ijk,
-            std::tuple<Out<Key<2>, blk_t>, Out<Key<3>, blk_t>> &result) {
+    void op(const Key<3> &key, typename baseT::input_values_tuple_type &&_ijk,
+            std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>> &result) {
       const auto i = key[0];
       const auto j = key[1];
       const auto k = key[2];
@@ -383,9 +387,9 @@ class SpMM {
       // otherwise write to the result flow
       if (have_next_k) {
         ::send<1>(Key<3>({i, j, next_k}),
-                  gemm(std::move(baseT::get<2>(_ijk)), baseT::get<0>(_ijk), baseT::get<1>(_ijk)), result);
+                  gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)), result);
       } else
-        ::send<0>(Key<2>({i, j}), gemm(std::move(baseT::get<2>(_ijk)), baseT::get<0>(_ijk), baseT::get<1>(_ijk)),
+        ::send<0>(Key<2>({i, j}), gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
                   result);
     }
 
@@ -454,9 +458,9 @@ class SpMM {
   };
 
  private:
-  Edge<Key<3>, blk_t> a_ijk_;
-  Edge<Key<3>, blk_t> b_ijk_;
-  Edge<Key<3>, blk_t> c_ijk_;
+  Edge<Key<3>, Blk> a_ijk_;
+  Edge<Key<3>, Blk> b_ijk_;
+  Edge<Key<3>, Blk> c_ijk_;
   std::vector<std::vector<long>> a_rowidx_to_colidx_;
   std::vector<std::vector<long>> b_colidx_to_rowidx_;
   std::vector<std::vector<long>> a_colidx_to_rowidx_;
@@ -466,10 +470,10 @@ class SpMM {
   std::unique_ptr<MultiplyAdd> multiplyadd_;
 
   // result[i][j] gives the j-th nonzero row for column i in matrix mat
-  std::vector<std::vector<long>> make_colidx_to_rowidx(const SpMatrix &mat) {
+  std::vector<std::vector<long>> make_colidx_to_rowidx(const SpMatrix<Blk> &mat) {
     std::vector<std::vector<long>> colidx_to_rowidx;
     for (int k = 0; k < mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
-      for (SpMatrix::InnerIterator it(mat, k); it; ++it) {
+      for (typename SpMatrix<Blk>::InnerIterator it(mat, k); it; ++it) {
         auto row = it.row();
         auto col = it.col();
         if (col >= colidx_to_rowidx.size()) colidx_to_rowidx.resize(col + 1);
@@ -480,10 +484,10 @@ class SpMM {
     return colidx_to_rowidx;
   }
   // result[i][j] gives the j-th nonzero column for row i in matrix mat
-  std::vector<std::vector<long>> make_rowidx_to_colidx(const SpMatrix &mat) {
+  std::vector<std::vector<long>> make_rowidx_to_colidx(const SpMatrix<Blk> &mat) {
     std::vector<std::vector<long>> rowidx_to_colidx;
     for (int k = 0; k < mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
-      for (SpMatrix::InnerIterator it(mat, k); it; ++it) {
+      for (typename SpMatrix<Blk>::InnerIterator it(mat, k); it; ++it) {
         auto row = it.row();
         auto col = it.col();
         if (row >= rowidx_to_colidx.size()) rowidx_to_colidx.resize(row + 1);
@@ -521,11 +525,12 @@ std::tuple<_T, _T> norms(const btas::Tensor<_T, _Range, _Store> &t) {
 
 std::tuple<double, double> norms(double t) { return std::make_tuple(t * t, std::abs(t)); }
 
-std::tuple<double, double> norms(const SpMatrix &A) {
+template <typename Blk = blk_t>
+std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
   double norm_2_square = 0.0;
   double norm_inf = 0.0;
   for (int i = 0; i < A.outerSize(); ++i) {
-    for (SpMatrix::InnerIterator it(A, i); it; ++it) {
+    for (typename SpMatrix<Blk>::InnerIterator it(A, i); it; ++it) {
       //  cout << 1+it.row() << "\t"; // row index
       //  cout << 1+it.col() << "\t"; // col index (here it is equal to k)
       //  cout << it.value() << endl;
@@ -547,7 +552,7 @@ int main(int argc, char **argv) {
     const int n = 2;
     const int m = 3;
     const int k = 4;
-    SpMatrix A(n, k), B(k, m), C(n, m);
+    SpMatrix<> A(n, k), B(k, m), C(n, m);
 
     // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
     if (ttg_default_execution_context().rank() == 0) {
@@ -595,11 +600,12 @@ int main(int argc, char **argv) {
     Edge<> ctl("control");
     Control control(ctl);
     Edge<Key<2>, blk_t> eA, eB, eC;
-    Read_SpMatrix a("A", A, ctl, eA);
-    Read_SpMatrix b("B", B, ctl, eB);
-    Write_SpMatrix c(C, eC);
+    Read_SpMatrix<> a("A", A, ctl, eA);
+    Read_SpMatrix<> b("B", B, ctl, eB);
+    Write_SpMatrix<> c(C, eC);
     //  SpMM a_times_b(world, eA, eB, eC, A, B);
-    SpMM a_times_b(eA, eB, eC, A, B);
+    SpMM<> a_times_b(eA, eB, eC, A, B);
+
 
     // ready to run!
     auto connected = make_graph_executable(&control);
@@ -613,10 +619,10 @@ int main(int argc, char **argv) {
 
     // rank 0 only: validate against the reference output
     if (ttg_default_execution_context().rank() == 0) {
-      SpMatrix Cref = A * B;
+      SpMatrix<> Cref = A * B;
 
       double norm_2_square, norm_inf;
-      std::tie(norm_2_square, norm_inf) = norms(Cref - C);
+      std::tie(norm_2_square, norm_inf) = norms<blk_t>(Cref - C);
       std::cout << "||Cref - C||_2      = " << std::sqrt(norm_2_square) << std::endl;
       std::cout << "||Cref - C||_\\infty = " << norm_inf << std::endl;
     }
