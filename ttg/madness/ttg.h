@@ -9,6 +9,7 @@
 #include <cassert>
 #include <functional>
 #include <iostream>
+#include <future>
 #include <map>
 #include <memory>
 #include <string>
@@ -59,6 +60,21 @@ namespace madness {
   };
 #endif
 
+  namespace detail {
+  static inline std::map<World*, std::set<std::shared_ptr<void>>>& ptr_registry_accessor() {
+    static std::map<World*, std::set<std::shared_ptr<void>>> registry;
+    return registry;
+  };
+  static inline std::map<World*, ::ttg::Edge<>>& clt_edge_registry_accessor() {
+    static std::map<World*, ::ttg::Edge<>> registry;
+    return registry;
+  };
+  static inline std::map<World*, std::set<std::shared_ptr<std::promise<void>>>>& status_registry_accessor() {
+    static std::map<World*, std::set<std::shared_ptr<std::promise<void>>>> registry;
+    return registry;
+  };
+  }
+
   template <typename... RestOfArgs>
     inline void ttg_initialize(int argc, char **argv, RestOfArgs &&...) {
       World &world = madness::initialize(argc, argv);
@@ -69,8 +85,60 @@ namespace madness {
     inline void ttg_execute(World &world) {
       // World executes tasks eagerly
     }
-    inline void ttg_fence(World &world) { world.gop.fence(); }
+    inline void ttg_fence(World &world) {
+      world.gop.fence();
+
+      // flag registered statuses
+      {
+        auto& registry = detail::status_registry_accessor();
+        auto iter = registry.find(&world);
+        if (iter != registry.end()) {
+          auto &statuses = iter->second;
+          for (auto &status: statuses) {
+            status->set_value();
+          }
+        }
+      }
+
+    }
+
     template <typename T>
+    inline void ttg_register_ptr(World& world, const std::shared_ptr<T>& ptr) {
+      auto& registry = detail::ptr_registry_accessor();
+      auto iter = registry.find(&world);
+      if (iter != registry.end()) {
+        auto& ptr_set = iter->second;
+        assert(ptr_set.find(ptr) == ptr_set.end());  // prevent duplicate registration
+        ptr_set.insert(ptr);
+      } else {
+        registry.insert(std::make_pair(&world, std::set<std::shared_ptr<void>>({ptr})));
+      }
+    }
+
+    inline void ttg_register_status(World& world, const std::shared_ptr<std::promise<void>>& status_ptr) {
+      auto& registry = detail::status_registry_accessor();
+      auto iter = registry.find(&world);
+      if (iter != registry.end()) {
+        auto& ptr_set = iter->second;
+        assert(ptr_set.find(status_ptr) == ptr_set.end());  // prevent duplicate registration
+        ptr_set.insert(status_ptr);
+      } else {
+        registry.insert(std::make_pair(&world, std::set<std::shared_ptr<std::promise<void>>>({status_ptr})));
+      }
+    }
+
+    inline ::ttg::Edge<>& ttg_ctl_edge(World& world) {
+      auto& registry = detail::clt_edge_registry_accessor();
+      auto iter = registry.find(&world);
+      if (iter != registry.end()) {
+        return iter->second;
+      } else {
+        registry.insert(std::make_pair(&world, ::ttg::Edge<>{}));
+        return registry[&world];
+      }
+    }
+
+  template <typename T>
     void ttg_sum(World &world, T &value) {
       world.gop.sum(value);
     }

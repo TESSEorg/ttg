@@ -248,10 +248,21 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
   void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
     matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
   }
+
+  /// grab completion status as a future<void>
+  /// \note cannot be called once this is executable
+  std::future<void> status() const {
+    assert(!this->is_executable());
+    if (!completion_status_) {
+      completion_status_ = std::make_shared<std::promise<void>>();
+      ttg_register_status(this->get_world(), completion_status_);
+    }
+    return completion_status_->get_future();
   }
 
  private:
   SpMatrix<Blk> &matrix_;
+  mutable std::shared_ptr<std::promise<void>> completion_status_;
 };
 
 // sparse mm
@@ -544,6 +555,8 @@ std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
   return std::make_tuple(norm_2_square, norm_inf);
 }
 
+#include "ttg_matrix.h"
+
 int main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
   {
@@ -606,6 +619,9 @@ int main(int argc, char **argv) {
     //  SpMM a_times_b(world, eA, eB, eC, A, B);
     SpMM<> a_times_b(eA, eB, eC, A, B);
 
+    MatrixFlow<blk_t> aflow; aflow << A;
+    SpMatrix<> Acopy;
+    auto status = aflow >> Acopy;
 
     // ready to run!
     auto connected = make_graph_executable(&control);
