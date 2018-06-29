@@ -99,7 +99,7 @@ namespace madness {
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
      protected:
-      World &get_world() { return world; }
+      World &get_world() const { return world; }
 
       using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
       using worldobjT = WorldObject<opT>;
@@ -619,7 +619,7 @@ namespace madness {
       /// thread on all processes.  In the MADNESS implementation it
       /// fences the entire world associated with the TTG.  If you wish to
       /// fence TTGs independently, then give each its own world.
-      void fence() { world.gop.fence(); }
+      void fence() { ttg_fence(world); }
 
       /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned
       template <std::size_t i>
