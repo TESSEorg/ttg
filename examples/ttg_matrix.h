@@ -25,7 +25,7 @@ namespace ttg {
     }
 
     // up to the user to ensure completion before reading destination_matrix
-    std::future<void> operator>>(SpMatrix<T>& destination_matrix) {
+    auto operator>>(SpMatrix<T>& destination_matrix) {
       auto result = std::make_shared<Write_SpMatrix<T>>(destination_matrix, edge_);
       ttg_register_ptr(world_, result);
 

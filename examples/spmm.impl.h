@@ -18,6 +18,8 @@
 #include TTG_RUNTIME_H
 IMPORT_TTG_RUNTIME_NS
 
+#include "../ttg/util/future.h"
+
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 using blk_t = btas::Tensor<double>;
 #else
@@ -251,18 +253,19 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
 
   /// grab completion status as a future<void>
   /// \note cannot be called once this is executable
-  std::future<void> status() const {
+  const std::shared_future<void>& status() const {
     assert(!this->is_executable());
     if (!completion_status_) {
-      completion_status_ = std::make_shared<std::promise<void>>();
-      ttg_register_status(this->get_world(), completion_status_);
+      auto promise = std::make_shared<std::promise<void>>();
+      completion_status_ = std::make_shared<std::shared_future<void>>(promise->get_future());
+      ttg_register_status(this->get_world(), std::move(promise));
     }
-    return completion_status_->get_future();
+    return *completion_status_.get();
   }
 
  private:
   SpMatrix<Blk> &matrix_;
-  mutable std::shared_ptr<std::promise<void>> completion_status_;
+  mutable std::shared_ptr<std::shared_future<void>> completion_status_;
 };
 
 // sparse mm
@@ -616,6 +619,8 @@ int main(int argc, char **argv) {
     Read_SpMatrix<> a("A", A, ctl, eA);
     Read_SpMatrix<> b("B", B, ctl, eB);
     Write_SpMatrix<> c(C, eC);
+    auto c_status = c.status();
+    assert(!has_value(c_status));
     //  SpMM a_times_b(world, eA, eB, eC, A, B);
     SpMM<> a_times_b(eA, eB, eC, A, B);
 
@@ -632,6 +637,8 @@ int main(int argc, char **argv) {
 
     ttg_execute(ttg_default_execution_context());
     ttg_fence(ttg_default_execution_context());
+
+    assert(has_value(c_status));
 
     // rank 0 only: validate against the reference output
     if (ttg_default_execution_context().rank() == 0) {
