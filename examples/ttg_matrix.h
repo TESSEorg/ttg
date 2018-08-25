@@ -48,7 +48,7 @@ namespace ttg {
     }
 
     template<typename Archive> void serialize(Archive &ar) {
-      ar & type_ & static_cast<base_t&>(*this);
+      ar & type_ & nrows_ & ncols_ & static_cast<base_t&>(*this);
     }
 
    private:
