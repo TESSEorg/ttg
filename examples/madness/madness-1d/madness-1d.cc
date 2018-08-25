@@ -772,8 +772,7 @@ public:
 		project.out<1>()->connect(printer.in<0>());
 		project.out<0>()->connect(project.in<0>());
 
-		//Verify()(&producer);
-		Verify()(&producer);
+		Verify(&producer);
 		world.gop.fence();
 	}
 
