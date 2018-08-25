@@ -1116,7 +1116,7 @@ namespace ttg {
   template <size_t i, typename keyT, typename... output_terminalsT>
   std::enable_if_t<!std::is_same_v<keyT,Void>,void>
   sendk(const keyT &key, std::tuple<output_terminalsT...> &t) {
-    std::get<i>(t).send(key);
+    std::get<i>(t).send(key, Void{});
   }
 
   // TODO if sendk is removed, rename to send
