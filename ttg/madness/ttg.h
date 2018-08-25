@@ -97,6 +97,7 @@ namespace madness {
           for (auto &status: statuses) {
             status->set_value();
           }
+          statuses.clear();  // clear out the statuses
         }
       }
 
