@@ -23,6 +23,8 @@ namespace ttg {
     Shape(const Eigen::SparseMatrix<T>& spmat, Type type = Type::col2row) :
     base_t(type == Type::col2row ? make_colidx_to_rowidx(spmat) : make_rowidx_to_colidx(spmat)), nrows_(spmat.rows()), ncols_(spmat.cols()), type_(type) {}
 
+    long nrows() const { return nrows_; }
+    long ncols() const { return ncols_; }
     Type type() const { return type_; }
 
     /// converts col->row <-> row->col
@@ -183,7 +185,7 @@ namespace ttg {
 
     /// attach to the source sparse Eigen::Matrix
     void operator<<(const Eigen::SparseMatrix<T>& source_matrix) {
-      // shape reader makes shape and pushes it on
+      // shape reader computes shape of source_matrix
       ttg_register_ptr(world_, std::make_shared<matrix::ReadShape<T>>("", source_matrix, ttg_ctl_edge(world_), shape_edge_));
       // reads data from source_matrix_ for a given key
       ttg_register_ptr(world_, std::make_shared<matrix::Read<T>>("", source_matrix, ctl_edge_, data_edge_));
@@ -199,7 +201,16 @@ namespace ttg {
     /// of this function is true.
     /// @note up to the user to ensure completion before reading destination_matrix
     auto operator>>(SpMatrix<T>& destination_matrix) {
+#if 0  // new code not ready yet
+      // shape writer writes shape to destination_matrix
+      // shape writer needs to control Writer also ... currently there is no way to activate flows so make control an input to every write task ...
+      // this also ensures that shape and data flows are consistent
+      ctl_edge_t ctl_edge;
+      ttg_register_ptr(world_, std::make_shared<matrix::WriteShape<T>>("", destination_matrix, shape_edge_, ctl_edge));
+      auto result = std::make_shared<matrix::Write<T>>(destination_matrix, data_edge_, ctl_edge);
+#else
       auto result = std::make_shared<Write_SpMatrix<T>>(destination_matrix, data_edge_);
+#endif
       ttg_register_ptr(world_, result);
 
       // return op status ... set to true after world fence

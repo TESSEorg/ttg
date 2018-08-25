@@ -624,16 +624,11 @@ int main(int argc, char **argv) {
     //  SpMM a_times_b(world, eA, eB, eC, A, B);
     SpMM<> a_times_b(eA, eB, eC, A, B);
 
-    Matrix<blk_t> aflow; aflow << A;
-    SpMatrix<> Acopy;
-    auto status = aflow >> Acopy;
-    aflow.pushall();
+    std::cout << Dot{}(&a, &b) << std::endl;
 
     // ready to run!
     auto connected = make_graph_executable(&control);
     assert(connected);
-
-    std::cout << Dot{}(&a, &b) << std::endl;
 
     // ready, go! need only 1 kick, so must be done by 1 thread only
     if (ttg_default_execution_context().rank() == 0) control.start();
@@ -652,6 +647,37 @@ int main(int argc, char **argv) {
       std::cout << "||Cref - C||_2      = " << std::sqrt(norm_2_square) << std::endl;
       std::cout << "||Cref - C||_\\infty = " << norm_inf << std::endl;
     }
+
+    // copy matrix using ttg::Matrix
+    {
+      Matrix<blk_t> aflow;
+      aflow << A;
+      SpMatrix<> Acopy(A.rows(), A.cols());  // resizing will be automatic in the future when shape computation is complete .. see Matrix::operator>>
+      auto status = aflow >> Acopy;
+      assert(!has_value(status));
+      aflow.pushall();
+
+      Control control(ttg_ctl_edge(ttg_default_execution_context()));
+
+      std::cout << "matrix copy using ttg::Matrix" << std::endl;
+      std::cout << Dot{}(&control) << std::endl;
+
+      // ready to run!
+      auto connected = make_graph_executable(&control);
+      assert(connected);
+
+      // ready, go! need only 1 kick, so must be done by 1 thread only
+      if (ttg_default_execution_context().rank() == 0) control.start();
+
+      ttg_execute(ttg_default_execution_context());
+      ttg_fence(ttg_default_execution_context());
+
+      assert(has_value(status));
+      double norm_2_square, norm_inf;
+      std::tie(norm_2_square, norm_inf) = norms<blk_t>(Acopy - A);
+      assert(norm_inf == 0.0);
+    }
+
   }
   ttg_finalize();
 
