@@ -832,6 +832,8 @@ namespace parsec {
         parsec_mempool_destruct(&mempools);
       }
 
+      static constexpr const ::ttg::Runtime runtime = ::ttg::Runtime::PaRSEC;
+
       template <std::size_t i, typename Reducer>
       void set_input_reducer(Reducer &&reducer) {
         std::get<i>(input_reducers) = reducer;

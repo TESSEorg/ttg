@@ -671,6 +671,8 @@ namespace madness {
         }
       }
 
+      static constexpr const ::ttg::Runtime runtime = ::ttg::Runtime::MADWorld;
+
       template <std::size_t i, typename Reducer>
       void set_input_reducer(Reducer &&reducer) {
         std::get<i>(input_reducers) = reducer;

@@ -544,14 +544,16 @@ int try_main(int argc, char **argv) {
 #endif
 
 #ifndef PARSEC_TTG_H_INCLUDED  // TODO Teach PaRSEC streaming terminals
-    // Everything5 = Everything4 with consumer summing all values from A using a stream reducer
-    Everything5 q5;
-    std::cout << q5.dot() << std::endl;
-    q5.start();  // myusleep(100);
+    if constexpr (runtime_traits<ttg_runtime>::supports_streaming_terminal) {
+      // Everything5 = Everything4 with consumer summing all values from A using a stream reducer
+      Everything5 q5;
+      std::cout << q5.dot() << std::endl;
+      q5.start();  // myusleep(100);
 
-    Fibonacci fi;
-    std::cout << fi.dot() << std::endl << std::endl;
-    fi.start();
+      Fibonacci fi;
+      std::cout << fi.dot() << std::endl << std::endl;
+      fi.start();
+    }
 #endif
 
     ReductionTest t;
