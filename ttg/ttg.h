@@ -20,7 +20,11 @@
 
 namespace ttg {
 /// type analog of void
-class Void {};
+class Void {
+ public:
+  Void() = default;
+  template <typename T> Void(T&&) {}
+};
 
 static_assert(meta::is_empty_tuple_v<std::tuple<>>,"ouch");
 static_assert(meta::is_empty_tuple_v<std::tuple<Void>>,"ouch");

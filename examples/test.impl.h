@@ -243,6 +243,7 @@ class Everything4 {
   }
 };
 
+#ifndef PARSEC_TTG_H_INCLUDED  // TODO Teach PaRSEC streaming terminals
 class Everything5 {
   static void p(std::tuple<Out<keyT, int>> &out) {
     ::ttg::print("produced ", 0);
@@ -289,6 +290,7 @@ class Everything5 {
     if (ttg_default_execution_context().rank() == 0) wp->invoke();
   }
 };
+#endif  // !PaRSEC
 
 class EverythingComposite {
   std::unique_ptr<OpBase> P;

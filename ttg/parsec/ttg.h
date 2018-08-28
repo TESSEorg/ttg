@@ -176,6 +176,10 @@ namespace ttg {
     inline parsec_key_t unique_hash<parsec_key_t, int>(const int &t) {
       return t;
     }
+    template <>
+    inline parsec_key_t unique_hash<parsec_key_t, ::ttg::Void>(const ::ttg::Void &t) {
+      return 0;
+    }
   }  // namespace overload
 }  // namespace ttg
 
@@ -407,8 +411,14 @@ namespace parsec {
         if (obj->tracing()) {
           PrintThread{} << obj->get_name() << " : " << keyT((uintptr_t)task->key) << ": executing" << std::endl;
         }
-        obj->op(keyT((uintptr_t)task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
-                obj->output_terminals);
+        if constexpr(!std::is_same_v<keyT,::ttg::Void>) {
+          obj->op(keyT((uintptr_t) task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
+                  obj->output_terminals);
+        }
+        else {
+          obj->op(std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
+                  obj->output_terminals);
+        }
         if (obj->tracing())
           PrintThread{} << obj->get_name() << " : " << keyT((uintptr_t)task->key) << ": done executing" << std::endl;
       }
@@ -416,7 +426,11 @@ namespace parsec {
       static void static_op_noarg(parsec_task_t *my_task) {
         my_op_t *task = (my_op_t *)my_task;
         derivedT *obj = (derivedT *)task->object_ptr;
-        obj->op(keyT((uintptr_t)task->key), std::tuple<>(), obj->output_terminals);
+        if constexpr(!std::is_same_v<keyT,::ttg::Void>) {
+          obj->op(keyT((uintptr_t) task->key), obj->output_terminals);
+        } else {
+          obj->op(obj->output_terminals);
+        }
       }
 
      protected:
@@ -582,7 +596,7 @@ namespace parsec {
       }
 
       // Used to generate tasks with no input arguments
-      void set_arg_empty(const keyT &key) {
+      template <typename Key = keyT> std::enable_if_t<!std::is_same_v<Key,::ttg::Void>,void> set_arg_empty(const keyT &key) {
         if (tracing()) std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
         // create PaRSEC task
         // and give it to the scheduler
@@ -603,6 +617,32 @@ namespace parsec {
         task->object_ptr = static_cast<derivedT *>(this);
         using ::ttg::unique_hash;
         task->key = unique_hash<parsec_key_t>(key);
+        task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
+        __parsec_schedule(es, &task->parsec_task, 0);
+      }
+
+      // Used to generate tasks with no input arguments
+      template <typename Key = keyT> std::enable_if_t<std::is_same_v<Key,::ttg::Void>,void> set_arg_empty() {
+        if (tracing()) std::cout << get_name() << " : invoking op " << std::endl;
+        // create PaRSEC task
+        // and give it to the scheduler
+        my_op_t *task;
+        parsec_execution_stream_s *es = world.execution_stream();
+        parsec_thread_mempool_t *mempool =
+            &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
+        task = (my_op_t *)parsec_thread_mempool_allocate(mempool);
+        memset((void *)task, 0, sizeof(my_op_t));
+        task->parsec_task.mempool_owner = mempool;
+
+        OBJ_CONSTRUCT(task, parsec_list_item_t);
+        task->parsec_task.task_class = &this->self;
+        task->parsec_task.taskpool = world.taskpool();
+        task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
+
+        task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
+        task->object_ptr = static_cast<derivedT *>(this);
+        using ::ttg::unique_hash;
+        task->key = unique_hash<parsec_key_t>(0);
         task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
         __parsec_schedule(es, &task->parsec_task, 0);
       }
@@ -861,10 +901,17 @@ namespace parsec {
       }
 
       // Manual injection of a task that has no arguments
-      void invoke(const keyT &key) {
+      template <typename Key = keyT> std::enable_if_t<!std::is_same_v<Key,::ttg::Void>,void> invoke(const keyT &key) {
         // That task is going to complete, so count it as to execute
         parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
         set_arg_empty(key);
+      }
+
+      // Manual injection of a task that has no key or arguments
+      template <typename Key = keyT> std::enable_if_t<std::is_same_v<Key,::ttg::Void>,void> invoke() {
+        // That task is going to complete, so count it as to execute
+        parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
+        set_arg_empty();
       }
 
       void make_executable() override { OpBase::make_executable(); }
