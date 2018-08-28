@@ -169,11 +169,11 @@ static parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_ta
 namespace ttg {
   namespace overload {
     template <>
-    inline uint64_t unique_hash<uint64_t, uint64_t>(const uint64_t &t) {
+    inline parsec_key_t unique_hash<parsec_key_t, uint64_t>(const uint64_t &t) {
       return t;
     }
     template <>
-    inline uint64_t unique_hash<uint64_t, int>(const int &t) {
+    inline parsec_key_t unique_hash<parsec_key_t, int>(const int &t) {
       return t;
     }
   }  // namespace overload
@@ -379,7 +379,7 @@ namespace parsec {
      private:
       input_terminals_type input_terminals;
       output_terminalsT output_terminals;
-        std::array<void (Op::*)(void*, std::size_t), numins> set_arg_from_msg_fcts;
+      std::array<void (Op::*)(void*, std::size_t), numins> set_arg_from_msg_fcts;
 
       World &world;
       std::function<int(const keyT &)> keymap;
@@ -719,12 +719,12 @@ namespace parsec {
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
          World &world, keymapT &&keymap_ = keymapT())
           : ::ttg::OpBase(name, numins, numouts)
+          , set_arg_from_msg_fcts(make_set_args_fcts(std::make_index_sequence<numins>{}))
           , world(world)
           // if using default keymap, rebind to the given world
           , keymap(std::is_same<keymapT, default_keymap<keyT>>::value
                        ? decltype(keymap)(default_keymap<keyT>(world))
-                       : decltype(keymap)(std::forward<keymapT>(keymap_)))
-                                          , set_arg_from_msg_fcts(make_set_args_fcts(std::make_index_sequence<numins>{})) {
+                       : decltype(keymap)(std::forward<keymapT>(keymap_))) {
         // Cannot call these in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value)
           throw std::logic_error("parsec::ttg::OP: #input names != #input terminals");
