@@ -323,7 +323,7 @@ namespace parsec {
         // * (const T*&&) => const T&
         // so the input type alone is not enough, will have to cast to the desired type in unwrap_to
         // or have to use a struct instead of a pointer and overload indirection operator (operator*)
-        // probably not a godo way forward since it appears that operator* always return an lvalue ref.
+        // probably not a good way forward since it appears that operator* always return an lvalue ref.
         // not produce an rvalue ref need an explicit cast.
 
         return *wrapper;
