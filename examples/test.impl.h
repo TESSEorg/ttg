@@ -553,7 +553,7 @@ int try_main(int argc, char **argv) {
       // Everything5 = Everything4 with consumer summing all values from A using a stream reducer
       Everything5 q5;
       std::cout << q5.dot() << std::endl;
-      q5.start();  // myusleep(100);
+      q5.start();
 
       Fibonacci fi;
       std::cout << fi.dot() << std::endl << std::endl;
