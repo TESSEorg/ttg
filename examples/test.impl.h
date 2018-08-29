@@ -115,6 +115,7 @@ class EverythingBase {
     producer->make_executable();
     a->make_executable();
     consumer->make_executable();
+    // TODO need abstract base world? or OpBase need to provide OpBase::rank(), etc.
     if (ttg_default_execution_context().rank() == 0) dynamic_cast<Producer *>(producer.get())->invoke();
   }  // Ugh!
 };
@@ -144,7 +145,7 @@ class Everything2 {
     producer.make_executable();
     a.make_executable();
     consumer.make_executable();
-    if (ttg_default_execution_context().rank() == 0) producer.invoke();
+    if (producer.get_world().rank() == 0) producer.invoke();
   }  // Ugh!
 };
 
@@ -192,7 +193,7 @@ class Everything3 {
     wp->make_executable();
     wa->make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == 0) wp->invoke();
+    if (wp->get_world().rank() == 0) wp->invoke();
   }
 };
 
@@ -238,7 +239,7 @@ class Everything4 {
     wp->make_executable();
     wa->make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == 0) wp->invoke();
+    if (wp->get_world().rank() == 0) wp->invoke();
   }
 };
 
@@ -285,7 +286,7 @@ class Everything5 {
     wp->make_executable();
     wa->make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == 0) wp->invoke();
+    if (wp->get_world().rank() == 0) wp->invoke();
   }
 };
 
@@ -412,7 +413,7 @@ class BroadcastTest {
     wg->make_executable();
     broadcast.make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == root) wg->invoke(root);
+    if (wg->get_world().rank() == root) wg->invoke(root);
   }
 };
 
@@ -465,7 +466,7 @@ class Fibonacci {
   void start() {
     wa->make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == 0) wa->invoke(2, 1);
+    if (wa->get_world().rank() == 0) wa->invoke(2, 1);
   }
 };
 
