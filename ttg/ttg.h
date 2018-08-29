@@ -16,9 +16,33 @@
 
 #include "util/demangle.h"
 #include "util/meta.h"
+#include "util/runtimes.h"
 
 namespace ttg {
+/// type analog of void
+class Void {};
 
+static_assert(meta::is_empty_tuple_v<std::tuple<>>,"ouch");
+static_assert(meta::is_empty_tuple_v<std::tuple<Void>>,"ouch");
+
+bool operator==(const Void&, const Void&) { return true; }
+
+bool operator!=(const Void&, const Void&) { return false; }
+
+std::ostream& operator<<(std::ostream& os, const ttg::Void&) {
+  return os;
+}
+
+}  // namespace ttg
+
+namespace std {
+template <>
+struct hash<ttg::Void> {
+  int64_t operator()(const ttg::Void&) const { return 0; }
+};
+}
+
+namespace ttg {
   namespace overload {
     /// Computes unique hash values for objects of type T.
     /// Overload for your type.
@@ -508,6 +532,21 @@ namespace ttg {
 
         return status;
       }
+
+      // converters to OpBase*
+      static OpBase* to_OpBase_ptr(OpBase* op) { return op; }
+      static OpBase* to_OpBase_ptr(const OpBase* op) { return const_cast<OpBase*>(op); }
+
+      /// visitor that does nothing
+      /// @tparam Visitable any type
+      template <typename Visitable>
+      struct null_visitor {
+        /// visits a non-const Visitable object
+        void operator()(Visitable*) {};
+        /// visits a const Visitable object
+        void operator()(const Visitable*) {};
+      };
+
     };
   }  // namespace detail
 
@@ -515,21 +554,23 @@ namespace ttg {
   /// @tparam OpVisitor A Callable type that visits each Op
   /// @tparam InVisitor A Callable type that visits each In terminal
   /// @tparam OutVisitor A Callable type that visits each Out terminal
-  template <typename OpVisitor, typename InVisitor, typename OutVisitor>
+  template <typename OpVisitor = detail::Traverse::null_visitor<OpBase>,
+      typename InVisitor = detail::Traverse::null_visitor<TerminalBase>,
+      typename OutVisitor = detail::Traverse::null_visitor<TerminalBase>>
   class Traverse : private detail::Traverse {
    public:
     static_assert(
         std::is_void<::ttg::meta::void_t<decltype(std::declval<OpVisitor>()(std::declval<OpBase *>()))>>::value,
-        "Traverse<OpVisitor,...>: OpVisitor(const OpBase *op) must be a valid expression");
+        "Traverse<OpVisitor,...>: OpVisitor(OpBase *op) must be a valid expression");
     static_assert(
         std::is_void<::ttg::meta::void_t<decltype(std::declval<InVisitor>()(std::declval<TerminalBase *>()))>>::value,
-        "Traverse<,InVisitor,>: InVisitor(const TerminalBase *op) must be a valid expression");
+        "Traverse<,InVisitor,>: InVisitor(TerminalBase *op) must be a valid expression");
     static_assert(
         std::is_void<::ttg::meta::void_t<decltype(std::declval<OutVisitor>()(std::declval<TerminalBase *>()))>>::value,
-        "Traverse<...,OutVisitor>: OutVisitor(const TerminalBase *op) must be a valid expression");
+        "Traverse<...,OutVisitor>: OutVisitor(TerminalBase *op) must be a valid expression");
 
-    template <typename OpVisitor_, typename InVisitor_, typename OutVisitor_>
-    Traverse(OpVisitor_ &&op_v, InVisitor_ &&in_v, OutVisitor_ &&out_v)
+    template <typename OpVisitor_ = detail::Traverse::null_visitor<OpBase>, typename InVisitor_ = detail::Traverse::null_visitor<TerminalBase>, typename OutVisitor_ = detail::Traverse::null_visitor<TerminalBase>>
+    Traverse(OpVisitor_ &&op_v = OpVisitor_{}, InVisitor_ &&in_v = InVisitor_{}, OutVisitor_ &&out_v = OutVisitor_{})
         : op_visitor_(std::forward<OpVisitor_>(op_v))
         , in_visitor_(std::forward<InVisitor_>(in_v))
         , out_visitor_(std::forward<OutVisitor_>(out_v)){};
@@ -538,9 +579,13 @@ namespace ttg {
     const InVisitor &in_visitor() const { return in_visitor_; }
     const OutVisitor &out_visitor() const { return out_visitor_; }
 
-    bool operator()(OpBase *op) {
+    /// Traverses graph starting at one or more Ops
+    template <typename ... OpBasePtrs>
+    std::enable_if_t<(std::is_convertible_v<std::remove_reference_t<OpBasePtrs>,OpBase*> && ...),bool>
+        operator()(OpBase* op, OpBasePtrs && ... ops) {
       reset();
-      const bool result = traverse(op);
+      bool result = traverse(op);
+      result &= (traverse(std::forward<OpBasePtrs>(ops)) && ... );
       reset();
       return result;
     }
@@ -564,49 +609,23 @@ namespace ttg {
                                                          std::forward<OutVisitor>(out_v)};
   };
 
-  /// @brief Verifies graph connectivity
-  class Verify : private detail::Traverse {
-    void opfunc(OpBase *op) {}
-    void infunc(TerminalBase *in) {}
-    void outfunc(TerminalBase *out) {}
-
-   public:
-    /// Traverses graph starting at @c op
-    /// @return true if traversal from this Op does not reveal dangling (non-connected) Out terminals
-    bool operator()(const OpBase *op) {
-      reset();
-      bool status = traverse(const_cast<OpBase *>(op));
-      reset();
-      return status;
-    }
-  };
+  /// verifies connectivity of the Graph
+  static Traverse<> verify{};
 
   /// Prints the graph to std::cout in an ad hoc format
-  class Print : private detail::Traverse {
-    void opfunc(OpBase *op) {
-      std::cout << "op: " << (void *)op << " " << op->get_name() << " numin " << op->get_inputs().size() << " numout "
-                << op->get_outputs().size() << std::endl;
-    }
-
-    void infunc(TerminalBase *in) {
-      std::cout << "  in: " << in->get_index() << " " << in->get_name() << " " << in->get_key_type_str() << " "
-                << in->get_value_type_str() << std::endl;
-    }
-
-    void outfunc(TerminalBase *out) {
-      std::cout << " out: " << out->get_index() << " " << out->get_name() << " " << out->get_key_type_str() << " "
-                << out->get_value_type_str() << std::endl;
-    }
-
-   public:
-    /// @return true if traversal from this Op does not reveal dangling (non-connected) Out terminals
-    bool operator()(const OpBase *op) {
-      reset();
-      bool status = traverse(const_cast<OpBase *>(op));
-      reset();
-      return status;
-    }
-  };
+  static auto print_ttg = make_traverse(
+      [](auto *op) {
+        std::cout << "op: " << (void *)op << " " << op->get_name() << " numin " << op->get_inputs().size() << " numout "
+                  << op->get_outputs().size() << std::endl;
+      },
+      [](auto *in) {
+        std::cout << "  in: " << in->get_index() << " " << in->get_name() << " " << in->get_key_type_str() << " "
+                  << in->get_value_type_str() << std::endl;
+      },
+      [](auto *out) {
+        std::cout << " out: " << out->get_index() << " " << out->get_name() << " " << out->get_key_type_str() << " "
+                  << out->get_value_type_str() << std::endl;
+      });
 
   /// Prints the graph to a std::string in the format understood by GraphViz's dot program
   class Dot : private detail::Traverse {
@@ -694,14 +713,18 @@ namespace ttg {
 
    public:
     /// @return string containing the graph specification in the format understood by GraphViz's dot program
-    std::string operator()(const OpBase *op) {
+    template <typename... OpBasePtrs>
+    std::enable_if_t<(std::is_convertible_v<std::remove_const_t<std::remove_reference_t<OpBasePtrs>>, OpBase *> && ...),
+                     std::string>
+    operator()(OpBasePtrs &&... ops) {
       reset();
       buf.str(std::string());
       buf.clear();
 
       buf << "digraph G {\n";
       buf << "        ranksep=1.5;\n";
-      traverse(const_cast<OpBase *>(op));
+      bool t = true;
+      t &= (traverse(std::forward<OpBasePtrs>(ops)) && ... );
       buf << "}\n";
 
       reset();
@@ -715,18 +738,18 @@ namespace ttg {
 
   /// applies @c make_executable method to every op in the graph
   /// return true if there are no dangling out terminals
-  bool make_graph_executable(OpBase* op) {
-    return ::ttg::make_traverse(
-                                [](auto x) {x->make_executable(); },
-        [](auto x) {},
-        [](auto x) {}
-    )(op);
+  template <typename... OpBasePtrs>
+  std::enable_if_t<(std::is_convertible_v<std::remove_const_t<std::remove_reference_t<OpBasePtrs>>, OpBase *> && ...),
+                   bool>
+  make_graph_executable(OpBasePtrs &&... ops) {
+    return ::ttg::make_traverse([](auto x) { x->make_executable(); }, [](auto x) {},
+                                [](auto x) {})(std::forward<OpBasePtrs>(ops)...);
   }
 
-  template <typename keyT, typename valueT>
+  template <typename keyT = Void, typename valueT = Void>
   class Edge;  // Forward decl.
 
-  template <typename keyT, typename valueT>
+  template <typename keyT = Void, typename valueT = Void>
   class In : public TerminalBase {
    public:
     typedef valueT value_type;
@@ -810,7 +833,7 @@ namespace ttg {
   };
 
   // Output terminal
-  template <typename keyT, typename valueT>
+  template <typename keyT = Void, typename valueT = Void>
   class Out : public TerminalBase {
    public:
     typedef valueT value_type;
@@ -1067,9 +1090,46 @@ namespace ttg {
     t.send(key, std::forward<valueT>(value));
   }
 
+  // TODO decide whether we need this ... (how common will be pure control flow?)
+  template <typename keyT, typename output_terminalT>
+  void sendk(const keyT &key, output_terminalT &t) {
+    t.send(key, Void{});
+  }
+
+  // TODO if sendk is removed, rename to send
+  template <typename valueT, typename output_terminalT>
+  void sendv(valueT &&value, output_terminalT &t) {
+    t.send(Void{}, std::forward<valueT>(value));
+  }
+
+  template <typename keyT, typename valueT, typename output_terminalT>
+  void send(output_terminalT &t) {
+    t.send(Void{}, Void{});
+  }
+
   template <size_t i, typename keyT, typename valueT, typename... output_terminalsT>
-  void send(const keyT &key, valueT &&value, std::tuple<output_terminalsT...> &t) {
+  std::enable_if_t<!std::is_same_v<keyT,Void> || !std::is_same_v<valueT,Void>,void>
+      send(const keyT &key, valueT &&value, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).send(key, std::forward<valueT>(value));
+  }
+
+  // TODO decide whether we need this ... (how common will be pure control flow?)
+  template <size_t i, typename keyT, typename... output_terminalsT>
+  std::enable_if_t<!std::is_same_v<keyT,Void>,void>
+  sendk(const keyT &key, std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).send(key, Void{});
+  }
+
+  // TODO if sendk is removed, rename to send
+  template <size_t i, typename valueT, typename... output_terminalsT>
+  std::enable_if_t<!std::is_same_v<valueT,Void>,void>
+  sendv(valueT &&value, std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).send(Void{}, std::forward<valueT>(value));
+  }
+
+  template <size_t i, typename... output_terminalsT>
+  void send(std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).send(Void{}, Void{});
   }
 
   template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT>

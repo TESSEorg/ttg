@@ -4,16 +4,18 @@
 set(ttg-sources
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg.h
         ${CMAKE_CURRENT_SOURCE_DIR}/wrap.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/demangle.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/meta.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/serialization.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/bug.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/bug.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/util/backtrace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/util/backtrace.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/broadcast.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/bug.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/bug.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/demangle.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/future.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/meta.h
         ${CMAKE_CURRENT_SOURCE_DIR}/util/reduce.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/util/tree.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/broadcast.h)
+    )
 add_library(ttg ${ttg-sources})
 target_include_directories(ttg PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>

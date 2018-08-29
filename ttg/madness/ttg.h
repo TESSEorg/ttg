@@ -9,6 +9,7 @@
 #include <cassert>
 #include <functional>
 #include <iostream>
+#include <future>
 #include <map>
 #include <memory>
 #include <string>
@@ -42,7 +43,39 @@ namespace madness {
     inline void set_default_world(World &world) { detail::default_world_accessor() = &world; }
     inline void set_default_world(World *world) { detail::default_world_accessor() = world; }
 
-    template <typename... RestOfArgs>
+#if 0
+    class Control;
+    class Graph;
+  /// Graph is a collection of Op objects
+  class Graph {
+   public:
+    Graph() {
+      world_ = get_default_world();
+    }
+    Graph(World& w) : world_(w) {}
+
+
+   private:
+    World& world_;
+  };
+#endif
+
+  namespace detail {
+  static inline std::map<World*, std::set<std::shared_ptr<void>>>& ptr_registry_accessor() {
+    static std::map<World*, std::set<std::shared_ptr<void>>> registry;
+    return registry;
+  };
+  static inline std::map<World*, ::ttg::Edge<>>& clt_edge_registry_accessor() {
+    static std::map<World*, ::ttg::Edge<>> registry;
+    return registry;
+  };
+  static inline std::map<World*, std::set<std::shared_ptr<std::promise<void>>>>& status_registry_accessor() {
+    static std::map<World*, std::set<std::shared_ptr<std::promise<void>>>> registry;
+    return registry;
+  };
+  }
+
+  template <typename... RestOfArgs>
     inline void ttg_initialize(int argc, char **argv, RestOfArgs &&...) {
       World &world = madness::initialize(argc, argv);
       set_default_world(world);
@@ -52,8 +85,61 @@ namespace madness {
     inline void ttg_execute(World &world) {
       // World executes tasks eagerly
     }
-    inline void ttg_fence(World &world) { world.gop.fence(); }
+    inline void ttg_fence(World &world) {
+      world.gop.fence();
+
+      // flag registered statuses
+      {
+        auto& registry = detail::status_registry_accessor();
+        auto iter = registry.find(&world);
+        if (iter != registry.end()) {
+          auto &statuses = iter->second;
+          for (auto &status: statuses) {
+            status->set_value();
+          }
+          statuses.clear();  // clear out the statuses
+        }
+      }
+
+    }
+
     template <typename T>
+    inline void ttg_register_ptr(World& world, const std::shared_ptr<T>& ptr) {
+      auto& registry = detail::ptr_registry_accessor();
+      auto iter = registry.find(&world);
+      if (iter != registry.end()) {
+        auto& ptr_set = iter->second;
+        assert(ptr_set.find(ptr) == ptr_set.end());  // prevent duplicate registration
+        ptr_set.insert(ptr);
+      } else {
+        registry.insert(std::make_pair(&world, std::set<std::shared_ptr<void>>({ptr})));
+      }
+    }
+
+    inline void ttg_register_status(World& world, const std::shared_ptr<std::promise<void>>& status_ptr) {
+      auto& registry = detail::status_registry_accessor();
+      auto iter = registry.find(&world);
+      if (iter != registry.end()) {
+        auto& ptr_set = iter->second;
+        assert(ptr_set.find(status_ptr) == ptr_set.end());  // prevent duplicate registration
+        ptr_set.insert(status_ptr);
+      } else {
+        registry.insert(std::make_pair(&world, std::set<std::shared_ptr<std::promise<void>>>({status_ptr})));
+      }
+    }
+
+    inline ::ttg::Edge<>& ttg_ctl_edge(World& world) {
+      auto& registry = detail::clt_edge_registry_accessor();
+      auto iter = registry.find(&world);
+      if (iter != registry.end()) {
+        return iter->second;
+      } else {
+        registry.insert(std::make_pair(&world, ::ttg::Edge<>{}));
+        return registry[&world];
+      }
+    }
+
+  template <typename T>
     void ttg_sum(World &world, T &value) {
       world.gop.sum(value);
     }
@@ -81,9 +167,10 @@ namespace madness {
           std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs> &&)>...>
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
-     protected:
-      World &get_world() { return world; }
+     public:
+      World &get_world() const { return world; }
 
+     protected:
       using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
       using worldobjT = WorldObject<opT>;
 
@@ -149,12 +236,20 @@ namespace madness {
         void run(World &world) {
           // ::ttg::print("starting task");
 
-            opT::threaddata.key_hash = std::hash<keyT>()(key);
-            opT::threaddata.call_depth++;
+          opT::threaddata.key_hash = std::hash<keyT>()(key);
+          opT::threaddata.call_depth++;
             
-          derived->op(key, std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
-          
-            opT::threaddata.call_depth--;
+          if constexpr (!std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+            derived->op(key, std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
+          } else if constexpr (!std::is_same_v<keyT,::ttg::Void> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+            derived->op(key, derived->output_terminals);
+          } else if constexpr (std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+            derived->op(std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
+          } else {
+            derived->op(derived->output_terminals);  // !!! NOTE moving t into op
+          }
+
+          opT::threaddata.call_depth--;
           
           //::ttg::print("finishing task",opT::threaddata.call_depth);
         }
@@ -245,7 +340,15 @@ namespace madness {
                 
                 //::ttg::print("directly invoking:", get_name(), key, curhash, threaddata.key_hash, threaddata.call_depth);
                 opT::threaddata.call_depth++;
-                static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
+                if constexpr (!std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+                  static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
+                } else if constexpr (!std::is_same_v<keyT,::ttg::Void> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+                  static_cast<derivedT *>(this)->op(key, output_terminals); // Runs immediately
+                } else if constexpr (std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+                  static_cast<derivedT *>(this)->op(std::move(args->t), output_terminals); // Runs immediately
+                } else {
+                  static_cast<derivedT *>(this)->op(output_terminals); // Runs immediately
+                }
                 opT::threaddata.call_depth--;
                 
             }
@@ -261,12 +364,12 @@ namespace madness {
       }
 
       // Used to generate tasks with no input arguments
-      void set_arg_empty(const keyT &key) {
+      template <typename Key = keyT> std::enable_if_t<!std::is_same_v<Key,::ttg::Void>,void> set_arg_empty(const Key &key) {
         const int owner = keymap(key);
 
         if (owner != world.rank()) {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
-          worldobjT::send(owner, &opT::set_arg_empty, key);
+          worldobjT::send(owner, &opT::set_arg_empty<keyT>, key);
         } else {
           accessorT acc;
           if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
@@ -283,6 +386,24 @@ namespace madness {
         }
       }
 
+      // Used to generate tasks with no input arguments
+      template <typename Key = keyT>
+      std::enable_if_t<std::is_same_v<Key,::ttg::Void>,void> set_arg_empty() {
+        const int owner = keymap(::ttg::Void{});
+
+        if (owner != world.rank()) {
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : forwarding no-arg task: ");
+          worldobjT::send(owner, &opT::set_arg_empty<::ttg::Void>);
+        } else {
+          auto task = new OpArgs();  // It will be deleted by the task q
+
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
+          task->derived = static_cast<derivedT *>(this);
+
+          world.taskq.add(task);
+        }
+      }
+
       // Used by invoke to set all arguments associated with a task
       template <size_t... IS>
       void set_args(std::index_sequence<IS...>, const keyT &key, const input_values_tuple_type &args) {
@@ -291,6 +412,14 @@ namespace madness {
       }
 
      public:
+      /// sets stream size for input \c i
+      /// \param size positive integer that specifies the stream size
+      template <std::size_t i, bool key_is_void = ::ttg::meta::is_Void_v<keyT>>
+      std::enable_if_t<key_is_void,void> set_argstream_size(std::size_t size) {
+        // TODO: adapt key-based set_argstream_size
+        this->set_argstream_size<i>(::ttg::Void{}, size);
+      }
+
       /// sets stream size for input \c i
       /// \param size positive integer that specifies the stream size
       template <std::size_t i>
@@ -304,7 +433,10 @@ namespace madness {
         if (owner != world.rank()) {
           if (tracing())
             ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream size for terminal ", i);
-          worldobjT::send(owner, &opT::template set_argstream_size<i>, key, size);
+          if constexpr (::ttg::meta::is_Void_v<keyT>)
+            worldobjT::send(owner, &opT::template set_argstream_size<i, true>, size);
+          else
+            worldobjT::send(owner, &opT::template set_argstream_size<i>, key, size);
         } else {
           if (tracing())
             ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": setting stream size for terminal ", i);
@@ -352,8 +484,8 @@ namespace madness {
             ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
 
           accessorT acc;
-          assert(cache.find(acc, key) &&
-                 "Op::finalize_argstream called but no values had been received yet for this key");
+          const auto found = cache.find(acc, key);
+          assert(found && "Op::finalize_argstream called but no values had been received yet for this key");
           OpArgs *args = acc->second;
 
           // check if stream is already bounded
@@ -537,8 +669,11 @@ namespace madness {
             for (std::size_t i = 0; i < numins; i++) std::cerr << (item.second->nargs[i] == 0 ? "T" : "F") << " ";
             std::cerr << ")" << std::endl;
           }
+          abort();
         }
       }
+
+      static constexpr const ::ttg::Runtime runtime = ::ttg::Runtime::MADWorld;
 
       template <std::size_t i, typename Reducer>
       void set_input_reducer(Reducer &&reducer) {
@@ -557,7 +692,7 @@ namespace madness {
       /// thread on all processes.  In the MADNESS implementation it
       /// fences the entire world associated with the TTG.  If you wish to
       /// fence TTGs independently, then give each its own world.
-      void fence() { world.gop.fence(); }
+      void fence() { ttg_fence(world); }
 
       /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned
       template <std::size_t i>
@@ -577,7 +712,10 @@ namespace madness {
       }
 
       /// Manual injection of a task that has no arguments
-      void invoke(const keyT &key) { set_arg_empty(key); }
+      template <typename Key = keyT> std::enable_if_t<!std::is_same_v<Key,::ttg::Void>,void> invoke(const Key &key) { set_arg_empty(key); }
+
+      /// Manual injection of a task that has no key or arguments
+      template <typename Key = keyT> std::enable_if_t<std::is_same_v<Key,::ttg::Void>,void> invoke() { set_arg_empty(); }
 
       /// keymap accessor
       /// @return the keymap

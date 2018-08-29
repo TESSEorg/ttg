@@ -11,8 +11,8 @@ IMPORT_TTG_RUNTIME_NS
 #include "../ttg/util/broadcast.h"
 #include "../ttg/util/reduce.h"
 
-class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int> {
-  using baseT = Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const int>;
+class A : public Op<keyT, std::tuple<Out<Void, int>, Out<keyT, int>>, A, const int> {
+  using baseT = Op<keyT, std::tuple<Out<Void, int>, Out<keyT, int>>, A, const int>;
 
  public:
   A(const std::string &name) : baseT(name, {"input"}, {"iterate", "result"}) {}
@@ -26,7 +26,7 @@ class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const i
     auto &value = baseT::get<0>(t);
     ::ttg::print("A got value ", value);
     if (value >= 100) {
-      ::send<0>(key, value, out);
+      ::sendv<0>(value, out);
     } else {
       ::send<1>(key + 1, value + 1, out);
     }
@@ -35,8 +35,8 @@ class A : public Op<keyT, std::tuple<Out<keyT, int>, Out<keyT, int>>, A, const i
   ~A() { std::cout << " A destructor\n"; }
 };
 
-class Producer : public Op<keyT, std::tuple<Out<keyT, int>>, Producer> {
-  using baseT = Op<keyT, std::tuple<Out<keyT, int>>, Producer>;
+class Producer : public Op<Void, std::tuple<Out<keyT, int>>, Producer> {
+  using baseT = Op<Void, std::tuple<Out<keyT, int>>, Producer>;
 
  public:
   Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
@@ -44,20 +44,20 @@ class Producer : public Op<keyT, std::tuple<Out<keyT, int>>, Producer> {
   Producer(const typename baseT::output_edges_type &outedges, const std::string &name)
       : baseT(edges(), outedges, name, {}, {"output"}) {}
 
-  void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
+  void op(baseT::output_terminals_type &out) {
     ::ttg::print("produced ", 0);
-    ::send<0>((int)(key), 0, out);
+    ::send<0>(0, 0, out);
   }
 
   ~Producer() { std::cout << " Producer destructor\n"; }
 };
 
-class Consumer : public Op<keyT, std::tuple<>, Consumer, const int> {
-  using baseT = Op<keyT, std::tuple<>, Consumer, const int>;
+class Consumer : public Op<Void, std::tuple<>, Consumer, const int> {
+  using baseT = Op<Void, std::tuple<>, Consumer, const int>;
 
  public:
   Consumer(const std::string &name) : baseT(name, {"input"}, {}) {}
-  void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
+  void op(baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
     ::ttg::print("consumed ", baseT::get<0>(t));
   }
 
@@ -78,18 +78,18 @@ class Everything {
     connect<0, 0>(&a, &consumer);  // a.out<0>()->connect(consumer.in<0>());
     connect<1, 0>(&a, &a);         // a.out<1>()->connect(a.in<0>());
 
-    Verify()(&producer);
+    verify(&producer);
   }
 
-  void print() { Print()(&producer); }
+  void print() { print_ttg(&producer); }
 
-  std::string dot() { return Dot()(&producer); }
+  std::string dot() { return Dot{}(&producer); }
 
   void start() {
     producer.make_executable();
     a.make_executable();
     consumer.make_executable();
-    producer.invoke(0);
+    producer.invoke();
   }
 };
 
@@ -104,23 +104,26 @@ class EverythingBase {
     connect<0, 0>(a, consumer);  // a->out(0)->connect(consumer->in(0));
     connect<1, 0>(a, a);         // a->out(1)->connect(a->in(0));
 
-    Verify()(producer.get());
+    verify(producer.get());
   }
 
-  void print() { Print()(producer.get()); }
+  void print() { print_ttg(producer.get()); }
 
-  std::string dot() { return Dot()(producer.get()); }
+  std::string dot() { return Dot{}(producer.get()); }
 
   void start() {
     producer->make_executable();
     a->make_executable();
     consumer->make_executable();
-    if (ttg_default_execution_context().rank() == 0) dynamic_cast<Producer *>(producer.get())->invoke(0);
+    // TODO need abstract base world? or OpBase need to provide OpBase::rank(), etc.
+    if (ttg_default_execution_context().rank() == 0) dynamic_cast<Producer *>(producer.get())->invoke();
   }  // Ugh!
 };
 
 class Everything2 {
-  Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
+  // !!!! Edges must be constructed before classes that use them
+  Edge<keyT, int> P2A, A2A;
+  Edge<Void, int> A2C;
   Producer producer;
   A a;
   Consumer consumer;
@@ -134,40 +137,42 @@ class Everything2 {
       , a(edges(fuse(P2A, A2A)), edges(A2C, A2A), "A")
       , consumer(edges(A2C), "consumer") {}
 
-  void print() { Print()(&producer); }
+  void print() { print_ttg(&producer); }
 
-  std::string dot() { return Dot()(&producer); }
+  std::string dot() { return Dot{}(&producer); }
 
   void start() {
     producer.make_executable();
     a.make_executable();
     consumer.make_executable();
-    if (ttg_default_execution_context().rank() == 0) producer.invoke(0);
+    if (producer.get_world().rank() == 0) producer.invoke();
   }  // Ugh!
 };
 
 class Everything3 {
-  static void p(const keyT &key, std::tuple<> &&t, std::tuple<Out<keyT, int>> &out) {
+  static void p(std::tuple<> &&, std::tuple<Out<keyT, int>> &out) {
     ::ttg::print("produced ", 0);
-    send<0>(key, int(0), out);
+    send<0>(0, int(0), out);
   }
 
-  static void a(const keyT &key, std::tuple<const int> &&t, std::tuple<Out<keyT, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, std::tuple<const int> &&t, std::tuple<Out<Void, int>, Out<keyT, int>> &out) {
     const auto value = std::get<0>(t);
     if (value >= 100) {
-      send<0>(key, value, out);
+      sendv<0>(value, out);
     } else {
       send<1>(key + 1, value + 1, out);
     }
   }
 
-  static void c(const keyT &key, std::tuple<const int> &&t, std::tuple<> &out) {
+  static void c(std::tuple<const int> &&t, std::tuple<> &out) {
     ::ttg::print("consumed ", std::get<0>(t));
   }
 
-  Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
+  // !!!! Edges must be constructed before classes that use them
+  Edge<keyT, int> P2A, A2A;
+  Edge<Void, int> A2C;
 
-  decltype(wrapt<keyT>(p, edges(), edges(P2A))) wp;
+  decltype(wrapt<Void>(p, edges(), edges(P2A))) wp;
   decltype(wrapt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
   decltype(wrapt(c, edges(A2C), edges())) wc;
 
@@ -176,41 +181,43 @@ class Everything3 {
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrapt<keyT>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wp(wrapt<Void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
       , wa(wrapt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
       , wc(wrapt(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
 
-  void print() { Print()(wp.get()); }
+  void print() { print_ttg(wp.get()); }
 
-  std::string dot() { return Dot()(wp.get()); }
+  std::string dot() { return Dot{}(wp.get()); }
 
   void start() {
     wp->make_executable();
     wa->make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == 0) wp->invoke(0);
+    if (wp->get_world().rank() == 0) wp->invoke();
   }
 };
 
 class Everything4 {
-  static void p(const keyT &key, std::tuple<Out<keyT, int>> &out) {
+  static void p(std::tuple<Out<keyT, int>> &out) {
     ::ttg::print("produced ", 0);
-    send<0>(key, int(0), out);
+    send<0>(0, 0, out);
   }
 
-  static void a(const keyT &key, const int &value, std::tuple<Out<keyT, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, const int &value, std::tuple<Out<Void, int>, Out<keyT, int>> &out) {
     if (value >= 100) {
-      send<0>(key, value, out);
+      sendv<0>(value, out);
     } else {
       send<1>(key + 1, value + 1, out);
     }
   }
 
-  static void c(const keyT &key, const int &value, std::tuple<> &out) { ::ttg::print("consumed ", value); }
+  static void c(const int &value, std::tuple<> &out) { ::ttg::print("consumed ", value); }
 
-  Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
+  // !!!! Edges must be constructed before classes that use them
+  Edge<keyT, int> P2A, A2A;
+  Edge<Void, int> A2C;
 
-  decltype(wrap<keyT>(p, edges(), edges(P2A))) wp;
+  decltype(wrap<Void>(p, edges(), edges(P2A))) wp;
   decltype(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
   decltype(wrap(c, edges(A2C), edges())) wc;
 
@@ -219,40 +226,43 @@ class Everything4 {
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrap<keyT>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wp(wrap<Void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
       , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
-      , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
+      , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {}))
+  {}
 
-  void print() { Print()(wp.get()); }
+  void print() { print_ttg(wp.get()); }
 
-  std::string dot() { return Dot()(wp.get()); }
+  std::string dot() { return Dot{}(wp.get()); }
 
   void start() {
     wp->make_executable();
     wa->make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == 0) wp->invoke(0);
+    if (wp->get_world().rank() == 0) wp->invoke();
   }
 };
 
 class Everything5 {
-  static void p(const keyT &key, std::tuple<Out<keyT, int>> &out) {
+  static void p(std::tuple<Out<keyT, int>> &out) {
     ::ttg::print("produced ", 0);
-    send<0>(key, int(0), out);
+    send<0>(0, 0, out);
   }
 
-  static void a(const keyT &key, const int &value, std::tuple<Out<keyT, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, const int &value, std::tuple<Out<Void, int>, Out<keyT, int>> &out) {
     if (value < 100) {
       send<1>(key + 1, value + 1, out);
-      send<0>(0, value, out);
+      sendv<0>(value, out);
     }
   }
 
-  static void c(const keyT &key, const int &value, std::tuple<> &out) { ::ttg::print("consumed ", value); }
+  static void c(const int &value, std::tuple<> &out) { ::ttg::print("consumed ", value); }
 
-  Edge<keyT, int> P2A, A2A, A2C;  // !!!! Edges must be constructed before classes that use them
+  // !!!! Edges must be constructed before classes that use them
+  Edge<keyT, int> P2A, A2A;
+  Edge<Void, int> A2C;
 
-  decltype(wrap<keyT>(p, edges(), edges(P2A))) wp;
+  decltype(wrap<Void>(p, edges(), edges(P2A))) wp;
   decltype(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
   decltype(wrap(c, edges(A2C), edges())) wc;
 
@@ -261,22 +271,22 @@ class Everything5 {
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrap<keyT>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wp(wrap<Void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
       , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
       , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {
     wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
-    wc->set_argstream_size<0>(0, 100);
+    if (wc->get_world().rank() == 0) wc->set_argstream_size<0>(100);
   }
 
-  void print() { Print()(wp.get()); }
+  void print() { print_ttg(wp.get()); }
 
-  std::string dot() { return Dot()(wp.get()); }
+  std::string dot() { return Dot{}(wp.get()); }
 
   void start() {
     wp->make_executable();
     wa->make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == 0) wp->invoke(0);
+    if (wp->get_world().rank() == 0) wp->invoke();
   }
 };
 
@@ -312,21 +322,21 @@ class EverythingComposite {
     ::ttg::print("AC in<0>", (void *)(TerminalBase *)(ac->in<0>()));
     connect<0, 0>(p, ac);  // p->out<0>()->connect(ac->in<0>());
 
-    Verify()(p.get());
+    verify(p.get());
 
     P = std::move(p);
     AC = std::move(ac);
   }
 
-  void print() { Print()(P.get()); }
+  void print() { print_ttg(P.get()); }
 
-  std::string dot() { return Dot()(P.get()); }
+  std::string dot() { return Dot{}(P.get()); }
 
   void start() {
     Producer *p = dynamic_cast<Producer *>(P.get());
     P->make_executable();
     AC->make_executable();
-    p->invoke(0);
+    p->invoke();
   }  // Ugh!
 };
 
@@ -356,9 +366,9 @@ class ReductionTest {
       , reduction(G2R, R2C, 0, 0, std::plus<int>{})
       , wc(wrap(consumer, edges(R2C), edges(), "consumer", {"result"}, {})) {}
 
-  void print() { Print()(wg.get()); }
+  void print() { print_ttg(wg.get()); }
 
-  std::string dot() { return Dot()(wg.get()); }
+  std::string dot() { return Dot{}(wg.get()); }
 
   void start() {
     wg->make_executable();
@@ -395,15 +405,15 @@ class BroadcastTest {
       , broadcast(G2B, B2C, {ttg_default_execution_context().rank()}, root)
       , wc(wrap(consumer, edges(B2C), edges(), "consumer", {"result"}, {})) {}
 
-  void print() { Print()(wg.get()); }
+  void print() { print_ttg(wg.get()); }
 
-  std::string dot() { return Dot()(wg.get()); }
+  std::string dot() { return Dot{}(wg.get()); }
 
   void start() {
     wg->make_executable();
     broadcast.make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == root) wg->invoke(root);
+    if (wg->get_world().rank() == root) wg->invoke(root);
   }
 };
 
@@ -412,15 +422,21 @@ class Fibonacci {
   // compute all numbers up to this value
   static constexpr const int max() { return 1000; }
 
-  // computes next value: F_{n+2} = F_{n+1} + F_{n}, seeded by F_1 = 1, F_0 = 0
+  // computes next value: F_{n+2} = F_{n+1} + F_{n}, seeded by F_1 = 2, F_0 = 1
   static void next(const int &F_np1 /* aka key */, const int &F_n, std::tuple<Out<int, int>, Out<int, int>> &outs) {
     // if this is first call reduce F_np1 and F_n also
-    if (F_np1 == 1 && F_n == 0) send<1>(0, F_np1 + F_n, outs);
+    if (F_np1 == 2 && F_n == 1) send<1>(0, F_np1 + F_n, outs);
 
     const auto F_np2 = F_np1 + F_n;
     if (F_np2 < max()) {
-      send<0>(F_np2, F_np1, outs);
+      // on 1 process the right order of sends can avoid the race iff reductions are inline (on-current-thread) and not async (nthread>1):
+      // - send<1> will call wc->set_arg which will eagerly reduce the argument
+      // - send<0> then will call wa->set_arg which will create task for key F_np2 ... that can potentially call finalize<1> in the other clause
+      // - reversing the order of sends will create a race between wc->set_arg->send<1> executing on this thread and wa->set_arg->finalize<1> executing in thread pool
+      // - there is no way to detect the "undesired" outcome of the race without keeping expired OpArgs from the cache
+      // there is no way currently to avoid race if there is more than 1 process ... need to add the number of messages that the reducing terminal will receive. The order of operations will still matter.
       send<1>(0, F_np2, outs);
+      send<0>(F_np2, F_np1, outs);
     } else
       finalize<1>(0, outs);
   }
@@ -443,14 +459,14 @@ class Fibonacci {
     wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
   }
 
-  void print() { Print()(wa.get()); }
+  void print() { print_ttg(wa.get()); }
 
-  std::string dot() { return Dot()(wa.get()); }
+  std::string dot() { return Dot{}(wa.get()); }
 
   void start() {
     wa->make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == 0) wa->invoke(1, 0);
+    if (wa->get_world().rank() == 0) wa->invoke(2, 1);
   }
 };
 
@@ -533,14 +549,20 @@ int try_main(int argc, char **argv) {
 #endif
 
 #ifndef PARSEC_TTG_H_INCLUDED  // TODO Teach PaRSEC streaming terminals
-    // Everything5 = Everything4 with consumer summing all values from A using a stream reducer
-    Everything5 q5;
-    std::cout << q5.dot() << std::endl;
-    q5.start();  // myusleep(100);
+    if constexpr (runtime_traits<ttg_runtime>::supports_streaming_terminal) {
+      // Everything5 = Everything4 with consumer summing all values from A using a stream reducer
+      Everything5 q5;
+      std::cout << q5.dot() << std::endl;
+      q5.start();
 
-    Fibonacci fi;
-    std::cout << fi.dot() << std::endl << std::endl;
-    fi.start();
+      Fibonacci fi;
+      std::cout << fi.dot() << std::endl << std::endl;
+      if (ttg_default_execution_context().size() == 1) fi.start();  // see Fibonacci::next() for why there is a race here when nproc>1 (works most of the time)
+
+      // must fence here to flush out all tasks associated with Everything5 and Fibonacci
+      // TODO must fence in Op destructors to avoid compositional nightmares like this
+      ttg_fence(ttg_default_execution_context());
+    }
 #endif
 
     ReductionTest t;

@@ -106,7 +106,7 @@ namespace parsec {
       if (detail::default_world_accessor() != nullptr) {
         return *detail::default_world_accessor();
       } else {
-        throw "parsec::ttg::set_default_world() must be called before use";
+        throw std::logic_error("parsec::ttg::set_default_world() must be called before use");
       }
     }
     inline void set_default_world(World &world) { detail::default_world_accessor() = &world; }
@@ -364,7 +364,7 @@ namespace parsec {
           std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs> &&)>...>
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
-     protected:
+     public:
       World &get_world() { return world; }
 
      private:
@@ -438,7 +438,7 @@ namespace parsec {
 
         if (NULL != task->parsec_task.data[i].data_in) {
           std::cerr << get_name() << " : " << key << ": error argument is already set : " << i << std::endl;
-          throw "bad set arg";
+          throw std::logic_error("bad set arg");
         }
 
         void *task_body_tail_ptr =
@@ -624,9 +624,9 @@ namespace parsec {
                        : decltype(keymap)(std::forward<keymapT>(keymap_))) {
         // Cannot call these in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value)
-          throw "parsec::ttg::OP: #input names != #input terminals";
+          throw std::logic_error("parsec::ttg::OP: #input names != #input terminals");
         if (outnames.size() != std::tuple_size<output_terminalsT>::value)
-          throw "parsec::ttg::OP: #output names != #output terminals";
+          throw std::logic_error("parsec::ttg::OP: #output names != #output terminals");
 
         register_input_terminals(input_terminals, innames);
         register_output_terminals(output_terminals, outnames);
@@ -726,6 +726,8 @@ namespace parsec {
         parsec_hash_table_fini(&tasks_table);
         parsec_mempool_destruct(&mempools);
       }
+
+      static constexpr const ::ttg::Runtime runtime = ::ttg::Runtime::PaRSEC;
 
       template <std::size_t i, typename Reducer>
       void set_input_reducer(Reducer &&reducer) {
