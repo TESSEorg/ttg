@@ -81,18 +81,20 @@ namespace ttg {
     // is_empty_tuple
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // true if tuple contains empty types, e.g. is_empty_tuple<std::tuple<>> or is_empty_tuple<std::tuple<Void>>
+    // true if tuple is empty or contains only Void type, e.g. is_empty_tuple<std::tuple<>> or is_empty_tuple<std::tuple<Void>> evaluate to true
     template <typename T, typename Enabler = void>
     struct is_empty_tuple : std::false_type {};
 
     template <typename... Ts>
-    struct is_empty_tuple<std::tuple<Ts...>, std::enable_if_t<(std::is_empty<Ts>::value && ...)> > : std::true_type {
+    struct is_empty_tuple<std::tuple<Ts...>, std::enable_if_t<(is_Void_v<Ts> && ...)> > : std::true_type {
     };
 
     template <typename Tuple>
     inline constexpr bool is_empty_tuple_v = is_empty_tuple<Tuple>::value;
 
     static_assert(!is_empty_tuple_v<std::tuple<int>>, "ouch");
+    static_assert(is_empty_tuple_v<std::tuple<>>, "ouch");
+    static_assert(is_empty_tuple_v<std::tuple<Void>>, "ouch");
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // type_printer useful to print types in metaprograms
