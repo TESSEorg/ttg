@@ -432,8 +432,14 @@ class Fibonacci {
 
     const auto F_np2 = F_np1 + F_n;
     if (F_np2 < max()) {
-      send<0>(F_np2, F_np1, outs);
+      // on 1 process the right order of sends can avoid the race iff reductions are inline (on-current-thread) and not async (nthread>1):
+      // - send<1> will call wc->set_arg which will eagerly reduce the argument
+      // - send<0> then will call wa->set_arg which will create task for key F_np2 ... that can potentially call finalize<1> in the other clause
+      // - reversing the order of sends will create a race between wc->set_arg->send<1> executing on this thread and wa->set_arg->finalize<1> executing in thread pool
+      // - there is no way to detect the "undesired" outcome of the race without keeping expired OpArgs from the cache
+      // there is no way currently to avoid race if there is more than 1 process ... need to add the number of messages that the reducing terminal will receive. The order of operations will still matter.
       send<1>(0, F_np2, outs);
+      send<0>(F_np2, F_np1, outs);
     } else
       finalize<1>(0, outs);
   }
