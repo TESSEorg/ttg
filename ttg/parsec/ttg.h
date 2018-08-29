@@ -347,9 +347,10 @@ namespace parsec {
         return data;
       }
 
-      using input_values_tuple_type = std::tuple<data_wrapper_t<input_valueTs>...>;
+      using input_values_tuple_type = std::tuple<data_wrapper_t<std::decay_t<input_valueTs>>...>;
       using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
       using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
+      using input_unwrapped_values_tuple_type = std::tuple<std::decay_t<input_valueTs>...>;
 
       using output_terminals_type = output_terminalsT;
       using output_edges_type = typename ::ttg::terminals_to_edges<output_terminalsT>::type;
@@ -411,14 +412,20 @@ namespace parsec {
         if (obj->tracing()) {
           PrintThread{} << obj->get_name() << " : " << keyT((uintptr_t)task->key) << ": executing" << std::endl;
         }
-        if constexpr(!std::is_same_v<keyT,::ttg::Void>) {
+
+        if constexpr (!std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
           obj->op(keyT((uintptr_t) task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
                   obj->output_terminals);
-        }
-        else {
+        } else if constexpr (!std::is_same_v<keyT,::ttg::Void> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
+          ::ttg::meta::type_printer<input_unwrapped_values_tuple_type> x;
+          obj->op(keyT((uintptr_t) task->key), obj->output_terminals);
+        } else if constexpr (std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
           obj->op(std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
                   obj->output_terminals);
+        } else {
+          obj->op(obj->output_terminals);
         }
+
         if (obj->tracing())
           PrintThread{} << obj->get_name() << " : " << keyT((uintptr_t)task->key) << ": done executing" << std::endl;
       }

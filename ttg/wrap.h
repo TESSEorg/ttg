@@ -117,6 +117,7 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
   using input_values_tuple_type = typename baseT::input_values_tuple_type;
   using input_edges_type = typename baseT::input_edges_type;
   using output_edges_type = typename baseT::output_edges_type;
+  using input_unwrapped_values_tuple_type = typename baseT::input_unwrapped_values_tuple_type;
 
   std::function<boost::callable_traits::function_type_t<funcT>> func;
 
@@ -158,7 +159,7 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
 
   template<typename Key, typename ArgsTuple>
   std::enable_if_t<std::is_same_v<ArgsTuple,input_values_tuple_type> &&
-      !::ttg::meta::is_empty_tuple_v<ArgsTuple> &&
+      !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type> &&
       !::ttg::meta::is_Void_v<Key>,void>
       op(Key &&key, ArgsTuple &&args_tuple, output_terminalsT &out) {
     call_func(std::forward<Key>(key), std::forward<ArgsTuple>(args_tuple), out,
@@ -167,21 +168,21 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
 
   template<typename ArgsTuple, typename Key = keyT>
   std::enable_if_t<std::is_same_v<ArgsTuple,input_values_tuple_type> &&
-      !::ttg::meta::is_empty_tuple_v<ArgsTuple> &&
+      !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type> &&
       ::ttg::meta::is_Void_v<Key>,void>
   op(ArgsTuple &&args_tuple, output_terminalsT &out) {
     call_func(std::forward<ArgsTuple>(args_tuple), out,
               std::make_index_sequence<std::tuple_size<ArgsTuple>::value>{});
   };
 
-  template<typename Key, typename ArgsTuple = input_values_tuple_type>
+  template<typename Key, typename ArgsTuple = input_unwrapped_values_tuple_type>
   std::enable_if_t<::ttg::meta::is_empty_tuple_v<ArgsTuple> &&
       !::ttg::meta::is_Void_v<Key>,void>
   op(Key &&key, output_terminalsT &out) {
     call_func(std::forward<Key>(key), out);
   };
 
-  template<typename Key = keyT, typename ArgsTuple = input_values_tuple_type>
+  template<typename Key = keyT, typename ArgsTuple = input_unwrapped_values_tuple_type>
   std::enable_if_t<::ttg::meta::is_empty_tuple_v<ArgsTuple> &&
       ::ttg::meta::is_Void_v<Key>,void>
   op(output_terminalsT &out) {
