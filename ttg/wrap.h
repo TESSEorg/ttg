@@ -103,9 +103,6 @@ struct WrapOpUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<input_values
   using type = WrapOp<funcT, keyT, output_terminalsT, std::remove_reference_t<input_valuesT>...>;
 };
 
-template <typename>
-struct type_printer;
-
 // Class to wrap a callable with signature
 //
 // case 1 (keyT != Void): void op(auto&& key, input_valuesT&&..., std::tuple<output_terminalsT...>&)

@@ -744,8 +744,6 @@ namespace parsec {
         junk[0]++;
       }
 
-      template <typename T>
-      struct type_printer;
       template <typename input_terminals_tupleT, typename flowsT>
       void initialize_flows(flowsT &&flows) {
         _initialize_flows<input_terminals_tupleT>(
