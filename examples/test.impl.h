@@ -421,10 +421,10 @@ class Fibonacci {
   // compute all numbers up to this value
   static constexpr const int max() { return 1000; }
 
-  // computes next value: F_{n+2} = F_{n+1} + F_{n}, seeded by F_1 = 1, F_0 = 0
+  // computes next value: F_{n+2} = F_{n+1} + F_{n}, seeded by F_1 = 2, F_0 = 1
   static void next(const int &F_np1 /* aka key */, const int &F_n, std::tuple<Out<int, int>, Out<int, int>> &outs) {
     // if this is first call reduce F_np1 and F_n also
-    if (F_np1 == 1 && F_n == 0) send<1>(0, F_np1 + F_n, outs);
+    if (F_np1 == 2 && F_n == 1) send<1>(0, F_np1 + F_n, outs);
 
     const auto F_np2 = F_np1 + F_n;
     if (F_np2 < max()) {
@@ -459,7 +459,7 @@ class Fibonacci {
   void start() {
     wa->make_executable();
     wc->make_executable();
-    if (ttg_default_execution_context().rank() == 0) wa->invoke(1, 0);
+    if (ttg_default_execution_context().rank() == 0) wa->invoke(2, 1);
   }
 };
 
