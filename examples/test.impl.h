@@ -558,6 +558,10 @@ int try_main(int argc, char **argv) {
       Fibonacci fi;
       std::cout << fi.dot() << std::endl << std::endl;
       if (ttg_default_execution_context().size() == 1) fi.start();  // see Fibonacci::next() for why there is a race here when nproc>1 (works most of the time)
+
+      // must fence here to flush out all tasks associated with Everything5 and Fibonacci
+      // TODO must fence in Op destructors to avoid compositional nightmares like this
+      ttg_fence(ttg_default_execution_context());
     }
 #endif
 
