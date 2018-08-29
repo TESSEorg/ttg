@@ -205,11 +205,11 @@ std::ostream &operator<<(std::ostream &os, const Key<Rank> &key) {
 namespace ttg {
   namespace overload {
     template <>
-    uint64_t unique_hash<uint64_t, Key<2u>>(const Key<2u> &key) {
+    runtime_traits<ttg_runtime>::hash_t unique_hash<runtime_traits<ttg_runtime>::hash_t, Key<2u>>(const Key<2u> &key) {
       return key.hash();
     }
     template <>
-    uint64_t unique_hash<uint64_t, Key<3u>>(const Key<3u> &key) {
+    runtime_traits<ttg_runtime>::hash_t unique_hash<runtime_traits<ttg_runtime>::hash_t, Key<3u>>(const Key<3u> &key) {
       return key.hash();
     }
   }  // namespace overload

@@ -4,6 +4,7 @@
 #define IMPORT_TTG_RUNTIME_NS   \
   using namespace madness;      \
   using namespace madness::ttg; \
-  using namespace ::ttg;
+  using namespace ::ttg;        \
+  constexpr const ::ttg::Runtime ttg_runtime = ::ttg::Runtime::MADWorld;
 
 #include "../spmm.impl.h"
