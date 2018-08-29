@@ -275,7 +275,7 @@ class Everything5 {
       , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
       , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {
     wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
-    wc->set_argstream_size<0>(100);
+    if (wc->get_world().rank() == 0) wc->set_argstream_size<0>(100);
   }
 
   void print() { print_ttg(wp.get()); }
