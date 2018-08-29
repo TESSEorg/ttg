@@ -419,7 +419,7 @@ namespace madness {
         this->set_argstream_size<i>(::ttg::Void{}, size);
       }
 
-        /// sets stream size for input \c i
+      /// sets stream size for input \c i
       /// \param size positive integer that specifies the stream size
       template <std::size_t i>
       void set_argstream_size(const keyT &key, std::size_t size) {
