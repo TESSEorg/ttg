@@ -561,7 +561,7 @@ int try_main(int argc, char **argv) {
 
       Fibonacci fi;
       std::cout << fi.dot() << std::endl << std::endl;
-      fi.start();
+      if (ttg_default_execution_context().size() == 1) fi.start();  // see Fibonacci::next() for why there is a race here when nproc>1 (works most of the time)
     }
 #endif
 
