@@ -421,6 +421,7 @@ class BroadcastTest {
   }
 };
 
+#ifndef PARSEC_TTG_H_INCLUDED  // TODO Teach PaRSEC streaming terminals
 // Computes Fibonacci numbers up to some value
 class Fibonacci {
   // compute all numbers up to this value
@@ -473,6 +474,7 @@ class Fibonacci {
     if (wa->get_world().rank() == 0) wa->invoke(2, 1);
   }
 };
+#endif
 
 int try_main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
