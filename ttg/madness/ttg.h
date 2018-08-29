@@ -483,8 +483,8 @@ namespace madness {
             ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
 
           accessorT acc;
-          assert(cache.find(acc, key) &&
-                 "Op::finalize_argstream called but no values had been received yet for this key");
+          const auto found = cache.find(acc, key);
+          assert(found && "Op::finalize_argstream called but no values had been received yet for this key");
           OpArgs *args = acc->second;
 
           // check if stream is already bounded
