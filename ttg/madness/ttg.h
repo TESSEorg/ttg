@@ -167,9 +167,10 @@ namespace madness {
           std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs> &&)>...>
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
-     protected:
+     public:
       World &get_world() const { return world; }
 
+     protected:
       using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
       using worldobjT = WorldObject<opT>;
 

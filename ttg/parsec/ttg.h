@@ -393,7 +393,7 @@ namespace parsec {
           std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs> &&)>...>
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
-     protected:
+     public:
       World &get_world() { return world; }
 
      private:
