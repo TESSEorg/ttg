@@ -395,7 +395,7 @@ namespace parsec {
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
      public:
-      World &get_world() { return world; }
+      World &get_world() const { return world; }
 
      private:
 
