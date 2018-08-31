@@ -2,7 +2,7 @@
 #include <iostream>
 
 const double L = 10.0;       // The computational domain is [-L,L]
-const double thresh = 1e-4;  // The threshold for small difference coefficients
+const double thresh = 1e-6;  // The threshold for small difference coefficients
 
 void error(const char* s) {
   std::cerr << s << std::endl;
@@ -312,7 +312,7 @@ double C(const double x) { return std::exp(-x * x) * std::sin(x); }
 double R(const double x) { return (A(x) + B(x)) * C(x); }
 
 int main(int argc, char** argv) {
-  ttg_initialize(argc, argv, 2);
+  ttg_initialize(argc, argv, -1);
   {
     ctlEdge ctl("start ctl");
     nodeEdge a("a"), b("b"), c("c"), abc("abc"), diffa("diffa"), errdiff("errdiff"), errabc("errabc"), a_plus_b("a+b"),
@@ -359,15 +359,16 @@ int main(int argc, char** argv) {
     assert(connected);
 
     if (ttg_default_execution_context().rank() == 0) {
-      std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
+#if 0
+      std::cout << "Is everything connected? " << verify()(start.get()) << std::endl;
       std::cout << "==== begin dot ====\n";
       std::cout << Dot()(start.get()) << std::endl;
       std::cout << "====  end dot  ====\n";
+#endif
 
       // This kicks off the entire computation
       start->invoke(Key(0, 0));
     }
-
     ttg_execute(ttg_default_execution_context());
     ttg_fence(ttg_default_execution_context());
 
