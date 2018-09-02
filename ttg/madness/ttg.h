@@ -224,8 +224,6 @@ namespace madness {
       struct OpArgs : TaskInterface {
        public:
         struct void_key {
-          void_key() = default;
-          template <typename T> void_key(T&&) {}
         };
 
         int counter;                            // Tracks the number of arguments finalized

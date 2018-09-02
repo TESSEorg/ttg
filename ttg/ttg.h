@@ -15,7 +15,7 @@
 #include <boost/callable_traits.hpp>  // needed for wrap.h
 
 // uncomment if want to use void as Void
-//#define TTG_USE_STD_VOID
+#define TTG_USE_STD_VOID
 
 #include "util/demangle.h"
 #include "util/meta.h"
