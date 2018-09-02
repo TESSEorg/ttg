@@ -5,11 +5,7 @@
 
 namespace ttg {
 
-#ifdef TTG_USE_STD_VOID
-using Void = void;
-#else
   class Void;
-#endif
 
   namespace meta {
 
@@ -88,10 +84,10 @@ using Void = void;
     constexpr bool is_void_v = is_Void_v<T> || std::is_void_v<T>;
 
     template <typename ... Ts>
-    constexpr bool is_all_void_v = (is_Void_v<Ts> && ...);
+    constexpr bool is_all_void_v = (is_void_v<Ts> && ...);
 
     template <typename ... Ts>
-    constexpr bool is_any_void_v = (is_Void_v<Ts> || ...);
+    constexpr bool is_any_void_v = (is_void_v<Ts> || ...);
 
     template <typename ... Ts>
     constexpr bool is_none_void_v = !is_any_void_v<Ts...>;

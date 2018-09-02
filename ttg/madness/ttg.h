@@ -223,9 +223,6 @@ namespace madness {
 
       struct OpArgs : TaskInterface {
        public:
-        struct void_key {
-        };
-
         int counter;                            // Tracks the number of arguments finalized
         std::array<std::size_t, numins> nargs;  // Tracks the number of expected values (0 = finalized)
         std::array<std::size_t, numins>
@@ -233,14 +230,14 @@ namespace madness {
                                      // (0 = unbounded stream)
         input_values_tuple_type t;   // The input values
         derivedT *derived;           // Pointer to derived class instance
-        std::conditional_t<::ttg::meta::is_void_v<keyT>,void_key,keyT> key;                    // Task key
+        std::conditional_t<::ttg::meta::is_void_v<keyT>,::ttg::Void,keyT> key;                    // Task key
 
         OpArgs() : counter(numins), nargs(), stream_size(), t() { std::fill(nargs.begin(), nargs.end(), 1); }
 
         void run(World &world) {
           // ::ttg::print("starting task");
 
-          opT::threaddata.key_hash = std::hash<keyT>()(key);
+          opT::threaddata.key_hash = std::hash<decltype(key)>()(key);
           opT::threaddata.call_depth++;
             
           if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
@@ -475,7 +472,7 @@ namespace madness {
 
         if (owner != world.rank()) {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : forwarding no-arg task: ");
-          worldobjT::send(owner, &opT::set_arg_empty<::ttg::Void>);
+          worldobjT::send(owner, &opT::set_arg_empty<void>);
         } else {
           auto task = new OpArgs();  // It will be deleted by the task q
 

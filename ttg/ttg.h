@@ -14,19 +14,16 @@
 
 #include <boost/callable_traits.hpp>  // needed for wrap.h
 
-// uncomment if want to use void as Void
-#define TTG_USE_STD_VOID
-
 #include "util/demangle.h"
 #include "util/meta.h"
 #include "util/runtimes.h"
 
 namespace ttg {
 
-#ifdef TTG_USE_STD_VOID
-using Void = void;
-#else
-/// type analog of void
+/// @brief A complete version of void
+
+/// Void can be used interchangeably with void as key or value type, but is also hashable, etc.
+/// May reduce the amount of metaprogramming relative to void.
 class Void {
  public:
   Void() = default;
@@ -40,7 +37,6 @@ bool operator!=(const Void&, const Void&) { return false; }
 std::ostream& operator<<(std::ostream& os, const ttg::Void&) {
   return os;
 }
-#endif
 
 static_assert(meta::is_empty_tuple_v<std::tuple<>>,"ouch");
 static_assert(meta::is_empty_tuple_v<std::tuple<Void>>,"ouch");
@@ -72,15 +68,15 @@ namespace ttg {
     struct default_keymap_impl;
     template <typename keyT>
     struct default_keymap_impl<
-        keyT, std::enable_if_t<::ttg::meta::has_std_hash_overload_v<keyT> || ::ttg::meta::is_void_v<keyT>>> {
+        keyT, std::enable_if_t<meta::has_std_hash_overload_v<keyT> || meta::is_void_v<keyT>>> {
       default_keymap_impl() = default;
       default_keymap_impl(int world_size) : world_size(world_size) {}
 
       template <typename Key = keyT>
-      std::enable_if_t<!::ttg::meta::is_void_v<Key>,int>
+      std::enable_if_t<!meta::is_void_v<Key>,int>
       operator()(const Key &key) const { return std::hash<keyT>{}(key) % world_size; }
       template <typename Key = keyT>
-      std::enable_if_t<::ttg::meta::is_void_v<Key>,int>
+      std::enable_if_t<meta::is_void_v<Key>,int>
       operator()() const { return 0; }
 
      private:
@@ -577,13 +573,13 @@ namespace ttg {
   class Traverse : private detail::Traverse {
    public:
     static_assert(
-        std::is_void<::ttg::meta::void_t<decltype(std::declval<OpVisitor>()(std::declval<OpBase *>()))>>::value,
+        std::is_void<meta::void_t<decltype(std::declval<OpVisitor>()(std::declval<OpBase *>()))>>::value,
         "Traverse<OpVisitor,...>: OpVisitor(OpBase *op) must be a valid expression");
     static_assert(
-        std::is_void<::ttg::meta::void_t<decltype(std::declval<InVisitor>()(std::declval<TerminalBase *>()))>>::value,
+        std::is_void<meta::void_t<decltype(std::declval<InVisitor>()(std::declval<TerminalBase *>()))>>::value,
         "Traverse<,InVisitor,>: InVisitor(TerminalBase *op) must be a valid expression");
     static_assert(
-        std::is_void<::ttg::meta::void_t<decltype(std::declval<OutVisitor>()(std::declval<TerminalBase *>()))>>::value,
+        std::is_void<meta::void_t<decltype(std::declval<OutVisitor>()(std::declval<TerminalBase *>()))>>::value,
         "Traverse<...,OutVisitor>: OutVisitor(TerminalBase *op) must be a valid expression");
 
     template <typename OpVisitor_ = detail::Traverse::null_visitor<OpBase>, typename InVisitor_ = detail::Traverse::null_visitor<TerminalBase>, typename OutVisitor_ = detail::Traverse::null_visitor<TerminalBase>>
@@ -763,10 +759,10 @@ namespace ttg {
                                 [](auto x) {})(std::forward<OpBasePtrs>(ops)...);
   }
 
-  template <typename keyT = Void, typename valueT = Void>
+  template <typename keyT = void, typename valueT = void>
   class Edge;  // Forward decl.
 
-  template <typename keyT = Void, typename valueT = Void>
+  template <typename keyT = void, typename valueT = void>
   class In : public TerminalBase {
    public:
     typedef valueT value_type;
@@ -894,7 +890,7 @@ namespace ttg {
   };
 
   // Output terminal
-  template <typename keyT = Void, typename valueT = Void>
+  template <typename keyT = void, typename valueT = void>
   class Out : public TerminalBase {
    public:
     typedef valueT value_type;
@@ -1238,21 +1234,21 @@ namespace ttg {
   }
 
   template <size_t i, typename keyT, typename valueT, typename... output_terminalsT>
-  std::enable_if_t<!std::is_same_v<keyT,Void> || !std::is_same_v<valueT,Void>,void>
+  std::enable_if_t<meta::is_none_void_v<keyT,std::decay_t<valueT>>,void>
       send(const keyT &key, valueT &&value, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).send(key, std::forward<valueT>(value));
   }
 
   // TODO decide whether we need this ... (how common will be pure control flow?)
   template <size_t i, typename keyT, typename... output_terminalsT>
-  std::enable_if_t<!std::is_same_v<keyT,Void>,void>
+  std::enable_if_t<!meta::is_void_v<keyT>,void>
   sendk(const keyT &key, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).sendk(key);
   }
 
   // TODO if sendk is removed, rename to send
   template <size_t i, typename valueT, typename... output_terminalsT>
-  std::enable_if_t<!std::is_same_v<valueT,Void>,void>
+  std::enable_if_t<!meta::is_void_v<valueT>,void>
   sendv(valueT &&value, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).sendv(std::forward<valueT>(value));
   }

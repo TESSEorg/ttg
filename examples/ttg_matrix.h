@@ -95,12 +95,12 @@ namespace ttg {
   // - this could be generalized to read efficiently from a distributed data structure
   // Use Read_SpMatrix is need to read all data from a data structure localized on 1 process
   template <typename Blk = blk_t>
-  class Read : public Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, Void> {
+  class Read : public Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, void> {
    public:
-    using baseT = Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, Void>;
+    using baseT = Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, void>;
     static constexpr const int owner = 0;  // where data resides
 
-    Read(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>, Void> &in, Edge<Key<2>, Blk> &out)
+    Read(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>, void> &in, Edge<Key<2>, Blk> &out)
         : baseT(edges(in), edges(out), std::string("read_spmatrix(") + label + ")", {"ij"}, {std::string(label) + "ij"},
                 /* keymap */ [](auto key) { return owner; })
         , matrix_(matrix) {}
@@ -117,17 +117,17 @@ namespace ttg {
 
   // compute shape of an existing SpMatrix on rank 0
   template <typename Blk = blk_t>
-  class ReadShape : public Op<Void, std::tuple<Out<Void, Shape>>, ReadShape<Blk>, Void> {
+  class ReadShape : public Op<void, std::tuple<Out<void, Shape>>, ReadShape<Blk>, void> {
    public:
-    using baseT = Op<Void, std::tuple<Out<Void, Shape>>, ReadShape<Blk>, Void>;
+    using baseT = Op<void, std::tuple<Out<void, Shape>>, ReadShape<Blk>, void>;
     static constexpr const int owner = 0;  // where data resides
 
-    ReadShape(const char *label, const SpMatrix<Blk> &matrix, Edge<Void, Void> &in, Edge<Void, Shape> &out)
+    ReadShape(const char *label, const SpMatrix<Blk> &matrix, Edge<void, void> &in, Edge<void, Shape> &out)
         : baseT(edges(in), edges(out), std::string("read_spmatrix_shape(") + label + ")", {"ctl"}, {std::string("shape[") + label + "]"},
         /* keymap */ []() { return owner; })
         , matrix_(matrix) {}
 
-    void op(std::tuple<Out<Void, Shape>> &out) {
+    void op(std::tuple<Out<void, Shape>> &out) {
       ::sendv<0>(Shape(matrix_), out);
     }
 
@@ -136,16 +136,16 @@ namespace ttg {
   };
 
   // pushes all blocks given by the shape
-  class Push : public Op<Void, std::tuple<Out<Key<2>, Void>>, Push, Shape> {
+  class Push : public Op<void, std::tuple<Out<Key<2>, void>>, Push, Shape> {
    public:
-    using baseT = Op<Void, std::tuple<Out<Key<2>, Void>>, Push, Shape>;
+    using baseT = Op<void, std::tuple<Out<Key<2>, void>>, Push, Shape>;
     static constexpr const int owner = 0;  // where data resides
 
-    Push(const char *label, Edge<Void, Shape> &in, Edge<Key<2>, Void> &out)
+    Push(const char *label, Edge<void, Shape> &in, Edge<Key<2>, void> &out)
         : baseT(edges(in), edges(out), std::string("push_spmatrix(") + label + ")", {std::string("shape[") + label + "]"}, {"ij"},
         /* keymap */ []() { return owner; }) {}
 
-    void op(typename baseT::input_values_tuple_type && ins, std::tuple<Out<Key<2>, Void>> &out) {
+    void op(typename baseT::input_values_tuple_type && ins, std::tuple<Out<Key<2>, void>> &out) {
       const auto& shape = baseT::get<0>(ins);
       assert(shape.type() == Shape::Type::col2row);
       long colidx = 0;
@@ -168,8 +168,8 @@ namespace ttg {
    public:
     using shape_t = matrix::Shape;
     using data_edge_t = Edge<Key<2>, T>;
-    using shape_edge_t = Edge<Void, shape_t>;
-    using ctl_edge_t = Edge<Key<2>, Void>;
+    using shape_edge_t = Edge<void, shape_t>;
+    using ctl_edge_t = Edge<Key<2>, void>;
 
     Matrix() = default;
 

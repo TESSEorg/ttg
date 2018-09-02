@@ -11,8 +11,8 @@ IMPORT_TTG_RUNTIME_NS
 #include "../ttg/util/broadcast.h"
 #include "../ttg/util/reduce.h"
 
-class A : public Op<keyT, std::tuple<Out<Void, int>, Out<keyT, int>>, A, const int> {
-  using baseT = Op<keyT, std::tuple<Out<Void, int>, Out<keyT, int>>, A, const int>;
+class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int> {
+  using baseT = Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int>;
 
  public:
   A(const std::string &name) : baseT(name, {"input"}, {"iterate", "result"}) {}
@@ -35,8 +35,8 @@ class A : public Op<keyT, std::tuple<Out<Void, int>, Out<keyT, int>>, A, const i
   ~A() { std::cout << " A destructor\n"; }
 };
 
-class Producer : public Op<Void, std::tuple<Out<keyT, int>>, Producer> {
-  using baseT = Op<Void, std::tuple<Out<keyT, int>>, Producer>;
+class Producer : public Op<void, std::tuple<Out<keyT, int>>, Producer> {
+  using baseT = Op<void, std::tuple<Out<keyT, int>>, Producer>;
 
  public:
   Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
@@ -52,8 +52,8 @@ class Producer : public Op<Void, std::tuple<Out<keyT, int>>, Producer> {
   ~Producer() { std::cout << " Producer destructor\n"; }
 };
 
-class Consumer : public Op<Void, std::tuple<>, Consumer, const int> {
-  using baseT = Op<Void, std::tuple<>, Consumer, const int>;
+class Consumer : public Op<void, std::tuple<>, Consumer, const int> {
+  using baseT = Op<void, std::tuple<>, Consumer, const int>;
 
  public:
   Consumer(const std::string &name) : baseT(name, {"input"}, {}) {}
@@ -124,7 +124,7 @@ class EverythingBase {
 class Everything2 {
   // !!!! Edges must be constructed before classes that use them
   Edge<keyT, int> P2A, A2A;
-  Edge<Void, int> A2C;
+  Edge<void, int> A2C;
   Producer producer;
   A a;
   Consumer consumer;
@@ -156,7 +156,7 @@ class Everything3 {
     send<0>(0, int(0), out);
   }
 
-  static void a(const keyT &key, std::tuple<const int> &&t, std::tuple<Out<Void, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, std::tuple<const int> &&t, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
     const auto value = std::get<0>(t);
     if (value >= 100) {
       sendv<0>(value, out);
@@ -171,9 +171,9 @@ class Everything3 {
 
   // !!!! Edges must be constructed before classes that use them
   Edge<keyT, int> P2A, A2A;
-  Edge<Void, int> A2C;
+  Edge<void, int> A2C;
 
-  decltype(wrapt<Void>(p, edges(), edges(P2A))) wp;
+  decltype(wrapt<void>(p, edges(), edges(P2A))) wp;
   decltype(wrapt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
   decltype(wrapt(c, edges(A2C), edges())) wc;
 
@@ -182,7 +182,7 @@ class Everything3 {
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrapt<Void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wp(wrapt<void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
       , wa(wrapt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
       , wc(wrapt(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
 
@@ -204,7 +204,7 @@ class Everything4 {
     send<0>(0, 0, out);
   }
 
-  static void a(const keyT &key, const int &value, std::tuple<Out<Void, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, const int &value, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
     if (value >= 100) {
       sendv<0>(value, out);
     } else {
@@ -216,9 +216,9 @@ class Everything4 {
 
   // !!!! Edges must be constructed before classes that use them
   Edge<keyT, int> P2A, A2A;
-  Edge<Void, int> A2C;
+  Edge<void, int> A2C;
 
-  decltype(wrap<Void>(p, edges(), edges(P2A))) wp;
+  decltype(wrap<void>(p, edges(), edges(P2A))) wp;
   decltype(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
   decltype(wrap(c, edges(A2C), edges())) wc;
 
@@ -227,7 +227,7 @@ class Everything4 {
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrap<Void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wp(wrap<void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
       , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
       , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {}))
   {}
@@ -251,7 +251,7 @@ class Everything5 {
     send<0>(0, 0, out);
   }
 
-  static void a(const keyT &key, const int &value, std::tuple<Out<Void, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, const int &value, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
     if (value < 100) {
       send<1>(key + 1, value + 1, out);
       sendv<0>(value, out);
@@ -262,9 +262,9 @@ class Everything5 {
 
   // !!!! Edges must be constructed before classes that use them
   Edge<keyT, int> P2A, A2A;
-  Edge<Void, int> A2C;
+  Edge<void, int> A2C;
 
-  decltype(wrap<Void>(p, edges(), edges(P2A))) wp;
+  decltype(wrap<void>(p, edges(), edges(P2A))) wp;
   decltype(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
   decltype(wrap(c, edges(A2C), edges())) wc;
 
@@ -273,7 +273,7 @@ class Everything5 {
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrap<Void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wp(wrap<void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
       , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
       , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {
     wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
