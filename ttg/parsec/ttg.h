@@ -482,12 +482,12 @@ namespace parsec {
           PrintThread{} << obj->get_name() << " : " << keyT((uintptr_t)task->key) << ": executing" << std::endl;
         }
 
-        if constexpr (!std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
+        if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
           obj->op(keyT((uintptr_t) task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
                   obj->output_terminals);
-        } else if constexpr (!std::is_same_v<keyT,::ttg::Void> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
+        } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
           obj->op(keyT((uintptr_t) task->key), obj->output_terminals);
-        } else if constexpr (std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
+        } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
           obj->op(std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
                   obj->output_terminals);
         } else {
@@ -501,7 +501,7 @@ namespace parsec {
       static void static_op_noarg(parsec_task_t *my_task) {
         my_op_t *task = (my_op_t *)my_task;
         derivedT *obj = (derivedT *)task->object_ptr;
-        if constexpr(!std::is_same_v<keyT,::ttg::Void>) {
+        if constexpr(!::ttg::meta::is_void_v<keyT>) {
           obj->op(keyT((uintptr_t) task->key), obj->output_terminals);
         } else {
           obj->op(obj->output_terminals);
@@ -671,7 +671,7 @@ namespace parsec {
       }
 
       // Used to generate tasks with no input arguments
-      template <typename Key = keyT> std::enable_if_t<!std::is_same_v<Key,::ttg::Void>,void> set_arg_empty(const keyT &key) {
+      template <typename Key = keyT> std::enable_if_t<!meta::is_void_v<Key>,void> set_arg_empty(const keyT &key) {
         if (tracing()) std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
         // create PaRSEC task
         // and give it to the scheduler
@@ -697,7 +697,7 @@ namespace parsec {
       }
 
       // Used to generate tasks with no input arguments
-      template <typename Key = keyT> std::enable_if_t<std::is_same_v<Key,::ttg::Void>,void> set_arg_empty() {
+      template <typename Key = keyT> std::enable_if_t<meta::is_void_v<Key>,void> set_arg_empty() {
         if (tracing()) std::cout << get_name() << " : invoking op " << std::endl;
         // create PaRSEC task
         // and give it to the scheduler
@@ -974,14 +974,14 @@ namespace parsec {
       }
 
       // Manual injection of a task that has no arguments
-      template <typename Key = keyT> std::enable_if_t<!std::is_same_v<Key,::ttg::Void>,void> invoke(const keyT &key) {
+      template <typename Key = keyT> std::enable_if_t<!meta::is_void_v<Key>,void> invoke(const keyT &key) {
         // That task is going to complete, so count it as to execute
         parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
         set_arg_empty(key);
       }
 
       // Manual injection of a task that has no key or arguments
-      template <typename Key = keyT> std::enable_if_t<std::is_same_v<Key,::ttg::Void>,void> invoke() {
+      template <typename Key = keyT> std::enable_if_t<meta::is_void_v<Key>,void> invoke() {
         // That task is going to complete, so count it as to execute
         parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
         set_arg_empty();

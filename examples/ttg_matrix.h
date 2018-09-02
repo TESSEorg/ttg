@@ -124,7 +124,7 @@ namespace ttg {
 
     ReadShape(const char *label, const SpMatrix<Blk> &matrix, Edge<Void, Void> &in, Edge<Void, Shape> &out)
         : baseT(edges(in), edges(out), std::string("read_spmatrix_shape(") + label + ")", {"ctl"}, {std::string("shape[") + label + "]"},
-        /* keymap */ [](auto key) { return owner; })
+        /* keymap */ []() { return owner; })
         , matrix_(matrix) {}
 
     void op(std::tuple<Out<Void, Shape>> &out) {
@@ -143,7 +143,7 @@ namespace ttg {
 
     Push(const char *label, Edge<Void, Shape> &in, Edge<Key<2>, Void> &out)
         : baseT(edges(in), edges(out), std::string("push_spmatrix(") + label + ")", {std::string("shape[") + label + "]"}, {"ij"},
-        /* keymap */ [](auto key) { return owner; }) {}
+        /* keymap */ []() { return owner; }) {}
 
     void op(typename baseT::input_values_tuple_type && ins, std::tuple<Out<Key<2>, Void>> &out) {
       const auto& shape = baseT::get<0>(ins);

@@ -5,7 +5,11 @@
 
 namespace ttg {
 
+#ifdef TTG_USE_STD_VOID
+using Void = void;
+#else
   class Void;
+#endif
 
   namespace meta {
 
@@ -73,9 +77,24 @@ namespace ttg {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // is_Void_v
+    // is_void_v = Void or void
+    // is_none_void_v
+    // is_any_void_v
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <typename T>
     constexpr bool is_Void_v = std::is_same_v<std::decay_t<T>,Void>;
+
+    template <typename T>
+    constexpr bool is_void_v = is_Void_v<T> || std::is_void_v<T>;
+
+    template <typename ... Ts>
+    constexpr bool is_all_void_v = (is_Void_v<Ts> && ...);
+
+    template <typename ... Ts>
+    constexpr bool is_any_void_v = (is_Void_v<Ts> || ...);
+
+    template <typename ... Ts>
+    constexpr bool is_none_void_v = !is_any_void_v<Ts...>;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // is_empty_tuple
@@ -102,6 +121,133 @@ namespace ttg {
 
     template <typename T>
     struct type_printer;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// has_std_hash_overload_v<T> evaluates to true if std::hash<T> is defined
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+template <typename T, typename Enabler = void>
+struct has_std_hash_overload : std::false_type {};
+template <typename T>
+struct has_std_hash_overload<T, ::ttg::meta::void_t<decltype(std::declval<std::hash<T>>()(std::declval<const T &>()))>> : std::true_type {};
+template <typename T> constexpr bool has_std_hash_overload_v = has_std_hash_overload<T>::value;
+
+
+namespace detail {
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // send_callback_t<key,value> = std::function<void(const key&, const value&>, protected against void key or value
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template<typename Key, typename Value, typename Enabler = void>
+    struct send_callback;
+    template<typename Key, typename Value>
+    struct send_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
+      using type = std::function<void(const Key&, const Value&)>;
+    };
+    template<typename Key, typename Value>
+    struct send_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
+      using type = std::function<void(const Key&)>;
+    };
+    template<typename Key, typename Value>
+    struct send_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
+      using type = std::function<void(const Value&)>;
+    };
+    template<typename Key, typename Value>
+    struct send_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
+      using type = std::function<void()>;
+    };
+    template <typename Key, typename Value> using send_callback_t = typename send_callback<Key,Value>::type;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// move_callback_t<key,value> = std::function<void(const key&, value&&>, protected against void key or value
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+template<typename Key, typename Value, typename Enabler = void>
+struct move_callback;
+template<typename Key, typename Value>
+struct move_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
+using type = std::function<void(const Key&, Value&&)>;
+};
+template<typename Key, typename Value>
+struct move_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
+using type = std::function<void(const Key&)>;
+};
+template<typename Key, typename Value>
+struct move_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
+using type = std::function<void(Value&&)>;
+};
+template<typename Key, typename Value>
+struct move_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
+using type = std::function<void()>;
+};
+template <typename Key, typename Value> using move_callback_t = typename move_callback<Key,Value>::type;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// setsize_callback_t<key> = std::function<void(const keyT &, std::size_t)> protected against void key
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+template<typename Key, typename Enabler = void>
+struct setsize_callback;
+template<typename Key>
+struct setsize_callback<Key, std::enable_if_t<!is_void_v<Key>>> {
+using type = std::function<void(const Key &, std::size_t)>;
+};
+template<typename Key>
+struct setsize_callback<Key, std::enable_if_t<is_void_v<Key>>> {
+using type = std::function<void(std::size_t)>;
+};
+template <typename Key> using setsize_callback_t = typename setsize_callback<Key>::type;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// finalize_callback_t<key> = std::function<void(const keyT &)> protected against void key
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+template<typename Key, typename Enabler = void>
+struct finalize_callback;
+template<typename Key>
+struct finalize_callback<Key, std::enable_if_t<!is_void_v<Key>>> {
+using type = std::function<void(const Key &)>;
+};
+template<typename Key>
+struct finalize_callback<Key, std::enable_if_t<is_void_v<Key>>> {
+using type = std::function<void()>;
+};
+template <typename Key> using finalize_callback_t = typename finalize_callback<Key>::type;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // keymap_t<key,value> = std::function<int(const key&>, protected against void key
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template<typename Key, typename Enabler = void>
+    struct keymap;
+    template<typename Key>
+    struct keymap<Key, std::enable_if_t<!is_void_v<Key>>> {
+      using type = std::function<int(const Key&)>;
+    };
+    template<typename Key>
+    struct keymap<Key, std::enable_if_t<is_void_v<Key>>> {
+      using type = std::function<int()>;
+    };
+    template <typename Key> using keymap_t = typename keymap<Key>::type;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// input_reducers_t<valueTs...> = std::tuple<
+//   std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs> &&)>...>
+// protected against void valueTs
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+template<bool nonvoid_values, typename ... valueTs>
+struct input_reducers_impl;
+template<typename ... valueTs>
+struct input_reducers_impl<true, valueTs...>
+{
+  using type =
+      std::tuple<std::function<std::decay_t<valueTs>(std::decay_t<valueTs> &&, std::decay_t<valueTs> &&)>...>;
+};
+template<typename ... valueTs>
+struct input_reducers_impl<false, valueTs...>  {
+using type = std::tuple<std::function<void()>>;
+};
+template<typename ... valueTs>
+struct input_reducers : public input_reducers_impl<is_none_void_v<valueTs...>,valueTs...> {
+};
+template<typename ... valueTs> using input_reducers_t = typename input_reducers<valueTs...>::type;
+
+}  // only used by deep internals
 
 }  // namespace meta
 

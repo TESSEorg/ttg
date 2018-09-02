@@ -223,7 +223,7 @@ class Read_SpMatrix : public Op<Void, std::tuple<Out<Key<2>, Blk>>, Read_SpMatri
 
   Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<> &ctl, Edge<Key<2>, Blk> &out)
       : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
-              [](auto key) { return 0; })
+              []() { return 0; })
       , matrix_(matrix) {}
 
   void op(std::tuple<Out<Key<2>, Blk>> &out) {
