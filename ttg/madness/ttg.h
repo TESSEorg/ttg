@@ -778,6 +778,7 @@ namespace madness {
           };
           input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
         }
+        else abort();
       }
 
       template <std::size_t... IS>
