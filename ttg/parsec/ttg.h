@@ -896,42 +896,34 @@ namespace parsec {
         using valueT = typename terminalT::value_type;
         if constexpr (::ttg::meta::is_none_void_v<keyT,valueT>) {
           auto move_callback = [this](const keyT &key, valueT &&value) {
-            // std::cout << "move_callback\n";
             set_arg<i, keyT, valueT>(key, std::forward<valueT>(value));
           };
           auto send_callback = [this](const keyT &key, const valueT &value) {
-            // std::cout << "send_callback\n";
             set_arg<i, keyT, const valueT &>(key, value);
           };
           input.set_callback(send_callback, move_callback);
         }
         else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_void_v<valueT>) {
           auto move_callback = [this](valueT &&value) {
-            // std::cout << "move_callback\n";
             set_arg<i, keyT, valueT>(std::forward<valueT>(value));
           };
           auto send_callback = [this](const valueT &value) {
-            // std::cout << "send_callback\n";
             set_arg<i, keyT, const valueT &>(value);
           };
           input.set_callback(send_callback, move_callback);
         } else if constexpr(!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_void_v<valueT>) {
           auto move_callback = [this](const keyT &key) {
-            // std::cout << "move_callback\n";
             set_arg<keyT>(key);
           };
           auto send_callback = [this](const keyT &key) {
-            // std::cout << "send_callback\n";
             set_arg<keyT>(key);
           };
           input.set_callback(send_callback, move_callback);
         } else if constexpr (::ttg::meta::is_all_void_v<keyT,valueT>) {
           auto move_callback = [this]() {
-            // std::cout << "move_callback\n";
             set_arg<keyT>();
           };
           auto send_callback = [this]() {
-            // std::cout << "send_callback\n";
             set_arg<keyT>();
           };
           input.set_callback(send_callback, move_callback);
