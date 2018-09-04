@@ -507,9 +507,9 @@ namespace parsec {
         derivedT *obj = (derivedT *)task->object_ptr;
         if (obj->tracing()) {
           if constexpr (!::ttg::meta::is_void_v<keyT>)
-            ::ttg::print(obj->get_name(), " : ", keyT((uintptr_t) task->key), ": executing");
+            ::ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", keyT((uintptr_t) task->key), ": executing");
           else
-            ::ttg::print(obj->get_name(), " : executing");
+            ::ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : executing");
         }
 
         if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
@@ -526,9 +526,9 @@ namespace parsec {
 
         if (obj->tracing()) {
           if constexpr (!::ttg::meta::is_void_v<keyT>)
-            ::ttg::print(obj->get_name(), " : ", keyT((uintptr_t) task->key), ": done executing");
+            ::ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", keyT((uintptr_t) task->key), ": done executing");
           else
-            ::ttg::print(obj->get_name(), " : done executing");
+            ::ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
         }
       }
 
@@ -590,8 +590,7 @@ namespace parsec {
       void set_arg_local_impl(const Key &key, Value && value) {
         using valueT = data_unwrapped_t<typename std::tuple_element<i, input_values_tuple_type>::type>;
 
-        if (tracing())
-          ::ttg::print(get_name(), " : ", key, ": setting argument : ", i, " : value = ", value);
+        if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i, " : value = ", value);
 
         using ::ttg::unique_hash;
         parsec_key_t hk = unique_hash<parsec_key_t>(key);
@@ -628,8 +627,7 @@ namespace parsec {
             parsec_hash_table_nolock_insert(&tasks_table, &newtask->op_ht_item);
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
             task = newtask;
-            if (tracing())
-              ::ttg::print(get_name(), " : ", key, ": creating task");
+            if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
           }
         }
 
@@ -672,8 +670,7 @@ namespace parsec {
         if (count == self.dependencies_goal) {
           world.increment_sent_to_sched();
           parsec_execution_stream_t *es = world.execution_stream();
-          if (tracing())
-            ::ttg::print(get_name(), " : ", key, ": invoking op");
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
           parsec_hash_table_remove(&tasks_table, hk);
           __parsec_schedule(es, &task->parsec_task, 0);
         }
@@ -741,8 +738,8 @@ namespace parsec {
       std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
       set_arg(const Key &key) {
         static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, "set_arg called without a value but valueT!=void");
-        if (tracing())
-          ::ttg::print(get_name(), " : ", key, ": invoking op ");
+
+        if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
         // create PaRSEC task
         // and give it to the scheduler
         my_op_t *task;
@@ -772,7 +769,7 @@ namespace parsec {
       set_arg() {
         static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type >, "set_arg called without a value but valueT!=void");
         if (tracing())
-          ::ttg::print(get_name(), " : invoking op ");
+          ::ttg::print(world.rank(), ":", get_name(), " : invoking op ");
         // create PaRSEC task
         // and give it to the scheduler
         my_op_t *task;
