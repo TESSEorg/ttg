@@ -580,28 +580,28 @@ namespace parsec {
           if constexpr (::ttg::meta::is_none_void_v<keyT,valueT>)
             set_arg<i, keyT, valueT>(msg->key, std::forward<valueT>(msg->val));
           else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_void_v<valueT>)
-            set_arg_empty<keyT>(msg->key);
+            set_arg<keyT>(msg->key);
           else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_void_v<valueT>)
             set_arg<i, keyT, valueT>(std::forward<valueT>(msg->val));
           else if constexpr (::ttg::meta::is_all_void_v<keyT,valueT>)
-            set_arg_empty<keyT>();
+            set_arg<keyT>();
       }
 
       template <std::size_t i, typename Key, typename Value>
       std::enable_if_t<::ttg::meta::is_none_void_v<Key,std::decay_t<Value>>, void>
       set_arg_local(const Key &key, Value && value) {
-        set_arg_local_<i>(key,std::forward<Value>(value));
+        set_arg_local_impl<i>(key,std::forward<Value>(value));
       }
 
       template <std::size_t i, typename Key = keyT, typename Value>
       std::enable_if_t<::ttg::meta::is_void_v<Key> && !::ttg::meta::is_void_v<std::decay_t<Value>>, void>
       set_arg_local(Value && value) {
-        set_arg_local_<i>(::ttg::Void{},std::forward<Value>(value));
+        set_arg_local_impl<i>(::ttg::Void{},std::forward<Value>(value));
       }
 
       // Used to set the i'th argument
       template <std::size_t i, typename Key, typename Value>
-      void set_arg_local_(const Key &key, Value && value) {
+      void set_arg_local_impl(const Key &key, Value && value) {
         using valueT = data_unwrapped_t<typename std::tuple_element<i, input_values_tuple_type>::type>;
 
         if (tracing()) PrintThread{} << get_name() << " : " << key << ": setting argument : " << i << std::endl;
@@ -693,18 +693,18 @@ namespace parsec {
       template <std::size_t i, typename Key, typename Value>
       std::enable_if_t<::ttg::meta::is_none_void_v<Key,std::decay_t<Value>>, void>
       set_arg(const Key &key, Value &&value) {
-        set_arg_<i>(key,std::forward<Value>(value));
+        set_arg_impl<i>(key,std::forward<Value>(value));
       }
 
       template <std::size_t i, typename Key, typename Value>
       std::enable_if_t<::ttg::meta::is_void_v<Key> && !::ttg::meta::is_void_v<std::decay_t<Value>>, void>
       set_arg(Value &&value) {
-        set_arg_<i>(::ttg::Void{},std::forward<Value>(value));
+        set_arg_impl<i>(::ttg::Void{},std::forward<Value>(value));
       }
 
       // Used to set the i'th argument
       template <std::size_t i, typename Key, typename Value>
-      void set_arg_(const Key &key, Value &&value) {
+      void set_arg_impl(const Key &key, Value &&value) {
         using valueT = data_unwrapped_t<typename std::tuple_element<i, input_values_tuple_type>::type>;
         int owner;
         if constexpr (!::ttg::meta::is_void_v<Key>)
@@ -750,7 +750,8 @@ namespace parsec {
       // Used to generate tasks with no input arguments
       template <typename Key = keyT>
       std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
-      set_arg_empty(const Key &key) {
+      set_arg(const Key &key) {
+        static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, "set_arg called without a value but valueT!=void");
         if (tracing()) std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
         // create PaRSEC task
         // and give it to the scheduler
@@ -776,7 +777,10 @@ namespace parsec {
       }
 
       // Used to generate tasks with no input arguments
-      template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void> set_arg_empty() {
+      template <typename Key = keyT>
+      std::enable_if_t<::ttg::meta::is_void_v<Key>,void>
+      set_arg() {
+        static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type >, "set_arg called without a value but valueT!=void");
         if (tracing()) std::cout << get_name() << " : invoking op " << std::endl;
         // create PaRSEC task
         // and give it to the scheduler
@@ -914,21 +918,21 @@ namespace parsec {
         } else if constexpr(!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_void_v<valueT>) {
           auto move_callback = [this](const keyT &key) {
             // std::cout << "move_callback\n";
-            set_arg_empty<keyT>(key);
+            set_arg<keyT>(key);
           };
           auto send_callback = [this](const keyT &key) {
             // std::cout << "send_callback\n";
-            set_arg_empty<keyT>(key);
+            set_arg<keyT>(key);
           };
           input.set_callback(send_callback, move_callback);
         } else if constexpr (::ttg::meta::is_all_void_v<keyT,valueT>) {
           auto move_callback = [this]() {
             // std::cout << "move_callback\n";
-            set_arg_empty<keyT>();
+            set_arg<keyT>();
           };
           auto send_callback = [this]() {
             // std::cout << "send_callback\n";
-            set_arg_empty<keyT>();
+            set_arg<keyT>();
           };
           input.set_callback(send_callback, move_callback);
         } else abort();
@@ -1132,14 +1136,14 @@ namespace parsec {
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void> invoke(const Key &key) {
         // That task is going to complete, so count it as to execute
         parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
-        set_arg_empty(key);
+        set_arg<keyT>(key);
       }
 
       // Manual injection of a task that has no key or arguments
       template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void> invoke() {
         // That task is going to complete, so count it as to execute
         parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
-        set_arg_empty();
+        set_arg<keyT>();
       }
 
       void make_executable() override { OpBase::make_executable(); }

@@ -283,12 +283,7 @@ namespace madness {
         static_assert(std::is_same<std::decay_t<Value>, std::decay_t<valueT>>::value,
                       "Op::set_arg(key,value) given value of type incompatible with Op");
 
-        int owner;
-        if constexpr (!::ttg::meta::is_void_v<keyT>)
-          owner = keymap(key);
-        else
-          owner = keymap();
-
+        const auto owner = keymap(key);
         if (owner != world.rank()) {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
           // should be able on the other end to consume value (since it is just a temporary byproduct of serialization)
@@ -377,7 +372,7 @@ namespace madness {
 
       template <std::size_t i, typename Key = keyT, typename Value>
       std::enable_if_t<::ttg::meta::is_void_v<Key> && !::ttg::meta::is_void_v<std::decay_t<Value>>,void>
-      set_arg_empty_key(Value &&value) {
+      set_arg(Value &&value) {
         using valueT = typename std::tuple_element<i, input_values_tuple_type>::type;  // Should be T or const T
         static_assert(std::is_same<std::decay_t<Value>, std::decay_t<valueT>>::value,
                       "Op::set_arg(key,value) given value of type incompatible with Op");
@@ -387,7 +382,7 @@ namespace madness {
         if (owner != world.rank()) {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : forwarding setting argument : ", i);
           // CAVEAT see comment above in set_arg re:
-          worldobjT::send(owner, &opT::template set_arg_empty_key<i, keyT, const std::remove_reference_t<Value>&>, value);
+          worldobjT::send(owner, &opT::template set_arg<i, keyT, const std::remove_reference_t<Value>&>, value);
         } else {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : received value for argument : ", i);
 
@@ -443,12 +438,13 @@ namespace madness {
       // Used to generate tasks with no input arguments
       template <typename Key = keyT>
       std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
-      set_arg_empty(const Key &key) {
+      set_arg(const Key &key) {
+        static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, "set_arg called without a value but valueT!=void");
         const int owner = keymap(key);
 
         if (owner != world.rank()) {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
-          worldobjT::send(owner, &opT::set_arg_empty<keyT>, key);
+          worldobjT::send(owner, &opT::set_arg<keyT>, key);
         } else {
           accessorT acc;
           if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
@@ -467,12 +463,13 @@ namespace madness {
 
       // Used to generate tasks with no input arguments
       template <typename Key = keyT>
-      std::enable_if_t<::ttg::meta::is_void_v<Key>,void> set_arg_empty() {
+      std::enable_if_t<::ttg::meta::is_void_v<Key>,void> set_arg() {
+        static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, "set_arg called without a value but valueT!=void");
         const int owner = keymap();
 
         if (owner != world.rank()) {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : forwarding no-arg task: ");
-          worldobjT::send(owner, &opT::set_arg_empty<void>);
+          worldobjT::send(owner, &opT::set_arg<keyT>);
         } else {
           auto task = new OpArgs();  // It will be deleted by the task q
 
@@ -589,11 +586,7 @@ namespace madness {
         assert(std::get<i>(input_reducers) && "Op::finalize_argstream called on nonstreaming input terminal");
 
         // body
-        int owner;
-        if constexpr (!::ttg::meta::is_void_v<keyT>)
-          owner = keymap(key);
-        else
-          owner = keymap();
+        const auto owner = keymap(key);
         if (owner != world.rank()) {
           if (tracing())
             ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
@@ -735,10 +728,10 @@ namespace madness {
         //////////////////////////////////////////////////////////////////
         else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_void_v<valueT>) {
           auto move_callback = [this](valueT &&value) {
-            set_arg_empty_key<i, keyT, valueT>(std::forward<valueT>(value));
+            set_arg<i, keyT, valueT>(std::forward<valueT>(value));
           };
           auto send_callback = [this](const valueT &value) {
-            set_arg_empty_key<i, keyT, const valueT &>(value);
+            set_arg<i, keyT, const valueT &>(value);
           };
           auto setsize_callback = [this](std::size_t size) {
             set_argstream_size<i>(size);
@@ -753,7 +746,7 @@ namespace madness {
         //////////////////////////////////////////////////////////////////
         else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_void_v<valueT>) {
           auto send_callback = [this](const keyT &key) {
-            set_arg_empty<keyT>(key);
+            set_arg<keyT>(key);
           };
           auto setsize_callback = [this](const keyT &key, std::size_t size) {
             set_argstream_size<i>(key, size);
@@ -768,7 +761,7 @@ namespace madness {
         //////////////////////////////////////////////////////////////////
         else if constexpr (::ttg::meta::is_all_void_v<keyT,valueT>) {
           auto send_callback = [this]() {
-            set_arg_empty<keyT>();
+            set_arg<keyT>();
           };
           auto setsize_callback = [this](std::size_t size) {
             set_argstream_size<i>(size);
@@ -928,10 +921,10 @@ namespace madness {
 
       /// Manual injection of a task that has no arguments
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
-      invoke(const Key &key) { set_arg_empty(key); }
+      invoke(const Key &key) { set_arg<Key>(key); }
 
       /// Manual injection of a task that has no key or arguments
-      template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void> invoke() { set_arg_empty(); }
+      template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void> invoke() { set_arg<Key>(); }
 
       /// keymap accessor
       /// @return the keymap
