@@ -558,7 +558,7 @@ namespace parsec {
       template <std::size_t i>
       void set_arg_from_msg(void *data, std::size_t size) {
           using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
-          using msg_t = detail::msg_t<keyT,valueT>;
+          using msg_t = detail::msg_t<keyT,std::decay_t<valueT>>;
           assert(size == sizeof(msg_t) &&
                  "Trying to unpack as message that does not hold the right number of bytes for this type");
           msg_t *msg = static_cast<msg_t*>(data);
@@ -709,7 +709,7 @@ namespace parsec {
         // the target task is remote. Pack the information and send it to
         // the corresponding peer.
         // TODO do we need to copy value?
-        using msg_t = detail::msg_t<keyT,valueT>;
+        using msg_t = detail::msg_t<keyT,std::decay_t<valueT>>;
         msg_t msg(get_instance_id(), i, key, value);
         parsec_remote_deps_t* deps = (parsec_remote_deps_t*)remote_deps_allocate(&parsec_remote_dep_context.freelist);
         deps->root = get_default_world().rank();
