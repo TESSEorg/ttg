@@ -933,11 +933,15 @@ namespace ttg {
       this->connect_base(in);
     }
 
-    // clang generates a warning that might be returning a nonvoid in functions that SFINAE'd to return void only
-    // TODO remove when clang is fixed
+    // clang and gcc generate a warning that might be returning a nonvoid in functions that SFINAE'd to return void only
+    // TODO remove when clang/gcc are fixed
 #ifdef __clang__
 #  pragma clang diagnostic push
 #  pragma clang diagnostic ignored "-Wreturn-type"
+#endif
+#ifdef __GNUG__
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wreturn-type"
 #endif
 
     template<typename Key = keyT, typename Value = valueT>
@@ -1086,9 +1090,12 @@ namespace ttg {
       }
     }
 
-    // TODO remove when clang is fixed
+    // TODO remove when clang/gcc are fixed
 #ifdef __clang__
 #  pragma clang diagnostic pop
+#endif
+#ifdef __GNUG__
+#  pragma GCC diagnostic pop
 #endif
 
     Type get_type() const override { return TerminalBase::Type::Write; }
