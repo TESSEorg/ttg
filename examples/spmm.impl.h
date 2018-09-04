@@ -566,6 +566,7 @@ std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
 int main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
   {
+    ::ttg::trace_on();
     OpBase::set_trace_all(true);
 
     const int n = 2;
@@ -649,10 +650,15 @@ int main(int argc, char **argv) {
       std::tie(norm_2_square, norm_inf) = norms<blk_t>(Cref - C);
       std::cout << "||Cref - C||_2      = " << std::sqrt(norm_2_square) << std::endl;
       std::cout << "||Cref - C||_\\infty = " << norm_inf << std::endl;
+      if (std::sqrt(norm_2_square) > 1e-8) {
+        std::cout << "Cref:\n" << Cref << std::endl;
+        std::cout << "C:\n" << C << std::endl;
+        ttg_abort();
+      }
     }
 
     // copy matrix using ttg::Matrix
-    {
+    if (0) {
       Matrix<blk_t> aflow;
       aflow << A;
       SpMatrix<> Acopy(A.rows(), A.cols());  // resizing will be automatic in the future when shape computation is complete .. see Matrix::operator>>
