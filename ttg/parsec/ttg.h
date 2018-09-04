@@ -203,21 +203,6 @@ static parsec_key_fn_t parsec_tasks_hash_fcts = {
     .key_hash  = parsec_hash_table_generic_64bits_key_hash
 };
 
-class PrintThread : public std::ostringstream {
- public:
-  PrintThread() = default;
-
-  ~PrintThread() {
-    std::lock_guard<std::mutex> guard(_mutexPrint);
-    std::cout << this->str();
-    std::cout.flush();
-  }
-
- private:
-  static std::mutex _mutexPrint;
-};
-
-std::mutex PrintThread::_mutexPrint{};
 namespace parsec {
   namespace ttg {
     typedef void (*static_set_arg_fct_type)(void *, size_t, ::ttg::OpBase*);
@@ -521,9 +506,9 @@ namespace parsec {
         derivedT *obj = (derivedT *)task->object_ptr;
         if (obj->tracing()) {
           if constexpr (!::ttg::meta::is_void_v<keyT>)
-            PrintThread{} << obj->get_name() << " : " << keyT((uintptr_t) task->key) << ": executing" << std::endl;
+            ::ttg::print(obj->get_name(), " : ", keyT((uintptr_t) task->key), ": executing");
           else
-            PrintThread{} << obj->get_name() << " : executing" << std::endl;
+            ::ttg::print(obj->get_name(), " : executing");
         }
 
         if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
@@ -540,9 +525,9 @@ namespace parsec {
 
         if (obj->tracing()) {
           if constexpr (!::ttg::meta::is_void_v<keyT>)
-            PrintThread{} << obj->get_name() << " : " << keyT((uintptr_t) task->key) << ": done executing" << std::endl;
+            ::ttg::print(obj->get_name(), " : ", keyT((uintptr_t) task->key), ": done executing");
           else
-            PrintThread{} << obj->get_name() << " : done executing" << std::endl;
+            ::ttg::print(obj->get_name(), " : done executing");
         }
       }
 
@@ -604,7 +589,8 @@ namespace parsec {
       void set_arg_local_impl(const Key &key, Value && value) {
         using valueT = data_unwrapped_t<typename std::tuple_element<i, input_values_tuple_type>::type>;
 
-        if (tracing()) PrintThread{} << get_name() << " : " << key << ": setting argument : " << i << std::endl;
+        if (tracing())
+          ::ttg::print(get_name(), " : ", key, ": setting argument : ", i, " : value = ", value);
 
         using ::ttg::unique_hash;
         parsec_key_t hk = unique_hash<parsec_key_t>(key);
@@ -641,14 +627,15 @@ namespace parsec {
             parsec_hash_table_nolock_insert(&tasks_table, &newtask->op_ht_item);
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
             task = newtask;
-            if (tracing()) PrintThread{} << get_name() << " : " << key << ": creating task" << std::endl;
+            if (tracing())
+              ::ttg::print(get_name(), " : ", key, ": creating task");
           }
         }
 
         assert(task->key == hk);
 
         if (NULL != task->parsec_task.data[i].data_in) {
-          std::cerr << get_name() << " : " << key << ": error argument is already set : " << i << std::endl;
+          ::ttg::print_error(get_name(), " : ", key, ": error argument is already set : ", i);
           throw std::logic_error("bad set arg");
         }
 
@@ -684,7 +671,8 @@ namespace parsec {
         if (count == self.dependencies_goal) {
           world.increment_sent_to_sched();
           parsec_execution_stream_t *es = world.execution_stream();
-          if (tracing()) PrintThread{} << get_name() << " : " << key << ": invoking op" << std::endl;
+          if (tracing())
+            ::ttg::print(get_name(), " : ", key, ": invoking op");
           parsec_hash_table_remove(&tasks_table, hk);
           __parsec_schedule(es, &task->parsec_task, 0);
         }
@@ -752,7 +740,8 @@ namespace parsec {
       std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
       set_arg(const Key &key) {
         static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, "set_arg called without a value but valueT!=void");
-        if (tracing()) std::cout << get_name() << " : " << key << ": invoking op " << std::endl;
+        if (tracing())
+          ::ttg::print(get_name(), " : ", key, ": invoking op ");
         // create PaRSEC task
         // and give it to the scheduler
         my_op_t *task;
@@ -781,7 +770,8 @@ namespace parsec {
       std::enable_if_t<::ttg::meta::is_void_v<Key>,void>
       set_arg() {
         static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type >, "set_arg called without a value but valueT!=void");
-        if (tracing()) std::cout << get_name() << " : invoking op " << std::endl;
+        if (tracing())
+          ::ttg::print(get_name(), " : invoking op ");
         // create PaRSEC task
         // and give it to the scheduler
         my_op_t *task;
