@@ -248,6 +248,8 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
       : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, [](auto key) { return 0; }), matrix_(matrix) {}
 
   void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
+    std::lock_guard<std::mutex> lock(mtx_);
+    ::ttg::print("Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem));
     matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
   }
 
@@ -264,6 +266,7 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
   }
 
  private:
+  std::mutex mtx_;
   SpMatrix<Blk> &matrix_;
   mutable std::shared_ptr<std::shared_future<void>> completion_status_;
 };
