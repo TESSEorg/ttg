@@ -53,6 +53,27 @@ namespace ttg {
       ar & type_ & nrows_ & ncols_ & static_cast<base_t&>(*this);
     }
 
+    void print(std::ostream& os) const {
+      os << "Shape: type=";
+      switch(type()) {
+        case Type::col2row: os << "col2row";
+          break;
+        case Type::row2col: os << "row2col";
+          break;
+        case Type::invalid: os << "invalid";
+          break;
+      }
+      os << " { ";
+      for(int i=0; i!=size(); ++i) {
+        os << i << ":{ ";
+        for(const auto j : (*this)[i]) {
+          os << j << " ";
+        }
+        os << "} ";
+      }
+      os << "}";
+    }
+
    private:
     long nrows_ = -1, ncols_ = -1;
     Type type_ = Type::invalid;
@@ -87,6 +108,11 @@ namespace ttg {
       return rowidx_to_colidx;
     }
   };
+
+  std::ostream& operator<<(std::ostream& os, const Shape& shape) {
+    shape.print(os);
+    return os;
+  }
 
   // flow data from an existing SpMatrix on rank 0
   // similar to Read_SpMatrix but uses tasks to read data:
