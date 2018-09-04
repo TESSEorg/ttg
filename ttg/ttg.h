@@ -933,6 +933,13 @@ namespace ttg {
       this->connect_base(in);
     }
 
+    // clang generates a warning that might be returning a nonvoid in functions that SFINAE'd to return void only
+    // TODO remove when clang is fixed
+#ifdef __clang__
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wreturn-type"
+#endif
+
     template<typename Key = keyT, typename Value = valueT>
     std::enable_if<meta::is_none_void_v<Key,Value>,void> send(const Key &key, const Value &value) {
       for (auto successor : successors()) {
@@ -1078,6 +1085,11 @@ namespace ttg {
         }
       }
     }
+
+    // TODO remove when clang is fixed
+#ifdef __clang__
+#  pragma clang diagnostic pop
+#endif
 
     Type get_type() const override { return TerminalBase::Type::Write; }
   };
