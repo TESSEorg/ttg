@@ -12,8 +12,12 @@ namespace ttg {
   namespace detail {
     template <typename T>
     static std::string demangled_type_name(T *x = nullptr) {
-      const char *name = (x != nullptr) ? typeid(*x).name() :  // this works for polymorphic types
-                             typeid(T).name();
+      const char *name;
+      if constexpr (std::is_void_v<T>)
+        name = "void";
+      else
+        name = (x != nullptr) ? typeid(*x).name() :  // this works for polymorphic types
+                                typeid(T).name();
       static char buf[10240];  // should really be allocated with malloc
       size_t size = 10240;
       int status;
