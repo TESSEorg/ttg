@@ -366,7 +366,7 @@ namespace parsec {
     struct msg_t<Key,Value,std::enable_if_t<!::ttg::meta::is_void_v<Key> && ::ttg::meta::is_void_v<Value>>> {
       uint64_t op_id;
       std::size_t param_id;
-      keyT key;
+      Key key;
       msg_t() = default;
       msg_t(uint64_t op_id, std::size_t param_id, const Key& key, const ::ttg::Void&) : op_id(op_id), param_id(param_id), key(key) {}
     };
@@ -580,11 +580,11 @@ namespace parsec {
           if constexpr (::ttg::meta::is_none_void_v<keyT,valueT>)
             set_arg<i, keyT, valueT>(msg->key, std::forward<valueT>(msg->val));
           else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_void_v<valueT>)
-            set_arg<i, keyT, valueT>(msg->key);
+            set_arg_empty<keyT>(msg->key);
           else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_void_v<valueT>)
             set_arg<i, keyT, valueT>(std::forward<valueT>(msg->val));
           else if constexpr (::ttg::meta::is_all_void_v<keyT,valueT>)
-            set_arg<i, keyT, valueT>();
+            set_arg_empty<keyT>();
       }
 
       template <std::size_t i, typename Key, typename Value>
@@ -914,21 +914,21 @@ namespace parsec {
         } else if constexpr(!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_void_v<valueT>) {
           auto move_callback = [this](const keyT &key) {
             // std::cout << "move_callback\n";
-            set_arg<i, keyT, valueT>(key);
+            set_arg_empty<keyT>(key);
           };
           auto send_callback = [this](const keyT &key) {
             // std::cout << "send_callback\n";
-            set_arg<i, keyT, const valueT &>(key);
+            set_arg_empty<keyT>(key);
           };
           input.set_callback(send_callback, move_callback);
         } else if constexpr (::ttg::meta::is_all_void_v<keyT,valueT>) {
           auto move_callback = [this]() {
             // std::cout << "move_callback\n";
-            set_arg<i, keyT, valueT>();
+            set_arg_empty<keyT>();
           };
-          auto send_callback = [this](const keyT &key) {
+          auto send_callback = [this]() {
             // std::cout << "send_callback\n";
-            set_arg<i, keyT, const valueT &>();
+            set_arg_empty<keyT>();
           };
           input.set_callback(send_callback, move_callback);
         } else abort();
