@@ -19,15 +19,16 @@
 #include "util/runtimes.h"
 
 namespace ttg {
-/// type analog of void
+
+/// @brief A complete version of void
+
+/// Void can be used interchangeably with void as key or value type, but is also hashable, etc.
+/// May reduce the amount of metaprogramming relative to void.
 class Void {
  public:
   Void() = default;
   template <typename T> Void(T&&) {}
 };
-
-static_assert(meta::is_empty_tuple_v<std::tuple<>>,"ouch");
-static_assert(meta::is_empty_tuple_v<std::tuple<Void>>,"ouch");
 
 bool operator==(const Void&, const Void&) { return true; }
 
@@ -37,12 +38,15 @@ std::ostream& operator<<(std::ostream& os, const ttg::Void&) {
   return os;
 }
 
+static_assert(meta::is_empty_tuple_v<std::tuple<>>,"ouch");
+static_assert(meta::is_empty_tuple_v<std::tuple<Void>>,"ouch");
+
 }  // namespace ttg
 
 namespace std {
 template <>
 struct hash<ttg::Void> {
-  int64_t operator()(const ttg::Void&) const { return 0; }
+  template <typename ... Args> int64_t operator()(Args&& ... args) const { return 0; }
 };
 }
 
@@ -64,11 +68,16 @@ namespace ttg {
     struct default_keymap_impl;
     template <typename keyT>
     struct default_keymap_impl<
-        keyT, ::ttg::meta::void_t<decltype(std::declval<std::hash<keyT>>()(std::declval<const keyT &>()))>> {
+        keyT, std::enable_if_t<meta::has_std_hash_overload_v<keyT> || meta::is_void_v<keyT>>> {
       default_keymap_impl() = default;
       default_keymap_impl(int world_size) : world_size(world_size) {}
-      // clang-format on
-      int operator()(const keyT &key) const { return std::hash<keyT>{}(key) % world_size; }
+
+      template <typename Key = keyT>
+      std::enable_if_t<!meta::is_void_v<Key>,int>
+      operator()(const Key &key) const { return std::hash<keyT>{}(key) % world_size; }
+      template <typename Key = keyT>
+      std::enable_if_t<meta::is_void_v<Key>,int>
+      operator()() const { return 0; }
 
      private:
       int world_size;
@@ -564,13 +573,13 @@ namespace ttg {
   class Traverse : private detail::Traverse {
    public:
     static_assert(
-        std::is_void<::ttg::meta::void_t<decltype(std::declval<OpVisitor>()(std::declval<OpBase *>()))>>::value,
+        std::is_void<meta::void_t<decltype(std::declval<OpVisitor>()(std::declval<OpBase *>()))>>::value,
         "Traverse<OpVisitor,...>: OpVisitor(OpBase *op) must be a valid expression");
     static_assert(
-        std::is_void<::ttg::meta::void_t<decltype(std::declval<InVisitor>()(std::declval<TerminalBase *>()))>>::value,
+        std::is_void<meta::void_t<decltype(std::declval<InVisitor>()(std::declval<TerminalBase *>()))>>::value,
         "Traverse<,InVisitor,>: InVisitor(TerminalBase *op) must be a valid expression");
     static_assert(
-        std::is_void<::ttg::meta::void_t<decltype(std::declval<OutVisitor>()(std::declval<TerminalBase *>()))>>::value,
+        std::is_void<meta::void_t<decltype(std::declval<OutVisitor>()(std::declval<TerminalBase *>()))>>::value,
         "Traverse<...,OutVisitor>: OutVisitor(TerminalBase *op) must be a valid expression");
 
     template <typename OpVisitor_ = detail::Traverse::null_visitor<OpBase>, typename InVisitor_ = detail::Traverse::null_visitor<TerminalBase>, typename OutVisitor_ = detail::Traverse::null_visitor<TerminalBase>>
@@ -750,10 +759,10 @@ namespace ttg {
                                 [](auto x) {})(std::forward<OpBasePtrs>(ops)...);
   }
 
-  template <typename keyT = Void, typename valueT = Void>
+  template <typename keyT = void, typename valueT = void>
   class Edge;  // Forward decl.
 
-  template <typename keyT = Void, typename valueT = Void>
+  template <typename keyT = void, typename valueT = void>
   class In : public TerminalBase {
    public:
     typedef valueT value_type;
@@ -764,10 +773,10 @@ namespace ttg {
     static_assert(std::is_same<std::remove_const_t<valueT>, std::decay_t<valueT>>::value,
                   "In<keyT,valueT> assumes std::remove_const<T> is a non-decayable type");
     using edge_type = Edge<keyT, valueT>;
-    using send_callback_type = std::function<void(const keyT &, const std::decay_t<valueT> &)>;
-    using move_callback_type = std::function<void(const keyT &, std::decay_t<valueT> &&)>;
-    using setsize_callback_type = std::function<void(const keyT &, std::size_t)>;
-    using finalize_callback_type = std::function<void(const keyT &)>;
+    using send_callback_type = meta::detail::send_callback_t<keyT, std::decay_t<valueT>>;
+    using move_callback_type = meta::detail::move_callback_t<keyT, std::decay_t<valueT>>;
+    using setsize_callback_type = meta::detail::setsize_callback_t<keyT>;
+    using finalize_callback_type = meta::detail::finalize_callback_t<keyT>;
     static constexpr bool is_an_input_terminal = true;
 
    private:
@@ -798,37 +807,81 @@ namespace ttg {
       this->finalize_callback = finalize_callback;
     }
 
-    void send(const keyT &key, const valueT &value) {
-      // std::cout << "In::send-constref::\n";
+    template <typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<meta::is_none_void_v<Key,Value>,void>
+    send(const Key &key, const Value &value) {
       if (!send_callback) throw std::runtime_error("send callback not initialized");
-      ;
       send_callback(key, value);
     }
 
-    void send(const keyT &key, valueT &&value) {
-      // std::cout << "In::send-move::\n";
+    template <typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<meta::is_none_void_v<Key,Value> && std::is_same_v<Value,std::remove_reference_t<Value>>,void>
+    send(const Key &key, Value &&value) {
       if (!move_callback) throw std::runtime_error("move callback not initialized");
-      ;
       move_callback(key, std::forward<valueT>(value));
+    }
+
+    template <typename Key = keyT>
+    std::enable_if_t<!meta::is_void_v<Key>,void>
+    sendk(const Key &key) {
+      if (!send_callback) throw std::runtime_error("send callback not initialized");
+      send_callback(key);
+    }
+
+    template <typename Value = valueT>
+    std::enable_if_t<!meta::is_void_v<Value>,void>
+    sendv(const Value &value) {
+      if (!send_callback) throw std::runtime_error("send callback not initialized");
+      send_callback(value);
+    }
+
+    template <typename Value = valueT>
+    std::enable_if_t<!meta::is_void_v<Value> && std::is_same_v<Value,std::remove_reference_t<Value>>,void>
+    sendv(Value &&value) {
+      if (!move_callback) throw std::runtime_error("move callback not initialized");
+      move_callback(std::forward<valueT>(value));
+    }
+
+    void send() {
+      if (!send_callback) throw std::runtime_error("send callback not initialized");
+      send_callback();
     }
 
     // An optimized implementation will need a separate callback for broadcast
     // with a specific value for rangeT
-    template <typename rangeT>
-    void broadcast(const rangeT &keylist, const valueT &value) {
+    template <typename rangeT, typename Value = valueT>
+    std::enable_if_t<!meta::is_void_v<Value>,void>
+    broadcast(const rangeT &keylist, const Value &value) {
       for (auto key : keylist) send(key, value);
     }
 
-    void set_size(const keyT &key, std::size_t size) {
-      // std::cout << "In::set_size::\n";
+    template <typename Key = keyT>
+    std::enable_if_t<!meta::is_void_v<Key>,void>
+    set_size(const Key &key, std::size_t size) {
       if (!setsize_callback) throw std::runtime_error("set_size callback not initialized");
-      setsize_callback(key);
+      setsize_callback(key, size);
     }
 
-    void finalize(const keyT &key) {
+    template <typename Key = keyT>
+    std::enable_if_t<meta::is_void_v<Key>,void>
+    set_size(std::size_t size) {
+      if (!setsize_callback) throw std::runtime_error("set_size callback not initialized");
+      setsize_callback(size);
+    }
+
+    template <typename Key = keyT>
+    std::enable_if_t<!meta::is_void_v<Key>,void>
+    finalize(const Key &key) {
       // std::cout << "In::finalize::\n";
       if (!finalize_callback) throw std::runtime_error("finalize callback not initialized");
       finalize_callback(key);
+    }
+
+    template <typename Key = keyT>
+    std::enable_if_t<meta::is_void_v<Key>,void>
+    finalize() {
+      if (!finalize_callback) throw std::runtime_error("finalize callback not initialized");
+      finalize_callback();
     }
 
     Type get_type() const override {
@@ -837,7 +890,7 @@ namespace ttg {
   };
 
   // Output terminal
-  template <typename keyT = Void, typename valueT = Void>
+  template <typename keyT = void, typename valueT = void>
   class Out : public TerminalBase {
    public:
     typedef valueT value_type;
@@ -880,7 +933,15 @@ namespace ttg {
       this->connect_base(in);
     }
 
-    void send(const keyT &key, const valueT &value) {
+    // clang generates a warning that might be returning a nonvoid in functions that SFINAE'd to return void only
+    // TODO remove when clang is fixed
+#ifdef __clang__
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wreturn-type"
+#endif
+
+    template<typename Key = keyT, typename Value = valueT>
+    std::enable_if<meta::is_none_void_v<Key,Value>,void> send(const Key &key, const Value &value) {
       for (auto successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
@@ -891,7 +952,45 @@ namespace ttg {
       }
     }
 
-    void send(const keyT &key, valueT &&value) {
+    template<typename Key = keyT, typename Value = valueT>
+    std::enable_if<!meta::is_void_v<Key> && meta::is_void_v<Value>,void> sendk(const Key &key) {
+      for (auto successor : successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->sendk(key);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          static_cast<In<keyT, valueT> *>(successor)->sendk(key);
+        }
+      }
+    }
+
+    template<typename Key = keyT, typename Value = valueT>
+    std::enable_if<meta::is_void_v<Key> && !meta::is_void_v<Value>,void> sendv(const Value &value) {
+      for (auto successor : successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->sendv(value);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          static_cast<In<keyT, valueT> *>(successor)->sendv(value);
+        }
+      }
+    }
+
+    template<typename Key = keyT, typename Value = valueT>
+    std::enable_if<meta::is_all_void_v<Key,Value>,void> send() {
+      for (auto successor : successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send();
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          static_cast<In<keyT, valueT> *>(successor)->send();
+        }
+      }
+    }
+
+    template<typename Key = keyT, typename Value = valueT>
+    std::enable_if<meta::is_none_void_v<Key,Value> && std::is_same_v<Value,std::remove_reference_t<Value>>,void>
+    send(const Key &key, Value &&value) {
       std::size_t N = successors().size();
       // find the first terminal that can consume the value
       std::size_t move_terminal = N - 1;
@@ -915,15 +1014,16 @@ namespace ttg {
         }
         {
           TerminalBase *successor = successors()[move_terminal];
-          static_cast<In<keyT, valueT> *>(successor)->send(key, std::forward<valueT>(value));
+          static_cast<In<keyT, valueT> *>(successor)->send(key, std::forward<Value>(value));
         }
       }
     }
 
     // An optimized implementation will need a separate callback for broadcast
     // with a specific value for rangeT
-    template <typename rangeT>
-    void broadcast(const rangeT &keylist, const valueT &value) {  // NO MOVE YET
+    template<typename rangeT, typename Key = keyT, typename Value = valueT>
+    std::enable_if<meta::is_none_void_v<Key,Value>,void>
+    broadcast(const rangeT &keylist, const Value &value) {  // NO MOVE YET
       for (auto successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
@@ -934,7 +1034,9 @@ namespace ttg {
       }
     }
 
-    void set_size(const keyT &key, std::size_t size) {
+    template<typename Key = keyT>
+    std::enable_if<!meta::is_void_v<Key>,void>
+    set_size(const Key &key, std::size_t size) {
       for (auto successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
@@ -945,7 +1047,22 @@ namespace ttg {
       }
     }
 
-    void finalize(const keyT &key) {
+    template<typename Key = keyT>
+    std::enable_if<meta::is_void_v<Key>,void>
+    set_size(std::size_t size) {
+      for (auto successor : successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->set_size(size);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          static_cast<In<keyT, valueT> *>(successor)->set_size(size);
+        }
+      }
+    }
+
+    template<typename Key = keyT>
+    std::enable_if<!meta::is_void_v<Key>,void>
+    finalize(const Key &key) {
       for (auto successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
@@ -955,6 +1072,24 @@ namespace ttg {
         }
       }
     }
+
+    template<typename Key = keyT>
+    std::enable_if<meta::is_void_v<Key>,void>
+    finalize() {
+      for (auto successor : successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->finalize();
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          static_cast<In<keyT, valueT> *>(successor)->finalize();
+        }
+      }
+    }
+
+    // TODO remove when clang is fixed
+#ifdef __clang__
+#  pragma clang diagnostic pop
+#endif
 
     Type get_type() const override { return TerminalBase::Type::Write; }
   };
@@ -1094,46 +1229,45 @@ namespace ttg {
     t.send(key, std::forward<valueT>(value));
   }
 
-  // TODO decide whether we need this ... (how common will be pure control flow?)
   template <typename keyT, typename output_terminalT>
   void sendk(const keyT &key, output_terminalT &t) {
-    t.send(key, Void{});
+    t.sendk(key);
   }
 
   // TODO if sendk is removed, rename to send
   template <typename valueT, typename output_terminalT>
   void sendv(valueT &&value, output_terminalT &t) {
-    t.send(Void{}, std::forward<valueT>(value));
+    t.sendv(std::forward<valueT>(value));
   }
 
   template <typename keyT, typename valueT, typename output_terminalT>
   void send(output_terminalT &t) {
-    t.send(Void{}, Void{});
+    t.send();
   }
 
   template <size_t i, typename keyT, typename valueT, typename... output_terminalsT>
-  std::enable_if_t<!std::is_same_v<keyT,Void> || !std::is_same_v<valueT,Void>,void>
+  std::enable_if_t<meta::is_none_void_v<keyT,std::decay_t<valueT>>,void>
       send(const keyT &key, valueT &&value, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).send(key, std::forward<valueT>(value));
   }
 
   // TODO decide whether we need this ... (how common will be pure control flow?)
   template <size_t i, typename keyT, typename... output_terminalsT>
-  std::enable_if_t<!std::is_same_v<keyT,Void>,void>
+  std::enable_if_t<!meta::is_void_v<keyT>,void>
   sendk(const keyT &key, std::tuple<output_terminalsT...> &t) {
-    std::get<i>(t).send(key, Void{});
+    std::get<i>(t).sendk(key);
   }
 
   // TODO if sendk is removed, rename to send
   template <size_t i, typename valueT, typename... output_terminalsT>
-  std::enable_if_t<!std::is_same_v<valueT,Void>,void>
+  std::enable_if_t<!meta::is_void_v<valueT>,void>
   sendv(valueT &&value, std::tuple<output_terminalsT...> &t) {
-    std::get<i>(t).send(Void{}, std::forward<valueT>(value));
+    std::get<i>(t).sendv(std::forward<valueT>(value));
   }
 
   template <size_t i, typename... output_terminalsT>
   void send(std::tuple<output_terminalsT...> &t) {
-    std::get<i>(t).send(Void{}, Void{});
+    std::get<i>(t).send();
   }
 
   template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT>

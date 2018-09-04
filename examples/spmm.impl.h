@@ -217,13 +217,13 @@ namespace ttg {
 
 // flow data from an existing SpMatrix on rank 0
 template <typename Blk = blk_t>
-class Read_SpMatrix : public Op<Void, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, Void> {
+class Read_SpMatrix : public Op<void, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void> {
  public:
-  using baseT = Op<Void, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, Void>;
+  using baseT = Op<void, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void>;
 
   Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<> &ctl, Edge<Key<2>, Blk> &out)
       : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
-              [](auto key) { return 0; })
+              []() { return 0; })
       , matrix_(matrix) {}
 
   void op(std::tuple<Out<Key<2>, Blk>> &out) {
@@ -513,8 +513,8 @@ class SpMM {
   }
 };
 
-class Control : public Op<Void, std::tuple<Out<>>, Control> {
-  using baseT = Op<Void, std::tuple<Out<>>, Control>;
+class Control : public Op<void, std::tuple<Out<>>, Control> {
+  using baseT = Op<void, std::tuple<Out<>>, Control>;
 
  public:
   Control(Edge<> &ctl) : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}) {}

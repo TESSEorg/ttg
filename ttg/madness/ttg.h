@@ -161,10 +161,9 @@ namespace madness {
     class Op : public ::ttg::OpBase, public WorldObject<Op<keyT, output_terminalsT, derivedT, input_valueTs...>> {
      private:
       World &world;
-      std::function<int(const keyT &)> keymap;
+      ::ttg::meta::detail::keymap_t<keyT> keymap;
       // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
-      std::tuple<
-          std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs> &&)>...>
+      ::ttg::meta::detail::input_reducers_t<input_valueTs...>
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
      public:
@@ -200,9 +199,10 @@ namespace madness {
         size_t call_depth = 0; // how deep calls are nested
       } threaddata;
 
-      using input_values_tuple_type = std::tuple<data_wrapper_t<std::decay_t<input_valueTs>>...>;
       using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
       using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
+      static_assert(::ttg::meta::is_none_void_v<input_valueTs...> || std::tuple_size_v<input_terminals_type> == 1, "only single void input can be handled (i.e. can't mix void and nonvoid inputs)");
+      using input_values_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,std::tuple<data_wrapper_t<std::decay_t<input_valueTs>>...>,std::tuple<>>;
       using input_unwrapped_values_tuple_type = input_values_tuple_type;
 
       using output_terminals_type = output_terminalsT;
@@ -230,21 +230,21 @@ namespace madness {
                                      // (0 = unbounded stream)
         input_values_tuple_type t;   // The input values
         derivedT *derived;           // Pointer to derived class instance
-        keyT key;                    // Task key
+        std::conditional_t<::ttg::meta::is_void_v<keyT>,::ttg::Void,keyT> key;                    // Task key
 
         OpArgs() : counter(numins), nargs(), stream_size(), t() { std::fill(nargs.begin(), nargs.end(), 1); }
 
         void run(World &world) {
           // ::ttg::print("starting task");
 
-          opT::threaddata.key_hash = std::hash<keyT>()(key);
+          opT::threaddata.key_hash = std::hash<decltype(key)>()(key);
           opT::threaddata.call_depth++;
             
-          if constexpr (!std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+          if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
             derived->op(key, std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
-          } else if constexpr (!std::is_same_v<keyT,::ttg::Void> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+          } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
             derived->op(key, derived->output_terminals);
-          } else if constexpr (std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+          } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
             derived->op(std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
           } else {
             derived->op(derived->output_terminals);  // !!! NOTE moving t into op
@@ -269,25 +269,31 @@ namespace madness {
 
       };
 
-      using cacheT = ConcurrentHashMap<keyT, OpArgs *, std::hash<keyT>>;
+      using hashable_keyT = std::conditional_t<::ttg::meta::is_void_v<keyT>,int,keyT>;
+      using cacheT = ConcurrentHashMap<hashable_keyT, OpArgs *, std::hash<hashable_keyT>>;
       using accessorT = typename cacheT::accessor;
       cacheT cache;
 
      protected:
-      // Used to set the i'th argument (T is template to enable && collapsing)
-      template <std::size_t i, typename T>
-      // void set_arg(const keyT& key, const typename std::tuple_element<i, input_values_tuple_type>::type& value) {
-      void set_arg(const keyT &key, T &&value) {
+
+      template <std::size_t i, typename Key, typename Value>
+      std::enable_if_t<::ttg::meta::is_none_void_v<Key,std::decay_t<Value>>,void>
+      set_arg(const Key &key, Value &&value) {
         using valueT = typename std::tuple_element<i, input_values_tuple_type>::type;  // Should be T or const T
-        static_assert(std::is_same<std::decay_t<T>, std::decay_t<valueT>>::value,
+        static_assert(std::is_same<std::decay_t<Value>, std::decay_t<valueT>>::value,
                       "Op::set_arg(key,value) given value of type incompatible with Op");
 
-        const int owner = keymap(key);
-
+        const auto owner = keymap(key);
         if (owner != world.rank()) {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
-          worldobjT::send(owner, &opT::template set_arg<i, const typename std::remove_reference<T>::type &>, key,
-                          value);
+          // should be able on the other end to consume value (since it is just a temporary byproduct of serialization)
+          // BUT compiler vomits when const std::remove_reference_t<Value>& -> std::decay_t<Value>
+          // this exposes bad design in MemFuncWrapper (probably similar bugs elsewhere?) whose generic operator()
+          // should use memfun's argument types (since that's what will be called) rather than misautodeduce in a particular context
+          // P.S. another issue is in send_am which can execute both remotely (where one can always move arguments) and locally
+          //      here we know that this will be a remove execution, so we prepare to take rvalues;
+          //      send_am will need to separate local and remote paths to deal with this
+          worldobjT::send(owner, &opT::template set_arg<i, Key, const std::remove_reference_t<Value>&>, key, value);
         } else {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
 
@@ -308,7 +314,7 @@ namespace madness {
             args->lock();
             // have a value already? if not, set, otherwise reduce
             if ((args->stream_size[i] == 0 && args->nargs[i] == 1) || (args->stream_size[i] == args->nargs[i])) {
-              this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<T>(value);
+              this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
             } else {
               valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
               // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
@@ -324,7 +330,7 @@ namespace madness {
             }
             args->unlock();
           } else {  // this is a nonstreaming input => set the value
-            this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<T>(value);
+            this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
             args->nargs[i]--;
             args->counter--;
           }
@@ -341,11 +347,11 @@ namespace madness {
                 
                 //::ttg::print("directly invoking:", get_name(), key, curhash, threaddata.key_hash, threaddata.call_depth);
                 opT::threaddata.call_depth++;
-                if constexpr (!std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+                if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
                   static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
-                } else if constexpr (!std::is_same_v<keyT,::ttg::Void> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+                } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
                   static_cast<derivedT *>(this)->op(key, output_terminals); // Runs immediately
-                } else if constexpr (std::is_same_v<keyT,::ttg::Void> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+                } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
                   static_cast<derivedT *>(this)->op(std::move(args->t), output_terminals); // Runs immediately
                 } else {
                   static_cast<derivedT *>(this)->op(output_terminals); // Runs immediately
@@ -364,13 +370,81 @@ namespace madness {
         }
       }
 
+      template <std::size_t i, typename Key = keyT, typename Value>
+      std::enable_if_t<::ttg::meta::is_void_v<Key> && !::ttg::meta::is_void_v<std::decay_t<Value>>,void>
+      set_arg(Value &&value) {
+        using valueT = typename std::tuple_element<i, input_values_tuple_type>::type;  // Should be T or const T
+        static_assert(std::is_same<std::decay_t<Value>, std::decay_t<valueT>>::value,
+                      "Op::set_arg(key,value) given value of type incompatible with Op");
+
+        const int owner = keymap();
+
+        if (owner != world.rank()) {
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : forwarding setting argument : ", i);
+          // CAVEAT see comment above in set_arg re:
+          worldobjT::send(owner, &opT::template set_arg<i, keyT, const std::remove_reference_t<Value>&>, value);
+        } else {
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : received value for argument : ", i);
+
+          accessorT acc;
+          if (cache.insert(acc, 0)) acc->second = new OpArgs();  // It will be deleted by the task q
+          OpArgs *args = acc->second;
+
+          if (args->nargs[i] == 0) {
+            ::ttg::print_error(world.rank(), ":", get_name(), " : error argument is already finalized : ", i);
+            throw "bad set arg";
+          }
+
+          auto reducer = std::get<i>(input_reducers);
+          if (reducer) {  // is this a streaming input? reduce the received value
+            // N.B. Right now reductions are done eagerly, without spawning tasks
+            //      this means we must lock
+            args->lock();
+            // have a value already? if not, set, otherwise reduce
+            if ((args->stream_size[i] == 0 && args->nargs[i] == 1) || (args->stream_size[i] == args->nargs[i])) {
+              this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
+            } else {
+              valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
+              // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
+              this->get<i, std::decay_t<valueT> &>(args->t) =
+                  std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->t), std::move(value_copy)));
+            }
+            // update the counter if the stream is bounded
+            // this assumes that the stream size is set before data starts flowing ... strong-typing streams will solve
+            // this
+            if (args->stream_size[i] != 0) {
+              args->nargs[i]--;
+              if (args->nargs[i] == 0) args->counter--;
+            }
+            args->unlock();
+          } else {  // this is a nonstreaming input => set the value
+            this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
+            args->nargs[i]--;
+            args->counter--;
+          }
+
+          // ready to run the task?
+          if (args->counter == 0) {
+            if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
+            args->derived = static_cast<derivedT *>(this);
+
+            world.taskq.add(args);
+
+            cache.erase(acc);
+          }
+        }
+      }
+
       // Used to generate tasks with no input arguments
-      template <typename Key = keyT> std::enable_if_t<!std::is_same_v<Key,::ttg::Void>,void> set_arg_empty(const Key &key) {
+      template <typename Key = keyT>
+      std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
+      set_arg(const Key &key) {
+        static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, "set_arg called without a value but valueT!=void");
         const int owner = keymap(key);
 
         if (owner != world.rank()) {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
-          worldobjT::send(owner, &opT::set_arg_empty<keyT>, key);
+          worldobjT::send(owner, &opT::set_arg<keyT>, key);
         } else {
           accessorT acc;
           if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
@@ -389,12 +463,13 @@ namespace madness {
 
       // Used to generate tasks with no input arguments
       template <typename Key = keyT>
-      std::enable_if_t<std::is_same_v<Key,::ttg::Void>,void> set_arg_empty() {
-        const int owner = keymap(::ttg::Void{});
+      std::enable_if_t<::ttg::meta::is_void_v<Key>,void> set_arg() {
+        static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, "set_arg called without a value but valueT!=void");
+        const int owner = keymap();
 
         if (owner != world.rank()) {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : forwarding no-arg task: ");
-          worldobjT::send(owner, &opT::set_arg_empty<::ttg::Void>);
+          worldobjT::send(owner, &opT::set_arg<keyT>);
         } else {
           auto task = new OpArgs();  // It will be deleted by the task q
 
@@ -406,8 +481,9 @@ namespace madness {
       }
 
       // Used by invoke to set all arguments associated with a task
-      template <size_t... IS>
-      void set_args(std::index_sequence<IS...>, const keyT &key, const input_values_tuple_type &args) {
+      template <typename Key, size_t... IS>
+      std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
+      set_args(std::index_sequence<IS...>, const Key &key, const input_values_tuple_type &args) {
         int junk[] = {0, (set_arg<IS>(key, Op::get<IS>(args)), 0)...};
         junk[0]++;
       }
@@ -415,16 +491,53 @@ namespace madness {
      public:
       /// sets stream size for input \c i
       /// \param size positive integer that specifies the stream size
-      template <std::size_t i, bool key_is_void = ::ttg::meta::is_Void_v<keyT>>
+      template <std::size_t i, bool key_is_void = ::ttg::meta::is_void_v<keyT>>
       std::enable_if_t<key_is_void,void> set_argstream_size(std::size_t size) {
-        // TODO: adapt key-based set_argstream_size
-        this->set_argstream_size<i>(::ttg::Void{}, size);
+        // preconditions
+        assert(std::get<i>(input_reducers) && "Op::set_argstream_size called on nonstreaming input terminal");
+        assert(size > 0 && "Op::set_argstream_size(size) called with size=0");
+
+        // body
+        const auto owner = keymap();
+        if (owner != world.rank()) {
+          if (tracing())
+            ::ttg::print(world.rank(), ":", get_name(), " : forwarding stream size for terminal ", i);
+            worldobjT::send(owner, &opT::template set_argstream_size<i, true>, size);
+        } else {
+          if (tracing())
+            ::ttg::print(world.rank(), ":", get_name(), " : setting stream size for terminal ", i);
+
+          accessorT acc;
+          if (cache.insert(acc, 0)) acc->second = new OpArgs();  // It will be deleted by the task q
+          OpArgs *args = acc->second;
+
+          args->lock();
+
+          // check if stream is already bounded
+          if (args->stream_size[i] > 0) {
+            ::ttg::print_error(world.rank(), ":", get_name(), " : error stream is already bounded : ", i);
+            throw std::runtime_error("Op::set_argstream_size called for a bounded stream");
+          }
+
+          // check if stream is already finalized
+          if (args->nargs[i] == 0) {
+            ::ttg::print_error(world.rank(), ":", get_name(), " : error stream is already finalized : ", i);
+            throw std::runtime_error("Op::set_argstream_size called for a finalized stream");
+          }
+
+          // commit changes
+          args->stream_size[i] = size;
+          args->nargs[i] = size;
+
+          args->unlock();
+        }
       }
 
       /// sets stream size for input \c i
       /// \param size positive integer that specifies the stream size
-      template <std::size_t i>
-      void set_argstream_size(const keyT &key, std::size_t size) {
+      template <std::size_t i, typename Key = keyT, bool key_is_void = ::ttg::meta::is_void_v<Key>>
+      std::enable_if_t<!key_is_void,void>
+      set_argstream_size(const Key &key, std::size_t size) {
         // preconditions
         assert(std::get<i>(input_reducers) && "Op::set_argstream_size called on nonstreaming input terminal");
         assert(size > 0 && "Op::set_argstream_size(key,size) called with size=0");
@@ -434,9 +547,6 @@ namespace madness {
         if (owner != world.rank()) {
           if (tracing())
             ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream size for terminal ", i);
-          if constexpr (::ttg::meta::is_Void_v<keyT>)
-            worldobjT::send(owner, &opT::template set_argstream_size<i, true>, size);
-          else
             worldobjT::send(owner, &opT::template set_argstream_size<i>, key, size);
         } else {
           if (tracing())
@@ -469,8 +579,9 @@ namespace madness {
       }
 
       /// finalizes stream for input \c i
-      template <std::size_t i>
-      void finalize_argstream(const keyT &key) {
+      template <std::size_t i, typename Key = keyT, bool key_is_void = ::ttg::meta::is_void_v<Key>>
+      std::enable_if_t<!key_is_void,void>
+      finalize_argstream(const Key &key) {
         // preconditions
         assert(std::get<i>(input_reducers) && "Op::finalize_argstream called on nonstreaming input terminal");
 
@@ -519,6 +630,55 @@ namespace madness {
         }
       }
 
+      /// finalizes stream for input \c i
+      template <std::size_t i, bool key_is_void = ::ttg::meta::is_void_v<keyT>>
+      std::enable_if_t<key_is_void,void> finalize_argstream() {
+        // preconditions
+        assert(std::get<i>(input_reducers) && "Op::finalize_argstream called on nonstreaming input terminal");
+
+        // body
+        const int owner = keymap();
+        if (owner != world.rank()) {
+          if (tracing())
+            ::ttg::print(world.rank(), ":", get_name(), " : forwarding stream finalize for terminal ", i);
+          worldobjT::send(owner, &opT::template finalize_argstream<i, true>);
+        } else {
+          if (tracing())
+            ::ttg::print(world.rank(), ":", get_name(), " : finalizing stream for terminal ", i);
+
+          accessorT acc;
+          const auto found = cache.find(acc, 0);
+          assert(found && "Op::finalize_argstream called but no values had been received yet for this key");
+          OpArgs *args = acc->second;
+
+          // check if stream is already bounded
+          if (args->stream_size[i] > 0) {
+            ::ttg::print_error(world.rank(), ":", get_name(), " : error finalize called on bounded stream: ", i);
+            throw std::runtime_error("Op::finalize called for a bounded stream");
+          }
+
+          // check if stream is already finalized
+          if (args->nargs[i] == 0) {
+            ::ttg::print_error(world.rank(), ":", get_name(), " : error stream is already finalized : ", i);
+            throw std::runtime_error("Op::finalized called for a finalized stream");
+          }
+
+          // commit changes
+          args->nargs[i] = 0;
+          args->counter--;
+          // ready to run the task?
+          if (args->counter == 0) {
+            if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
+            args->derived = static_cast<derivedT *>(this);
+
+            world.taskq.add(args);
+            // static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
+
+            cache.erase(acc);
+          }
+        }
+      }
+
      private:
       // Copy/assign/move forbidden ... we could make it work using
       // PIMPL for this base class.  However, this instance of the base
@@ -545,27 +705,73 @@ namespace madness {
         // using setsize_callbackT = typename ::ttg::In<keyT, valueT>::setsize_callback_type;
         // using finalize_callbackT = typename ::ttg::In<keyT, valueT>::finalize_callback_type;
 
-        auto move_callback = [this](const keyT &key, valueT &&value) {
-          // std::cout << "move_callback\n";
-          set_arg<i, valueT>(key, std::forward<valueT>(value));
-        };
-
-        auto send_callback = [this](const keyT &key, const valueT &value) {
-          // std::cout << "send_callback\n";
-          set_arg<i, const valueT &>(key, value);
-        };
-
-        auto setsize_callback = [this](const keyT &key, std::size_t size) {
-          // std::cout << "send_callback\n";
-          set_argstream_size<i>(key, size);
-        };
-
-        auto finalize_callback = [this](const keyT &key) {
-          // std::cout << "send_callback\n";
-          finalize_argstream<i>(key);
-        };
-
-        input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
+        //////////////////////////////////////////////////////////////////
+        // nonvoid key, nonvoid value
+        //////////////////////////////////////////////////////////////////
+        if constexpr (::ttg::meta::is_none_void_v<keyT,valueT>) {
+          auto move_callback = [this](const keyT &key, valueT &&value) {
+            set_arg<i, keyT, valueT>(key, std::forward<valueT>(value));
+          };
+          auto send_callback = [this](const keyT &key, const valueT &value) {
+            set_arg<i, keyT, const valueT &>(key, value);
+          };
+          auto setsize_callback = [this](const keyT &key, std::size_t size) {
+            set_argstream_size<i>(key, size);
+          };
+          auto finalize_callback = [this](const keyT &key) {
+            finalize_argstream<i>(key);
+          };
+          input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
+        }
+        //////////////////////////////////////////////////////////////////
+        // void key, nonvoid value
+        //////////////////////////////////////////////////////////////////
+        else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_void_v<valueT>) {
+          auto move_callback = [this](valueT &&value) {
+            set_arg<i, keyT, valueT>(std::forward<valueT>(value));
+          };
+          auto send_callback = [this](const valueT &value) {
+            set_arg<i, keyT, const valueT &>(value);
+          };
+          auto setsize_callback = [this](std::size_t size) {
+            set_argstream_size<i>(size);
+          };
+          auto finalize_callback = [this]() {
+            finalize_argstream<i>();
+          };
+          input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
+        }
+        //////////////////////////////////////////////////////////////////
+        // nonvoid key, void value
+        //////////////////////////////////////////////////////////////////
+        else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_void_v<valueT>) {
+          auto send_callback = [this](const keyT &key) {
+            set_arg<keyT>(key);
+          };
+          auto setsize_callback = [this](const keyT &key, std::size_t size) {
+            set_argstream_size<i>(key, size);
+          };
+          auto finalize_callback = [this](const keyT &key) {
+            finalize_argstream<i>(key);
+          };
+          input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+        }
+        //////////////////////////////////////////////////////////////////
+        // void key, void value
+        //////////////////////////////////////////////////////////////////
+        else if constexpr (::ttg::meta::is_all_void_v<keyT,valueT>) {
+          auto send_callback = [this]() {
+            set_arg<keyT>();
+          };
+          auto setsize_callback = [this](std::size_t size) {
+            set_argstream_size<i>(size);
+          };
+          auto finalize_callback = [this]() {
+            finalize_argstream<i>();
+          };
+          input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+        }
+        else abort();
       }
 
       template <std::size_t... IS>
@@ -708,19 +914,35 @@ namespace madness {
       }
 
       /// Manual injection of a task with all input arguments specified as a tuple
-      void invoke(const keyT &key, const input_values_tuple_type &args) {
+      template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
+      invoke(const Key &key, const input_values_tuple_type &args) {
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, key, args);
       }
 
       /// Manual injection of a task that has no arguments
-      template <typename Key = keyT> std::enable_if_t<!std::is_same_v<Key,::ttg::Void>,void> invoke(const Key &key) { set_arg_empty(key); }
+      template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
+      invoke(const Key &key) { set_arg<Key>(key); }
 
       /// Manual injection of a task that has no key or arguments
-      template <typename Key = keyT> std::enable_if_t<std::is_same_v<Key,::ttg::Void>,void> invoke() { set_arg_empty(); }
+      template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void> invoke() { set_arg<Key>(); }
 
       /// keymap accessor
       /// @return the keymap
       const decltype(keymap) &get_keymap() const { return keymap; }
+
+      /// computes the owner of key @c key
+      /// @param[in] key the key
+      /// @return the owner of @c key
+      template <typename Key>
+      std::enable_if_t<!::ttg::meta::is_void_v<Key>,int>
+      owner(const Key& key) const { return keymap(key); }
+
+      /// computes the owner of void key
+      /// @return the owner of void key
+      template <typename Key>
+      std::enable_if_t<::ttg::meta::is_void_v<Key>,int>
+      owner() const { return keymap(); }
+
     };
 
 #include "../wrap.h"
