@@ -64,7 +64,7 @@ namespace ttg {
           break;
       }
       os << " { ";
-      for(int i=0; i!=size(); ++i) {
+      for(auto i=0ul; i!=size(); ++i) {
         os << i << ":{ ";
         for(const auto j : (*this)[i]) {
           os << j << " ";
@@ -83,8 +83,8 @@ namespace ttg {
       base_t colidx_to_rowidx;
       for (int k = 0; k < mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
         for (typename Eigen::SparseMatrix<T>::InnerIterator it(mat, k); it; ++it) {
-          auto row = it.row();
-          auto col = it.col();
+          const std::size_t row = it.row();
+          const std::size_t col = it.col();
           if (col >= colidx_to_rowidx.size()) colidx_to_rowidx.resize(col + 1);
           // in either case (col- or row-major) row index increasing for the given col
           colidx_to_rowidx[col].push_back(row);
@@ -98,8 +98,8 @@ namespace ttg {
       base_t rowidx_to_colidx;
       for (int k = 0; k < mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
         for (typename Eigen::SparseMatrix<T>::InnerIterator it(mat, k); it; ++it) {
-          auto row = it.row();
-          auto col = it.col();
+          const std::size_t row = it.row();
+          const std::size_t col = it.col();
           if (row >= rowidx_to_colidx.size()) rowidx_to_colidx.resize(row + 1);
           // in either case (col- or row-major) col index increasing for the given row
           rowidx_to_colidx[row].push_back(col);

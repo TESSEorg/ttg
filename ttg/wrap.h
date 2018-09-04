@@ -217,7 +217,7 @@ auto wrapt(funcT &&func, const std::tuple<::ttg::Edge<keyT, input_valuesT>...> &
   using func_args_t = boost::callable_traits::args_t<funcT>;
   constexpr const auto num_args = std::tuple_size<func_args_t>::value;
   constexpr const auto void_key = ::ttg::meta::is_void_v<keyT>;
-  static_assert(num_args == void_key ? 2 : 3, "ttg::wrapt(func, ...): func must take 3 arguments (or 2, if keyT=void)");
+  static_assert(num_args == (void_key ? 2 : 3), "ttg::wrapt(func, ...): func must take 3 arguments (or 2, if keyT=void)");
   // 2. input_args_t = {input_valuesT&&...}
   using input_args_t = std::decay_t<typename std::tuple_element<void_key ? 0 : 1, func_args_t>::type>;
   using decayed_input_args_t = ::ttg::meta::decayed_tuple_t<input_args_t>;
