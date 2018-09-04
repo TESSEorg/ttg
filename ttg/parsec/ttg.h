@@ -248,6 +248,7 @@ namespace parsec {
       set_default_world(nullptr);
       MPI_Finalize();
     }
+    inline void ttg_abort() { MPI_Abort(get_default_world().comm(), 1); }
     inline World &ttg_default_execution_context() { return get_default_world(); }
     inline void ttg_execute(World &world) { world.execute(); }
     inline void ttg_fence(World &world) {

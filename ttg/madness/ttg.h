@@ -81,6 +81,7 @@ namespace madness {
       set_default_world(world);
     }
     inline void ttg_finalize() { madness::finalize(); }
+    inline void ttg_abort() { MPI_Abort(MPI_COMM_WORLD, 1); }
     inline World &ttg_default_execution_context() { return get_default_world(); }
     inline void ttg_execute(World &world) {
       // World executes tasks eagerly
