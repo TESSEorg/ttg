@@ -86,7 +86,7 @@ namespace mra {
             assert(initialized);
             for (Dimension d=0; d<NDIM; ++d)
                 xsim[d] = (xuser[d] - cell[d].first) * cell_reciprocal_width[d];
-            return xsim;
+            //return xsim;
         }
         
         /// Convert simulation coords ([0,1]^NDIM) to user coords (Domain)

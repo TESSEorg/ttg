@@ -605,6 +605,7 @@ namespace madness {
           accessorT acc;
           const auto found = cache.find(acc, key);
           assert(found && "Op::finalize_argstream called but no values had been received yet for this key");
+          TTGUNUSED(found);
           OpArgs *args = acc->second;
 
           // check if stream is already bounded
@@ -660,6 +661,7 @@ namespace madness {
           accessorT acc;
           const auto found = cache.find(acc, 0);
           assert(found && "Op::finalize_argstream called but no values had been received yet for this key");
+          TTGUNUSED(found);
           OpArgs *args = acc->second;
 
           // check if stream is already bounded

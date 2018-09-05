@@ -743,7 +743,8 @@ public:
 
 	~Producer() {std::cout << "Producer destructor\n";}
 
-	void op(const Key &key, const std::tuple<>& t, baseT::output_terminals_type &out) {
+    //void op(const Key &key, const std::tuple<>& t, baseT::output_terminals_type &out) {
+	void op(const Key &key, baseT::output_terminals_type &out) {
 		Key root(0, 0);
 		//std::cout << "Produced the root node whose key is " << root << std::endl;
 		::send<0>(root, Control(), out);
@@ -772,11 +773,11 @@ public:
 		project.out<1>()->connect(printer.in<0>());
 		project.out<0>()->connect(project.in<0>());
 
-		Verify(&producer);
+		if (!make_graph_executable(&producer)) throw "should be connected";
 		world.gop.fence();
 	}
 
-	void print() {Print()(&producer);}
+	void print() {}//{Print()(&producer);}
 	std::string dot() {return Dot()(&producer);}
 	void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
 	void fence() { world.gop.fence(); }
@@ -836,13 +837,12 @@ public:
 
       minusOp.out<1>()->connect(printer.in<0>());
 
-      //Verify()(producer.get());
-      Verify()(&producer);
+      if (!make_graph_executable(&producer)) throw "should be connected";
       world.gop.fence();
 
    }
 
-   void print() {Print()(&producer);}
+   void print() {}//{Print()(&producer);}
    std::string dot() {return Dot()(&producer);}
    void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
    void fence() { world.gop.fence(); }
@@ -897,13 +897,12 @@ public:
       addOp.out<2>()->connect(addOp.in<1>());
       addOp.out<1>()->connect(printer.in<0>());   
 
-      //Verify()(producer.get());
-      Verify()(&producer);
+      if (!make_graph_executable(&producer)) throw "should be connected";
       world.gop.fence();
    }
 
 
-   void print() {Print()(&producer);}
+   void print() {}//{Print()(&producer);}
    std::string dot() {return Dot()(&producer);}
    void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
    void fence() { world.gop.fence(); }
@@ -954,13 +953,12 @@ public:
 
       reconstruct_doIt.out<1>()->connect(printer.in<0>());
 
-      //Verify()(producer.get());
-      Verify()(&producer);
+      if (!make_graph_executable(&producer)) throw "should be connected";
       world.gop.fence();
       
    }
 
-   void print() {Print()(&producer);}
+   void print() {}//{Print()(&producer);}
    std::string dot() {return Dot()(&producer);}
    void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
    void fence() { world.gop.fence(); }
@@ -1042,13 +1040,12 @@ public:
       // EXAMPLE 9  --> DIRECTLY CONNECTING THE RESULT OF GAXPY TO PRINTER
       //gaxpyOp.out<1>()->connect(printer.in<0>());
       
-      //Verify()(producer.get());
-      Verify()(&producer);
+      if (!make_graph_executable(&producer)) throw "should be connected";
       world.gop.fence();
       
    }
 
-   void print() {Print()(&producer);}
+   void print() {}//{Print()(&producer);}
    std::string dot() {return Dot()(&producer);}
    void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
    void fence() { world.gop.fence(); }
@@ -1159,14 +1156,12 @@ public:
 	
 	reconstruct_doIt.out<1>()->connect(printer.in<0>());
 	
-
-        //Verify()(producer.get());
-        Verify()(&producer);
+        if (!make_graph_executable(&producer)) throw "should be connected";
 	world.gop.fence();
    }
 
 
-   void print() {Print()(&producer);}
+   void print() {}//{Print()(&producer);}
    std::string dot() {return Dot()(&producer);}
    void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
    void fence() { world.gop.fence(); }
@@ -1270,13 +1265,11 @@ public:
 		
 		subOp.out<1>()->connect(printer.in<0>());
 
-
-		//Verify()(producer.get());
-                Verify()(&producer);
+                if (!make_graph_executable(&producer)) throw "should be connected";
 		world.gop.fence();		
 	}
 
-    void print() {Print()(&producer);}
+    void print() {}//{Print()(&producer);}
     std::string dot() {return Dot()(&producer);}
     void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
     void fence() { world.gop.fence(); }
@@ -1318,13 +1311,12 @@ public:
 
       diff_doIt.out<3>()->connect(printer.in<0>());
    
-      //Verify()(producer.get());
-      Verify()(&producer);
+      if (!make_graph_executable(&producer)) throw "should be connected";
       world.gop.fence();
    }
 
 
-   void print() {Print()(&producer);}
+   void print() {}//{Print()(&producer);}
    std::string dot() {return Dot()(&producer);}
    void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
    void fence() { world.gop.fence(); }
@@ -1365,7 +1357,7 @@ public:
 
 
 
-   void print() {Print()(&producer);}
+   void print() {}//{Print()(&producer);}
    std::string dot() {return Dot()(&producer);}
    void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
    void fence() { world.gop.fence(); }

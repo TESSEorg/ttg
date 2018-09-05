@@ -633,6 +633,7 @@ int main(int argc, char **argv) {
     // ready to run!
     auto connected = make_graph_executable(&control);
     assert(connected);
+    TTGUNUSED(connected);
 
     // ready, go! need only 1 kick, so must be done by 1 thread only
     if (ttg_default_execution_context().rank() == 0) control.start();
@@ -674,6 +675,7 @@ int main(int argc, char **argv) {
       // ready to run!
       auto connected = make_graph_executable(&control);
       assert(connected);
+      TTGUNUSED(connected);
 
       // ready, go! need only 1 kick, so must be done by 1 thread only
       if (ttg_default_execution_context().rank() == 0) control.start();

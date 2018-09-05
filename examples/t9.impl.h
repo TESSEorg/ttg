@@ -357,6 +357,7 @@ int main(int argc, char** argv) {
     // ready to run!
     auto connected = make_graph_executable(start.get());
     assert(connected);
+    TTGUNUSED(connected);
 
     if (ttg_default_execution_context().rank() == 0) {
 #if 0
