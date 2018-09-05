@@ -202,8 +202,10 @@ namespace madness {
 
       using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
       using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
-      static_assert(::ttg::meta::is_none_void_v<input_valueTs...> || std::tuple_size_v<input_terminals_type> == 1, "only single void input can be handled (i.e. can't mix void and nonvoid inputs)");
-      using input_values_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,std::tuple<data_wrapper_t<std::decay_t<input_valueTs>>...>,std::tuple<>>;
+      static_assert(::ttg::meta::is_none_void_v<input_valueTs...> || ::ttg::meta::is_last_void_v<input_valueTs...>, "at most one void input can be handled, and it must come last");
+      // if have data inputs and (always last) control input, convert last input to Void to make logic easier
+      using input_values_full_tuple_type = std::tuple<data_wrapper_t<::ttg::meta::void_to_Void_t<std::decay_t<input_valueTs>>>...>;
+      using input_values_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,input_values_full_tuple_type,typename ::ttg::meta::drop_last_n<input_values_full_tuple_type,1ul>::type>;
       using input_unwrapped_values_tuple_type = input_values_tuple_type;
 
       using output_terminals_type = output_terminalsT;
@@ -229,7 +231,7 @@ namespace madness {
         std::array<std::size_t, numins>
             stream_size;             // Expected number of values to receive, only used for streaming inputs
                                      // (0 = unbounded stream)
-        input_values_tuple_type t;   // The input values
+        input_values_tuple_type t;   // The input values (does not include control)
         derivedT *derived;           // Pointer to derived class instance
         std::conditional_t<::ttg::meta::is_void_v<keyT>,::ttg::Void,keyT> key;                    // Task key
 
@@ -259,7 +261,7 @@ namespace madness {
         virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
 
        private:
-        madness::Spinlock lock_;                          // sychronizes access to data
+        madness::Spinlock lock_;                          // synchronizes access to data
        public:
         void lock() {
           lock_.lock();
@@ -277,11 +279,19 @@ namespace madness {
 
      protected:
 
+      // there are 3 types of set_arg for nonvoid Key:
+      // - case 1: complete Value type
+      // - case 2: void Value, mixed (data+control) inputs
+      // - case 3: void Value, no inputs
+      // + 3 more types for void Key (cases 4-6)
+      // case 2 will be implemented by passing dummy ::ttg::Void object to reduce the number of code branches
+
+      // case 1:
       template <std::size_t i, typename Key, typename Value>
-      std::enable_if_t<::ttg::meta::is_none_void_v<Key,std::decay_t<Value>>,void>
+      std::enable_if_t<!::ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>,void>
       set_arg(const Key &key, Value &&value) {
-        using valueT = typename std::tuple_element<i, input_values_tuple_type>::type;  // Should be T or const T
-        static_assert(std::is_same<std::decay_t<Value>, std::decay_t<valueT>>::value,
+        using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;  // Should be T or const T
+        static_assert(std::is_same_v<std::decay_t<Value>, std::decay_t<valueT>>,
                       "Op::set_arg(key,value) given value of type incompatible with Op");
 
         const auto owner = keymap(key);
@@ -313,14 +323,18 @@ namespace madness {
             // N.B. Right now reductions are done eagerly, without spawning tasks
             //      this means we must lock
             args->lock();
-            // have a value already? if not, set, otherwise reduce
-            if ((args->stream_size[i] == 0 && args->nargs[i] == 1) || (args->stream_size[i] == args->nargs[i])) {
-              this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
-            } else {
-              valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
-              // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
-              this->get<i, std::decay_t<valueT> &>(args->t) =
-                  std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->t), std::move(value_copy)));
+            if constexpr (!::ttg::meta::is_void_v<valueT>) {  // for data values
+              // have a value already? if not, set, otherwise reduce
+              if ((args->stream_size[i] == 0 && args->nargs[i] == 1) || (args->stream_size[i] == args->nargs[i])) {
+                this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
+              } else {
+                valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
+                this->get<i, std::decay_t<valueT> &>(args->t) =
+                    std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->t), std::move(value_copy)));
+              }
+            }
+            else {
+              reducer(); // even if this was a control input, must execute the reducer for possible side effects
             }
             // update the counter if the stream is bounded
             // this assumes that the stream size is set before data starts flowing ... strong-typing streams will solve
@@ -331,7 +345,9 @@ namespace madness {
             }
             args->unlock();
           } else {  // this is a nonstreaming input => set the value
-            this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
+            if constexpr (!::ttg::meta::is_void_v<valueT>) {  // for data values
+              this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
+            }
             args->nargs[i]--;
             args->counter--;
           }
@@ -371,10 +387,18 @@ namespace madness {
         }
       }
 
+      // case 2
+      template <std::size_t i, typename Key, typename Value>
+      std::enable_if_t<!::ttg::meta::is_void_v<Key> && std::is_void_v<Value>,void>
+      set_arg(const Key &key) {
+        set_arg<i>(key, ::ttg::Void{});
+      }
+
+      // case 4
       template <std::size_t i, typename Key = keyT, typename Value>
-      std::enable_if_t<::ttg::meta::is_void_v<Key> && !::ttg::meta::is_void_v<std::decay_t<Value>>,void>
+      std::enable_if_t<::ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>,void>
       set_arg(Value &&value) {
-        using valueT = typename std::tuple_element<i, input_values_tuple_type>::type;  // Should be T or const T
+        using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;  // Should be T or const T
         static_assert(std::is_same<std::decay_t<Value>, std::decay_t<valueT>>::value,
                       "Op::set_arg(key,value) given value of type incompatible with Op");
 
@@ -436,7 +460,14 @@ namespace madness {
         }
       }
 
-      // Used to generate tasks with no input arguments
+      // case 4
+      template <std::size_t i, typename Key = keyT, typename Value>
+      std::enable_if_t<::ttg::meta::is_void_v<Key> && std::is_void_v<Value>,void>
+      set_arg() {
+        set_arg<i>(::ttg::Void{});
+      }
+
+      // case 3
       template <typename Key = keyT>
       std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
       set_arg(const Key &key) {
@@ -462,7 +493,7 @@ namespace madness {
         }
       }
 
-      // Used to generate tasks with no input arguments
+      // case 6
       template <typename Key = keyT>
       std::enable_if_t<::ttg::meta::is_void_v<Key>,void> set_arg() {
         static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, "set_arg called without a value but valueT!=void");
@@ -715,15 +746,11 @@ namespace madness {
         static_assert(std::is_same<keyT, typename terminalT::key_type>::value,
                       "Op::register_input_callback(terminalT) -- incompatible terminalT");
         using valueT = std::decay_t<typename terminalT::value_type>;
-        // using send_callbackT = typename ::ttg::In<keyT, valueT>::send_callback_type;
-        // using move_callbackT = typename ::ttg::In<keyT, valueT>::move_callback_type;
-        // using setsize_callbackT = typename ::ttg::In<keyT, valueT>::setsize_callback_type;
-        // using finalize_callbackT = typename ::ttg::In<keyT, valueT>::finalize_callback_type;
 
         //////////////////////////////////////////////////////////////////
-        // nonvoid key, nonvoid value
+        // case 1: nonvoid key, nonvoid value
         //////////////////////////////////////////////////////////////////
-        if constexpr (::ttg::meta::is_none_void_v<keyT,valueT>) {
+        if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && !std::is_void_v<valueT>) {
           auto move_callback = [this](const keyT &key, valueT &&value) {
             set_arg<i, keyT, valueT>(key, std::forward<valueT>(value));
           };
@@ -739,9 +766,9 @@ namespace madness {
           input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
         }
         //////////////////////////////////////////////////////////////////
-        // void key, nonvoid value
+        // case 4: void key, nonvoid value
         //////////////////////////////////////////////////////////////////
-        else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_void_v<valueT>) {
+        else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && !std::is_void_v<valueT>) {
           auto move_callback = [this](valueT &&value) {
             set_arg<i, keyT, valueT>(std::forward<valueT>(value));
           };
@@ -757,9 +784,39 @@ namespace madness {
           input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
         }
         //////////////////////////////////////////////////////////////////
-        // nonvoid key, void value
+        // case 2: nonvoid key, void value, mixed inputs
         //////////////////////////////////////////////////////////////////
-        else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_void_v<valueT>) {
+        else if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
+          auto send_callback = [this](const keyT &key) {
+            set_arg<i, keyT, void>(key);
+          };
+          auto setsize_callback = [this](const keyT &key, std::size_t size) {
+            set_argstream_size<i>(key, size);
+          };
+          auto finalize_callback = [this](const keyT &key) {
+            finalize_argstream<i>(key);
+          };
+          input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+        }
+        //////////////////////////////////////////////////////////////////
+        // case 5: void key, void value, mixed inputs
+        //////////////////////////////////////////////////////////////////
+        else if constexpr (::ttg::meta::is_all_void_v<keyT,valueT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
+          auto send_callback = [this]() {
+            set_arg<i, keyT, void>();
+          };
+          auto setsize_callback = [this](std::size_t size) {
+            set_argstream_size<i>(size);
+          };
+          auto finalize_callback = [this]() {
+            finalize_argstream<i>();
+          };
+          input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+        }
+        //////////////////////////////////////////////////////////////////
+        // case 3: nonvoid key, void value, no inputs
+        //////////////////////////////////////////////////////////////////
+        else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
           auto send_callback = [this](const keyT &key) {
             set_arg<keyT>(key);
           };
@@ -772,9 +829,9 @@ namespace madness {
           input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
         }
         //////////////////////////////////////////////////////////////////
-        // void key, void value
+        // case 6: void key, void value, no inputs
         //////////////////////////////////////////////////////////////////
-        else if constexpr (::ttg::meta::is_all_void_v<keyT,valueT>) {
+        else if constexpr (::ttg::meta::is_all_void_v<keyT,valueT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
           auto send_callback = [this]() {
             set_arg<keyT>();
           };
@@ -929,17 +986,17 @@ namespace madness {
       }
 
       /// Manual injection of a task with all input arguments specified as a tuple
-      template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
+      template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>,void>
       invoke(const Key &key, const input_values_tuple_type &args) {
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, key, args);
       }
 
       /// Manual injection of a task that has no arguments
-      template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
+      template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>,void>
       invoke(const Key &key) { set_arg<Key>(key); }
 
       /// Manual injection of a task that has no key or arguments
-      template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void> invoke() { set_arg<Key>(); }
+      template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>,void> invoke() { set_arg<Key>(); }
 
       /// keymap accessor
       /// @return the keymap

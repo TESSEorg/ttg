@@ -161,6 +161,63 @@ namespace ttg {
     const SpMatrix<Blk> &matrix_;
   };
 
+  // WriteShape commits shape to an existing SpMatrix on rank 0 and sends control message for every block
+  // since SpMatrix supports random inserts there is no need to commit the shape into the matrix, other than get the dimensions
+  template <typename Blk = blk_t>
+  class WriteShape : public Op<void, std::tuple<>, WriteShape<Blk>, Shape> {
+   public:
+    using baseT = Op<void, std::tuple<>, WriteShape<Blk>, Shape>;
+    static constexpr const int owner = 0;  // where data resides
+
+    WriteShape(const char *label, SpMatrix<Blk> &matrix, Edge<void, Shape> &in)
+        : baseT(edges(in), edges(), std::string("write_spmatrix_shape(") + label + ")", {std::string("shape[") + label + "]"}, {},
+        /* keymap */ []() { return owner; })
+        , matrix_(matrix) {}
+
+    void op(typename baseT::input_values_tuple_type && ins, std::tuple<> &out) {
+      const auto& shape = baseT::template get<0>(ins);
+      matrix_.resize(shape.nrows(), shape.ncols());
+    }
+
+   private:
+    SpMatrix<Blk> &matrix_;
+  };
+
+  // flow (move?) data into an existing SpMatrix on rank 0
+  template <typename Blk = blk_t>
+  class Write : public Op<Key<2>, std::tuple<>, Write<Blk>, Blk, void> {
+   public:
+    using baseT = Op<Key<2>, std::tuple<>, Write<Blk>, Blk, void>;
+
+    Write(const char *label, SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &data_in, Edge<Key<2>, void> &ctl_in)
+        : baseT(edges(data_in, ctl_in), edges(), std::string("write_spmatrix(") + label + ")", {std::string(label) + "ij", std::string("ij")}, {},
+            /* keymap */ [](auto key) { return 0; }),
+            matrix_(matrix) {}
+
+    void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
+      std::lock_guard<std::mutex> lock(mtx_);
+      ::ttg::print("Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem));
+      matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
+    }
+
+    /// grab completion status as a future<void>
+    /// \note cannot be called once this is executable
+    const std::shared_future<void>& status() const {
+      assert(!this->is_executable());
+      if (!completion_status_) {
+        auto promise = std::make_shared<std::promise<void>>();
+        completion_status_ = std::make_shared<std::shared_future<void>>(promise->get_future());
+        ttg_register_status(this->get_world(), std::move(promise));
+      }
+      return *completion_status_.get();
+    }
+
+   private:
+    std::mutex mtx_;
+    SpMatrix<Blk> &matrix_;
+    mutable std::shared_ptr<std::shared_future<void>> completion_status_;
+  };
+
   // pushes all blocks given by the shape
   class Push : public Op<void, std::tuple<Out<Key<2>, void>>, Push, Shape> {
    public:
@@ -173,14 +230,26 @@ namespace ttg {
 
     void op(typename baseT::input_values_tuple_type && ins, std::tuple<Out<Key<2>, void>> &out) {
       const auto& shape = baseT::get<0>(ins);
-      assert(shape.type() == Shape::Type::col2row);
-      long colidx = 0;
-      for(const auto& col: shape) {
-        for(const auto rowidx: col) {
-          ::sendk<0>(Key<2>({rowidx, colidx}), out);
+      if (shape.type() == Shape::Type::col2row) {
+        long colidx = 0;
+        for (const auto &col: shape) {
+          for (const auto rowidx: col) {
+            ::sendk<0>(Key<2>({rowidx, colidx}), out);
+          }
+          ++colidx;
         }
-        ++colidx;
       }
+      else if (shape.type() == Shape::Type::row2col) {
+        long rowidx = 0;
+        for (const auto &row: shape) {
+          for (const auto colidx: row) {
+            ::sendk<0>(Key<2>({rowidx, colidx}), out);
+          }
+          ++rowidx;
+        }
+      }
+      else
+        throw std::logic_error("Push received Shape with invalid type");
     }
   };
 
@@ -227,13 +296,15 @@ namespace ttg {
     /// of this function is true.
     /// @note up to the user to ensure completion before reading destination_matrix
     auto operator>>(SpMatrix<T>& destination_matrix) {
-#if 0  // new code not ready yet
+#if 1
       // shape writer writes shape to destination_matrix
-      // shape writer needs to control Writer also ... currently there is no way to activate flows so make control an input to every write task ...
-      // this also ensures that shape and data flows are consistent
+      ttg_register_ptr(world_, std::make_shared<matrix::WriteShape<T>>("", destination_matrix, shape_edge_));
+      // this converts shape to control messages to ensure that shape and data flows are consistent (i.e. if shape says there should be a block {r,c} Write will expect the data for it)
+      // TODO if pushall had been called ctl_edge_ is already live, hence can just attach to it
       ctl_edge_t ctl_edge;
-      ttg_register_ptr(world_, std::make_shared<matrix::WriteShape<T>>("", destination_matrix, shape_edge_, ctl_edge));
-      auto result = std::make_shared<matrix::Write<T>>(destination_matrix, data_edge_, ctl_edge);
+      if (!ctl_edge_.live())
+        ttg_register_ptr(world_, std::make_shared<matrix::Push>("", shape_edge_, ctl_edge));
+      auto result = std::make_shared<matrix::Write<T>>("", destination_matrix, data_edge_, (ctl_edge_.live() ? ctl_edge_ : ctl_edge));
 #else
       auto result = std::make_shared<Write_SpMatrix<T>>(destination_matrix, data_edge_);
 #endif

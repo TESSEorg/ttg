@@ -1205,6 +1205,16 @@ namespace ttg {
       }
     }
 
+    /// probes if this is already has at least one input
+    bool live() const {
+      bool result = false;
+      for(const auto& edge: p) {
+        if (!edge->ins.empty())
+          return true;
+      }
+      return result;
+    }
+
     void set_in(Out<keyT, valueT> *in) const {
       for (auto &edge : p) edge->set_in(in);
     }

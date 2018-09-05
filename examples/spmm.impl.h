@@ -659,7 +659,7 @@ int main(int argc, char **argv) {
     }
 
     // copy matrix using ttg::Matrix
-    if (0) {
+    if (1) {
       Matrix<blk_t> aflow;
       aflow << A;
       SpMatrix<> Acopy(A.rows(), A.cols());  // resizing will be automatic in the future when shape computation is complete .. see Matrix::operator>>
