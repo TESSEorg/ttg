@@ -446,8 +446,9 @@ namespace parsec {
 
       using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
       using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
-      static_assert(::ttg::meta::is_none_void_v<input_valueTs...> || std::tuple_size_v<input_terminals_type> == 1, "only single void input can be handled (i.e. can't mix void and nonvoid inputs)");
-      using input_values_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,std::tuple<data_wrapper_t<std::decay_t<input_valueTs>>...>,std::tuple<>>;
+      // if have data inputs and (always last) control input, convert last input to Void to make logic easier
+      using input_values_full_tuple_type = std::tuple<data_wrapper_t<::ttg::meta::void_to_Void_t<std::decay_t<input_valueTs>>>...>;
+      using input_values_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,input_values_full_tuple_type,typename ::ttg::meta::drop_last_n<input_values_full_tuple_type,std::size_t{1}>::type>;
       using input_unwrapped_values_tuple_type = std::tuple<std::decay_t<input_valueTs>...>;
 
       using output_terminals_type = output_terminalsT;
@@ -556,6 +557,15 @@ namespace parsec {
           (obj->*member)(data, size);
       }
 
+      // there are 6 types of set_arg:
+      // - case 1: nonvoid Key, complete Value type
+      // - case 2: nonvoid Key, void Value, mixed (data+control) inputs
+      // - case 3: nonvoid Key, void Value, no inputs
+      // - case 4:    void Key, complete Value type
+      // - case 5:    void Key, void Value, mixed (data+control) inputs
+      // - case 6:    void Key, void Value, no inputs
+      // implementation of these will be further split into "local-only" and global+local
+
       template <std::size_t i>
       void set_arg_from_msg(void *data, std::size_t size) {
           using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
@@ -563,14 +573,26 @@ namespace parsec {
           assert(size == sizeof(msg_t) &&
                  "Trying to unpack as message that does not hold the right number of bytes for this type");
           msg_t *msg = static_cast<msg_t*>(data);
-          if constexpr (::ttg::meta::is_none_void_v<keyT,valueT>)
+          // case 1
+          if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && !std::is_void_v<valueT>)
             set_arg<i, keyT, valueT>(msg->key, std::forward<valueT>(msg->val));
-          else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_void_v<valueT>)
+          // case 2
+          if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
+            set_arg<i, keyT, ::ttg::Void>(msg->key, ::ttg::Void{});
+          // case 3
+          else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
             set_arg<keyT>(msg->key);
-          else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_void_v<valueT>)
+          // case 4
+          else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && !std::is_void_v<valueT>)
             set_arg<i, keyT, valueT>(std::forward<valueT>(msg->val));
-          else if constexpr (::ttg::meta::is_all_void_v<keyT,valueT>)
+          // case 5
+          else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
+            set_arg<i, keyT, ::ttg::Void>(::ttg::Void{});
+          // case 6
+          else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
             set_arg<keyT>();
+          else
+            abort();
       }
 
       template <std::size_t i, typename Key, typename Value>
@@ -676,14 +698,16 @@ namespace parsec {
         }
       }
 
+      // cases 1+2
       template <std::size_t i, typename Key, typename Value>
-      std::enable_if_t<::ttg::meta::is_none_void_v<Key,std::decay_t<Value>>, void>
+      std::enable_if_t<!::ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void>
       set_arg(const Key &key, Value &&value) {
         set_arg_impl<i>(key,std::forward<Value>(value));
       }
 
+      // cases 4+5
       template <std::size_t i, typename Key, typename Value>
-      std::enable_if_t<::ttg::meta::is_void_v<Key> && !::ttg::meta::is_void_v<std::decay_t<Value>>, void>
+      std::enable_if_t<::ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void>
       set_arg(Value &&value) {
         set_arg_impl<i>(::ttg::Void{},std::forward<Value>(value));
       }
@@ -733,7 +757,7 @@ namespace parsec {
         remote_dep_dequeue_send(owner, deps);
       }
 
-      // Used to generate tasks with no input arguments
+      // case 3
       template <typename Key = keyT>
       std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
       set_arg(const Key &key) {
@@ -763,7 +787,7 @@ namespace parsec {
         __parsec_schedule(es, &task->parsec_task, 0);
       }
 
-      // Used to generate tasks with no input arguments
+      // case 6
       template <typename Key = keyT>
       std::enable_if_t<::ttg::meta::is_void_v<Key>,void>
       set_arg() {
