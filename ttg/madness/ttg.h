@@ -205,7 +205,7 @@ namespace madness {
       static_assert(::ttg::meta::is_none_void_v<input_valueTs...> || ::ttg::meta::is_last_void_v<input_valueTs...>, "at most one void input can be handled, and it must come last");
       // if have data inputs and (always last) control input, convert last input to Void to make logic easier
       using input_values_full_tuple_type = std::tuple<data_wrapper_t<::ttg::meta::void_to_Void_t<std::decay_t<input_valueTs>>>...>;
-      using input_values_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,input_values_full_tuple_type,typename ::ttg::meta::drop_last_n<input_values_full_tuple_type,1ul>::type>;
+      using input_values_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,input_values_full_tuple_type,typename ::ttg::meta::drop_last_n<input_values_full_tuple_type,std::size_t{1}>::type>;
       using input_unwrapped_values_tuple_type = input_values_tuple_type;
 
       using output_terminals_type = output_terminalsT;
@@ -279,12 +279,14 @@ namespace madness {
 
      protected:
 
-      // there are 3 types of set_arg for nonvoid Key:
-      // - case 1: complete Value type
-      // - case 2: void Value, mixed (data+control) inputs
-      // - case 3: void Value, no inputs
-      // + 3 more types for void Key (cases 4-6)
-      // case 2 will be implemented by passing dummy ::ttg::Void object to reduce the number of code branches
+      // there are 6 types of set_arg:
+      // - case 1: nonvoid Key, complete Value type
+      // - case 2: nonvoid Key, void Value, mixed (data+control) inputs
+      // - case 3: nonvoid Key, void Value, no inputs
+      // - case 4:    void Key, complete Value type
+      // - case 5:    void Key, void Value, mixed (data+control) inputs
+      // - case 6:    void Key, void Value, no inputs
+      // cases 2 and 5 will be implemented by passing dummy ::ttg::Void object to reduce the number of code branches
 
       // case 1:
       template <std::size_t i, typename Key, typename Value>
