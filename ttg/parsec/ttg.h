@@ -83,10 +83,9 @@ namespace parsec {
       auto *execution_stream() { return es; }
       auto *taskpool() { return tpool; }
 
-      void increment_created() { parsec_atomic_fetch_inc_int32(&created_counter()); }
+      void increment_created() { parsec_atomic_fetch_inc_int32(&taskpool()->nb_tasks); }
       void increment_sent_to_sched() { parsec_atomic_fetch_inc_int32(&sent_to_sched_counter()); }
 
-      int32_t created() const { return this->created_counter(); }
       int32_t sent_to_sched() const { return this->sent_to_sched_counter(); }
 
      private:
@@ -94,10 +93,6 @@ namespace parsec {
       parsec_execution_stream_t *es = nullptr;
       parsec_taskpool_t *tpool = nullptr;
 
-      volatile int32_t &created_counter() const {
-        static volatile int32_t created = 0;
-        return created;
-      }
       volatile int32_t &sent_to_sched_counter() const {
         static volatile int32_t sent_to_sched = 0;
         return sent_to_sched;
@@ -666,7 +661,6 @@ namespace parsec {
             free(newtask);
           } else {
             newtask->op_ht_item.key = hk;
-            parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
             world.increment_created();
             parsec_hash_table_nolock_insert(&tasks_table, &newtask->op_ht_item);
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
@@ -808,6 +802,7 @@ namespace parsec {
         using ::ttg::unique_hash;
         task->key = unique_hash<parsec_key_t>(key);
         task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
+        world.increment_created();
         __parsec_schedule(es, &task->parsec_task, 0);
       }
 
@@ -838,6 +833,7 @@ namespace parsec {
         using ::ttg::unique_hash;
         task->key = unique_hash<parsec_key_t>(0);
         task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
+        world.increment_created();
         __parsec_schedule(es, &task->parsec_task, 0);
       }
 
@@ -1162,7 +1158,6 @@ namespace parsec {
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
       invoke(const Key &key, const input_values_tuple_type &args) {
         // That task is going to complete, so count it as to execute
-        parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, key, args);
       }
 
@@ -1170,21 +1165,18 @@ namespace parsec {
       template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void>
       invoke(const input_values_tuple_type &args) {
         // That task is going to complete, so count it as to execute
-        parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, args);
       }
 
       // Manual injection of a task that has no arguments
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void> invoke(const Key &key) {
         // That task is going to complete, so count it as to execute
-        parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
         set_arg<keyT>(key);
       }
 
       // Manual injection of a task that has no key or arguments
       template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void> invoke() {
         // That task is going to complete, so count it as to execute
-        parsec_atomic_fetch_inc_int32(&world.taskpool()->nb_tasks);
         set_arg<keyT>();
       }
 
