@@ -245,6 +245,7 @@ namespace mra {
                     }
                 }
                 assert(itb == endb); // should be true if they really do conform
+                TTGUNUSED(endb);
             }
         }
         else { // general but slowest iteration
@@ -259,6 +260,7 @@ namespace mra {
                 ++itb;
             }
             assert(itb == endb); // should be true if they really do conform
+            TTGUNUSED(endb);
         }        
     }
 

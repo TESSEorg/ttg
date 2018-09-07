@@ -240,7 +240,7 @@ int main(int argc, char** argv)
         Edge<sumreskeyT,yT> sumresult;
         Edge<sumreskeyT,kT> k;
         
-        const size_t N = 90000;
+        const size_t N = 900;
         
         auto start = make_start(x, N);
         auto guess = make_guess(x, xyguess);
@@ -257,7 +257,7 @@ int main(int argc, char** argv)
         auto connected = make_graph_executable(start.get());
         assert(connected);
         if (ttg_default_execution_context().rank() == 0) {
-            std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
+            std::cout << "Is everything connected? " << connected << std::endl;
             std::cout << "==== begin dot ====\n";
             std::cout << Dot()(start.get()) << std::endl;
             std::cout << "====  end dot  ====\n";

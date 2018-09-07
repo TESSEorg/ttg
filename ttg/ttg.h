@@ -18,6 +18,8 @@
 #include "util/meta.h"
 #include "util/runtimes.h"
 
+#define TTGUNUSED(x) ((void)(x))
+
 namespace ttg {
 
 /// @brief A complete version of void

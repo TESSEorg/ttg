@@ -501,12 +501,14 @@ namespace madness {
         // body
         const auto owner = keymap();
         if (owner != world.rank()) {
-          if (tracing())
+          if (tracing()) {
             ::ttg::print(world.rank(), ":", get_name(), " : forwarding stream size for terminal ", i);
-            worldobjT::send(owner, &opT::template set_argstream_size<i, true>, size);
+          }
+          worldobjT::send(owner, &opT::template set_argstream_size<i, true>, size);
         } else {
-          if (tracing())
+          if (tracing()) {
             ::ttg::print(world.rank(), ":", get_name(), " : setting stream size for terminal ", i);
+          }
 
           accessorT acc;
           if (cache.insert(acc, 0)) acc->second = new OpArgs();  // It will be deleted by the task q
@@ -546,12 +548,14 @@ namespace madness {
         // body
         const auto owner = keymap(key);
         if (owner != world.rank()) {
-          if (tracing())
+          if (tracing()) {
             ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream size for terminal ", i);
-            worldobjT::send(owner, &opT::template set_argstream_size<i>, key, size);
+          }
+          worldobjT::send(owner, &opT::template set_argstream_size<i>, key, size);
         } else {
-          if (tracing())
+          if (tracing()) {
             ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": setting stream size for terminal ", i);
+          }
 
           accessorT acc;
           if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
@@ -589,16 +593,19 @@ namespace madness {
         // body
         const auto owner = keymap(key);
         if (owner != world.rank()) {
-          if (tracing())
+          if (tracing()) {
             ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
+          }
           worldobjT::send(owner, &opT::template finalize_argstream<i>, key);
         } else {
-          if (tracing())
+          if (tracing()) {
             ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
+          }
 
           accessorT acc;
           const auto found = cache.find(acc, key);
           assert(found && "Op::finalize_argstream called but no values had been received yet for this key");
+          TTGUNUSED(found);
           OpArgs *args = acc->second;
 
           // check if stream is already bounded
@@ -619,7 +626,9 @@ namespace madness {
           args->counter--;
           // ready to run the task?
           if (args->counter == 0) {
-            if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+            if (tracing()) {
+              ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+            }
             args->derived = static_cast<derivedT *>(this);
             args->key = key;
 
@@ -640,16 +649,19 @@ namespace madness {
         // body
         const int owner = keymap();
         if (owner != world.rank()) {
-          if (tracing())
+          if (tracing()) {
             ::ttg::print(world.rank(), ":", get_name(), " : forwarding stream finalize for terminal ", i);
+          }
           worldobjT::send(owner, &opT::template finalize_argstream<i, true>);
         } else {
-          if (tracing())
+          if (tracing()) {
             ::ttg::print(world.rank(), ":", get_name(), " : finalizing stream for terminal ", i);
+          }
 
           accessorT acc;
           const auto found = cache.find(acc, 0);
           assert(found && "Op::finalize_argstream called but no values had been received yet for this key");
+          TTGUNUSED(found);
           OpArgs *args = acc->second;
 
           // check if stream is already bounded
@@ -669,7 +681,9 @@ namespace madness {
           args->counter--;
           // ready to run the task?
           if (args->counter == 0) {
-            if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
+            if (tracing()) {
+              ::ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
+            }
             args->derived = static_cast<derivedT *>(this);
 
             world.taskq.add(args);
@@ -978,7 +992,7 @@ namespace madness {
         if (threads.empty()) {
           static pthread_t main_thread_id = pthread_self();
           threads.push_back(&main_thread_id);
-          for (int t = 0; t != madness::ThreadPool::size(); ++t) {
+          for (auto t = 0ul; t != madness::ThreadPool::size(); ++t) {
             threads.push_back(&(madness::ThreadPool::get_threads()[t].get_id()));
           }
         }

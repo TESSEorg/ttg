@@ -363,16 +363,16 @@ class SpMM {
 
       // for each i and j that belongs to this node
       // determine first k that contributes, initialize input {i,j,first_k} flow to 0
-      for (long i = 0; i != a_rowidx_to_colidx_.size(); ++i) {
+      for (auto i = 0ul; i != a_rowidx_to_colidx_.size(); ++i) {
         if (a_rowidx_to_colidx_[i].empty()) continue;
-        for (long j = 0; j != b_colidx_to_rowidx_.size(); ++j) {
+        for (auto j = 0ul; j != b_colidx_to_rowidx_.size(); ++j) {
           if (b_colidx_to_rowidx_[j].empty()) continue;
 
           // assuming here {i,j,k} for all k map to same node
-          auto owner = keymap(Key<3>({i, j, 0l}));
+          auto owner = keymap(Key<3>({i, j, 0ul}));
           if (owner == ttg_default_execution_context().rank()) {
             if (true) {
-              long k;
+              decltype(i) k;
               bool have_k;
               std::tie(k, have_k) = compute_first_k(i, j);
               if (have_k) {
@@ -491,8 +491,8 @@ class SpMM {
     std::vector<std::vector<long>> colidx_to_rowidx;
     for (int k = 0; k < mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
       for (typename SpMatrix<Blk>::InnerIterator it(mat, k); it; ++it) {
-        auto row = it.row();
-        auto col = it.col();
+        const std::size_t row = it.row();
+        const std::size_t col = it.col();
         if (col >= colidx_to_rowidx.size()) colidx_to_rowidx.resize(col + 1);
         // in either case (col- or row-major) row index increasing for the given col
         colidx_to_rowidx[col].push_back(row);
@@ -505,8 +505,8 @@ class SpMM {
     std::vector<std::vector<long>> rowidx_to_colidx;
     for (int k = 0; k < mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
       for (typename SpMatrix<Blk>::InnerIterator it(mat, k); it; ++it) {
-        auto row = it.row();
-        auto col = it.col();
+        const std::size_t row = it.row();
+        const std::size_t col = it.col();
         if (row >= rowidx_to_colidx.size()) rowidx_to_colidx.resize(row + 1);
         // in either case (col- or row-major) col index increasing for the given row
         rowidx_to_colidx[row].push_back(col);
@@ -633,6 +633,7 @@ int main(int argc, char **argv) {
     // ready to run!
     auto connected = make_graph_executable(&control);
     assert(connected);
+    TTGUNUSED(connected);
 
     // ready, go! need only 1 kick, so must be done by 1 thread only
     if (ttg_default_execution_context().rank() == 0) control.start();
@@ -674,6 +675,7 @@ int main(int argc, char **argv) {
       // ready to run!
       auto connected = make_graph_executable(&control);
       assert(connected);
+      TTGUNUSED(connected);
 
       // ready, go! need only 1 kick, so must be done by 1 thread only
       if (ttg_default_execution_context().rank() == 0) control.start();

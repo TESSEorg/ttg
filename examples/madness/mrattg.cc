@@ -449,7 +449,7 @@ void test0() {
     auto connected = make_graph_executable(start.get());
     assert(connected);
     if (ttg_default_execution_context().rank() == 0) {
-        std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
+        std::cout << "Is everything connected? " << connected << std::endl;
         std::cout << "==== begin dot ====\n";
         std::cout << Dot()(start.get()) << std::endl;
         std::cout << "====  end dot  ====\n";
@@ -475,6 +475,7 @@ void test1() {
     auto start = make_start(ctl);
     std::vector<std::unique_ptr<OpBase>> ops;
     for (auto i : range(3)) {
+        TTGUNUSED(i);
         rnodeEdge<T,K,NDIM> a("a"), c("c");
         cnodeEdge<T,K,NDIM> b("b");
     
@@ -500,7 +501,7 @@ void test1() {
     auto connected = make_graph_executable(start.get());
     assert(connected);
     if (ttg_default_execution_context().rank() == 0) {
-        std::cout << "Is everything connected? " << Verify()(start.get()) << std::endl;
+        std::cout << "Is everything connected? " << connected << std::endl;
         std::cout << "==== begin dot ====\n";
         std::cout << Dot()(start.get()) << std::endl;
         std::cout << "====  end dot  ====\n";
