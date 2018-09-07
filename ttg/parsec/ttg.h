@@ -446,6 +446,7 @@ namespace parsec {
 
       using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
       using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
+      static_assert(::ttg::meta::is_none_Void_v<input_valueTs...>, "::ttg::Void is for internal use only, do not use it");
       // if have data inputs and (always last) control input, convert last input to Void to make logic easier
       using input_values_full_tuple_type = std::tuple<data_wrapper_t<::ttg::meta::void_to_Void_t<std::decay_t<input_valueTs>>>...>;
       using input_values_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,input_values_full_tuple_type,typename ::ttg::meta::drop_last_n<input_values_full_tuple_type,std::size_t{1}>::type>;

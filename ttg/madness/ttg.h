@@ -202,6 +202,7 @@ namespace madness {
 
       using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
       using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
+      static_assert(::ttg::meta::is_none_Void_v<input_valueTs...>, "::ttg::Void is for internal use only, do not use it");
       static_assert(::ttg::meta::is_none_void_v<input_valueTs...> || ::ttg::meta::is_last_void_v<input_valueTs...>, "at most one void input can be handled, and it must come last");
       // if have data inputs and (always last) control input, convert last input to Void to make logic easier
       using input_values_full_tuple_type = std::tuple<data_wrapper_t<::ttg::meta::void_to_Void_t<std::decay_t<input_valueTs>>>...>;
