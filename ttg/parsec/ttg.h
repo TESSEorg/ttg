@@ -534,9 +534,11 @@ namespace parsec {
         derivedT *obj = (derivedT *)task->object_ptr;
         if constexpr(!::ttg::meta::is_void_v<keyT>) {
           obj->op(keyT((uintptr_t) task->key), obj->output_terminals);
-        } else {
+        } else if constexpr(::ttg::meta::is_void_v<keyT>) {
           obj->op(obj->output_terminals);
         }
+        else
+          abort();
       }
 
      protected:
@@ -745,7 +747,8 @@ namespace parsec {
           else
             set_arg_local<i, keyT, Value>(std::forward<Value>(value));
           return;
-        }
+        } else  // shipping tasks is not yet implemented
+          abort();
         // the target task is remote. Pack the information and send it to
         // the corresponding peer.
         // TODO do we need to copy value?
@@ -781,60 +784,74 @@ namespace parsec {
       set_arg(const Key &key) {
         static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, "logic error: set_arg (case 3) called but input_values_tuple_type is nonempty");
 
-        if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
-        // create PaRSEC task
-        // and give it to the scheduler
-        my_op_t *task;
-        parsec_execution_stream_s *es = world.execution_stream();
-        parsec_thread_mempool_t *mempool =
-            &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-        task = (my_op_t *)parsec_thread_mempool_allocate(mempool);
-        memset((void *)task, 0, sizeof(my_op_t));
-        task->parsec_task.mempool_owner = mempool;
+        const auto owner = keymap(key);
+        if( owner == ttg_default_execution_context().rank() ) {
 
-        OBJ_CONSTRUCT(task, parsec_list_item_t);
-        task->parsec_task.task_class = &this->self;
-        task->parsec_task.taskpool = world.taskpool();
-        task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
+          // create PaRSEC task
+          // and give it to the scheduler
+          my_op_t *task;
+          parsec_execution_stream_s *es = world.execution_stream();
+          parsec_thread_mempool_t *mempool =
+              &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
+          task = (my_op_t *) parsec_thread_mempool_allocate(mempool);
+          memset((void *) task, 0, sizeof(my_op_t));
+          task->parsec_task.mempool_owner = mempool;
 
-        task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
-        task->object_ptr = static_cast<derivedT *>(this);
-        using ::ttg::unique_hash;
-        task->key = unique_hash<parsec_key_t>(key);
-        task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
-        world.increment_created();
-        __parsec_schedule(es, &task->parsec_task, 0);
+          OBJ_CONSTRUCT(task, parsec_list_item_t);
+          task->parsec_task.task_class = &this->self;
+          task->parsec_task.taskpool = world.taskpool();
+          task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
+
+          task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
+          task->object_ptr = static_cast<derivedT *>(this);
+          using ::ttg::unique_hash;
+          task->key = unique_hash<parsec_key_t>(key);
+          task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
+          world.increment_created();
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+          world.increment_sent_to_sched();
+          __parsec_schedule(es, &task->parsec_task, 0);
+        }
+        else // shipping tasks is not yet implemented
+          abort();
       }
 
       // case 6
       template <typename Key = keyT>
       std::enable_if_t<::ttg::meta::is_void_v<Key>,void>
       set_arg() {
-        static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type >, "set_arg called without a value but valueT!=void");
-        if (tracing())
-          ::ttg::print(world.rank(), ":", get_name(), " : invoking op ");
-        // create PaRSEC task
-        // and give it to the scheduler
-        my_op_t *task;
-        parsec_execution_stream_s *es = world.execution_stream();
-        parsec_thread_mempool_t *mempool =
-            &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-        task = (my_op_t *)parsec_thread_mempool_allocate(mempool);
-        memset((void *)task, 0, sizeof(my_op_t));
-        task->parsec_task.mempool_owner = mempool;
+        static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, "logic error: set_arg (case 3) called but input_values_tuple_type is nonempty");
 
-        OBJ_CONSTRUCT(task, parsec_list_item_t);
-        task->parsec_task.task_class = &this->self;
-        task->parsec_task.taskpool = world.taskpool();
-        task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
+        const auto owner = keymap();
+        if( owner == ttg_default_execution_context().rank() ) {
 
-        task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
-        task->object_ptr = static_cast<derivedT *>(this);
-        using ::ttg::unique_hash;
-        task->key = unique_hash<parsec_key_t>(0);
-        task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
-        world.increment_created();
-        __parsec_schedule(es, &task->parsec_task, 0);
+          // create PaRSEC task
+          // and give it to the scheduler
+          my_op_t *task;
+          parsec_execution_stream_s *es = world.execution_stream();
+          parsec_thread_mempool_t *mempool =
+              &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
+          task = (my_op_t *) parsec_thread_mempool_allocate(mempool);
+          memset((void *) task, 0, sizeof(my_op_t));
+          task->parsec_task.mempool_owner = mempool;
+
+          OBJ_CONSTRUCT(task, parsec_list_item_t);
+          task->parsec_task.task_class = &this->self;
+          task->parsec_task.taskpool = world.taskpool();
+          task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
+
+          task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
+          task->object_ptr = static_cast<derivedT *>(this);
+          using ::ttg::unique_hash;
+          task->key = unique_hash<parsec_key_t>(0);
+          task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : creating task");
+          world.increment_created();
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
+          world.increment_sent_to_sched();
+          __parsec_schedule(es, &task->parsec_task, 0);
+        }
       }
 
       // Used by invoke to set all arguments associated with a task
