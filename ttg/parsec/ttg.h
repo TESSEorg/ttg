@@ -441,8 +441,10 @@ namespace parsec {
 
       using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueTs>...>;
       using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
-      static_assert(::ttg::meta::is_none_void_v<input_valueTs...> || std::tuple_size_v<input_terminals_type> == 1, "only single void input can be handled (i.e. can't mix void and nonvoid inputs)");
-      using input_values_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,std::tuple<data_wrapper_t<std::decay_t<input_valueTs>>...>,std::tuple<>>;
+      static_assert(::ttg::meta::is_none_Void_v<input_valueTs...>, "::ttg::Void is for internal use only, do not use it");
+      // if have data inputs and (always last) control input, convert last input to Void to make logic easier
+      using input_values_full_tuple_type = std::tuple<data_wrapper_t<::ttg::meta::void_to_Void_t<std::decay_t<input_valueTs>>>...>;
+      using input_values_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,input_values_full_tuple_type,typename ::ttg::meta::drop_last_n<input_values_full_tuple_type,std::size_t{1}>::type>;
       using input_unwrapped_values_tuple_type = std::tuple<std::decay_t<input_valueTs>...>;
 
       using output_terminals_type = output_terminalsT;
@@ -532,9 +534,11 @@ namespace parsec {
         derivedT *obj = (derivedT *)task->object_ptr;
         if constexpr(!::ttg::meta::is_void_v<keyT>) {
           obj->op(keyT((uintptr_t) task->key), obj->output_terminals);
-        } else {
+        } else if constexpr(::ttg::meta::is_void_v<keyT>) {
           obj->op(obj->output_terminals);
         }
+        else
+          abort();
       }
 
      protected:
@@ -551,6 +555,15 @@ namespace parsec {
           (obj->*member)(data, size);
       }
 
+      // there are 6 types of set_arg:
+      // - case 1: nonvoid Key, complete Value type
+      // - case 2: nonvoid Key, void Value, mixed (data+control) inputs
+      // - case 3: nonvoid Key, void Value, no inputs
+      // - case 4:    void Key, complete Value type
+      // - case 5:    void Key, void Value, mixed (data+control) inputs
+      // - case 6:    void Key, void Value, no inputs
+      // implementation of these will be further split into "local-only" and global+local
+
       template <std::size_t i>
       void set_arg_from_msg(void *data, std::size_t size) {
           using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
@@ -558,24 +571,36 @@ namespace parsec {
           assert(size == sizeof(msg_t) &&
                  "Trying to unpack as message that does not hold the right number of bytes for this type");
           msg_t *msg = static_cast<msg_t*>(data);
-          if constexpr (::ttg::meta::is_none_void_v<keyT,valueT>)
+          // case 1
+          if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && !std::is_void_v<valueT>)
             set_arg<i, keyT, valueT>(msg->key, std::forward<valueT>(msg->val));
-          else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_void_v<valueT>)
+          // case 2
+          if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
+            set_arg<i, keyT, ::ttg::Void>(msg->key, ::ttg::Void{});
+          // case 3
+          else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
             set_arg<keyT>(msg->key);
-          else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_void_v<valueT>)
+          // case 4
+          else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && !std::is_void_v<valueT>)
             set_arg<i, keyT, valueT>(std::forward<valueT>(msg->val));
-          else if constexpr (::ttg::meta::is_all_void_v<keyT,valueT>)
+          // case 5
+          else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
+            set_arg<i, keyT, ::ttg::Void>(::ttg::Void{});
+          // case 6
+          else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
             set_arg<keyT>();
+          else
+            abort();
       }
 
       template <std::size_t i, typename Key, typename Value>
-      std::enable_if_t<::ttg::meta::is_none_void_v<Key,std::decay_t<Value>>, void>
+      std::enable_if_t<!::ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void>
       set_arg_local(const Key &key, Value && value) {
         set_arg_local_impl<i>(key,std::forward<Value>(value));
       }
 
       template <std::size_t i, typename Key = keyT, typename Value>
-      std::enable_if_t<::ttg::meta::is_void_v<Key> && !::ttg::meta::is_void_v<std::decay_t<Value>>, void>
+      std::enable_if_t<::ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void>
       set_arg_local(Value && value) {
         set_arg_local_impl<i>(::ttg::Void{},std::forward<Value>(value));
       }
@@ -583,9 +608,30 @@ namespace parsec {
       // Used to set the i'th argument
       template <std::size_t i, typename Key, typename Value>
       void set_arg_local_impl(const Key &key, Value && value) {
-        using valueT = data_unwrapped_t<typename std::tuple_element<i, input_values_tuple_type>::type>;
+        using valueT = data_unwrapped_t<typename std::tuple_element<i, input_values_full_tuple_type>::type>;
+        constexpr const bool valueT_is_Void = ::ttg::meta::is_void_v<valueT>;
 
-        if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i, " : value = ", value);
+        if (tracing()) {
+          if constexpr (!valueT_is_Void) {
+            ::ttg::print(world.rank(),
+                         ":",
+                         get_name(),
+                         " : ",
+                         key,
+                         ": received value for argument : ",
+                         i,
+                         " : value = ",
+                         value);
+          } else {
+            ::ttg::print(world.rank(),
+                         ":",
+                         get_name(),
+                         " : ",
+                         key,
+                         ": received value for argument : ",
+                         i);
+          }
+        }
 
         using ::ttg::unique_hash;
         parsec_key_t hk = unique_hash<parsec_key_t>(key);
@@ -627,36 +673,38 @@ namespace parsec {
 
         assert(task->key == hk);
 
-        if (NULL != task->parsec_task.data[i].data_in) {
-          ::ttg::print_error(get_name(), " : ", key, ": error argument is already set : ", i);
-          throw std::logic_error("bad set arg");
+        if constexpr (!valueT_is_Void) {
+          if (NULL != task->parsec_task.data[i].data_in) {
+            ::ttg::print_error(get_name(), " : ", key, ": error argument is already set : ", i);
+            throw std::logic_error("bad set arg");
+          }
+
+          void *task_body_tail_ptr =
+              reinterpret_cast<void *>(reinterpret_cast<intptr_t>(task) + static_cast<intptr_t>(sizeof(my_op_t)));
+          std::size_t task_body_tail_size = sizeof(input_values_tuple_type) + alignment_of_input_tuple;
+          task->user_tuple = std::align(alignment_of_input_tuple, sizeof(input_values_tuple_type), task_body_tail_ptr,
+                                        task_body_tail_size);
+          assert(task->user_tuple != nullptr);
+          input_values_tuple_type *tuple = static_cast<input_values_tuple_type *>(task->user_tuple);
+
+          // Q. do we need to worry about someone calling set_arg "directly", i.e. through BaseOp::send and passing their
+          // own (non-PaRSEC) value rather than value owned by PaRSEC?
+          // N.B. wrap(data_wrapper_t) does nothing, so no double wrapping here
+          std::get<i>(*tuple) = data_wrapper_t<valueT>(wrap(std::forward<Value>(value)));
+          parsec_data_copy_t *copy = OBJ_NEW(parsec_data_copy_t);
+          task->parsec_task.data[i].data_in = copy;
+          copy->device_private = (void *) (std::get<i>(*tuple));  // tuple holds pointers already
+          // uncomment this if you want to test deserialization ... also comment out the placement new above
+          //    auto* ddesc = ::ttg::get_data_descriptor<valueT>();
+          //    void* value_ptr = (void*)&value;
+          //    uint64_t hs, ps;
+          //    int is_contiguous;
+          //    void* buf;
+          //    (*(ddesc->get_info))(value_ptr, &hs, &ps, &is_contiguous, &buf);
+          //    assert(is_contiguous);
+          //    (*(ddesc->unpack_header))(copy->device_private, hs, value_ptr);
+          //    (*(ddesc->unpack_payload))(copy->device_private, ps, 0, value_ptr);
         }
-
-        void *task_body_tail_ptr =
-            reinterpret_cast<void *>(reinterpret_cast<intptr_t>(task) + static_cast<intptr_t>(sizeof(my_op_t)));
-        std::size_t task_body_tail_size = sizeof(input_values_tuple_type) + alignment_of_input_tuple;
-        task->user_tuple = std::align(alignment_of_input_tuple, sizeof(input_values_tuple_type), task_body_tail_ptr,
-                                      task_body_tail_size);
-        assert(task->user_tuple != nullptr);
-        input_values_tuple_type *tuple = static_cast<input_values_tuple_type *>(task->user_tuple);
-
-        // Q. do we need to worry about someone calling set_arg "directly", i.e. through BaseOp::send and passing their
-        // own (non-PaRSEC) value rather than value owned by PaRSEC?
-        // N.B. wrap(data_wrapper_t) does nothing, so no double wrapping here
-        std::get<i>(*tuple) = data_wrapper_t<valueT>(wrap(std::forward<Value>(value)));
-        parsec_data_copy_t *copy = OBJ_NEW(parsec_data_copy_t);
-        task->parsec_task.data[i].data_in = copy;
-        copy->device_private = (void *)(std::get<i>(*tuple));  // tuple holds pointers already
-        // uncomment this if you want to test deserialization ... also comment out the placement new above
-        //    auto* ddesc = ::ttg::get_data_descriptor<valueT>();
-        //    void* value_ptr = (void*)&value;
-        //    uint64_t hs, ps;
-        //    int is_contiguous;
-        //    void* buf;
-        //    (*(ddesc->get_info))(value_ptr, &hs, &ps, &is_contiguous, &buf);
-        //    assert(is_contiguous);
-        //    (*(ddesc->unpack_header))(copy->device_private, hs, value_ptr);
-        //    (*(ddesc->unpack_payload))(copy->device_private, ps, 0, value_ptr);
 
         int32_t count = parsec_atomic_fetch_inc_int32(&task->in_data_count)+1;
         assert(count <= self.dependencies_goal);
@@ -670,14 +718,16 @@ namespace parsec {
         }
       }
 
+      // cases 1+2
       template <std::size_t i, typename Key, typename Value>
-      std::enable_if_t<::ttg::meta::is_none_void_v<Key,std::decay_t<Value>>, void>
+      std::enable_if_t<!::ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void>
       set_arg(const Key &key, Value &&value) {
         set_arg_impl<i>(key,std::forward<Value>(value));
       }
 
+      // cases 4+5
       template <std::size_t i, typename Key, typename Value>
-      std::enable_if_t<::ttg::meta::is_void_v<Key> && !::ttg::meta::is_void_v<std::decay_t<Value>>, void>
+      std::enable_if_t<::ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void>
       set_arg(Value &&value) {
         set_arg_impl<i>(::ttg::Void{},std::forward<Value>(value));
       }
@@ -685,7 +735,7 @@ namespace parsec {
       // Used to set the i'th argument
       template <std::size_t i, typename Key, typename Value>
       void set_arg_impl(const Key &key, Value &&value) {
-        using valueT = data_unwrapped_t<typename std::tuple_element<i, input_values_tuple_type>::type>;
+        using valueT = data_unwrapped_t<typename std::tuple_element<i, input_values_full_tuple_type>::type>;
         int owner;
         if constexpr (!::ttg::meta::is_void_v<Key>)
           owner = keymap(key);
@@ -697,7 +747,8 @@ namespace parsec {
           else
             set_arg_local<i, keyT, Value>(std::forward<Value>(value));
           return;
-        }
+        } else  // shipping tasks is not yet implemented
+          abort();
         // the target task is remote. Pack the information and send it to
         // the corresponding peer.
         // TODO do we need to copy value?
@@ -727,66 +778,80 @@ namespace parsec {
         remote_dep_dequeue_send(owner, deps);
       }
 
-      // Used to generate tasks with no input arguments
+      // case 3
       template <typename Key = keyT>
       std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
       set_arg(const Key &key) {
-        static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, "set_arg called without a value but valueT!=void");
+        static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, "logic error: set_arg (case 3) called but input_values_tuple_type is nonempty");
 
-        if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
-        // create PaRSEC task
-        // and give it to the scheduler
-        my_op_t *task;
-        parsec_execution_stream_s *es = world.execution_stream();
-        parsec_thread_mempool_t *mempool =
-            &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-        task = (my_op_t *)parsec_thread_mempool_allocate(mempool);
-        memset((void *)task, 0, sizeof(my_op_t));
-        task->parsec_task.mempool_owner = mempool;
+        const auto owner = keymap(key);
+        if( owner == ttg_default_execution_context().rank() ) {
 
-        OBJ_CONSTRUCT(task, parsec_list_item_t);
-        task->parsec_task.task_class = &this->self;
-        task->parsec_task.taskpool = world.taskpool();
-        task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
+          // create PaRSEC task
+          // and give it to the scheduler
+          my_op_t *task;
+          parsec_execution_stream_s *es = world.execution_stream();
+          parsec_thread_mempool_t *mempool =
+              &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
+          task = (my_op_t *) parsec_thread_mempool_allocate(mempool);
+          memset((void *) task, 0, sizeof(my_op_t));
+          task->parsec_task.mempool_owner = mempool;
 
-        task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
-        task->object_ptr = static_cast<derivedT *>(this);
-        using ::ttg::unique_hash;
-        task->key = unique_hash<parsec_key_t>(key);
-        task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
-        world.increment_created();
-        __parsec_schedule(es, &task->parsec_task, 0);
+          OBJ_CONSTRUCT(task, parsec_list_item_t);
+          task->parsec_task.task_class = &this->self;
+          task->parsec_task.taskpool = world.taskpool();
+          task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
+
+          task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
+          task->object_ptr = static_cast<derivedT *>(this);
+          using ::ttg::unique_hash;
+          task->key = unique_hash<parsec_key_t>(key);
+          task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
+          world.increment_created();
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+          world.increment_sent_to_sched();
+          __parsec_schedule(es, &task->parsec_task, 0);
+        }
+        else // shipping tasks is not yet implemented
+          abort();
       }
 
-      // Used to generate tasks with no input arguments
+      // case 6
       template <typename Key = keyT>
       std::enable_if_t<::ttg::meta::is_void_v<Key>,void>
       set_arg() {
-        static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type >, "set_arg called without a value but valueT!=void");
-        if (tracing())
-          ::ttg::print(world.rank(), ":", get_name(), " : invoking op ");
-        // create PaRSEC task
-        // and give it to the scheduler
-        my_op_t *task;
-        parsec_execution_stream_s *es = world.execution_stream();
-        parsec_thread_mempool_t *mempool =
-            &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-        task = (my_op_t *)parsec_thread_mempool_allocate(mempool);
-        memset((void *)task, 0, sizeof(my_op_t));
-        task->parsec_task.mempool_owner = mempool;
+        static_assert(::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, "logic error: set_arg (case 3) called but input_values_tuple_type is nonempty");
 
-        OBJ_CONSTRUCT(task, parsec_list_item_t);
-        task->parsec_task.task_class = &this->self;
-        task->parsec_task.taskpool = world.taskpool();
-        task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
+        const auto owner = keymap();
+        if( owner == ttg_default_execution_context().rank() ) {
 
-        task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
-        task->object_ptr = static_cast<derivedT *>(this);
-        using ::ttg::unique_hash;
-        task->key = unique_hash<parsec_key_t>(0);
-        task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
-        world.increment_created();
-        __parsec_schedule(es, &task->parsec_task, 0);
+          // create PaRSEC task
+          // and give it to the scheduler
+          my_op_t *task;
+          parsec_execution_stream_s *es = world.execution_stream();
+          parsec_thread_mempool_t *mempool =
+              &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
+          task = (my_op_t *) parsec_thread_mempool_allocate(mempool);
+          memset((void *) task, 0, sizeof(my_op_t));
+          task->parsec_task.mempool_owner = mempool;
+
+          OBJ_CONSTRUCT(task, parsec_list_item_t);
+          task->parsec_task.task_class = &this->self;
+          task->parsec_task.taskpool = world.taskpool();
+          task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
+
+          task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
+          task->object_ptr = static_cast<derivedT *>(this);
+          using ::ttg::unique_hash;
+          task->key = unique_hash<parsec_key_t>(0);
+          task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : creating task");
+          world.increment_created();
+          if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
+          world.increment_sent_to_sched();
+          __parsec_schedule(es, &task->parsec_task, 0);
+        }
       }
 
       // Used by invoke to set all arguments associated with a task
@@ -878,7 +943,8 @@ namespace parsec {
       template <typename terminalT, std::size_t i>
       void register_input_callback(terminalT &input) {
         using valueT = typename terminalT::value_type;
-        if constexpr (::ttg::meta::is_none_void_v<keyT,valueT>) {
+        // case 1
+        if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && !std::is_void_v<valueT>) {
           auto move_callback = [this](const keyT &key, valueT &&value) {
             set_arg<i, keyT, valueT>(key, std::forward<valueT>(value));
           };
@@ -887,7 +953,22 @@ namespace parsec {
           };
           input.set_callback(send_callback, move_callback);
         }
-        else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_void_v<valueT>) {
+        // case 2
+        else if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
+          auto send_callback = [this](const keyT &key) {
+            set_arg<i, keyT, ::ttg::Void>(key, ::ttg::Void{});
+          };
+          input.set_callback(send_callback, send_callback);
+        }
+        // case 3
+        else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
+          auto send_callback = [this](const keyT &key) {
+            set_arg<keyT>(key);
+          };
+          input.set_callback(send_callback, send_callback);
+        }
+        // case 4
+        else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && !std::is_void_v<valueT>) {
           auto move_callback = [this](valueT &&value) {
             set_arg<i, keyT, valueT>(std::forward<valueT>(value));
           };
@@ -895,22 +976,20 @@ namespace parsec {
             set_arg<i, keyT, const valueT &>(value);
           };
           input.set_callback(send_callback, move_callback);
-        } else if constexpr(!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_void_v<valueT>) {
-          auto move_callback = [this](const keyT &key) {
-            set_arg<keyT>(key);
+        }
+        // case 5
+        else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
+          auto send_callback = [this]() {
+            set_arg<i, keyT, ::ttg::Void>(::ttg::Void{});
           };
-          auto send_callback = [this](const keyT &key) {
-            set_arg<keyT>(key);
-          };
-          input.set_callback(send_callback, move_callback);
-        } else if constexpr (::ttg::meta::is_all_void_v<keyT,valueT>) {
-          auto move_callback = [this]() {
-            set_arg<keyT>();
-          };
+          input.set_callback(send_callback, send_callback);
+        }
+        // case 6
+        else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
           auto send_callback = [this]() {
             set_arg<keyT>();
           };
-          input.set_callback(send_callback, move_callback);
+          input.set_callback(send_callback, send_callback);
         } else abort();
       }
 
@@ -1095,26 +1174,22 @@ namespace parsec {
       // Manual injection of a task with all input arguments specified as a tuple
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
       invoke(const Key &key, const input_values_tuple_type &args) {
-        // That task is going to complete, so count it as to execute
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, key, args);
       }
 
       // Manual injection of a task with all input arguments specified as a tuple
       template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void>
       invoke(const input_values_tuple_type &args) {
-        // That task is going to complete, so count it as to execute
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, args);
       }
 
       // Manual injection of a task that has no arguments
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void> invoke(const Key &key) {
-        // That task is going to complete, so count it as to execute
         set_arg<keyT>(key);
       }
 
       // Manual injection of a task that has no key or arguments
       template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void> invoke() {
-        // That task is going to complete, so count it as to execute
         set_arg<keyT>();
       }
 

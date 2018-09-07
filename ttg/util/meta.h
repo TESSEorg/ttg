@@ -47,6 +47,19 @@ namespace ttg {
       using type = typename take_first_n_helper<std::tuple<>, Tuple, N>::type;
     };
 
+    template <typename Tuple, std::size_t N, typename Enabler = void>
+    struct drop_last_n;
+
+    template <typename... Ts, std::size_t N>
+    struct drop_last_n<std::tuple<Ts...>, N, std::enable_if_t< N<=sizeof...(Ts)>> {
+      using type = typename take_first_n<std::tuple<Ts...>,(sizeof...(Ts)-N)>::type;
+    };
+
+    template <typename... Ts, std::size_t N>
+    struct drop_last_n<std::tuple<Ts...>, N, std::enable_if_t< !(N<=sizeof...(Ts))>> {
+      using type = std::tuple<>;
+    };
+
     // tuple<Ts...> -> tuple<std::remove_reference_t<Ts>...>
     template <typename T, typename Enabler = void>
     struct nonref_tuple;
@@ -76,6 +89,8 @@ namespace ttg {
     // is_void_v = Void or void
     // is_none_void_v
     // is_any_void_v
+    // is_last_void_v
+    // void_to_Void_t
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <typename T>
     constexpr bool is_Void_v = std::is_same_v<std::decay_t<T>,Void>;
@@ -90,13 +105,47 @@ namespace ttg {
     constexpr bool is_any_void_v = (is_void_v<Ts> || ...);
 
     template <typename ... Ts>
+    constexpr bool is_any_Void_v = (is_Void_v<Ts> || ...);
+
+    template <typename ... Ts>
     constexpr bool is_none_void_v = !is_any_void_v<Ts...>;
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <typename ... Ts>
+    constexpr bool is_none_Void_v = !is_any_Void_v<Ts...>;
+
+    template <typename ... Ts>
+    struct is_last_void;
+
+    template <>
+    struct is_last_void<> : public std::false_type {
+    };
+
+    template <typename T>
+    struct is_last_void<T> : public std::conditional_t<is_void_v<T>,std::true_type,std::false_type> {
+    };
+
+    template <typename T1, typename ... Ts>
+    struct is_last_void<T1, Ts...> : public is_last_void<Ts...> {
+    };
+
+    template <typename ... Ts>
+    constexpr bool is_last_void_v = is_last_void<Ts...>::value;
+
+    template <typename T>
+    struct void_to_Void {
+      using type = T;
+    };
+    template <>
+    struct void_to_Void<void> {
+      using type = Void;
+    };
+    template <typename T> using void_to_Void_t = typename void_to_Void<T>::type;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // is_empty_tuple
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // true if tuple is empty or contains only Void type, e.g. is_empty_tuple<std::tuple<>> or is_empty_tuple<std::tuple<Void>> evaluate to true
+    // true if tuple is empty or contains only Void types, e.g. is_empty_tuple<std::tuple<>> or is_empty_tuple<std::tuple<Void>> evaluate to true
     template <typename T, typename Enabler = void>
     struct is_empty_tuple : std::false_type {};
 
@@ -110,6 +159,7 @@ namespace ttg {
     static_assert(!is_empty_tuple_v<std::tuple<int>>, "ouch");
     static_assert(is_empty_tuple_v<std::tuple<>>, "ouch");
     static_assert(is_empty_tuple_v<std::tuple<Void>>, "ouch");
+    static_assert(is_empty_tuple_v<std::tuple<Void, Void, Void>>, "ouch");
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // type_printer useful to print types in metaprograms
@@ -226,20 +276,21 @@ template <typename Key> using finalize_callback_t = typename finalize_callback<K
 //   std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs> &&)>...>
 // protected against void valueTs
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-template<bool nonvoid_values, typename ... valueTs>
-struct input_reducers_impl;
-template<typename ... valueTs>
-struct input_reducers_impl<true, valueTs...>
+template<typename T, typename Enabler = void>
+struct input_reducer_type;
+template<typename T>
+struct input_reducer_type<T, std::enable_if_t<!is_void_v<T>>>
 {
-  using type =
-      std::tuple<std::function<std::decay_t<valueTs>(std::decay_t<valueTs> &&, std::decay_t<valueTs> &&)>...>;
+  using type = std::function<std::decay_t<T>(std::decay_t<T> &&, std::decay_t<T> &&)>;
+};
+template<typename T>
+struct input_reducer_type<T, std::enable_if_t<is_void_v<T>>>
+{
+using type = std::function<void()>;
 };
 template<typename ... valueTs>
-struct input_reducers_impl<false, valueTs...>  {
-using type = std::tuple<std::function<void()>>;
-};
-template<typename ... valueTs>
-struct input_reducers : public input_reducers_impl<is_none_void_v<valueTs...>,valueTs...> {
+struct input_reducers {
+  using type = std::tuple<typename input_reducer_type<valueTs>::type...>;
 };
 template<typename ... valueTs> using input_reducers_t = typename input_reducers<valueTs...>::type;
 
