@@ -651,7 +651,7 @@ int main(int argc, char **argv) {
       std::tie(norm_2_square, norm_inf) = norms<blk_t>(Cref - C);
       std::cout << "||Cref - C||_2      = " << std::sqrt(norm_2_square) << std::endl;
       std::cout << "||Cref - C||_\\infty = " << norm_inf << std::endl;
-      if (std::sqrt(norm_2_square) > 1e-8) {
+      if (norm_inf > 1e-9) {
         std::cout << "Cref:\n" << Cref << std::endl;
         std::cout << "C:\n" << C << std::endl;
         ttg_abort();
