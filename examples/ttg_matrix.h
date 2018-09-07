@@ -134,7 +134,7 @@ namespace ttg {
     void op(const Key<2>& key, std::tuple<Out<Key<2>, Blk>> &out) {
       // random access in CSC format is inefficient, this is only to demonstrate the way to go for hash-based storage
       // for whatever reason coeffRef does not work on a const SpMatrix&
-      ::send<0>(key, static_cast<const Blk>(const_cast<SpMatrix<Blk>&>(matrix_).coeffRef(key[0], key[1])), out);
+      ::send<0>(key, static_cast<const Blk&>(const_cast<SpMatrix<Blk>&>(matrix_).coeffRef(key[0], key[1])), out);
     }
 
    private:
