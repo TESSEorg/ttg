@@ -1157,26 +1157,22 @@ namespace parsec {
       // Manual injection of a task with all input arguments specified as a tuple
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
       invoke(const Key &key, const input_values_tuple_type &args) {
-        // That task is going to complete, so count it as to execute
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, key, args);
       }
 
       // Manual injection of a task with all input arguments specified as a tuple
       template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void>
       invoke(const input_values_tuple_type &args) {
-        // That task is going to complete, so count it as to execute
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, args);
       }
 
       // Manual injection of a task that has no arguments
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void> invoke(const Key &key) {
-        // That task is going to complete, so count it as to execute
         set_arg<keyT>(key);
       }
 
       // Manual injection of a task that has no key or arguments
       template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void> invoke() {
-        // That task is going to complete, so count it as to execute
         set_arg<keyT>();
       }
 
