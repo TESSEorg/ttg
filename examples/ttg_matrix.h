@@ -90,7 +90,7 @@ namespace ttg {
             auto last_value = -1;
             for (; first1 != last1; ++d_first) {
               if (first2 == last2) {
-                std::copy(first1, last1, d_first);
+                std::copy_if(first1, last1, d_first, [last_value](auto v) { return v != last_value; });
                 break;
               }
               if (*first2 < *first1) {
@@ -107,7 +107,7 @@ namespace ttg {
                 ++first1;
               }
             }
-            std::copy(first2, last2, d_first);
+            std::copy_if(first2, last2, d_first, [last_value](auto v) { return v != last_value; });
           }
         }
       }
