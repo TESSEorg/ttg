@@ -77,7 +77,7 @@ namespace parsec {
      public:
       World(int *argc, char **argv[], int ncores) {
 
-          if(true) {
+          if(false) {
               char hostname[256];
               volatile int loop = 1;
               gethostname(hostname, 256);
