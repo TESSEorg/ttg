@@ -638,12 +638,35 @@ int main(int argc, char **argv) {
     // ready, go! need only 1 kick, so must be done by 1 thread only
     if (ttg_default_execution_context().rank() == 0) control.start();
 
+    ///////////////////////////////////////////////////////////////////////////
+    // copy matrix using ttg::Matrix
+    Matrix<blk_t> aflow;
+    aflow << A;
+    SpMatrix<> Acopy(A.rows(), A.cols());  // resizing will be automatic in the future when shape computation is complete .. see Matrix::operator>>
+    auto copy_status = aflow >> Acopy;
+    assert(!has_value(copy_status));
+    aflow.pushall();
+    {
+      Control control(ttg_ctl_edge(ttg_default_execution_context()));
+
+      std::cout << "matrix copy using ttg::Matrix" << std::endl;
+      std::cout << Dot{}(&control) << std::endl;
+
+      // ready to run!
+      auto connected = make_graph_executable(&control);
+      assert(connected);
+      TTGUNUSED(connected);
+
+      // ready, go! need only 1 kick, so must be done by 1 thread only
+      if (ttg_default_execution_context().rank() == 0) control.start();
+    }
+    //////////////////////////////////////////////////////////////////////////
+
     ttg_execute(ttg_default_execution_context());
     ttg_fence(ttg_default_execution_context());
 
+    // validate C=A*B against the reference output
     assert(has_value(c_status));
-
-    // rank 0 only: validate against the reference output
     if (ttg_default_execution_context().rank() == 0) {
       SpMatrix<> Cref = A * B;
 
@@ -658,38 +681,16 @@ int main(int argc, char **argv) {
       }
     }
 
-    // copy matrix using ttg::Matrix
-    if (1) {
-      Matrix<blk_t> aflow;
-      aflow << A;
-      SpMatrix<> Acopy(A.rows(), A.cols());  // resizing will be automatic in the future when shape computation is complete .. see Matrix::operator>>
-      auto status = aflow >> Acopy;
-      assert(!has_value(status));
-      aflow.pushall();
-
-      Control control(ttg_ctl_edge(ttg_default_execution_context()));
-
-      std::cout << "matrix copy using ttg::Matrix" << std::endl;
-      std::cout << Dot{}(&control) << std::endl;
-
-      // ready to run!
-      auto connected = make_graph_executable(&control);
-      assert(connected);
-      TTGUNUSED(connected);
-
-      // ready, go! need only 1 kick, so must be done by 1 thread only
-      if (ttg_default_execution_context().rank() == 0) control.start();
-
-      ttg_execute(ttg_default_execution_context());
-      ttg_fence(ttg_default_execution_context());
-
-      assert(has_value(status));
+    // validate Acopy=A against the reference output
+    assert(has_value(copy_status));
+    if (ttg_default_execution_context().rank() == 0) {
       double norm_2_square, norm_inf;
       std::tie(norm_2_square, norm_inf) = norms<blk_t>(Acopy - A);
       assert(norm_inf == 0.0);
     }
 
   }
+
   ttg_finalize();
 
   return 0;

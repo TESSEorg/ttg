@@ -23,9 +23,15 @@ namespace ttg {
     Shape(const Eigen::SparseMatrix<T>& spmat, Type type = Type::col2row) :
     base_t(type == Type::col2row ? make_colidx_to_rowidx(spmat) : make_rowidx_to_colidx(spmat)), nrows_(spmat.rows()), ncols_(spmat.cols()), type_(type) {}
 
+    Shape(long nrows, long ncols, Type type) : nrows_(nrows), ncols_(ncols), type_(type) { resize(type == Type::col2row ? ncols_ : (type == Type::row2col ? nrows_ : 0)); }
+
     long nrows() const { return nrows_; }
     long ncols() const { return ncols_; }
     Type type() const { return type_; }
+
+    static bool congruent(const Shape& shape1, const Shape& shape2) {
+      return shape1.nrows() == shape2.nrows() && shape1.ncols() == shape2.ncols();
+    }
 
     /// converts col->row <-> row->col
     Shape inverse() const {
@@ -47,6 +53,65 @@ namespace ttg {
         std::sort(std::begin(result[i]), std::end(result[i]));
       }
       return *this;
+    }
+
+    static Shape add(const Shape& shape1, const Shape& shape2) {
+      if(shape1.type() != shape2.type())
+        throw std::logic_error("Shape::add(shape1,shape2): shape1.type() != shape2.type()");
+      if(shape1.type() == Type::invalid)
+        throw std::logic_error("Shape::add(shape1,shape2): shape1.type() == invalid");
+      if(!congruent(shape1, shape2))
+        throw std::logic_error("Shape::add(shape1,shape2): shape1 not congruent to shape2");
+
+      Shape result(shape1.nrows(), shape1.ncols(), shape1.type());
+      for(std::size_t i = 0; i!=shape1.size(); ++i) {
+        const auto& shape1_row_i = shape1[i];
+        const auto& shape2_row_i = shape2[i];
+        if (shape1_row_i.empty()) {
+          if (shape2_row_i.empty()) {
+            continue; // both rows empty -> skip to next
+          }
+          else {
+            result.at(i) = shape2_row_i;
+          }
+        }
+        else {
+          if (shape2_row_i.empty()) {
+            result.at(i) = shape1_row_i;
+          }
+          else {
+            // std::merge but only keeps uniques (when shapes have norms will add the norm values)
+            // based on https://en.cppreference.com/w/cpp/iterator/inserter
+            auto first1 = shape1_row_i.begin();
+            auto last1 = shape1_row_i.end();
+            auto first2 = shape2_row_i.begin();
+            auto last2 = shape2_row_i.end();
+            auto d_first = std::inserter(result.at(i), result.at(i).end());
+            auto last_value = -1;
+            for (; first1 != last1; ++d_first) {
+              if (first2 == last2) {
+                std::copy_if(first1, last1, d_first, [last_value](auto v) { return v != last_value; });
+                break;
+              }
+              if (*first2 < *first1) {
+                if (*first2 != last_value) {
+                  *d_first = *first2;
+                  last_value = *first2;
+                }
+                ++first2;
+              } else {
+                if (*first1 != last_value) {
+                  *d_first = *first1;
+                  last_value = *first1;
+                }
+                ++first1;
+              }
+            }
+            std::copy_if(first2, last2, d_first, [last_value](auto v) { return v != last_value; });
+          }
+        }
+      }
+      return result;
     }
 
     template<typename Archive> void serialize(Archive &ar) {
@@ -114,33 +179,6 @@ namespace ttg {
     return os;
   }
 
-  // flow data from an existing SpMatrix on rank 0
-  // similar to Read_SpMatrix but uses tasks to read data:
-  // - this allows to read some data only (imagine need to do Hadamard product of 2 sparse matrices ... only some blocks will be needed)
-  //   but will only be efficient if can do random access (slow with CSC format used by Eigen matrices)
-  // - this could be generalized to read efficiently from a distributed data structure
-  // Use Read_SpMatrix is need to read all data from a data structure localized on 1 process
-  template <typename Blk = blk_t>
-  class Read : public Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, void> {
-   public:
-    using baseT = Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, void>;
-    static constexpr const int owner = 0;  // where data resides
-
-    Read(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>, void> &in, Edge<Key<2>, Blk> &out)
-        : baseT(edges(in), edges(out), std::string("read_spmatrix(") + label + ")", {"ij"}, {std::string(label) + "ij"},
-                /* keymap */ [](auto key) { return owner; })
-        , matrix_(matrix) {}
-
-    void op(const Key<2>& key, std::tuple<Out<Key<2>, Blk>> &out) {
-      // random access in CSC format is inefficient, this is only to demonstrate the way to go for hash-based storage
-      // for whatever reason coeffRef does not work on a const SpMatrix&
-      ::send<0>(key, static_cast<const Blk&>(const_cast<SpMatrix<Blk>&>(matrix_).coeffRef(key[0], key[1])), out);
-    }
-
-   private:
-    const SpMatrix<Blk> &matrix_;
-  };
-
   // compute shape of an existing SpMatrix on rank 0
   template <typename Blk = blk_t>
   class ReadShape : public Op<void, std::tuple<Out<void, Shape>>, ReadShape<Blk>, void> {
@@ -155,6 +193,33 @@ namespace ttg {
 
     void op(std::tuple<Out<void, Shape>> &out) {
       ::sendv<0>(Shape(matrix_), out);
+    }
+
+   private:
+    const SpMatrix<Blk> &matrix_;
+  };
+
+  // flow data from an existing SpMatrix on rank 0
+  // similar to Read_SpMatrix but uses tasks to read data:
+  // - this allows to read some data only (imagine need to do Hadamard product of 2 sparse matrices ... only some blocks will be needed)
+  //   but will only be efficient if can do random access (slow with CSC format used by Eigen matrices)
+  // - this could be generalized to read efficiently from a distributed data structure
+  // Use Read_SpMatrix is need to read all data from a data structure localized on 1 process
+  template <typename Blk = blk_t>
+  class Read : public Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, void> {
+   public:
+    using baseT = Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, void>;
+    static constexpr const int owner = 0;  // where data resides
+
+    Read(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>, void> &in, Edge<Key<2>, Blk> &out)
+        : baseT(edges(in), edges(out), std::string("read_spmatrix(") + label + ")", {"ij"}, {std::string(label) + "ij"},
+        /* keymap */ [](auto key) { return owner; })
+        , matrix_(matrix) {}
+
+    void op(const Key<2>& key, std::tuple<Out<Key<2>, Blk>> &out) {
+      // random access in CSC format is inefficient, this is only to demonstrate the way to go for hash-based storage
+      // for whatever reason coeffRef does not work on a const SpMatrix&
+      ::send<0>(key, static_cast<const Blk&>(const_cast<SpMatrix<Blk>&>(matrix_).coeffRef(key[0], key[1])), out);
     }
 
    private:
@@ -216,6 +281,22 @@ namespace ttg {
     std::mutex mtx_;
     SpMatrix<Blk> &matrix_;
     mutable std::shared_ptr<std::shared_future<void>> completion_status_;
+  };
+
+  // ShapeAdd adds two Shape objects
+  class ShapeAdd : public Op<void, std::tuple<Out<void, Shape>>, ShapeAdd, Shape, Shape> {
+   public:
+    using baseT = Op<void, std::tuple<Out<void, Shape>>, ShapeAdd, Shape, Shape>;
+    static constexpr const int owner = 0;  // where data resides
+
+    ShapeAdd(Edge<void, Shape> &in1, Edge<void, Shape> &in2, Edge<void, Shape> &out)
+        : baseT(edges(in1, in2), edges(out), {}, {}, {},
+        /* keymap */ []() { return owner; })
+        {}
+
+    void op(typename baseT::input_values_tuple_type && ins, std::tuple<Out<void, Shape>> &out) {
+      ::sendv<0>(Shape::add(baseT::template get<0>(ins), baseT::template get<1>(ins)), out);
+    }
   };
 
   // pushes all blocks given by the shape
@@ -296,7 +377,6 @@ namespace ttg {
     /// of this function is true.
     /// @note up to the user to ensure completion before reading destination_matrix
     auto operator>>(SpMatrix<T>& destination_matrix) {
-#if 1
       // shape writer writes shape to destination_matrix
       ttg_register_ptr(world_, std::make_shared<matrix::WriteShape<T>>("", destination_matrix, shape_edge_));
       // this converts shape to control messages to ensure that shape and data flows are consistent (i.e. if shape says there should be a block {r,c} Write will expect the data for it)
@@ -305,9 +385,6 @@ namespace ttg {
       if (!ctl_edge_.live())
         ttg_register_ptr(world_, std::make_shared<matrix::Push>("", shape_edge_, ctl_edge));
       auto result = std::make_shared<matrix::Write<T>>("", destination_matrix, data_edge_, (ctl_edge_.live() ? ctl_edge_ : ctl_edge));
-#else
-      auto result = std::make_shared<Write_SpMatrix<T>>(destination_matrix, data_edge_);
-#endif
       ttg_register_ptr(world_, result);
 
       // return op status ... set to true after world fence
