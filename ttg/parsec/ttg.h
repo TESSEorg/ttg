@@ -28,26 +28,85 @@
 #include <cstdlib>
 #include <cstring>
 
-extern "C" int parsec_ptg_update_runtime_task(parsec_taskpool_t *tp, int tasks);
-extern "C" int remote_dep_dequeue_send(int rank, parsec_remote_deps_t* deps);
+extern "C" {
+    void parsec_taskpool_termination_detected(parsec_taskpool_t *tp);
+    int parsec_ptg_update_runtime_task(parsec_taskpool_t *tp, int tasks);
+    int parsec_comm_register_callback(int *tag, size_t max_msg_size, int tp_flag, parsec_comm_recv_message_t cb);
+    int parsec_comm_unregister_callback(int tag);
+}
 
 namespace parsec {
   namespace ttg {
+      typedef void (*static_set_arg_fct_type)(void *, size_t, ::ttg::OpBase*);
+      typedef std::pair<static_set_arg_fct_type, ::ttg::OpBase*> static_set_arg_fct_call_t;
+      static std::map<uint64_t, static_set_arg_fct_call_t> static_id_to_op_map;
+      
+      typedef std::tuple<int, void *, size_t>static_set_arg_fct_arg_t;
+      static std::multimap<uint64_t, static_set_arg_fct_arg_t> delayed_unpack_actions;
+
+      static int static_unpack_msg(int src_rank, parsec_taskpool_t *tp, void *data, size_t size) {
+          static_set_arg_fct_type static_set_arg_fct;
+        typedef struct {
+            uint64_t op_id;
+        } msg_header_t;
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        msg_header_t *msg = static_cast<msg_header_t*>(data);
+        uint64_t op_id = msg->op_id;
+        try {
+            auto op_pair = static_id_to_op_map.at( op_id );
+            static_set_arg_fct = op_pair.first;
+            static_set_arg_fct(data, size, op_pair.second);
+        } catch (const std::out_of_range & e) {
+            size_t size;
+            void *data_cpy = malloc(size);
+            memcpy(data_cpy, data, size);
+            std::cout << rank << " -> Delaying action "
+                      << src_rank << ", " 
+                      << op_id << ", "
+                      << data_cpy << ", "
+                      << size << std::endl;
+            delayed_unpack_actions.insert(std::make_pair(op_id, std::make_tuple( src_rank, data_cpy, size )));
+        }
+        return 0;
+    }
 
     class World {
+        int _parsec_ttg_tag = -1;
+        const int PARSEC_TTG_MAX_AM_SIZE = 1024*1024;
      public:
       World(int *argc, char **argv[], int ncores) {
+
+          if(true) {
+              char hostname[256];
+              volatile int loop = 1;
+              gethostname(hostname, 256);
+              std::cout << "ssh -t " << hostname << " gdb -p " << getpid() << std::endl;
+              while( loop ) {
+                  sleep(1);
+              }
+          }
+
         ctx = parsec_init(ncores, argc, argv);
-        tpool = (parsec_taskpool_t *)calloc(1, sizeof(parsec_taskpool_t));
-        tpool->taskpool_id = 1;
-        tpool->nb_tasks = 0;
-        tpool->nb_pending_actions = 1;
-        tpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
         es = ctx->virtual_processes[0]->execution_streams[0];
+
+        parsec_comm_register_callback(&_parsec_ttg_tag, PARSEC_TTG_MAX_AM_SIZE, 1, parsec::ttg::static_unpack_msg);
+        
+        tpool = (parsec_taskpool_t *)calloc(1, sizeof(parsec_taskpool_t));
+        tpool->taskpool_id = -1;
+        tpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
+        tpool->taskpool_type = PARSEC_TASKPOOL_TYPE_TTG;
+        parsec_taskpool_reserve_id(tpool);
+
+        parsec_termdet_open_dyn_module(tpool);
+        tpool->tdm.module->monitor_taskpool(tpool, parsec_taskpool_termination_detected);
+        parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
       }
 
-      ~World() { parsec_fini(&ctx); }
+      ~World() { parsec_comm_unregister_callback(_parsec_ttg_tag); parsec_fini(&ctx); }
 
+        int &parsec_ttg_tag() { return _parsec_ttg_tag; }
+        
       MPI_Comm comm() const { return MPI_COMM_WORLD; }
 
       int size() const {
@@ -71,22 +130,21 @@ namespace parsec {
         if(ret != 0) throw std::runtime_error("TTG: parsec_context_start failed");
       }
 
-      void fence() {
-          int ws, mr;
-          MPI_Comm_size(MPI_COMM_WORLD, &ws);
-          if(ws > 1) {
-              MPI_Comm_rank(MPI_COMM_WORLD, &mr);
-              fprintf(stderr, "On rank %d: (very) poor man's fence: giving 10s to complete before entering the wait\n", mr);
-              sleep(10);
-          }
-          parsec_context_wait(ctx);
-      }
-
       auto *context() { return ctx; }
       auto *execution_stream() { return es; }
       auto *taskpool() { return tpool; }
 
-      void increment_created() { parsec_atomic_fetch_inc_int32(&taskpool()->nb_tasks); }
+      void fence() {
+          int ws, mr;
+          parsec_taskpool_t *tp = taskpool();
+          MPI_Comm_rank(MPI_COMM_WORLD, &mr);
+          fprintf(stderr, "On rank %d: parsec taskpool is ready for completion\n", mr);
+          tp->tdm.module->taskpool_ready(tp);
+          fprintf(stderr, "On rank %d: entering parsec_context_wait\n", mr);
+          parsec_context_wait(ctx);
+      }
+
+      void increment_created() { taskpool()->tdm.module->taskpool_addto_nb_tasks(taskpool(), 1); }
       void increment_sent_to_sched() { parsec_atomic_fetch_inc_int32(&sent_to_sched_counter()); }
 
       int32_t sent_to_sched() const { return this->sent_to_sched_counter(); }
@@ -203,22 +261,6 @@ static parsec_key_fn_t parsec_tasks_hash_fcts = {
 
 namespace parsec {
   namespace ttg {
-    typedef void (*static_set_arg_fct_type)(void *, size_t, ::ttg::OpBase*);
-    static std::map<uint64_t, 
-                    std::pair<static_set_arg_fct_type,
-                              ::ttg::OpBase* > > static_id_to_op_map;
-
-    static void static_unpack_msg(void *data, size_t size) {
-        void (*static_set_arg_fct)(void *, size_t, ::ttg::OpBase *);
-        typedef struct {
-            uint64_t op_id;
-        } msg_header_t;
-        msg_header_t *msg = static_cast<msg_header_t*>(data);
-        auto op_pair = static_id_to_op_map.at( msg->op_id );
-        static_set_arg_fct = op_pair.first;
-        static_set_arg_fct(data, size, op_pair.second);
-    }
-
     namespace detail {
     static inline std::map<World*, std::set<std::shared_ptr<void>>>& ptr_registry_accessor() {
       static std::map<World*, std::set<std::shared_ptr<void>>> registry;
@@ -329,7 +371,7 @@ namespace parsec {
 
     template <typename Key, typename Value>
     struct msg_t<Key,Value,std::enable_if_t<::ttg::meta::is_none_void_v<Key,Value>>> {
-      uint64_t op_id;
+      msg_header_t op_id;
       std::size_t param_id;
       Key key;
       Value val;
@@ -665,12 +707,12 @@ namespace parsec {
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
             free(newtask);
           } else {
+            if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
             newtask->op_ht_item.key = hk;
             world.increment_created();
             parsec_hash_table_nolock_insert(&tasks_table, &newtask->op_ht_item);
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
             task = newtask;
-            if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
           }
         }
 
@@ -750,35 +792,13 @@ namespace parsec {
           else
             set_arg_local<i, keyT, Value>(std::forward<Value>(value));
           return;
-        } else  // shipping tasks is not yet implemented
-          abort();
+        }
         // the target task is remote. Pack the information and send it to
         // the corresponding peer.
         // TODO do we need to copy value?
         using msg_t = detail::msg_t<keyT,std::decay_t<valueT>>;
         msg_t msg(get_instance_id(), i, key, value);
-        parsec_remote_deps_t* deps = (parsec_remote_deps_t*)remote_deps_allocate(&parsec_remote_dep_context.freelist);
-        deps->root = get_default_world().rank();
-        deps->outgoing_mask = (1 << i);
-        deps->max_priority = 0;
-        deps->taskpool = world.taskpool();
-        struct remote_dep_output_param_s* output = &deps->output[0];
-        int _array_pos = owner / (8 * sizeof(uint32_t));
-        int _array_mask = 1 << (owner % (8 * sizeof(uint32_t)));
-        output->rank_bits[_array_pos] |= _array_mask;
-        output->deps_mask |= (1 << i);
-        output->count_bits = 1;
-        output->priority = 0;
-
-        deps->msg.deps = (remote_dep_datakey_t)deps;
-        deps->msg.output_mask = (1 << i);
-        deps->msg.tag = 10;  // TODO: change me
-        deps->msg.taskpool_id = deps->taskpool->taskpool_id;
-        deps->msg.task_class_id = this->self.task_class_id;
-        deps->msg.length = (sizeof(msg_t) + sizeof(int) - 1) / sizeof(int);
-        memcpy(deps->msg.locals, &msg, sizeof(msg_t));
-
-        remote_dep_dequeue_send(owner, deps);
+        parsec_comm_send_message(owner, world.parsec_ttg_tag(), world.taskpool(), static_cast<void*>(&msg), sizeof(msg_t));
       }
 
       // case 3
@@ -1057,8 +1077,6 @@ namespace parsec {
 
         register_input_callbacks(std::make_index_sequence<numins>{});
 
-        register_static_op_function();
-
         int i;
 
         memset(&self, 0, sizeof(parsec_task_class_t));
@@ -1125,7 +1143,9 @@ namespace parsec {
                                  sizeof(my_op_t) + sizeof(input_values_tuple_type) + alignof(input_values_tuple_type),
                                  offsetof(parsec_task_t, mempool_owner), k);
 
-        parsec_hash_table_init(&tasks_table, offsetof(my_op_t, op_ht_item), 10, parsec_tasks_hash_fcts, NULL);
+        parsec_hash_table_init(&tasks_table, offsetof(my_op_t, op_ht_item), 8, parsec_tasks_hash_fcts, NULL);
+
+        register_static_op_function();
       }
 
       template <typename keymapT = default_keymap<keyT>>
@@ -1204,13 +1224,27 @@ namespace parsec {
 
       // Register the static_op function to associate it to instance_id
       void register_static_op_function(void) {
-          static_id_to_op_map.insert( std::pair<uint64_t, 
-                                                std::pair<void (*)(void *, size_t, 
-                                                                   ::ttg::OpBase *), 
-                                                ::ttg::OpBase*>>
-                                      (get_instance_id(), 
-                                       std::pair<void (*)(void *, size_t, ::ttg::OpBase *),
-                                                 ::ttg::OpBase*>(&Op::static_set_arg, this) ));
+          int rank;
+          MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+          
+          std::cout << rank << "-> Inserting into static_id_to_op_map at " << get_instance_id() << std::endl;
+          static_set_arg_fct_call_t call = std::make_pair(&Op::static_set_arg, this);          
+          static_id_to_op_map.insert(std::make_pair(get_instance_id(), call));
+          std::cout << rank << "-> Inserted into static_id_to_op_map at " << get_instance_id() << std::endl;
+
+          for(auto it = delayed_unpack_actions.find( get_instance_id() );
+              it != delayed_unpack_actions.end();) {
+              auto p = *it;
+              std::cout << rank << "-> Unpacking delayed action "
+                        << std::get<0>(p.second) << ", "
+                        << p.first << ", "
+                        << std::get<1>(p.second) << ", "
+                        << std::get<2>(p.second) << std::endl;
+              auto tp = world.taskpool();
+              static_unpack_msg(std::get<0>(p.second), tp, std::get<1>(p.second), std::get<2>(p.second));
+              free(std::get<1>(p.second));
+              it = delayed_unpack_actions.erase(it);
+          }
       }
     };
 
