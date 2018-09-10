@@ -377,7 +377,6 @@ namespace ttg {
     /// of this function is true.
     /// @note up to the user to ensure completion before reading destination_matrix
     auto operator>>(SpMatrix<T>& destination_matrix) {
-#if 1
       // shape writer writes shape to destination_matrix
       ttg_register_ptr(world_, std::make_shared<matrix::WriteShape<T>>("", destination_matrix, shape_edge_));
       // this converts shape to control messages to ensure that shape and data flows are consistent (i.e. if shape says there should be a block {r,c} Write will expect the data for it)
@@ -386,9 +385,6 @@ namespace ttg {
       if (!ctl_edge_.live())
         ttg_register_ptr(world_, std::make_shared<matrix::Push>("", shape_edge_, ctl_edge));
       auto result = std::make_shared<matrix::Write<T>>("", destination_matrix, data_edge_, (ctl_edge_.live() ? ctl_edge_ : ctl_edge));
-#else
-      auto result = std::make_shared<Write_SpMatrix<T>>(destination_matrix, data_edge_);
-#endif
       ttg_register_ptr(world_, result);
 
       // return op status ... set to true after world fence
