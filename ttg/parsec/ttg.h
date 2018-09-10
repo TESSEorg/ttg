@@ -63,6 +63,9 @@ namespace parsec {
       }
 
       void execute() {
+          // execute comes after fence. With termination detection, fence could just mark the taskpool
+          // as ready to enqueue more, and execute() would mark the taskpool ready.
+          // Currently, we need to create a new taskpool here, since it has been waited upon by fence()
         parsec_enqueue(ctx, tpool);
         int ret = parsec_context_start(ctx);
         if(ret != 0) throw std::runtime_error("TTG: parsec_context_start failed");
