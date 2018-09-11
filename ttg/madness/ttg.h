@@ -250,9 +250,10 @@ namespace madness {
             derived->op(key, derived->output_terminals);
           } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
             derived->op(std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
-          } else {
+          } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
             derived->op(derived->output_terminals);  // !!! NOTE moving t into op
           }
+          else abort();
 
           opT::threaddata.call_depth--;
           
@@ -373,9 +374,9 @@ namespace madness {
                   static_cast<derivedT *>(this)->op(key, output_terminals); // Runs immediately
                 } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
                   static_cast<derivedT *>(this)->op(std::move(args->t), output_terminals); // Runs immediately
-                } else {
+                } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
                   static_cast<derivedT *>(this)->op(output_terminals); // Runs immediately
-                }
+                } else abort();
                 opT::threaddata.call_depth--;
                 
             }

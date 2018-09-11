@@ -560,9 +560,9 @@ namespace parsec {
         } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
           obj->op(std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
                   obj->output_terminals);
-        } else {
+        } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
           obj->op(obj->output_terminals);
-        }
+        } else abort();
 
         if (obj->tracing()) {
           if constexpr (!::ttg::meta::is_void_v<keyT>)
@@ -580,8 +580,7 @@ namespace parsec {
         } else if constexpr(::ttg::meta::is_void_v<keyT>) {
           obj->op(obj->output_terminals);
         }
-        else
-          abort();
+        else abort();
       }
 
      protected:
