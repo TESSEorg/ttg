@@ -60,8 +60,8 @@ namespace parsec {
             static_set_arg_fct = op_pair.first;
             static_set_arg_fct(data, size, op_pair.second);
         } catch (const std::out_of_range & e) {
-            size_t size;
             void *data_cpy = malloc(size);
+            assert(data_cpy != 0);
             memcpy(data_cpy, data, size);
             std::cout << rank << " -> Delaying action "
                       << src_rank << ", " 
