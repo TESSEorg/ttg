@@ -44,11 +44,12 @@ namespace parsec {
       typedef std::tuple<int, void *, size_t>static_set_arg_fct_arg_t;
       static std::multimap<uint64_t, static_set_arg_fct_arg_t> delayed_unpack_actions;
 
+      struct msg_header_t {
+        uint64_t op_id;
+      };
+
       static int static_unpack_msg(int src_rank, parsec_taskpool_t *tp, void *data, size_t size) {
           static_set_arg_fct_type static_set_arg_fct;
-        typedef struct {
-            uint64_t op_id;
-        } msg_header_t;
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         msg_header_t *msg = static_cast<msg_header_t*>(data);
@@ -376,33 +377,33 @@ namespace parsec {
       Key key;
       Value val;
       msg_t() = default;
-      msg_t(uint64_t op_id, std::size_t param_id, const Key& key, const Value& val) : op_id(op_id), param_id(param_id), key(key), val(val) {}
+      msg_t(uint64_t op_id, std::size_t param_id, const Key& key, const Value& val) : op_id{op_id}, param_id(param_id), key(key), val(val) {}
     };
 
     template <typename Key, typename Value>
     struct msg_t<Key,Value,std::enable_if_t<::ttg::meta::is_void_v<Key> && !::ttg::meta::is_void_v<Value>>> {
-      uint64_t op_id;
+      msg_header_t op_id;
       std::size_t param_id;
       Value val;
       msg_t() = default;
-      msg_t(uint64_t op_id, std::size_t param_id, const ::ttg::Void&, const Value& val) : op_id(op_id), param_id(param_id), val(val) {}
+      msg_t(uint64_t op_id, std::size_t param_id, const ::ttg::Void&, const Value& val) : op_id{op_id}, param_id(param_id), val(val) {}
     };
 
     template <typename Key, typename Value>
     struct msg_t<Key,Value,std::enable_if_t<!::ttg::meta::is_void_v<Key> && ::ttg::meta::is_void_v<Value>>> {
-      uint64_t op_id;
+      msg_header_t op_id;
       std::size_t param_id;
       Key key;
       msg_t() = default;
-      msg_t(uint64_t op_id, std::size_t param_id, const Key& key, const ::ttg::Void&) : op_id(op_id), param_id(param_id), key(key) {}
+      msg_t(uint64_t op_id, std::size_t param_id, const Key& key, const ::ttg::Void&) : op_id{op_id}, param_id(param_id), key(key) {}
     };
 
     template <typename Key, typename Value>
     struct msg_t<Key,Value,std::enable_if_t<::ttg::meta::is_all_void_v<Key,Value>>> {
-      uint64_t op_id;
+      msg_header_t op_id;
       std::size_t param_id;
       msg_t() = default;
-      msg_t(uint64_t op_id, std::size_t param_id, const ::ttg::Void&, const ::ttg::Void&) : op_id(op_id), param_id(param_id) {}
+      msg_t(uint64_t op_id, std::size_t param_id, const ::ttg::Void&, const ::ttg::Void&) : op_id{op_id}, param_id(param_id) {}
     };
 
     }  // namespace detail
