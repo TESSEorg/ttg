@@ -46,6 +46,7 @@ namespace parsec {
 
       struct msg_header_t {
         uint64_t op_id;
+        std::size_t param_id;
       };
 
       static int static_unpack_msg(int src_rank, parsec_taskpool_t *tp, void *data, size_t size) {
@@ -373,37 +374,33 @@ namespace parsec {
     template <typename Key, typename Value>
     struct msg_t<Key,Value,std::enable_if_t<::ttg::meta::is_none_void_v<Key,Value>>> {
       msg_header_t op_id;
-      std::size_t param_id;
       Key key;
       Value val;
       msg_t() = default;
-      msg_t(uint64_t op_id, std::size_t param_id, const Key& key, const Value& val) : op_id{op_id}, param_id(param_id), key(key), val(val) {}
+      msg_t(uint64_t op_id, std::size_t param_id, const Key& key, const Value& val) : op_id{op_id, param_id}, key(key), val(val) {}
     };
 
     template <typename Key, typename Value>
     struct msg_t<Key,Value,std::enable_if_t<::ttg::meta::is_void_v<Key> && !::ttg::meta::is_void_v<Value>>> {
       msg_header_t op_id;
-      std::size_t param_id;
       Value val;
       msg_t() = default;
-      msg_t(uint64_t op_id, std::size_t param_id, const ::ttg::Void&, const Value& val) : op_id{op_id}, param_id(param_id), val(val) {}
+      msg_t(uint64_t op_id, std::size_t param_id, const ::ttg::Void&, const Value& val) : op_id{op_id, param_id}, val(val) {}
     };
 
     template <typename Key, typename Value>
     struct msg_t<Key,Value,std::enable_if_t<!::ttg::meta::is_void_v<Key> && ::ttg::meta::is_void_v<Value>>> {
       msg_header_t op_id;
-      std::size_t param_id;
       Key key;
       msg_t() = default;
-      msg_t(uint64_t op_id, std::size_t param_id, const Key& key, const ::ttg::Void&) : op_id{op_id}, param_id(param_id), key(key) {}
+      msg_t(uint64_t op_id, std::size_t param_id, const Key& key, const ::ttg::Void&) : op_id{op_id, param_id}, key(key) {}
     };
 
     template <typename Key, typename Value>
     struct msg_t<Key,Value,std::enable_if_t<::ttg::meta::is_all_void_v<Key,Value>>> {
       msg_header_t op_id;
-      std::size_t param_id;
       msg_t() = default;
-      msg_t(uint64_t op_id, std::size_t param_id, const ::ttg::Void&, const ::ttg::Void&) : op_id{op_id}, param_id(param_id) {}
+      msg_t(uint64_t op_id, std::size_t param_id, const ::ttg::Void&, const ::ttg::Void&) : op_id{op_id, param_id} {}
     };
 
     }  // namespace detail
@@ -589,13 +586,9 @@ namespace parsec {
 
      protected:
       static void static_set_arg(void *data, std::size_t size, ::ttg::OpBase *bop) {
-          typedef struct {
-              uint64_t op_id;
-              std::size_t param_id;
-          } header_t;
-          assert(size >= sizeof(header_t) &&
+          assert(size >= sizeof(msg_header_t) &&
                  "Trying to unpack as message that does not hold enough bytes to represent a single header");
-          header_t *hd = static_cast<header_t*>(data);
+          msg_header_t *hd = static_cast<msg_header_t*>(data);
           derivedT *obj = reinterpret_cast<derivedT*>(bop);
           auto member = obj->set_arg_from_msg_fcts[hd->param_id];
           (obj->*member)(data, size);
