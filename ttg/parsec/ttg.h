@@ -614,7 +614,7 @@ namespace parsec {
           if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && !std::is_void_v<valueT>)
             set_arg<i, keyT, valueT>(msg->key, std::forward<valueT>(msg->val));
           // case 2
-          if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
+          else if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
             set_arg<i, keyT, ::ttg::Void>(msg->key, ::ttg::Void{});
           // case 3
           else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
