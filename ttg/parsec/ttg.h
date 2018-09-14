@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cassert>
+#include <experimental/type_traits>
 #include <functional>
 #include <future>
 #include <iostream>
@@ -199,14 +200,13 @@ typedef struct my_op_s {
 //  // (0 = unbounded stream)
   parsec_hash_table_item_t op_ht_item;
   void (*function_template_class_ptr)(void *);
+  void (*function_template_class_ptr_cuda)(void *);
   void *object_ptr;
   void (*static_set_arg)(int, int);
   parsec_key_t key;
   void *user_tuple; /* user_tuple will past the end of my_op_s (to allow for proper alignment)
                      * This points to the beginning of the tuple. */
 } my_op_t;
-
-static parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *task);
 }
 
 static parsec_hook_return_t do_nothing(parsec_execution_stream_t *es, parsec_task_t *task) {
@@ -215,11 +215,19 @@ static parsec_hook_return_t do_nothing(parsec_execution_stream_t *es, parsec_tas
   return PARSEC_HOOK_RETURN_DONE;
 }
 
+extern "C" {
 static parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *task) {
-  my_op_t *me = (my_op_t *)task;
+  my_op_t *me = (my_op_t *) task;
   me->function_template_class_ptr(task);
-  (void)es;
+  (void) es;
   return PARSEC_HOOK_RETURN_DONE;
+}
+static parsec_hook_return_t hook_cuda(struct parsec_execution_stream_s *es, parsec_task_t *task) {
+  my_op_t *me = (my_op_t *) task;
+  me->function_template_class_ptr_cuda(task);
+  (void) es;
+  return PARSEC_HOOK_RETURN_DONE;
+}
 }
 
 namespace ttg {
@@ -409,10 +417,16 @@ namespace parsec {
       parsec_mempool_t mempools;
       std::map<std::pair<int, int>, int> mempools_index;
 
+      //check for a non-type member named have_cuda_op
+      template <typename T>
+      using have_cuda_op_non_type_t = decltype(&T::have_cuda_op);
+      static constexpr bool have_cuda_op_is_defined = std::experimental::is_detected_v<have_cuda_op_non_type_t, derivedT>;
+
      public:
       static constexpr int numins = sizeof...(input_valueTs);                    // number of input arguments
-      static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or
-      // results
+      static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs
+
+      static constexpr bool have_cuda_op = have_cuda_op_is_defined ? derivedT::have_cuda_op : false;
 
       // PaRSEC for now passes data as tuple of ptrs (datacopies have these pointers also)
       // N.B. perhaps make data_wrapper_t<T> = parsec_data_copy_t (rather, a T-dependent wrapper around it to automate
@@ -1082,13 +1096,26 @@ namespace parsec {
 
         //    function_id_to_instance[self.task_class_id] = this;
 
-        self.incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
-        ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CPU;
-        ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
-        ((__parsec_chore_t *)self.incarnations)[0].hook = hook;
-        ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
-        ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
-        ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
+        if constexpr (have_cuda_op) {
+          self.incarnations = (__parsec_chore_t *) malloc(3 * sizeof(__parsec_chore_t));
+          ((__parsec_chore_t *) self.incarnations)[0].type = PARSEC_DEV_CUDA;
+          ((__parsec_chore_t *) self.incarnations)[0].evaluate = NULL;
+          ((__parsec_chore_t *) self.incarnations)[0].hook = hook_cuda;
+          ((__parsec_chore_t *) self.incarnations)[1].type = PARSEC_DEV_CPU;
+          ((__parsec_chore_t *) self.incarnations)[1].evaluate = NULL;
+          ((__parsec_chore_t *) self.incarnations)[1].hook = hook;
+          ((__parsec_chore_t *) self.incarnations)[2].type = PARSEC_DEV_NONE;
+          ((__parsec_chore_t *) self.incarnations)[2].evaluate = NULL;
+          ((__parsec_chore_t *) self.incarnations)[2].hook = NULL;
+        } else {
+          self.incarnations = (__parsec_chore_t *) malloc(2 * sizeof(__parsec_chore_t));
+          ((__parsec_chore_t *) self.incarnations)[0].type = PARSEC_DEV_CPU;
+          ((__parsec_chore_t *) self.incarnations)[0].evaluate = NULL;
+          ((__parsec_chore_t *) self.incarnations)[0].hook = hook;
+          ((__parsec_chore_t *) self.incarnations)[1].type = PARSEC_DEV_NONE;
+          ((__parsec_chore_t *) self.incarnations)[1].evaluate = NULL;
+          ((__parsec_chore_t *) self.incarnations)[1].hook = NULL;
+        }
 
         self.release_task = parsec_release_task_to_mempool_update_nbtasks;
         self.complete_execution = do_nothing;
