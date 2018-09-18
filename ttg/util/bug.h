@@ -287,7 +287,7 @@ namespace mpqc {
      * @param exec the executable name
      */
     Debugger(const char *exec = 0);
-    ~Debugger();
+    virtual ~Debugger();
 
     /** The debug member attempts to start a debugger
         running on the current process. */
