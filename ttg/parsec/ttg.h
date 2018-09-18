@@ -189,6 +189,8 @@ namespace parsec {
 }  // namespace parsec
 
 extern "C" {
+typedef void (*parsec_static_op_t)(void *);  // static_op will be cast to this type
+
 typedef struct my_op_s {
   parsec_task_t parsec_task;
   int32_t in_data_count;
@@ -199,8 +201,7 @@ typedef struct my_op_s {
 //      stream_size;                        // Expected number of values to receive, only used for streaming inputs
 //  // (0 = unbounded stream)
   parsec_hash_table_item_t op_ht_item;
-  void (*function_template_class_ptr)(void *);
-  void (*function_template_class_ptr_cuda)(void *);
+  parsec_static_op_t function_template_class_ptr[::ttg::runtime_traits<::ttg::Runtime::PaRSEC>::num_execution_spaces];
   void *object_ptr;
   void (*static_set_arg)(int, int);
   parsec_key_t key;
@@ -216,15 +217,15 @@ static parsec_hook_return_t do_nothing(parsec_execution_stream_t *es, parsec_tas
 }
 
 extern "C" {
-static parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *task) {
+static inline parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *task) {
   my_op_t *me = (my_op_t *) task;
-  me->function_template_class_ptr(task);
+  me->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::Host)](task);
   (void) es;
   return PARSEC_HOOK_RETURN_DONE;
 }
-static parsec_hook_return_t hook_cuda(struct parsec_execution_stream_s *es, parsec_task_t *task) {
+static inline parsec_hook_return_t hook_cuda(struct parsec_execution_stream_s *es, parsec_task_t *task) {
   my_op_t *me = (my_op_t *) task;
-  me->function_template_class_ptr_cuda(task);
+  me->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::CUDA)](task);
   (void) es;
   return PARSEC_HOOK_RETURN_DONE;
 }
@@ -553,7 +554,17 @@ namespace parsec {
           return resultT{{&Op::set_arg_from_msg<IS>...}};
       }
 
+      template <::ttg::ExecutionSpace Space>
       static void static_op(parsec_task_t *my_task) {
+        if constexpr (Space == ::ttg::ExecutionSpace::Host)
+          static_op_host(my_task);
+        else if constexpr (Space == ::ttg::ExecutionSpace::CUDA)
+          static_op_cuda(my_task);
+        else abort();
+      }
+
+      template <::ttg::ExecutionSpace Space = ::ttg::ExecutionSpace::Host>
+      static void static_op_host(parsec_task_t *my_task) {
         my_op_t *task = (my_op_t *)my_task;
         derivedT *obj = (derivedT *)task->object_ptr;
         if (obj->tracing()) {
@@ -583,13 +594,66 @@ namespace parsec {
         }
       }
 
+      template <::ttg::ExecutionSpace Space = ::ttg::ExecutionSpace::CUDA>
+      static void static_op_cuda(parsec_task_t *my_task) {
+        my_op_t *task = (my_op_t *)my_task;
+        derivedT *obj = (derivedT *)task->object_ptr;
+        if (obj->tracing()) {
+          if constexpr (!::ttg::meta::is_void_v<keyT>)
+            ::ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", keyT((uintptr_t) task->key), ": executing");
+          else
+            ::ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : executing");
+        }
+
+        if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
+          obj->op_cuda(keyT((uintptr_t) task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
+                  obj->output_terminals);
+        } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
+          obj->op_cuda(keyT((uintptr_t) task->key), obj->output_terminals);
+        } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
+          obj->op_cuda(std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
+                  obj->output_terminals);
+        } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
+          obj->op_cuda(obj->output_terminals);
+        } else abort();
+
+        if (obj->tracing()) {
+          if constexpr (!::ttg::meta::is_void_v<keyT>)
+            ::ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", keyT((uintptr_t) task->key), ": done executing");
+          else
+            ::ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
+        }
+      }
+
+      template <::ttg::ExecutionSpace Space>
       static void static_op_noarg(parsec_task_t *my_task) {
+        if constexpr (Space == ::ttg::ExecutionSpace::Host)
+          static_op_noarg_host(my_task);
+        else if constexpr (Space == ::ttg::ExecutionSpace::CUDA)
+          static_op_noarg_cuda(my_task);
+        else abort();
+      }
+
+      template <::ttg::ExecutionSpace Space = ::ttg::ExecutionSpace::Host>
+      static void static_op_noarg_host(parsec_task_t *my_task) {
         my_op_t *task = (my_op_t *)my_task;
         derivedT *obj = (derivedT *)task->object_ptr;
         if constexpr(!::ttg::meta::is_void_v<keyT>) {
           obj->op(keyT((uintptr_t) task->key), obj->output_terminals);
         } else if constexpr(::ttg::meta::is_void_v<keyT>) {
           obj->op(obj->output_terminals);
+        }
+        else abort();
+      }
+
+      template <::ttg::ExecutionSpace Space = ::ttg::ExecutionSpace::CUDA>
+      static void static_op_noarg_cuda(parsec_task_t *my_task) {
+        my_op_t *task = (my_op_t *)my_task;
+        derivedT *obj = (derivedT *)task->object_ptr;
+        if constexpr(!::ttg::meta::is_void_v<keyT>) {
+          obj->op_cuda(keyT((uintptr_t) task->key), obj->output_terminals);
+        } else if constexpr(::ttg::meta::is_void_v<keyT>) {
+          obj->op_cuda(obj->output_terminals);
         }
         else abort();
       }
@@ -701,7 +765,9 @@ namespace parsec {
           newtask->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
           newtask->in_data_count = 0;
 
-          newtask->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op);
+          newtask->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::Host)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op<::ttg::ExecutionSpace::Host>);
+          if constexpr (have_cuda_op)
+            newtask->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::CUDA)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op<::ttg::ExecutionSpace::CUDA>);
           newtask->object_ptr = static_cast<derivedT *>(this);
           newtask->key = hk;
 
@@ -832,7 +898,9 @@ namespace parsec {
           task->parsec_task.taskpool = world.taskpool();
           task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
 
-          task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
+          task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::Host)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::Host>);
+          if constexpr (have_cuda_op)
+            task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::CUDA)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::CUDA>);
           task->object_ptr = static_cast<derivedT *>(this);
           using ::ttg::unique_hash;
           task->key = unique_hash<parsec_key_t>(key);
@@ -871,7 +939,9 @@ namespace parsec {
           task->parsec_task.taskpool = world.taskpool();
           task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
 
-          task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
+          task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::Host)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::Host>);
+          if constexpr (have_cuda_op)
+            task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::CUDA)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::CUDA>);
           task->object_ptr = static_cast<derivedT *>(this);
           using ::ttg::unique_hash;
           task->key = unique_hash<parsec_key_t>(0);
