@@ -554,17 +554,20 @@ namespace parsec {
           return resultT{{&Op::set_arg_from_msg<IS>...}};
       }
 
-      template <::ttg::ExecutionSpace Space>
-      static void static_op(parsec_task_t *my_task) {
+      /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
+      template <::ttg::ExecutionSpace Space, typename ... Args>
+      void baseop(Args&& ... args) {
+        derivedT *derived = static_cast<derivedT*>(this);
         if constexpr (Space == ::ttg::ExecutionSpace::Host)
-          static_op_host(my_task);
-        else if constexpr (Space == ::ttg::ExecutionSpace::CUDA)
-          static_op_cuda(my_task);
+          derived->op(std::forward<Args>(args)...);
+        else if constexpr (Space == ::ttg::ExecutionSpace::Host)
+          derived->op_cuda(std::forward<Args>(args)...);
         else abort();
       }
 
-      template <::ttg::ExecutionSpace Space = ::ttg::ExecutionSpace::Host>
-      static void static_op_host(parsec_task_t *my_task) {
+      template <::ttg::ExecutionSpace Space>
+      static void static_op(parsec_task_t *my_task) {
+
         my_op_t *task = (my_op_t *)my_task;
         derivedT *obj = (derivedT *)task->object_ptr;
         if (obj->tracing()) {
@@ -575,46 +578,15 @@ namespace parsec {
         }
 
         if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->op(keyT((uintptr_t) task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
+          obj->template baseop<Space>(keyT((uintptr_t) task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
                   obj->output_terminals);
         } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->op(keyT((uintptr_t) task->key), obj->output_terminals);
+          obj->template baseop<Space>(keyT((uintptr_t) task->key), obj->output_terminals);
         } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->op(std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
+          obj->template baseop<Space>(std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
                   obj->output_terminals);
         } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->op(obj->output_terminals);
-        } else abort();
-
-        if (obj->tracing()) {
-          if constexpr (!::ttg::meta::is_void_v<keyT>)
-            ::ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", keyT((uintptr_t) task->key), ": done executing");
-          else
-            ::ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
-        }
-      }
-
-      template <::ttg::ExecutionSpace Space = ::ttg::ExecutionSpace::CUDA>
-      static void static_op_cuda(parsec_task_t *my_task) {
-        my_op_t *task = (my_op_t *)my_task;
-        derivedT *obj = (derivedT *)task->object_ptr;
-        if (obj->tracing()) {
-          if constexpr (!::ttg::meta::is_void_v<keyT>)
-            ::ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", keyT((uintptr_t) task->key), ": executing");
-          else
-            ::ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : executing");
-        }
-
-        if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->op_cuda(keyT((uintptr_t) task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
-                  obj->output_terminals);
-        } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->op_cuda(keyT((uintptr_t) task->key), obj->output_terminals);
-        } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->op_cuda(std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
-                  obj->output_terminals);
-        } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->op_cuda(obj->output_terminals);
+          obj->template baseop<Space>(obj->output_terminals);
         } else abort();
 
         if (obj->tracing()) {
@@ -627,33 +599,12 @@ namespace parsec {
 
       template <::ttg::ExecutionSpace Space>
       static void static_op_noarg(parsec_task_t *my_task) {
-        if constexpr (Space == ::ttg::ExecutionSpace::Host)
-          static_op_noarg_host(my_task);
-        else if constexpr (Space == ::ttg::ExecutionSpace::CUDA)
-          static_op_noarg_cuda(my_task);
-        else abort();
-      }
-
-      template <::ttg::ExecutionSpace Space = ::ttg::ExecutionSpace::Host>
-      static void static_op_noarg_host(parsec_task_t *my_task) {
         my_op_t *task = (my_op_t *)my_task;
         derivedT *obj = (derivedT *)task->object_ptr;
         if constexpr(!::ttg::meta::is_void_v<keyT>) {
-          obj->op(keyT((uintptr_t) task->key), obj->output_terminals);
+          obj->template baseop<Space>(keyT((uintptr_t) task->key), obj->output_terminals);
         } else if constexpr(::ttg::meta::is_void_v<keyT>) {
-          obj->op(obj->output_terminals);
-        }
-        else abort();
-      }
-
-      template <::ttg::ExecutionSpace Space = ::ttg::ExecutionSpace::CUDA>
-      static void static_op_noarg_cuda(parsec_task_t *my_task) {
-        my_op_t *task = (my_op_t *)my_task;
-        derivedT *obj = (derivedT *)task->object_ptr;
-        if constexpr(!::ttg::meta::is_void_v<keyT>) {
-          obj->op_cuda(keyT((uintptr_t) task->key), obj->output_terminals);
-        } else if constexpr(::ttg::meta::is_void_v<keyT>) {
-          obj->op_cuda(obj->output_terminals);
+          obj->template baseop<Space>(obj->output_terminals);
         }
         else abort();
       }
