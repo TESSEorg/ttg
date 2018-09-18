@@ -556,11 +556,11 @@ namespace parsec {
 
       /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
       template <::ttg::ExecutionSpace Space, typename ... Args>
-      void baseop(Args&& ... args) {
+      void op(Args&& ... args) {
         derivedT *derived = static_cast<derivedT*>(this);
         if constexpr (Space == ::ttg::ExecutionSpace::Host)
           derived->op(std::forward<Args>(args)...);
-        else if constexpr (Space == ::ttg::ExecutionSpace::Host)
+        else if constexpr (Space == ::ttg::ExecutionSpace::CUDA)
           derived->op_cuda(std::forward<Args>(args)...);
         else abort();
       }
@@ -569,6 +569,7 @@ namespace parsec {
       static void static_op(parsec_task_t *my_task) {
 
         my_op_t *task = (my_op_t *)my_task;
+        opT *baseobj = (opT *)task->object_ptr;
         derivedT *obj = (derivedT *)task->object_ptr;
         if (obj->tracing()) {
           if constexpr (!::ttg::meta::is_void_v<keyT>)
@@ -578,15 +579,15 @@ namespace parsec {
         }
 
         if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->template baseop<Space>(keyT((uintptr_t) task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
+          baseobj->template op<Space>(keyT((uintptr_t) task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
                   obj->output_terminals);
         } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->template baseop<Space>(keyT((uintptr_t) task->key), obj->output_terminals);
+          baseobj->template op<Space>(keyT((uintptr_t) task->key), obj->output_terminals);
         } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->template baseop<Space>(std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
+          baseobj->template op<Space>(std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
                   obj->output_terminals);
         } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->template baseop<Space>(obj->output_terminals);
+          baseobj->template op<Space>(obj->output_terminals);
         } else abort();
 
         if (obj->tracing()) {
@@ -600,11 +601,12 @@ namespace parsec {
       template <::ttg::ExecutionSpace Space>
       static void static_op_noarg(parsec_task_t *my_task) {
         my_op_t *task = (my_op_t *)my_task;
+        opT *baseobj = (opT *)task->object_ptr;
         derivedT *obj = (derivedT *)task->object_ptr;
         if constexpr(!::ttg::meta::is_void_v<keyT>) {
-          obj->template baseop<Space>(keyT((uintptr_t) task->key), obj->output_terminals);
+          baseobj->template op<Space>(keyT((uintptr_t) task->key), obj->output_terminals);
         } else if constexpr(::ttg::meta::is_void_v<keyT>) {
-          obj->template baseop<Space>(obj->output_terminals);
+          baseobj->template op<Space>(obj->output_terminals);
         }
         else abort();
       }
