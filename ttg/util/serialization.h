@@ -70,7 +70,8 @@ namespace ttg {
     // t points to some memory in which we will construct an object from the header
     static void unpack_header(void* object, uint64_t header_size, const void* buf) {
       assert(header_size == 0);
-      new (object) T;
+      using decT = std::decay_t<T>;
+      new (object) decT;
     }
 
     static void unpack_payload(void* object, uint64_t chunk_size, uint64_t pos, const void* buf) {
