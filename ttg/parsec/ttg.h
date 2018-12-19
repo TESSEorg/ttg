@@ -786,7 +786,7 @@ namespace parsec {
         const ttg_data_descriptor *dKey = ::ttg::get_data_descriptor<Key>();
         uint64_t size_of_key = sizeof(Key);
         dKey->pack_payload(&key, &size_of_key, 0, reinterpret_cast<void**>(&msg.bytes));
-        const ttg_data_descriptor *dValue = ::ttg::get_data_descriptor<Value>();
+        const ttg_data_descriptor *dValue = ::ttg::get_data_descriptor<std::decay_t<Value>>();
         uint64_t size_of_value = sizeof(Value);
         dValue->pack_payload(&value, &size_of_value, size_of_key, reinterpret_cast<void**>(&msg.bytes));
         parsec_taskpool_t *tp = world.taskpool();
