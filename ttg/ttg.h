@@ -1305,16 +1305,28 @@ namespace ttg {
   }
 
   template <typename keyT, typename output_terminalT>
-  void finalize(const keyT &key, output_terminalT &t) {
+  std::enable_if_t<!meta::is_void_v<keyT>,void>
+  finalize(const keyT &key, output_terminalT &t) {
     t.finalize(key);
   }
 
   template <size_t i, typename keyT, typename... output_terminalsT>
-  void finalize(const keyT &key, std::tuple<output_terminalsT...> &t) {
+  std::enable_if_t<!meta::is_void_v<keyT>,void>
+  finalize(const keyT &key, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).finalize(key);
   }
 
-  // Make type of tuple of edges from type of tuple of terminals
+  template <typename output_terminalT>
+  void finalize(output_terminalT &t) {
+    t.finalize();
+  }
+
+  template <size_t i, typename... output_terminalsT>
+  void finalize(std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).finalize();
+  }
+
+// Make type of tuple of edges from type of tuple of terminals
   template <typename termsT>
   struct terminals_to_edges;
   template <typename... termsT>
