@@ -581,6 +581,42 @@ int try_main(int argc, char **argv) {
       // must fence here to flush out all tasks associated with Everything5 and Fibonacci
       // TODO must fence in Op destructors to avoid compositional nightmares like this
       ttg_fence(ttg_default_execution_context());
+
+      // compose Fibonacci from free functions
+      {
+        const auto max = 1000;
+        // Sum Fibonacci numbers up to max
+        auto next = [max](const int &F_n_plus_1,
+                          const int &F_n,
+                          std::tuple<Out<int, int>, Out<Void, int>> &outs) {
+          // if this is first call reduce F_np1 and F_n also
+          if (F_n_plus_1 == 2 && F_n == 1) sendv<1>(F_n_plus_1 + F_n, outs);
+
+          const auto F_n_plus_2 = F_n_plus_1 + F_n;
+          if (F_n_plus_1 < max) {
+            sendv<1>(F_n_plus_1, outs);
+            send<0>(F_n_plus_2, F_n_plus_1, outs);
+          } else
+            finalize < 1 > (outs);
+        };
+
+        auto print_sum = [max](const int &value, std::tuple<> &out) {
+          ::ttg::print("wrap: sum of Fibonacci numbers up to ", max, " = ", value);
+        };
+
+        Edge<int, int> N2N;
+        Edge<Void, int> N2R;
+
+        auto n = wrap(next, edges(N2N), edges(N2N, N2R));
+        auto p = wrap(print_sum, edges(N2R), edges());
+        p->set_input_reducer<0>([](int &&a, int &&b) {
+          ::ttg::print("current value of Fibonacci reducer = ", a, ", received = ", b, "new value = ", a+b);
+          return a + b;
+        });
+        n->invoke(2, 1);
+
+        ttg_fence(ttg_default_execution_context());
+      }
     }
 #endif
 
@@ -608,3 +644,4 @@ int main(int argc, char **argv) {
     return 1;
   }
 }
+

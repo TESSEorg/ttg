@@ -152,7 +152,7 @@ namespace ttg {
         /// To use pthread_t portably you must store pthread_t obtained from pthread_self (used to obtain pthread_t for
         /// the main thread) and pthread_create; then pass pointers to the unique objects to this constructor. The
         /// pointers are used to index threads.
-        Pool(const std::vector<const pthread_t *> &threads) {
+        explicit Pool(const std::vector<const pthread_t *> &threads) {
           for (const auto &thread : threads) {
             assert(thread != nullptr);
             pool_[thread].resize(nwatchpoints_per_thread);
@@ -280,18 +280,18 @@ namespace mpqc {
      * @param reason optional string specifying the reason for traceback
      * @return backtrace
      */
-    static void __traceback(const std::string &prefix, const char *reason = 0);
+    static void __traceback(const std::string &prefix, const char *reason = nullptr);
 
    public:
     /** @brief Programmatic construction of Debugger
      * @param exec the executable name
      */
-    Debugger(const char *exec = 0);
+    explicit Debugger(const char *exec = nullptr);
     virtual ~Debugger();
 
     /** The debug member attempts to start a debugger
         running on the current process. */
-    virtual void debug(const char *reason = 0);
+    virtual void debug(const char *reason);
     /** The traceback member attempts to produce a Backtrace
      for the current process.  A symbol table must be saved for
      the executable if any sense is to be made of the traceback.
@@ -299,7 +299,7 @@ namespace mpqc {
      (2) backtrace, or (3) certain platforms with hardwired unwinding.
      @param reason optional string specifying the reason for traceback
      */
-    virtual void traceback(const char *reason = 0);
+    virtual void traceback(const char *reason);
     /// Turn on or off debugging on a signel.  The default is on.
     virtual void set_debug_on_signal(int);
     /// Turn on or off traceback on a signel.  The default is on.

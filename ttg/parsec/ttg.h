@@ -3,6 +3,7 @@
 
 #include "../ttg.h"
 #include "../util/meta.h"
+#include "../util/serialization.h"
 
 #include <array>
 #include <cassert>
@@ -80,8 +81,8 @@ namespace parsec {
 
     class World {
         int _parsec_ttg_tag = -1;
-        const int PARSEC_TTG_MAX_AM_SIZE = 1024*1024;
      public:
+        static const int PARSEC_TTG_MAX_AM_SIZE = 1024*1024;
       World(int *argc, char **argv[], int ncores) {
           ctx = parsec_init(ncores, argc, argv);
           es = ctx->virtual_processes[0]->execution_streams[0];
@@ -374,41 +375,19 @@ namespace parsec {
     // std::map<int, ParsecBaseOp*> ParsecBaseOp::function_id_to_instance = {};
 
     namespace detail {
-    template <typename Key, typename Value, typename Enabler = void>
-    struct msg_t;
-
-    template <typename Key, typename Value>
-    struct msg_t<Key,Value,std::enable_if_t<::ttg::meta::is_none_void_v<Key,Value>>> {
-      msg_header_t op_id;
-      Key key;
-      Value val;
-      msg_t() = default;
-      msg_t(uint64_t op_id, std::size_t param_id, const Key& key, const Value& val) : op_id{op_id, param_id}, key(key), val(val) {}
-    };
-
-    template <typename Key, typename Value>
-    struct msg_t<Key,Value,std::enable_if_t<::ttg::meta::is_void_v<Key> && !::ttg::meta::is_void_v<Value>>> {
-      msg_header_t op_id;
-      Value val;
-      msg_t() = default;
-      msg_t(uint64_t op_id, std::size_t param_id, const ::ttg::Void&, const Value& val) : op_id{op_id, param_id}, val(val) {}
-    };
-
-    template <typename Key, typename Value>
-    struct msg_t<Key,Value,std::enable_if_t<!::ttg::meta::is_void_v<Key> && ::ttg::meta::is_void_v<Value>>> {
-      msg_header_t op_id;
-      Key key;
-      msg_t() = default;
-      msg_t(uint64_t op_id, std::size_t param_id, const Key& key, const ::ttg::Void&) : op_id{op_id, param_id}, key(key) {}
-    };
-
-    template <typename Key, typename Value>
-    struct msg_t<Key,Value,std::enable_if_t<::ttg::meta::is_all_void_v<Key,Value>>> {
-      msg_header_t op_id;
-      msg_t() = default;
-      msg_t(uint64_t op_id, std::size_t param_id, const ::ttg::Void&, const ::ttg::Void&) : op_id{op_id, param_id} {}
-    };
-
+        struct msg_t {
+            union {
+                struct {
+                    msg_header_t op_id;
+                    char bytes[1];
+                };
+                struct {
+                    char all_bytes[World::PARSEC_TTG_MAX_AM_SIZE];
+                };
+            };
+            msg_t() = default;
+            msg_t(uint64_t op_id, std::size_t param_id) : op_id{op_id, param_id} {}
+        };
     }  // namespace detail
 
     template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
@@ -633,30 +612,46 @@ namespace parsec {
       template <std::size_t i>
       void set_arg_from_msg(void *data, std::size_t size) {
           using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
-          using msg_t = detail::msg_t<keyT,std::decay_t<valueT>>;
-          assert(size == sizeof(msg_t) &&
-                 "Trying to unpack as message that does not hold the right number of bytes for this type");
+          using msg_t = detail::msg_t;
           msg_t *msg = static_cast<msg_t*>(data);
           // case 1
-          if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && !std::is_void_v<valueT>)
-            set_arg<i, keyT, valueT>(msg->key, std::forward<valueT>(msg->val));
-          // case 2
-          else if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
-            set_arg<i, keyT, ::ttg::Void>(msg->key, ::ttg::Void{});
-          // case 3
-          else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
-            set_arg<keyT>(msg->key);
-          // case 4
-          else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && !std::is_void_v<valueT>)
-            set_arg<i, keyT, valueT>(std::forward<valueT>(msg->val));
-          // case 5
-          else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
-            set_arg<i, keyT, ::ttg::Void>(::ttg::Void{});
-          // case 6
-          else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>)
-            set_arg<keyT>();
-          else
-            abort();
+          if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && !std::is_void_v<valueT>) {
+                  keyT key;
+                  const ttg_data_descriptor *dKey = ::ttg::get_data_descriptor<keyT>();
+                  using decvalueT = std::decay_t<valueT>;
+                  decvalueT val;
+                  const ttg_data_descriptor *dValue = ::ttg::get_data_descriptor<decvalueT>();
+                  dKey->unpack_payload(&key, sizeof(keyT), 0, msg->bytes);
+                  dValue->unpack_payload(&val, sizeof(decvalueT), sizeof(keyT), msg->bytes);
+                  set_arg<i, keyT, valueT>(key, std::move(val));
+                  // case 2
+              } else if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
+                  keyT key;
+                  const ttg_data_descriptor* dKey = ::ttg::get_data_descriptor<keyT>();
+                  dKey->unpack_payload(&key, sizeof(keyT), 0, msg->bytes);
+                  set_arg<i, keyT, ::ttg::Void>(key, ::ttg::Void{});
+                  // case 3
+              } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
+                  keyT key;
+                  const ttg_data_descriptor* dKey = ::ttg::get_data_descriptor<keyT>();
+                  dKey->unpack_payload(&key, sizeof(keyT), 0, msg->bytes);
+                  set_arg<keyT>(key);
+                  // case 4
+              } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && !std::is_void_v<valueT>) {
+                  using decvalueT = std::decay_t<valueT>;
+                  decvalueT val;
+                  const ttg_data_descriptor* dValue = ::ttg::get_data_descriptor<decvalueT>();
+                  dValue->unpack_payload(&val, sizeof(decvalueT), 0, msg->bytes);
+                  set_arg<i, keyT, valueT>(std::move(val));
+                  // case 5
+              } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
+                  set_arg<i, keyT, ::ttg::Void>(::ttg::Void{});
+                  // case 6
+              } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
+                  set_arg<keyT>();
+              } else {
+              abort();
+          }
       }
 
       template <std::size_t i, typename Key, typename Value>
@@ -797,7 +792,7 @@ namespace parsec {
       template <std::size_t i, typename Key, typename Value>
       std::enable_if_t<::ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void>
       set_arg(Value &&value) {
-        set_arg_impl<i>(::ttg::Void{},std::forward<Value>(value));
+          set_arg_impl<i>(::ttg::Void{},std::forward<Value>(value));
       }
 
       // Used to set the i'th argument
@@ -819,8 +814,14 @@ namespace parsec {
         // the target task is remote. Pack the information and send it to
         // the corresponding peer.
         // TODO do we need to copy value?
-        using msg_t = detail::msg_t<keyT,std::decay_t<valueT>>;
-        msg_t msg(get_instance_id(), i, key, value);
+        using msg_t = detail::msg_t;
+        msg_t msg(get_instance_id(), i);
+        const ttg_data_descriptor *dKey = ::ttg::get_data_descriptor<Key>();
+        uint64_t size_of_key = sizeof(Key);
+        dKey->pack_payload(&key, &size_of_key, 0, reinterpret_cast<void**>(&msg.bytes));
+        const ttg_data_descriptor *dValue = ::ttg::get_data_descriptor<std::decay_t<Value>>();
+        uint64_t size_of_value = sizeof(Value);
+        dValue->pack_payload(&value, &size_of_value, size_of_key, reinterpret_cast<void**>(&msg.bytes));
         parsec_taskpool_t *tp = world.taskpool();
         tp->tdm.module->outgoing_message_start(tp, owner, NULL);       
         tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0, MPI_COMM_WORLD);       
