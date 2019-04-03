@@ -3,14 +3,15 @@ Prototype TESSE C++ API, with MADNESS and PaRSEC as backends. These instructions
 
 # prerequisites
 - CMake, version 3.6 or more recent
-- C++14 compiler
-- Boost 1.66 (__to be released in 12/2017!__ ) ... until the release occurs get boost as follows (more instructions   [here](https://github.com/boostorg/boost/wiki/Getting-Started)
+- C++17 compiler
+- Boost 1.66
+  - if don't have recent Boost install as follows (more instructions   [here](https://github.com/boostorg/boost/wiki/Getting-Started)
 ):
-  - `git clone --recursive https://github.com/boostorg/boost.git`
-  - `cd boost`
-  - `./bootstrap.sh`
-  - `./b2 headers`
-  - make sure that you pass the output of `pwd` to CMake as the argument to `BOOST_ROOT`
+    - `git clone --recursive https://github.com/boostorg/boost.git`
+    - `cd boost`
+    - `./bootstrap.sh`
+    - `./b2 headers`
+    - make sure that you pass the output of `pwd` to CMake as the argument to `BOOST_ROOT`
 
 # compile
 GNU C++ (6.x) and Clang (Apple LLVM 8.0.0) compilers work. To avoid polluting the source tree, make a build directory,
