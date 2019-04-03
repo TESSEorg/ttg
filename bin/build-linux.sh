@@ -47,22 +47,24 @@ fi
 cmake ${TRAVIS_BUILD_DIR} \
     -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
+    -DCMAKE_PREFIX_PATH="${INSTALL_PREFIX}/eigen3" \
     -DBOOST_ROOT="${INSTALL_PREFIX}/boost" \
     -DMADNESS_ROOT_DIR="${INSTALL_PREFIX}/madness" \
-    -DEIGEN3_INCLUDE_DIR="${INSTALL_PREFIX}/eigen3" \
     -DBTAS_INSTALL_DIR="${INSTALL_PREFIX}/BTAS" \
     -DCMAKE_CXX_FLAGS="${CXX_FLAGS} ${EXTRAFLAGS} ${CODECOVCXXFLAGS}"
 
 ### test
-#make -j2 check VERBOSE=1
+make serialization
+tests/serialization
 
 ### examples
-make test-mad t9-mad spmm-mad bspmm-mad serialization
-./examples/ttg-mad
-./examples/t9-mad
-./examples/spmm-mad
-./examples/bspmm-mad
-./tests/serialization
+make test-mad t9-mad spmm-mad bspmm-mad
+export MPI_HOME=${INSTALL_PREFIX}/mpich
+for PROG in test-mad t9-mad spmm-mad bspmm-mad
+do
+  examples/$PROG
+  setarch `uname -m` -R ${MPI_HOME}/bin/mpirun -n 2 examples/$PROG
+done
 
 # print ccache stats
 ccache -s
