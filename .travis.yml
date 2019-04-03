@@ -15,9 +15,12 @@ addons:
     sources: &clang8_sources
       - llvm-toolchain-xenial-8
     packages: &base_packages
-    - cmake
-    - cmake-data
-    - lcov
+      - libblas-dev
+      - liblapack-dev
+      - libtbb-dev
+      - cmake
+      - cmake-data
+      - lcov
 
 env:
   global:
@@ -32,7 +35,7 @@ matrix:
   fast_finish: true
   include:
     - compiler: clang
-      env: CLANG_VERSION=7 BUILD_TYPE=Debug
+      env: CLANG_VERSION=7 GCC_VERSION=8 BUILD_TYPE=Debug
       addons:
         apt:
           sources:
@@ -43,8 +46,9 @@ matrix:
             - clang-7
             - libc++-7-dev
             - libc++abi-7-dev
+            - g++-8
     - compiler: clang
-      env: CLANG_VERSION=7 BUILD_TYPE=Release
+      env: CLANG_VERSION=7 GCC_VERSION=8 BUILD_TYPE=Release
       addons:
         apt:
           sources:
@@ -55,8 +59,9 @@ matrix:
             - clang-7
             - libc++-7-dev
             - libc++abi-7-dev
+            - g++-8
     - compiler: clang
-      env: CLANG_VERSION=8 BUILD_TYPE=Debug
+      env: CLANG_VERSION=8 GCC_VERSION=8 BUILD_TYPE=Debug
       addons:
         apt:
           sources:
@@ -67,8 +72,9 @@ matrix:
             - clang-8
             - libc++-8-dev
             - libc++abi-8-dev
+            - g++-8
     - compiler: clang
-      env: CLANG_VERSION=8 BUILD_TYPE=Release
+      env: CLANG_VERSION=8 GCC_VERSION=8 BUILD_TYPE=Release
       addons:
         apt:
           sources:
@@ -79,6 +85,7 @@ matrix:
             - clang-8
             - libc++-8-dev
             - libc++abi-8-dev
+            - g++-8
     - compiler: gcc
       env: GCC_VERSION=8 BUILD_TYPE=Debug
       addons:
