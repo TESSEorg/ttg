@@ -573,9 +573,9 @@ int try_main(int argc, char **argv) {
       {
         const auto max = 1000;
         // Sum Fibonacci numbers up to max
-        auto next = [max](const int &F_n_plus_1,
-                          const int &F_n,
-                          std::tuple<Out<int, int>, Out<Void, int>> &outs) {
+        auto fib = [max](const int &F_n_plus_1,
+                         const int &F_n,
+                         std::tuple<Out<int, int>, Out<Void, int>> &outs) {
           // if this is first call reduce F_n also
           if (F_n_plus_1 == 2 && F_n == 1) sendv<1>(F_n, outs);
 
@@ -587,8 +587,8 @@ int try_main(int argc, char **argv) {
             finalize<1>(outs);
         };
 
-        auto print_sum = [max](const int &value, std::tuple<> &out) {
-          ::ttg::print("wrap: sum of Fibonacci numbers up to ", max, " = ", value);
+        auto print = [max](const int &value, std::tuple<> &out) {
+          ::ttg::print("sum of Fibonacci numbers up to ", max, " = ", value);
           {  // validate the result
             auto ref_value = 0;
             // recursive lambda pattern from http://pedromelendez.com/blog/2015/07/16/recursive-lambdas-in-c14/
@@ -608,17 +608,17 @@ int try_main(int argc, char **argv) {
           }
         };
 
-        Edge<int, int> N2N;
-        Edge<Void, int> N2P;
+        Edge<int, int> F2F;
+        Edge<Void, int> F2P;
 
-        auto n = wrap(next, edges(N2N), edges(N2N, N2P), "next");
-        auto p = wrap(print_sum, edges(N2P), edges(), "print_sum");
+        auto f = make_op(fib, edges(F2F), edges(F2F, F2P), "next");
+        auto p = make_op(print, edges(F2P), edges(), "print");
         p->set_input_reducer<0>([](int &&a, int &&b) {
           return a + b;
         });
-        make_graph_executable(n.get());
+        make_graph_executable(f.get());
         if( ttg_default_execution_context().rank() == 0)
-          n->invoke(2, 1);
+          f->invoke(2, 1);
 
         ttg_fence(ttg_default_execution_context());
       }

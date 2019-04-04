@@ -278,4 +278,14 @@ auto wrap(funcT &&func, const std::tuple<::ttg::Edge<keyT, input_edge_valuesT>..
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
+// pattern from https://www.fluentcpp.com/2017/10/27/function-aliases-cpp/
+#define TTG_UTIL_ALIAS_TEMPLATE_FUNCTION(aliasname,funcname)\
+template<typename... Args> \
+inline auto aliasname(Args&&... args) \
+{ \
+    return funcname(std::forward<Args>(args)...); \
+}
+
+TTG_UTIL_ALIAS_TEMPLATE_FUNCTION(make_op, wrap);
+
 #endif  // CXXAPI_WRAP_H
