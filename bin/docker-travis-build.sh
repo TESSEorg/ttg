@@ -20,7 +20,7 @@ curl -sSL "http://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add -
 echo "deb http://apt.llvm.org/xenial/ llvm-toolchain-xenial-8 main" | tee -a /etc/apt/sources.list > /dev/null
 apt-add-repository -y "ppa:ubuntu-toolchain-r/test"
 apt-get -yq update >> ~/apt-get-update.log
-apt-get -yq --no-install-suggests --no-install-recommends --force-yes install g++-8  libblas-dev liblapack-dev libtbb-dev clang-8 libc++-8-dev libc++abi-8-dev cmake cmake-data
+apt-get -yq --no-install-suggests --no-install-recommends --force-yes install g++-8  libblas-dev liblapack-dev libtbb-dev clang-8 libc++-8-dev libc++abi-8-dev gdb cmake cmake-data
 mkdir -p ${TRAVIS_BUILD_TOPDIR}
 cd ${TRAVIS_BUILD_TOPDIR}
 git clone git@github.com:TESSEorg/tesse-cxx.git ${TRAVIS_BUILD_TOPDIR}/TESSEorg/tesse-cxx
@@ -49,8 +49,6 @@ FROM travisci/ci-sardonyx:packer-1541445940-e193d27
 
 # Use baseimage-docker's init system.
 CMD ["/sbin/my_init"]
-
-RUN echo "$PUBKEY"
 
 # create source, build, and install dirs
 RUN mkdir -p /home/travis/_build
