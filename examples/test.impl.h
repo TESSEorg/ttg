@@ -576,31 +576,49 @@ int try_main(int argc, char **argv) {
         auto next = [max](const int &F_n_plus_1,
                           const int &F_n,
                           std::tuple<Out<int, int>, Out<Void, int>> &outs) {
-          // if this is first call reduce F_np1 and F_n also
-          if (F_n_plus_1 == 2 && F_n == 1) sendv<1>(F_n_plus_1 + F_n, outs);
+          // if this is first call reduce F_n also
+          if (F_n_plus_1 == 2 && F_n == 1) sendv<1>(F_n, outs);
 
           const auto F_n_plus_2 = F_n_plus_1 + F_n;
           if (F_n_plus_1 < max) {
             sendv<1>(F_n_plus_1, outs);
             send<0>(F_n_plus_2, F_n_plus_1, outs);
           } else
-            finalize < 1 > (outs);
+            finalize<1>(outs);
         };
 
         auto print_sum = [max](const int &value, std::tuple<> &out) {
           ::ttg::print("wrap: sum of Fibonacci numbers up to ", max, " = ", value);
+          {  // validate the result
+            auto ref_value = 0;
+            // recursive lambda pattern from http://pedromelendez.com/blog/2015/07/16/recursive-lambdas-in-c14/
+            auto validator = [max, &ref_value](int f_np1, int f_n) {
+              auto impl = [max, &ref_value](int f_np1, int f_n, const auto &impl_ref) -> void {
+                assert(f_n < max);
+                ref_value += f_n;
+                if (f_np1 < max) {
+                  const auto f_np2 = f_np1 + f_n;
+                  impl_ref(f_np2, f_np1, impl_ref);
+                }
+              };
+              impl(f_np1, f_n, impl);
+            };
+            validator(2, 1);
+            assert(value == ref_value);
+          }
         };
 
         Edge<int, int> N2N;
-        Edge<Void, int> N2R;
+        Edge<Void, int> N2P;
 
-        auto n = wrap(next, edges(N2N), edges(N2N, N2R));
-        auto p = wrap(print_sum, edges(N2R), edges());
+        auto n = wrap(next, edges(N2N), edges(N2N, N2P), "next");
+        auto p = wrap(print_sum, edges(N2P), edges(), "print_sum");
         p->set_input_reducer<0>([](int &&a, int &&b) {
-          ::ttg::print("current value of Fibonacci reducer = ", a, ", received = ", b, "new value = ", a+b);
           return a + b;
         });
-        n->invoke(2, 1);
+        make_graph_executable(n.get());
+        if( ttg_default_execution_context().rank() == 0)
+          n->invoke(2, 1);
 
         ttg_fence(ttg_default_execution_context());
       }
