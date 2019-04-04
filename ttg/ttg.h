@@ -636,8 +636,11 @@ namespace ttg {
     void outfunc(TerminalBase *out) { out_visitor_(out); }
   };
 
-  template <typename OpVisitor, typename InVisitor, typename OutVisitor>
-  auto make_traverse(OpVisitor &&op_v, InVisitor &&in_v, OutVisitor &&out_v) {
+  namespace {
+    auto trivial_1param_lambda = [](auto &&op) {};
+  }
+  template <typename OpVisitor = decltype(trivial_1param_lambda)&, typename InVisitor = decltype(trivial_1param_lambda)&, typename OutVisitor = decltype(trivial_1param_lambda)&>
+  auto make_traverse(OpVisitor &&op_v = trivial_1param_lambda, InVisitor &&in_v = trivial_1param_lambda, OutVisitor &&out_v = trivial_1param_lambda) {
     return Traverse<std::remove_reference_t<OpVisitor>, std::remove_reference_t<InVisitor>,
                     std::remove_reference_t<OutVisitor>>{std::forward<OpVisitor>(op_v), std::forward<InVisitor>(in_v),
                                                          std::forward<OutVisitor>(out_v)};
@@ -776,8 +779,7 @@ namespace ttg {
   std::enable_if_t<(std::is_convertible_v<std::remove_const_t<std::remove_reference_t<OpBasePtrs>>, OpBase *> && ...),
                    bool>
   make_graph_executable(OpBasePtrs &&... ops) {
-    return ::ttg::make_traverse([](auto x) { x->make_executable(); }, [](auto x) {},
-                                [](auto x) {})(std::forward<OpBasePtrs>(ops)...);
+    return ::ttg::make_traverse([](auto&&x) { std::forward<decltype(x)>(x)->make_executable(); })(std::forward<OpBasePtrs>(ops)...);
   }
 
   template <typename keyT = void, typename valueT = void>
