@@ -37,7 +37,7 @@ namespace madness {
       if (detail::default_world_accessor() != nullptr) {
         return *detail::default_world_accessor();
       } else {
-        throw "madness::ttg::set_default_world() must be called before use";
+        throw std::runtime_error("madness::ttg::set_default_world() must be called before use");
       }
     }
     inline void set_default_world(World &world) { detail::default_world_accessor() = &world; }
@@ -325,7 +325,7 @@ namespace madness {
           if (args->nargs[i] == 0) {
             ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
                                ": error argument is already finalized : ", i);
-            throw "bad set arg";
+            throw std::runtime_error("Op::set_arg called for a finalized stream");
           }
 
           auto reducer = std::get<i>(input_reducers);
@@ -434,7 +434,7 @@ namespace madness {
 
           if (args->nargs[i] == 0) {
             ::ttg::print_error(world.rank(), ":", get_name(), " : error argument is already finalized : ", i);
-            throw "bad set arg";
+            throw std::runtime_error("Op::set_arg called for a finalized stream");
           }
 
           auto reducer = std::get<i>(input_reducers);
@@ -442,6 +442,9 @@ namespace madness {
             // N.B. Right now reductions are done eagerly, without spawning tasks
             //      this means we must lock
             args->lock();
+            if (tracing()) {
+              ::ttg::print_error(world.rank(), ":", get_name(), " : reducing value into argument : ", i);
+            }
             // have a value already? if not, set, otherwise reduce
             if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
               this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
@@ -463,6 +466,9 @@ namespace madness {
             // this
             if (args->stream_size[i] != 0) {
               args->nargs[i]--;
+              if (tracing()) {
+                ::ttg::print_error(world.rank(), ":", get_name(), " : stream ", i, " has size ", args->stream_size[i], " current nargs", args->nargs[i]);
+              }
               if (args->nargs[i] == 0) args->counter--;
             }
             args->unlock();
@@ -562,7 +568,7 @@ namespace madness {
           worldobjT::send(owner, &opT::template set_argstream_size<i, true>, size);
         } else {
           if (tracing()) {
-            ::ttg::print(world.rank(), ":", get_name(), " : setting stream size for terminal ", i);
+            ::ttg::print(world.rank(), ":", get_name(), " : setting stream size to ", size, " for terminal ", i);
           }
 
           accessorT acc;
@@ -671,7 +677,7 @@ namespace madness {
           // check if stream is already finalized
           if (args->nargs[i] == 0) {
             ::ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error stream is already finalized : ", i);
-            throw std::runtime_error("Op::finalized called for a finalized stream");
+            throw std::runtime_error("Op::finalize called for a finalized stream");
           }
 
           // commit changes
@@ -726,7 +732,7 @@ namespace madness {
           // check if stream is already finalized
           if (args->nargs[i] == 0) {
             ::ttg::print_error(world.rank(), ":", get_name(), " : error stream is already finalized : ", i);
-            throw std::runtime_error("Op::finalized called for a finalized stream");
+            throw std::runtime_error("Op::finalize called for a finalized stream");
           }
 
           // commit changes
@@ -956,7 +962,8 @@ namespace madness {
       virtual ~Op() {
         if (cache.size() != 0) {
           std::cerr << world.rank() << ":"
-                    << "warning: unprocessed tasks in destructor of operation '" << get_name() << "'" << std::endl;
+                    << "warning: unprocessed tasks in destructor of operation '" << get_name()
+                    << "' (class name = " << get_class_name() << ")" << std::endl;
           std::cerr << world.rank() << ":"
                     << "   T => argument assigned     F => argument unassigned" << std::endl;
           int nprint = 0;
@@ -978,6 +985,9 @@ namespace madness {
 
       template <std::size_t i, typename Reducer>
       void set_input_reducer(Reducer &&reducer) {
+        if (tracing()) {
+          ::ttg::print(world.rank(), ":", get_name(), " : setting reducer for terminal ", i);
+        }
         std::get<i>(input_reducers) = reducer;
       }
 
@@ -1010,15 +1020,29 @@ namespace madness {
       /// Manual injection of a task with all input arguments specified as a tuple
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>,void>
       invoke(const Key &key, const input_values_tuple_type &args) {
+        TTG_OP_ASSERT_EXECUTABLE();
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, key, args);
+      }
+
+      /// Manual injection of a key-free task with all input arguments specified as a tuple
+      template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>,void>
+      invoke(const input_values_tuple_type &args) {
+        TTG_OP_ASSERT_EXECUTABLE();
+        set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, args);
       }
 
       /// Manual injection of a task that has no arguments
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>,void>
-      invoke(const Key &key) { set_arg<Key>(key); }
+      invoke(const Key &key) {
+        TTG_OP_ASSERT_EXECUTABLE();
+        set_arg<Key>(key);
+      }
 
       /// Manual injection of a task that has no key or arguments
-      template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>,void> invoke() { set_arg<Key>(); }
+      template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>,void> invoke() {
+        TTG_OP_ASSERT_EXECUTABLE();
+        set_arg<Key>();
+      }
 
       /// keymap accessor
       /// @return the keymap

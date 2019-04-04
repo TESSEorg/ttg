@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <boost/callable_traits.hpp>  // needed for wrap.h
+#include <boost/core/demangle.hpp>
 
 #include "util/demangle.h"
 #include "util/meta.h"
@@ -327,6 +328,8 @@ namespace ttg {
       // std::cout << name << "@" << (void *)this << " -> " << instance_id << std::endl;
     }
 
+    virtual ~OpBase() = default;
+
     /// Sets trace for all operations to value and returns previous setting
     static bool set_trace_all(bool value) {
       std::swap(trace, value);
@@ -357,6 +360,11 @@ namespace ttg {
 
     /// Gets the name of this operation
     const std::string &get_name() const { return name; }
+
+    /// Gets the demangled class name (uses RTTI)
+    std::string get_class_name() const {
+      return boost::core::demangle(typeid(*this).name());
+    }
 
     /// Returns the vector of input terminals
     const std::vector<TerminalBase *> &get_inputs() const { return inputs; }
@@ -393,15 +401,26 @@ namespace ttg {
     /// Waits for the entire TTG associated with this op to be completed (collective)
     virtual void fence() = 0;
 
-    /// Queries if this ready to execute
-    /// @return true is this object is executable
-    bool is_executable() const { return executable; }
-
     /// Marks this executable
     /// @return nothing
     virtual void make_executable() = 0;
 
-    virtual ~OpBase() {}
+    /// Queries if this ready to execute
+    /// @return true is this object is executable
+    bool is_executable() const { return executable; }
+
+    /// Asserts that this is executable
+    /// Use this macro from inside a derived class
+    /// @throw std::logic_error if this is not executable
+#define TTG_OP_ASSERT_EXECUTABLE() \
+      do { \
+        if (!this->is_executable()) { \
+          std::ostringstream oss; \
+          oss << "Op is not executable at " << __FILE__ << ":" << __LINE__; \
+          throw std::logic_error(oss.str().c_str()); \
+        } \
+      } while (0);
+
   };
 
   // With more than one source file this will need to be moved
