@@ -228,15 +228,21 @@ namespace madness {
       struct OpArgs : TaskInterface {
        public:
         int counter;                            // Tracks the number of arguments finalized
-        std::array<std::size_t, numins> nargs;  // Tracks the number of expected values (0 = finalized)
+        std::array<std::size_t, numins> nargs;  // Tracks the number of expected values
+                                                // for any type of input: 0 = finalized;
+                                                // for a streaming input the following values are possible:
+                                                // - 0: finalized
+                                                // - std::numeric_limits<std::size_t>::max(): initial state (there is no value yet)
+                                                // - 1: if streaming: have a value, waiting for more
+                                                // - n: if nonstreaming: expect this many more values
         std::array<std::size_t, numins>
-            stream_size;             // Expected number of values to receive, only used for streaming inputs
-                                     // (0 = unbounded stream)
+            stream_size;             // Expected number of values to receive, to be used for streaming inputs
+                                     // (0 = unbounded stream, >0 = bounded stream)
         input_values_tuple_type t;   // The input values (does not include control)
         derivedT *derived;           // Pointer to derived class instance
         std::conditional_t<::ttg::meta::is_void_v<keyT>,::ttg::Void,keyT> key;                    // Task key
 
-        OpArgs() : counter(numins), nargs(), stream_size(), t() { std::fill(nargs.begin(), nargs.end(), 1); }
+        OpArgs() : counter(numins), nargs(), stream_size(), t() { std::fill(nargs.begin(), nargs.end(), std::numeric_limits<std::size_t>::max()); }
 
         void run(World &world) {
           // ::ttg::print("starting task");
@@ -329,8 +335,15 @@ namespace madness {
             args->lock();
             if constexpr (!::ttg::meta::is_void_v<valueT>) {  // for data values
               // have a value already? if not, set, otherwise reduce
-              if ((args->stream_size[i] == 0 && args->nargs[i] == 1) || (args->stream_size[i] == args->nargs[i])) {
+              if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
                 this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
+                // now have a value, reset nargs
+                if (args->stream_size[i] != 0) {
+                  args->nargs[i] = args->stream_size[i];
+                }
+                else {
+                  args->nargs[i] = 1;
+                }
               } else {
                 valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
                 this->get<i, std::decay_t<valueT> &>(args->t) =
@@ -352,7 +365,7 @@ namespace madness {
             if constexpr (!::ttg::meta::is_void_v<valueT>) {  // for data values
               this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
             }
-            args->nargs[i]--;
+            args->nargs[i] = 0;
             args->counter--;
           }
 
@@ -430,8 +443,15 @@ namespace madness {
             //      this means we must lock
             args->lock();
             // have a value already? if not, set, otherwise reduce
-            if ((args->stream_size[i] == 0 && args->nargs[i] == 1) || (args->stream_size[i] == args->nargs[i])) {
+            if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
               this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
+              // now have a value, reset nargs
+              if (args->stream_size[i] != 0) {
+                args->nargs[i] = args->stream_size[i];
+              }
+              else {
+                args->nargs[i] = 1;
+              }
             } else {
               valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
               // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
@@ -448,7 +468,7 @@ namespace madness {
             args->unlock();
           } else {  // this is a nonstreaming input => set the value
             this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
-            args->nargs[i]--;
+            args->nargs[i] = 0;
             args->counter--;
           }
 
@@ -565,7 +585,6 @@ namespace madness {
 
           // commit changes
           args->stream_size[i] = size;
-          args->nargs[i] = size;
 
           args->unlock();
         }
@@ -612,7 +631,6 @@ namespace madness {
 
           // commit changes
           args->stream_size[i] = size;
-          args->nargs[i] = size;
 
           args->unlock();
         }
