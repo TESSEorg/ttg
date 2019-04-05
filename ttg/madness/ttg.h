@@ -23,8 +23,6 @@
 
 #include <madness/world/world_task_queue.h>
 
-#include "../madness/watch.h"
-
 namespace madness {
   namespace ttg {
 
@@ -1082,5 +1080,7 @@ namespace madness {
 
   }  // namespace ttg
 }  // namespace madness
+
+#include "../madness/watch.h"
 
 #endif  // MADNESS_TTG_H_INCLUDED

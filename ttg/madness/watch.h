@@ -37,8 +37,8 @@ namespace madness {
         if (threads.empty()) {
           static pthread_t main_thread_id = pthread_self();
           threads.push_back(&main_thread_id);
-          for (auto t = 0ul; t != madness::ThreadPool::size(); ++t) {
-            threads.push_back(&(madness::ThreadPool::get_threads()[t].get_id()));
+          for (auto t = 0ul; t != ::madness::ThreadPool::size(); ++t) {
+            threads.push_back(&(::madness::ThreadPool::get_threads()[t].get_id()));
           }
         }
 #endif
