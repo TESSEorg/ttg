@@ -490,7 +490,7 @@ namespace madness {
         }
       }
 
-      // case 4
+      // case 5
       template <std::size_t i, typename Key = keyT, typename Value>
       std::enable_if_t<::ttg::meta::is_void_v<Key> && std::is_void_v<Value>,void>
       set_arg() {
@@ -870,6 +870,9 @@ namespace madness {
             finalize_argstream<i>();
           };
           input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+          if (tracing()) {
+            ::ttg::print(world.rank(), ":", get_name(), " : set callbacks for terminal ", input.get_name(), " assuming void {key,value} and no input");
+          }
         }
         else abort();
       }
@@ -884,14 +887,24 @@ namespace madness {
 
       template <std::size_t... IS, typename inedgesT>
       void connect_my_inputs_to_incoming_edge_outputs(std::index_sequence<IS...>, inedgesT &inedges) {
+        static_assert(sizeof...(IS) == std::tuple_size_v<input_terminals_type>);
+        static_assert(std::tuple_size_v<inedgesT> == std::tuple_size_v<input_terminals_type>);
         int junk[] = {0, (std::get<IS>(inedges).set_out(&std::get<IS>(input_terminals)), 0)...};
         junk[0]++;
+        if (tracing()) {
+          ::ttg::print(world.rank(), ":", get_name(), " : connected ", sizeof...(IS), " Op inputs to ", sizeof...(IS), " Edges");
+        }
       }
 
       template <std::size_t... IS, typename outedgesT>
       void connect_my_outputs_to_outgoing_edge_inputs(std::index_sequence<IS...>, outedgesT &outedges) {
+        static_assert(sizeof...(IS) == std::tuple_size_v<output_terminalsT>);
+        static_assert(std::tuple_size_v<outedgesT> == std::tuple_size_v<output_terminalsT>);
         int junk[] = {0, (std::get<IS>(outedges).set_in(&std::get<IS>(output_terminals)), 0)...};
         junk[0]++;
+        if (tracing()) {
+          ::ttg::print(world.rank(), ":", get_name(), " : connected ", sizeof...(IS), " Op outputs to ", sizeof...(IS), " Edges");
+        }
       }
 
      public:
@@ -910,7 +923,7 @@ namespace madness {
               ::ttg::print_error(world.rank(), ":", get_name(),  "#input_names", innames.size(), "!= #input_terminals", std::tuple_size<input_terminals_type>::value);
               throw this->get_name()+":madness::ttg::Op: #input names != #input terminals";
           }
-        if (outnames.size() != std::tuple_size<output_terminalsT>::value)
+        if (outnames.size() != std::tuple_size_v<output_terminalsT>)
             throw this->get_name()+":madness::ttg::Op: #output names != #output terminals";
 
         register_input_terminals(input_terminals, innames);
@@ -1064,72 +1077,6 @@ namespace madness {
     };
 
 #include "../wrap.h"
-
-    // clang-format off
-/*
- * This allows programmatic control of watchpoints. Requires MADWorld using legacy ThreadPool and macOS. Example:
- * @code
- *   double x = 0.0;
- *   ::madness::ttg::initialize_watchpoints();
- *   ::madness::ttg::watchpoint_set(&x, ::ttg::detail::MemoryWatchpoint_x86_64::kWord,
- *     ::ttg::detail::MemoryWatchpoint_x86_64::kWhenWritten);
- *   x = 1.0;  // this will generate SIGTRAP ...
- *   ttg_default_execution_context().taskq.add([&x](){ x = 1.0; });  // and so will this ...
- *   ::madness::ttg::watchpoint_set(&x, ::ttg::detail::MemoryWatchpoint_x86_64::kWord,
- *     ::ttg::detail::MemoryWatchpoint_x86_64::kWhenWrittenOrRead);
- *   ttg_default_execution_context().taskq.add([&x](){
- *       std::cout << x << std::endl; });  // and even this!
- *
- * @endcode
- */
-    // clang-format on
-
-    namespace detail {
-      inline const std::vector<const pthread_t *> &watchpoints_threads() {
-        static std::vector<const pthread_t *> threads;
-        // can set watchpoints only with the legacy MADNESS threadpool
-        // TODO improve this when shortsighted MADNESS macro names are strengthened, i.e. HAVE_INTEL_TBB ->
-        // MADNESS_HAS_INTEL_TBB
-        // TODO also exclude the case of a PARSEC-based backend
-#ifndef HAVE_INTEL_TBB
-        if (threads.empty()) {
-          static pthread_t main_thread_id = pthread_self();
-          threads.push_back(&main_thread_id);
-          for (auto t = 0ul; t != madness::ThreadPool::size(); ++t) {
-            threads.push_back(&(madness::ThreadPool::get_threads()[t].get_id()));
-          }
-        }
-#endif
-        return threads;
-      }
-    }  // namespace detail
-
-    /// must be called from main thread before setting watchpoints
-    inline void initialize_watchpoints() {
-#if defined(HAVE_INTEL_TBB)
-      ::ttg::print_error(ttg_default_execution_context().rank(),
-                         "WARNING: watchpoints are only supported with MADWorld using the legacy threadpool");
-#endif
-#if !defined(__APPLE__)
-      ::ttg::print_error(ttg_default_execution_context().rank(), "WARNING: watchpoints are only supported on macOS");
-#endif
-      ::ttg::detail::MemoryWatchpoint_x86_64::Pool::initialize_instance(detail::watchpoints_threads());
-    }
-
-    /// sets a hardware watchpoint for window @c [addr,addr+size) and condition @c cond
-    template <typename T>
-    inline void watchpoint_set(T *addr, ::ttg::detail::MemoryWatchpoint_x86_64::Size size,
-                               ::ttg::detail::MemoryWatchpoint_x86_64::Condition cond) {
-      const auto &threads = detail::watchpoints_threads();
-      for (auto t : threads) ::ttg::detail::MemoryWatchpoint_x86_64::Pool::instance()->set(addr, size, cond, t);
-    }
-
-    /// clears the hardware watchpoint for window @c [addr,addr+size) previously created with watchpoint_set<T>
-    template <typename T>
-    inline void watchpoint_clear(T *addr) {
-      const auto &threads = detail::watchpoints_threads();
-      for (auto t : threads) ::ttg::detail::MemoryWatchpoint_x86_64::Pool::instance()->clear(addr, t);
-    }
 
   }  // namespace ttg
 }  // namespace madness

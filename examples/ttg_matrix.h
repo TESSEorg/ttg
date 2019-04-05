@@ -212,7 +212,7 @@ namespace ttg {
     static constexpr const int owner = 0;  // where data resides
 
     Read(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>, void> &in, Edge<Key<2>, Blk> &out)
-        : baseT(edges(in), edges(out), std::string("read_spmatrix(") + label + ")", {"ij"}, {std::string(label) + "ij"},
+        : baseT(edges(in), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl[ij]"}, {std::string(label) + "[ij]"},
         /* keymap */ [](auto key) { return owner; })
         , matrix_(matrix) {}
 
@@ -255,7 +255,7 @@ namespace ttg {
     using baseT = Op<Key<2>, std::tuple<>, Write<Blk>, Blk, void>;
 
     Write(const char *label, SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &data_in, Edge<Key<2>, void> &ctl_in)
-        : baseT(edges(data_in, ctl_in), edges(), std::string("write_spmatrix(") + label + ")", {std::string(label) + "ij", std::string("ij")}, {},
+        : baseT(edges(data_in, ctl_in), edges(), std::string("write_spmatrix(") + label + ")", {std::string(label) + "[ij]", std::string("ctl[ij]")}, {},
             /* keymap */ [](auto key) { return 0; }),
             matrix_(matrix) {}
 
@@ -306,7 +306,7 @@ namespace ttg {
     static constexpr const int owner = 0;  // where data resides
 
     Push(const char *label, Edge<void, Shape> &in, Edge<Key<2>, void> &out)
-        : baseT(edges(in), edges(out), std::string("push_spmatrix(") + label + ")", {std::string("shape[") + label + "]"}, {"ij"},
+        : baseT(edges(in), edges(out), std::string("push_spmatrix(") + label + ")", {std::string("shape[") + label + "]"}, {"ctl[ij]"},
         /* keymap */ []() { return owner; }) {}
 
     void op(typename baseT::input_values_tuple_type && ins, std::tuple<Out<Key<2>, void>> &out) {
@@ -362,15 +362,15 @@ namespace ttg {
     /// attach to the source sparse Eigen::Matrix
     void operator<<(const Eigen::SparseMatrix<T>& source_matrix) {
       // shape reader computes shape of source_matrix
-      ttg_register_ptr(world_, std::make_shared<matrix::ReadShape<T>>("", source_matrix, ttg_ctl_edge(world_), shape_edge_));
+      ttg_register_ptr(world_, std::make_shared<matrix::ReadShape<T>>("Matrix.ReadShape", source_matrix, ttg_ctl_edge(world_), shape_edge_));
       // reads data from source_matrix_ for a given key
-      ttg_register_ptr(world_, std::make_shared<matrix::Read<T>>("", source_matrix, ctl_edge_, data_edge_));
+      ttg_register_ptr(world_, std::make_shared<matrix::Read<T>>("Matrix.Read", source_matrix, ctl_edge_, data_edge_));
     }
 
     /// pushes all data that exists
     void pushall() {
       // reads the shape and pulls all the data
-      ttg_register_ptr(world_, std::make_shared<matrix::Push>("", shape_edge_, ctl_edge_));
+      ttg_register_ptr(world_, std::make_shared<matrix::Push>("Matrix.Push1", shape_edge_, ctl_edge_));
     }
 
     /// @return an std::future<void> object indicating the status; @c destination_matrix is ready if calling has_value() on the return value
@@ -378,13 +378,13 @@ namespace ttg {
     /// @note up to the user to ensure completion before reading destination_matrix
     auto operator>>(SpMatrix<T>& destination_matrix) {
       // shape writer writes shape to destination_matrix
-      ttg_register_ptr(world_, std::make_shared<matrix::WriteShape<T>>("", destination_matrix, shape_edge_));
+      ttg_register_ptr(world_, std::make_shared<matrix::WriteShape<T>>("Matrix.WriteShape", destination_matrix, shape_edge_));
       // this converts shape to control messages to ensure that shape and data flows are consistent (i.e. if shape says there should be a block {r,c} Write will expect the data for it)
       // TODO if pushall had been called ctl_edge_ is already live, hence can just attach to it
       ctl_edge_t ctl_edge;
       if (!ctl_edge_.live())
-        ttg_register_ptr(world_, std::make_shared<matrix::Push>("", shape_edge_, ctl_edge));
-      auto result = std::make_shared<matrix::Write<T>>("", destination_matrix, data_edge_, (ctl_edge_.live() ? ctl_edge_ : ctl_edge));
+        ttg_register_ptr(world_, std::make_shared<matrix::Push>("Matrix.Push2", shape_edge_, ctl_edge));
+      auto result = std::make_shared<matrix::Write<T>>("Matrix.Write", destination_matrix, data_edge_, (ctl_edge_.live() ? ctl_edge_ : ctl_edge));
       ttg_register_ptr(world_, result);
 
       // return op status ... set to true after world fence
