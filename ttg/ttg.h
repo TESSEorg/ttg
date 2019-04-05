@@ -19,9 +19,30 @@
 #include "util/meta.h"
 #include "util/runtimes.h"
 
+#if __has_include(<mpi.h>)
+#  include <mpi.h>
+#endif
+
 #define TTGUNUSED(x) ((void)(x))
 
 namespace ttg {
+
+  inline int rank() {
+    int me = -1;
+#if __has_include(<mpi.h>)
+    int inited;
+    MPI_Initialized(&inited);
+    if (inited) {
+      int fini;
+      MPI_Finalized(&fini);
+      if (!fini) {
+        auto errcod = MPI_Comm_rank(MPI_COMM_WORLD, &me);
+        assert(errcod == 0);
+      }
+    }
+#endif
+    return me;
+  }
 
 /// @brief A complete version of void
 
@@ -183,8 +204,6 @@ namespace ttg {
     /// This is called by the derived class's connect method
     void connect_base(TerminalBase *successor) { successors_.push_back(successor); connected = true; successor->connected = true;}
 
-    const std::vector<TerminalBase *> &successors() const { return successors_; }
-
    public:
     /// Return ptr to containing op
     OpBase *get_op() const {
@@ -231,7 +250,7 @@ namespace ttg {
     /// dynamic down cast from TerminalBase* to In<keyT,valueT>.
     virtual void connect(TerminalBase *in) = 0;
 
-    virtual ~TerminalBase() {}
+    virtual ~TerminalBase() = default;
   };
 
   /// Provides basic information and graph connectivity (eventually statistics,
@@ -313,6 +332,12 @@ namespace ttg {
     void set_terminals(const terminalsT &terms, const setfuncT setfunc) {
       set_terminals(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, setfunc);
     }
+
+   private:
+    OpBase(const OpBase &) = delete;
+    OpBase &operator=(const OpBase &) = delete;
+    OpBase(OpBase &&) = delete;
+    OpBase &operator=(OpBase &&) = delete;
 
    public:
     OpBase(const std::string &name, size_t numins, size_t numouts)
@@ -952,8 +977,18 @@ namespace ttg {
               detail::demangled_type_name(this) + "\ntype of other Terminal" + detail::demangled_type_name(in));
       } else  // successor->type() == TerminalBase::Type::Write
         throw std::invalid_argument(std::string("you are trying to connect an Out terminal to another Out terminal"));
+      if (tracing()) {
+        print(rank(), ": connected Out<> ", get_name(), "(ptr=", this, ") to In<> ", in->get_name(), "(ptr=", in, ")");
+      }
 #endif
       this->connect_base(in);
+    }
+
+    auto nsuccessors() const {
+      return get_connections().size();
+    }
+    const auto& successors() const {
+      return get_connections();
     }
 
     // clang and gcc generate a warning that might be returning a nonvoid in functions that SFINAE'd to return void only
@@ -1005,12 +1040,21 @@ namespace ttg {
 
     template<typename Key = keyT, typename Value = valueT>
     std::enable_if<meta::is_all_void_v<Key,Value>,void> send() {
+      if (tracing()) {
+        print(rank(), ": in ", get_name(), "(ptr=", this, ") Out<>::send: #successors=", successors().size());
+      }
       for (auto successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send();
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
           static_cast<In<keyT, valueT> *>(successor)->send();
+        }
+        else {
+          throw std::logic_error("Out<>: invalid successor type");
+        }
+        if (tracing()) {
+          print("Out<> ", get_name(), "(ptr=", this, ") send to In<> ", successor->get_name(), "(ptr=", successor, ")");
         }
       }
     }
@@ -1171,13 +1215,17 @@ namespace ttg {
       EdgeImpl(const std::string &name) : name(name), outs(), ins() {}
 
       void set_in(Out<keyT, valueT> *in) {
-        if (ins.size() && tracing()) std::cout << "Edge: " << name << " : has multiple inputs" << std::endl;
+        if (ins.size() && tracing()) {
+          print("Edge: ", name, " : has multiple inputs");
+        }
         ins.push_back(in);
         try_to_connect_new_in(in);
       }
 
       void set_out(TerminalBase *out) {
-        if (outs.size() && tracing()) std::cout << "Edge: " << name << " : has multiple outputs" << std::endl;
+        if (outs.size() && tracing()) {
+          print("Edge: ", name, " : has multiple outputs");
+        }
         outs.push_back(out);
         try_to_connect_new_out(out);
       }
