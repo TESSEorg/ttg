@@ -646,19 +646,18 @@ int main(int argc, char **argv) {
     auto copy_status = aflow >> Acopy;
     assert(!has_value(copy_status));
     aflow.pushall();
+    Control control2(ttg_ctl_edge(ttg_default_execution_context()));
     {
-      Control control(ttg_ctl_edge(ttg_default_execution_context()));
-
       std::cout << "matrix copy using ttg::Matrix" << std::endl;
-      std::cout << Dot{}(&control) << std::endl;
+//      if (ttg_default_execution_context().rank() == 0) std::cout << Dot{}(&control2) << std::endl;
 
       // ready to run!
-      auto connected = make_graph_executable(&control);
+      auto connected = make_graph_executable(&control2);
       assert(connected);
       TTGUNUSED(connected);
 
       // ready, go! need only 1 kick, so must be done by 1 thread only
-      if (ttg_default_execution_context().rank() == 0) control.start();
+      if (ttg_default_execution_context().rank() == 0) control2.start();
     }
     //////////////////////////////////////////////////////////////////////////
 
