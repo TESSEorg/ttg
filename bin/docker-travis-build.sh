@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# this script builds a 'Trusty' env docker image used by Travis-CI for TESSEorg/tesse-cxx (aka TTG) project
+# this script builds a 'Xenial' env docker image used by Travis-CI for TESSEorg/tesse-cxx (aka TTG) project
 #
 # to run bash in the image: docker run -it ttg-travis-debug bash -l
 # N.B. relevant locations:
