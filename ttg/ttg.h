@@ -991,20 +991,9 @@ namespace ttg {
       return get_connections();
     }
 
-    // clang and gcc generate a warning that might be returning a nonvoid in functions that SFINAE'd to return void only
-    // TODO remove when clang/gcc are fixed
-#ifdef __clang__
-#  pragma clang diagnostic push
-#  pragma clang diagnostic ignored "-Wreturn-type"
-#endif
-#ifdef __GNUG__
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wreturn-type"
-#endif
-
     template<typename Key = keyT, typename Value = valueT>
-    std::enable_if<meta::is_none_void_v<Key,Value>,void> send(const Key &key, const Value &value) {
-      for (auto successor : successors()) {
+    std::enable_if_t<meta::is_none_void_v<Key,Value>,void> send(const Key &key, const Value &value) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
@@ -1015,8 +1004,8 @@ namespace ttg {
     }
 
     template<typename Key = keyT, typename Value = valueT>
-    std::enable_if<!meta::is_void_v<Key> && meta::is_void_v<Value>,void> sendk(const Key &key) {
-      for (auto successor : successors()) {
+    std::enable_if_t<!meta::is_void_v<Key> && meta::is_void_v<Value>,void> sendk(const Key &key) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->sendk(key);
@@ -1027,8 +1016,8 @@ namespace ttg {
     }
 
     template<typename Key = keyT, typename Value = valueT>
-    std::enable_if<meta::is_void_v<Key> && !meta::is_void_v<Value>,void> sendv(const Value &value) {
-      for (auto successor : successors()) {
+    std::enable_if_t<meta::is_void_v<Key> && !meta::is_void_v<Value>,void> sendv(const Value &value) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->sendv(value);
@@ -1039,11 +1028,11 @@ namespace ttg {
     }
 
     template<typename Key = keyT, typename Value = valueT>
-    std::enable_if<meta::is_all_void_v<Key,Value>,void> send() {
+    std::enable_if_t<meta::is_all_void_v<Key,Value>,void> send() {
       if (tracing()) {
         print(rank(), ": in ", get_name(), "(ptr=", this, ") Out<>::send: #successors=", successors().size());
       }
-      for (auto successor : successors()) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send();
@@ -1059,14 +1048,14 @@ namespace ttg {
       }
     }
 
-    template<typename Key = keyT, typename Value = valueT>
-    std::enable_if<meta::is_none_void_v<Key,Value> && std::is_same_v<Value,std::remove_reference_t<Value>>,void>
+    template <typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<meta::is_none_void_v<Key,Value> && std::is_same_v<Value,std::remove_reference_t<Value>>,void>
     send(const Key &key, Value &&value) {
       std::size_t N = successors().size();
       // find the first terminal that can consume the value
       std::size_t move_terminal = N - 1;
       for (std::size_t i = 0; i != N; ++i) {
-        if (successors()[i]->get_type() == TerminalBase::Type::Consume) {
+        if (successors().at(i)->get_type() == TerminalBase::Type::Consume) {
           move_terminal = i;
           break;
         }
@@ -1075,7 +1064,7 @@ namespace ttg {
         // send copies to every terminal except the one we will move the results to
         for (std::size_t i = 0; i != N; ++i) {
           if (i != move_terminal) {
-            TerminalBase *successor = successors()[i];
+            TerminalBase *successor = successors().at(i);
             if (successor->get_type() == TerminalBase::Type::Read) {
               static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
             } else if (successor->get_type() == TerminalBase::Type::Consume) {
@@ -1084,7 +1073,7 @@ namespace ttg {
           }
         }
         {
-          TerminalBase *successor = successors()[move_terminal];
+          TerminalBase *successor = successors().at(move_terminal);
           static_cast<In<keyT, valueT> *>(successor)->send(key, std::forward<Value>(value));
         }
       }
@@ -1093,9 +1082,9 @@ namespace ttg {
     // An optimized implementation will need a separate callback for broadcast
     // with a specific value for rangeT
     template<typename rangeT, typename Key = keyT, typename Value = valueT>
-    std::enable_if<meta::is_none_void_v<Key,Value>,void>
+    std::enable_if_t<meta::is_none_void_v<Key,Value>,void>
     broadcast(const rangeT &keylist, const Value &value) {  // NO MOVE YET
-      for (auto successor : successors()) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->broadcast(keylist, value);
@@ -1106,9 +1095,9 @@ namespace ttg {
     }
 
     template<typename Key = keyT>
-    std::enable_if<!meta::is_void_v<Key>,void>
+    std::enable_if_t<!meta::is_void_v<Key>,void>
     set_size(const Key &key, std::size_t size) {
-      for (auto successor : successors()) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->set_size(key, size);
@@ -1119,9 +1108,9 @@ namespace ttg {
     }
 
     template<typename Key = keyT>
-    std::enable_if<meta::is_void_v<Key>,void>
+    std::enable_if_t<meta::is_void_v<Key>,void>
     set_size(std::size_t size) {
-      for (auto successor : successors()) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->set_size(size);
@@ -1132,9 +1121,9 @@ namespace ttg {
     }
 
     template<typename Key = keyT>
-    std::enable_if<!meta::is_void_v<Key>,void>
+    std::enable_if_t<!meta::is_void_v<Key>,void>
     finalize(const Key &key) {
-      for (auto successor : successors()) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->finalize(key);
@@ -1145,7 +1134,7 @@ namespace ttg {
     }
 
     template<typename Key = keyT>
-    std::enable_if<meta::is_void_v<Key>,void>
+    std::enable_if_t<meta::is_void_v<Key>,void>
     finalize() {
       for (auto successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
@@ -1156,14 +1145,6 @@ namespace ttg {
         }
       }
     }
-
-    // TODO remove when clang/gcc are fixed
-#ifdef __clang__
-#  pragma clang diagnostic pop
-#endif
-#ifdef __GNUG__
-#  pragma GCC diagnostic pop
-#endif
 
     Type get_type() const override { return TerminalBase::Type::Write; }
   };
