@@ -564,7 +564,18 @@ std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
 #include "ttg_matrix.h"
 
 int main(int argc, char **argv) {
+
   ttg_initialize(argc, argv, 2);
+
+//  using mpqc::Debugger;
+//  auto debugger = std::make_shared<Debugger>();
+//  Debugger::set_default_debugger(debugger);
+//  debugger->set_exec(argv[0]);
+//  debugger->set_prefix(ttg_default_execution_context().rank());
+//  debugger->set_cmd("lldb_xterm");
+//
+//  initialize_watchpoints();
+
   {
     ::ttg::trace_on();
     OpBase::set_trace_all(true);
