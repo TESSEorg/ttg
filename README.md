@@ -4,8 +4,8 @@ Prototype TESSE C++ API, with MADNESS and PaRSEC as backends. These instructions
 # prerequisites
 - CMake, version 3.6 or more recent
 - C++17 compiler
-- Boost 1.66
-  - if don't have recent Boost install as follows (more instructions   [here](https://github.com/boostorg/boost/wiki/Getting-Started)
+- Boost 1.66 or later
+  - if don't have recent Boost, install as follows (more instructions   [here](https://github.com/boostorg/boost/wiki/Getting-Started)
 ):
     - `git clone --recursive https://github.com/boostorg/boost.git`
     - `cd boost`
@@ -29,7 +29,7 @@ and from there do:
 N.B. Must use CMake to configure MADNESS (i.e. autotools builds will not work). The existing examples only use the `world` component of MADNESS, so to save time you only need to build targets `install-world` and `install-config`.
 - `cmake <path to the top of tesse-cxx> -DMADNESS_ROOT_DIR=<MADNESS install prefix>`
 - `make test-mad t9-mad serialization`
-- `./examples/ttg-mad`
+- `./examples/test-mad`
 - `./examples/t9-mad`
 - `./tests/serialization`
 
