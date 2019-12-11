@@ -15,11 +15,11 @@ class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
   using baseT = Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int>;
 
  public:
-  A(const std::string &name) : baseT(name, {"input"}, {"iterate", "result"}) {}
+  A(const std::string &name) : baseT(name, {"inputA"}, {"resultA", "iterateA"}) {}
 
   A(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
     const std::string &name)
-      : baseT(inedges, outedges, name, {"input"}, {"result", "iterate"}) {}
+      : baseT(inedges, outedges, name, {"inputA"}, {"resultA", "iterateA"}) {}
 
   void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
     // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int

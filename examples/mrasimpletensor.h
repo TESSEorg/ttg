@@ -189,21 +189,21 @@ namespace mra {
     template <typename tensorA, typename tensorB, typename opT>
     void apply_binaryop(tensorA& a, tensorB& b, const opT& op) {
         assert(a.conforms(b));
-        if constexpr (a.is_contiguous() && b.is_contiguous()) { // by definition not a slice tensor
+        if (a.is_contiguous() && b.is_contiguous()) { // by definition not a slice tensor
                 std::cout << "bina ... not been here yet?\n";
             auto pa = a.ptr();
             auto pb = b.ptr();
             for (size_t i=0; i<a.size(); i++) op(pa[i],pb[i]);
         }
         else if (a.stride(a.ndim()-1) == 1 && b.stride(b.ndim()-1) == 1) { // inner loop is contiguous
-            if constexpr (a.ndim() == 1) {
+            if (a.ndim() == 1) {
                 std::cout << "binb ... not been here yet?\n";
                 const size_t n = a.dim(a.ndim()-1);
                 auto pa = a.ptr();
                 auto pb = b.ptr();
                 for (size_t i=0; i<n; ++i) op(pa[i],pb[i]);                
             }
-            else if constexpr (a.ndim() >= 2) {
+            else if (a.ndim() >= 2) {
                 const size_t dimi = a.dim(a.ndim()-1);
                 const size_t dimj = a.dim(a.ndim()-2);
                 const size_t strideia = a.stride(a.ndim()-1);

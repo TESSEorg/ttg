@@ -12,20 +12,26 @@ namespace ttg {
   namespace detail {
     template <typename T>
     static std::string demangled_type_name(T *x = nullptr) {
-      const char *name;
+      const char *name = nullptr;
       if constexpr (std::is_void_v<T>)
         name = "void";
       else
         name = (x != nullptr) ? typeid(*x).name() :  // this works for polymorphic types
-                                typeid(T).name();
-      static char buf[10240];  // should really be allocated with malloc
-      size_t size = 10240;
+                   typeid(T).name();
+      static size_t buf_size = 1024;
+      static std::unique_ptr<char, decltype(std::free) *> buf{reinterpret_cast<char *>(malloc(sizeof(char) * buf_size)),
+                                                              std::free};
       int status;
-      char *res = abi::__cxa_demangle(name, buf, &size, &status);
-      if (res)
-        return res;
-      else
+      char *res = abi::__cxa_demangle(name, buf.get(), &buf_size, &status);
+      if (status != 0 || res == nullptr) {
         return name;
+      } else {
+        if (res != buf.get()) {
+          buf.release();
+          buf = std::unique_ptr<char, decltype(std::free) *>{res, std::free};
+        }
+        return res;
+      }
     }
 #else
 template <typename T>
