@@ -13,14 +13,36 @@
 #include <vector>
 
 #include <boost/callable_traits.hpp>  // needed for wrap.h
+#include <boost/core/demangle.hpp>
 
 #include "util/demangle.h"
 #include "util/meta.h"
 #include "util/runtimes.h"
 
+#if __has_include(<mpi.h>)
+#  include <mpi.h>
+#endif
+
 #define TTGUNUSED(x) ((void)(x))
 
 namespace ttg {
+
+  inline int rank() {
+    int me = -1;
+#if __has_include(<mpi.h>)
+    int inited;
+    MPI_Initialized(&inited);
+    if (inited) {
+      int fini;
+      MPI_Finalized(&fini);
+      if (!fini) {
+        auto errcod = MPI_Comm_rank(MPI_COMM_WORLD, &me);
+        assert(errcod == 0);
+      }
+    }
+#endif
+    return me;
+  }
 
 /// @brief A complete version of void
 
@@ -182,8 +204,6 @@ namespace ttg {
     /// This is called by the derived class's connect method
     void connect_base(TerminalBase *successor) { successors_.push_back(successor); connected = true; successor->connected = true;}
 
-    const std::vector<TerminalBase *> &successors() const { return successors_; }
-
    public:
     /// Return ptr to containing op
     OpBase *get_op() const {
@@ -230,7 +250,7 @@ namespace ttg {
     /// dynamic down cast from TerminalBase* to In<keyT,valueT>.
     virtual void connect(TerminalBase *in) = 0;
 
-    virtual ~TerminalBase() {}
+    virtual ~TerminalBase() = default;
   };
 
   /// Provides basic information and graph connectivity (eventually statistics,
@@ -313,6 +333,12 @@ namespace ttg {
       set_terminals(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, setfunc);
     }
 
+   private:
+    OpBase(const OpBase &) = delete;
+    OpBase &operator=(const OpBase &) = delete;
+    OpBase(OpBase &&) = delete;
+    OpBase &operator=(OpBase &&) = delete;
+
    public:
     OpBase(const std::string &name, size_t numins, size_t numouts)
         : instance_id(next_instance_id())
@@ -326,6 +352,8 @@ namespace ttg {
         , executable(false) {
       // std::cout << name << "@" << (void *)this << " -> " << instance_id << std::endl;
     }
+
+    virtual ~OpBase() = default;
 
     /// Sets trace for all operations to value and returns previous setting
     static bool set_trace_all(bool value) {
@@ -357,6 +385,11 @@ namespace ttg {
 
     /// Gets the name of this operation
     const std::string &get_name() const { return name; }
+
+    /// Gets the demangled class name (uses RTTI)
+    std::string get_class_name() const {
+      return boost::core::demangle(typeid(*this).name());
+    }
 
     /// Returns the vector of input terminals
     const std::vector<TerminalBase *> &get_inputs() const { return inputs; }
@@ -393,15 +426,26 @@ namespace ttg {
     /// Waits for the entire TTG associated with this op to be completed (collective)
     virtual void fence() = 0;
 
-    /// Queries if this ready to execute
-    /// @return true is this object is executable
-    bool is_executable() const { return executable; }
-
     /// Marks this executable
     /// @return nothing
     virtual void make_executable() = 0;
 
-    virtual ~OpBase() {}
+    /// Queries if this ready to execute
+    /// @return true is this object is executable
+    bool is_executable() const { return executable; }
+
+    /// Asserts that this is executable
+    /// Use this macro from inside a derived class
+    /// @throw std::logic_error if this is not executable
+#define TTG_OP_ASSERT_EXECUTABLE() \
+      do { \
+        if (!this->is_executable()) { \
+          std::ostringstream oss; \
+          oss << "Op is not executable at " << __FILE__ << ":" << __LINE__; \
+          throw std::logic_error(oss.str().c_str()); \
+        } \
+      } while (0);
+
   };
 
   // With more than one source file this will need to be moved
@@ -617,8 +661,11 @@ namespace ttg {
     void outfunc(TerminalBase *out) { out_visitor_(out); }
   };
 
-  template <typename OpVisitor, typename InVisitor, typename OutVisitor>
-  auto make_traverse(OpVisitor &&op_v, InVisitor &&in_v, OutVisitor &&out_v) {
+  namespace {
+    auto trivial_1param_lambda = [](auto &&op) {};
+  }
+  template <typename OpVisitor = decltype(trivial_1param_lambda)&, typename InVisitor = decltype(trivial_1param_lambda)&, typename OutVisitor = decltype(trivial_1param_lambda)&>
+  auto make_traverse(OpVisitor &&op_v = trivial_1param_lambda, InVisitor &&in_v = trivial_1param_lambda, OutVisitor &&out_v = trivial_1param_lambda) {
     return Traverse<std::remove_reference_t<OpVisitor>, std::remove_reference_t<InVisitor>,
                     std::remove_reference_t<OutVisitor>>{std::forward<OpVisitor>(op_v), std::forward<InVisitor>(in_v),
                                                          std::forward<OutVisitor>(out_v)};
@@ -757,8 +804,7 @@ namespace ttg {
   std::enable_if_t<(std::is_convertible_v<std::remove_const_t<std::remove_reference_t<OpBasePtrs>>, OpBase *> && ...),
                    bool>
   make_graph_executable(OpBasePtrs &&... ops) {
-    return ::ttg::make_traverse([](auto x) { x->make_executable(); }, [](auto x) {},
-                                [](auto x) {})(std::forward<OpBasePtrs>(ops)...);
+    return ::ttg::make_traverse([](auto&&x) { std::forward<decltype(x)>(x)->make_executable(); })(std::forward<OpBasePtrs>(ops)...);
   }
 
   template <typename keyT = void, typename valueT = void>
@@ -931,24 +977,23 @@ namespace ttg {
               detail::demangled_type_name(this) + "\ntype of other Terminal" + detail::demangled_type_name(in));
       } else  // successor->type() == TerminalBase::Type::Write
         throw std::invalid_argument(std::string("you are trying to connect an Out terminal to another Out terminal"));
+      if (tracing()) {
+        print(rank(), ": connected Out<> ", get_name(), "(ptr=", this, ") to In<> ", in->get_name(), "(ptr=", in, ")");
+      }
 #endif
       this->connect_base(in);
     }
 
-    // clang and gcc generate a warning that might be returning a nonvoid in functions that SFINAE'd to return void only
-    // TODO remove when clang/gcc are fixed
-#ifdef __clang__
-#  pragma clang diagnostic push
-#  pragma clang diagnostic ignored "-Wreturn-type"
-#endif
-#ifdef __GNUG__
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wreturn-type"
-#endif
+    auto nsuccessors() const {
+      return get_connections().size();
+    }
+    const auto& successors() const {
+      return get_connections();
+    }
 
     template<typename Key = keyT, typename Value = valueT>
-    std::enable_if<meta::is_none_void_v<Key,Value>,void> send(const Key &key, const Value &value) {
-      for (auto successor : successors()) {
+    std::enable_if_t<meta::is_none_void_v<Key,Value>,void> send(const Key &key, const Value &value) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
@@ -959,8 +1004,8 @@ namespace ttg {
     }
 
     template<typename Key = keyT, typename Value = valueT>
-    std::enable_if<!meta::is_void_v<Key> && meta::is_void_v<Value>,void> sendk(const Key &key) {
-      for (auto successor : successors()) {
+    std::enable_if_t<!meta::is_void_v<Key> && meta::is_void_v<Value>,void> sendk(const Key &key) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->sendk(key);
@@ -971,8 +1016,8 @@ namespace ttg {
     }
 
     template<typename Key = keyT, typename Value = valueT>
-    std::enable_if<meta::is_void_v<Key> && !meta::is_void_v<Value>,void> sendv(const Value &value) {
-      for (auto successor : successors()) {
+    std::enable_if_t<meta::is_void_v<Key> && !meta::is_void_v<Value>,void> sendv(const Value &value) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->sendv(value);
@@ -983,25 +1028,34 @@ namespace ttg {
     }
 
     template<typename Key = keyT, typename Value = valueT>
-    std::enable_if<meta::is_all_void_v<Key,Value>,void> send() {
-      for (auto successor : successors()) {
+    std::enable_if_t<meta::is_all_void_v<Key,Value>,void> send() {
+      if (tracing()) {
+        print(rank(), ": in ", get_name(), "(ptr=", this, ") Out<>::send: #successors=", successors().size());
+      }
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send();
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
           static_cast<In<keyT, valueT> *>(successor)->send();
         }
+        else {
+          throw std::logic_error("Out<>: invalid successor type");
+        }
+        if (tracing()) {
+          print("Out<> ", get_name(), "(ptr=", this, ") send to In<> ", successor->get_name(), "(ptr=", successor, ")");
+        }
       }
     }
 
-    template<typename Key = keyT, typename Value = valueT>
-    std::enable_if<meta::is_none_void_v<Key,Value> && std::is_same_v<Value,std::remove_reference_t<Value>>,void>
+    template <typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<meta::is_none_void_v<Key,Value> && std::is_same_v<Value,std::remove_reference_t<Value>>,void>
     send(const Key &key, Value &&value) {
       std::size_t N = successors().size();
       // find the first terminal that can consume the value
       std::size_t move_terminal = N - 1;
       for (std::size_t i = 0; i != N; ++i) {
-        if (successors()[i]->get_type() == TerminalBase::Type::Consume) {
+        if (successors().at(i)->get_type() == TerminalBase::Type::Consume) {
           move_terminal = i;
           break;
         }
@@ -1010,7 +1064,7 @@ namespace ttg {
         // send copies to every terminal except the one we will move the results to
         for (std::size_t i = 0; i != N; ++i) {
           if (i != move_terminal) {
-            TerminalBase *successor = successors()[i];
+            TerminalBase *successor = successors().at(i);
             if (successor->get_type() == TerminalBase::Type::Read) {
               static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
             } else if (successor->get_type() == TerminalBase::Type::Consume) {
@@ -1019,7 +1073,7 @@ namespace ttg {
           }
         }
         {
-          TerminalBase *successor = successors()[move_terminal];
+          TerminalBase *successor = successors().at(move_terminal);
           static_cast<In<keyT, valueT> *>(successor)->send(key, std::forward<Value>(value));
         }
       }
@@ -1028,9 +1082,9 @@ namespace ttg {
     // An optimized implementation will need a separate callback for broadcast
     // with a specific value for rangeT
     template<typename rangeT, typename Key = keyT, typename Value = valueT>
-    std::enable_if<meta::is_none_void_v<Key,Value>,void>
+    std::enable_if_t<meta::is_none_void_v<Key,Value>,void>
     broadcast(const rangeT &keylist, const Value &value) {  // NO MOVE YET
-      for (auto successor : successors()) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->broadcast(keylist, value);
@@ -1041,9 +1095,9 @@ namespace ttg {
     }
 
     template<typename Key = keyT>
-    std::enable_if<!meta::is_void_v<Key>,void>
+    std::enable_if_t<!meta::is_void_v<Key>,void>
     set_size(const Key &key, std::size_t size) {
-      for (auto successor : successors()) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->set_size(key, size);
@@ -1054,9 +1108,9 @@ namespace ttg {
     }
 
     template<typename Key = keyT>
-    std::enable_if<meta::is_void_v<Key>,void>
+    std::enable_if_t<meta::is_void_v<Key>,void>
     set_size(std::size_t size) {
-      for (auto successor : successors()) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->set_size(size);
@@ -1067,9 +1121,9 @@ namespace ttg {
     }
 
     template<typename Key = keyT>
-    std::enable_if<!meta::is_void_v<Key>,void>
+    std::enable_if_t<!meta::is_void_v<Key>,void>
     finalize(const Key &key) {
-      for (auto successor : successors()) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->finalize(key);
@@ -1080,7 +1134,7 @@ namespace ttg {
     }
 
     template<typename Key = keyT>
-    std::enable_if<meta::is_void_v<Key>,void>
+    std::enable_if_t<meta::is_void_v<Key>,void>
     finalize() {
       for (auto successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
@@ -1091,14 +1145,6 @@ namespace ttg {
         }
       }
     }
-
-    // TODO remove when clang/gcc are fixed
-#ifdef __clang__
-#  pragma clang diagnostic pop
-#endif
-#ifdef __GNUG__
-#  pragma GCC diagnostic pop
-#endif
 
     Type get_type() const override { return TerminalBase::Type::Write; }
   };
@@ -1150,13 +1196,17 @@ namespace ttg {
       EdgeImpl(const std::string &name) : name(name), outs(), ins() {}
 
       void set_in(Out<keyT, valueT> *in) {
-        if (ins.size() && tracing()) std::cout << "Edge: " << name << " : has multiple inputs" << std::endl;
+        if (ins.size() && tracing()) {
+          print("Edge: ", name, " : has multiple inputs");
+        }
         ins.push_back(in);
         try_to_connect_new_in(in);
       }
 
       void set_out(TerminalBase *out) {
-        if (outs.size() && tracing()) std::cout << "Edge: " << name << " : has multiple outputs" << std::endl;
+        if (outs.size() && tracing()) {
+          print("Edge: ", name, " : has multiple outputs");
+        }
         outs.push_back(out);
         try_to_connect_new_out(out);
       }

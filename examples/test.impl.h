@@ -15,11 +15,11 @@ class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
   using baseT = Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int>;
 
  public:
-  A(const std::string &name) : baseT(name, {"input"}, {"iterate", "result"}) {}
+  A(const std::string &name) : baseT(name, {"inputA"}, {"resultA", "iterateA"}) {}
 
   A(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
     const std::string &name)
-      : baseT(inedges, outedges, name, {"input"}, {"result", "iterate"}) {}
+      : baseT(inedges, outedges, name, {"inputA"}, {"resultA", "iterateA"}) {}
 
   static constexpr const bool have_cuda_op = true;
 
@@ -586,34 +586,52 @@ int try_main(int argc, char **argv) {
       {
         const auto max = 1000;
         // Sum Fibonacci numbers up to max
-        auto next = [max](const int &F_n_plus_1,
-                          const int &F_n,
-                          std::tuple<Out<int, int>, Out<Void, int>> &outs) {
-          // if this is first call reduce F_np1 and F_n also
-          if (F_n_plus_1 == 2 && F_n == 1) sendv<1>(F_n_plus_1 + F_n, outs);
+        auto fib = [max](const int &F_n_plus_1,
+                         const int &F_n,
+                         std::tuple<Out<int, int>, Out<Void, int>> &outs) {
+          // if this is first call reduce F_n also
+          if (F_n_plus_1 == 2 && F_n == 1) sendv<1>(F_n, outs);
 
           const auto F_n_plus_2 = F_n_plus_1 + F_n;
           if (F_n_plus_1 < max) {
             sendv<1>(F_n_plus_1, outs);
             send<0>(F_n_plus_2, F_n_plus_1, outs);
           } else
-            finalize < 1 > (outs);
+            finalize<1>(outs);
         };
 
-        auto print_sum = [max](const int &value, std::tuple<> &out) {
-          ::ttg::print("wrap: sum of Fibonacci numbers up to ", max, " = ", value);
+        auto print = [max](const int &value, std::tuple<> &out) {
+          ::ttg::print("sum of Fibonacci numbers up to ", max, " = ", value);
+          {  // validate the result
+            auto ref_value = 0;
+            // recursive lambda pattern from http://pedromelendez.com/blog/2015/07/16/recursive-lambdas-in-c14/
+            auto validator = [max, &ref_value](int f_np1, int f_n) {
+              auto impl = [max, &ref_value](int f_np1, int f_n, const auto &impl_ref) -> void {
+                assert(f_n < max);
+                ref_value += f_n;
+                if (f_np1 < max) {
+                  const auto f_np2 = f_np1 + f_n;
+                  impl_ref(f_np2, f_np1, impl_ref);
+                }
+              };
+              impl(f_np1, f_n, impl);
+            };
+            validator(2, 1);
+            assert(value == ref_value);
+          }
         };
 
-        Edge<int, int> N2N;
-        Edge<Void, int> N2R;
+        Edge<int, int> F2F;
+        Edge<Void, int> F2P;
 
-        auto n = wrap(next, edges(N2N), edges(N2N, N2R));
-        auto p = wrap(print_sum, edges(N2R), edges());
+        auto f = make_op(fib, edges(F2F), edges(F2F, F2P), "next");
+        auto p = make_op(print, edges(F2P), edges(), "print");
         p->set_input_reducer<0>([](int &&a, int &&b) {
-          ::ttg::print("current value of Fibonacci reducer = ", a, ", received = ", b, "new value = ", a+b);
           return a + b;
         });
-        n->invoke(2, 1);
+        make_graph_executable(f.get());
+        if( ttg_default_execution_context().rank() == 0)
+          f->invoke(2, 1);
 
         ttg_fence(ttg_default_execution_context());
       }

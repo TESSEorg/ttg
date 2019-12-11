@@ -1240,23 +1240,28 @@ namespace parsec {
 
       // Manual injection of a task with all input arguments specified as a tuple
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void>
-      invoke(const Key &key, const input_values_tuple_type &args) {
+      invoke(const Key &key, const input_values_tuple_type &args)
+      {
+        TTG_OP_ASSERT_EXECUTABLE();
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, key, args);
       }
 
-      // Manual injection of a task with all input arguments specified as a tuple
+      // Manual injection of a key-free task and all input arguments specified as a tuple
       template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void>
       invoke(const input_values_tuple_type &args) {
+        TTG_OP_ASSERT_EXECUTABLE();
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, args);
       }
 
       // Manual injection of a task that has no arguments
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>,void> invoke(const Key &key) {
+        TTG_OP_ASSERT_EXECUTABLE();
         set_arg<keyT>(key);
       }
 
       // Manual injection of a task that has no key or arguments
       template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>,void> invoke() {
+        TTG_OP_ASSERT_EXECUTABLE();
         set_arg<keyT>();
       }
 

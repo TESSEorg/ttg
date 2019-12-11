@@ -37,7 +37,7 @@ namespace madness {
       if (detail::default_world_accessor() != nullptr) {
         return *detail::default_world_accessor();
       } else {
-        throw "madness::ttg::set_default_world() must be called before use";
+        throw std::runtime_error("madness::ttg::set_default_world() must be called before use");
       }
     }
     inline void set_default_world(World &world) { detail::default_world_accessor() = &world; }
@@ -214,11 +214,11 @@ namespace madness {
 
       template <std::size_t i, typename resultT, typename InTuple>
       static resultT get(InTuple &&intuple) {
-        return unwrap_to<resultT>(std::get<i>(intuple));
+        return unwrap_to<resultT>(std::get<i>(std::forward<InTuple>(intuple)));
       };
       template <std::size_t i, typename InTuple>
       static auto &get(InTuple &&intuple) {
-        return unwrap(std::get<i>(intuple));
+        return unwrap(std::get<i>(std::forward<InTuple>(intuple)));
       };
 
      private:
@@ -228,15 +228,21 @@ namespace madness {
       struct OpArgs : TaskInterface {
        public:
         int counter;                            // Tracks the number of arguments finalized
-        std::array<std::size_t, numins> nargs;  // Tracks the number of expected values (0 = finalized)
+        std::array<std::size_t, numins> nargs;  // Tracks the number of expected values
+                                                // for any type of input: 0 = finalized;
+                                                // for a streaming input the following values are possible:
+                                                // - 0: finalized
+                                                // - std::numeric_limits<std::size_t>::max(): initial state (there is no value yet)
+                                                // - 1: if streaming: have a value, waiting for more
+                                                // - n: if nonstreaming: expect this many more values
         std::array<std::size_t, numins>
-            stream_size;             // Expected number of values to receive, only used for streaming inputs
-                                     // (0 = unbounded stream)
+            stream_size;             // Expected number of values to receive, to be used for streaming inputs
+                                     // (0 = unbounded stream, >0 = bounded stream)
         input_values_tuple_type t;   // The input values (does not include control)
         derivedT *derived;           // Pointer to derived class instance
         std::conditional_t<::ttg::meta::is_void_v<keyT>,::ttg::Void,keyT> key;                    // Task key
 
-        OpArgs() : counter(numins), nargs(), stream_size(), t() { std::fill(nargs.begin(), nargs.end(), 1); }
+        OpArgs() : counter(numins), nargs(), stream_size(), t() { std::fill(nargs.begin(), nargs.end(), std::numeric_limits<std::size_t>::max()); }
 
         void run(World &world) {
           // ::ttg::print("starting task");
@@ -319,7 +325,7 @@ namespace madness {
           if (args->nargs[i] == 0) {
             ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
                                ": error argument is already finalized : ", i);
-            throw "bad set arg";
+            throw std::runtime_error("Op::set_arg called for a finalized stream");
           }
 
           auto reducer = std::get<i>(input_reducers);
@@ -329,8 +335,15 @@ namespace madness {
             args->lock();
             if constexpr (!::ttg::meta::is_void_v<valueT>) {  // for data values
               // have a value already? if not, set, otherwise reduce
-              if ((args->stream_size[i] == 0 && args->nargs[i] == 1) || (args->stream_size[i] == args->nargs[i])) {
+              if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
                 this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
+                // now have a value, reset nargs
+                if (args->stream_size[i] != 0) {
+                  args->nargs[i] = args->stream_size[i];
+                }
+                else {
+                  args->nargs[i] = 1;
+                }
               } else {
                 valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
                 this->get<i, std::decay_t<valueT> &>(args->t) =
@@ -352,7 +365,7 @@ namespace madness {
             if constexpr (!::ttg::meta::is_void_v<valueT>) {  // for data values
               this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
             }
-            args->nargs[i]--;
+            args->nargs[i] = 0;
             args->counter--;
           }
 
@@ -421,7 +434,7 @@ namespace madness {
 
           if (args->nargs[i] == 0) {
             ::ttg::print_error(world.rank(), ":", get_name(), " : error argument is already finalized : ", i);
-            throw "bad set arg";
+            throw std::runtime_error("Op::set_arg called for a finalized stream");
           }
 
           auto reducer = std::get<i>(input_reducers);
@@ -429,9 +442,19 @@ namespace madness {
             // N.B. Right now reductions are done eagerly, without spawning tasks
             //      this means we must lock
             args->lock();
+            if (tracing()) {
+              ::ttg::print_error(world.rank(), ":", get_name(), " : reducing value into argument : ", i);
+            }
             // have a value already? if not, set, otherwise reduce
-            if ((args->stream_size[i] == 0 && args->nargs[i] == 1) || (args->stream_size[i] == args->nargs[i])) {
+            if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
               this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
+              // now have a value, reset nargs
+              if (args->stream_size[i] != 0) {
+                args->nargs[i] = args->stream_size[i];
+              }
+              else {
+                args->nargs[i] = 1;
+              }
             } else {
               valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
               // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
@@ -443,12 +466,15 @@ namespace madness {
             // this
             if (args->stream_size[i] != 0) {
               args->nargs[i]--;
+              if (tracing()) {
+                ::ttg::print_error(world.rank(), ":", get_name(), " : stream ", i, " has size ", args->stream_size[i], " current nargs", args->nargs[i]);
+              }
               if (args->nargs[i] == 0) args->counter--;
             }
             args->unlock();
           } else {  // this is a nonstreaming input => set the value
             this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
-            args->nargs[i]--;
+            args->nargs[i] = 0;
             args->counter--;
           }
 
@@ -464,7 +490,7 @@ namespace madness {
         }
       }
 
-      // case 4
+      // case 5
       template <std::size_t i, typename Key = keyT, typename Value>
       std::enable_if_t<::ttg::meta::is_void_v<Key> && std::is_void_v<Value>,void>
       set_arg() {
@@ -542,7 +568,7 @@ namespace madness {
           worldobjT::send(owner, &opT::template set_argstream_size<i, true>, size);
         } else {
           if (tracing()) {
-            ::ttg::print(world.rank(), ":", get_name(), " : setting stream size for terminal ", i);
+            ::ttg::print(world.rank(), ":", get_name(), " : setting stream size to ", size, " for terminal ", i);
           }
 
           accessorT acc;
@@ -565,7 +591,6 @@ namespace madness {
 
           // commit changes
           args->stream_size[i] = size;
-          args->nargs[i] = size;
 
           args->unlock();
         }
@@ -612,7 +637,6 @@ namespace madness {
 
           // commit changes
           args->stream_size[i] = size;
-          args->nargs[i] = size;
 
           args->unlock();
         }
@@ -653,7 +677,7 @@ namespace madness {
           // check if stream is already finalized
           if (args->nargs[i] == 0) {
             ::ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error stream is already finalized : ", i);
-            throw std::runtime_error("Op::finalized called for a finalized stream");
+            throw std::runtime_error("Op::finalize called for a finalized stream");
           }
 
           // commit changes
@@ -708,7 +732,7 @@ namespace madness {
           // check if stream is already finalized
           if (args->nargs[i] == 0) {
             ::ttg::print_error(world.rank(), ":", get_name(), " : error stream is already finalized : ", i);
-            throw std::runtime_error("Op::finalized called for a finalized stream");
+            throw std::runtime_error("Op::finalize called for a finalized stream");
           }
 
           // commit changes
@@ -846,6 +870,9 @@ namespace madness {
             finalize_argstream<i>();
           };
           input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+          if (tracing()) {
+            ::ttg::print(world.rank(), ":", get_name(), " : set callbacks for terminal ", input.get_name(), " assuming void {key,value} and no input");
+          }
         }
         else abort();
       }
@@ -860,14 +887,24 @@ namespace madness {
 
       template <std::size_t... IS, typename inedgesT>
       void connect_my_inputs_to_incoming_edge_outputs(std::index_sequence<IS...>, inedgesT &inedges) {
+        static_assert(sizeof...(IS) == std::tuple_size_v<input_terminals_type>);
+        static_assert(std::tuple_size_v<inedgesT> == std::tuple_size_v<input_terminals_type>);
         int junk[] = {0, (std::get<IS>(inedges).set_out(&std::get<IS>(input_terminals)), 0)...};
         junk[0]++;
+        if (tracing()) {
+          ::ttg::print(world.rank(), ":", get_name(), " : connected ", sizeof...(IS), " Op inputs to ", sizeof...(IS), " Edges");
+        }
       }
 
       template <std::size_t... IS, typename outedgesT>
       void connect_my_outputs_to_outgoing_edge_inputs(std::index_sequence<IS...>, outedgesT &outedges) {
+        static_assert(sizeof...(IS) == std::tuple_size_v<output_terminalsT>);
+        static_assert(std::tuple_size_v<outedgesT> == std::tuple_size_v<output_terminalsT>);
         int junk[] = {0, (std::get<IS>(outedges).set_in(&std::get<IS>(output_terminals)), 0)...};
         junk[0]++;
+        if (tracing()) {
+          ::ttg::print(world.rank(), ":", get_name(), " : connected ", sizeof...(IS), " Op outputs to ", sizeof...(IS), " Edges");
+        }
       }
 
      public:
@@ -886,7 +923,7 @@ namespace madness {
               ::ttg::print_error(world.rank(), ":", get_name(),  "#input_names", innames.size(), "!= #input_terminals", std::tuple_size<input_terminals_type>::value);
               throw this->get_name()+":madness::ttg::Op: #input names != #input terminals";
           }
-        if (outnames.size() != std::tuple_size<output_terminalsT>::value)
+        if (outnames.size() != std::tuple_size_v<output_terminalsT>)
             throw this->get_name()+":madness::ttg::Op: #output names != #output terminals";
 
         register_input_terminals(input_terminals, innames);
@@ -938,7 +975,8 @@ namespace madness {
       virtual ~Op() {
         if (cache.size() != 0) {
           std::cerr << world.rank() << ":"
-                    << "warning: unprocessed tasks in destructor of operation '" << get_name() << "'" << std::endl;
+                    << "warning: unprocessed tasks in destructor of operation '" << get_name()
+                    << "' (class name = " << get_class_name() << ")" << std::endl;
           std::cerr << world.rank() << ":"
                     << "   T => argument assigned     F => argument unassigned" << std::endl;
           int nprint = 0;
@@ -960,6 +998,9 @@ namespace madness {
 
       template <std::size_t i, typename Reducer>
       void set_input_reducer(Reducer &&reducer) {
+        if (tracing()) {
+          ::ttg::print(world.rank(), ":", get_name(), " : setting reducer for terminal ", i);
+        }
         std::get<i>(input_reducers) = reducer;
       }
 
@@ -992,15 +1033,29 @@ namespace madness {
       /// Manual injection of a task with all input arguments specified as a tuple
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>,void>
       invoke(const Key &key, const input_values_tuple_type &args) {
+        TTG_OP_ASSERT_EXECUTABLE();
         set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, key, args);
+      }
+
+      /// Manual injection of a key-free task with all input arguments specified as a tuple
+      template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>,void>
+      invoke(const input_values_tuple_type &args) {
+        TTG_OP_ASSERT_EXECUTABLE();
+        set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, args);
       }
 
       /// Manual injection of a task that has no arguments
       template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>,void>
-      invoke(const Key &key) { set_arg<Key>(key); }
+      invoke(const Key &key) {
+        TTG_OP_ASSERT_EXECUTABLE();
+        set_arg<Key>(key);
+      }
 
       /// Manual injection of a task that has no key or arguments
-      template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>,void> invoke() { set_arg<Key>(); }
+      template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>,void> invoke() {
+        TTG_OP_ASSERT_EXECUTABLE();
+        set_arg<Key>();
+      }
 
       /// keymap accessor
       /// @return the keymap
@@ -1023,73 +1078,9 @@ namespace madness {
 
 #include "../wrap.h"
 
-    // clang-format off
-/*
- * This allows programmatic control of watchpoints. Requires MADWorld using legacy ThreadPool and macOS. Example:
- * @code
- *   double x = 0.0;
- *   ::madness::ttg::initialize_watchpoints();
- *   ::madness::ttg::watchpoint_set(&x, ::ttg::detail::MemoryWatchpoint_x86_64::kWord,
- *     ::ttg::detail::MemoryWatchpoint_x86_64::kWhenWritten);
- *   x = 1.0;  // this will generate SIGTRAP ...
- *   ttg_default_execution_context().taskq.add([&x](){ x = 1.0; });  // and so will this ...
- *   ::madness::ttg::watchpoint_set(&x, ::ttg::detail::MemoryWatchpoint_x86_64::kWord,
- *     ::ttg::detail::MemoryWatchpoint_x86_64::kWhenWrittenOrRead);
- *   ttg_default_execution_context().taskq.add([&x](){
- *       std::cout << x << std::endl; });  // and even this!
- *
- * @endcode
- */
-    // clang-format on
-
-    namespace detail {
-      inline const std::vector<const pthread_t *> &watchpoints_threads() {
-        static std::vector<const pthread_t *> threads;
-        // can set watchpoints only with the legacy MADNESS threadpool
-        // TODO improve this when shortsighted MADNESS macro names are strengthened, i.e. HAVE_INTEL_TBB ->
-        // MADNESS_HAS_INTEL_TBB
-        // TODO also exclude the case of a PARSEC-based backend
-#ifndef HAVE_INTEL_TBB
-        if (threads.empty()) {
-          static pthread_t main_thread_id = pthread_self();
-          threads.push_back(&main_thread_id);
-          for (auto t = 0ul; t != madness::ThreadPool::size(); ++t) {
-            threads.push_back(&(madness::ThreadPool::get_threads()[t].get_id()));
-          }
-        }
-#endif
-        return threads;
-      }
-    }  // namespace detail
-
-    /// must be called from main thread before setting watchpoints
-    inline void initialize_watchpoints() {
-#if defined(HAVE_INTEL_TBB)
-      ::ttg::print_error(ttg_default_execution_context().rank(),
-                         "WARNING: watchpoints are only supported with MADWorld using the legacy threadpool");
-#endif
-#if !defined(__APPLE__)
-      ::ttg::print_error(ttg_default_execution_context().rank(), "WARNING: watchpoints are only supported on macOS");
-#endif
-      ::ttg::detail::MemoryWatchpoint_x86_64::Pool::initialize_instance(detail::watchpoints_threads());
-    }
-
-    /// sets a hardware watchpoint for window @c [addr,addr+size) and condition @c cond
-    template <typename T>
-    inline void watchpoint_set(T *addr, ::ttg::detail::MemoryWatchpoint_x86_64::Size size,
-                               ::ttg::detail::MemoryWatchpoint_x86_64::Condition cond) {
-      const auto &threads = detail::watchpoints_threads();
-      for (auto t : threads) ::ttg::detail::MemoryWatchpoint_x86_64::Pool::instance()->set(addr, size, cond, t);
-    }
-
-    /// clears the hardware watchpoint for window @c [addr,addr+size) previously created with watchpoint_set<T>
-    template <typename T>
-    inline void watchpoint_clear(T *addr) {
-      const auto &threads = detail::watchpoints_threads();
-      for (auto t : threads) ::ttg::detail::MemoryWatchpoint_x86_64::Pool::instance()->clear(addr, t);
-    }
-
   }  // namespace ttg
 }  // namespace madness
+
+#include "../madness/watch.h"
 
 #endif  // MADNESS_TTG_H_INCLUDED
