@@ -499,7 +499,6 @@ int try_main(int argc, char **argv) {
 
     x.start();  // myusleep(100);
 
-#if 0
     // Next compose with base class pointers and verify destruction
     EverythingBase x1;
     x1.print();
@@ -530,26 +529,32 @@ int try_main(int argc, char **argv) {
     Everything4 q;
     std::cout << q.dot() << std::endl;
     q.start();  // myusleep(100);
-#endif
-#if 0
+
+#if 0  // can we make something like this happen? ... edges are named, but terminals are indexed, so components are "reusable"
     {
       ttg.let([]() {
            std::cout << "produced 0" << std::endl;
-           return {"A", 0, 0};
+           // sends {Void{}, 0} to the first terminal
+           return 0;
+           // this is equivalent to:
+           // send<0>({Void{}, 0}); return;
           })
-         .let([](auto &&key, auto &&value) {
+         .attach_outputs({"A"})
+         // {void,value} is implicitly converted to {key,void}?
+         .let([](auto &&key) {
            if (key <= 100) {
-             return {"A", key + 1, value + 1};
+             send<0>(key + 1);
            }
            else {
-             return {"B", 0, value};
+             send<1>(key);
            }
           })
-         .attach_inputs("A")
-         .let([](auto &&key, auto &&value) {
-           std::cout << "consumed" << value << std::endl;
+         .attach_inputs({"A"})
+         .attach_outputs({"A", "B"})
+         .let([](auto &&key) {
+           std::cout << "consumed" << key << std::endl;
           })
-         .attach_inputs("B");
+         .attach_inputs({"B"});
       ttg.submit(execution_context);
     }
 #endif
