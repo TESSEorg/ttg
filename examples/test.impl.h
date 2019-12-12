@@ -573,7 +573,7 @@ int try_main(int argc, char **argv) {
       {
         const auto max = 1000;
         // Sum Fibonacci numbers up to max
-        auto fib = [max](const int &F_n_plus_1,
+        auto fib = [&](const int &F_n_plus_1,
                          const int &F_n,
                          std::tuple<Out<int, int>, Out<Void, int>> &outs) {
           // if this is first call reduce F_n also

@@ -1414,10 +1414,10 @@ namespace ttg {
         template <typename terminalT>
         void register_input_callback(terminalT &input) {
             using valueT = std::decay_t<typename terminalT::value_type>;
-            auto move_callback = [this](const keyT &key, valueT &&value) {};
-            auto send_callback = [this](const keyT &key, const valueT &value) {};
-            auto setsize_callback = [this](const keyT &key, std::size_t size) {};
-            auto finalize_callback = [this](const keyT &key) {};
+            auto move_callback = [](const keyT &key, valueT &&value) {};
+            auto send_callback = [](const keyT &key, const valueT &value) {};
+            auto setsize_callback = [](const keyT &key, std::size_t size) {};
+            auto finalize_callback = [](const keyT &key) {};
             
             input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
         }
