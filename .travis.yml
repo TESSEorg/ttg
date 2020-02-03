@@ -26,6 +26,7 @@ env:
   global:
     - BUILD_PREFIX=/home/travis/_build
     - INSTALL_PREFIX=/home/travis/_install
+    - secure: "HPyzY9+EYx3SQI8Wd5nrROYs5lwm1VJ0dsqc6bFa5dOboArEZJ0Zqj96ZH4pD5P9I3WQT6GKCDDrZdUD7GLHVU7QNzhiWMutW0Zyp4Pkh9/UFMK7vjX0Dclf2ORoqKVOHW0R1z1mnqSlnGJDqvBFhe+tkcdPzPgNqDkMy1sICc3fCEge04UV/mf//TTyC8eAaQuA8/F0NVNJj7sX8zsfG9ZCVAg3aMeGuZx87BUdkPUen8nKl3dxPuXFrYirDwlc7VFfBL2xC4uz1AJwKVR6gyyFGeXXmFVH7LxsC/jY75D/q7IaD39NA1gu/7incQjNIwQdm0l/YURZ7l4YnXKrtlEkD22RSKzf9OsJ+SFfW2vsBVRLFxlm6qxzzVWLsurdtAAlCCtH5EuzCLzDj/iELpUE5FxlKPUUnZarBd9hdOmyYjR1fKIg/tqbJDi9tngGvFAph3xDr1U1IiroZJdx2vyRN8nWiTUTTgBWhauodbrB7Wi8eBNrlyKSnphUAvYRfzvt0lOo8cv2G7dk2bR9tUbmQ+sI4j4sXMWO0JZR7Wi8otU/nt3U/2u8ZBS+Idcc4e8o//1XNxd0IzMU+/9pen0kicCtx5dZVv/Xgb8UE1rMa3uOTpsL1tmtVSURJh8l3Wm51SxR6ZolYTPht12T3lHULcNJAcx05GaU0tTfqOs="
 
 branches:
   only:
@@ -104,6 +105,9 @@ matrix:
             - libc++-8-dev
             - libc++abi-8-dev
             - g++-8
+            - doxygen  # gcc8 Release build deploys dox
+            - graphviz # provides dot for doxygen graphs
+            - fonts-liberation # recommended by graphviz
 
 before_install:
 - "env"
@@ -125,6 +129,8 @@ after_success:
   - if [ "$BUILD_TYPE" = "Debug" ] && [ "$GCC_VERSION" = 8 ]; then lcov --list coverage.info; fi; #debug info
   # upload report to CodeCov
   #- if [ "$BUILD_TYPE" = "Debug" ] && [ "$GCC_VERSION" = 8 ]; then bash <(curl -s https://codecov.io/bash) -t c0d0a777-cce2-48fa-8ec0-863ce1dcf446; fi;
+  # generate docs
+  - if [ "$BUILD_TYPE" = "Release" ] && [ "$CLANG_VERSION" = 8 ]; then bash ./bin/deploy-$TRAVIS_OS_NAME.sh; fi;
 
 notifications:
   slack:
