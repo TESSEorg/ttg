@@ -6,3 +6,8 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 # Installation
 
 See [INSTALL.md](https://github.com/TESSEorg/ttg/blob/master/INSTALL.md) .
+
+# Documentation
+
+TTG documentation is available for the following versions:
+- [master branch](https://tesseorg.github.io/ttg/dox-master) .
