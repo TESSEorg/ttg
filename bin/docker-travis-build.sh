@@ -1,10 +1,11 @@
 #!/bin/sh
 
-# this script builds a 'Xenial' env docker image used by Travis-CI for TESSEorg/tesse-cxx (aka TTG) project
+# this script builds a 'Bionic' env docker image used by Travis-CI for TESSEorg/ttg project
 #
 # to run bash in the image: docker run -it ttg-travis-debug bash -l
+# see docker-travis.md for further instructions
 # N.B. relevant locations:
-#   - source dir: /home/travis/build/TESSEorg/tesse-cxx (TRAVIS_BUILD_DIR env in Travis jobs)
+#   - source dir: /home/travis/build/TESSEorg/ttg (TRAVIS_BUILD_DIR env in Travis jobs)
 #   - build dir: /home/travis/_build
 #   - install dir: /home/travis/_install
 
@@ -12,18 +13,17 @@
 export TRAVIS_BUILD_TOPDIR=/home/travis/build
 
 ##############################################################
-# make a script to download all prereqs and clone TESSEorg/tesse-cxx repo
+# make a script to download all prereqs and clone TESSEorg/ttg repo
 setup=setup.sh
 cat > $setup << END
 #!/bin/sh
 curl -sSL "http://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add -
-echo "deb http://apt.llvm.org/xenial/ llvm-toolchain-xenial-8 main" | tee -a /etc/apt/sources.list > /dev/null
 apt-add-repository -y "ppa:ubuntu-toolchain-r/test"
 apt-get -yq update >> ~/apt-get-update.log
-apt-get -yq --no-install-suggests --no-install-recommends --force-yes install g++-8  libblas-dev liblapack-dev libtbb-dev clang-8 libc++-8-dev libc++abi-8-dev gdb cmake cmake-data
+apt-get -yq --no-install-suggests --no-install-recommends --force-yes install g++-8  libblas-dev liblapack-dev libtbb-dev clang-7 libc++-7-dev libc++abi-7-dev clang-8 libc++-8-dev libc++abi-8-dev gdb cmake cmake-data doxygen graphviz fonts-liberation
 mkdir -p ${TRAVIS_BUILD_TOPDIR}
 cd ${TRAVIS_BUILD_TOPDIR}
-git clone git@github.com:TESSEorg/tesse-cxx.git ${TRAVIS_BUILD_TOPDIR}/TESSEorg/tesse-cxx
+git clone git@github.com:TESSEorg/ttg.git ${TRAVIS_BUILD_TOPDIR}/TESSEorg/ttg
 END
 chmod +x $setup
 
@@ -35,7 +35,7 @@ cat > $build << END
 cd /home/travis/_build
 export BUILD_PREFIX=/home/travis/_build
 export INSTALL_PREFIX=/home/travis/_install
-export TRAVIS_BUILD_DIR=${TRAVIS_BUILD_TOPDIR}/TESSEorg/tesse-cxx
+export TRAVIS_BUILD_DIR=${TRAVIS_BUILD_TOPDIR}/TESSEorg/ttg
 ./build-linux.sh
 END
 chmod +x $build
@@ -43,9 +43,8 @@ chmod +x $build
 ##############################################################
 # make Dockerfile
 cat > Dockerfile << END
-# Travis default 'Xenial' image
-# for up-to-date info: https://docs.travis-ci.com/user/common-build-problems/#troubleshooting-locally-in-a-docker-image
-FROM travisci/ci-sardonyx:packer-1541445940-e193d27
+# Travis default 'Bionic' image
+FROM travisci/ci-ubuntu-1804:packer-1577347966-74db3f91
 
 # Use baseimage-docker's init system.
 CMD ["/sbin/my_init"]

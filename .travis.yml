@@ -124,7 +124,7 @@ after_failure:
 after_success:
   # create report
   - cd ${TRAVIS_BUILD_DIR}
-  - if [ "$BUILD_TYPE" = "Debug" ] && [ "$GCC_VERSION" = 8 ]; then lcov --gcov-tool gcov-${GCC_VERSION} --directory ${BUILD_PREFIX}/tesse-cxx --capture --output-file coverage.info; fi; # capture coverage info
+  - if [ "$BUILD_TYPE" = "Debug" ] && [ "$GCC_VERSION" = 8 ]; then lcov --gcov-tool gcov-${GCC_VERSION} --directory ${BUILD_PREFIX}/ttg --capture --output-file coverage.info; fi; # capture coverage info
   - if [ "$BUILD_TYPE" = "Debug" ] && [ "$GCC_VERSION" = 8 ]; then lcov --remove coverage.info '/usr/*' '*/eigen3/*' '*/BTAS/*' '*/boost/*' '*/tests/*' '*/examples/*' --output-file coverage.info; fi; # filter out non-project files
   - if [ "$BUILD_TYPE" = "Debug" ] && [ "$GCC_VERSION" = 8 ]; then lcov --list coverage.info; fi; #debug info
   # upload report to CodeCov

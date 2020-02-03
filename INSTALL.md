@@ -24,7 +24,7 @@ and from there do:
 
 ## MADNESS examples
 N.B. Must use CMake to configure MADNESS (i.e. autotools builds will not work). The existing examples only use the `world` component of MADNESS, so to save time you only need to build targets `install-world` and `install-config`.
-- `cmake <path to the top of tesse-cxx> -DMADNESS_ROOT_DIR=<MADNESS install prefix>`
+- `cmake <path to the top of ttg> -DMADNESS_ROOT_DIR=<MADNESS install prefix>`
 - `make test-mad t9-mad serialization`
 - `./examples/test-mad`
 - `./examples/t9-mad`
@@ -35,7 +35,7 @@ N.B. Must use CMake to configure MADNESS (i.e. autotools builds will not work). 
 N.B. Distributed memory is not yet supported with PaRSEC backend.
 
 - `export PKG_CONFIG_PATH=<PaRSEC lib prefix>/pkgconfig:${PKG_CONFIG_PATH}`
-- `cmake <path to the top of tesse-cxx>
+- `cmake <path to the top of ttg>
 - `make test-parsec t9-parsec`
 - `./examples/test-parsec`
 - `./examples/t9-parsec`
