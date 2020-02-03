@@ -13,4 +13,5 @@ This method requires Docker installed on your local machine. This also assumes t
     * `export GCC_VERSION=8`
     * `export CLANG_VERSION=VVV` where `VVV` should be the Clang version to be used. The currently valid values are `7` and `8`.
     * `export CXX=clang++`
+    * `apt-get update && apt-get install libc++-VVV-dev`
 5. Download+build prerequisites (MPICH, MADNESS), TTG, and run tests: `./build.sh`
