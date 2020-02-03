@@ -204,7 +204,7 @@ namespace ttg {
   // - this allows to read some data only (imagine need to do Hadamard product of 2 sparse matrices ... only some blocks will be needed)
   //   but will only be efficient if can do random access (slow with CSC format used by Eigen matrices)
   // - this could be generalized to read efficiently from a distributed data structure
-  // Use Read_SpMatrix is need to read all data from a data structure localized on 1 process
+  // Use Read_SpMatrix if need to read all data from a data structure localized on 1 process
   template <typename Blk = blk_t>
   class Read : public Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, void> {
    public:
