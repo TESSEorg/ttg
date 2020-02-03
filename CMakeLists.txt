@@ -10,6 +10,21 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
 
+# Set TTG version =======================================================
+
+# see https://semver.org/
+set(TTG_MAJOR_VERSION 0)
+set(TTG_MINOR_VERSION 1)
+set(TTG_MICRO_VERSION 0)
+set(TTG_PRERELEASE_ID )
+
+set(TTG_VERSION "${TTG_MAJOR_VERSION}.${TTG_MINOR_VERSION}.${TTG_MICRO_VERSION}")
+if (TTG_PRERELEASE_ID)
+  set(TTG_EXT_VERSION "${TTG_VERSION}-${TTG_PRERELEASE_ID}")
+else(TTG_PRERELEASE_ID)
+  set(TTG_EXT_VERSION "${TTG_VERSION}")
+endif(TTG_PRERELEASE_ID)
+
 ##########################
 #### prerequisites
 ##########################
@@ -63,4 +78,5 @@ endif(${PARSEC_FOUND})
 add_subdirectory(ttg)
 add_subdirectory(tests)
 add_subdirectory(examples)
+add_subdirectory(doc)
 
