@@ -78,6 +78,7 @@ ADD build-eigen3-linux.sh /home/travis/_build/build-eigen3-linux.sh
 ADD build-linux.sh /home/travis/_build/build-linux.sh
 ADD build-madness-linux.sh /home/travis/_build/build-madness-linux.sh
 ADD build-mpich-linux.sh /home/travis/_build/build-mpich-linux.sh
+ADD deploy-linux.sh /home/travis/_build/deploy-linux.sh
 ADD $build /home/travis/_build/$build
 END
 
