@@ -17,7 +17,7 @@ if [ "$BUILD_TYPE" = "${DEPLOY_BUILD_TYPE}" ] && [ "$CLANG_VERSION" = "${DEPLOY_
     cd ${BUILD_PREFIX} && wget http://doxygen.nl/files/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
     cd ${INSTALL_PREFIX} && tar xzf ${BUILD_PREFIX}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
   fi
-  export PATH=${INSTALL_PREFIX}/${DOXYGEN_VERSION}/bin:$PATH
+  export PATH=${INSTALL_PREFIX}/doxygen-${DOXYGEN_VERSION}/bin:$PATH
   which doxygen
   doxygen --version
 fi
