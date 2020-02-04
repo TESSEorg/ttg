@@ -51,6 +51,7 @@ git init
 git add *
 git commit -a -q -m "rebuilt TTG master docs via Travis build: $TRAVIS_BUILD_NUMBER"
 git checkout -b gh-pages
+echo ${GH_TTG_TOKEN}
 git remote add origin https://${GH_TTG_TOKEN}@github.com/TESSEorg/ttg.git > /dev/null 2>&1
 git push origin +gh-pages --force
 cd ..
