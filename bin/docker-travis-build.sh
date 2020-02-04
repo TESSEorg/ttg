@@ -36,7 +36,7 @@ cd /home/travis/_build
 export BUILD_PREFIX=/home/travis/_build
 export INSTALL_PREFIX=/home/travis/_install
 export TRAVIS_BUILD_DIR=${TRAVIS_BUILD_TOPDIR}/TESSEorg/ttg
-./build-linux.sh
+${TRAVIS_BUILD_DIR}/bin/build-$TRAVIS_OS_NAME.sh
 END
 chmod +x $build
 
@@ -72,13 +72,6 @@ RUN /home/travis/_build/$setup
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # copy travis scripts + ssh key
-ADD build-boost-linux.sh /home/travis/_build/build-boost-linux.sh
-ADD build-btas-linux.sh /home/travis/_build/build-btas-linux.sh
-ADD build-eigen3-linux.sh /home/travis/_build/build-eigen3-linux.sh
-ADD build-linux.sh /home/travis/_build/build-linux.sh
-ADD build-madness-linux.sh /home/travis/_build/build-madness-linux.sh
-ADD build-mpich-linux.sh /home/travis/_build/build-mpich-linux.sh
-ADD deploy-linux.sh /home/travis/_build/deploy-linux.sh
 ADD $build /home/travis/_build/$build
 END
 
