@@ -20,14 +20,11 @@ addons:
       - libtbb-dev
       - cmake
       - cmake-data
-      - lcov
 
 env:
   global:
     - BUILD_PREFIX=/home/travis/_build
     - INSTALL_PREFIX=/home/travis/_install
-    - DEPLOY_BUILD_TYPE=Release
-    - DEPLOY_CLANG_VERSION=8
 
 branches:
   only:
@@ -37,7 +34,7 @@ matrix:
   fast_finish: true
   include:
     - compiler: gcc
-      env: GCC_VERSION=8 BUILD_TYPE=Debug
+      env: GCC_VERSION=8 BUILD_TYPE=Debug COMPUTE_COVERAGE=1
       addons:
         apt:
           sources:
@@ -45,6 +42,7 @@ matrix:
           packages:
             - *base_packages
             - g++-8
+            - lcov
     - compiler: gcc
       env: GCC_VERSION=8 BUILD_TYPE=Release
       addons:
@@ -94,7 +92,7 @@ matrix:
             - libc++abi-8-dev
             - g++-8
     - compiler: clang
-      env: CLANG_VERSION=8 GCC_VERSION=8 BUILD_TYPE=Release
+      env: CLANG_VERSION=8 GCC_VERSION=8 BUILD_TYPE=Release DEPLOY=1
       addons:
         apt:
           sources:
@@ -114,7 +112,7 @@ before_install:
 - "mkdir -p ${BUILD_PREFIX} && mkdir -p ${INSTALL_PREFIX}"
 
 script:
-  - ./bin/build-$TRAVIS_OS_NAME.sh
+  - ${TRAVIS_BUILD_DIR}/bin/build-$TRAVIS_OS_NAME.sh
 
 after_failure:
 - cat ${BUILD_PREFIX}/ttg/CMakeFiles/CMakeOutput.log
@@ -124,13 +122,13 @@ after_failure:
 after_success:
   # create report
   - cd ${TRAVIS_BUILD_DIR}
-  - if [ "$BUILD_TYPE" = "Debug" ] && [ "$GCC_VERSION" = 8 ]; then lcov --gcov-tool gcov-${GCC_VERSION} --directory ${BUILD_PREFIX}/ttg --capture --output-file coverage.info; fi; # capture coverage info
-  - if [ "$BUILD_TYPE" = "Debug" ] && [ "$GCC_VERSION" = 8 ]; then lcov --remove coverage.info '/usr/*' '*/eigen3/*' '*/BTAS/*' '*/boost/*' '*/tests/*' '*/examples/*' --output-file coverage.info; fi; # filter out non-project files
-  - if [ "$BUILD_TYPE" = "Debug" ] && [ "$GCC_VERSION" = 8 ]; then lcov --list coverage.info; fi; #debug info
+  - if [ "$COMPUTE_COVERAGE" = "1" ]; then lcov --gcov-tool gcov-${GCC_VERSION} --directory ${BUILD_PREFIX}/ttg --capture --output-file coverage.info; fi; # capture coverage info
+  - if [ "$COMPUTE_COVERAGE" = "1" ]; then lcov --remove coverage.info '/usr/*' '*/eigen3/*' '*/BTAS/*' '*/boost/*' '*/tests/*' '*/examples/*' --output-file coverage.info; fi; # filter out non-project files
+  - if [ "$COMPUTE_COVERAGE" = "1" ]; then lcov --list coverage.info; fi; #debug info
   # upload report to CodeCov
-  #- if [ "$BUILD_TYPE" = "Debug" ] && [ "$GCC_VERSION" = 8 ]; then bash <(curl -s https://codecov.io/bash) -t c0d0a777-cce2-48fa-8ec0-863ce1dcf446; fi;
+  #- if [ "$COMPUTE_COVERAGE" = "1" ]; then bash <(curl -s https://codecov.io/bash) -t c0d0a777-cce2-48fa-8ec0-863ce1dcf446; fi;
   # generate docs
-  - if [ "$BUILD_TYPE" = "${DEPLOY_BUILD_TYPE}" ] && [ "$CLANG_VERSION" = "${DEPLOY_CLANG_VERSION}" ]; then bash ./bin/deploy-$TRAVIS_OS_NAME.sh; fi;
+  - if [ "$DEPLOY" = "1" ]; then bash ${TRAVIS_BUILD_DIR}/bin/deploy-$TRAVIS_OS_NAME.sh; fi;
 
 notifications:
   slack:

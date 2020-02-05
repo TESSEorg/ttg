@@ -11,7 +11,7 @@ ${TRAVIS_BUILD_DIR}/bin/build-madness-$TRAVIS_OS_NAME.sh
 set -ev
 
 # download latest Doxygen
-if [ "$BUILD_TYPE" = "${DEPLOY_BUILD_TYPE}" ] && [ "$CLANG_VERSION" = "${DEPLOY_CLANG_VERSION}" ]; then
+if [ "$DEPLOY" = "1" ]; then
   DOXYGEN_VERSION=1.8.17
   if [ ! -d ${INSTALL_PREFIX}/doxygen-${DOXYGEN_VERSION} ]; then
     cd ${BUILD_PREFIX} && wget http://doxygen.nl/files/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
@@ -52,7 +52,7 @@ mkdir -p ttg
 cd ttg
 
 # configure CodeCov only for g++-8 debug build
-if [ "$BUILD_TYPE" = "Debug" ] && [ "$GCC_VERSION" = 8 ]; then
+if [ "$COMPUTE_COVERAGE" = "1" ]; then
     export CODECOVCXXFLAGS="--coverage -O0"
 fi
 
