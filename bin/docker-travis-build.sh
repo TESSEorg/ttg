@@ -33,10 +33,11 @@ build=build.sh
 cat > $build << END
 #!/bin/sh
 cd /home/travis/_build
+export TRAVIS_BUILD_TOPDIR=${TRAVIS_BUILD_TOPDIR}
 export BUILD_PREFIX=/home/travis/_build
 export INSTALL_PREFIX=/home/travis/_install
-export TRAVIS_BUILD_DIR=${TRAVIS_BUILD_TOPDIR}/TESSEorg/ttg
-${TRAVIS_BUILD_DIR}/bin/build-$TRAVIS_OS_NAME.sh
+export TRAVIS_BUILD_DIR=\${TRAVIS_BUILD_TOPDIR}/TESSEorg/ttg
+\${TRAVIS_BUILD_DIR}/bin/build-\${TRAVIS_OS_NAME}.sh
 END
 chmod +x $build
 
