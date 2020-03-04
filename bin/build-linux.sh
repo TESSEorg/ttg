@@ -4,7 +4,7 @@ ${TRAVIS_BUILD_DIR}/bin/build-boost-$TRAVIS_OS_NAME.sh
 ${TRAVIS_BUILD_DIR}/bin/build-eigen3-$TRAVIS_OS_NAME.sh
 ${TRAVIS_BUILD_DIR}/bin/build-btas-$TRAVIS_OS_NAME.sh
 ${TRAVIS_BUILD_DIR}/bin/build-mpich-$TRAVIS_OS_NAME.sh
-${TRAVIS_BUILD_DIR}/bin/build-madness-$TRAVIS_OS_NAME.sh
+#${TRAVIS_BUILD_DIR}/bin/build-madness-$TRAVIS_OS_NAME.sh
 #${TRAVIS_BUILD_DIR}/bin/build-parsec-$TRAVIS_OS_NAME.sh
 
 # Exit on error
