@@ -4,7 +4,6 @@ This method requires Docker installed on your local machine. This also assumes t
 2. Run shell in a container using the newly created image: `docker run -it ttg-travis-debug bash -l`; if you want to run debugger you want to add `--privileged` flag, as in: `docker run --privileged -it ttg-travis-debug bash -l`
 3. `cd /home/travis/_build`
 4. Configure the job to use the appropriate compiler, compiler version, and debug/release build type:
-  * `export TRAVIS_OS_NAME=linux`
   * `export BUILD_TYPE=B`, where `B` is `Debug` or `Release`
   * If want to use GNU C++ compiler (gcc):
     * `export GCC_VERSION=VVV` where `VVV` should be the GCC version to be used. The currently valid value is `8`.
