@@ -28,9 +28,7 @@ endif(TTG_PRERELEASE_ID)
 ##########################
 #### prerequisites
 ##########################
-
-# need Boost.CallableTraits (header only, part of Boost 1.66 released in Dec 2017) for wrap.h to work
-find_package(Boost 1.66 REQUIRED)
+find_package(Boost ${TTG_TRACKED_BOOST_VERSION} REQUIRED)
 
 # MRA code needs CBLAS
 find_package(CBLAS)
@@ -63,8 +61,10 @@ endif()
 #### prerequisite runtimes
 ##########################
 # MADNESS
-find_package(MADNESS 0.10.1 CONFIG QUIET COMPONENTS world HINTS ${MADNESS_ROOT_DIR})
-message(STATUS "MADNESS_FOUND=${MADNESS_FOUND}")
+include(FindOrFetchMADNESS)
+if (TARGET MADworld)
+  message(STATUS "MADNESS_FOUND=1")
+endif(TARGET MADworld)
 # PaRSEC
 find_package(PARSEC MODULE COMPONENTS MPI)
 message(STATUS "PARSEC_FOUND=${PARSEC_FOUND}")

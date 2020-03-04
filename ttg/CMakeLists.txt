@@ -29,7 +29,7 @@ install(FILES ${ttg-sources}
 #########################
 ####### MADNESS-specific
 #########################
-if (${MADNESS_FOUND})
+if (TARGET MADworld)
   add_library(ttg-mad INTERFACE)
   target_link_libraries(ttg-mad INTERFACE ttg Boost::boost)
   target_include_directories(ttg-mad INTERFACE
@@ -47,7 +47,7 @@ if (${MADNESS_FOUND})
   string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
   target_compile_options(ttg-mad INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
   target_link_libraries(ttg-mad INTERFACE MADworld ${MADNESS_DISABLEPIE_LINKER_FLAG})
-endif(${MADNESS_FOUND})
+endif(TARGET MADworld)
 
 ########################
 ####### PaRSEC-specific
