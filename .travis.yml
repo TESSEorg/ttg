@@ -17,6 +17,7 @@ addons:
     packages: &base_packages
       - libblas-dev
       - liblapack-dev
+      - liblapacke-dev
       - libtbb-dev
       - cmake
       - cmake-data

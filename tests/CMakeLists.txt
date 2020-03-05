@@ -1,5 +1,5 @@
 # serialization (needs MADNESS)
-if (${MADNESS_FOUND})
+if (TARGET MADworld)
   add_executable (serialization serialization.cc)
   target_link_libraries(serialization LINK_PUBLIC ttg MADworld ${MADNESS_DISABLEPIE_LINKER_FLAG})
-endif(${MADNESS_FOUND})
+endif(TARGET MADworld)

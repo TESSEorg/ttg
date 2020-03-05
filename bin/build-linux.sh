@@ -4,7 +4,7 @@ ${TRAVIS_BUILD_DIR}/bin/build-boost-$TRAVIS_OS_NAME.sh
 ${TRAVIS_BUILD_DIR}/bin/build-eigen3-$TRAVIS_OS_NAME.sh
 ${TRAVIS_BUILD_DIR}/bin/build-btas-$TRAVIS_OS_NAME.sh
 ${TRAVIS_BUILD_DIR}/bin/build-mpich-$TRAVIS_OS_NAME.sh
-${TRAVIS_BUILD_DIR}/bin/build-madness-$TRAVIS_OS_NAME.sh
+#${TRAVIS_BUILD_DIR}/bin/build-madness-$TRAVIS_OS_NAME.sh
 #${TRAVIS_BUILD_DIR}/bin/build-parsec-$TRAVIS_OS_NAME.sh
 
 # Exit on error
@@ -57,11 +57,11 @@ if [ "$COMPUTE_COVERAGE" = "1" ]; then
 fi
 
 cmake ${TRAVIS_BUILD_DIR} \
+    -DCMAKE_TOOLCHAIN_FILE=${TRAVIS_BUILD_DIR}/cmake/toolchains/travis.cmake \
     -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
     -DCMAKE_PREFIX_PATH="${INSTALL_PREFIX}/eigen3" \
     -DBOOST_ROOT="${INSTALL_PREFIX}/boost" \
-    -DMADNESS_ROOT_DIR="${INSTALL_PREFIX}/madness" \
     -DBTAS_INSTALL_DIR="${INSTALL_PREFIX}/BTAS" \
     -DCMAKE_CXX_FLAGS="${CXX_FLAGS} ${EXTRAFLAGS} ${CODECOVCXXFLAGS}"
 
