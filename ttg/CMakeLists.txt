@@ -52,7 +52,7 @@ endif(TARGET MADworld)
 ########################
 ####### PaRSEC-specific
 ########################
-if (${PARSEC_FOUND})
+if (TARGET PaRSEC::parsec)
   add_library(ttg-parsec INTERFACE)
   target_link_libraries(ttg-parsec INTERFACE ttg Boost::boost)
   target_include_directories(ttg-parsec INTERFACE
@@ -69,7 +69,5 @@ if (${PARSEC_FOUND})
   # Use current CMAKE_CXX_FLAGS to compile targets dependent on this library
   string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
   target_compile_options(ttg-parsec INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
-  link_directories(${PARSEC_LIBRARY_DIRS})
-  target_include_directories(ttg-parsec INTERFACE ${PARSEC_INCLUDE_DIRS})
-  target_link_libraries(ttg-parsec INTERFACE parsec ${PARSEC_LIBRARIES} ${MPI_C_LIBRARIES})
-endif(${PARSEC_FOUND})
+  target_link_libraries(ttg-parsec INTERFACE PaRSEC::parsec)
+endif(TARGET PaRSEC::parsec)

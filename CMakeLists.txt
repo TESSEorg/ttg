@@ -66,11 +66,10 @@ if (TARGET MADworld)
   message(STATUS "MADNESS_FOUND=1")
 endif(TARGET MADworld)
 # PaRSEC
-find_package(PARSEC MODULE COMPONENTS MPI)
-message(STATUS "PARSEC_FOUND=${PARSEC_FOUND}")
-if (${PARSEC_FOUND})
-    link_directories(${PARSEC_LIBRARY_DIRS})
-endif(${PARSEC_FOUND})
+include(FindOrFetchPARSEC)
+if (TARGET PaRSEC::parsec)
+  message(STATUS "PARSEC_FOUND=1")
+endif(TARGET PaRSEC::parsec)
 
 ##########################
 #### Components
