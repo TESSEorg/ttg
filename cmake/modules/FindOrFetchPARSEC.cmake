@@ -10,7 +10,7 @@ if (NOT TARGET PaRSEC::parsec)
 
   include(DownloadProject)
   download_project(PROJ                PARSEC
-    GIT_REPOSITORY      https://bitbucket.org/eduard_valeyev/parsec.git
+    GIT_REPOSITORY      https://bitbucket.org/icldistcomp/parsec.git
     GIT_TAG             ${TTG_TRACKED_PARSEC_TAG}
     PREFIX              ${PROJECT_BINARY_DIR}/external
     UPDATE_DISCONNECTED 1
