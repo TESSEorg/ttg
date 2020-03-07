@@ -13,6 +13,13 @@ enum class Execution {
   Async   // calls asynchronously, e.g. by firing off a task
 };
 
+/// denotes task execution space
+enum class ExecutionSpace {
+  Host,   // a CPU
+  CUDA,   // an NVIDIA CUDA device
+  Invalid
+};
+
 };
 
 #endif //TTG_EXECUTION_H
