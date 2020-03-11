@@ -69,7 +69,7 @@ cmake ${TRAVIS_BUILD_DIR} \
 make serialization
 tests/serialization
 
-### examples
+### MADNESS examples
 make test-mad t9-mad spmm-mad bspmm-mad
 export MPI_HOME=${INSTALL_PREFIX}/mpich
 for PROG in test-mad t9-mad spmm-mad bspmm-mad
@@ -77,6 +77,10 @@ do
   examples/$PROG
   setarch `uname -m` -R ${MPI_HOME}/bin/mpirun -n 2 examples/$PROG
 done
+
+### PaRSEC examples
+make test-parsec t9-parsec spmm-parsec bspmm-parsec
+# TODO run these tests also
 
 # print ccache stats
 ccache -s
