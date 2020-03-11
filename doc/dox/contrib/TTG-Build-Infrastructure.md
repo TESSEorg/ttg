@@ -1,4 +1,8 @@
-# Subprojects in TTG {#TTG-subprojects}
+# TTG Build Infrastructure {#TTG-Build-Infrastructure}
+
+TTG uses CMake metabuild system, with dependencies downloaded automatically, if needed, and included as [CMake subprojects](https://github.com/ttroy50/cmake-examples/tree/master/02-sub-projects/A-basic).
+
+## Managing subprojects in TTG
 
 TTG uses a set of subprojects as dependencies: MADNESS, PaRSEC and
 Boost at least. These projects are pulled from git repositories in
@@ -7,7 +11,7 @@ Makefile) are created in <BUILDDIR>/external/<SUBPROJECT>-download
 directories, and they are compiled either in their source directory,
 or in <BUILD_DIR>/external/<SUBPROJECT>-build directories.
 
-## Keeping the subprojects in sync
+### Keeping the subprojects in sync
 
 In order to keep TTG in sync with each subproject, one needs to update the following files:
 
