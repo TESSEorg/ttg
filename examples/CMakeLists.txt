@@ -37,7 +37,7 @@ if (TARGET MADworld)
 endif(TARGET MADworld)
 
 # "new" PaRSEC is not usable yet
-if (TARGET PaRSEC::parsec AND FALSE)
+if (TARGET PaRSEC::parsec)
   # sanity check
   add_executable (test-parsec parsec/test.cc test.impl.h)
   target_link_libraries(test-parsec LINK_PUBLIC ttg-parsec)
@@ -57,4 +57,4 @@ if (TARGET PaRSEC::parsec AND FALSE)
       target_link_libraries(bspmm-parsec LINK_PUBLIC ttg-parsec eigen3 BTAS Boost::boost MADworld ${MADNESS_DISABLEPIE_LINKER_FLAG})
     endif (BTAS_FOUND AND TARGET MADworld)
   endif()
-endif(TARGET PaRSEC::parsec AND FALSE)
+endif(TARGET PaRSEC::parsec)

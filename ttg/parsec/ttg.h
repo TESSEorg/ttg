@@ -21,20 +21,17 @@
 #include <parsec.h>
 #include <parsec/class/parsec_hash_table.h>
 #include <parsec/data_internal.h>
-#include <parsec/devices/device.h>
+#include <parsec/mca/device/device.h>
 #include <parsec/execution_stream.h>
 #include <parsec/interfaces/interface.h>
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
-#include <parsec/remote_dep.h>
 #include <cstdlib>
 #include <cstring>
 
 extern "C" {
     void parsec_taskpool_termination_detected(parsec_taskpool_t *tp);
-    int parsec_ptg_update_runtime_task(parsec_taskpool_t *tp, int tasks);
-    int parsec_comm_register_callback(int *tag, size_t max_msg_size, int tp_flag, parsec_comm_recv_message_t cb);
-    int parsec_comm_unregister_callback(int tag);
+    int parsec_add_fetch_runtime_task(parsec_taskpool_t *tp, int tasks);
 }
 
 namespace parsec {
@@ -47,16 +44,20 @@ namespace parsec {
       static std::multimap<uint64_t, static_set_arg_fct_arg_t> delayed_unpack_actions;
 
       struct msg_header_t {
-        uint64_t op_id;
-        std::size_t param_id;
+          uint32_t taskpool_id;
+          uint64_t op_id;
+          std::size_t param_id;
       };
 
-      static int static_unpack_msg(int src_rank, parsec_taskpool_t *tp, void *data, size_t size) {
+      static int static_unpack_msg(parsec_comm_engine_t *ce, long unsigned int tag,  void *data, long unsigned int size, int src_rank,  void *obj) {
           static_set_arg_fct_type static_set_arg_fct;
           int rank;
+          parsec_taskpool_t *tp = NULL;
           MPI_Comm_rank(MPI_COMM_WORLD, &rank);
           msg_header_t *msg = static_cast<msg_header_t*>(data);
           uint64_t op_id = msg->op_id;
+          tp = parsec_taskpool_lookup( msg->taskpool_id );
+          assert(NULL != tp);
           static_map_mutex.lock();
           try {
               auto op_pair = static_id_to_op_map.at( op_id );
@@ -80,18 +81,19 @@ namespace parsec {
     }
 
     class World {
-        int _parsec_ttg_tag = -1;
+        const int _PARSEC_TTG_TAG = 8081; // How do we get a unique TAG ID?
      public:
         static const int PARSEC_TTG_MAX_AM_SIZE = 1024*1024;
       World(int *argc, char **argv[], int ncores) {
           ctx = parsec_init(ncores, argc, argv);
           es = ctx->virtual_processes[0]->execution_streams[0];
 
-          parsec_comm_register_callback(&_parsec_ttg_tag, PARSEC_TTG_MAX_AM_SIZE, 1, parsec::ttg::static_unpack_msg);
+          parsec_ce.tag_register(_PARSEC_TTG_TAG, parsec::ttg::static_unpack_msg, this,
+                                 PARSEC_TTG_MAX_AM_SIZE);
         
           tpool = (parsec_taskpool_t *)calloc(1, sizeof(parsec_taskpool_t));
           tpool->taskpool_id = -1;
-          tpool->update_nb_runtime_task = parsec_ptg_update_runtime_task;
+          tpool->update_nb_runtime_task = parsec_add_fetch_runtime_task;
           tpool->taskpool_type = PARSEC_TASKPOOL_TYPE_TTG;
           parsec_taskpool_reserve_id(tpool);
 
@@ -100,9 +102,9 @@ namespace parsec {
           parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
       }
 
-      ~World() { parsec_comm_unregister_callback(_parsec_ttg_tag); parsec_fini(&ctx); }
+      ~World() { parsec_ce.tag_unregister(_PARSEC_TTG_TAG); parsec_fini(&ctx); }
 
-        int &parsec_ttg_tag() { return _parsec_ttg_tag; }
+      const int &parsec_ttg_tag() { return _PARSEC_TTG_TAG; }
         
       MPI_Comm comm() const { return MPI_COMM_WORLD; }
 
@@ -386,7 +388,7 @@ namespace parsec {
                 };
             };
             msg_t() = default;
-            msg_t(uint64_t op_id, std::size_t param_id) : op_id{op_id, param_id} {}
+            msg_t(uint64_t op_id, uint32_t taskpool_id, std::size_t param_id) : op_id{taskpool_id, op_id, param_id} {}
         };
     }  // namespace detail
 
@@ -406,8 +408,8 @@ namespace parsec {
       static constexpr int numins = sizeof...(input_valueTs);                    // number of input arguments
       static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs
 
-      static constexpr bool have_cuda_op = have_cuda_op_is_defined ? derivedT::have_cuda_op : false;
-
+      static constexpr bool have_cuda_op = false;
+      
       // PaRSEC for now passes data as tuple of ptrs (datacopies have these pointers also)
       // N.B. perhaps make data_wrapper_t<T> = parsec_data_copy_t (rather, a T-dependent wrapper around it to automate
       // the casts that will be inevitably needed)
@@ -707,7 +709,7 @@ namespace parsec {
           memset((void *)newtask, 0, sizeof(my_op_t) + sizeof(input_values_tuple_type) + alignment_of_input_tuple);
           newtask->parsec_task.mempool_owner = mempool;
 
-          OBJ_CONSTRUCT(&newtask->parsec_task, parsec_list_item_t);
+          PARSEC_OBJ_CONSTRUCT(&newtask->parsec_task, parsec_list_item_t);
           newtask->parsec_task.task_class = &this->self;
           newtask->parsec_task.taskpool = world.taskpool();
           newtask->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
@@ -754,7 +756,7 @@ namespace parsec {
           // own (non-PaRSEC) value rather than value owned by PaRSEC?
           // N.B. wrap(data_wrapper_t) does nothing, so no double wrapping here
           std::get<i>(*tuple) = data_wrapper_t<valueT>(wrap(std::forward<Value>(value)));
-          parsec_data_copy_t *copy = OBJ_NEW(parsec_data_copy_t);
+          parsec_data_copy_t *copy = PARSEC_OBJ_NEW(parsec_data_copy_t);
           task->parsec_task.data[i].data_in = copy;
           copy->device_private = (void *) (std::get<i>(*tuple));  // tuple holds pointers already
           // uncomment this if you want to test deserialization ... also comment out the placement new above
@@ -815,7 +817,7 @@ namespace parsec {
         // the corresponding peer.
         // TODO do we need to copy value?
         using msg_t = detail::msg_t;
-        msg_t msg(get_instance_id(), i);
+        msg_t msg(get_instance_id(), world.taskpool()->taskpool_id, i);
         const ttg_data_descriptor *dKey = ::ttg::get_data_descriptor<Key>();
         uint64_t size_of_key = sizeof(Key);
         dKey->pack_payload(&key, &size_of_key, 0, reinterpret_cast<void**>(&msg.bytes));
@@ -824,8 +826,8 @@ namespace parsec {
         dValue->pack_payload(&value, &size_of_value, size_of_key, reinterpret_cast<void**>(&msg.bytes));
         parsec_taskpool_t *tp = world.taskpool();
         tp->tdm.module->outgoing_message_start(tp, owner, NULL);       
-        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0, MPI_COMM_WORLD);       
-        parsec_comm_send_message(owner, world.parsec_ttg_tag(), tp, static_cast<void*>(&msg), sizeof(msg_t));
+        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0, MPI_COMM_WORLD);
+        parsec_ce.send_active_message(&parsec_ce, world.parsec_ttg_tag(), owner, static_cast<void*>(&msg), sizeof(msg_t));
       }
 
       // case 3
@@ -847,7 +849,7 @@ namespace parsec {
           memset((void *) task, 0, sizeof(my_op_t));
           task->parsec_task.mempool_owner = mempool;
 
-          OBJ_CONSTRUCT(task, parsec_list_item_t);
+          PARSEC_OBJ_CONSTRUCT(task, parsec_list_item_t);
           task->parsec_task.task_class = &this->self;
           task->parsec_task.taskpool = world.taskpool();
           task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
@@ -888,7 +890,7 @@ namespace parsec {
           memset((void *) task, 0, sizeof(my_op_t));
           task->parsec_task.mempool_owner = mempool;
 
-          OBJ_CONSTRUCT(task, parsec_list_item_t);
+          PARSEC_OBJ_CONSTRUCT(task, parsec_list_item_t);
           task->parsec_task.task_class = &this->self;
           task->parsec_task.taskpool = world.taskpool();
           task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
@@ -1072,8 +1074,8 @@ namespace parsec {
         int junk[] = {
             0,
             (*(const_cast<std::remove_const_t<decltype(flows[IS]->flow_flags)> *>(&(flows[IS]->flow_flags))) =
-                 (std::is_const<typename std::tuple_element<IS, input_terminals_tupleT>::type>::value ? FLOW_ACCESS_READ
-                                                                                                      : FLOW_ACCESS_RW),
+                 (std::is_const<typename std::tuple_element<IS, input_terminals_tupleT>::type>::value ? PARSEC_FLOW_ACCESS_READ
+                                                                                                      : PARSEC_FLOW_ACCESS_RW),
              0)...};
         junk[0]++;
       }
@@ -1147,9 +1149,9 @@ namespace parsec {
         for (i = 0; i < numins; i++) {
           parsec_flow_t *flow = new parsec_flow_t;
           flow->name = strdup((std::string("flow in") + std::to_string(i)).c_str());
-          flow->sym_type = SYM_INOUT;
+          flow->sym_type = PARSEC_SYM_INOUT;
           // see initialize_flows below
-          // flow->flow_flags = FLOW_ACCESS_RW;
+          // flow->flow_flags = PARSEC_FLOW_ACCESS_RW;
           flow->dep_in[0] = NULL;
           flow->dep_out[0] = NULL;
           flow->flow_index = i;
@@ -1162,8 +1164,8 @@ namespace parsec {
         for (i = 0; i < numouts; i++) {
           parsec_flow_t *flow = new parsec_flow_t;
           flow->name = strdup((std::string("flow out") + std::to_string(i)).c_str());
-          flow->sym_type = SYM_INOUT;
-          flow->flow_flags = FLOW_ACCESS_READ;  // does PaRSEC use this???
+          flow->sym_type = PARSEC_SYM_INOUT;
+          flow->flow_flags = PARSEC_FLOW_ACCESS_READ;  // does PaRSEC use this???
           flow->dep_in[0] = NULL;
           flow->dep_out[0] = NULL;
           flow->flow_index = i;
@@ -1183,7 +1185,7 @@ namespace parsec {
           }
         }
         // + alignment_of_input_tuple to allow alignment of input_values_tuple_type
-        parsec_mempool_construct(&mempools, OBJ_CLASS(parsec_task_t),
+        parsec_mempool_construct(&mempools, PARSEC_OBJ_CLASS(parsec_task_t),
                                  sizeof(my_op_t) + sizeof(input_values_tuple_type) + alignof(input_values_tuple_type),
                                  offsetof(parsec_task_t, mempool_owner), k);
 
@@ -1300,10 +1302,10 @@ namespace parsec {
 
               for(auto it : tmp) {
                   if(tracing()) {
-                      ::ttg::print("parsec::ttg(", rank, ") Unpacking delayed message (", std::get<0>(it), ", ",
+                      ::ttg::print("parsec::ttg(", rank, ") Unpacking delayed message (", ", ",
                                    get_instance_id(), ", ", std::get<1>(it), ", ", std::get<2>(it), ")");
                   }
-                  int rc = static_unpack_msg(std::get<0>(it), tp, std::get<1>(it), std::get<2>(it));
+                  int rc = static_unpack_msg(&parsec_ce, world.parsec_ttg_tag(),  std::get<1>(it), std::get<2>(it), std::get<0>(it), NULL);
                   assert(rc == 0);
                   free(std::get<1>(it));
               }
