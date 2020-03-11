@@ -1,15 +1,4 @@
-cmake_minimum_required (VERSION 3.6)
-project(ttg)
-
-enable_language(CXX)
-include(GNUInstallDirs)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
-include(ExternalDependenciesVersions)
+cmake_minimum_required (VERSION 3.9) # supports project(DESCRIPTION "")
 
 # Set TTG version =======================================================
 
@@ -25,6 +14,22 @@ if (TTG_PRERELEASE_ID)
 else(TTG_PRERELEASE_ID)
   set(TTG_EXT_VERSION "${TTG_VERSION}")
 endif(TTG_PRERELEASE_ID)
+
+# Declare TTG =======================================================
+project(ttg
+    VERSION ${TTG_VERSION}
+    DESCRIPTION "Task Template Graph: flowgraph programming model"
+    LANGUAGES CXX
+    HOMEPAGE_URL "https://tesseorg.github.io/ttg/")
+
+include(GNUInstallDirs)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
+include(ExternalDependenciesVersions)
 
 ##########################
 #### prerequisites
