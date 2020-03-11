@@ -49,7 +49,7 @@ namespace parsec {
           std::size_t param_id;
       };
 
-      static int static_unpack_msg(parsec_comm_engine_t *ce, long unsigned int tag,  void *data, long unsigned int size, int src_rank,  void *obj) {
+      static int static_unpack_msg(parsec_comm_engine_t *ce, uint64_t tag,  void *data, long unsigned int size, int src_rank,  void *obj) {
           static_set_arg_fct_type static_set_arg_fct;
           int rank;
           parsec_taskpool_t *tp = NULL;
