@@ -21,7 +21,20 @@ class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
     const std::string &name)
       : baseT(inedges, outedges, name, {"inputA"}, {"resultA", "iterateA"}) {}
 
+  static constexpr const bool have_cuda_op = true;
+
   void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
+    // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int
+    auto &value = baseT::get<0>(t);
+    ::ttg::print("A got value ", value);
+    if (value >= 100) {
+      ::sendv<0>(value, out);
+    } else {
+      ::send<1>(key + 1, value + 1, out);
+    }
+  }
+
+  void op_cuda(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
     // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int
     auto &value = baseT::get<0>(t);
     ::ttg::print("A got value ", value);

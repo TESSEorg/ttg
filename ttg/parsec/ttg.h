@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cassert>
+#include <experimental/type_traits>
 #include <functional>
 #include <future>
 #include <iostream>
@@ -189,6 +190,8 @@ namespace parsec {
 }  // namespace parsec
 
 extern "C" {
+typedef void (*parsec_static_op_t)(void *);  // static_op will be cast to this type
+
 typedef struct my_op_s {
   parsec_task_t parsec_task;
   int32_t in_data_count;
@@ -199,15 +202,13 @@ typedef struct my_op_s {
 //      stream_size;                        // Expected number of values to receive, only used for streaming inputs
 //  // (0 = unbounded stream)
   parsec_hash_table_item_t op_ht_item;
-  void (*function_template_class_ptr)(void *);
+  parsec_static_op_t function_template_class_ptr[::ttg::runtime_traits<::ttg::Runtime::PaRSEC>::num_execution_spaces];
   void *object_ptr;
   void (*static_set_arg)(int, int);
   parsec_key_t key;
   void *user_tuple; /* user_tuple will past the end of my_op_s (to allow for proper alignment)
                      * This points to the beginning of the tuple. */
 } my_op_t;
-
-static parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *task);
 }
 
 static parsec_hook_return_t do_nothing(parsec_execution_stream_t *es, parsec_task_t *task) {
@@ -216,11 +217,19 @@ static parsec_hook_return_t do_nothing(parsec_execution_stream_t *es, parsec_tas
   return PARSEC_HOOK_RETURN_DONE;
 }
 
-static parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *task) {
-  my_op_t *me = (my_op_t *)task;
-  me->function_template_class_ptr(task);
-  (void)es;
+extern "C" {
+static inline parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *task) {
+  my_op_t *me = (my_op_t *) task;
+  me->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::Host)](task);
+  (void) es;
   return PARSEC_HOOK_RETURN_DONE;
+}
+static inline parsec_hook_return_t hook_cuda(struct parsec_execution_stream_s *es, parsec_task_t *task) {
+  my_op_t *me = (my_op_t *) task;
+  me->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::CUDA)](task);
+  (void) es;
+  return PARSEC_HOOK_RETURN_DONE;
+}
 }
 
 namespace ttg {
@@ -388,10 +397,16 @@ namespace parsec {
       parsec_mempool_t mempools;
       std::map<std::pair<int, int>, int> mempools_index;
 
+      //check for a non-type member named have_cuda_op
+      template <typename T>
+      using have_cuda_op_non_type_t = decltype(&T::have_cuda_op);
+      static constexpr bool have_cuda_op_is_defined = std::experimental::is_detected_v<have_cuda_op_non_type_t, derivedT>;
+
      public:
       static constexpr int numins = sizeof...(input_valueTs);                    // number of input arguments
-      static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or
-      // results
+      static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs
+
+      static constexpr bool have_cuda_op = have_cuda_op_is_defined ? derivedT::have_cuda_op : false;
 
       // PaRSEC for now passes data as tuple of ptrs (datacopies have these pointers also)
       // N.B. perhaps make data_wrapper_t<T> = parsec_data_copy_t (rather, a T-dependent wrapper around it to automate
@@ -518,8 +533,22 @@ namespace parsec {
           return resultT{{&Op::set_arg_from_msg<IS>...}};
       }
 
+      /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
+      template <::ttg::ExecutionSpace Space, typename ... Args>
+      void op(Args&& ... args) {
+        derivedT *derived = static_cast<derivedT*>(this);
+        if constexpr (Space == ::ttg::ExecutionSpace::Host)
+          derived->op(std::forward<Args>(args)...);
+        else if constexpr (Space == ::ttg::ExecutionSpace::CUDA)
+          derived->op_cuda(std::forward<Args>(args)...);
+        else abort();
+      }
+
+      template <::ttg::ExecutionSpace Space>
       static void static_op(parsec_task_t *my_task) {
+
         my_op_t *task = (my_op_t *)my_task;
+        opT *baseobj = (opT *)task->object_ptr;
         derivedT *obj = (derivedT *)task->object_ptr;
         if (obj->tracing()) {
           if constexpr (!::ttg::meta::is_void_v<keyT>)
@@ -529,15 +558,15 @@ namespace parsec {
         }
 
         if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->op(keyT((uintptr_t) task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
+          baseobj->template op<Space>(keyT((uintptr_t) task->key), std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
                   obj->output_terminals);
         } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->op(keyT((uintptr_t) task->key), obj->output_terminals);
+          baseobj->template op<Space>(keyT((uintptr_t) task->key), obj->output_terminals);
         } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->op(std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
+          baseobj->template op<Space>(std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
                   obj->output_terminals);
         } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          obj->op(obj->output_terminals);
+          baseobj->template op<Space>(obj->output_terminals);
         } else abort();
 
         if (obj->tracing()) {
@@ -548,13 +577,15 @@ namespace parsec {
         }
       }
 
+      template <::ttg::ExecutionSpace Space>
       static void static_op_noarg(parsec_task_t *my_task) {
         my_op_t *task = (my_op_t *)my_task;
+        opT *baseobj = (opT *)task->object_ptr;
         derivedT *obj = (derivedT *)task->object_ptr;
         if constexpr(!::ttg::meta::is_void_v<keyT>) {
-          obj->op(keyT((uintptr_t) task->key), obj->output_terminals);
+          baseobj->template op<Space>(keyT((uintptr_t) task->key), obj->output_terminals);
         } else if constexpr(::ttg::meta::is_void_v<keyT>) {
-          obj->op(obj->output_terminals);
+          baseobj->template op<Space>(obj->output_terminals);
         }
         else abort();
       }
@@ -682,7 +713,9 @@ namespace parsec {
           newtask->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
           newtask->in_data_count = 0;
 
-          newtask->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op);
+          newtask->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::Host)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op<::ttg::ExecutionSpace::Host>);
+          if constexpr (have_cuda_op)
+            newtask->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::CUDA)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op<::ttg::ExecutionSpace::CUDA>);
           newtask->object_ptr = static_cast<derivedT *>(this);
           newtask->key = hk;
 
@@ -819,7 +852,9 @@ namespace parsec {
           task->parsec_task.taskpool = world.taskpool();
           task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
 
-          task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
+          task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::Host)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::Host>);
+          if constexpr (have_cuda_op)
+            task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::CUDA)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::CUDA>);
           task->object_ptr = static_cast<derivedT *>(this);
           using ::ttg::unique_hash;
           task->key = unique_hash<parsec_key_t>(key);
@@ -858,7 +893,9 @@ namespace parsec {
           task->parsec_task.taskpool = world.taskpool();
           task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
 
-          task->function_template_class_ptr = reinterpret_cast<void (*)(void *)>(&Op::static_op_noarg);
+          task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::Host)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::Host>);
+          if constexpr (have_cuda_op)
+            task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::CUDA)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::CUDA>);
           task->object_ptr = static_cast<derivedT *>(this);
           using ::ttg::unique_hash;
           task->key = unique_hash<parsec_key_t>(0);
@@ -1083,13 +1120,26 @@ namespace parsec {
 
         //    function_id_to_instance[self.task_class_id] = this;
 
-        self.incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
-        ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CPU;
-        ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
-        ((__parsec_chore_t *)self.incarnations)[0].hook = hook;
-        ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
-        ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
-        ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
+        if constexpr (have_cuda_op) {
+          self.incarnations = (__parsec_chore_t *) malloc(3 * sizeof(__parsec_chore_t));
+          ((__parsec_chore_t *) self.incarnations)[0].type = PARSEC_DEV_CUDA;
+          ((__parsec_chore_t *) self.incarnations)[0].evaluate = NULL;
+          ((__parsec_chore_t *) self.incarnations)[0].hook = hook_cuda;
+          ((__parsec_chore_t *) self.incarnations)[1].type = PARSEC_DEV_CPU;
+          ((__parsec_chore_t *) self.incarnations)[1].evaluate = NULL;
+          ((__parsec_chore_t *) self.incarnations)[1].hook = hook;
+          ((__parsec_chore_t *) self.incarnations)[2].type = PARSEC_DEV_NONE;
+          ((__parsec_chore_t *) self.incarnations)[2].evaluate = NULL;
+          ((__parsec_chore_t *) self.incarnations)[2].hook = NULL;
+        } else {
+          self.incarnations = (__parsec_chore_t *) malloc(2 * sizeof(__parsec_chore_t));
+          ((__parsec_chore_t *) self.incarnations)[0].type = PARSEC_DEV_CPU;
+          ((__parsec_chore_t *) self.incarnations)[0].evaluate = NULL;
+          ((__parsec_chore_t *) self.incarnations)[0].hook = hook;
+          ((__parsec_chore_t *) self.incarnations)[1].type = PARSEC_DEV_NONE;
+          ((__parsec_chore_t *) self.incarnations)[1].evaluate = NULL;
+          ((__parsec_chore_t *) self.incarnations)[1].hook = NULL;
+        }
 
         self.release_task = parsec_release_task_to_mempool_update_nbtasks;
         self.complete_execution = do_nothing;
