@@ -402,14 +402,20 @@ namespace parsec {
       //check for a non-type member named have_cuda_op
       template <typename T>
       using have_cuda_op_non_type_t = decltype(&T::have_cuda_op);
-      static constexpr bool have_cuda_op_is_defined = std::experimental::is_detected_v<have_cuda_op_non_type_t, derivedT>;
 
      public:
       static constexpr int numins = sizeof...(input_valueTs);                    // number of input arguments
       static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs
 
-      static constexpr bool have_cuda_op = false;
-      
+      /// @return true if derivedT::have_cuda_op exists and is defined to true
+      static constexpr bool derived_has_cuda_op() {
+        if constexpr (std::experimental::is_detected_v<have_cuda_op_non_type_t, derivedT>) {
+          return derivedT::have_cuda_op;
+        } else {
+          return false;
+        }
+      }
+
       // PaRSEC for now passes data as tuple of ptrs (datacopies have these pointers also)
       // N.B. perhaps make data_wrapper_t<T> = parsec_data_copy_t (rather, a T-dependent wrapper around it to automate
       // the casts that will be inevitably needed)
@@ -716,7 +722,7 @@ namespace parsec {
           newtask->in_data_count = 0;
 
           newtask->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::Host)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op<::ttg::ExecutionSpace::Host>);
-          if constexpr (have_cuda_op)
+          if constexpr (derived_has_cuda_op())
             newtask->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::CUDA)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op<::ttg::ExecutionSpace::CUDA>);
           newtask->object_ptr = static_cast<derivedT *>(this);
           newtask->key = hk;
@@ -855,7 +861,7 @@ namespace parsec {
           task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
 
           task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::Host)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::Host>);
-          if constexpr (have_cuda_op)
+          if constexpr (derived_has_cuda_op())
             task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::CUDA)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::CUDA>);
           task->object_ptr = static_cast<derivedT *>(this);
           using ::ttg::unique_hash;
@@ -896,7 +902,7 @@ namespace parsec {
           task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
 
           task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::Host)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::Host>);
-          if constexpr (have_cuda_op)
+          if constexpr (derived_has_cuda_op())
             task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::CUDA)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::CUDA>);
           task->object_ptr = static_cast<derivedT *>(this);
           using ::ttg::unique_hash;
@@ -1122,7 +1128,7 @@ namespace parsec {
 
         //    function_id_to_instance[self.task_class_id] = this;
 
-        if constexpr (have_cuda_op) {
+        if constexpr (derived_has_cuda_op()) {
           self.incarnations = (__parsec_chore_t *) malloc(3 * sizeof(__parsec_chore_t));
           ((__parsec_chore_t *) self.incarnations)[0].type = PARSEC_DEV_CUDA;
           ((__parsec_chore_t *) self.incarnations)[0].evaluate = NULL;
