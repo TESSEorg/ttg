@@ -399,13 +399,17 @@ namespace parsec {
       parsec_mempool_t mempools;
       std::map<std::pair<int, int>, int> mempools_index;
 
+      //check for a non-type member named have_cuda_op
+      template <typename T>
+      using have_cuda_op_non_type_t = decltype(&T::have_cuda_op);
+
      public:
       static constexpr int numins = sizeof...(input_valueTs);                    // number of input arguments
       static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs
 
       /// @return true if derivedT::have_cuda_op exists and is defined to true
-      static constexpr bool have_cuda_op() const {
-        constexpr bool have_cuda_op_is_defined = std::experimental::is_detected_v<decltype(&T::have_cuda_op), derivedT>;
+      static constexpr bool have_cuda_op() {
+        constexpr bool have_cuda_op_is_defined = std::experimental::is_detected_v<have_cuda_op_non_type_t, derivedT>;
         if constexpr (have_cuda_op_is_defined) {
           return derivedT::have_cuda_op;
         } else {
