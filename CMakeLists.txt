@@ -50,16 +50,16 @@ if (EIGEN3_FOUND)
   set_property(TARGET eigen3 PROPERTY
           INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
 endif (EIGEN3_FOUND)
+# Boost
+include(FindOrFetchBoost)
 # block-sparse tensor algorithms also need BTAS and (header-only) Boost.Iterator and Boost.Containers
-if (Boost_FOUND)
-  find_package(BTAS)
-  message (STATUS "BTAS_FOUND=${BTAS_FOUND}")
-  if (BTAS_FOUND)
-    add_library(BTAS INTERFACE IMPORTED)
-    set_property(TARGET BTAS PROPERTY
-            INTERFACE_INCLUDE_DIRECTORIES ${BTAS_INCLUDE_DIRS})
-  endif(BTAS_FOUND)
-endif()
+find_package(BTAS)
+message (STATUS "BTAS_FOUND=${BTAS_FOUND}")
+if (BTAS_FOUND)
+  add_library(BTAS INTERFACE IMPORTED)
+  set_property(TARGET BTAS PROPERTY
+          INTERFACE_INCLUDE_DIRECTORIES ${BTAS_INCLUDE_DIRS})
+endif(BTAS_FOUND)
 
 ##########################
 #### prerequisite runtimes
@@ -74,8 +74,6 @@ include(FindOrFetchPARSEC)
 if (TARGET PaRSEC::parsec)
   message(STATUS "PARSEC_FOUND=1")
 endif(TARGET PaRSEC::parsec)
-# Boost
-include(FindOrFetchBoost)
 
 ##########################
 #### Components

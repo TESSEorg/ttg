@@ -2,8 +2,8 @@
 include(CheckCXXSourceCompiles)
 include(CMakePushCheckState)
 
-if (NOT ${Boost_FOUND})
-  find_package(Boost)
+if (NOT TARGET Boost::boost)
+  message(FATAL_ERROR "find_package(BTAS) should be invoked after include(FindOrFetchBoost)")
 endif()
 
 if (BTAS_INCLUDE_DIRS)
@@ -30,9 +30,10 @@ else (BTAS_INCLUDE_DIRS)
     # validate version, etc. by compiling tests
     cmake_push_check_state()
   
-    list(APPEND CMAKE_REQUIRED_INCLUDES ${Boost_INCLUDE_DIRS} ${BTAS_INCLUDE_DIR})
+    list(APPEND CMAKE_REQUIRED_INCLUDES ${BTAS_INCLUDE_DIR})
     list(APPEND CMAKE_REQUIRED_DEFINITIONS ${CMAKE_CXX14_STANDARD_COMPILE_OPTION})
-    
+    list(APPEND CMAKE_REQUIRED_LIBRARIES Boost::boost)
+
     # sanity check
     CHECK_CXX_SOURCE_COMPILES(
       "
