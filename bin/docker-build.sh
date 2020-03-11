@@ -43,7 +43,7 @@ RUN apt-get update && apt-get install -y cmake ninja-build libblas-dev liblapack
 RUN CMAKE_URL="https://cmake.org/files/v${CMAKE_VERSION%.[0-9]}/cmake-${CMAKE_VERSION}-Linux-x86_64.tar.gz" && wget --no-check-certificate -O - \$CMAKE_URL | tar --strip-components=1 -xz -C /usr/local
 ENV CMAKE=/usr/local/bin/cmake
 # 3. clone and build TTG
-RUN mkdir -p /home/tesse && cd /home/tesse && git clone https://github.com/TESSEorg/ttg.git && mkdir ttg-build && cd ttg-build && \$CMAKE ../ttg -G Ninja -DCMAKE_CXX_COMPILER=clang++-8 -DCMAKE_C_COMPILER=clang-8 -DCMAKE_INSTALL_PREFIX=/home/tesse/ttg-install -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF && \$CMAKE --build . --target test-madness && \$CMAKE --build . --target test-parsec
+RUN mkdir -p /home/tesse && cd /home/tesse && git clone https://github.com/TESSEorg/ttg.git && mkdir ttg-build && cd ttg-build && \$CMAKE ../ttg -DCMAKE_CXX_COMPILER=clang++-8 -DCMAKE_C_COMPILER=clang-8 -DCMAKE_INSTALL_PREFIX=/home/tesse/ttg-install -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF && \$CMAKE --build . --target test-madness && \$CMAKE --build . --target test-parsec
 
 # Clean up APT when done.
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
