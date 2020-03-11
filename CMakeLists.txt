@@ -1,15 +1,4 @@
-cmake_minimum_required (VERSION 3.6)
-project(ttg)
-
-enable_language(CXX)
-include(GNUInstallDirs)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
-include(ExternalDependenciesVersions)
+cmake_minimum_required (VERSION 3.9) # supports project(DESCRIPTION "")
 
 # Set TTG version =======================================================
 
@@ -25,6 +14,22 @@ if (TTG_PRERELEASE_ID)
 else(TTG_PRERELEASE_ID)
   set(TTG_EXT_VERSION "${TTG_VERSION}")
 endif(TTG_PRERELEASE_ID)
+
+# Declare TTG =======================================================
+project(ttg
+    VERSION ${TTG_VERSION}
+    DESCRIPTION "Task Template Graph: flowgraph programming model"
+    LANGUAGES CXX
+    HOMEPAGE_URL "https://tesseorg.github.io/ttg/")
+
+include(GNUInstallDirs)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
+include(ExternalDependenciesVersions)
 
 ##########################
 #### prerequisites
@@ -45,16 +50,16 @@ if (EIGEN3_FOUND)
   set_property(TARGET eigen3 PROPERTY
           INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
 endif (EIGEN3_FOUND)
+# Boost
+include(FindOrFetchBoost)
 # block-sparse tensor algorithms also need BTAS and (header-only) Boost.Iterator and Boost.Containers
-if (Boost_FOUND)
-  find_package(BTAS)
-  message (STATUS "BTAS_FOUND=${BTAS_FOUND}")
-  if (BTAS_FOUND)
-    add_library(BTAS INTERFACE IMPORTED)
-    set_property(TARGET BTAS PROPERTY
-            INTERFACE_INCLUDE_DIRECTORIES ${BTAS_INCLUDE_DIRS})
-  endif(BTAS_FOUND)
-endif()
+find_package(BTAS)
+message (STATUS "BTAS_FOUND=${BTAS_FOUND}")
+if (BTAS_FOUND)
+  add_library(BTAS INTERFACE IMPORTED)
+  set_property(TARGET BTAS PROPERTY
+          INTERFACE_INCLUDE_DIRECTORIES ${BTAS_INCLUDE_DIRS})
+endif(BTAS_FOUND)
 
 ##########################
 #### prerequisite runtimes
@@ -69,8 +74,6 @@ include(FindOrFetchPARSEC)
 if (TARGET PaRSEC::parsec)
   message(STATUS "PARSEC_FOUND=1")
 endif(TARGET PaRSEC::parsec)
-# Boost
-include(FindOrFetchBoost)
 
 ##########################
 #### Components

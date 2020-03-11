@@ -1,4 +1,4 @@
-find_package(Boost ${TTG_TRACKED_BOOST_VERSION} CONFIG QUIET HINTS ${Boost_DIR})
+find_package(Boost ${TTG_TRACKED_BOOST_VERSION} QUIET)
 
 if (NOT TARGET Boost::boost)
 
@@ -11,4 +11,9 @@ if (NOT TARGET Boost::boost)
 
   add_subdirectory(${BOOST_SOURCE_DIR} ${BOOST_BINARY_DIR})
 
+  if (NOT TARGET Boost::boost)
+    message(FATAL_ERROR "Downloaded and configured boost, but Boost::boost is still not found. Please create an issue at ${PROJECT_HOMEPAGE_URL}")
+  endif(NOT TARGET Boost::boost)
+
 endif(NOT TARGET Boost::boost)
+
