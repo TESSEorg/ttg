@@ -29,8 +29,6 @@ endif(TTG_PRERELEASE_ID)
 ##########################
 #### prerequisites
 ##########################
-find_package(Boost ${TTG_TRACKED_BOOST_VERSION} REQUIRED)
-
 # MRA code needs CBLAS
 find_package(CBLAS)
 if (CBLAS_FOUND)
@@ -71,6 +69,8 @@ include(FindOrFetchPARSEC)
 if (TARGET PaRSEC::parsec)
   message(STATUS "PARSEC_FOUND=1")
 endif(TARGET PaRSEC::parsec)
+# Boost
+include(FindOrFetchBoost)
 
 ##########################
 #### Components
