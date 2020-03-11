@@ -1,13 +1,20 @@
 # prerequisites
-- CMake, version 3.9 or more recent
-- C++17 compiler
-- Boost 1.66 or later; installed, if not found
+- C++ compiler with support for the [C++17 standard](http://www.iso.org/standard/68564.html), or a more recent standard. This includes the following compilers:
+  - [GNU C++](https://gcc.gnu.org/), version 7.0 or higher
+  - [Clang](https://clang.llvm.org/), version 5 or higher
+  - [Apple Clang](https://en.wikipedia.org/wiki/Xcode), version 9.3 or higher
+  - [Intel C++ compiler](https://software.intel.com/en-us/c-compilers), version 19 or higher
+
+  See the current [Travis CI matrix](.travis.yml) for the most up-to-date list of compilers that are known to work.
+
+- [CMake](https://cmake.org/), version 3.10 or higher; if CUDA support is needed, CMake 3.17 or higher is required.
+- [Git]() 1.8 or later (required to obtain TiledArray and MADNESS source code from GitHub)
+- [Boost](https://boost.org/) version 1.66 or later; installed, if not found
 - PaRSEC or MADNESS runtimes (see below); installed, if not found
 
-# compile
-GNU C++ (7.x) and Clang (Apple Clang 9.3 or LLVM Clang 7) compilers work. To avoid polluting the source tree, make a build directory,
-and from there do:
-- cmake `<cmake args>`
+# build
+- `cmake <cmake args>`
+- `cmake --build . --target <test or example you want (see below)>`
 
 ## useful cmake command-line arguments:
 - `CMAKE_CXX_COMPILER`, e.g. `-DCMAKE_CXX_COMPILER=clang++` to use clang
