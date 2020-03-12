@@ -51,6 +51,10 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 # disable ASLR to make MADWorld happy
 RUN mkdir -p /etc/my_init.d
 ADD $disable_aslr /etc/my_init.d/disable_aslr.sh
+
+# for further info ...
+RUN echo "\e[92mDone! For info on how to use the image refer to bin/docker.md\e[0m"
+
 END
 
 function clean_up {
