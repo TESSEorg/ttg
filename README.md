@@ -5,7 +5,8 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 
 # Installation
 
-See [INSTALL.md](https://github.com/TESSEorg/ttg/blob/master/INSTALL.md) .
+- To try out TTG in a Docker container, install Docker, then execute `bin/docker-build.sh` and follow instructions in `bin/docker.md`;
+- See [INSTALL.md](https://github.com/TESSEorg/ttg/blob/master/INSTALL.md) to learn how to build and install TTG.
 
 # Documentation
 
