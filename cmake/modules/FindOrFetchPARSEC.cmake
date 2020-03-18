@@ -12,10 +12,10 @@ if (NOT TARGET PaRSEC::parsec)
   download_project(PROJ                PARSEC
     GIT_REPOSITORY      https://bitbucket.org/herault/parsec.git
     GIT_TAG             ${TTG_TRACKED_PARSEC_TAG}
-    PREFIX              ${PROJECT_BINARY_DIR}/external
+    PREFIX              "${PROJECT_BINARY_DIR}/external"
     UPDATE_DISCONNECTED 1
     )
 
-  add_subdirectory(${PARSEC_SOURCE_DIR} ${PARSEC_BINARY_DIR})
+  add_subdirectory("${PARSEC_SOURCE_DIR}" "${PARSEC_BINARY_DIR}")
 
 endif(NOT TARGET PaRSEC::parsec)
