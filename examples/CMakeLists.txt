@@ -28,7 +28,7 @@ if (TARGET MADworld)
   endif(EIGEN3_FOUND)
 
   # MRA on ttg (not yet runtime-agnostic)
-  if (CBLAS_FOUND)
+  if (CBLAS_FOUND AND MKL_FOUND)
     add_executable (mrattg-mad madness/mrattg.cc mragl.cc mratwoscale.cc mradomain.h mrafunctiondata.h mrafunctionfunctor.h mrafunctionnode.h mragl.h mrahash.h mrakey.h mramisc.h mramxm.h mrarange.h mrasimpletensor.h mratwoscale.h mratypes.h)
     target_link_libraries(mrattg-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG} ${CBLAS_LIBRARIES} -lpthread -lm -ldl)
     target_include_directories(mrattg-mad PUBLIC . ${CBLAS_INCLUDE_DIR})
