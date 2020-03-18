@@ -31,6 +31,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
 include(ExternalDependenciesVersions)
 
+set_directory_properties(PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
 ##########################
 #### prerequisites
 ##########################
@@ -82,4 +84,5 @@ add_subdirectory(ttg)
 add_subdirectory(tests)
 add_subdirectory(examples)
 add_subdirectory(doc)
+
 
