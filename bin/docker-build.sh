@@ -10,6 +10,8 @@
 #   - build dir: /home/tesse/ttg-install
 
 export CMAKE_VERSION=3.16.3
+export DIRNAME=`dirname $0`
+export ABSDIRNAME=`pwd $DIRNAME`
 
 ##############################################################
 # make a script to disable ASLR to make MADWorld happy
@@ -53,7 +55,8 @@ RUN mkdir -p /etc/my_init.d
 ADD $disable_aslr /etc/my_init.d/disable_aslr.sh
 
 # for further info ...
-RUN echo "\e[92mDone! For info on how to use the image refer to bin/docker.md\e[0m"
+ARG CACHEBUST=1
+RUN echo "\e[92mDone! For info on how to use the image refer to $ABSDIRNAME/docker.md\e[0m"
 
 END
 
@@ -66,7 +69,7 @@ trap clean_up SIGHUP SIGINT SIGTERM
 
 ##############################################################
 # build a dev image
-docker build -t ttg-dev .
+docker build -t ttg-dev --build-arg CACHEBUST=$(date +%s) .
 
 ##############################################################
 # extra admin tasks, uncomment as needed
