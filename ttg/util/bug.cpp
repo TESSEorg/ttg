@@ -182,9 +182,9 @@ void Debugger::default_cmd() {
 
 void Debugger::resolve_cmd_alias() {
   if (cmd_ == "gdb_xterm") {
-    cmd_ = "xterm -title \"$(PREFIX)$(EXEC)\" -e gdb $(EXEC) $(PID) &";
+    cmd_ = "xterm -title \"$(PREFIX)$(EXEC)\" -e gdb -ex \"set variable debugger_ready_=1\" --pid=$(PID) $(EXEC) &";
   } else if (cmd_ == "lldb_xterm") {
-    cmd_ = "xterm -title \"$(PREFIX)$(EXEC)\" -e lldb -p $(PID) &";
+    cmd_ = "xterm -title \"$(PREFIX)$(EXEC)\" -e lldb -p $(PID) -o \"expr debugger_ready_=1\" &";
   }
 }
 
@@ -240,7 +240,13 @@ void Debugger::debug(const char *reason) {
         sleep(sleep_);
       }
       if (wait_for_debugger_) {
-        std::cout << prefix_ << ": Spinning until debugger_ready_ is set ..." << endl;
+        std::string make_ready_message;
+        if (cmd_.find(" gdb ") != std::string::npos || cmd_.find(" lldb ") != std::string::npos) {
+          make_ready_message = " configure debugging session (set breakpoints/watchpoints, etc.) then type 'c' to continue running";
+        }
+
+        std::cout << prefix_
+                  << ": waiting for the user ..." << make_ready_message << endl;
         while (!debugger_ready_)
           ;
       }
@@ -342,7 +348,7 @@ namespace mpqc {
   void launch_lldb_xterm() {
     auto debugger = std::make_shared<mpqc::Debugger>();
     debugger->set_cmd("xterm -title \"$(PREFIX)$(EXEC)\" -e lldb -p $(PID) &");
-    debugger->debug("Starting gdb ...");
+    debugger->debug("Starting lldb ...");
   }
 
 }  // namespace mpqc
