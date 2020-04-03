@@ -128,9 +128,11 @@ namespace ttg {
     /// chunk_size --- inputs max amount of data to output, and on output returns amount actually output
     /// pos --- position in the input buffer to resume serialization
     /// ptr[chunk_size] --- place for output
-    static void pack_payload(const void* object, uint64_t* chunk_size, uint64_t pos, void** buf) {
-      madness::archive::BufferOutputArchive ar(*buf, *chunk_size);
-      ar&(*(T*)object);
+    static uint64_t pack_payload(const void* object, uint64_t chunk_size, uint64_t pos, void* _buf) {
+        unsigned char *buf = reinterpret_cast<unsigned char*>(_buf);
+        madness::archive::BufferOutputArchive ar(&buf[pos], chunk_size);
+        ar&(*(T*)object);
+        return pos+chunk_size;
     }
 
     // t points to some memory in which we will construct an object from the header
