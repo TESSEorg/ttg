@@ -1,9 +1,22 @@
 #include <cmath>
 #include <iostream>
 
-const double L = 10.0;       // The computational domain is [-L,L]
-const double thresh = 1e-6;  // The threshold for small difference coefficients
+/*!
+  \file t9.impl.h
+  \brief Multiresolution computation on a 1-D spatial tree
+  \defgroup example1Dtree Multiresolution computation on a 1-D spatial tree
+  \ingroup examples
 
+  \par Points of interest
+  - recursive tree-traversal using TTG
+  - dynamic sparsity --- no global knowledge of what data is being computed on
+  - abstract data type as the key (index) mapping computation
+*/
+
+const double L = 10.0;       //< The computational domain is [-L,L]
+const double thresh = 1e-6;  //< The threshold for small difference coefficients
+
+// Simplistic error handler useful only for debugging --- production code should call `ttg_error()`
 void error(const char* s) {
   std::cerr << s << std::endl;
   throw s;
@@ -12,35 +25,51 @@ void error(const char* s) {
 // Computes powers of 2
 double pow2(double n) { return std::pow(2.0, n); }
 
-// 1 dimensional index into the tree (n=level,l=translation)
+// 1 dimensional index into the tree (`n`=level,`l`=translation)
 struct Key {
-  int n;  // leave this as signed otherwise -n does unexpected things
-  unsigned long l;
-  uint64_t hashvalue;
+  int n;  // Level in the tree --- leave this as signed otherwise `-n` will do unexpected things
+  unsigned long l; // Translation in at level `n` in range [0,2**n).
+  uint64_t hashvalue; // Hash of n and l for storage for rapid comparison and hashing
 
+  // Default constructor makes uninitialized key
+
+  // Not overriding the default constructor is essential to keep the class POD
+  // in which case we do not need to provide a serialization method.
   Key() = default;
-  Key(uint64_t hash) : n(hash >> 48), l(hash & 0x0000FFFFFFFFFFFF), hashvalue(hash) {}
 
+  //Key(uint64_t hash) : n(hash >> 48), l(hash & 0x0000FFFFFFFFFFFF), hashvalue(hash) {}
+
+  // Constructor given `n` and `l`
   Key(unsigned long n, unsigned long l) : n(n), l(l) { rehash(); }
 
+  // Equality test
   bool operator==(const Key& b) const { return n == b.n && l == b.l; }
 
+  // Inequality test
   bool operator!=(const Key& b) const { return !((*this) == b); }
 
+  // Ordering
   bool operator<(const Key& b) const { return (n < b.n) || (n == b.n && l < b.l); }
 
+  // Returns Key of the parent
   Key parent() const { return Key(n - 1, l >> 1); }
 
+  // Returns Key of the left child
   Key left_child() const { return Key(n + 1, 2 * l); }
 
+  // Returns Key of the right child
   Key right_child() const { return Key(n + 1, 2 * l + 1); }
 
-  Key left() const { return Key(n, l == 0ul ? (1ul << n) - 1 : l - 1); }  // periodic b.c.
+  // Returns Key of the left child with periodic boundary conditions (used in derivative)
+  Key left_child_periodic() const { return Key(n, l == 0ul ? (1ul << n) - 1 : l - 1); }  // periodic b.c.
 
-  Key right() const { return Key(n, l == ((1ul << n) - 1) ? 0 : l + 1); }  // periodic b.c.
+  // Returns Key of the left child with periodic boundary conditions (used in derivative)
+  Key right_child_periodic() const { return Key(n, l == ((1ul << n) - 1) ? 0 : l + 1); }  // periodic b.c.
 
+  // Recomputes the hash --- internal use only
   void rehash() { hashvalue = (size_t(n) << 48) + l; }
 
+  // Returns the hash
   uint64_t hash() const { return hashvalue; }
 };
 
@@ -51,11 +80,6 @@ namespace std {
     std::size_t operator()(const Key& s) const noexcept { return s.hash(); }
   };
 }  // namespace std
-
-template <typename Result = uint64_t>
-Result unique_hash(const Key& key) {
-  return (size_t(key.n) << 48) + key.l;
-}
 
 std::ostream& operator<<(std::ostream& s, const Key& key) {
   s << "Key(" << key.n << "," << key.l << ")";
@@ -70,15 +94,18 @@ double key_to_x(const Key& key) {
 
 // A node in the tree
 struct Node {
-  Key key;  // A convenience and in multidim code is only a tiny storage overhead
-  double s;
-  double d;
-  bool has_children;
+  Key key;  // As a convenience node stores its own key (in multidim code only tiny storage overhead)
+  double s; // sum or scaling function coefficient
+  double d; // difference or wavelet coefficient
+  bool has_children; // if true this node has children
 
+  // Use of generated default constructor required to make class POD
   Node() = default;
 
+  // Construct node from data
   Node(const Key& key, double s, double d, bool has_children) : key(key), s(s), d(d), has_children(has_children) {}
 
+  // Equality test checks key, s, d (but not has_children)
   bool operator==(const Node& a) const {
     return (key == a.key) && (std::abs(s - a.s) < 1e-12) && (std::abs(d - a.d) < 1e-12);
   }
@@ -167,9 +194,9 @@ auto make_binary_op(const funcT& func, nodeEdge left, nodeEdge right, nodeEdge R
 }
 
 void send_to_output_tree(const Key& key, const Node& node, std::tuple<nodeOut, nodeOut, nodeOut>& out) {
-  send<0>(key.right(), node, out);  // CANNOT MOVE NODE HERE SINCE USED BELOW!!!!
+  send<0>(key.right_child_periodic(), node, out);  // CANNOT MOVE NODE HERE SINCE USED BELOW!!!!
   send<1>(key, node, out);
-  send<2>(key.left(), node, out);
+  send<2>(key.left_child_periodic(), node, out);
 }
 
 void diff(const Key& key, Node&& left, Node&& center, Node&& right,
