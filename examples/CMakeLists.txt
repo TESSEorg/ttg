@@ -42,6 +42,7 @@ if (TARGET PaRSEC::parsec)
   add_executable (test-parsec parsec/test.cc test.impl.h)
   target_link_libraries(test-parsec LINK_PUBLIC ttg-parsec)
 
+  if (FALSE)
   # T9 example
   add_executable (t9-parsec parsec/t9.cc t9.impl.h)
   target_link_libraries(t9-parsec LINK_PUBLIC ttg-parsec)
@@ -57,4 +58,5 @@ if (TARGET PaRSEC::parsec)
       target_link_libraries(bspmm-parsec LINK_PUBLIC ttg-parsec eigen3 BTAS Boost::boost MADworld ${MADNESS_DISABLEPIE_LINKER_FLAG})
     endif (BTAS_FOUND)
   endif(EIGEN3_FOUND AND TARGET MADworld)
+  endif (FALSE)
 endif(TARGET PaRSEC::parsec)
