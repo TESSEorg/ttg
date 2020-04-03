@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.9) # supports project(DESCRIPTION "")
+cmake_minimum_required (VERSION 3.14) # supports FetchContenta_MakeAvailable
 
 # Set TTG version =======================================================
 
@@ -22,14 +22,14 @@ project(ttg
     LANGUAGES CXX
     HOMEPAGE_URL "https://tesseorg.github.io/ttg/")
 
-include(GNUInstallDirs)
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
+include(GNUInstallDirs)
 include(ExternalDependenciesVersions)
+include(LoadFetchContent)
 
 set_directory_properties(PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
@@ -55,13 +55,7 @@ endif (EIGEN3_FOUND)
 # Boost
 include(FindOrFetchBoost)
 # block-sparse tensor algorithms also need BTAS and (header-only) Boost.Iterator and Boost.Containers
-find_package(BTAS)
-message (STATUS "BTAS_FOUND=${BTAS_FOUND}")
-if (BTAS_FOUND)
-  add_library(BTAS INTERFACE IMPORTED)
-  set_property(TARGET BTAS PROPERTY
-          INTERFACE_INCLUDE_DIRECTORIES ${BTAS_INCLUDE_DIRS})
-endif(BTAS_FOUND)
+include(FindOrFetchBTAS)
 
 ##########################
 #### prerequisite runtimes
