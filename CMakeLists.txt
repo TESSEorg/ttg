@@ -32,8 +32,6 @@ include(ExternalDependenciesVersions)
 include(LoadFetchContent)
 include(AddCustomTargetSubproject)
 
-set_directory_properties(PROPERTIES EXCLUDE_FROM_ALL TRUE)
-
 ##########################
 #### prerequisites
 ##########################

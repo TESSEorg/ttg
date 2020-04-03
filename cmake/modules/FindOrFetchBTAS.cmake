@@ -14,6 +14,7 @@ if (NOT TARGET BTAS::BTAS)
       SOURCE_DIR BTAS_SOURCE_DIR
       BINARY_DIR BTAS_BINARY_DIR
       )
+  set_property(DIRECTORY ${BTAS_SOURCE_DIR} PROPERTY EXCLUDE_FROM_ALL TRUE)
 
   # use subproject targets as if they were in exported namespace ...
   if (TARGET BTAS AND NOT TARGET BTAS::BTAS)
