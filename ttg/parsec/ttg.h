@@ -251,7 +251,7 @@ namespace ttg {
   }  // namespace overload
 }  // namespace ttg
 
-static uint64_t parsec_tasks_hash_fct(parsec_key_t key, int nb_bits, void *data) {
+static inline uint64_t parsec_tasks_hash_fct(parsec_key_t key, int nb_bits, void *data) {
   /* Use all the bits of the 64 bits key, project on the lowest base bits (0 <= hash < 1024) */
   int b = 0;
   uint64_t mask = ~0ULL >> (64 - nb_bits);
