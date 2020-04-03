@@ -15,6 +15,8 @@ set(ttg-sources
         ${CMAKE_CURRENT_SOURCE_DIR}/util/reduce.h
         ${CMAKE_CURRENT_SOURCE_DIR}/util/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/util/tree.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/version.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/version.cc
     )
 add_library(ttg ${ttg-sources})
 target_include_directories(ttg PUBLIC
@@ -22,6 +24,9 @@ target_include_directories(ttg PUBLIC
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
         )
 target_link_libraries(ttg PUBLIC Boost::boost)
+if (TARGET TTG_Libunwind)
+  target_link_libraries(ttg PUBLIC TTG_Libunwind)
+endif(TARGET TTG_Libunwind)
 install(FILES ${ttg-sources}
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         COMPONENT ttg)
@@ -53,7 +58,7 @@ endif(TARGET MADworld)
 if (TARGET PaRSEC::parsec)
   add_library(ttg-parsec INTERFACE)
   find_package(MPI)
-  target_link_libraries(ttg-parsec INTERFACE ttg Boost::boost MPI::MPI_CXX "/usr/lib64/libunwind.so")
+  target_link_libraries(ttg-parsec INTERFACE ttg Boost::boost MPI::MPI_CXX)
   target_include_directories(ttg-parsec INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
