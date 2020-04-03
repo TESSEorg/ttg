@@ -1,8 +1,19 @@
 #! /bin/sh
 
-${TRAVIS_BUILD_DIR}/bin/build-boost-$TRAVIS_OS_NAME.sh
+#
+# install prerequisites
+#
+
+# need more recent cmake than available
+if [ ! -d "${INSTALL_PREFIX}/cmake" ]; then
+  CMAKE_VERSION=3.17.0
+  CMAKE_URL="https://cmake.org/files/v${CMAKE_VERSION%.[0-9]}/cmake-${CMAKE_VERSION}-Linux-x86_64.tar.gz"
+  mkdir ${INSTALL_PREFIX}/cmake && wget --no-check-certificate -O - ${CMAKE_URL} | tar --strip-components=1 -xz -C ${INSTALL_PREFIX}/cmake
+fi
+export PATH=${INSTALL_PREFIX}/cmake/bin:${PATH}
+cmake --version
+
 ${TRAVIS_BUILD_DIR}/bin/build-eigen3-$TRAVIS_OS_NAME.sh
-${TRAVIS_BUILD_DIR}/bin/build-btas-$TRAVIS_OS_NAME.sh
 ${TRAVIS_BUILD_DIR}/bin/build-mpich-$TRAVIS_OS_NAME.sh
 
 # Exit on error
@@ -18,6 +29,13 @@ if [ "$DEPLOY" = "1" ]; then
   export PATH=${INSTALL_PREFIX}/doxygen-${DOXYGEN_VERSION}/bin:$PATH
   which doxygen
   doxygen --version
+fi
+
+# use Ninja for Debug builds and Make for Release
+if [ "$BUILD_TYPE" = "Debug" ]; then
+    export CMAKE_GENERATOR="Ninja"
+else
+    export CMAKE_GENERATOR="Unix Makefiles"
 fi
 
 #
@@ -54,31 +72,27 @@ if [ "$COMPUTE_COVERAGE" = "1" ]; then
     export CODECOVCXXFLAGS="--coverage -O0"
 fi
 
-cmake ${TRAVIS_BUILD_DIR} \
+cmake ${TRAVIS_BUILD_DIR} -G "${CMAKE_GENERATOR}" \
     -DCMAKE_TOOLCHAIN_FILE=${TRAVIS_BUILD_DIR}/cmake/toolchains/travis.cmake \
     -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
     -DCMAKE_PREFIX_PATH="${INSTALL_PREFIX}/eigen3" \
-    -DBOOST_ROOT="${INSTALL_PREFIX}/boost" \
-    -DBTAS_INSTALL_DIR="${INSTALL_PREFIX}/BTAS" \
     -DCMAKE_CXX_FLAGS="${CXX_FLAGS} ${EXTRAFLAGS} ${CODECOVCXXFLAGS}"
 
-### test
-make serialization
-tests/serialization
-
-### MADNESS examples
-make test-mad t9-mad spmm-mad bspmm-mad
+### examples
+cmake --build .
 export MPI_HOME=${INSTALL_PREFIX}/mpich
+# run madness examples
 for PROG in test-mad t9-mad spmm-mad bspmm-mad
 do
   examples/$PROG
   setarch `uname -m` -R ${MPI_HOME}/bin/mpirun -n 2 examples/$PROG
 done
+# TODO run parsec examples
 
-### PaRSEC examples
-make test-parsec t9-parsec spmm-parsec bspmm-parsec
-# TODO run these tests also
+### tests
+cmake --build . --target serialization
+tests/serialization
 
 # print ccache stats
 ccache -s
