@@ -30,6 +30,7 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
 include(GNUInstallDirs)
 include(ExternalDependenciesVersions)
 include(LoadFetchContent)
+include(AddCustomTargetSubproject)
 
 set_directory_properties(PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
