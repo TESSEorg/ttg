@@ -1,19 +1,20 @@
-find_package(Boost ${TTG_TRACKED_BOOST_VERSION} QUIET)
+#find_package(Boost ${TTG_TRACKED_BOOST_VERSION} QUIET)
 
 if (NOT TARGET Boost::boost)
 
-  include(DownloadProject)
-  download_project(PROJ                BOOST
-    GIT_REPOSITORY      https://github.com/Orphis/boost-cmake
-    PREFIX              "${PROJECT_BINARY_DIR}/external"
-    UPDATE_DISCONNECTED 1
-    )
-
-  add_subdirectory("${BOOST_SOURCE_DIR}" "${BOOST_BINARY_DIR}")
-
-  if (NOT TARGET Boost::boost)
-    message(FATAL_ERROR "Downloaded and configured boost, but Boost::boost is still not found. Please create an issue at ${PROJECT_HOMEPAGE_URL}")
-  endif(NOT TARGET Boost::boost)
+  FetchContent_Declare(
+          CMAKEBOOST
+          GIT_REPOSITORY      https://github.com/Orphis/boost-cmake
+  )
+  FetchContent_MakeAvailable(CMAKEBOOST)
+  FetchContent_GetProperties(CMAKEBOOST
+          SOURCE_DIR CMAKEBOOST_SOURCE_DIR
+          BINARY_DIR CMAKEBOOST_BINARY_DIR
+          )
 
 endif(NOT TARGET Boost::boost)
 
+# postcond check
+if (NOT TARGET Boost::boost)
+  message(FATAL_ERROR "FindOrFetchBOOST could not make Boost::boost target available")
+endif(NOT TARGET Boost::boost)

@@ -57,8 +57,8 @@ void test_serialization(const T& t) {
   char buf[256];
   void* buf_ptr = (void*)buf;
   d->pack_header(vt, 0, &buf_ptr);
-  uint64_t size_of_t = sizeof(T);
-  d->pack_payload(vt, &size_of_t, 0, &buf_ptr);
+  uint64_t pos = 0;
+  pos = d->pack_payload(vt, sizeof(T), pos, buf_ptr);
   printf("serialized ");
   d->print(vt);
 

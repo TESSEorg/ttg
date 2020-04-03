@@ -36,9 +36,7 @@ if (TARGET MADworld)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   )
-  set(ttg-mad_headers
-        ${CMAKE_CURRENT_SOURCE_DIR}/madness/ttg.h
-      )
+  set(ttg-mad_headers madness/ttg.h)
   target_sources(ttg-mad INTERFACE ${ttg-mad_headers})
   install(FILES ${ttg-mad_headers}
           DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
@@ -60,9 +58,7 @@ if (TARGET PaRSEC::parsec)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   )
-  set(ttg-parsec_headers
-        ${CMAKE_CURRENT_SOURCE_DIR}/parsec/ttg.h
-     )
+  set(ttg-parsec_headers parsec/ttg.h)
   target_sources(ttg-parsec INTERFACE ${ttg-parsec_headers})
   install(FILES ${ttg-parsec_headers}
           DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}

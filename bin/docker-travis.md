@@ -6,11 +6,11 @@ This method requires Docker installed on your local machine. This also assumes t
 4. Configure the job to use the appropriate compiler, compiler version, and debug/release build type:
   * `export BUILD_TYPE=B`, where `B` is `Debug` or `Release`
   * If want to use GNU C++ compiler (gcc):
-    * `export GCC_VERSION=VVV` where `VVV` should be the GCC version to be used. The currently valid value is `8`.
+    * `export GCC_VERSION=VVV` where `VVV` should be the GCC version to be used. The currently valid values are `8` and `9`.
     * `export CXX=g++`
   * If want to use Clang C++ compiler (clang++):
     * `export GCC_VERSION=8`
-    * `export CLANG_VERSION=VVV` where `VVV` should be the Clang version to be used. The currently valid values are `7` and `8`.
+    * `export CLANG_VERSION=VVV` where `VVV` should be the Clang version to be used. The currently valid values are `7`, `8`, and `9`.
     * `export CXX=clang++`
     * `apt-get update && apt-get install libc++-${CLANG_VERSION}-dev libc++abi-${CLANG_VERSION}-dev`
 5. Download+build prerequisites (MPICH, MADNESS), TTG, and run tests: `./build.sh`
