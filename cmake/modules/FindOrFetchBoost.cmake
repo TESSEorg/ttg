@@ -1,15 +1,15 @@
-find_package(Boost ${TTG_TRACKED_BOOST_VERSION} QUIET)
+#find_package(Boost ${TTG_TRACKED_BOOST_VERSION} QUIET)
 
 if (NOT TARGET Boost::boost)
 
   FetchContent_Declare(
-          BOOST
+          CMAKEBOOST
           GIT_REPOSITORY      https://github.com/Orphis/boost-cmake
   )
-  FetchContent_MakeAvailable(BOOST)
-  FetchContent_GetProperties(BOOST
-          SOURCE_DIR BOOST_SOURCE_DIR
-          BINARY_DIR BOOST_BINARY_DIR
+  FetchContent_MakeAvailable(CMAKEBOOST)
+  FetchContent_GetProperties(CMAKEBOOST
+          SOURCE_DIR CMAKEBOOST_SOURCE_DIR
+          BINARY_DIR CMAKEBOOST_BINARY_DIR
           )
 
 endif(NOT TARGET Boost::boost)
