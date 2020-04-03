@@ -202,19 +202,6 @@ std::ostream &operator<<(std::ostream &os, const Key<Rank> &key) {
   return os;
 }
 
-namespace ttg {
-  namespace overload {
-    template <>
-    runtime_traits<ttg_runtime>::hash_t unique_hash<runtime_traits<ttg_runtime>::hash_t, Key<2u>>(const Key<2u> &key) {
-      return key.hash();
-    }
-    template <>
-    runtime_traits<ttg_runtime>::hash_t unique_hash<runtime_traits<ttg_runtime>::hash_t, Key<3u>>(const Key<3u> &key) {
-      return key.hash();
-    }
-  }  // namespace overload
-}  // namespace ttg
-
 // flow data from an existing SpMatrix on rank 0
 template <typename Blk = blk_t>
 class Read_SpMatrix : public Op<void, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void> {

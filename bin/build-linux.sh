@@ -13,6 +13,7 @@ fi
 export PATH=${INSTALL_PREFIX}/cmake/bin:${PATH}
 cmake --version
 
+${TRAVIS_BUILD_DIR}/bin/build-boost-$TRAVIS_OS_NAME.sh
 ${TRAVIS_BUILD_DIR}/bin/build-eigen3-$TRAVIS_OS_NAME.sh
 ${TRAVIS_BUILD_DIR}/bin/build-mpich-$TRAVIS_OS_NAME.sh
 
@@ -77,6 +78,7 @@ cmake ${TRAVIS_BUILD_DIR} -G "${CMAKE_GENERATOR}" \
     -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
     -DCMAKE_PREFIX_PATH="${INSTALL_PREFIX}/eigen3" \
+    -DBOOST_ROOT="${INSTALL_PREFIX}/boost" \
     -DCMAKE_CXX_FLAGS="${CXX_FLAGS} ${EXTRAFLAGS} ${CODECOVCXXFLAGS}"
 
 ### examples

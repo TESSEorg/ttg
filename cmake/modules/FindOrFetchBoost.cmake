@@ -1,4 +1,4 @@
-#find_package(Boost ${TTG_TRACKED_BOOST_VERSION} QUIET)
+find_package(Boost ${TTG_TRACKED_BOOST_VERSION} QUIET)
 
 if (NOT TARGET Boost::boost)
 

@@ -31,26 +31,25 @@
 #include <iterator>
 #include <sstream>
 
-#if __has_include(<libunwind.h>)
-#define HAVE_LIBUNWIND
+#if defined(TTG_HAS_LIBUNWIND)
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
 #else
 #if __has_include(<execinfo.h>)
-#define HAVE_BACKTRACE
+#define TTG_HAS_BACKTRACE
 #include <execinfo.h>
 #endif
 #endif
 
 #if __has_include(<cxxabi.h>)
 #include <cxxabi.h>
-#define HAVE_CXA_DEMANGLE
+#define TTG_HAS_CXA_DEMANGLE
 #endif
 
 namespace mpqc {
   namespace detail {
     Backtrace::Backtrace(const std::string &prefix) : prefix_(prefix) {
-#ifdef HAVE_LIBUNWIND
+#ifdef TTG_HAS_LIBUNWIND
       {
         unw_cursor_t cursor;
         unw_context_t uc;
@@ -71,7 +70,7 @@ namespace mpqc {
           ++frame;
         }
       }
-#elif defined(HAVE_BACKTRACE)  // !HAVE_LIBUNWIND
+#elif defined(TTG_HAS_BACKTRACE)  // !TTG_HAS_LIBUNWIND
       void *stack_addrs[1024];
       const int naddrs = backtrace(stack_addrs, 1024);
       char **frame_symbols = backtrace_symbols(stack_addrs, naddrs);
@@ -109,7 +108,7 @@ namespace mpqc {
         frames_.push_back(oss.str());
       }
       free(frame_symbols);
-#else  // !HAVE_LIBUNWIND && !HAVE_BACKTRACE
+#else  // !TTG_HAS_LIBUNWIND && !TTG_HAS_BACKTRACE
 #if defined(SIMPLE_STACK)
       int bottom = 0x1234;
       void **topstack = (void **)0xffffffffL;
@@ -147,7 +146,7 @@ namespace mpqc {
         frame_pointer = (void **)*frame_pointer;
       }
 #endif  // SIMPLE_STACK
-#endif  // HAVE_BACKTRACE
+#endif  // TTG_HAS_BACKTRACE
     }
 
     Backtrace::Backtrace(const Backtrace &other) : frames_(other.frames_), prefix_(other.prefix_) {}
@@ -160,7 +159,7 @@ namespace mpqc {
 
     std::string Backtrace::__demangle(const std::string &symbol) {
       std::string dsymbol;
-#ifdef HAVE_CXA_DEMANGLE
+#ifdef TTG_HAS_CXA_DEMANGLE
       {
         int status;
         char *dsymbol_char = abi::__cxa_demangle(symbol.c_str(), 0, 0, &status);

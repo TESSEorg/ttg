@@ -168,17 +168,16 @@ namespace ttg {
     template <typename T>
     struct type_printer;
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// has_std_hash_overload_v<T> evaluates to true if std::hash<T> is defined
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-template <typename T, typename Enabler = void>
-struct has_std_hash_overload : std::false_type {};
-template <typename T>
-struct has_std_hash_overload<T, ::ttg::meta::void_t<decltype(std::declval<std::hash<T>>()(std::declval<const T &>()))>> : std::true_type {};
-template <typename T> constexpr bool has_std_hash_overload_v = has_std_hash_overload<T>::value;
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // has_std_hash_specialization_v<T> evaluates to true if std::hash<T> is defined
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <typename T, typename Enabler = void>
+    struct has_std_hash_specialization : std::false_type {};
+    template <typename T>
+    struct has_std_hash_specialization<T, ::ttg::meta::void_t<decltype(std::declval<std::hash<T>>()(std::declval<const T &>()))>> : std::true_type {};
+    template <typename T> constexpr bool has_std_hash_specialization_v = has_std_hash_specialization<T>::value;
 
-
-namespace detail {
+    namespace detail {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // send_callback_t<key,value> = std::function<void(const key&, const value&>, protected against void key or value
