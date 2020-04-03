@@ -31,6 +31,13 @@ if [ "$DEPLOY" = "1" ]; then
   doxygen --version
 fi
 
+# use Ninja for Debug builds and Make for Release
+if [ "$BUILD_TYPE" = "Debug" ]; then
+    export CMAKE_GENERATOR="Ninja"
+else
+    export CMAKE_GENERATOR="Unix Makefiles"
+fi
+
 #
 # Environment variables
 #
@@ -65,29 +72,27 @@ if [ "$COMPUTE_COVERAGE" = "1" ]; then
     export CODECOVCXXFLAGS="--coverage -O0"
 fi
 
-cmake ${TRAVIS_BUILD_DIR} \
+cmake ${TRAVIS_BUILD_DIR} -G "${CMAKE_GENERATOR}" \
     -DCMAKE_TOOLCHAIN_FILE=${TRAVIS_BUILD_DIR}/cmake/toolchains/travis.cmake \
     -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
     -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
     -DCMAKE_PREFIX_PATH="${INSTALL_PREFIX}/eigen3" \
     -DCMAKE_CXX_FLAGS="${CXX_FLAGS} ${EXTRAFLAGS} ${CODECOVCXXFLAGS}"
 
-### test
-make serialization
-tests/serialization
-
-### MADNESS examples
-make test-mad t9-mad spmm-mad bspmm-mad
+### examples
+cmake --build .
 export MPI_HOME=${INSTALL_PREFIX}/mpich
+# run madness examples
 for PROG in test-mad t9-mad spmm-mad bspmm-mad
 do
   examples/$PROG
   setarch `uname -m` -R ${MPI_HOME}/bin/mpirun -n 2 examples/$PROG
 done
+# TODO run parsec examples
 
-### PaRSEC examples
-make test-parsec t9-parsec spmm-parsec bspmm-parsec
-# TODO run these tests also
+### tests
+cmake --build . --target serialization
+tests/serialization
 
 # print ccache stats
 ccache -s

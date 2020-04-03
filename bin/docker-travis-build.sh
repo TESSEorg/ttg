@@ -20,7 +20,7 @@ cat > $setup << END
 curl -sSL "http://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add -
 apt-add-repository -y "ppa:ubuntu-toolchain-r/test"
 apt-get -yq update >> ~/apt-get-update.log
-apt-get -yq --no-install-suggests --no-install-recommends --force-yes install g++-8  libblas-dev liblapack-dev liblapacke-dev libtbb-dev clang-7 clang-8 gdb cmake cmake-data graphviz fonts-liberation flex
+apt-get -yq --no-install-suggests --no-install-recommends --force-yes install g++-8  libblas-dev liblapack-dev liblapacke-dev libtbb-dev clang-7 clang-8 gdb cmake cmake-data graphviz fonts-liberation flex ninja-build
 mkdir -p ${TRAVIS_BUILD_TOPDIR}
 cd ${TRAVIS_BUILD_TOPDIR}
 git clone git@github.com:TESSEorg/ttg.git ${TRAVIS_BUILD_TOPDIR}/TESSEorg/ttg
