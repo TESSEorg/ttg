@@ -54,7 +54,8 @@ endif(TARGET MADworld)
 ########################
 if (TARGET PaRSEC::parsec)
   add_library(ttg-parsec INTERFACE)
-  target_link_libraries(ttg-parsec INTERFACE ttg Boost::boost)
+  find_package(MPI)
+  target_link_libraries(ttg-parsec INTERFACE ttg Boost::boost MPI::MPI_CXX "/usr/lib64/libunwind.so")
   target_include_directories(ttg-parsec INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
