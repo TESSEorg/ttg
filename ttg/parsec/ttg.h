@@ -81,7 +81,7 @@ namespace parsec {
     }
 
     class World {
-        const int _PARSEC_TTG_TAG = 8081; // How do we get a unique TAG ID?
+        const int _PARSEC_TTG_TAG = 10; // This TAG should be 'allocated' at the PaRSEC level
      public:
         static const int PARSEC_TTG_MAX_AM_SIZE = 1024*1024;
       World(int *argc, char **argv[], int ncores) {
@@ -99,6 +99,15 @@ namespace parsec {
 
           parsec_termdet_open_dyn_module(tpool);
           tpool->tdm.module->monitor_taskpool(tpool, parsec_taskpool_termination_detected);
+          // In TTG, we use the pending actions to denote that the
+          // taskpool is not ready, i.e. some local tasks could still
+          // be added by the main thread. It should then be initialized
+          // to 0, execute will set it to 1 and mark the tpool as ready,
+          // and the fence() will decrease it back to 0. However, at
+          // taskpool_enable(), the comm. engine decreases nb_pa by 1,
+          // for PTG and DTD... So, we initialize it to 1 if running in
+          // distributed and to 0 otherwise.
+          tpool->tdm.module->taskpool_set_nb_pa(tpool, size() > 1 ? 1 : 0); 
           parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
       }
 
@@ -121,10 +130,9 @@ namespace parsec {
       }
 
       void execute() {
-          // execute comes after fence. With termination detection, fence could just mark the taskpool
-          // as ready to enqueue more, and execute() would mark the taskpool ready.
-          // Currently, we need to create a new taskpool here, since it has been waited upon by fence()
         parsec_enqueue(ctx, tpool);
+        tpool->tdm.module->taskpool_addto_nb_pa(tpool, 1);
+        tpool->tdm.module->taskpool_ready(tpool);
         int ret = parsec_context_start(ctx);
         if(ret != 0) throw std::runtime_error("TTG: parsec_context_start failed");
       }
@@ -140,7 +148,8 @@ namespace parsec {
               MPI_Comm_rank(MPI_COMM_WORLD, &rank);
               ::ttg::print("parsec::ttg(", rank,  "): parsec taskpool is ready for completion");
           }
-          tp->tdm.module->taskpool_ready(tp);
+          // We are locally ready (i.e. we won't add new tasks)
+          tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
           if( ::ttg::tracing() ) {
               ::ttg::print("parsec::ttg(", rank, "): waiting for completion");
           }
@@ -378,15 +387,9 @@ namespace parsec {
 
     namespace detail {
         struct msg_t {
-            union {
-                struct {
-                    msg_header_t op_id;
-                    char bytes[1];
-                };
-                struct {
-                    char all_bytes[World::PARSEC_TTG_MAX_AM_SIZE];
-                };
-            };
+            msg_header_t op_id;
+            unsigned char bytes[World::PARSEC_TTG_MAX_AM_SIZE - sizeof(msg_header_t)];
+
             msg_t() = default;
             msg_t(uint64_t op_id, uint32_t taskpool_id, std::size_t param_id) : op_id{taskpool_id, op_id, param_id} {}
         };
@@ -824,12 +827,12 @@ namespace parsec {
         // TODO do we need to copy value?
         using msg_t = detail::msg_t;
         msg_t msg(get_instance_id(), world.taskpool()->taskpool_id, i);
+
+        uint64_t pos = 0;
         const ttg_data_descriptor *dKey = ::ttg::get_data_descriptor<Key>();
-        uint64_t size_of_key = sizeof(Key);
-        dKey->pack_payload(&key, &size_of_key, 0, reinterpret_cast<void**>(&msg.bytes));
+        pos = dKey->pack_payload(&key, sizeof(Key), pos, msg.bytes);
         const ttg_data_descriptor *dValue = ::ttg::get_data_descriptor<std::decay_t<Value>>();
-        uint64_t size_of_value = sizeof(Value);
-        dValue->pack_payload(&value, &size_of_value, size_of_key, reinterpret_cast<void**>(&msg.bytes));
+        pos = dValue->pack_payload(&value, sizeof(Value), pos, msg.bytes);
         parsec_taskpool_t *tp = world.taskpool();
         tp->tdm.module->outgoing_message_start(tp, owner, NULL);       
         tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0, MPI_COMM_WORLD);
