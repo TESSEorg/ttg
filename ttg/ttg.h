@@ -93,7 +93,7 @@ namespace ttg {
 
   /// instantiation of unique_hash for types which have member function hash()
   template <typename T>
-  struct unique_hash<T, std::void_t<decltype(std::declval<const T&>.hash())>> {
+  struct unique_hash<T, std::void_t<decltype(std::declval<const T&>().hash())>> {
       auto operator()(const T &t) { return t.hash(); }
   };
 
