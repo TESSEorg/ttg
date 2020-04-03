@@ -76,11 +76,29 @@ struct hash<ttg::Void> {
 
 namespace ttg {
   namespace overload {
-    /// Computes unique hash values for objects of type T.
-    /// Overload for your type.
-    template <typename Output, typename Input>
-    Output unique_hash(const Input &t);
+    /// \brief Computes unique hash values for objects of type T.
+
+    /// Specialize for your type, if needed.
+    /// \note Must provide operator()(const Input&)
+    template <typename T, typename Enabler = void>
+    struct unique_hash;
+
+    /// instantiation of unique_hash for types which have std::hash defined
+    template <typename T>
+    struct unique_hash<T, std::enable_if_t<meta::has_std_hash_specialization_v<T>>> {
+      auto operator()(const T& t) {
+        return std::hash<T>{}(t);
+      }
+    };
+
+  /// instantiation of unique_hash for types which have member function hash()
+  template <typename T>
+  struct unique_hash<T, std::void_t<decltype(std::declval<const T&>.hash())>> {
+      auto operator()(const T &t) { return t.hash(); }
+  };
+
   }  // namespace overload
+
   using namespace ::ttg::overload;
 
   namespace detail {
@@ -92,7 +110,7 @@ namespace ttg {
     struct default_keymap_impl;
     template <typename keyT>
     struct default_keymap_impl<
-        keyT, std::enable_if_t<meta::has_std_hash_overload_v<keyT> || meta::is_void_v<keyT>>> {
+        keyT, std::enable_if_t<meta::has_std_hash_specialization_v<keyT> || meta::is_void_v<keyT>>> {
       default_keymap_impl() = default;
       default_keymap_impl(int world_size) : world_size(world_size) {}
 
