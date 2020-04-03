@@ -985,6 +985,7 @@ namespace madness {
               std::cerr << "   etc." << std::endl;
               break;
             }
+            using madness::operators::operator<<;
             std::cerr << world.rank() << ":"
                       << "   unused: " << item.first << " : ( ";
             for (std::size_t i = 0; i < numins; i++) std::cerr << (item.second->nargs[i] == 0 ? "T" : "F") << " ";
