@@ -76,39 +76,9 @@ struct hash<ttg::Void> {
 }
 
 namespace ttg {
-  /// place for overloading/instantiating hash and other functionality
-  namespace overload {
-
-    /// \brief Computes hash values for objects of type T.
-
-    /// Specialize for your type, if needed.
-    /// \note Must provide operator()(const Input&)
-    template <typename T, typename Enabler = void>
-    struct hash;
-
-    /// instantiation of hash for types which have member function hash()
-    template <typename T>
-    struct hash<T, std::void_t<decltype(std::declval<const T&>().hash())>> {
-      auto operator()(const T &t) { return t.hash(); }
-    };
-
-    /// instantiation of unique_hash for types which have std::hash defined
-    template <typename T, typename Enabler>
-    struct hash {
-      auto operator()(const T& t) {
-        detail::FNVhasher hasher;
-        hasher.update(sizeof(T), reinterpret_cast<const std::byte*>(&t));
-        return hasher.value();
-      }
-    };
-
-  }  // namespace overload
-
-  using namespace ::ttg::overload;
-
   namespace detail {
 
-    /// the default keymap implementation requires std::hash{}(key) ... use SFINAE
+    /// the default keymap implementation requires ttg::hash{}(key) ... use SFINAE
     /// TODO improve error messaging via more elaborate techniques e.g.
     /// https://gracicot.github.io/tricks/2017/07/01/deleted-function-diagnostic.html
     template <typename keyT, typename Enabler = void>

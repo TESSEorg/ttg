@@ -189,7 +189,7 @@ namespace parsec {
     inline void set_default_world(World &world) { detail::default_world_accessor() = &world; }
     inline void set_default_world(World *world) { detail::default_world_accessor() = world; }
 
-    /// the default keymap implementation maps key to std::hash{}(key) % nproc
+    /// the default keymap implementation maps key to ttg::hash{}(key) % nproc
     template <typename keyT>
     struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
      public:

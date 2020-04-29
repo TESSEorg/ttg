@@ -157,7 +157,7 @@ struct Key : public std::array<long, Rank> {
     std::copy(ilist.begin(), ilist.end(), this->begin());
     assert(valid());
   }
-  Key(uint64_t hash) {
+  Key(std::size_t hash) {
     static_assert(Rank == 2 || Rank == 3, "Key<Rank>::Key(hash) only implemented for Rank={2,3}");
     if (Rank == 2) {
       (*this)[0] = hash / max_index;
@@ -168,7 +168,7 @@ struct Key : public std::array<long, Rank> {
       (*this)[2] = hash % max_index;
     }
   }
-  int64_t hash() const {
+  std::size_t hash() const {
     static_assert(Rank == 2 || Rank == 3, "Key<Rank>::hash only implemented for Rank={2,3}");
     return Rank == 2 ? (*this)[0] * max_index + (*this)[1]
                      : ((*this)[0] * max_index + (*this)[1]) * max_index + (*this)[2];
@@ -183,16 +183,6 @@ struct Key : public std::array<long, Rank> {
     return result;
   }
 };
-
-namespace std {
-  template <std::size_t Rank>
-  struct hash<Key<Rank>> {
-    hash() = default;
-    typedef Key<Rank> argument_type;
-    typedef std::size_t result_type;
-    result_type operator()(argument_type const &s) const noexcept { return s.hash(); }
-  };
-}  // namespace std
 
 template <std::size_t Rank>
 std::ostream &operator<<(std::ostream &os, const Key<Rank> &key) {

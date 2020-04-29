@@ -24,10 +24,49 @@ namespace ttg {
         for (size_t i = 0; i < n; i++) update(bytes[i]);
       }
 
-      /// Returns the value of the hash of the stream
+      /// @return the value of the hash of the stream
       auto value() const noexcept { return value_; }
+
+      /// @return the initial hash value
+      static result_type initial_value() { return offset_basis; }
     };
   }  // namespace detail
+
+  /// place for overloading/instantiating hash and other functionality
+  namespace overload {
+
+    /// \brief Computes hash values for objects of type T.
+
+    /// Specialize for your type, if needed.
+    /// \note Must provide operator()(const Input&)
+    template <typename T, typename Enabler = void>
+    struct hash;
+
+    /// instantiation of hash for types which have member function hash()
+    template <typename T>
+    struct hash<T, std::void_t<decltype(std::declval<const T&>().hash())>> {
+      auto operator()(const T &t) const { return t.hash(); }
+    };
+
+    /// instantiation of hash for types which have member function hash()
+    template <>
+    struct hash<void, void> {
+      auto operator()() const { return detail::FNVhasher::initial_value(); }
+    };
+
+    /// default implementation uses the bitwise hasher FNVhasher
+    template <typename T, typename Enabler>
+    struct hash {
+      auto operator()(const T& t) const {
+        detail::FNVhasher hasher;
+        hasher.update(sizeof(T), reinterpret_cast<const std::byte*>(&t));
+        return hasher.value();
+      }
+    };
+
+  }  // namespace overload
+
+  using namespace ::ttg::overload;
 }  // namespace ttg
 
 #endif  // TTG_TTG_UTIL_HASH_H
