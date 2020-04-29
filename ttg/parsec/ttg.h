@@ -111,7 +111,7 @@ namespace parsec {
           parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
       }
 
-      ~World() { parsec_ce.tag_unregister(_PARSEC_TTG_TAG); parsec_fini(&ctx); }
+      ~World() { parsec_ce.tag_unregister(_PARSEC_TTG_TAG); parsec_fini(&ctx); free(tpool); }
 
       const int &parsec_ttg_tag() { return _PARSEC_TTG_TAG; }
         
@@ -1120,11 +1120,16 @@ namespace parsec {
           key_hash
       };
       
-     static parsec_hook_return_t release_key_from_task(parsec_execution_stream_t *es, parsec_task_t *task) {
+     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *task) {
          if constexpr (!::ttg::meta::is_void_v<keyT>) {
                  my_op_t *op = (my_op_t*)task;
                  keyT *key = (keyT*)op->key;
                  delete(key);
+         }
+         for(int i = 0; i < MAX_PARAM_COUNT; i++) {
+             if(NULL != task->data[i].data_in) {
+                 PARSEC_OBJ_RELEASE(task->data[i].data_in);
+             }
          }
      }
         
@@ -1184,7 +1189,7 @@ namespace parsec {
         }
 
         self.release_task = parsec_release_task_to_mempool_update_nbtasks;
-        self.complete_execution = release_key_from_task;
+        self.complete_execution = complete_task_and_release;
 
         for (i = 0; i < numins; i++) {
           parsec_flow_t *flow = new parsec_flow_t;
@@ -1257,6 +1262,18 @@ namespace parsec {
       ~Op() {
         parsec_hash_table_fini(&tasks_table);
         parsec_mempool_destruct(&mempools);
+        uintptr_t addr = (uintptr_t)self.incarnations;
+        free((void*)addr);
+        for(int i = 0; i < self.nb_flows; i++) {
+            if( NULL != self.in[i] ) {
+                free(self.in[i]->name);
+                delete self.in[i];
+            }
+            if( NULL != self.out[i]) {
+                free(self.out[i]->name);
+                delete self.out[i];
+            }
+        }
       }
 
       static constexpr const ::ttg::Runtime runtime = ::ttg::Runtime::PaRSEC;
