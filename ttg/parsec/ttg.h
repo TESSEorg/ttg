@@ -688,8 +688,8 @@ namespace parsec {
           }
         }
 
-        using ::ttg::unique_hash;
-        parsec_key_t hk = unique_hash<Key>{}(key);
+        using ::ttg::hash;
+        parsec_key_t hk = hash<Key>{}(key);
         my_op_t *task = NULL;
         constexpr const std::size_t alignment_of_input_tuple = std::alignment_of<input_values_tuple_type>::value;
         if (NULL == (task = (my_op_t *)parsec_hash_table_find(&tasks_table, hk))) {
@@ -850,8 +850,8 @@ namespace parsec {
           if constexpr (derived_has_cuda_op())
             task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::CUDA)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::CUDA>);
           task->object_ptr = static_cast<derivedT *>(this);
-          using ::ttg::unique_hash;
-          task->key = unique_hash<Key>{}(key);
+          using ::ttg::hash;
+          task->key = hash<Key>{}(key);
           task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
           world.increment_created();
@@ -891,7 +891,6 @@ namespace parsec {
           if constexpr (derived_has_cuda_op())
             task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::CUDA)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::CUDA>);
           task->object_ptr = static_cast<derivedT *>(this);
-          using ::ttg::unique_hash;
           task->key = 0;
           task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : creating task");

@@ -18,6 +18,7 @@
 #include "util/demangle.h"
 #include "util/meta.h"
 #include "util/runtimes.h"
+#include "util/hash.h"
 
 #if __has_include(<mpi.h>)
 #  include <mpi.h>
@@ -75,27 +76,31 @@ struct hash<ttg::Void> {
 }
 
 namespace ttg {
+  /// place for overloading/instantiating hash and other functionality
   namespace overload {
-    /// \brief Computes unique hash values for objects of type T.
+
+    /// \brief Computes hash values for objects of type T.
 
     /// Specialize for your type, if needed.
     /// \note Must provide operator()(const Input&)
     template <typename T, typename Enabler = void>
-    struct unique_hash;
+    struct hash;
 
-    /// instantiation of unique_hash for types which have std::hash defined
+    /// instantiation of hash for types which have member function hash()
     template <typename T>
-    struct unique_hash<T, std::enable_if_t<meta::has_std_hash_specialization_v<T>>> {
-      auto operator()(const T& t) {
-        return std::hash<T>{}(t);
-      }
+    struct hash<T, std::void_t<decltype(std::declval<const T&>().hash())>> {
+      auto operator()(const T &t) { return t.hash(); }
     };
 
-  /// instantiation of unique_hash for types which have member function hash()
-  template <typename T>
-  struct unique_hash<T, std::void_t<decltype(std::declval<const T&>().hash())>> {
-      auto operator()(const T &t) { return t.hash(); }
-  };
+    /// instantiation of unique_hash for types which have std::hash defined
+    template <typename T, typename Enabler>
+    struct hash {
+      auto operator()(const T& t) {
+        detail::FNVhasher hasher;
+        hasher.update(sizeof(T), reinterpret_cast<const std::byte*>(&t));
+        return hasher.value();
+      }
+    };
 
   }  // namespace overload
 
