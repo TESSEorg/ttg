@@ -42,7 +42,7 @@ if (TARGET PaRSEC::parsec)
   add_executable (test-parsec parsec/test.cc test.impl.h)
   target_link_libraries(test-parsec LINK_PUBLIC ttg-parsec)
 
-  if (FALSE)
+  if (TRUE)
   # T9 example
   add_executable (t9-parsec parsec/t9.cc t9.impl.h)
   target_link_libraries(t9-parsec LINK_PUBLIC ttg-parsec)
