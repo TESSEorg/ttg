@@ -85,13 +85,13 @@ namespace ttg {
     struct default_keymap_impl;
     template <typename keyT>
     struct default_keymap_impl<
-        keyT, std::enable_if_t<meta::has_std_hash_specialization_v<keyT> || meta::is_void_v<keyT>>> {
+        keyT, std::enable_if_t<meta::has_ttg_hash_specialization_v<keyT> || meta::is_void_v<keyT>>> {
       default_keymap_impl() = default;
       default_keymap_impl(int world_size) : world_size(world_size) {}
 
       template <typename Key = keyT>
       std::enable_if_t<!meta::is_void_v<Key>,int>
-      operator()(const Key &key) const { return std::hash<keyT>{}(key) % world_size; }
+      operator()(const Key &key) const { return ttg::hash<keyT>{}(key) % world_size; }
       template <typename Key = keyT>
       std::enable_if_t<meta::is_void_v<Key>,int>
       operator()() const { return 0; }

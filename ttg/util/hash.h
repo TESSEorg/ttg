@@ -67,6 +67,18 @@ namespace ttg {
   }  // namespace overload
 
   using namespace ::ttg::overload;
+
+  namespace meta {
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // has_ttg_hash_specialization_v<T> evaluates to true if ttg::hash<T> is defined
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <typename T, typename Enabler = void>
+    struct has_ttg_hash_specialization : std::false_type {};
+    template <typename T>
+    struct has_ttg_hash_specialization<T, ::ttg::meta::void_t<decltype(std::declval<ttg::hash<T>>()(std::declval<const T &>()))>> : std::true_type {};
+    template <typename T> constexpr bool has_ttg_hash_specialization_v = has_ttg_hash_specialization<T>::value;
+  }  // namespace meta
+
 }  // namespace ttg
 
 #endif  // TTG_TTG_UTIL_HASH_H
