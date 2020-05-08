@@ -4,6 +4,7 @@
 #include "../ttg.h"
 #include "../util/meta.h"
 #include "../util/serialization.h"
+#include "../ttg/util/hash.h"
 
 #include <array>
 #include <cassert>
@@ -1098,7 +1099,8 @@ namespace parsec {
                   return 0;
               } else {
               keyT kk = *( reinterpret_cast<keyT*>(k) );
-              return std::hash<keyT>()(kk);
+              using ::ttg::hash;
+              return hash<decltype(kk)>{}(kk);
           }
       }
 
