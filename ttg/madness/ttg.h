@@ -3,6 +3,7 @@
 
 #include "../ttg.h"
 #include "../ttg/util/bug.h"
+#include "../ttg/util/hash.h"
 #include "../util/meta.h"
 
 #include <array>
@@ -247,7 +248,8 @@ namespace madness {
         void run(World &world) {
           // ::ttg::print("starting task");
 
-          opT::threaddata.key_hash = std::hash<decltype(key)>()(key);
+          using ::ttg::hash;
+          opT::threaddata.key_hash = hash<decltype(key)>{}(key);
           opT::threaddata.call_depth++;
             
           if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
@@ -281,7 +283,7 @@ namespace madness {
       };
 
       using hashable_keyT = std::conditional_t<::ttg::meta::is_void_v<keyT>,int,keyT>;
-      using cacheT = ConcurrentHashMap<hashable_keyT, OpArgs *, std::hash<hashable_keyT>>;
+      using cacheT = ConcurrentHashMap<hashable_keyT, OpArgs *, ::ttg::hash<hashable_keyT>>;
       using accessorT = typename cacheT::accessor;
       cacheT cache;
 
@@ -375,7 +377,8 @@ namespace madness {
             args->derived = static_cast<derivedT *>(this);
             args->key = key;
 
-            auto curhash = std::hash<keyT>{}(key);
+            using ::ttg::hash;
+            auto curhash = hash<keyT>{}(key);
 
             if (curhash == threaddata.key_hash && threaddata.call_depth<6) { // Needs to be externally configurable
                 

@@ -29,15 +29,13 @@ double pow2(double n) { return std::pow(2.0, n); }
 struct Key {
   int n;  // Level in the tree --- leave this as signed otherwise `-n` will do unexpected things
   unsigned long l; // Translation in at level `n` in range [0,2**n).
-  uint64_t hashvalue; // Hash of n and l for storage for rapid comparison and hashing
+  std::size_t hashvalue; // Hash of n and l for storage for rapid comparison and hashing
 
   // Default constructor makes uninitialized key
 
   // Not overriding the default constructor is essential to keep the class POD
   // in which case we do not need to provide a serialization method.
   Key() = default;
-
-  //Key(uint64_t hash) : n(hash >> 48), l(hash & 0x0000FFFFFFFFFFFF), hashvalue(hash) {}
 
   // Constructor given `n` and `l`
   Key(unsigned long n, unsigned long l) : n(n), l(l) { rehash(); }
@@ -70,16 +68,8 @@ struct Key {
   void rehash() { hashvalue = (size_t(n) << 48) + l; }
 
   // Returns the hash
-  uint64_t hash() const { return hashvalue; }
+  std::size_t hash() const { return hashvalue; }
 };
-
-namespace std {
-  // specialize std::hash for Key
-  template <>
-  struct hash<Key> {
-    std::size_t operator()(const Key& s) const noexcept { return s.hash(); }
-  };
-}  // namespace std
 
 std::ostream& operator<<(std::ostream& s, const Key& key) {
   s << "Key(" << key.n << "," << key.l << ")";
