@@ -31,7 +31,7 @@ namespace ttg {
                         World &world = ttg_default_execution_context(), int max_key = -1,
                         Edge<int, Value> inout_l = Edge<int, Value>{}, Edge<int, Value> inout_r = Edge<int, Value>{})
         : baseT(edges(fuse(in, inout_l, inout_r)), edges(inout_l, inout_r, out), "BinaryTreeBroadcast",
-                {"in|inout_l|inout_r"}, {"inout_l", "inout_r", "out"}, world)
+                {"in|inout_l|inout_r"}, {"inout_l", "inout_r", "out"}, world, [](int key) { return key; })
         , tree_((max_key == -1 ? world.size() : max_key), root)
         , local_keys_(std::move(local_keys)) {}
 

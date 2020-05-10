@@ -38,7 +38,7 @@ namespace ttg {
                      Edge<int, Value> inout = Edge<int, Value>{}, Edge<int, Value> inout_l = Edge<int, Value>{},
                      Edge<int, Value> inout_r = Edge<int, Value>{})
         : baseT(edges(fuse(in, inout), inout_l, inout_r), edges(inout, inout_l, inout_r, out), "BinaryTreeReduce",
-                {"in|inout", "inout_l", "inout_r"}, {"inout", "inout_l", "inout_r", "out"}, world)
+                {"in|inout", "inout_l", "inout_r"}, {"inout", "inout_l", "inout_r", "out"}, world, [](int key) { return key; })
         , tree_((max_key == -1 ? world.size() : max_key), root)
         , dest_key_(dest_key)
         , op_(std::move(op)) {
@@ -48,6 +48,7 @@ namespace ttg {
     void op(const int &key, typename baseT::input_values_tuple_type &&indata,
             std::tuple<Out<int, Value>, Out<int, Value>, Out<int, Value>, Out<OutKey, Value>> &outdata) {
       assert(key < tree_.size());
+      assert(key == this->get_world().rank());
       /// skip stub values ... won't need this ugliness when streaming is implemented
       auto children = tree_.child_keys(key);
       Value result;
