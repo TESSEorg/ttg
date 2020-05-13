@@ -814,17 +814,18 @@ namespace parsec {
         // the corresponding peer.
         // TODO do we need to copy value?
         using msg_t = detail::msg_t;
-        msg_t msg(get_instance_id(), world.taskpool()->taskpool_id, i);
+        msg_t* msg = new msg_t(get_instance_id(), world.taskpool()->taskpool_id, i);
 
         uint64_t pos = 0;
         const ttg_data_descriptor *dKey = ::ttg::get_data_descriptor<Key>();
-        pos = dKey->pack_payload(&key, sizeof(Key), pos, msg.bytes);
+        pos = dKey->pack_payload(&key, sizeof(Key), pos, msg->bytes);
         const ttg_data_descriptor *dValue = ::ttg::get_data_descriptor<std::decay_t<Value>>();
-        pos = dValue->pack_payload(&value, sizeof(Value), pos, msg.bytes);
+        pos = dValue->pack_payload(&value, sizeof(Value), pos, msg->bytes);
         parsec_taskpool_t *tp = world.taskpool();
         tp->tdm.module->outgoing_message_start(tp, owner, NULL);       
         tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0, MPI_COMM_WORLD);
-        parsec_ce.send_am(&parsec_ce, world.parsec_ttg_tag(), owner, static_cast<void*>(&msg), sizeof(msg_t));
+        parsec_ce.send_am(&parsec_ce, world.parsec_ttg_tag(), owner, static_cast<void*>(msg), sizeof(msg_header_t)+pos);
+        delete msg;
       }
 
       // case 3
@@ -1111,7 +1112,7 @@ namespace parsec {
               } else {
               keyT kk = *( reinterpret_cast<keyT*>(k) );
               // use streambuf here?
-              snprintf(buffer, buffer_size, "%lld", reinterpret_cast<uint64_t>(k));
+              snprintf(buffer, buffer_size, "%lld", k);
               return buffer;
           }
       }
