@@ -1133,6 +1133,7 @@ namespace parsec {
                  PARSEC_OBJ_RELEASE(task->data[i].data_in);
              }
          }
+         return PARSEC_HOOK_RETURN_DONE;
      }
         
      public:
