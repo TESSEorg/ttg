@@ -2,6 +2,8 @@ find_package(MADNESS 0.10.1 CONFIG QUIET COMPONENTS world HINTS "${MADNESS_ROOT_
 
 if (NOT TARGET MADworld)
 
+  set(MADNESS_BUILD_MADWORLD_ONLY ON CACHE BOOL "Whether to build MADNESS runtime only")
+  set(ENABLE_PARSEC OFF CACHE BOOL "Whether to use PaRSEC as the task backend of MADWorld")
   FetchContent_Declare(
           MADNESS
           GIT_REPOSITORY      https://github.com/m-a-d-n-e-s-s/madness.git

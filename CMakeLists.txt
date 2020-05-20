@@ -59,16 +59,16 @@ include(FindOrFetchBTAS)
 ##########################
 #### prerequisite runtimes
 ##########################
-# MADNESS
-include(FindOrFetchMADNESS)
-if (TARGET MADworld)
-  message(STATUS "MADNESS_FOUND=1")
-endif(TARGET MADworld)
 # PaRSEC
 include(FindOrFetchPARSEC)
 if (TARGET PaRSEC::parsec)
   message(STATUS "PARSEC_FOUND=1")
 endif(TARGET PaRSEC::parsec)
+# MADNESS
+include(FindOrFetchMADNESS)
+if (TARGET MADworld)
+  message(STATUS "MADNESS_FOUND=1")
+endif(TARGET MADworld)
 
 ##########################
 #### Components
