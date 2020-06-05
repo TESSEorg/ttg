@@ -3,5 +3,5 @@
 
 # need Boost.CallableTraits (header only, part of Boost 1.66 released in Dec 2017) for wrap.h to work
 set(TTG_TRACKED_BOOST_VERSION 1.66)
-set(TTG_TRACKED_MADNESS_TAG a7da8be01c86b805e60ddf8d54bd8bd71852cc2b)
+set(TTG_TRACKED_MADNESS_TAG 8a3013d635d757a4899ed6c52a86c1ccfe530e33)
 set(TTG_TRACKED_PARSEC_TAG 20e8489906cb65ec4ddbdec28dd8790f565d5426)
