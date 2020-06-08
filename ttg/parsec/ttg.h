@@ -397,8 +397,21 @@ namespace parsec {
       // PaRSEC for now passes data as tuple of ptrs (datacopies have these pointers also)
       // N.B. perhaps make data_wrapper_t<T> = parsec_data_copy_t (rather, a T-dependent wrapper around it to automate
       // the casts that will be inevitably needed)
-      template <typename T>
-      using data_wrapper_t = T *;
+      template <typename T> struct data_wrapper_t {
+          using type = T;
+          parsec_data_copy_t *data_copy;
+
+          data_wrapper_t() {
+              data_copy = NULL;
+          }
+          data_wrapper_t(data_wrapper_t<T> &other_copy) {
+              data_copy = other_copy.data_copy;
+          }
+          data_wrapper_t(T &value) {
+              data_copy = PARSEC_OBJ_NEW(parsec_data_copy_t);
+              data_copy->device_private = (void*)( new T(value) );
+          }
+      };
       template <typename T>
       struct data_wrapper_traits {
         using type = T;
@@ -426,8 +439,8 @@ namespace parsec {
       template <typename T>
       using data_unwrapped_t = typename data_wrapper_traits<T>::type;
 
-      template <typename Wrapper>
-      static auto &&unwrap(Wrapper &&wrapper) {
+      template <template <typename> typename Ttrait, typename T>
+      static auto &&unwrap(Ttrait<T> &&wrapper) {
         // what will be the return type? Either const or non-const lvalue ref
         // * (T*&) => T&
         // * (const T*&) => const T&
@@ -436,10 +449,24 @@ namespace parsec {
         // so the input type alone is not enough, will have to cast to the desired type in unwrap_to
         // or have to use a struct instead of a pointer and overload indirection operator (operator*)
         // probably not a good way forward since it appears that operator* always return an lvalue ref.
-        // not produce an rvalue ref need an explicit cast.
-
-        return *wrapper;
+        // not produce an rvalue ref need an explicit cast.        
+        return *static_cast<T*>(wrapper.data_copy->device_private);
       }
+
+      template <template <typename> typename Ttrait, typename T>
+      static auto &unwrap(Ttrait<T> &wrapper) {
+        // what will be the return type? Either const or non-const lvalue ref
+        // * (T*&) => T&
+        // * (const T*&) => const T&
+        // * (T*&&) => T&
+        // * (const T*&&) => const T&
+        // so the input type alone is not enough, will have to cast to the desired type in unwrap_to
+        // or have to use a struct instead of a pointer and overload indirection operator (operator*)
+        // probably not a good way forward since it appears that operator* always return an lvalue ref.
+        // not produce an rvalue ref need an explicit cast.        
+        return *static_cast<T*>(wrapper.data_copy->device_private);
+      }
+        
       // extend this to tell PaRSEC how the data is being used (even is this is to increment the counter only)
       template <typename Result, typename Wrapper>
       static Result unwrap_to(Wrapper &&wrapper) {
@@ -448,7 +475,7 @@ namespace parsec {
       // this wraps a (moved) copy T must be copyable and/or movable (depends on the use)
       template <typename T>
       static data_wrapper_t<std::remove_reference_t<T>> wrap(T &&data) {
-        return new std::remove_reference_t<T>(std::forward<T>(data));
+        return new data_wrapper_t<T>(std::remove_reference_t<T>(std::forward<T>(data)));
       }
       template <typename T>
       static data_wrapper_t<T> wrap(data_wrapper_t<T> &&data) {
@@ -765,11 +792,13 @@ namespace parsec {
 
           // Q. do we need to worry about someone calling set_arg "directly", i.e. through BaseOp::send and passing their
           // own (non-PaRSEC) value rather than value owned by PaRSEC?
-          // N.B. wrap(data_wrapper_t) does nothing, so no double wrapping here
-          std::get<i>(*tuple) = data_wrapper_t<valueT>(wrap(std::forward<Value>(value)));
-          parsec_data_copy_t *copy = PARSEC_OBJ_NEW(parsec_data_copy_t);
-          task->parsec_task.data[i].data_in = copy;
-          copy->device_private = (void *) (std::get<i>(*tuple));  // tuple holds pointers already
+          auto parsec_wrapper = wrap(std::forward<Value>(value));   
+          // Issue at the following line: when compiling test-parsec, Value is <const int>, but the type
+          // of the i-th argument of *tuple is valueT = <int>. The compiler does not know how
+          // to convert a data_wrapper_t<const int> into a data_wrapper_t<int>, and complains about that...
+          // and I don't know how to specify it...
+          std::get<i>(*tuple) = parsec_wrapper; // tuple holds pointers already
+          parsec_data_copy_t *copy = parsec_wrapper.data_copy;
           // uncomment this if you want to test deserialization ... also comment out the placement new above
           //    auto* ddesc = ::ttg::get_data_descriptor<valueT>();
           //    void* value_ptr = (void*)&value;
