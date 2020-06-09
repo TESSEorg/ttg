@@ -104,11 +104,8 @@ namespace parsec {
           // taskpool is not ready, i.e. some local tasks could still
           // be added by the main thread. It should then be initialized
           // to 0, execute will set it to 1 and mark the tpool as ready,
-          // and the fence() will decrease it back to 0. However, at
-          // taskpool_enable(), the comm. engine decreases nb_pa by 1,
-          // for PTG and DTD... So, we initialize it to 1 if running in
-          // distributed and to 0 otherwise.
-          tpool->tdm.module->taskpool_set_nb_pa(tpool, size() > 1 ? 1 : 0); 
+          // and the fence() will decrease it back to 0. 
+          tpool->tdm.module->taskpool_set_nb_pa(tpool, 0); 
           parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
       }
 
@@ -572,9 +569,9 @@ namespace parsec {
         opT *baseobj = (opT *)task->object_ptr;
         derivedT *obj = (derivedT *)task->object_ptr;
         if constexpr(!::ttg::meta::is_void_v<keyT>) {
-                baseobj->template op<Space>(*(keyT*)task->key, obj->output_terminals);
+            baseobj->template op<Space>(*(keyT*)task->key, obj->output_terminals);
         } else if constexpr(::ttg::meta::is_void_v<keyT>) {
-          baseobj->template op<Space>(obj->output_terminals);
+            baseobj->template op<Space>(obj->output_terminals);
         }
         else abort();
       }
@@ -585,10 +582,27 @@ namespace parsec {
                  "Trying to unpack as message that does not hold enough bytes to represent a single header");
           msg_header_t *hd = static_cast<msg_header_t*>(data);
           derivedT *obj = reinterpret_cast<derivedT*>(bop);
-          auto member = obj->set_arg_from_msg_fcts[hd->param_id];
-          (obj->*member)(data, size);
+          if(-1 != hd->param_id) {
+            auto member = obj->set_arg_from_msg_fcts[hd->param_id];
+            (obj->*member)(data, size);
+          } else {
+            if constexpr (::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+              if constexpr (::ttg::meta::is_void_v<keyT>) {
+                obj->template set_arg<keyT>();
+              } else {
+                using msg_t = detail::msg_t;
+                msg_t *msg = static_cast<msg_t*>(data);
+                keyT key;
+                const ttg_data_descriptor *dKey = ::ttg::get_data_descriptor<keyT>();
+                dKey->unpack_payload(&key, sizeof(keyT), 0, msg->bytes);
+                obj->template set_arg<keyT>(key);
+              }
+            } else {
+              abort();
+            }
+          }
       }
-
+      
       // there are 6 types of set_arg:
       // - case 1: nonvoid Key, complete Value type
       // - case 2: nonvoid Key, void Value, mixed (data+control) inputs
@@ -836,7 +850,6 @@ namespace parsec {
 
         const auto owner = keymap(key);
         if( owner == ttg_default_execution_context().rank() ) {
-
           // create PaRSEC task
           // and give it to the scheduler
           my_op_t *task;
@@ -864,9 +877,20 @@ namespace parsec {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
           world.increment_sent_to_sched();
           __parsec_schedule(es, &task->parsec_task, 0);
+        } else {
+          using msg_t = detail::msg_t;
+          // We pass -1 to signal that we just need to call set_arg(key) on the other end
+          msg_t* msg = new msg_t(get_instance_id(), world.taskpool()->taskpool_id, -1);
+
+          uint64_t pos = 0;
+          const ttg_data_descriptor *dKey = ::ttg::get_data_descriptor<Key>();
+          pos = dKey->pack_payload(&key, sizeof(Key), pos, msg->bytes);
+          parsec_taskpool_t *tp = world.taskpool();
+          tp->tdm.module->outgoing_message_start(tp, owner, NULL);       
+          tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0, MPI_COMM_WORLD);
+          parsec_ce.send_am(&parsec_ce, world.parsec_ttg_tag(), owner, static_cast<void*>(msg), sizeof(msg_header_t)+pos);
+          delete msg;
         }
-        else // shipping tasks is not yet implemented
-          abort();
       }
 
       // case 6
@@ -1341,7 +1365,7 @@ namespace parsec {
           if (tracing()) {
               ::ttg::print("parsec::ttg(", rank,  ") Inserting into static_id_to_op_map at ", get_instance_id());
           }
-          static_set_arg_fct_call_t call = std::make_pair(&Op::static_set_arg, this);          
+          static_set_arg_fct_call_t call = std::make_pair(&Op::static_set_arg, this);
 
           static_map_mutex.lock();
           static_id_to_op_map.insert(std::make_pair(get_instance_id(), call));
