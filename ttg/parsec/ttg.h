@@ -438,39 +438,11 @@ namespace parsec {
       };
       template <typename T>
       using data_unwrapped_t = typename data_wrapper_traits<T>::type;
-
-      template <template <typename> typename Ttrait, typename T>
-      static auto &&unwrap(Ttrait<T> &&wrapper) {
-        // what will be the return type? Either const or non-const lvalue ref
-        // * (T*&) => T&
-        // * (const T*&) => const T&
-        // * (T*&&) => T&
-        // * (const T*&&) => const T&
-        // so the input type alone is not enough, will have to cast to the desired type in unwrap_to
-        // or have to use a struct instead of a pointer and overload indirection operator (operator*)
-        // probably not a good way forward since it appears that operator* always return an lvalue ref.
-        // not produce an rvalue ref need an explicit cast.        
-        return *static_cast<T*>(wrapper.data_copy->device_private);
-      }
-
-      template <template <typename> typename Ttrait, typename T>
-      static auto &unwrap(Ttrait<T> &wrapper) {
-        // what will be the return type? Either const or non-const lvalue ref
-        // * (T*&) => T&
-        // * (const T*&) => const T&
-        // * (T*&&) => T&
-        // * (const T*&&) => const T&
-        // so the input type alone is not enough, will have to cast to the desired type in unwrap_to
-        // or have to use a struct instead of a pointer and overload indirection operator (operator*)
-        // probably not a good way forward since it appears that operator* always return an lvalue ref.
-        // not produce an rvalue ref need an explicit cast.        
-        return *static_cast<T*>(wrapper.data_copy->device_private);
-      }
-        
+      
       // extend this to tell PaRSEC how the data is being used (even is this is to increment the counter only)
       template <typename Result, typename Wrapper>
       static Result unwrap_to(Wrapper &&wrapper) {
-        return static_cast<Result>(unwrap(std::forward<Wrapper>(wrapper)));
+          return *static_cast<Result*>(wrapper.data_copy->device_private);
       }
       // this wraps a (moved) copy T must be copyable and/or movable (depends on the use)
       template <typename T>
@@ -512,15 +484,18 @@ namespace parsec {
       };
       template <std::size_t i>
       static auto &get(input_values_tuple_type &intuple) {
-        return unwrap(std::get<i>(intuple));
+          using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
+          return unwrap_to<valueT>(std::get<i>(intuple));
       };
       template <std::size_t i>
       static const auto &get(const input_values_tuple_type &intuple) {
-        return unwrap(std::get<i>(intuple));
+          using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
+          return unwrap_to<valueT>(std::get<i>(intuple));
       };
       template <std::size_t i>
       static auto &&get(input_values_tuple_type &&intuple) {
-        return unwrap(std::get<i>(intuple));
+          using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
+          return unwrap_to<valueT>(std::get<i>(intuple));
       };
 
      private:
