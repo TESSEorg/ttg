@@ -130,7 +130,7 @@ class Matrix {
 struct Control {};
 
 template <typename T>
-void stencil_computation(int i, int j, int M, int N, BlockMatrix<T>& bm, BlockMatrix<T>& left, BlockMatrix<T>& top,
+inline void stencil_computation(int i, int j, int M, int N, BlockMatrix<T>& bm, BlockMatrix<T>& left, BlockMatrix<T>& top,
                          BlockMatrix<T>& right, BlockMatrix<T>& bottom) {
   // i==0 -> no top block
   // j==0 -> no left block
@@ -139,13 +139,24 @@ void stencil_computation(int i, int j, int M, int N, BlockMatrix<T>& bm, BlockMa
   int MB = bm.rows();
   int NB = bm.cols();
 
-  for (int ii = 0; ii < bm.rows(); ++ii) {
-    for (int jj = 0; jj < bm.cols(); ++jj) {
-      bm(ii, jj) += (ii == 0) ? (i > 0 ? top(top.rows() - 1, jj) : 0.0) : bm(ii - 1, jj);
-      bm(ii, jj) += (ii == MB - 1) ? (i < M - 1 ? bottom(0, jj) : 0.0) : bm(ii + 1, jj);
-      bm(ii, jj) += (jj == 0) ? (j > 0 ? left(ii, left.cols() - 1) : 0.0) : bm(ii, jj - 1);
-      bm(ii, jj) += (jj == NB - 1) ? (j < N - 1 ? right(0, 0) : 0.0) : bm(ii, jj + 1);
-      bm(ii, jj) *= 0.25;
+  /*for (int ii = 0; ii < MB; ++ii) {
+    for (int jj = 0; jj < NB; ++jj) {
+      T& val = bm(ii,jj);
+      val += ii == 0 ? 0.0 : bm(ii-1,jj);
+      val += ii >= MB - 1 ? 0.0 : bm(ii+1,jj);
+      val += jj == 0 ? 0.0 : bm(ii,jj-1);
+      val += jj >= NB - 1 ? 0.0 : bm(ii,jj+1);
+      val *= 0.25;
+    }
+  }*/
+  for (int ii = 0; ii < MB; ++ii) {
+    for (int jj = 0; jj < NB; ++jj) {
+      T& val = bm(ii,jj);
+      val += (ii == 0) ? (i > 0 ? top(MB - 1, jj) : 0.0) : bm(ii - 1, jj);
+      val += (ii == MB - 1) ? (i < M - 1 ? bottom(0, jj) : 0.0) : bm(ii + 1, jj);
+      val += (jj == 0) ? (j > 0 ? left(ii, NB - 1) : 0.0) : bm(ii, jj - 1);
+      val += (jj == NB - 1) ? (j < N - 1 ? right(ii, 0) : 0.0) : bm(ii, jj + 1);
+      val *= 0.25;
     }
   }
 }
@@ -161,7 +172,7 @@ void wavefront_serial(Matrix<T>* m, int n_brows, int n_bcols) {
       if (j < n_bcols - 1) right = (*m)(i, j + 1);
       if (j > 0) left = (*m)(i, j - 1);
       if (i > 0) top = (*m)(i - 1, j);
-
+      
       stencil_computation(i, j, n_brows, n_bcols, (*m)(i, j), left, top, right, bottom);
     }
   }
@@ -261,7 +272,7 @@ int main(int argc, char** argv) {
   int n_rows, n_cols, B;
   int n_brows, n_bcols;
 
-  n_rows = n_cols = 8192;
+  n_rows = n_cols = 16384;
   B = 128;
 
   n_brows = (n_rows / B) + (n_rows % B > 0);

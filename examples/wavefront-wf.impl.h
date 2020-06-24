@@ -11,8 +11,8 @@
 int M, N, B;
 int MB, NB;
 
-double** matrix{nullptr};
-double** matrix2{nullptr};
+std::shared_ptr<double> matrix;
+std::shared_ptr<double> matrix2;
 
 using Key = std::pair<int, int>;
 
@@ -21,16 +21,13 @@ struct Control {};
 
 // initialize the matrix
 inline void init_matrix() {
-  matrix = new double*[M];
-  matrix2 = new double*[M];
-  for (int i = 0; i < M; ++i) {
-    matrix[i] = new double[N];
-    matrix2[i] = new double[N];
-  }
+  matrix = std::shared_ptr<double>(new double[M * N], [](double* p) { delete[] p; });
+  matrix2 = std::shared_ptr<double>(new double[M * N], [](double* p) { delete[] p; });
+
   for (int i = 0; i < M; ++i) {
     for (int j = 0; j < N; ++j) {
-      matrix[i][j] = 1;  // i*N + j;
-      matrix2[i][j] = matrix[i][j];
+      matrix.get()[i * N + j] = 1;  // i*N + j;
+      matrix2.get()[i * N + j] = 1;
     }
   }
 }
@@ -39,28 +36,24 @@ inline void init_matrix() {
 inline void print_matrix() {
   std::cout << "Output Matrix of TTG version" << std::endl;
   for (int i = 0; i < M; i++) {
-    for (int j = 0; j < N; j++) std::cout << matrix[i][j] << " ";
+    for (int j = 0; j < N; j++) std::cout << matrix.get()[i * N + j] << " ";
     std::cout << std::endl;
   }
   std::cout << std::endl << std::endl;
   std::cout << "Output Matrix of Serial version" << std::endl;
   for (int i = 0; i < M; i++) {
-    for (int j = 0; j < N; j++) std::cout << matrix2[i][j] << " ";
+    for (int j = 0; j < N; j++) std::cout << matrix2.get()[i * N + j] << " ";
     std::cout << std::endl;
   }
 }
 
 // destroy the matrix
 inline void delete_matrix() {
-  for (int i = 0; i < M; ++i) {
-    delete[] matrix[i];
-    delete[] matrix2[i];
-  }
-  delete[] matrix;
-  delete[] matrix2;
+  delete[] matrix.get();
+  delete matrix2.get();
 }
 
-inline void stencil_computation(int i, int j, double** m) {
+inline void stencil_computation(int i, int j, std::shared_ptr<double>  m) {
   int start_i = i * B;
   int end_i = (i * B + B > M) ? M : i * B + B;
   int start_j = j * B;
@@ -68,11 +61,12 @@ inline void stencil_computation(int i, int j, double** m) {
 
   for (int ii = start_i; ii < end_i; ++ii) {
     for (int jj = start_j; jj < end_j; ++jj) {
-      m[ii][jj] += ii == 0 ? 0.0 : m[ii - 1][jj];
-      m[ii][jj] += ii >= M - 1 ? 0.0 : m[ii + 1][jj];
-      m[ii][jj] += jj == 0 ? 0.0 : m[ii][jj - 1];
-      m[ii][jj] += jj >= N - 1 ? 0.0 : m[ii][jj + 1];
-      m[ii][jj] *= 0.25;
+      double& val = m.get()[ii * N + jj];
+      val += ii == 0 ? 0.0 : m.get()[(ii - 1) * N + jj];
+      val += ii >= M - 1 ? 0.0 : m.get()[(ii + 1) * N + jj];
+      val += jj == 0 ? 0.0 : m.get()[ii * N + jj - 1];
+      val += jj >= N - 1 ? 0.0 : m.get()[ii * N + jj + 1];
+      val *= 0.25;
     }
   }
 }
@@ -91,7 +85,7 @@ IMPORT_TTG_RUNTIME_NS
 
 // Method to generate  wavefront tasks with two inputs.
 template <typename funcT>
-auto make_wavefront2(double** m, const funcT& func, Edge<Key, Control>& input1, Edge<Key, Control>& input2) {
+auto make_wavefront2(std::shared_ptr<double> m, const funcT& func, Edge<Key, Control>& input1, Edge<Key, Control>& input2) {
   auto f = [m, func](const Key& key, const Control& ctl1, const Control& ctl2,
                      std::tuple<Out<Key, Control>, Out<Key, Control>>& out) {
     auto [i, j] = key;
@@ -121,7 +115,7 @@ auto make_wavefront2(double** m, const funcT& func, Edge<Key, Control>& input1, 
 
 // Method to generate wavefront task with single input.
 template <typename funcT>
-auto make_wavefront(double** m, const funcT& func, Edge<Key, Control>& input1, Edge<Key, Control>& input2) {
+auto make_wavefront(std::shared_ptr<double> m, const funcT& func, Edge<Key, Control>& input1, Edge<Key, Control>& input2) {
   auto f = [m, func](const Key& key, const Control& ctl,
                      std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>& out) {
     auto [i, j] = key;
@@ -150,7 +144,7 @@ auto make_wavefront(double** m, const funcT& func, Edge<Key, Control>& input1, E
 
 int main(int argc, char** argv) {
   ttg_initialize(argc, argv, -1);
-  M = N = 8192;
+  M = N = 16384;
   B = 128;
 
   MB = (M / B) + (M % B > 0);
@@ -197,12 +191,12 @@ int main(int argc, char** argv) {
   std::cout << "Serial Execution Time (milliseconds) : "
             << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1e3 << std::endl;
 
-  // print_matrix();
+  //print_matrix();
   std::cout << "Verifying the result....";
   bool success = true;
   for (int i = 0; i < M; i++) {
     for (int j = 0; j < N; j++) {
-      if (matrix[i][j] - matrix2[i][j] != 0) {
+      if (matrix.get()[i*N + j] - matrix2.get()[i*N + j] != 0) {
         success = false;
         std::cout << "ERROR (" << i << "," << j << ")\n";
       }
@@ -212,7 +206,7 @@ int main(int argc, char** argv) {
   std::cout << "....done!" << std::endl;
   std::cout << (success ? "SUCCESS!!!" : "FAILED!!!") << std::endl;
 
-  delete_matrix();
+  //delete_matrix();
 
   return 0;
 }
