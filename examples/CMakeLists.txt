@@ -15,13 +15,29 @@ if (TARGET MADworld)
   add_executable (t9-mad madness/t9.cc t9.impl.h)
   target_link_libraries(t9-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
-	#Wavefront example (shared memory)
+	#Wavefront example (workflow with shared data)
 	add_executable (wavefront-wf-mad madness/wavefront-wf.cc wavefront-wf.impl.h)
 	target_link_libraries(wavefront-wf-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
+  # Wavefront example (workflow with classes)
+  add_executable (wavefront-wf2-mad madness/wavefront-wf2.cc wavefront-wf2.impl.h)
+  target_link_libraries(wavefront-wf2-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 	
-	# Wavefront example (distributed memory)
+	# Wavefront example (distributed)
 	add_executable (wavefront-df-mad madness/wavefront-df.cc wavefront-df.impl.h)
-	target_link_libraries(wavefront-df-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLA})
+	target_link_libraries(wavefront-df-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
+  # Floyd Warshall's all pairs shortest paths
+  add_executable (fw-apsp-mad madness/floyd_warshall.cc floyd_warshall.impl.h)
+  target_link_libraries(fw-apsp-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
+  # Floyd Warshall's all pairs shortest paths (distributed)
+  add_executable (fw-apsp-df-mad madness/floyd_warshall_df.cc floyd_warshall_df.impl.h)
+  target_link_libraries(fw-apsp-df-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
+  # Guassian Elimination Example
+  # add_executable (ge-mad madness/ge.cc ge.impl.h)
+  # target_link_libraries(ge-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
   # sparse matmul
   if (EIGEN3_FOUND)
