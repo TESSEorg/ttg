@@ -36,8 +36,12 @@ if (TARGET MADworld)
   target_link_libraries(fw-apsp-df-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
   # Guassian Elimination Example
-  # add_executable (ge-mad madness/ge.cc ge.impl.h)
-  # target_link_libraries(ge-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+  add_executable (ge-mad madness/ge.cc ge.impl.h)
+  target_link_libraries(ge-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
+  # Guassian Elimination (dataflow) Example
+  add_executable (ge-df-mad madness/ge_df.cc ge_df.impl.h)
+  target_link_libraries(ge-df-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
   # sparse matmul
   if (EIGEN3_FOUND)
