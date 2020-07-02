@@ -168,7 +168,7 @@ class FuncA : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    std::cout << "FuncA " << I << " " << J << " " << K << " " << std::endl;
+    //std::cout << "FuncA " << I << " " << J << " " << K << " " << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
       ge_iterative_kernel(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg);
@@ -249,7 +249,7 @@ class FuncB : public Op<Key, std::tuple<Out<Key, Control>>, FuncB, Control, Cont
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    std::cout << "FuncB " << I << " " << J << " " << K << " " << std::endl;
+    //std::cout << "FuncB " << I << " " << J << " " << K << " " << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
       ge_iterative_kernel(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg);
@@ -320,7 +320,7 @@ class FuncC : public Op<Key, std::tuple<Out<Key, Control>>, FuncC, Control, Cont
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    std::cout << "FuncC " << I << " " << J << " " << K << " " << std::endl;
+    //std::cout << "FuncC " << I << " " << J << " " << K << " " << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
       ge_iterative_kernel(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg);
@@ -393,7 +393,7 @@ class FuncD : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    std::cout << "FuncD " << I << " " << J << " " << K << " " << std::endl;
+    //std::cout << "FuncD " << I << " " << J << " " << K << " " << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
       ge_iterative_kernel(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg);
