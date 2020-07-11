@@ -114,7 +114,7 @@ class Initiator
       : baseT(edges(), outedges, name, {}, {"outA", "outB", "outC", "outD"})
       , adjacency_matrix_ttg(adjacency_matrix_ttg) {}
 
-  ~Initiator() { std::cout << "Initiator destructor\n"; }
+  ~Initiator() {}
 
   void op(const Integer& iterations, typename baseT::output_terminals_type& out) {
     // making x_ready for all the blocks (for function calls A, B, C, and D)
@@ -145,17 +145,22 @@ class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
   std::string kernel_type;
   int recursive_fan_out;
   int base_size;
+  bool verify_results;
+  T* adjacency_matrix_serial;
 
  public:
   Finalizer(Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
-            int recursive_fan_out, int base_size, const std::string& name)
+            int recursive_fan_out, int base_size, const std::string& name,
+            T* adjacency_matrix_serial, bool verify_results = false)
       : baseT(name, {"input"}, {})
       , result_matrix_ttg(result_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
       , kernel_type(kernel_type)
       , recursive_fan_out(recursive_fan_out)
-      , base_size(base_size) {}
+      , base_size(base_size) 
+      , verify_results(verify_results)
+      , adjacency_matrix_serial(adjacency_matrix_serial) {}
 
   Finalizer(Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
             int recursive_fan_out, int base_size, const typename baseT::input_edges_type& inedges,
@@ -172,9 +177,36 @@ class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
           typename baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
+    int block_size = problem_size / blocking_factor;
 
+    BlockMatrix<T> bm = get<0>(t);
+
+    bool equal = true;
+    if (verify_results) {
+      int block_size = problem_size / blocking_factor;
+      for (int i = 0; i < problem_size; ++i) {
+        int row = i * problem_size;
+        int blockX = i / block_size;
+        if (blockX == I) {
+          int x = i % block_size;
+          for (int j = 0; j < problem_size; ++j) {
+            int blockY = j / block_size;
+            if (blockY == J) {
+              int y = j % block_size;
+              double v1 = bm(x,y);
+              double v2 = adjacency_matrix_serial[row + j];
+              if (fabs(v1 - v2) > numeric_limits<double>::epsilon()) {
+                cout << "ERROR in block [" << I << "," << J << "], element[" << i << ", " << j << "]: " << v2 << "!=" << v1 << endl;
+                equal = false;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
     // Use std::forward to forward a decay of reference types? Read about this.
-    (*result_matrix_ttg)(I, J, get<0>(t));  // Store the result block in the matrix
+    //(*result_matrix_ttg)(I, J, get<0>(t));  // Store the result block in the matrix
   }
 };
 
@@ -414,9 +446,9 @@ class FuncC : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
 };
 
 template <typename T>
-class FuncD : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
+class FuncD : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
                         FuncD<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>> {
-  using baseT = Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncD,
+  using baseT = Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncD,
                    BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>>;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
@@ -428,7 +460,7 @@ class FuncD : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
  public:
   FuncD(Matrix<T>* adjacency_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
         int recursive_fan_out, int base_size, const std::string& name)
-      : baseT(name, {"x_ready", "v_ready", "u_ready", "w_ready"}, {"outA", "outB", "outC", "outD", "result"})
+      : baseT(name, {"x_ready", "v_ready", "u_ready", "w_ready"}, {"outA", "outB", "outC", "outD"})
       , adjacency_matrix_ttg(adjacency_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
@@ -439,7 +471,7 @@ class FuncD : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
   FuncD(Matrix<T>* adjacency_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
         int recursive_fan_out, int base_size, const typename baseT::input_edges_type& inedges,
         const typename baseT::output_edges_type& outedges, const std::string& name)
-      : baseT(inedges, outedges, name, {"x_ready", "v_ready", "u_ready", "w_ready"}, {"outA", "outB", "outC", "outD", "result"})
+      : baseT(inedges, outedges, name, {"x_ready", "v_ready", "u_ready", "w_ready"}, {"outA", "outB", "outC", "outD"})
       , adjacency_matrix_ttg(adjacency_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
@@ -514,13 +546,14 @@ class GaussianElimination {
 
  public:
   GaussianElimination(Matrix<T>* adjacency_matrix_ttg, Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor,
-                      const std::string& kernel_type, int recursive_fan_out, int base_size)
+                      const std::string& kernel_type, int recursive_fan_out, int base_size, 
+                      T* adjacency_matrix_serial, bool verify_results = false)
       : initiator(adjacency_matrix_ttg, "initiator")
       , funcA(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcA")
       , funcB(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcB")
       , funcC(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcC")
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
-      , finalizer(result_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "finalizer")
+      , finalizer(result_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "finalizer", adjacency_matrix_serial, verify_results)
       , blocking_factor(blocking_factor), world(madness::World::get_default()) {
     initiator.template out<0>()->connect(funcA.template in<0>());
     initiator.template out<1>()->connect(funcB.template in<0>());
@@ -541,7 +574,6 @@ class GaussianElimination {
     funcD.template out<1>()->connect(funcB.template in<0>());
     funcD.template out<2>()->connect(funcC.template in<0>());
     funcD.template out<3>()->connect(funcD.template in<0>());
-    funcD.template out<4>()->connect(finalizer.template in<0>());
 
     if (!make_graph_executable(&initiator)) throw "should be connected";
     world.gop.fence();
@@ -596,8 +628,6 @@ int main(int argc, char** argv) {
     if (strcmp(argv[arg], "-dx") == 0) xterm_debug(argv[0], 0);
   }
 
-  OpBase::set_trace_all(false);
-
   // NEW IMPLEMENTATION
   int problem_size;
   int blocking_factor;
@@ -636,23 +666,22 @@ int main(int argc, char** argv) {
   std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
   // Calling the blocked implementation of GE algorithm on ttg runtime
   GaussianElimination<double> ge(m, r, problem_size, blocking_factor, kernel_type, recursive_fan_out,
-                         base_size);
+                         base_size, adjacency_matrix_serial, verify_results);
   //std::cout << ge.dot() << std::endl;
   ge.start();
   ge.fence();
   std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-  cout << "blocked ttg (data-flow) ge took: " << duration / 1000000.0 << " seconds" << endl;
+  if (world.rank() == 0)
+    cout << "blocked ttg (data-flow) ge took: " << duration / 1000000.0 << " seconds" << endl;
 
-  //r->print();
-  //m->print();
-  if (verify_results) {
+  /*if (verify_results) {
     if (equals(r, adjacency_matrix_serial, problem_size, blocking_factor)) {
       cout << "Serial and TTG implementation matches!" << endl;
     } else {
       cout << "Serial and TTG implementation DOESN\"T matches!" << endl;
     }
-  }
+  }*/
   // deallocating the allocated memories
   //free(adjacency_matrix_ttg);
   delete m;
@@ -706,7 +735,7 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
 
 void init_square_matrix(int problem_size, int blocking_factor,bool verify_results,
                         double* adjacency_matrix_serial, Matrix<double>* m) {
-  srand(123);  // srand(time(nullptr));
+  //srand(123);  // srand(time(nullptr));
   int block_size = problem_size / blocking_factor;
   for (int i = 0; i < problem_size; ++i) {
     int row = i * problem_size;
@@ -715,9 +744,8 @@ void init_square_matrix(int problem_size, int blocking_factor,bool verify_result
     for (int j = 0; j < problem_size; ++j) {
       int blockY = j / block_size;
       int y = j % block_size;
-      double value = rand() % 100 + 1;
+      double value = i * blocking_factor + j;//rand() % 100 + 1;
       ((*m)(blockX, blockY))(x, y, value);
-      //adjacency_matrix_ttg[row + j] = value;
       if (verify_results) {
         adjacency_matrix_serial[row + j] = value;
       }

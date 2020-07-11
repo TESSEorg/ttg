@@ -34,7 +34,7 @@ inline BlockMatrix<T> stencil_computation(int i, int j, int M, int N, BlockMatri
   int MB = bm.rows();
   int NB = bm.cols();
   BlockMatrix<T> current = bm;
-
+  std::cout << i << " " << j << std::endl;
   for (int ii = 0; ii < MB; ++ii) {
     for (int jj = 0; jj < NB; ++jj) {
       current(ii,jj,(current(ii,jj) + ((ii == 0) ? (i > 0 ? top(MB - 1, jj) : 0.0) : current(ii - 1, jj))));

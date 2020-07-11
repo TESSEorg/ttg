@@ -1,4 +1,5 @@
 #include <iostream>
+#include <madness/world/archive.h>
 
 template <typename T>
 class BlockMatrix {
@@ -14,22 +15,19 @@ class BlockMatrix {
     // Deallocator is required since we are allocating a pointer
     m_block = std::shared_ptr<T>(new T[_rows * _cols], [](T* p) { delete[] p; });
   }
+
+  //Copy constructor
+  /*BlockMatrix(const BlockMatrix<T>& other) : _rows(other._rows), _cols(other._cols),
+              m_block(std::make_shared<T>(*other.m_block)) {}
   
-  /*//Move constructor
-  BlockMatrix(BlockMatrix<T>&& other) {
-    _rows = other._rows;
-    _cols = other._cols;
-    m_block = other.m_block;
-    other.m_block = nullptr;
-  }
+  //Move constructor
+  BlockMatrix(BlockMatrix<T>&& other) : _rows(other._rows), _cols(other._cols),
+              m_block(std::make_shared<T>(*other.m_block)) //is it possible to use move instead? 
+  {}
   
-  BlockMatrix<T>& operator=(BlockMatrix<T>& other) noexcept
-  {
-    if (this != &other) {
-      _rows = other._rows;
-      _cols = other._cols;
-      m_block = other.m_block;
-    }
+  BlockMatrix<T> operator=(BlockMatrix<T> other) {
+    //std::shared_ptr<T>(other.get()).swap(m_block);
+    std::swap(*this, other);
     return *this;
   }*/
 
@@ -38,7 +36,9 @@ class BlockMatrix {
   int size() const { return _rows * _cols; }
   int rows() const { return _rows; }
   int cols() const { return _cols; }
-
+  const T* get() const { return m_block.get(); }
+  T* get() { return m_block.get(); }
+  
   void fill() {
     // Initialize all elements of the matrix to 1
     for (int i = 0; i < _rows; ++i) {
@@ -82,9 +82,29 @@ class BlockMatrix {
     m_block.get()[row * _cols + col] = val;
   }
      
-  template <typename Archive>
-  void serialize(Archive& ar) {}
 };
+
+namespace madness {
+  namespace archive {
+    template <class Archive, typename T>
+    struct ArchiveStoreImpl<Archive, BlockMatrix<T>> {
+      static inline void store(const Archive& ar, const BlockMatrix<T>& bm) {
+        ar << bm.rows() << bm.cols();
+        ar << wrap(bm.get(), bm.rows() * bm.cols()); //BlockMatrix<T>(bm.rows(), bm.cols());
+      }
+    };
+  
+    template <class Archive, typename T>
+    struct ArchiveLoadImpl<Archive, BlockMatrix<T>> {
+      static inline void load(const Archive& ar, BlockMatrix<T>& bm) {
+        int rows, cols;
+        ar >> rows >> cols;
+        bm = BlockMatrix<T>(rows,cols);
+        ar >> wrap(bm.get(), bm.rows() * bm.cols()); //BlockMatrix<T>(bm.rows(), bm.cols());
+      }
+    };
+  }
+}
 
 template <typename T>
 std::ostream& operator<<(std::ostream& s, BlockMatrix<T>& m) {
@@ -135,10 +155,18 @@ class Matrix {
   bool operator!=(const Matrix& matrix) const { return (matrix.m != m); }
 
   //Return by value
-  BlockMatrix<T> operator()(int block_row, int block_col) { return m.get()[block_row * nb_col + block_col]; }
+  BlockMatrix<T> operator()(int block_row, int block_col) 
+  { 
+    return m.get()[block_row * nb_col + block_col]; 
+  }
 
   void operator()(int block_row, int block_col, BlockMatrix<T> val) {
-    m.get()[block_row * nb_col + block_col] = val;
+    for (int i = 0; i < b_rows; i++) {
+      for (int j = 0; j < b_cols; j++) {
+        m.get()[block_row * nb_col + block_col](i,j,val(i,j));
+      }
+    }
+    //m.get()[block_row * nb_col + block_col] = val;
   }
 
   void print() {
@@ -148,7 +176,4 @@ class Matrix {
       }
     }
   }
-
-  template <typename Archive>
-  void serialize(Archive& ar) {}
 };
