@@ -12,8 +12,9 @@
 #include <tuple>
 #include <utility>
 #include "blockmatrix.h"
+#include "../ttg/util/bug.h"
 
-// #include <omp.h> //
+//#include <omp.h> //
 
 #include "FW-APSP/FloydIterativeKernelDF.h"        // contains the iterative kernel
 #include "FW-APSP/FloydRecursiveSerialKernelDF.h"  // contains the recursive but serial kernels
@@ -82,30 +83,30 @@ std::ostream& operator<<(std::ostream& s, const Control ctl) {
 
 template <typename T>
 class Initiator : public Op<int,
-                            std::tuple<Out<Key, BlockMatrix<T>>>//, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
-                                       //Out<Key, BlockMatrix<T>>>,
-                            ,Initiator<T>> {
+                            std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
+                            Out<Key, BlockMatrix<T>>>,
+                            Initiator<T>> {
   using baseT = Op<int,
-                   std::tuple<Out<Key, BlockMatrix<T>>>, //Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
-                              //Out<Key, BlockMatrix<T>>>,
+                   std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
+                              Out<Key, BlockMatrix<T>>>,
                    Initiator>;
   Matrix<T>* adjacency_matrix_ttg;
 
  public:
   Initiator(Matrix<T>* adjacency_matrix_ttg, const std::string& name)
-      : baseT(name, {}, {"outA"}//, "outB", "outC", "outD"}
+      : baseT(name, {}, {"outA", "outB", "outC", "outD"}
       ), adjacency_matrix_ttg(adjacency_matrix_ttg) {}
   Initiator(Matrix<T>* adjacency_matrix_ttg, const typename baseT::output_edges_type& outedges, const std::string& name)
-      : baseT(edges(), outedges, name, {}, {"outA"})//, "outB", "outC", "outD"})
+      : baseT(edges(), outedges, name, {}, {"outA", "outB", "outC", "outD"})
       , adjacency_matrix_ttg(adjacency_matrix_ttg) {}
 
-  ~Initiator() { std::cout << "Initiator destructor\n"; }
+  ~Initiator() {}
 
   void op(const int& iterations, typename baseT::output_terminals_type& out) {
     // making x_ready for all the blocks (for function calls A, B, C, and D)
     // This triggers for the immediate execution of function A at tile [0, 0]. But
     // functions B, C, and D have other dependencies to meet before execution; They wait
-    /*for (int i = 0; i < iterations; ++i) {
+    for (int i = 0; i < iterations; ++i) {
       for (int j = 0; j < iterations; ++j) {
         if (i == 0 && j == 0) {  // A function call
           ::send<0>(Key(std::make_pair(std::make_pair(i, j), 0)), (*adjacency_matrix_ttg)(i, j), out);
@@ -117,8 +118,8 @@ class Initiator : public Op<int,
           ::send<3>(Key(std::make_pair(std::make_pair(i, j), 0)), (*adjacency_matrix_ttg)(i, j), out);
         }
       }
-    }*/
-    ::send<0>(Key(std::make_pair(std::make_pair(0, 0), 0)), (*adjacency_matrix_ttg)(0, 0), out);
+    }
+    //::send<0>(Key(std::make_pair(std::make_pair(0, 0), 0)), (*adjacency_matrix_ttg)(0, 0), out);
   }
 };
 
@@ -131,17 +132,22 @@ class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
   std::string kernel_type;
   int recursive_fan_out;
   int base_size;
+  bool verify_results;
+  T* adjacency_matrix_serial;
 
  public:
   Finalizer(Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
-            int recursive_fan_out, int base_size, const std::string& name)
+            int recursive_fan_out, int base_size, const std::string& name,
+            T* adjacency_matrix_serial, bool verify_results = false)
       : baseT(name, {"input"}, {})
       , result_matrix_ttg(result_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
       , kernel_type(kernel_type)
       , recursive_fan_out(recursive_fan_out)
-      , base_size(base_size) {}
+      , base_size(base_size) 
+      , verify_results(verify_results)
+      , adjacency_matrix_serial(adjacency_matrix_serial) {}
 
   Finalizer(Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
             int recursive_fan_out, int base_size, const typename baseT::input_edges_type& inedges,
@@ -159,9 +165,39 @@ class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
           typename baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
+    int block_size = problem_size / blocking_factor;
 
+    BlockMatrix<T> bm = get<0>(t);
+    //cout << "[" << I << "," << J << "] : " << bm << endl;
+    bool equal = true;
+    if (verify_results) {
+      int block_size = problem_size / blocking_factor;
+      for (int i = 0; i < problem_size; ++i) {
+        int row = i * problem_size;
+        int blockX = i / block_size;
+        if (blockX == I) {
+          int x = i % block_size;
+          for (int j = 0; j < problem_size; ++j) {
+            int blockY = j / block_size;
+            if (blockY == J) {
+              int y = j % block_size;
+              double v1 = bm(x,y);
+              double v2 = adjacency_matrix_serial[row + j];
+              if (fabs(v1 - v2) > numeric_limits<double>::epsilon()) {
+                cout << "ERROR in block [" << I << "," << J << "], element[" << i << ", " << j << "]: " << v2 << "!=" << v1 << endl;
+                equal = false;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
     // Use std::forward to forward a decay of reference types? Read about this.
-    (*result_matrix_ttg)(I, J, get<0>(t));  // Store the result block in the matrix
+    //BlockMatrix<T> bm (block_size, block_size);
+    //(madness::archive::wrap(bm.get(), block_size * block_size));
+    //cout << bm << endl;
+    //(*result_matrix_ttg)(I, J, get<0>(t));  // Store the result block in the matrix
   }
 };
 
@@ -216,17 +252,18 @@ class FuncA : public Op<Key,
     if (kernel_type == "iterative") {
       // cout << "FuncA" << I << " " << J << " " << K << endl;
       m_ij = floyd_iterative_kernel(problem_size / blocking_factor, (get<0>(t)), (get<0>(t)), (get<0>(t)));
+      //cout << "A[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
     }
 
     // Making u_ready/v_ready for all the B/C function calls in the CURRENT iteration
     for (int l = 0; l < blocking_factor; ++l) {
       if (l != K) {
-        if (K == 0) {
+        /*if (K == 0) {
           // B calls - x_ready
           ::send<1>(Key(std::make_pair(std::make_pair(I, l), K)), (*adjacency_matrix_ttg)(I,l), out);
           // C calls - x_ready
           ::send<2>(Key(std::make_pair(std::make_pair(l, J), K)), (*adjacency_matrix_ttg)(l,J), out);
-        }
+        }*/
         // B calls
         // cout << "Send " << I << " " << l << " " << K << endl;
         ::send<4>(Key(std::make_pair(std::make_pair(I, l), K)), m_ij, out);
@@ -251,8 +288,10 @@ class FuncA : public Op<Key,
                 // cout << "Send " << I << " " << J << " " << K << endl;
         ::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
       }
-    } else
+    } else {
+      //cout << "A[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
       ::send<6>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
+    }
   }
 };
 
@@ -305,13 +344,14 @@ class FuncB : public Op<Key,
     if (kernel_type == "iterative") {
       // cout << "FuncB" << I << " " << J << " " << K << endl;
       m_ij = floyd_iterative_kernel(problem_size / blocking_factor, (get<0>(t)), (get<1>(t)), (get<0>(t)));
+      //cout << "B[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
     }
 
     // Making v_ready for all the D function calls in the CURRENT iteration
     for (int i = 0; i < blocking_factor; ++i) {
       if (i != I) {
-        if (K == 0)
-          ::send<3>(Key(std::make_pair(std::make_pair(i, J), K)), (*adjacency_matrix_ttg)(i,J), out);
+        //if (K == 0)
+          //::send<3>(Key(std::make_pair(std::make_pair(i, J), K)), (*adjacency_matrix_ttg)(i,J), out);
         // cout << "Send " << i << " " << J << " " << K << endl;
         ::send<4>(Key(std::make_pair(std::make_pair(i, J), K)), m_ij, out);
       }
@@ -332,8 +372,10 @@ class FuncB : public Op<Key,
                 // cout << "Send " << I << " " << J << " " << K << endl;
         ::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
       }
-    } else
+    } else {
+      //cout << "B[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
       ::send<5>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
+    }
   }
 };
 
@@ -386,6 +428,7 @@ class FuncC : public Op<Key,
     if (kernel_type == "iterative") {
       // cout << "FuncC" << I << " " << J << " " << K << endl;
       m_ij = floyd_iterative_kernel(problem_size / blocking_factor, (get<0>(t)), (get<0>(t)), (get<1>(t)));
+      //cout << "C[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
     }
 
     // Making u_ready for all the D function calls in the CURRENT iteration
@@ -412,8 +455,10 @@ class FuncC : public Op<Key,
                 // cout << "Send " << I << " " << J << " " << K << endl;
         ::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
       }
-    } else
+    } else {
+      //cout << "C[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
       ::send<5>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
+    }
   }
 };
 
@@ -467,6 +512,7 @@ class FuncD : public Op<Key,
     if (kernel_type == "iterative") {
       // cout << "FuncD" << I << " " << J << " " << K << endl;
       m_ij = floyd_iterative_kernel(problem_size / blocking_factor, (get<0>(t)), (get<2>(t)), (get<1>(t)));
+      //cout << "D[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
     }
 
     // making x_ready for the computation on the SAME block in the NEXT iteration
@@ -484,8 +530,10 @@ class FuncD : public Op<Key,
                 // cout << "Send " << I << " " << J << " " << K << endl;
         ::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
       }
-    } else
+    } else {
+      //cout << "D[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
       ::send<4>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
+    }
   }
 };
 
@@ -504,20 +552,21 @@ class FloydWarshall {
 
  public:
   FloydWarshall(Matrix<T>* adjacency_matrix_ttg, Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor,
-                const std::string& kernel_type, int recursive_fan_out, int base_size)
+                const std::string& kernel_type, int recursive_fan_out, int base_size, T* adjacency_matrix_serial,
+                bool verify_results = false)
       : initiator(adjacency_matrix_ttg, "initiator")
       , funcA(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcA")
       , funcB(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcB")
       , funcC(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcC")
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
       , finalizer(result_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
-                  "finalizer")
+                  "finalizer", adjacency_matrix_serial, verify_results)
       , world(madness::World::get_default())
       , blocking_factor(blocking_factor) {
     initiator.template out<0>()->connect(funcA.template in<0>());
-    //initiator.template out<1>()->connect(funcB.template in<0>());
-    //initiator.template out<2>()->connect(funcC.template in<0>());
-    //initiator.template out<3>()->connect(funcD.template in<0>());
+    initiator.template out<1>()->connect(funcB.template in<0>());
+    initiator.template out<2>()->connect(funcC.template in<0>());
+    initiator.template out<3>()->connect(funcD.template in<0>());
 
     funcA.template out<0>()->connect(funcA.template in<0>());
     funcA.template out<1>()->connect(funcB.template in<0>());
@@ -595,14 +644,18 @@ int main(int argc, char** argv) {
   World world(SafeMPI::COMM_WORLD);
   set_default_world(world);
 
-  // world.taskq.add(world.rank(), hi);
+  using mpqc::Debugger;
+  auto debugger = std::make_shared<Debugger>();
+  Debugger::set_default_debugger(debugger);
+  debugger->set_exec(argv[0]);
+  debugger->set_prefix(ttg_default_execution_context().rank());
+  debugger->set_cmd("lldb_xterm");
+
   world.gop.fence();
 
   for (int arg = 1; arg < argc; ++arg) {
     if (strcmp(argv[arg], "-dx") == 0) xterm_debug(argv[0], 0);
   }
-
-  OpBase::set_trace_all(false);
 
   // NEW IMPLEMENTATION
   int problem_size;
@@ -624,15 +677,14 @@ int main(int argc, char** argv) {
 
   Matrix<double>* m = new Matrix<double>(n_brows, n_bcols, block_size, block_size);
   Matrix<double>* r = new Matrix<double>(n_brows, n_bcols, block_size, block_size);
-  // m->fill();
 
   if (verify_results) {
     adjacency_matrix_serial = (double*)malloc(sizeof(double) * problem_size * problem_size);
   }
-  // adjacency_matrix_ttg = (double*) malloc(sizeof(double) * problem_size * problem_size);
+   
   init_square_matrix(problem_size, blocking_factor, verify_results, adjacency_matrix_serial, m);
-  // m->print();
-
+  
+  //Run in every process to be able to verify? Is there another way?
   // Calling the iterative fw-apsp
   if (verify_results) {
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
@@ -645,29 +697,29 @@ int main(int argc, char** argv) {
   // Running the ttg version
   std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
   // Calling the blocked implementation of FW-APSP algorithm on ttg runtime
-  FloydWarshall fw_apsp(m, r, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size);
-  std::cout << fw_apsp.dot() << std::endl;
+  FloydWarshall fw_apsp(m, r, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
+                        adjacency_matrix_serial, verify_results);
+  //std::cout << fw_apsp.dot() << std::endl;
   fw_apsp.start();
   fw_apsp.fence();
   std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-  cout << "blocked ttg (data-flow) fw-apsp took: " << duration / 1000000.0 << " seconds" << endl;
+  if (world.rank() == 0)
+    cout << "blocked ttg (data-flow) fw-apsp took: " << duration / 1000000.0 << " seconds" << endl;
 
-  if (verify_results) {
+  /*if (verify_results && world.rank() == 0) {
+    r->print();
     if (equals(r, adjacency_matrix_serial, problem_size, blocking_factor)) {
       cout << "Serial and TTG implementation matches!" << endl;
     } else {
       cout << "Serial and TTG implementation DOESN\"T match!" << endl;
     }
-  }
+  }*/
 
   // deallocating the allocated memories
   if (verify_results) {
     free(adjacency_matrix_serial);
   }
-  // print_square_matrix(problem_size, blocking_factor, verify_results, adjacency_matrix_serial);
-  cout << endl << endl << endl;
-  // m->print();
   delete m;
   return 0;
 }
@@ -711,7 +763,7 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
 
 void init_square_matrix(int problem_size, int blocking_factor, bool verify_results, double* adjacency_matrix_serial,
                         Matrix<double>* m) {
-  srand(123);  // srand(time(nullptr));
+  //srand(123);  // srand(time(nullptr));
   int block_size = problem_size / blocking_factor;
   for (int i = 0; i < problem_size; ++i) {
     int row = i * problem_size;
@@ -721,7 +773,7 @@ void init_square_matrix(int problem_size, int blocking_factor, bool verify_resul
       int blockY = j / block_size;
       int y = j % block_size;
       if (i != j) {
-        double value = rand() % 100 + 1;
+        double value = i * blocking_factor + j; //rand() % 100 + 1;
         ((*m)(blockX, blockY))(x, y, value);
         if (verify_results) {
           adjacency_matrix_serial[row + j] = value;
