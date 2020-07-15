@@ -11,6 +11,8 @@
 #include <string> /* string */
 #include <tuple>
 #include <utility>
+#include <algorithm>
+#include <execution>
 #include "blockmatrix.h"
 #include "../ttg/util/bug.h"
 
@@ -106,7 +108,22 @@ class Initiator : public Op<int,
     // making x_ready for all the blocks (for function calls A, B, C, and D)
     // This triggers for the immediate execution of function A at tile [0, 0]. But
     // functions B, C, and D have other dependencies to meet before execution; They wait
-    for (int i = 0; i < iterations; ++i) {
+    std::for_each(std::execution::par, adjacency_matrix_ttg->matrix().begin(), adjacency_matrix_ttg->matrix().end(), 
+      [&out](const std::pair<std::pair<int,int>, BlockMatrix<T>>& kv) {
+        auto [i,j] = kv.first;
+        BlockMatrix<T> bm = kv.second;
+        if (i == 0 && j == 0) {  // A function call
+          ::send<0>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
+        } else if (i == 0) {  // B function call
+          ::send<1>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
+        } else if (j == 0) {  // C function call
+          ::send<2>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
+        } else {  // D function call
+          ::send<3>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
+        }
+    });
+      
+    /*for (int i = 0; i < iterations; ++i) {
       for (int j = 0; j < iterations; ++j) {
         if (i == 0 && j == 0) {  // A function call
           ::send<0>(Key(std::make_pair(std::make_pair(i, j), 0)), (*adjacency_matrix_ttg)(i, j), out);
@@ -118,7 +135,7 @@ class Initiator : public Op<int,
           ::send<3>(Key(std::make_pair(std::make_pair(i, j), 0)), (*adjacency_matrix_ttg)(i, j), out);
         }
       }
-    }
+    }*/
     //::send<0>(Key(std::make_pair(std::make_pair(0, 0), 0)), (*adjacency_matrix_ttg)(0, 0), out);
   }
 };
