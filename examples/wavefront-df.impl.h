@@ -36,11 +36,11 @@ inline BlockMatrix<T> stencil_computation(int i, int j, int M, int N, BlockMatri
   BlockMatrix<T> current = bm;
   for (int ii = 0; ii < MB; ++ii) {
     for (int jj = 0; jj < NB; ++jj) {
-      current(ii,jj,(current(ii,jj) + ((ii == 0) ? (i > 0 ? top(MB - 1, jj) : 0.0) : current(ii - 1, jj))));
-      current(ii,jj,(current(ii,jj) + ((ii == MB - 1) ? (i < M - 1 ? bottom(0, jj) : 0.0) : current(ii + 1, jj))));
-      current(ii,jj,(current(ii,jj) + ((jj == 0) ? (j > 0 ? left(ii, NB - 1) : 0.0) : current(ii, jj - 1))));
-      current(ii,jj,(current(ii,jj) + ((jj == NB - 1) ? (j < N - 1 ? right(ii, 0) : 0.0) : current(ii, jj + 1))));
-      current(ii,jj, current(ii,jj) * 0.25);
+      current(ii,jj) = (current(ii,jj) + ((ii == 0) ? (i > 0 ? top(MB - 1, jj) : 0.0) : current(ii - 1, jj)));
+      current(ii,jj) = (current(ii,jj) + ((ii == MB - 1) ? (i < M - 1 ? bottom(0, jj) : 0.0) : current(ii + 1, jj)));
+      current(ii,jj) = (current(ii,jj) + ((jj == 0) ? (j > 0 ? left(ii, NB - 1) : 0.0) : current(ii, jj - 1)));
+      current(ii,jj) = (current(ii,jj) + ((jj == NB - 1) ? (j < N - 1 ? right(ii, 0) : 0.0) : current(ii, jj + 1)));
+      current(ii,jj) = current(ii,jj) * 0.25;
     }
   }
   return current;
@@ -58,7 +58,7 @@ void wavefront_serial(Matrix<T>* m, Matrix<T>* result, int n_brows, int n_bcols)
       if (j > 0) left = ((*m)(i, j - 1));
       if (i > 0) top = ((*m)(i - 1, j));
       
-      (*result)(i,j,stencil_computation(i, j, n_brows, n_bcols, ((*m)(i,j)), (left), (top), (right), (bottom)));
+      (*result)(i,j) = stencil_computation(i, j, n_brows, n_bcols, ((*m)(i,j)), (left), (top), (right), (bottom));
     }
   }
 }
