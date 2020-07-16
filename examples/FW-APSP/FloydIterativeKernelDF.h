@@ -13,7 +13,7 @@ BlockMatrix<T> floyd_iterative_kernel(int block_size, BlockMatrix<T> m_ij,
 		//#pragma ivdep
     for(int i = 0; i < block_size; ++i) {
 			for(int j = 0; j < block_size; ++j) {
-				m_ij(i,j,min(m_ij(i,j), m_ik(i,k) + m_kj(k,j)));
+				m_ij(i,j) = min(m_ij(i,j), m_ik(i,k) + m_kj(k,j));
       }
 		}
 	}

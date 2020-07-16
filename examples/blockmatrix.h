@@ -77,9 +77,9 @@ class BlockMatrix {
 
     return notequal;
   }
-
+ 
   //Return by value
-  T operator() (int row, int col) { return m_block.get()[row * _cols + col]; }
+  T& operator() (int row, int col) { return m_block.get()[row * _cols + col]; }
   
   void operator() (int row, int col, T val) {
     m_block.get()[row * _cols + col] = val;
@@ -160,12 +160,12 @@ class Matrix {
   int rows() const { return nb_row; }
   // Return # of block cols
   int cols() const { return nb_col; }
-  std::unordered_map<std::pair<int,int>, BlockMatrix<T>, pair_hash> matrix() const { return m; }
+  std::unordered_map<std::pair<int,int>, BlockMatrix<T>, pair_hash> get() const { return m; }
     
   void fill() {
     for (int i = 0; i < nb_row; i++)
       for (int j = 0; j < nb_col; j++) 
-        m[i * nb_col + j].fill();
+        m[std::make_pair(i,j)].fill();
   }
 
   bool operator==(const Matrix& matrix) const { return (matrix.m == m); }
@@ -178,19 +178,14 @@ class Matrix {
     return m[std::make_pair(block_row,block_col)];
   }
 
-  void operator()(int block_row, int block_col, BlockMatrix<T> val) {
-    for (int i = 0; i < b_rows; i++) {
-      for (int j = 0; j < b_cols; j++) {
-        m[std::make_pair(block_row,block_col)] = val(i,j);
-      }
-    }
-    //m.get()[block_row * nb_col + block_col] = val;
-  }
+  /*void operator=(int block_row, int block_col, BlockMatrix<T> val) {
+    m[std::make_pair(block_row,block_col)] = val;
+  }*/
 
   void print() {
     for (int i = 0; i < nb_row; i++) {
       for (int j = 0; j < nb_col; j++) {
-        std::cout << m[i * nb_col + j];
+        std::cout << m[std::make_pair(i,j)];
       }
     }
   }

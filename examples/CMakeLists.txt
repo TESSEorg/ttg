@@ -44,6 +44,10 @@ if (TARGET MADworld)
   add_executable (ge-df-mad madness/ge_df.cc ge_df.impl.h)
   target_link_libraries(ge-df-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
+  # Smith Waterman Algorithm
+  add_executable (sw-mad madness/sw.cc sw.impl.h)
+  target_link_libraries(sw-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
   # sparse matmul
   if (EIGEN3_FOUND)
     add_executable (spmm-mad madness/spmm.cc spmm.impl.h)
