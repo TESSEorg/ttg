@@ -199,25 +199,23 @@ namespace parsec {
 }  // namespace parsec
 
 extern "C" {
-typedef void (*parsec_static_op_t)(void *);  // static_op will be cast to this type
+    typedef void (*parsec_static_op_t)(void *);  // static_op will be cast to this type
 
-typedef struct my_op_s {
-  parsec_task_t parsec_task;
-  int32_t in_data_count;
-  // TODO need to augment PaRSEC backend's my_op_s by stream size info, etc.  ... in_data_count will need to be replaced by something like this
-//  int counter;                            // Tracks the number of arguments set
-//  std::array<std::size_t, numins> nargs;  // Tracks the number of expected values (0 = finalized)
-//  std::array<std::size_t, numins>
-//      stream_size;                        // Expected number of values to receive, only used for streaming inputs
-//  // (0 = unbounded stream)
-  parsec_hash_table_item_t op_ht_item;
-  parsec_static_op_t function_template_class_ptr[::ttg::runtime_traits<::ttg::Runtime::PaRSEC>::num_execution_spaces];
-  void *object_ptr;
-  void (*static_set_arg)(int, int);
-  parsec_key_t key;
-  void *user_tuple; /* user_tuple will past the end of my_op_s (to allow for proper alignment)
-                     * This points to the beginning of the tuple. */
-} my_op_t;
+    typedef struct my_op_s {
+        parsec_task_t parsec_task;
+        int32_t in_data_count;
+        // TODO need to augment PaRSEC backend's my_op_s by stream size info, etc.  ... in_data_count will need to be replaced by something like this
+        //  int counter;                            // Tracks the number of arguments set
+        //  std::array<std::size_t, numins> nargs;  // Tracks the number of expected values (0 = finalized)
+        //  std::array<std::size_t, numins>
+        //      stream_size;                        // Expected number of values to receive, only used for streaming inputs
+        //  // (0 = unbounded stream)
+        parsec_hash_table_item_t op_ht_item;
+        parsec_static_op_t function_template_class_ptr[::ttg::runtime_traits<::ttg::Runtime::PaRSEC>::num_execution_spaces];
+        void *object_ptr;
+        void (*static_set_arg)(int, int);
+        parsec_key_t key;
+    } my_op_t;
 }
 
 extern "C" {
@@ -442,7 +440,7 @@ namespace parsec {
       // extend this to tell PaRSEC how the data is being used (even is this is to increment the counter only)
       template <typename Result, typename Wrapper>
       static Result unwrap_to(Wrapper &&wrapper) {
-          return *static_cast<Result*>(wrapper.data_copy->device_private);
+          return static_cast<Result>(*reinterpret_cast<std::remove_reference_t<Result>*>(wrapper.data_copy->device_private));
       }
       // this wraps a (moved) copy T must be copyable and/or movable (depends on the use)
       template <typename T>
@@ -470,6 +468,7 @@ namespace parsec {
       using output_edges_type = typename ::ttg::terminals_to_edges<output_terminalsT>::type;
 
       // these are aware of result type, can communicate this info back to PaRSEC
+#if 0
       template <std::size_t i, typename resultT>
       static resultT get(input_values_tuple_type &intuple) {
         return unwrap_to<resultT>(std::get<i>(intuple));
@@ -482,20 +481,21 @@ namespace parsec {
       static resultT get(input_values_tuple_type &&intuple) {
         return unwrap_to<resultT>(std::get<i>(intuple));
       };
+#endif
       template <std::size_t i>
       static auto &get(input_values_tuple_type &intuple) {
           using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
-          return unwrap_to<valueT>(std::get<i>(intuple));
+          return unwrap_to<valueT&>(std::get<i>(intuple));
       };
       template <std::size_t i>
       static const auto &get(const input_values_tuple_type &intuple) {
           using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
-          return unwrap_to<valueT>(std::get<i>(intuple));
+          return unwrap_to<valueT&>(std::get<i>(intuple));
       };
       template <std::size_t i>
       static auto &&get(input_values_tuple_type &&intuple) {
           using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
-          return unwrap_to<valueT>(std::get<i>(intuple));
+          return unwrap_to<valueT&&>(std::get<i>(intuple));
       };
 
      private:
@@ -532,6 +532,11 @@ namespace parsec {
         else abort();
       }
 
+      template <std::size_t...IS>
+      static auto make_tuple_from_array(my_op_t *task, std::index_sequence<IS...>) {
+          return input_values_tuple_type{{task->parsec_task.data[IS].data_in ...}};
+      }
+        
       template <::ttg::ExecutionSpace Space>
       static void static_op(parsec_task_t *my_task) {
 
@@ -546,15 +551,15 @@ namespace parsec {
         }
 
         if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-                baseobj->template op<Space>(*(keyT*)task->key, std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
-                  obj->output_terminals);
+                input_values_tuple_type input = make_tuple_from_array(task, std::make_index_sequence<numins>{});
+                baseobj->template op<Space>(*(keyT*)task->key, std::move(input), obj->output_terminals);
         } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
                 baseobj->template op<Space>(*(keyT*)task->key, obj->output_terminals);
         } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          baseobj->template op<Space>(std::move(*static_cast<input_values_tuple_type *>(task->user_tuple)),
-                  obj->output_terminals);
+                input_values_tuple_type input = make_tuple_from_array(task, std::make_index_sequence<numins>{});
+                baseobj->template op<Space>(std::move(input), obj->output_terminals);
         } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-          baseobj->template op<Space>(obj->output_terminals);
+                baseobj->template op<Space>(obj->output_terminals);
         } else abort();
 
         if (obj->tracing()) {
@@ -757,14 +762,6 @@ namespace parsec {
             throw std::logic_error("bad set arg");
           }
 
-          void *task_body_tail_ptr =
-              reinterpret_cast<void *>(reinterpret_cast<intptr_t>(task) + static_cast<intptr_t>(sizeof(my_op_t)));
-          std::size_t task_body_tail_size = sizeof(input_values_tuple_type) + alignment_of_input_tuple;
-          task->user_tuple = std::align(alignment_of_input_tuple, sizeof(input_values_tuple_type), task_body_tail_ptr,
-                                        task_body_tail_size);
-          assert(task->user_tuple != nullptr);
-          input_values_tuple_type *tuple = static_cast<input_values_tuple_type *>(task->user_tuple);
-
           // Q. do we need to worry about someone calling set_arg "directly", i.e. through BaseOp::send and passing their
           // own (non-PaRSEC) value rather than value owned by PaRSEC?
           auto parsec_wrapper = wrap(std::forward<Value>(value));   
@@ -772,8 +769,8 @@ namespace parsec {
           // of the i-th argument of *tuple is valueT = <int>. The compiler does not know how
           // to convert a data_wrapper_t<const int> into a data_wrapper_t<int>, and complains about that...
           // and I don't know how to specify it...
-          std::get<i>(*tuple) = parsec_wrapper; // tuple holds pointers already
           parsec_data_copy_t *copy = parsec_wrapper.data_copy;
+          task->parsec_task.data[i].data_in = copy;
           // uncomment this if you want to test deserialization ... also comment out the placement new above
           //    auto* ddesc = ::ttg::get_data_descriptor<valueT>();
           //    void* value_ptr = (void*)&value;
