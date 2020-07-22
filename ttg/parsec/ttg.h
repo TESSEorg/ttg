@@ -63,7 +63,7 @@ namespace parsec {
           try {
               auto op_pair = static_id_to_op_map.at( op_id );
               static_map_mutex.unlock();
-              tp->tdm.module->incoming_message_start(tp, src_rank, NULL, NULL, 0, NULL, MPI_COMM_WORLD);
+              tp->tdm.module->incoming_message_start(tp, src_rank, NULL, NULL, 0, NULL);
               static_set_arg_fct = op_pair.first;
               static_set_arg_fct(data, size, op_pair.second);
               tp->tdm.module->incoming_message_end(tp, NULL);
@@ -837,7 +837,7 @@ namespace parsec {
         pos = dValue->pack_payload(&value, sizeof(Value), pos, msg->bytes);
         parsec_taskpool_t *tp = world.taskpool();
         tp->tdm.module->outgoing_message_start(tp, owner, NULL);       
-        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0, MPI_COMM_WORLD);
+        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
         parsec_ce.send_am(&parsec_ce, world.parsec_ttg_tag(), owner, static_cast<void*>(msg), sizeof(msg_header_t)+pos);
         delete msg;
       }
@@ -887,7 +887,7 @@ namespace parsec {
           pos = dKey->pack_payload(&key, sizeof(Key), pos, msg->bytes);
           parsec_taskpool_t *tp = world.taskpool();
           tp->tdm.module->outgoing_message_start(tp, owner, NULL);       
-          tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0, MPI_COMM_WORLD);
+          tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
           parsec_ce.send_am(&parsec_ce, world.parsec_ttg_tag(), owner, static_cast<void*>(msg), sizeof(msg_header_t)+pos);
           delete msg;
         }
