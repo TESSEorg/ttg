@@ -108,6 +108,7 @@ class Initiator : public Op<int,
     // making x_ready for all the blocks (for function calls A, B, C, and D)
     // This triggers for the immediate execution of function A at tile [0, 0]. But
     // functions B, C, and D have other dependencies to meet before execution; They wait
+
     std::for_each(std::execution::par, adjacency_matrix_ttg->get().begin(), adjacency_matrix_ttg->get().end(), 
       [&out](const std::pair<std::pair<int,int>, BlockMatrix<T>>& kv) {
         auto [i,j] = kv.first;

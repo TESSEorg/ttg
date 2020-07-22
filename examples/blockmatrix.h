@@ -2,8 +2,6 @@
 #include <unordered_map>
 #include <madness/world/archive.h>
 
-
-//std::unordered_map, container to hold all the blocks
 template <typename T>
 class BlockMatrix {
  private:
@@ -80,6 +78,9 @@ class BlockMatrix {
  
   //Return by value
   T& operator() (int row, int col) { return m_block.get()[row * _cols + col]; }
+
+  //Return by value
+  T operator() (int row, int col) { return m_block.get()[row * _cols + col]; }
   
   void operator() (int row, int col, T val) {
     m_block.get()[row * _cols + col] = val;
