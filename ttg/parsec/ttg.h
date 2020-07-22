@@ -533,8 +533,11 @@ namespace parsec {
       }
 
       template <std::size_t...IS>
-      static auto make_tuple_from_array(my_op_t *task, std::index_sequence<IS...>) {
-          return input_values_tuple_type{{task->parsec_task.data[IS].data_in ...}};
+      static auto make_tuple_of_ref_from_array(my_op_t *task, std::index_sequence<IS...>) {
+          return input_values_tuple_type{{
+             static_cast<typename std::tuple_element<IS, input_values_full_tuple_type>::type&>(
+                   *reinterpret_cast<typename std::tuple_element<IS, input_values_full_tuple_type>::type*>(
+                         task->parsec_task.data[IS].data_in)) ... }};
       }
         
       template <::ttg::ExecutionSpace Space>
@@ -551,12 +554,12 @@ namespace parsec {
         }
 
         if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-                input_values_tuple_type input = make_tuple_from_array(task, std::make_index_sequence<numins>{});
+                input_values_tuple_type input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numins>{});
                 baseobj->template op<Space>(*(keyT*)task->key, std::move(input), obj->output_terminals);
         } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
                 baseobj->template op<Space>(*(keyT*)task->key, obj->output_terminals);
         } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
-                input_values_tuple_type input = make_tuple_from_array(task, std::make_index_sequence<numins>{});
+                input_values_tuple_type input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numins>{});
                 baseobj->template op<Space>(std::move(input), obj->output_terminals);
         } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_unwrapped_values_tuple_type>) {
                 baseobj->template op<Space>(obj->output_terminals);
