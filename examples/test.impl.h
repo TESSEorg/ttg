@@ -23,7 +23,7 @@ class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
 
   static constexpr const bool have_cuda_op = true;
 
-  void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
+  void op(const keyT &key, const baseT::input_refs_tuple_type& t, baseT::output_terminals_type &out) {
     // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int
     auto &value = baseT::get<0>(t);
     ::ttg::print("A got value ", value);
@@ -34,7 +34,7 @@ class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
     }
   }
 
-  void op_cuda(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
+  void op_cuda(const keyT &key, const baseT::input_refs_tuple_type& t, baseT::output_terminals_type &out) {
     // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int
     auto &value = baseT::get<0>(t);
     ::ttg::print("A got value ", value);
@@ -70,7 +70,7 @@ class Consumer : public Op<void, std::tuple<>, Consumer, const int> {
 
  public:
   Consumer(const std::string &name) : baseT(name, {"input"}, {}) {}
-  void op(baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
+  void op(const baseT::input_refs_tuple_type& t, baseT::output_terminals_type &out) {
     ::ttg::print("consumed ", baseT::get<0>(t));
   }
 
@@ -107,6 +107,7 @@ class Everything {
   }
 };
 
+#if 0
 class EverythingBase {
   std::unique_ptr<OpBase> producer;
   std::unique_ptr<OpBase> a;
@@ -489,6 +490,8 @@ class Fibonacci {
 };
 #endif
 
+#endif
+
 int try_main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
 
@@ -512,6 +515,7 @@ int try_main(int argc, char **argv) {
 
     x.start();  // myusleep(100);
 
+#if 0
     // Next compose with base class pointers and verify destruction
     EverythingBase x1;
     x1.print();
@@ -648,6 +652,8 @@ int try_main(int argc, char **argv) {
 
     BroadcastTest b;
     b.start();
+
+#endif
 
     ttg_fence(ttg_default_execution_context());
     std::cout << "\nFence done\n";

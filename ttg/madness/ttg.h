@@ -159,8 +159,19 @@ namespace madness {
       default_keymap(World &world) : ::ttg::detail::default_keymap_impl<keyT>(world.mpi.size()) {}
     };
 
+    /// CRTP base for MADNESS-based Op classes
+    /// \tparam keyT a Key type
+    /// \tparam output_terminalsT
+    /// \tparam derivedT
+    /// \tparam input_valueTs pack of *value* types (no references; pointers are OK) encoding the types of input values
+    ///         flowing into this Op; a const type indicates nonmutating (read-only) use, nonconst type
+    ///         indicates mutating use (e.g. the corresponding input can be used as scratch, moved-from, etc.)
     template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
     class Op : public ::ttg::OpBase, public WorldObject<Op<keyT, output_terminalsT, derivedT, input_valueTs...>> {
+     public:
+      /// preconditions
+      static_assert((!std::is_reference_v<input_valueTs> && ...), "input_valueTs cannot contain reference types");
+
      private:
       World &world;
       ::ttg::meta::detail::keymap_t<keyT> keymap;
@@ -207,7 +218,9 @@ namespace madness {
       static_assert(::ttg::meta::is_none_void_v<input_valueTs...> || ::ttg::meta::is_last_void_v<input_valueTs...>, "at most one void input can be handled, and it must come last");
       // if have data inputs and (always last) control input, convert last input to Void to make logic easier
       using input_values_full_tuple_type = std::tuple<data_wrapper_t<::ttg::meta::void_to_Void_t<std::decay_t<input_valueTs>>>...>;
+      using input_refs_full_tuple_type = std::tuple<std::add_lvalue_reference_t<::ttg::meta::void_to_Void_t<input_valueTs>>...>;
       using input_values_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,input_values_full_tuple_type,typename ::ttg::meta::drop_last_n<input_values_full_tuple_type,std::size_t{1}>::type>;
+      using input_refs_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,input_refs_full_tuple_type,typename ::ttg::meta::drop_last_n<input_refs_full_tuple_type,std::size_t{1}>::type>;
       using input_unwrapped_values_tuple_type = input_values_tuple_type;
 
       using output_terminals_type = output_terminalsT;
@@ -239,11 +252,29 @@ namespace madness {
         std::array<std::size_t, numins>
             stream_size;             // Expected number of values to receive, to be used for streaming inputs
                                      // (0 = unbounded stream, >0 = bounded stream)
-        input_values_tuple_type t;   // The input values (does not include control)
+        input_values_tuple_type input_values;   // The input values (does not include control)
         derivedT *derived;           // Pointer to derived class instance
         std::conditional_t<::ttg::meta::is_void_v<keyT>,::ttg::Void,keyT> key;                    // Task key
 
-        OpArgs() : counter(numins), nargs(), stream_size(), t() { std::fill(nargs.begin(), nargs.end(), std::numeric_limits<std::size_t>::max()); }
+        OpArgs() : counter(numins), nargs(), stream_size(), input_values() {
+          std::fill(nargs.begin(), nargs.end(), std::numeric_limits<std::size_t>::max());
+        }
+
+        /// makes a tuple of references out of tuple of
+        template <typename ... Args, std::size_t... Is>
+        static std::tuple<std::add_lvalue_reference_t<Args>...>
+        make_lvrefs_tuple_impl(std::tuple<Args...>& inputs,
+                          std::index_sequence<Is...>) {
+          using result_type = std::tuple<std::add_lvalue_reference_t<Args>...>;
+          return result_type{std::get<Is>(inputs)...};
+        }
+
+        /// makes a tuple of references out of tuple of
+        template <typename ... Args>
+        static std::tuple<std::add_lvalue_reference_t<Args>...>
+        make_lvrefs_tuple(std::tuple<Args...>& inputs) {
+          return make_lvrefs_tuple_impl(inputs, std::index_sequence_for<Args...>{});
+        }
 
         void run(World &world) {
           // ::ttg::print("starting task");
@@ -251,20 +282,24 @@ namespace madness {
           using ::ttg::hash;
           opT::threaddata.key_hash = hash<decltype(key)>{}(key);
           opT::threaddata.call_depth++;
-            
+
           if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-            derived->op(key, std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
-          } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+            derived->op(key, make_lvrefs_tuple(input_values),
+                        derived->output_terminals);  // !!! NOTE converting input values to refs
+          } else if constexpr (!::ttg::meta::is_void_v<keyT> &&
+                               ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
             derived->op(key, derived->output_terminals);
-          } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-            derived->op(std::move(t), derived->output_terminals);  // !!! NOTE moving t into op
+          } else if constexpr (::ttg::meta::is_void_v<keyT> &&
+                               !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+            derived->op(make_lvrefs_tuple(input_values),
+                        derived->output_terminals);  // !!! NOTE converting input values to refs
           } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-            derived->op(derived->output_terminals);  // !!! NOTE moving t into op
-          }
-          else abort();
+            derived->op(derived->output_terminals);
+          } else
+            abort();
 
           opT::threaddata.call_depth--;
-          
+
           //::ttg::print("finishing task",opT::threaddata.call_depth);
         }
 
@@ -338,7 +373,7 @@ namespace madness {
             if constexpr (!::ttg::meta::is_void_v<valueT>) {  // for data values
               // have a value already? if not, set, otherwise reduce
               if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
-                this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
+                this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
                 // now have a value, reset nargs
                 if (args->stream_size[i] != 0) {
                   args->nargs[i] = args->stream_size[i];
@@ -348,8 +383,8 @@ namespace madness {
                 }
               } else {
                 valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
-                this->get<i, std::decay_t<valueT> &>(args->t) =
-                    std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->t), std::move(value_copy)));
+                this->get<i, std::decay_t<valueT> &>(args->input_values) =
+                    std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->input_values), std::move(value_copy)));
               }
             }
             else {
@@ -365,7 +400,7 @@ namespace madness {
             args->unlock();
           } else {  // this is a nonstreaming input => set the value
             if constexpr (!::ttg::meta::is_void_v<valueT>) {  // for data values
-              this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
+              this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
             }
             args->nargs[i] = 0;
             args->counter--;
@@ -385,11 +420,11 @@ namespace madness {
                 //::ttg::print("directly invoking:", get_name(), key, curhash, threaddata.key_hash, threaddata.call_depth);
                 opT::threaddata.call_depth++;
                 if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-                  static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
+                  static_cast<derivedT*>(this)->op(key, std::move(args->input_values), output_terminals); // Runs immediately
                 } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
                   static_cast<derivedT *>(this)->op(key, output_terminals); // Runs immediately
                 } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-                  static_cast<derivedT *>(this)->op(std::move(args->t), output_terminals); // Runs immediately
+                  static_cast<derivedT *>(this)->op(std::move(args->input_values), output_terminals); // Runs immediately
                 } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
                   static_cast<derivedT *>(this)->op(output_terminals); // Runs immediately
                 } else abort();
@@ -450,7 +485,7 @@ namespace madness {
             }
             // have a value already? if not, set, otherwise reduce
             if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
-              this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
+              this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
               // now have a value, reset nargs
               if (args->stream_size[i] != 0) {
                 args->nargs[i] = args->stream_size[i];
@@ -461,8 +496,8 @@ namespace madness {
             } else {
               valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
               // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
-              this->get<i, std::decay_t<valueT> &>(args->t) =
-                  std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->t), std::move(value_copy)));
+              this->get<i, std::decay_t<valueT> &>(args->input_values) =
+                  std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->input_values), std::move(value_copy)));
             }
             // update the counter if the stream is bounded
             // this assumes that the stream size is set before data starts flowing ... strong-typing streams will solve
@@ -476,7 +511,7 @@ namespace madness {
             }
             args->unlock();
           } else {  // this is a nonstreaming input => set the value
-            this->get<i, std::decay_t<valueT> &>(args->t) = std::forward<Value>(value);
+            this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
             args->nargs[i] = 0;
             args->counter--;
           }
