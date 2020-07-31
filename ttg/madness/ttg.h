@@ -256,24 +256,21 @@ namespace madness {
         derivedT *derived;           // Pointer to derived class instance
         std::conditional_t<::ttg::meta::is_void_v<keyT>,::ttg::Void,keyT> key;                    // Task key
 
+        /// makes a tuple of references out of tuple of
+        template <typename Tuple, std::size_t... Is>
+        static input_refs_tuple_type
+        make_input_refs_impl(Tuple&& inputs,
+                        std::index_sequence<Is...>) {
+          return input_refs_tuple_type{get<Is, std::tuple_element_t<Is, input_refs_tuple_type>>(std::forward<Tuple>(inputs))...};
+        }
+
+        /// makes a tuple of references out of input_values
+        input_refs_tuple_type make_input_refs() {
+          return make_input_refs_impl(this->input_values, std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{});
+        }
+
         OpArgs() : counter(numins), nargs(), stream_size(), input_values() {
           std::fill(nargs.begin(), nargs.end(), std::numeric_limits<std::size_t>::max());
-        }
-
-        /// makes a tuple of references out of tuple of
-        template <typename ... Args, std::size_t... Is>
-        static std::tuple<std::add_lvalue_reference_t<Args>...>
-        make_lvrefs_tuple_impl(std::tuple<Args...>& inputs,
-                          std::index_sequence<Is...>) {
-          using result_type = std::tuple<std::add_lvalue_reference_t<Args>...>;
-          return result_type{std::get<Is>(inputs)...};
-        }
-
-        /// makes a tuple of references out of tuple of
-        template <typename ... Args>
-        static std::tuple<std::add_lvalue_reference_t<Args>...>
-        make_lvrefs_tuple(std::tuple<Args...>& inputs) {
-          return make_lvrefs_tuple_impl(inputs, std::index_sequence_for<Args...>{});
         }
 
         void run(World &world) {
@@ -284,14 +281,14 @@ namespace madness {
           opT::threaddata.call_depth++;
 
           if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-            derived->op(key, make_lvrefs_tuple(input_values),
+            derived->op(key, this->make_input_refs(),
                         derived->output_terminals);  // !!! NOTE converting input values to refs
           } else if constexpr (!::ttg::meta::is_void_v<keyT> &&
                                ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
             derived->op(key, derived->output_terminals);
           } else if constexpr (::ttg::meta::is_void_v<keyT> &&
                                !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-            derived->op(make_lvrefs_tuple(input_values),
+            derived->op(this->make_input_refs(),
                         derived->output_terminals);  // !!! NOTE converting input values to refs
           } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
             derived->op(derived->output_terminals);
@@ -420,11 +417,11 @@ namespace madness {
                 //::ttg::print("directly invoking:", get_name(), key, curhash, threaddata.key_hash, threaddata.call_depth);
                 opT::threaddata.call_depth++;
                 if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-                  static_cast<derivedT*>(this)->op(key, std::move(args->input_values), output_terminals); // Runs immediately
+                  static_cast<derivedT*>(this)->op(key, args->make_input_refs(), output_terminals); // Runs immediately
                 } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
                   static_cast<derivedT *>(this)->op(key, output_terminals); // Runs immediately
                 } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-                  static_cast<derivedT *>(this)->op(std::move(args->input_values), output_terminals); // Runs immediately
+                  static_cast<derivedT *>(this)->op(args->make_input_refs(), output_terminals); // Runs immediately
                 } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
                   static_cast<derivedT *>(this)->op(output_terminals); // Runs immediately
                 } else abort();

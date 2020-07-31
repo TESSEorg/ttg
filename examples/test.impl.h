@@ -163,14 +163,13 @@ class Everything2 {
   }  // Ugh!
 };
 
-#if 0
 class Everything3 {
-  static void p(std::tuple<> &&, std::tuple<Out<keyT, int>> &out) {
+  static void p(const std::tuple<> &, std::tuple<Out<keyT, int>> &out) {
     ::ttg::print("produced ", 0);
     send<0>(0, int(0), out);
   }
 
-  static void a(const keyT &key, std::tuple<const int> &&t, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, const std::tuple<const int&> &t, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
     const auto value = std::get<0>(t);
     if (value >= 100) {
       sendv<0>(value, out);
@@ -179,7 +178,7 @@ class Everything3 {
     }
   }
 
-  static void c(std::tuple<const int> &&t, std::tuple<> &out) {
+  static void c(const std::tuple<const int&> &t, std::tuple<> &out) {
     ::ttg::print("consumed ", std::get<0>(t));
   }
 
@@ -306,7 +305,6 @@ class Everything5 {
   }
 };
 #endif  // !PaRSEC
-#endif
 
 class EverythingComposite {
   std::unique_ptr<OpBase> P;
@@ -358,9 +356,6 @@ class EverythingComposite {
         p->invoke();
   }  // Ugh!
 };
-
-#if 0
-void hi() { ::ttg::print("hi"); }
 
 class ReductionTest {
   static void generator(const int &key, std::tuple<Out<int, int>> &out) {
@@ -492,8 +487,6 @@ class Fibonacci {
 };
 #endif
 
-#endif
-
 int try_main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
 
@@ -538,7 +531,6 @@ int try_main(int argc, char **argv) {
     std::cout << y.dot() << std::endl;
     y.start();  // myusleep(100);
 
-#if 0
     // Next compose with wrappers using tuple API and edges
     Everything3 z;
     std::cout << z.dot() << std::endl;
@@ -654,8 +646,6 @@ int try_main(int argc, char **argv) {
 
     BroadcastTest b;
     b.start();
-
-#endif
 
     ttg_fence(ttg_default_execution_context());
     std::cout << "\nFence done\n";
