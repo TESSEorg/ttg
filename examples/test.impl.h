@@ -107,7 +107,6 @@ class Everything {
   }
 };
 
-#if 0
 class EverythingBase {
   std::unique_ptr<OpBase> producer;
   std::unique_ptr<OpBase> a;
@@ -164,6 +163,7 @@ class Everything2 {
   }  // Ugh!
 };
 
+#if 0
 class Everything3 {
   static void p(std::tuple<> &&, std::tuple<Out<keyT, int>> &out) {
     ::ttg::print("produced ", 0);
@@ -306,6 +306,7 @@ class Everything5 {
   }
 };
 #endif  // !PaRSEC
+#endif
 
 class EverythingComposite {
   std::unique_ptr<OpBase> P;
@@ -358,6 +359,7 @@ class EverythingComposite {
   }  // Ugh!
 };
 
+#if 0
 void hi() { ::ttg::print("hi"); }
 
 class ReductionTest {
@@ -515,7 +517,6 @@ int try_main(int argc, char **argv) {
 
     x.start();  // myusleep(100);
 
-#if 0
     // Next compose with base class pointers and verify destruction
     EverythingBase x1;
     x1.print();
@@ -537,6 +538,7 @@ int try_main(int argc, char **argv) {
     std::cout << y.dot() << std::endl;
     y.start();  // myusleep(100);
 
+#if 0
     // Next compose with wrappers using tuple API and edges
     Everything3 z;
     std::cout << z.dot() << std::endl;
