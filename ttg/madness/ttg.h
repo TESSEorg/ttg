@@ -190,22 +190,6 @@ namespace madness {
       static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or
       // results
 
-      // MADNESS tasks pass data directly, as values
-      template <typename T>
-      using data_wrapper_t = T;
-      template <typename Wrapper>
-      static auto &&unwrap(Wrapper &&wrapper) {
-        return std::forward<Wrapper>(wrapper);
-      }
-      template <typename Result, typename Wrapper>
-      static Result unwrap_to(Wrapper &&wrapper) {
-        return static_cast<Result>(std::forward<Wrapper>(wrapper));
-      }
-      template <typename T>
-      static auto &&wrap(T &&data) {
-        return std::forward<T>(data);
-      }
-
       // This to support op fusion
       inline static __thread struct {
         uint64_t key_hash = 0; // hash of current key
@@ -217,22 +201,21 @@ namespace madness {
       static_assert(::ttg::meta::is_none_Void_v<input_valueTs...>, "::ttg::Void is for internal use only, do not use it");
       static_assert(::ttg::meta::is_none_void_v<input_valueTs...> || ::ttg::meta::is_last_void_v<input_valueTs...>, "at most one void input can be handled, and it must come last");
       // if have data inputs and (always last) control input, convert last input to Void to make logic easier
-      using input_values_full_tuple_type = std::tuple<data_wrapper_t<::ttg::meta::void_to_Void_t<std::decay_t<input_valueTs>>>...>;
+      using input_values_full_tuple_type = std::tuple<::ttg::meta::void_to_Void_t<std::decay_t<input_valueTs>>...>;
       using input_refs_full_tuple_type = std::tuple<std::add_lvalue_reference_t<::ttg::meta::void_to_Void_t<input_valueTs>>...>;
       using input_values_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,input_values_full_tuple_type,typename ::ttg::meta::drop_last_n<input_values_full_tuple_type,std::size_t{1}>::type>;
       using input_refs_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,input_refs_full_tuple_type,typename ::ttg::meta::drop_last_n<input_refs_full_tuple_type,std::size_t{1}>::type>;
-      using input_unwrapped_values_tuple_type = input_values_tuple_type;
 
       using output_terminals_type = output_terminalsT;
       using output_edges_type = typename ::ttg::terminals_to_edges<output_terminalsT>::type;
 
       template <std::size_t i, typename resultT, typename InTuple>
       static resultT get(InTuple &&intuple) {
-        return unwrap_to<resultT>(std::get<i>(std::forward<InTuple>(intuple)));
+        return static_cast<resultT>(std::get<i>(std::forward<InTuple>(intuple)));
       };
       template <std::size_t i, typename InTuple>
       static auto &get(InTuple &&intuple) {
-        return unwrap(std::get<i>(std::forward<InTuple>(intuple)));
+        return std::get<i>(std::forward<InTuple>(intuple));
       };
 
      private:

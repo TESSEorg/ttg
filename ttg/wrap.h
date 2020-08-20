@@ -101,7 +101,6 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
   using input_refs_tuple_type = typename baseT::input_refs_tuple_type;
   using input_edges_type = typename baseT::input_edges_type;
   using output_edges_type = typename baseT::output_edges_type;
-  using input_unwrapped_values_tuple_type = typename baseT::input_unwrapped_values_tuple_type;
 
   std::function<boost::callable_traits::function_type_t<funcT>> func;
 
