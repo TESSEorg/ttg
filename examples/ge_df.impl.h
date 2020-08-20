@@ -256,7 +256,7 @@ class FuncA : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
     BlockMatrix<T> m_ij;
     // Executing the update
     if (kernel_type == "iterative") {
-      m_ij = ge_iterative_kernel(problem_size / blocking_factor, I, J, K, get<0>(t), get<0>(t), get<0>(t), get<0>(t));
+      m_ij = ge_iterative_kernelA(problem_size / blocking_factor, I, J, K, get<0>(t));
     } /*else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
       int i_lb = I * block_size;
@@ -341,7 +341,7 @@ class FuncB : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
     BlockMatrix<T> m_ij;
     // Executing the update
     if (kernel_type == "iterative") {
-      m_ij = ge_iterative_kernel(problem_size / blocking_factor, I, J, K, get<0>(t), get<1>(t), get<0>(t), get<1>(t));
+      m_ij = ge_iterative_kernelB(problem_size / blocking_factor, I, J, K, get<0>(t), get<1>(t));
     } /*else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
       int i_lb = I * block_size;
@@ -416,7 +416,7 @@ class FuncC : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
     BlockMatrix<T> m_ij;
     // Executing the update
     if (kernel_type == "iterative") {
-      m_ij = ge_iterative_kernel(problem_size / blocking_factor, I, J, K, get<0>(t), get<0>(t), get<1>(t), get<1>(t));
+      m_ij = ge_iterative_kernelC(problem_size / blocking_factor, I, J, K, get<0>(t), get<1>(t));
     } /*else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
       int i_lb = I * block_size;
@@ -492,7 +492,7 @@ class FuncD : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
     BlockMatrix<T> m_ij;
     // Executing the update
     if (kernel_type == "iterative") {
-      m_ij = ge_iterative_kernel(problem_size /blocking_factor, I, J, K, get<0>(t), get<2>(t), get<1>(t), get<3>(t));
+      m_ij = ge_iterative_kernelD(problem_size /blocking_factor, I, J, K, get<0>(t), get<2>(t), get<1>(t), get<3>(t));
     } /*else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
       int i_lb = I * block_size;
@@ -660,11 +660,12 @@ int main(int argc, char** argv) {
   //m->print();
   // Calling the iterative ge
   if (verify_results) {
-    std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+    //std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     ge_iterative(adjacency_matrix_serial, problem_size);
-    std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-    cout << "iterative ge took: " << duration / 1000000.0 << " seconds" << endl;
+    //std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+    //auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+    //cout << problem_size << " " << blocking_factor << " " << duration / 1000000.0 << endl;
+    //cout << "iterative ge took: " << duration / 1000000.0 << " seconds" << endl;
   }
 
   // Running the ttg version
@@ -678,9 +679,8 @@ int main(int argc, char** argv) {
   std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
   if (world.rank() == 0)
-    cout << "blocked ttg (data-flow) ge took: " << duration / 1000000.0 << " seconds" << endl;
-
-  /*if (verify_results) {
+    cout << problem_size << " " << blocking_factor << " " << duration / 1000000.0 << endl;
+  /*if (verify_results && world.rank() == 0) {
     if (equals(r, adjacency_matrix_serial, problem_size, blocking_factor)) {
       cout << "Serial and TTG implementation matches!" << endl;
     } else {
@@ -766,8 +766,8 @@ void parse_arguments(int argc, char** argv, int& problem_size, int& blocking_fac
   string verify_res(argv[4]);
   verify_results = (verify_res == "verify-results");
 
-  cout << "Problem_size: " << problem_size << ", blocking_factor: " << blocking_factor
-       << ", kernel_type: " << kernel_type << ", verify_results: " << boolalpha << verify_results;
+  //cout << "Problem_size: " << problem_size << ", blocking_factor: " << blocking_factor
+  //     << ", kernel_type: " << kernel_type << ", verify_results: " << boolalpha << verify_results;
   if (argc > 5) {
     recursive_fan_out = atoi(argv[5]);
     base_size = atoi(argv[6]);
