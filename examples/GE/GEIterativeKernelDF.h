@@ -1,71 +1,107 @@
-#ifndef GE_ITERATIVE_KERNEL
-#define GE_ITERATIVE_KERNEL
+#ifndef GE_ITERATIVE_KERNEL_DF
+#define GE_ITERATIVE_KERNEL_DF
 
 template <typename T>
-BlockMatrix<T> ge_iterative_kernelA(int block_size, int I, int J, int K, BlockMatrix<T> m_ij) {
+void ge_iterative_kernelA(int block_size, int I, int J, int K, T*  m_ij) {
   for(int k = 0; k < block_size; ++k) {
-		for(int i = 0; i < block_size; ++i) {
+		int k_row = k * block_size;
+    for(int i = 0; i < block_size; ++i) {
       if (i > k || I > K) {
+        int i_row = i * block_size;
+        T* temp = (T*)aligned_alloc(64, sizeof(T) * block_size);//new T[block_size];
         for(int j = 0; j < block_size; ++j) {
           if (J * block_size + j >= k) {
-            m_ij(i,j) -= ((m_ij(i,k) * m_ij(k,j)) / m_ij(k,k));
+            temp[j] = ((m_ij[i_row + k] * m_ij[k_row + j]) 
+                                      / m_ij[k_row + k]);
           }
-        }	
+        }
+        for (int j = 0; j < block_size; ++j) {
+          if (J * block_size + j >= k) {
+            m_ij[i_row + j] -= temp[j];
+          }
+        }
+        free(temp);	
       }		
     }	
 	}
-  return m_ij;
 }
 
 template <typename T>
-BlockMatrix<T> ge_iterative_kernelB(int block_size, int I, int J, int K, BlockMatrix<T> m_ij,
-              BlockMatrix<T> m_ik) {
+void ge_iterative_kernelB(int block_size, int I, int J, int K, T* m_ij,
+              const T* m_ik) {
   for(int k = 0; k < block_size; ++k) {
+    int k_row = k * block_size;
     for(int i = 0; i < block_size; ++i) {
       if (i > k || I > K) {
+        int i_row = i * block_size;
+        T* temp = (T*)aligned_alloc(64, sizeof(T) * block_size);//new T[block_size];
         for(int j = 0; j < block_size; ++j) {
           if (J * block_size + j >= k) {
-            m_ij(i,j) -= ((m_ik(i,k) * m_ij(k,j)) / m_ik(k,k));
+            temp[j] = ((m_ik[i_row + k] * m_ij[k_row + j]) 
+                                      / m_ik[k_row + k]);
           }
         }
+        for (int j = 0; j < block_size; ++j) {
+          if (J * block_size + j >= k) {
+            m_ij[i_row + j] -= temp[j];
+          }
+        }
+        free(temp);
       }
     }
   }
-  return m_ij;
 }
 
 template <typename T>
-BlockMatrix<T> ge_iterative_kernelC(int block_size, int I, int J, int K, BlockMatrix<T> m_ij,
-              BlockMatrix<T> m_kj) {
+void ge_iterative_kernelC(int block_size, int I, int J, int K, T* m_ij,
+              const T* m_kj) {
   for(int k = 0; k < block_size; ++k) {
+    int k_row = k * block_size;
     for(int i = 0; i < block_size; ++i) {
       if (i > k || I > K) {
+        int i_row = i * block_size;
+        T* temp = (T*)aligned_alloc(64, sizeof(T) * block_size); //new T[block_size];
         for(int j = 0; j < block_size; ++j) {
           if (J * block_size + j >= k) {
-            m_ij(i,j) -= ((m_ij(i,k) * m_kj(k,j)) / m_kj(k,k));
+            temp[j] = ((m_ij[i_row + k] * m_kj[k_row + j]) 
+                                      / m_kj[k_row + k]);
           }
         }
+        for (int j = 0; j < block_size; ++j) {
+          if (J * block_size + j >= k) {
+            m_ij[i_row + j] -= temp[j];
+          }
+        }
+        free(temp);
       }
     }
   }
-  return m_ij;
 }
 
 template <typename T>
-BlockMatrix<T> ge_iterative_kernelD(int block_size, int I, int J, int K, BlockMatrix<T> m_ij,
-              BlockMatrix<T> m_ik, BlockMatrix<T> m_kj, BlockMatrix<T> m_kk) {
+void ge_iterative_kernelD(int block_size, int I, int J, int K, T* m_ij,
+              const T* m_ik, const T* m_kj, const T* m_kk) {
   for(int k = 0; k < block_size; ++k) {
+     int k_row = k * block_size;
     for(int i = 0; i < block_size; ++i) {
       if (i > k || I > K) {
+        int i_row = i * block_size;
+        T* temp = (T*)aligned_alloc(64, sizeof(T) * block_size);//new T[block_size];
         for(int j = 0; j < block_size; ++j) {
           if (J * block_size + j >= k) {
-            m_ij(i,j) -= ((m_ik(i,k) * m_kj(k,j)) / m_kk(k,k));
+            temp[j] = ((m_ik[i_row + k] * m_kj[k_row + j]) 
+                                      / m_kk[k_row + k]);
           }
         }
+        for (int j = 0; j < block_size; ++j) {
+          if (J * block_size + j >= k) {
+            m_ij[i_row + j] -= temp[j];
+          }
+        }
+        free(temp);
       }
     }
   }
-  return m_ij;
 }
 
 
