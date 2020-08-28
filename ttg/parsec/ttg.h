@@ -449,11 +449,11 @@ namespace parsec {
       }
 
       template <std::size_t...IS>
-      static auto make_tuple_of_ref_from_array(my_op_t *task, std::index_sequence<IS...>) {
-        return input_refs_tuple_type{{
+      static input_refs_tuple_type make_tuple_of_ref_from_array(my_op_t *task, std::index_sequence<IS...>) {
+        return input_refs_tuple_type{
           static_cast<typename std::tuple_element<IS, input_refs_tuple_type>::type>(
             *reinterpret_cast<std::remove_reference_t<typename std::tuple_element<IS, input_refs_tuple_type>::type>*>(
-              task->parsec_task.data[IS].data_in)) ... }};
+              task->parsec_task.data[IS].data_in)) ... };
       }
 
       template <::ttg::ExecutionSpace Space>
