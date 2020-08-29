@@ -558,11 +558,13 @@ int main(int argc, char** argv) {
   parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, verify_results);
 
   double* adjacency_matrix_serial;  // Using for the verification (if needed)
+  //__declspec(align(16)) 
   double* adjacency_matrix_ttg;     // Using for running the blocked implementation of GE algorithm on ttg runtime
+  
   if (verify_results) {
-    adjacency_matrix_serial = (double*)malloc(sizeof(double) * problem_size * problem_size);
+    adjacency_matrix_serial = (double*)_mm_malloc(sizeof(double) * problem_size * problem_size, 32);
   }
-  adjacency_matrix_ttg = (double*)malloc(sizeof(double) * problem_size * problem_size);
+  adjacency_matrix_ttg = (double*)_mm_malloc(sizeof(double) * problem_size * problem_size, 32);
   init_square_matrix(adjacency_matrix_ttg, problem_size, verify_results, adjacency_matrix_serial);
 
   // Calling the iterative ge
@@ -594,9 +596,9 @@ int main(int argc, char** argv) {
     }
   }
   // deallocating the allocated memories
-  free(adjacency_matrix_ttg);
+  _mm_free(adjacency_matrix_ttg);
   if (verify_results) {
-    free(adjacency_matrix_serial);
+    _mm_free(adjacency_matrix_serial);
   }
 
   return 0;
@@ -618,7 +620,7 @@ void ge_iterative(double* adjacency_matrix_serial, int problem_size) {
   }
 }
 
-bool equals(double v1, double v2) { return fabs(v1 - v2) < numeric_limits<double>::epsilon(); }
+bool equals(double v1, double v2) { return fabs(v1 - v2) < 0.0000000001; }//numeric_limits<double>::epsilon(); }
 
 bool equals(double* matrix1, double* matrix2, int problem_size) {
   for (int i = 0; i < problem_size; ++i) {
@@ -629,6 +631,7 @@ bool equals(double* matrix1, double* matrix2, int problem_size) {
       if (!equals(v1, v2)) {
         cout << "matrix1[" << i << ", " << j << "]: " << v1 << endl;
         cout << "matrix2[" << i << ", " << j << "]: " << v2 << endl;
+        cout << "fabs: " << fabs(v1 - v2) << " is not less than " << numeric_limits<double>::epsilon()<< endl;
         return false;
       }
     }

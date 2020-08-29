@@ -257,7 +257,7 @@ class FuncA : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
     // Executing the update
     if (kernel_type == "iterative") {
       //m_ij = 
-      ge_iterative_kernelA(problem_size / blocking_factor, I, J, K, m_ij.get());
+      ge_iterative_kernel(problem_size / blocking_factor, I, J, K, m_ij.get(), get<0>(t).get(), get<0>(t).get(), get<0>(t).get());
     } /*else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
       int i_lb = I * block_size;
@@ -343,7 +343,7 @@ class FuncB : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
     // Executing the update
     if (kernel_type == "iterative") {
       //m_ij = 
-      ge_iterative_kernelB(problem_size / blocking_factor, I, J, K, m_ij.get(), get<1>(t).get());
+      ge_iterative_kernel(problem_size / blocking_factor, I, J, K, m_ij.get(), get<1>(t).get(), get<0>(t).get(), get<1>(t).get());
     } /*else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
       int i_lb = I * block_size;
@@ -419,7 +419,7 @@ class FuncC : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
     // Executing the update
     if (kernel_type == "iterative") {
       //m_ij = 
-      ge_iterative_kernelC(problem_size / blocking_factor, I, J, K, m_ij.get(), get<1>(t).get());
+      ge_iterative_kernel(problem_size / blocking_factor, I, J, K, m_ij.get(), get<0>(t).get(),  get<1>(t).get(), get<1>(t).get());
     } /*else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
       int i_lb = I * block_size;
@@ -496,7 +496,7 @@ class FuncD : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
     // Executing the update
     if (kernel_type == "iterative") {
       //m_ij = 
-      ge_iterative_kernelD(problem_size /blocking_factor, I, J, K, m_ij.get(), 
+      ge_iterative_kernel(problem_size /blocking_factor, I, J, K, m_ij.get(), 
           get<2>(t).get(), get<1>(t).get(), get<3>(t).get());
     } /*else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
