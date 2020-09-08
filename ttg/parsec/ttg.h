@@ -453,7 +453,7 @@ namespace parsec {
         return input_refs_tuple_type{
           static_cast<typename std::tuple_element<IS, input_refs_tuple_type>::type>(
             *reinterpret_cast<std::remove_reference_t<typename std::tuple_element<IS, input_refs_tuple_type>::type>*>(
-              task->parsec_task.data[IS].data_in)) ... };
+              task->parsec_task.data[IS].data_in->device_private)) ... };
       }
 
       template <::ttg::ExecutionSpace Space>
