@@ -117,8 +117,6 @@ matrix:
             - libc++-8-dev
             - libc++abi-8-dev
             - g++-8
-            - graphviz # provides dot for doxygen graphs
-            - fonts-liberation # recommended by graphviz
     - compiler: clang
       env: CLANG_VERSION=9 GCC_VERSION=8 BUILD_TYPE=Debug
       addons:
@@ -147,6 +145,8 @@ matrix:
             - clang-9
             - libc++-9-dev
             - libc++abi-9-dev
+            - graphviz # provides dot for doxygen graphs
+            - fonts-liberation # recommended by graphviz
 
 before_install:
 - "env"
