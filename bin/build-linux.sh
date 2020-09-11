@@ -84,13 +84,15 @@ cmake ${TRAVIS_BUILD_DIR} -G "${CMAKE_GENERATOR}" \
 ### examples
 cmake --build .
 export MPI_HOME=${INSTALL_PREFIX}/mpich
-# run madness examples
-for PROG in test-mad t9-mad spmm-mad bspmm-mad
+# run examples
+for RUNTIME in mad parsec
 do
-  examples/$PROG
-  setarch `uname -m` -R ${MPI_HOME}/bin/mpirun -n 2 examples/$PROG
+for EXAMPLE in test t9
+do
+  examples/$EXAMPLE-$RUNTIME
+  setarch `uname -m` -R ${MPI_HOME}/bin/mpirun -n 2 examples/$EXAMPLE-$RUNTIME
 done
-# TODO run parsec examples
+done
 
 ### tests
 cmake --build . --target serialization
