@@ -23,10 +23,6 @@ env:
     - BUILD_PREFIX=/home/travis/_build
     - INSTALL_PREFIX=/home/travis/_install
 
-branches:
-  only:
-  - master
-
 matrix:
   fast_finish: true
   include:
