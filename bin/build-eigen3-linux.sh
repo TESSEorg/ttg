@@ -27,7 +27,7 @@ cmake --version
 export INSTALL_DIR=${INSTALL_PREFIX}/eigen3
 if [ ! -d "${INSTALL_DIR}" ]; then
     cd ${BUILD_PREFIX}
-    wget -q https://gitlab.com/libeigen/eigen/-/archive/3.3.7/eigen-3.3.7.tar.bz2)
+    wget -q https://gitlab.com/libeigen/eigen/-/archive/3.3.7/eigen-3.3.7.tar.bz2
     tar -xjf eigen-3.3.7.tar.bz2
     cd eigen-*
     mkdir build

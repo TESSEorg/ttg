@@ -87,7 +87,7 @@ export MPI_HOME=${INSTALL_PREFIX}/mpich
 # run examples
 for RUNTIME in mad parsec
 do
-for EXAMPLE in test t9
+for EXAMPLE in test t9 spmm
 do
   examples/$EXAMPLE-$RUNTIME
   setarch `uname -m` -R ${MPI_HOME}/bin/mpirun -n 2 examples/$EXAMPLE-$RUNTIME
