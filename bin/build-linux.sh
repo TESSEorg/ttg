@@ -87,10 +87,16 @@ export MPI_HOME=${INSTALL_PREFIX}/mpich
 # run examples
 for RUNTIME in mad parsec
 do
-for EXAMPLE in test t9 spmm
+  # run parsec only with 1 rank for now
+  if [ "$RUNTIME" = "mad" ]; then
+    NPROC = 2
+  else
+    NPROC = 1
+  fi
+for EXAMPLE in test t9 spmm bspmm
 do
   examples/$EXAMPLE-$RUNTIME
-  setarch `uname -m` -R ${MPI_HOME}/bin/mpirun -n 2 examples/$EXAMPLE-$RUNTIME
+  setarch `uname -m` -R ${MPI_HOME}/bin/mpirun -n $NPROC examples/$EXAMPLE-$RUNTIME
 done
 done
 
