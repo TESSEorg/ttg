@@ -32,9 +32,10 @@ if (TARGET MADworld)
   target_link_libraries(fw-apsp-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
   # Floyd Warshall's all pairs shortest paths (distributed)
-  add_executable (fw-apsp-df-mad madness/floyd_warshall_df.cc floyd_warshall_df.impl.h)
-  target_include_directories(fw-apsp-df-mad PUBLIC /usr/local/opt/libomp/include/)
-  target_link_libraries(fw-apsp-df-mad LINK_PUBLIC ttg-mad -fopenmp ${MADNESS_DISABLEPIE_LINKER_FLAG})
+  if (OpenMP_CXX_FOUND)
+    add_executable (fw-apsp-df-mad madness/floyd_warshall_df.cc floyd_warshall_df.impl.h)
+    target_link_libraries(fw-apsp-df-mad LINK_PUBLIC ttg-mad OpenMP::OpenMP_CXX)
+  endif (OpenMP_CXX_FOUND)
 
   # Guassian Elimination Example
   add_executable (ge-mad madness/ge.cc ge.impl.h)
