@@ -89,9 +89,9 @@ for RUNTIME in mad parsec
 do
   # run parsec only with 1 rank for now
   if [ "$RUNTIME" = "mad" ]; then
-    NPROC = 2
+    export NPROC=2
   else
-    NPROC = 1
+    export NPROC=1
   fi
 for EXAMPLE in test t9 spmm bspmm
 do
