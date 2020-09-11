@@ -401,6 +401,7 @@ namespace parsec {
       using input_values_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,input_values_full_tuple_type,typename ::ttg::meta::drop_last_n<input_values_full_tuple_type,std::size_t{1}>::type>;
       using input_refs_tuple_type = std::conditional_t<::ttg::meta::is_none_void_v<input_valueTs...>,input_refs_full_tuple_type,typename ::ttg::meta::drop_last_n<input_refs_full_tuple_type,std::size_t{1}>::type>;
       using input_unwrapped_values_tuple_type = input_values_tuple_type;
+      static constexpr int numinvals = std::tuple_size_v<input_refs_tuple_type>; // number of input arguments with values (i.e. omitting the control input, if any)
 
       using output_terminals_type = output_terminalsT;
       using output_edges_type = typename ::ttg::terminals_to_edges<output_terminalsT>::type;
@@ -470,12 +471,12 @@ namespace parsec {
         }
 
         if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-          input_refs_tuple_type input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numins>{});
+          input_refs_tuple_type input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
           baseobj->template op<Space>(*(keyT*)task->key, std::move(input), obj->output_terminals);
         } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
           baseobj->template op<Space>(*(keyT*)task->key, obj->output_terminals);
         } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-          input_refs_tuple_type input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numins>{});
+          input_refs_tuple_type input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
           baseobj->template op<Space>(std::move(input), obj->output_terminals);
         } else if constexpr (::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
           baseobj->template op<Space>(obj->output_terminals);
