@@ -276,6 +276,12 @@ namespace parsec {
       set_default_world(new World(&argc, &argv, taskpool_size));
     }
     inline void ttg_finalize() {
+      auto &status = ::parsec::ttg::detail::status_registry_accessor();
+      status.clear();
+      auto &edges = ::parsec::ttg::detail::clt_edge_registry_accessor();
+      edges.clear();
+      auto &ptrs = ::parsec::ttg::detail::ptr_registry_accessor();
+      ptrs.clear();
       World *default_world = &get_default_world();
       delete default_world;
       set_default_world(nullptr);
