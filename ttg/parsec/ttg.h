@@ -1188,8 +1188,6 @@ namespace parsec {
                                  offsetof(parsec_task_t, mempool_owner), k);
 
         parsec_hash_table_init(&tasks_table, offsetof(my_op_t, op_ht_item), 8, tasks_hash_fcts, NULL);
-
-        register_static_op_function();
       }
 
       template <typename keymapT = default_keymap<keyT>>
@@ -1277,7 +1275,10 @@ namespace parsec {
         set_arg<keyT>();
       }
 
-      void make_executable() override { OpBase::make_executable(); }
+      void make_executable() override {
+        register_static_op_function();
+        OpBase::make_executable();
+      }
 
       /// keymap accessor
       /// @return the keymap
@@ -1296,11 +1297,11 @@ namespace parsec {
           static_id_to_op_map.insert(std::make_pair(get_instance_id(), call));
           if( delayed_unpack_actions.count(get_instance_id()) > 0 ) {
               auto tp = world.taskpool();
-              
+
               if (tracing()) {
                   ::ttg::print("parsec::ttg(", rank, ") There are ", delayed_unpack_actions.count(get_instance_id()), " messages delayed with op_id ", get_instance_id());
               }
-              
+
               auto se = delayed_unpack_actions.equal_range( get_instance_id() );
               std::vector<static_set_arg_fct_arg_t> tmp;
               for(auto it = se.first; it != se.second; ) {
