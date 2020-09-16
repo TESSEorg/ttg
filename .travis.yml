@@ -145,6 +145,7 @@ matrix:
             - clang-9
             - libc++-9-dev
             - libc++abi-9-dev
+            - libclang1-9 # needed to run doxygen
             - graphviz # provides dot for doxygen graphs
             - fonts-liberation # recommended by graphviz
 
