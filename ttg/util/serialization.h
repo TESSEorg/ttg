@@ -76,8 +76,9 @@ namespace ttg {
       new (object) decT;
     }
 
-    static void unpack_payload(void* object, uint64_t chunk_size, uint64_t pos, const void* buf) {
-      std::memcpy(object, buf, chunk_size);
+    static void unpack_payload(void* object, uint64_t chunk_size, uint64_t pos, const void* _buf) {
+      const unsigned char *buf = reinterpret_cast<const unsigned char*>(_buf);
+      std::memcpy(object, &buf[pos], chunk_size);
     }
   };
 
