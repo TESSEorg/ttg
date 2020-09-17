@@ -55,6 +55,8 @@ endif (EIGEN3_FOUND)
 include(FindOrFetchBoost)
 # block-sparse tensor algorithms also need BTAS and (header-only) Boost.Iterator and Boost.Containers
 include(FindOrFetchBTAS)
+# OpenMP may also be used by some examples
+find_package(OpenMP COMPONENTS CXX)
 
 ##########################
 #### prerequisite runtimes

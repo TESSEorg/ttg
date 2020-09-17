@@ -49,7 +49,7 @@ if (TARGET MADworld)
   # Use current CMAKE_CXX_FLAGS to compile targets dependent on this library
   string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
   target_compile_options(ttg-mad INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
-  target_link_libraries(ttg-mad INTERFACE MADworld ${MADNESS_DISABLEPIE_LINKER_FLAG})
+  target_link_libraries(ttg-mad INTERFACE MADworld)
 endif(TARGET MADworld)
 
 ########################

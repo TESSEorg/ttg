@@ -22,7 +22,7 @@ set -ev
 
 # download latest Doxygen
 if [ "$DEPLOY" = "1" ]; then
-  DOXYGEN_VERSION=1.8.17
+  DOXYGEN_VERSION=1.8.20
   if [ ! -d ${INSTALL_PREFIX}/doxygen-${DOXYGEN_VERSION} ]; then
     cd ${BUILD_PREFIX} && wget http://doxygen.nl/files/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
     cd ${INSTALL_PREFIX} && tar xzf ${BUILD_PREFIX}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
@@ -84,13 +84,21 @@ cmake ${TRAVIS_BUILD_DIR} -G "${CMAKE_GENERATOR}" \
 ### examples
 cmake --build .
 export MPI_HOME=${INSTALL_PREFIX}/mpich
-# run madness examples
-for PROG in test-mad t9-mad spmm-mad bspmm-mad
+# run examples
+for RUNTIME in mad parsec
 do
-  examples/$PROG
-  setarch `uname -m` -R ${MPI_HOME}/bin/mpirun -n 2 examples/$PROG
+for EXAMPLE in test t9 spmm bspmm
+do
+  # run {b}spmm-parsec only with 1 rank for now
+  if [ "$RUNTIME" = "parsec" ] && [ "$EXAMPLE" = "spmm" -o "$EXAMPLE" = "bspmm" ]; then
+    export NPROC=1
+  else
+    export NPROC=2
+  fi
+  examples/$EXAMPLE-$RUNTIME
+  setarch `uname -m` -R ${MPI_HOME}/bin/mpirun -n $NPROC examples/$EXAMPLE-$RUNTIME
 done
-# TODO run parsec examples
+done
 
 ### tests
 cmake --build . --target serialization
