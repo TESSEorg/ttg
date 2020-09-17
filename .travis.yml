@@ -169,8 +169,8 @@ after_success:
   - if [ "$COMPUTE_COVERAGE" = "1" ]; then lcov --list coverage.info; fi; #debug info
   # upload report to CodeCov
   #- if [ "$COMPUTE_COVERAGE" = "1" ]; then bash <(curl -s https://codecov.io/bash) -t c0d0a777-cce2-48fa-8ec0-863ce1dcf446; fi;
-  # generate docs
-  - if [ "$DEPLOY" = "1" ]; then bash ${TRAVIS_BUILD_DIR}/bin/deploy-$TRAVIS_OS_NAME.sh; fi;
+  # generate docs for the master only
+  - if [ "$DEPLOY" = "1" ] && [ "$TRAVIS_PULL_REQUEST" = "false" ] && [ "$TRAVIS_BRANCH" = "master" ]; then bash ${TRAVIS_BUILD_DIR}/bin/deploy-$TRAVIS_OS_NAME.sh; fi;
 
 notifications:
   slack:
