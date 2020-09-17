@@ -90,7 +90,7 @@ do
 for EXAMPLE in test t9 spmm bspmm
 do
   # run {b}spmm-parsec only with 1 rank for now
-  if [ "$RUNTIME" = "parsec" && ( "$EXAMPLE" = "spmm" || "$EXAMPLE" = "bspmm" ) ]; then
+  if [ \( "$RUNTIME" = "parsec" \) && \( "$EXAMPLE" = "spmm" || "$EXAMPLE" = "bspmm" \) ]; then
     export NPROC=1
   else
     export NPROC=2
