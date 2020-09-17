@@ -1,5 +1,5 @@
 # serialization (needs MADNESS)
 if (TARGET MADworld)
   add_executable (serialization serialization.cc)
-  target_link_libraries(serialization LINK_PUBLIC ttg MADworld ${MADNESS_DISABLEPIE_LINKER_FLAG})
+  target_link_libraries(serialization LINK_PUBLIC ttg MADworld)
 endif(TARGET MADworld)
