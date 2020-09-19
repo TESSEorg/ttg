@@ -47,7 +47,11 @@ if (TARGET MADworld)
 
   # Smith Waterman Algorithm
   add_executable (sw-mad madness/sw.cc sw.impl.h)
-  target_link_libraries(sw-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+  target_link_libraries(sw-mad LINK_PUBLIC ttg-mad)
+
+  # Map Reduce Algorithm
+  add_executable (mapreduce-mad madness/mapreduce.cc mapreduce.impl.h)
+  target_link_libraries(mapreduce-mad LINK_PUBLIC ttg-mad)
 
   # sparse matmul
   if (EIGEN3_FOUND)
