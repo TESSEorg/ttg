@@ -23,7 +23,7 @@ class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
 
   static constexpr const bool have_cuda_op = true;
 
-  void op(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
+  void op(const keyT &key, const baseT::input_refs_tuple_type& t, baseT::output_terminals_type &out) {
     // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int
     auto &value = baseT::get<0>(t);
     ::ttg::print("A got value ", value);
@@ -34,7 +34,7 @@ class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
     }
   }
 
-  void op_cuda(const keyT &key, baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
+  void op_cuda(const keyT &key, const baseT::input_refs_tuple_type& t, baseT::output_terminals_type &out) {
     // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int
     auto &value = baseT::get<0>(t);
     ::ttg::print("A got value ", value);
@@ -70,7 +70,7 @@ class Consumer : public Op<void, std::tuple<>, Consumer, const int> {
 
  public:
   Consumer(const std::string &name) : baseT(name, {"input"}, {}) {}
-  void op(baseT::input_values_tuple_type &&t, baseT::output_terminals_type &out) {
+  void op(const baseT::input_refs_tuple_type& t, baseT::output_terminals_type &out) {
     ::ttg::print("consumed ", baseT::get<0>(t));
   }
 
@@ -164,12 +164,12 @@ class Everything2 {
 };
 
 class Everything3 {
-  static void p(std::tuple<> &&, std::tuple<Out<keyT, int>> &out) {
+  static void p(const std::tuple<> &, std::tuple<Out<keyT, int>> &out) {
     ::ttg::print("produced ", 0);
     send<0>(0, int(0), out);
   }
 
-  static void a(const keyT &key, std::tuple<const int> &&t, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, const std::tuple<const int&> &t, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
     const auto value = std::get<0>(t);
     if (value >= 100) {
       sendv<0>(value, out);
@@ -178,7 +178,7 @@ class Everything3 {
     }
   }
 
-  static void c(std::tuple<const int> &&t, std::tuple<> &out) {
+  static void c(const std::tuple<const int&> &t, std::tuple<> &out) {
     ::ttg::print("consumed ", std::get<0>(t));
   }
 
@@ -356,8 +356,6 @@ class EverythingComposite {
         p->invoke();
   }  // Ugh!
 };
-
-void hi() { ::ttg::print("hi"); }
 
 class ReductionTest {
   static void generator(const int &key, std::tuple<Out<int, int>> &out) {
