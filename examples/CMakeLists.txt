@@ -42,8 +42,10 @@ if (TARGET MADworld)
   target_link_libraries(ge-mad LINK_PUBLIC ttg-mad)
 
   # Guassian Elimination (dataflow) Example
-  add_executable (ge-df-mad madness/ge_df.cc ge_df.impl.h)
-  target_link_libraries(ge-df-mad LINK_PUBLIC ttg-mad)
+  if (TARGET std::execution)
+    add_executable (ge-df-mad madness/ge_df.cc ge_df.impl.h)
+    target_link_libraries(ge-df-mad LINK_PUBLIC ttg-mad std::execution)
+  endif(TARGET std::execution)
 
   # Smith Waterman Algorithm
   add_executable (sw-mad madness/sw.cc sw.impl.h)
