@@ -71,15 +71,10 @@ set(CMAKE_REQUIRED_QUIET ${CXXStdExecution_FIND_QUIETLY})
 # All of our tests required C++17 or later
 set(CMAKE_CXX_STANDARD 17)
 
-check_include_file_cxx("execution" _CXX_EXECUTION_HAVE_HEADER)
-mark_as_advanced(_CXX_EXECUTION_HAVE_HEADER)
-set(CXX_HAVE_EXECUTION_HEADER ${_CXX_EXECUTION_HAVE_HEADER} CACHE BOOL "TRUE if we have the C++ execution header")
-
 set(_found FALSE)
 
-if(CXX_HAVE_EXECUTION_HEADER)
-  # We have execution header, but how do we use it? Do link checks
-  string(CONFIGURE [[
+# We have execution header, but how do we use it? Do link checks
+string(CONFIGURE [[
   #include <algorithm>
   #include <vector>
   #include <execution>
@@ -89,41 +84,40 @@ if(CXX_HAVE_EXECUTION_HEADER)
                   [](auto&& i) {i *= 2;});
     return 0;
   }
-    ]] code @ONLY)
+  ]] code @ONLY)
 
-  # Try to compile a simple filesystem program without any linker flags
-  check_cxx_source_compiles("${code}" CXX_EXECUTION_NO_LINK_NEEDED)
+# Try to compile a simple filesystem program without any linker flags
+check_cxx_source_compiles("${code}" CXX_EXECUTION_NO_LINK_NEEDED)
 
-  set(can_link ${CXX_EXECUTION_NO_LINK_NEEDED})
+set(can_link ${CXX_EXECUTION_NO_LINK_NEEDED})
 
-  if(NOT CXX_EXECUTION_NO_LINK_NEEDED)
-    if (NOT TBB_FOUND)
-      find_package(TBB)
-      if (TBB_FOUND)
-        # set up an interface library for TBB a la https://github.com/justusc/FindTBB
-        include(ImportTBB)
-        import_tbb()
-      endif()
-    endif()
-    if (TARGET tbb)
-      set(prev_libraries ${CMAKE_REQUIRED_LIBRARIES})
-      # Try to link a simple program with the ${TBB_LIBRARIES}
-      set(CMAKE_REQUIRED_LIBRARIES ${prev_libraries} tbb)
-      check_cxx_source_compiles("${code}" CXX_EXECUTION_TBB_NEEDED)
-      set(can_link ${CXX_EXECUTION_TBB_NEEDED})
+if(NOT CXX_EXECUTION_NO_LINK_NEEDED)
+  if (NOT TBB_FOUND)
+    find_package(TBB)
+    if (TBB_FOUND)
+      # set up an interface library for TBB a la https://github.com/justusc/FindTBB
+      include(ImportTBB)
+      import_tbb()
     endif()
   endif()
+  if (TARGET tbb)
+    set(prev_libraries ${CMAKE_REQUIRED_LIBRARIES})
+    # Try to link a simple program with the ${TBB_LIBRARIES}
+    set(CMAKE_REQUIRED_LIBRARIES ${prev_libraries} tbb)
+    check_cxx_source_compiles("${code}" CXX_EXECUTION_TBB_NEEDED)
+    set(can_link ${CXX_EXECUTION_TBB_NEEDED})
+  endif()
+endif()
 
-  if(can_link)
-    add_library(std::execution INTERFACE IMPORTED)
-    target_compile_features(std::execution INTERFACE cxx_std_17)
-    set(_found TRUE)
+if(can_link)
+  add_library(std::execution INTERFACE IMPORTED)
+  target_compile_features(std::execution INTERFACE cxx_std_17)
+  set(_found TRUE)
 
-    if(CXX_EXECUTION_NO_LINK_NEEDED)
-      # Nothing to add...
-    elseif(CXX_EXECUTION_TBB_NEEDED)
-      target_link_libraries(std::execution INTERFACE tbb)
-    endif()
+  if(CXX_EXECUTION_NO_LINK_NEEDED)
+    # Nothing to add...
+  elseif(CXX_EXECUTION_TBB_NEEDED)
+    target_link_libraries(std::execution INTERFACE tbb)
   endif()
 endif()
 
