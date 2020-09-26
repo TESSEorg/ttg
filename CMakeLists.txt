@@ -58,7 +58,7 @@ include(FindOrFetchBTAS)
 # OpenMP may also be used by some examples
 find_package(OpenMP COMPONENTS CXX)
 # std::execution may also be used by some examples
-find_package(StdExecution)
+find_package(CXXStdExecution)
 
 ##########################
 #### prerequisite runtimes

@@ -1,15 +1,15 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
 # file Copyright.txt or https://cmake.org/licensing for details.
 
-# This is copied from:
-#   https://github.com/vector-of-bool/CMakeCM/blob/master/modules/FindExecution.cmake
+# This is based on:
+#   https://github.com/vector-of-bool/CMakeCM/blob/master/modules/FindFilesystem.cmake
 
 #[=======================================================================[.rst:
 
-FindExecution
+FindCXXStdExecution
 ##############
 
-This module supports the C++17 standard library's filesystem utilities. Use the
+This module supports the C++17 standard library's execution utilities. Use the
 :imp-target:`std::execution` imported target to
 
 Imported Targets
@@ -42,11 +42,11 @@ Variables
 Examples
 ********
 
-Using `find_package(Execution)` with no component arguments:
+Using `find_package(CXXStdExecution)` with no component arguments:
 
 .. code-block:: cmake
 
-    find_package(Execution REQUIRED)
+    find_package(CXXStdExecution REQUIRED)
 
     add_executable(my-program main.cpp)
     target_link_libraries(my-program PRIVATE std::execution)
@@ -66,7 +66,7 @@ include(CheckCXXSourceCompiles)
 
 cmake_push_check_state()
 
-set(CMAKE_REQUIRED_QUIET ${Execution_FIND_QUIETLY})
+set(CMAKE_REQUIRED_QUIET ${CXXStdExecution_FIND_QUIETLY})
 
 # All of our tests required C++17 or later
 set(CMAKE_CXX_STANDARD 17)
@@ -99,12 +99,19 @@ if(CXX_HAVE_EXECUTION_HEADER)
   if(NOT CXX_EXECUTION_NO_LINK_NEEDED)
     if (NOT TBB_FOUND)
       find_package(TBB)
+      if (TBB_FOUND)
+        # set up an interface library for TBB a la https://github.com/justusc/FindTBB
+        include(ImportTBB)
+        import_tbb()
+      endif()
     endif()
-    set(prev_libraries ${CMAKE_REQUIRED_LIBRARIES})
-    # Try to link a simple program with the ${TBB_LIBRARIES}
-    set(CMAKE_REQUIRED_LIBRARIES ${prev_libraries} ${TBB_LIBRARIES})
-    check_cxx_source_compiles("${code}" CXX_EXECUTION_TBB_NEEDED)
-    set(can_link ${CXX_EXECUTION_TBB_NEEDED})
+    if (TARGET tbb)
+      set(prev_libraries ${CMAKE_REQUIRED_LIBRARIES})
+      # Try to link a simple program with the ${TBB_LIBRARIES}
+      set(CMAKE_REQUIRED_LIBRARIES ${prev_libraries} tbb)
+      check_cxx_source_compiles("${code}" CXX_EXECUTION_TBB_NEEDED)
+      set(can_link ${CXX_EXECUTION_TBB_NEEDED})
+    endif()
   endif()
 
   if(can_link)
@@ -115,13 +122,13 @@ if(CXX_HAVE_EXECUTION_HEADER)
     if(CXX_EXECUTION_NO_LINK_NEEDED)
       # Nothing to add...
     elseif(CXX_EXECUTION_TBB_NEEDED)
-      target_link_libraries(std::execution INTERFACE ${TBB_LIBRARIES})
+      target_link_libraries(std::execution INTERFACE tbb)
     endif()
   endif()
 endif()
 
 cmake_pop_check_state()
 
-if(NOT TARGET std::execution)
+if(NOT TARGET std::execution AND CXXStdFilesystem_FIND_REQUIRED)
   message(FATAL_ERROR "Cannot compile and link programs that #include <execution>")
 endif()
