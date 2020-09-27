@@ -32,18 +32,24 @@ if (TARGET MADworld)
   target_link_libraries(fw-apsp-mad LINK_PUBLIC ttg-mad)
 
   # Floyd Warshall's all pairs shortest paths (distributed)
-  if (OpenMP_CXX_FOUND)
+  if (OpenMP_CXX_FOUND AND TARGET std::execution)
     add_executable (fw-apsp-df-mad madness/floyd_warshall_df.cc floyd_warshall_df.impl.h)
-    target_link_libraries(fw-apsp-df-mad LINK_PUBLIC ttg-mad OpenMP::OpenMP_CXX)
-  endif (OpenMP_CXX_FOUND)
+    target_link_libraries(fw-apsp-df-mad LINK_PUBLIC ttg-mad OpenMP::OpenMP_CXX std::execution)
+  endif()
 
   # Guassian Elimination Example
   add_executable (ge-mad madness/ge.cc ge.impl.h)
   target_link_libraries(ge-mad LINK_PUBLIC ttg-mad)
 
   # Guassian Elimination (dataflow) Example
-  add_executable (ge-df-mad madness/ge_df.cc ge_df.impl.h)
-  target_link_libraries(ge-df-mad LINK_PUBLIC ttg-mad)
+  if (TARGET std::execution)
+    add_executable (ge-df-mad madness/ge_df.cc ge_df.impl.h)
+    target_link_libraries(ge-df-mad LINK_PUBLIC ttg-mad std::execution)
+  endif(TARGET std::execution)
+
+  # Smith Waterman Algorithm
+  add_executable (sw-mad madness/sw.cc sw.impl.h)
+  target_link_libraries(sw-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
   # sparse matmul
   if (EIGEN3_FOUND)
