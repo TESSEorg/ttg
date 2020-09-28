@@ -7,7 +7,10 @@
 #include <string> /* string */
 #include <tuple>
 #include <utility>
+#if __has_include(<execution>)
 #include <execution>
+#define HAS_EXECUTION_HEADER
+#endif
 #include "blockmatrix.h"
 
 // #include <omp.h> //
@@ -121,10 +124,14 @@ class Initiator
     // making x_ready for all the blocks (for function calls A, B, C, and D)
     // This triggers for the immediate execution of function A at tile [0, 0]. But
     // functions B, C, and D have other dependencies to meet before execution; They wait
-    //for (int i = 0; i < iterations.value; ++i) {
-      //for (int j = 0; j < iterations.value; ++j) {
+#ifdef HAS_EXECUTION_HEADER
       std::for_each(std::execution::par, adjacency_matrix_ttg->get().begin(), adjacency_matrix_ttg->get().end(),
-        [&out](const std::pair<std::pair<int,int>, BlockMatrix<T>>& kv) {
+        [&out](const std::pair<std::pair<int,int>, BlockMatrix<T>>& kv) 
+#else
+    std::for_each(adjacency_matrix_ttg->get().begin(), adjacency_matrix_ttg->get().end(),
+      [&out](const std::pair<std::pair<int,int>, BlockMatrix<T>>& kv)
+#endif
+      {
         auto [i,j] = kv.first;
         if (i == 0 && j == 0) {  // A function call
           ::send<0>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
@@ -136,8 +143,6 @@ class Initiator
           ::send<3>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
         }
       });
-      //}
-    //}
   }
 };
 

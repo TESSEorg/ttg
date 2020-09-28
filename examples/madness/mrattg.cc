@@ -97,20 +97,6 @@ auto make_start(const ctlEdge<NDIM>& ctl) {
 }
 
 
-// Factory function to assist in wrapping a callable with signature
-//
-// void op(const input_keyT&, std::tuple<input_valuesT...>&&, output_terminals_tuple_type&)
-template<typename keyT, typename output_terminals_tuple_type, typename...input_valuesT>
-auto wrapx(std::function<void (const keyT&,  std::tuple<input_valuesT...>&&, output_terminals_tuple_type&)>&& func,
-           const std::string &name="wrapper",
-           const std::vector<std::string> &innames = std::vector<std::string>(std::tuple_size<std::tuple<input_valuesT...>>::value, "input"),
-           const std::vector<std::string> &outnames= std::vector<std::string>(std::tuple_size<output_terminals_tuple_type>::value, "output"))
-{
-    using funcT = std::function<void (const keyT&,  std::tuple<input_valuesT...>&&, output_terminals_tuple_type&)>;
-    using wrapT = WrapOp<funcT, keyT, output_terminals_tuple_type, input_valuesT...>;
-    return std::make_unique<wrapT>(std::forward<funcT>(func), name, innames, outnames);
-}
-
 /// Constructs an operator that adaptively projects the provided function into the basis
 
 /// Returns an std::unique_ptr to the object
@@ -294,7 +280,7 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
 
 template <typename T, size_t K, Dimension NDIM>
 void do_reconstruct(const Key<NDIM>& key,
-                    std::tuple<FunctionCompressedNode<T,K,NDIM>,FixedTensor<T,K,NDIM>>&& t,
+                    const std::tuple<FunctionCompressedNode<T,K,NDIM>&,FixedTensor<T,K,NDIM>&>& t,
                     std::tuple<Out<Key<NDIM>,FixedTensor<T,K,NDIM>>,rnodeOut<T,K,NDIM>>& out) {
     const auto& child_slices = FunctionData<T,K,NDIM>::get_child_slices();
     auto& node = std::get<0>(t);

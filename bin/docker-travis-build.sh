@@ -18,7 +18,7 @@ setup=setup.sh
 cat > $setup << END
 #!/bin/sh
 curl -sSL "http://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add -
-echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-9 main" | tee -a /etc/apt/sources.list > /dev/null
+echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal main" | tee -a /etc/apt/sources.list > /dev/null
 apt-add-repository -y "ppa:ubuntu-toolchain-r/test"
 apt-get -yq update >> ~/apt-get-update.log
 apt-get -yq --no-install-suggests --no-install-recommends --force-yes install g++-8 g++-9 libblas-dev liblapack-dev liblapacke-dev libtbb-dev clang-7 clang-8 clang-9 gdb cmake cmake-data graphviz fonts-liberation flex ninja-build
@@ -46,8 +46,8 @@ chmod +x $build
 ##############################################################
 # make Dockerfile
 cat > Dockerfile << END
-# Travis default 'Bionic' image
-FROM travisci/ci-ubuntu-1804:packer-1577347966-74db3f91
+# Travis default 'Focal' image
+FROM travisci/ci-ubuntu-2004:packer-1600162361-606a7440
 
 # Use baseimage-docker's init system.
 CMD ["/sbin/my_init"]

@@ -82,9 +82,6 @@ class BlockMatrix {
   //Return by value
   inline T& operator() (int row, int col) { return m_block.get()[row * _cols + col]; }
 
-  //Return by value
-  //T operator() (int row, int col) { return m_block.get()[row * _cols + col]; }
-  
   void operator() (int row, int col, T val) {
     m_block.get()[row * _cols + col] = val;
   }
@@ -190,70 +187,6 @@ class Matrix {
     for (int i = 0; i < nb_row; i++) {
       for (int j = 0; j < nb_col; j++) {
         std::cout << m[std::make_pair(i,j)];
-      }
-    }
-  }
-};
-
-template <typename T>
-class MatrixOld {
- private:
-  int nb_row;  //# of blocks in a row
-  int nb_col;  //# of blocks in a col
-  int b_rows;  //# of rows in a block
-  int b_cols;  //# of cols in a block
-               // Array of BlockMatrix<T>
-  std::shared_ptr<BlockMatrix<T>> m;
-  
- public:
-  MatrixOld() = default;
-  MatrixOld(int nb_row, int nb_col, int b_rows, int b_cols)
-      : nb_row(nb_row), nb_col(nb_col), b_rows(b_rows), b_cols(b_cols) {
-    m = std::shared_ptr<BlockMatrix<T>>(new BlockMatrix<T>[nb_row * nb_col], [](BlockMatrix<T>* b) { delete[] b; });
-
-    for (int i = 0; i < nb_row; i++)
-      for (int j = 0; j < nb_col; j++) {
-        m.get()[i * nb_col + j] = BlockMatrix<T>(b_rows, b_cols);
-      }
-  }
-
-  ~MatrixOld() {}
-
-  // Return total # of elements in the matrix
-  int size() const { return (nb_row * b_rows) * (nb_col * b_cols); }
-  // Return # of block rows
-  int rows() const { return nb_row; }
-  // Return # of block cols
-  int cols() const { return nb_col; }
-
-  void fill() {
-    for (int i = 0; i < nb_row; i++)
-      for (int j = 0; j < nb_col; j++) (m.get()[i * nb_col + j]).fill();
-  }
-
-  bool operator==(const MatrixOld& matrix) const { return (matrix.m == m); }
-
-  bool operator!=(const MatrixOld& matrix) const { return (matrix.m != m); }
-
-  //Return by value
-  BlockMatrix<T> operator()(int block_row, int block_col) 
-  { 
-    return m.get()[block_row * nb_col + block_col]; 
-  }
-
-  void operator()(int block_row, int block_col, BlockMatrix<T> val) {
-    for (int i = 0; i < b_rows; i++) {
-      for (int j = 0; j < b_cols; j++) {
-        m.get()[block_row * nb_col + block_col](i,j,val(i,j));
-      }
-    }
-    //m.get()[block_row * nb_col + block_col] = val;
-  }
-
-  void print() {
-    for (int i = 0; i < nb_row; i++) {
-      for (int j = 0; j < nb_col; j++) {
-        std::cout << m.get()[i * nb_col + j];
       }
     }
   }
