@@ -562,9 +562,9 @@ int main(int argc, char** argv) {
   double* adjacency_matrix_ttg;     // Using for running the blocked implementation of GE algorithm on ttg runtime
   
   if (verify_results) {
-    adjacency_matrix_serial = (double*)_mm_malloc(sizeof(double) * problem_size * problem_size, 32);
+    adjacency_matrix_serial = (double*)malloc(sizeof(double) * problem_size * problem_size);
   }
-  adjacency_matrix_ttg = (double*)_mm_malloc(sizeof(double) * problem_size * problem_size, 32);
+  adjacency_matrix_ttg = (double*)malloc(sizeof(double) * problem_size * problem_size);
   init_square_matrix(adjacency_matrix_ttg, problem_size, verify_results, adjacency_matrix_serial);
 
   // Calling the iterative ge
@@ -596,9 +596,9 @@ int main(int argc, char** argv) {
     }
   }
   // deallocating the allocated memories
-  _mm_free(adjacency_matrix_ttg);
+  free(adjacency_matrix_ttg);
   if (verify_results) {
-    _mm_free(adjacency_matrix_serial);
+    free(adjacency_matrix_serial);
   }
 
   return 0;
