@@ -18,35 +18,27 @@ template<typename T>
 using MapKey = std::multimap<std::string, T>;
 
 namespace ttg::overload {
-  inline void combine_hash(size_t& seed, size_t hash) {
+  inline size_t combine_hash(size_t seed, size_t hash) {
     seed ^= hash + 0x9e3779b9 + (seed<<6) + (seed>>2);
+    return seed;
   }
+
+  template <>
+  struct hash<std::string> {
+    std::size_t operator()(const std::string& s) const noexcept {
+      detail::FNVhasher hasher;
+      hasher.update(s.size(), reinterpret_cast<const std::byte*>(s.c_str()));
+      return hasher.value();
+    }
+  };
 
   template <typename T, typename X>
   struct hash<std::pair<T, X>> {
     std::size_t operator()(const std::pair<T, X>& p) const noexcept {
       hash<T> hasher1;
       hash<X> hasher2;
-      madness::hashT seed = 0;
       
-      combine_hash(seed, std::hash<std::string>{}(p.first));
-      combine_hash(seed, hasher2(p.second));
-      
-      return seed; 
-    }
-  };
- 
-  template <typename T, typename X> 
-  struct hash<std::pair<std::pair<T, X>, X>> {
-    std::size_t operator()(const std::pair<std::pair<T, X>, X>& p) const noexcept {
-      madness::hashT seed = 0;
-      hash<std::pair<T, X>> hasher1;
-      hash<X> hasher2;
-
-      combine_hash(seed, hasher1(p.first));
-      combine_hash(seed, hasher2(p.second));
-    
-      return seed;
+      return combine_hash(hasher1(p.first), hasher2(p.second));
     }
   };
 }
@@ -60,6 +52,7 @@ namespace madness {
         //std::cout << "Storing ..." << mk.size() << std::endl;
         for (typename MapKey<T>::const_iterator it = mk.begin(); it != mk.end(); it++)
         {
+          ar & it->first.size();
           ar & it->first;
           ar & it->second; 
         }
@@ -72,13 +65,16 @@ namespace madness {
       static inline void load(const Archive& ar, MapKey<T>& mk) {
         int size;
         ar & size;
-        T v;
-        std::string s;
         //std::cout << "Loading ..." << size << std::endl;
         for (int i = 0; i < size; i++) {
-          ar & s; 
+          std::string s;
+          T v;
+          int ss;
+          ar & ss;
+          while (s.size() < ss)
+            ar & s; 
           ar & v;
-          //std::cout << s << " " << v << std::endl;
+          std::cout << "Loading..." << s << " " << v << std::endl;
           mk.insert(std::make_pair(s, v));
         }
         //ar >> mk;
@@ -280,7 +276,7 @@ int main(int argc, char* argv[]) {
   auto rd = make_reader(mapEdge);
   auto m = make_mapper(mapper<int>, mapEdge, reduceEdge);
   auto r = make_reducer(std::plus<int>(), reduceEdge, writerEdge);
-
+  
   std::mutex mtx;
   std::map<std::string, int> result;
   auto w = make_writer(result, mtx, writerEdge);
@@ -314,15 +310,16 @@ int main(int argc, char* argv[]) {
   ttg_execute(ttg_default_execution_context());
   ttg_fence(ttg_default_execution_context());
 
-  end = std::chrono::high_resolution_clock::now();
+  if (ttg_default_execution_context().rank() == 0) {
+    end = std::chrono::high_resolution_clock::now();
  
-  for(auto it : result) {
-    std::cout << it.first << " " << it.second << std::endl;   
-  } 
-  std::cout << "Mapreduce took " << 
-      (std::chrono::duration_cast<std::chrono::seconds>(end - beg).count()) << 
-      " seconds" << std::endl;
-  
+    for(auto it : result) {
+      std::cout << it.first << " " << it.second << std::endl;   
+    } 
+    std::cout << "Mapreduce took " << 
+        (std::chrono::duration_cast<std::chrono::seconds>(end - beg).count()) << 
+        " seconds" << std::endl;
+  }
   ttg_finalize();
   return 0;
 }
