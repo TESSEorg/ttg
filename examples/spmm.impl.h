@@ -673,7 +673,13 @@ int main(int argc, char **argv) {
     if (ttg_default_execution_context().rank() == 0) {
       double norm_2_square, norm_inf;
       std::tie(norm_2_square, norm_inf) = norms<blk_t>(Acopy - A);
-      assert(norm_inf == 0.0);
+      std::cout << "||Acopy - A||_2      = " << std::sqrt(norm_2_square) << std::endl;
+      std::cout << "||Acopy - A||_\\infty = " << norm_inf << std::endl;
+      if (norm_inf != 0) {
+        std::cout << "Acopy:\n" << Acopy << std::endl;
+        std::cout << "A:\n" << A << std::endl;
+        ttg_abort();
+      }
     }
 
   }
