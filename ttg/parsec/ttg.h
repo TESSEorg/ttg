@@ -18,6 +18,7 @@
 #include <string>
 #include <tuple>
 #include <vector>
+#include <list>
 
 #include <parsec.h>
 #include <parsec/class/parsec_hash_table.h>
@@ -109,7 +110,15 @@ namespace parsec {
           parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
       }
 
-      ~World() { parsec_ce.tag_unregister(_PARSEC_TTG_TAG); parsec_fini(&ctx); free(tpool); }
+      ~World() {
+          while (!op_register.empty()) {
+              std::cout << "Destroying OpBase " << (*op_register.begin()) << std::endl;
+              (*op_register.begin())->release();
+          }
+          parsec_ce.tag_unregister(_PARSEC_TTG_TAG);
+          parsec_fini(&ctx);
+          free(tpool);
+      }
 
       const int &parsec_ttg_tag() { return _PARSEC_TTG_TAG; }
         
@@ -159,10 +168,21 @@ namespace parsec {
 
       int32_t sent_to_sched() const { return this->sent_to_sched_counter(); }
 
+      void register_op(::ttg::OpBase* op) {
+          // TODO: do we need locking here?
+          op_register.push_back(op);
+      }
+
+      void deregister_op(::ttg::OpBase* op) {
+          // TODO: do we need locking here?
+          op_register.remove(op);
+      }
+
      private:
       parsec_context_t *ctx = nullptr;
       parsec_execution_stream_t *es = nullptr;
       parsec_taskpool_t *tpool = nullptr;
+      std::list<::ttg::OpBase*> op_register;
 
       volatile int32_t &sent_to_sched_counter() const {
         static volatile int32_t sent_to_sched = 0;
@@ -384,6 +404,8 @@ namespace parsec {
       //check for a non-type member named have_cuda_op
       template <typename T>
       using have_cuda_op_non_type_t = decltype(&T::have_cuda_op);
+
+      bool alive = true;
 
      public:
       static constexpr int numins = sizeof...(input_valueTs);                    // number of input arguments
@@ -1127,6 +1149,8 @@ namespace parsec {
         if (outnames.size() != std::tuple_size<output_terminalsT>::value)
           throw std::logic_error("parsec::ttg::OP: #output names != #output terminals");
 
+        world.register_op(this);
+
         register_input_terminals(input_terminals, innames);
         register_output_terminals(output_terminals, outnames);
 
@@ -1234,6 +1258,13 @@ namespace parsec {
 
       // Destructor checks for unexecuted tasks
       ~Op() {
+         release();
+      }
+
+      virtual void release() override {
+        std::cout << "Op dtor " << this << std::endl;
+        if (!alive) { return; }
+        alive = false;
         parsec_hash_table_fini(&tasks_table);
         parsec_mempool_destruct(&mempools);
         uintptr_t addr = (uintptr_t)self.incarnations;
@@ -1248,6 +1279,7 @@ namespace parsec {
                 delete self.out[i];
             }
         }
+        world.deregister_op(this);
       }
 
       static constexpr const ::ttg::Runtime runtime = ::ttg::Runtime::PaRSEC;

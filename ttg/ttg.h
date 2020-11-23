@@ -348,6 +348,8 @@ namespace ttg {
 
     virtual ~OpBase() = default;
 
+    virtual void release() { }
+
     /// Sets trace for all operations to value and returns previous setting
     static bool set_trace_all(bool value) {
       std::swap(trace, value);

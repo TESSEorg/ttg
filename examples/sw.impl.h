@@ -271,7 +271,7 @@ int main(int argc, char* argv[]) {
   end = std::chrono::high_resolution_clock::now();
   std::cout << "TTG Execution Time (milliseconds) : "
               << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
-
+  ttg_finalize();
 }
 
 int SW_serial(const std::string &a, const std::string &b) {
