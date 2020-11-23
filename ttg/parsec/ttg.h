@@ -557,7 +557,7 @@ namespace parsec {
                 using msg_t = detail::msg_t;
                 msg_t *msg = static_cast<msg_t*>(data);
                 keyT key;
-                unpack(key, static_cast<void*>(msg->bytes), 0);
+                obj->unpack(key, static_cast<void*>(msg->bytes), 0);
                 obj->template set_arg<keyT>(key);
               }
             } else {
