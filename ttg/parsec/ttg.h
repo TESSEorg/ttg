@@ -519,7 +519,7 @@ namespace parsec {
         dObj->get_info(static_cast<void*>(&bytes[pos]), &header_size, &payload_size, &contiguous, &buffer);
         assert(0 == header_size);
         if (NULL != buffer) {
-          dObj->unpack_payload(buffer, payload_size, pos, _bytes);
+          dObj->unpack_payload(&obj, payload_size, 0, buffer);
         } else {
           dObj->unpack_payload(&obj, payload_size, pos, _bytes);
         }
@@ -585,7 +585,7 @@ namespace parsec {
                   keyT key;
                   using decvalueT = std::decay_t<valueT>;
                   decvalueT val;
-                  uint64_t pos = unpack(key, static_cast<void*>(msg->bytes), 0);
+                  uint64_t pos = unpack(key, msg->bytes, 0);
                   pos = unpack(val, msg->bytes, pos);
                   set_arg<i, keyT, valueT>(key, std::move(val));
                   // case 2
