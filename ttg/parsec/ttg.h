@@ -510,6 +510,37 @@ namespace parsec {
       }
 
      protected:
+      template <typename T> uint64_t unpack(T &obj, void *_bytes, uint64_t pos) {
+        const ttg_data_descriptor *dObj = ::ttg::get_data_descriptor<T>();
+        uint64_t header_size, payload_size;
+        void *buffer;
+        char *bytes = static_cast<char *>(_bytes);
+        int contiguous;
+        dObj->get_info(static_cast<void*>(&bytes[pos]), &header_size, &payload_size, &contiguous, &buffer);
+        assert(0 == header_size);
+        if (NULL != buffer) {
+          dObj->unpack_payload(buffer, payload_size, pos, _bytes);
+        } else {
+          dObj->unpack_payload(&obj, payload_size, pos, _bytes);
+        }
+        return pos + payload_size;
+      }
+
+      template <typename T> uint64_t pack(T &obj, void *bytes, uint64_t pos) {
+        const ttg_data_descriptor *dObj = ::ttg::get_data_descriptor<T>();
+        uint64_t header_size, payload_size;
+        void *buffer;
+        int contiguous;
+        dObj->get_info(&obj, &header_size, &payload_size, &contiguous, &buffer);
+        assert(0 == header_size);
+        if (NULL != buffer) {
+          dObj->pack_payload(buffer, payload_size, pos, bytes);
+        } else {
+          dObj->pack_payload(&obj, payload_size, pos, bytes);
+        }
+        return pos + payload_size;
+      }
+
       static void static_set_arg(void *data, std::size_t size, ::ttg::OpBase *bop) {
           assert(size >= sizeof(msg_header_t) &&
                  "Trying to unpack as message that does not hold enough bytes to represent a single header");
@@ -526,8 +557,7 @@ namespace parsec {
                 using msg_t = detail::msg_t;
                 msg_t *msg = static_cast<msg_t*>(data);
                 keyT key;
-                const ttg_data_descriptor *dKey = ::ttg::get_data_descriptor<keyT>();
-                dKey->unpack_payload(&key, sizeof(keyT), 0, msg->bytes);
+                unpack(key, static_cast<void*>(msg->bytes), 0);
                 obj->template set_arg<keyT>(key);
               }
             } else {
@@ -553,31 +583,26 @@ namespace parsec {
           // case 1
           if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_refs_tuple_type> && !std::is_void_v<valueT>) {
                   keyT key;
-                  const ttg_data_descriptor *dKey = ::ttg::get_data_descriptor<keyT>();
                   using decvalueT = std::decay_t<valueT>;
                   decvalueT val;
-                  const ttg_data_descriptor *dValue = ::ttg::get_data_descriptor<decvalueT>();
-                  dKey->unpack_payload(&key, sizeof(keyT), 0, msg->bytes);
-                  dValue->unpack_payload(&val, sizeof(decvalueT), sizeof(keyT), msg->bytes);
+                  uint64_t pos = unpack(key, static_cast<void*>(msg->bytes), 0);
+                  pos = unpack(val, msg->bytes, pos);
                   set_arg<i, keyT, valueT>(key, std::move(val));
                   // case 2
               } else if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_refs_tuple_type> && std::is_void_v<valueT>) {
                   keyT key;
-                  const ttg_data_descriptor* dKey = ::ttg::get_data_descriptor<keyT>();
-                  dKey->unpack_payload(&key, sizeof(keyT), 0, msg->bytes);
+                  unpack(key, msg->bytes, 0);
                   set_arg<i, keyT, ::ttg::Void>(key, ::ttg::Void{});
                   // case 3
               } else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_refs_tuple_type> && std::is_void_v<valueT>) {
                   keyT key;
-                  const ttg_data_descriptor* dKey = ::ttg::get_data_descriptor<keyT>();
-                  dKey->unpack_payload(&key, sizeof(keyT), 0, msg->bytes);
+                  unpack(key, msg->bytes, 0);
                   set_arg<keyT>(key);
                   // case 4
               } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_refs_tuple_type> && !std::is_void_v<valueT>) {
                   using decvalueT = std::decay_t<valueT>;
                   decvalueT val;
-                  const ttg_data_descriptor* dValue = ::ttg::get_data_descriptor<decvalueT>();
-                  dValue->unpack_payload(&val, sizeof(decvalueT), 0, msg->bytes);
+                  unpack(val, msg->bytes, 0);
                   set_arg<i, keyT, valueT>(std::move(val));
                   // case 5
               } else if constexpr (::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_refs_tuple_type> && std::is_void_v<valueT>) {
@@ -757,10 +782,8 @@ namespace parsec {
         msg_t* msg = new msg_t(get_instance_id(), world.taskpool()->taskpool_id, i);
 
         uint64_t pos = 0;
-        const ttg_data_descriptor *dKey = ::ttg::get_data_descriptor<Key>();
-        pos = dKey->pack_payload(&key, sizeof(Key), pos, msg->bytes);
-        const ttg_data_descriptor *dValue = ::ttg::get_data_descriptor<std::decay_t<Value>>();
-        pos = dValue->pack_payload(&value, sizeof(Value), pos, msg->bytes);
+        pos = pack(key, msg->bytes, pos);
+        pos = pack(value, msg->bytes, pos);
         parsec_taskpool_t *tp = world.taskpool();
         tp->tdm.module->outgoing_message_start(tp, owner, NULL);       
         tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);

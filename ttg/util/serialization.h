@@ -139,11 +139,16 @@ namespace ttg {
     // t points to some memory in which we will construct an object from the header
     static void unpack_header(void* object, uint64_t header_size, const void* buf) {
       assert(header_size == 0);
-      new (object) T;
+      if constexpr(std::is_const_v<T>) {
+        std::abort();
+      } else {
+        new (object) T;
+      }
     }
 
-    static void unpack_payload(void* object, uint64_t chunk_size, uint64_t pos, const void* buf) {
-      madness::archive::BufferInputArchive ar(buf, chunk_size);
+    static void unpack_payload(void* object, uint64_t chunk_size, uint64_t pos, const void* _buf) {
+      const unsigned char *buf = reinterpret_cast<const unsigned char*>(_buf);
+      madness::archive::BufferInputArchive ar(&buf[pos], chunk_size);
       ar&(*(T*)object);
     }
   };

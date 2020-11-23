@@ -80,10 +80,13 @@ if (TARGET PaRSEC::parsec)
 
   if (TRUE)
 	  # T9 example
-  	add_executable (t9-parsec parsec/t9.cc t9.impl.h)
-  	target_link_libraries(t9-parsec LINK_PUBLIC ttg-parsec)
+      add_executable (t9-parsec parsec/t9.cc t9.impl.h)
+      target_link_libraries(t9-parsec LINK_PUBLIC ttg-parsec)
 
-  	# sparse matmul need MADNESS for serialization of ttg::matrix::Shape (part of next-gen prototype)
+      add_executable (sw-parsec parsec/sw.cc sw.impl.h)
+      target_link_libraries(sw-parsec LINK_PUBLIC ttg-parsec MADworld)
+
+      # sparse matmul need MADNESS for serialization of ttg::matrix::Shape (part of next-gen prototype)
   	if (EIGEN3_FOUND AND TARGET MADworld)
     	add_executable (spmm-parsec parsec/spmm.cc spmm.impl.h)
     	target_link_libraries(spmm-parsec LINK_PUBLIC ttg-parsec eigen3 MADworld)
