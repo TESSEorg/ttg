@@ -9,7 +9,8 @@
 #include <cstdlib>
 #include <mutex>
 
-#include "../../ttg/util/tree.h"
+#include "../ttg/util/tree.h"
+#include "../ttg/util/reduce.h"
 
 namespace ttg {
 
@@ -73,12 +74,18 @@ namespace ttg {
           assert(parents_children.first == key || parents_children.second == key);
           this_is_left_child = (parents_children.first == key);
         }
-        if (this_is_left_child)
-          send<1>(parent, std::move(result), outdata);
-        else
-          send<2>(parent, std::move(result), outdata);
-      } else
-        send<3>(dest_key_, std::move(result), outdata);
+        if (this_is_left_child) {
+          std::get<1>(outdata).send(parent, std::move(result));
+          //send<1>(parent, std::move(result), outdata);
+        }
+        else {
+          std::get<2>(outdata).send(parent, std::move(result));
+          //send<2>(parent, std::move(result), outdata);
+        }
+      } else {
+        std::get<3>(outdata).send(dest_key_, std::move(result));
+          //send<3>(dest_key_, std::move(result), outdata);
+      }
     }
 
    private:

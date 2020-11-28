@@ -40,8 +40,8 @@ namespace ttg {
       assert(key < tree_.size());
       assert(key == this->get_world().rank());
       auto children = tree_.child_keys(key);
-      if (children.first != -1) send<0>(children.first, this->template get<0, const Value &>(indata), outdata);
-      if (children.second != -1) send<1>(children.second, this->template get<0, const Value &>(indata), outdata);
+      if (children.first != -1) std::get<0>(outdata).send(children.first, this->template get<0, const Value &>(indata));
+      if (children.second != -1) std::get<1>(outdata).send(children.second, this->template get<0, const Value &>(indata));
       broadcast<2>(local_keys_, this->template get<0, const Value &>(indata), outdata);
     }
 

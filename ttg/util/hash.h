@@ -42,9 +42,15 @@ namespace ttg {
     template <typename T, typename Enabler = void>
     struct hash;
 
+    template <typename T = void, typename Enabler = void>
+    struct is_hashfun_defined : std::false_type {};
+
+    template<typename T>
+    struct is_hashfun_defined<T, decltype(std::declval<const T&>().hash())> : std::true_type {};
+
     /// instantiation of hash for types which have member function hash()
     template <typename T>
-    struct hash<T, std::void_t<decltype(std::declval<const T&>().hash())>> {
+    struct hash<T, std::enable_if_t<is_hashfun_defined<T>::value>> {
       auto operator()(const T &t) const { return t.hash(); }
     };
 
@@ -55,14 +61,39 @@ namespace ttg {
     };
 
     /// default implementation uses the bitwise hasher FNVhasher
-    template <typename T, typename Enabler>
-    struct hash {
+    template <typename T>
+    struct hash<T, std::enable_if_t<std::is_trivially_copyable_v<T> && 
+                !is_hashfun_defined<T>::value>> {
       auto operator()(const T& t) const {
         detail::FNVhasher hasher;
         hasher.update(sizeof(T), reinterpret_cast<const std::byte*>(&t));
         return hasher.value();
       }
     };
+
+    inline size_t combine_hash(size_t seed, size_t hash) {
+      seed ^= hash + 0x9e3779b9 + (seed<<6) + (seed>>2);
+      return seed;
+    }
+
+    template <typename T>
+    struct hash<T, std::enable_if_t<std::is_same_v<T, typename std::string>>> {
+      std::size_t operator()(const T& s) const noexcept {
+        detail::FNVhasher hasher;
+        hasher.update(s.size(), reinterpret_cast<const std::byte*>(s.c_str()));
+        return hasher.value();
+      }
+    }; 
+
+    template <typename T, typename X>
+    struct hash<std::pair<T, X>> {
+      std::size_t operator()(const std::pair<T, X>& p) const noexcept {
+      hash<T> hasher1;
+      hash<X> hasher2;
+
+      return combine_hash(hasher1(p.first), hasher2(p.second));
+    }
+  };
 
   }  // namespace overload
 

@@ -92,8 +92,8 @@ struct WrapOpUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<input_values
 // case 2 (keyT == void): void op(input_valuesT&&..., std::tuple<output_terminalsT...>&)
 //
 template <typename funcT, typename keyT, typename output_terminalsT, typename... input_valuesT>
-class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, output_terminalsT, input_valuesT...>,
-                             input_valuesT...> {
+class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, output_terminalsT, 
+                            input_valuesT...>, input_valuesT...> {
   using baseT =
       Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...>;
 
@@ -236,10 +236,12 @@ auto wrap(funcT &&func, const std::tuple<::ttg::Edge<keyT, input_edge_valuesT>..
   // Op needs actual types of arguments to func ... extract them and pass to WrapOpArgs
   // 1. func_args_t = {const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&}
   using func_args_t = boost::callable_traits::args_t<funcT>;
+  
   constexpr const auto num_args = std::tuple_size<func_args_t>::value;
   constexpr const auto void_key = ::ttg::meta::is_void_v<keyT>;
   static_assert(num_args == sizeof...(input_edge_valuesT) + (void_key ? 1 : 2),
                 "ttg::wrap(func, inedges): func's # of args != # of inedges");
+
   // 2. input_args_t = {input_valuesT&&...}
   using input_args_t =
       typename ::ttg::meta::take_first_n<typename ::ttg::meta::drop_first_n<func_args_t, std::size_t(void_key ? 0 : 1)>::type,
@@ -257,7 +259,7 @@ auto wrap(funcT &&func, const std::tuple<::ttg::Edge<keyT, input_edge_valuesT>..
   static_assert(
       std::is_same_v<typename std::tuple_element<num_args - 1, func_args_t>::type, output_terminals_type &>,
       "ttg::wrap(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
-
+  //std::cout << "WrapOpArgs types : " << boost::core::demangle(typeid(output_terminals_type).name()) << std::endl;
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 

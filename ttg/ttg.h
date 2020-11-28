@@ -60,6 +60,7 @@ bool operator==(const Void&, const Void&) { return true; }
 bool operator!=(const Void&, const Void&) { return false; }
 
 std::ostream& operator<<(std::ostream& os, const ttg::Void&) {
+  os << "Void";
   return os;
 }
 
@@ -117,7 +118,7 @@ namespace ttg {
     inline std::ostream &print_helper(std::ostream &out) { return out; }
     template <typename T, typename... Ts>
     inline std::ostream &print_helper(std::ostream &out, const T &t, const Ts &... ts) {
-      out << ' ' << t;
+      //out << ' ' << boost::core::demangle(typeid(t).name()) << "-----" << t;
       return print_helper(out, ts...);
     }
     //
@@ -154,7 +155,7 @@ namespace ttg {
   class TerminalBase {
    public:
     static constexpr bool is_a_terminal = true;
-
+    bool is_pull_terminal = false; //< Default is push terminal
     /// describes the terminal type
     enum class Type {
       Write,   /// can only be written to
@@ -171,6 +172,7 @@ namespace ttg {
     std::string value_type_str;  //< String describing value type
 
     std::vector<TerminalBase *> successors_;
+    std::vector<TerminalBase *> predecessors_; //This is required for pull terminals.
 
     TerminalBase(const TerminalBase &) = delete;
     TerminalBase(TerminalBase &&) = delete;
@@ -196,7 +198,14 @@ namespace ttg {
     /// Add directed connection (this --> successor) in internal representation of the TTG.
     /// This is called by the derived class's connect method
     void connect_base(TerminalBase *successor) { successors_.push_back(successor); connected = true; successor->connected = true;}
-
+    
+    void connect_pull(TerminalBase *predecessor) {
+      std::cout << "set_out : " << this->get_name() << "-> has predecessor " << predecessor->get_name() << std::endl; 
+      predecessors_.push_back(predecessor); 
+      connected = true; 
+      predecessor->connected = true; 
+    }
+    
    public:
     /// Return ptr to containing op
     OpBase *get_op() const {
@@ -234,9 +243,18 @@ namespace ttg {
     /// Get connections to successors
     const std::vector<TerminalBase *> &get_connections() const { return successors_; }
 
+    // Get connections to predecessors
+    const std::vector<TerminalBase *> &get_predecessors() const {return predecessors_; }
+
     /// Returns true if this terminal (input or output) is connected
     bool is_connected() const {return connected;}
 
+    template <typename keyT = void>
+    void invoke_predecessor(keyT &key) {
+      for (auto && predecessor : predecessors_) {
+        static_cast<Out<keyT, void>*>(predecessor)->invoke_callback(key);
+      }
+    }
     /// Connect this (a TTG output terminal) to a TTG input terminal.
     /// The base class method forwards to the the derived class connect method and so
     /// type checking for the key/value will be done at runtime when performing the
@@ -282,6 +300,7 @@ namespace ttg {
 
     template <bool out, typename terminalT, std::size_t i, typename setfuncT>
     void register_terminal(terminalT &term, const std::string &name, const setfuncT setfunc) {
+      //std::cout << "Terminal type : " << i << " " << term.is_pull_terminal << " " << name << boost::core::demangle(typeid(terminalT).name()) << std::endl;
       term.set(this, i, name, detail::demangled_type_name<typename terminalT::key_type>(),
                detail::demangled_type_name<typename terminalT::value_type>(),
                out ? TerminalBase::Type::Write
@@ -825,7 +844,7 @@ namespace ttg {
     move_callback_type move_callback;
     setsize_callback_type setsize_callback;
     finalize_callback_type finalize_callback;
-
+ 
     // No moving, copying, assigning permitted
     In(In &&other) = delete;
     In(const In &other) = delete;
@@ -887,7 +906,7 @@ namespace ttg {
       if (!send_callback) throw std::runtime_error("send callback not initialized");
       send_callback();
     }
-
+    
     // An optimized implementation will need a separate callback for broadcast
     // with a specific value for rangeT
     template <typename rangeT, typename Value = valueT>
@@ -926,7 +945,7 @@ namespace ttg {
     }
 
     Type get_type() const override {
-      return std::is_const<valueT>::value ? TerminalBase::Type::Read : TerminalBase::Type::Consume;
+      return (std::is_const<valueT>::value ? TerminalBase::Type::Read : TerminalBase::Type::Consume);
     }
   };
 
@@ -936,13 +955,14 @@ namespace ttg {
    public:
     typedef valueT value_type;
     typedef keyT key_type;
-    static_assert(std::is_same<keyT, std::decay_t<keyT>>::value,
-                  "Out<keyT,valueT> assumes keyT is a non-decayable type");
+    //static_assert(std::is_same<keyT, std::decay_t<keyT>>::value,
+    //              "Out<keyT,valueT> assumes keyT is a non-decayable type");
     static_assert(std::is_same<valueT, std::decay_t<valueT>>::value,
                   "Out<keyT,valueT> assumes valueT is a non-decayable type");
     typedef Edge<keyT, valueT> edge_type;
     static constexpr bool is_an_output_terminal = true;
-
+    using invoke_callback_type = meta::detail::invoke_callback_t<keyT>;
+    invoke_callback_type invoke_callback;
    private:
     // No moving, copying, assigning permitted
     Out(Out &&other) = delete;
@@ -975,6 +995,13 @@ namespace ttg {
       }
 #endif
       this->connect_base(in);
+      //If I am a pull terminal, add me as (in)'s predecessor
+      if (is_pull_terminal)
+        in->connect_pull(this);
+    }
+    
+    void set_invoke_callback(const invoke_callback_type &invoke_callback = invoke_callback_type{}) {
+      this->invoke_callback = invoke_callback;
     }
 
     auto nsuccessors() const {
@@ -990,9 +1017,8 @@ namespace ttg {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
-        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+        } else if (successor->get_type() == TerminalBase::Type::Consume)
           static_cast<In<keyT, valueT> *>(successor)->send(key, value);
-        }
       }
     }
 
@@ -1139,7 +1165,9 @@ namespace ttg {
       }
     }
 
-    Type get_type() const override { return TerminalBase::Type::Write; }
+    Type get_type() const override { 
+      return TerminalBase::Type::Write; 
+    }
   };
 
   /// Connect output terminal to successor input terminal
@@ -1168,6 +1196,11 @@ namespace ttg {
   template <typename keyT, typename valueT>
   class Edge {
    private:
+    //struct pullfunc_type
+    //{
+      //typedef std::function<std::decay_t<std::tuple<keyT>> (std::decay_t<std::tuple<keyT>&>)> type;
+      //typedef std::function<std::tuple<keyT> (std::tuple<keyT>&&)> type;
+    //};
     // An EdgeImpl represents a single edge that most usually will
     // connect a single output terminal with a single
     // input terminal.  However, we had to relax this constraint in
@@ -1181,17 +1214,21 @@ namespace ttg {
     // to a single terminal.
     struct EdgeImpl {
       std::string name;
+      bool is_pull_edge = false;
+
       std::vector<TerminalBase *> outs;  // In<keyT, valueT> or In<keyT, const valueT>
       std::vector<Out<keyT, valueT> *> ins;
 
-      EdgeImpl() : name(""), outs(), ins() {}
-
-      EdgeImpl(const std::string &name) : name(name), outs(), ins() {}
+      EdgeImpl(const std::string &name, bool is_pull = false) : name(name), 
+                is_pull_edge(is_pull), outs(), ins() {}
 
       void set_in(Out<keyT, valueT> *in) {
         if (ins.size() && tracing()) {
           print("Edge: ", name, " : has multiple inputs");
         }
+        in->is_pull_terminal = is_pull_edge;
+        //std::cout << "set_in : " << in->get_name() << " " << in->is_pull_terminal << std::endl;
+        
         ins.push_back(in);
         try_to_connect_new_in(in);
       }
@@ -1200,19 +1237,29 @@ namespace ttg {
         if (outs.size() && tracing()) {
           print("Edge: ", name, " : has multiple outputs");
         }
+        out->is_pull_terminal = is_pull_edge;
+        //std::cout << "set_out : " << out->get_name() << " " << out->is_pull_terminal << std::endl;
         outs.push_back(out);
         try_to_connect_new_out(out);
       }
 
       void try_to_connect_new_in(Out<keyT, valueT> *in) const {
-        for (auto out : outs)
-          if (in && out) in->connect(out);
+        for (auto out : outs) {
+          if (in && out) {
+            //std::cout << "set_in : " << in->get_name() << "-> connect to " << out->get_name() << std::endl;
+            in->connect(out);
+          }
+        }
       }
 
       void try_to_connect_new_out(TerminalBase *out) const {
         assert(out->get_type() != TerminalBase::Type::Write);  // out must be an In<>
-        for (auto in : ins)
-          if (in && out) in->connect(out);
+        for (auto in : ins) {
+          if (in && out) {
+            //std::cout << "set_out : " << in->get_name() << "-> connect to " << out->get_name() << std::endl;
+            in->connect(out);
+          }
+        }
       }
 
       ~EdgeImpl() {
@@ -1227,18 +1274,21 @@ namespace ttg {
     // We have a vector here to accomodate fusing multiple edges together
     // when connecting them all to a single terminal.
     mutable std::vector<std::shared_ptr<EdgeImpl>> p;  // Need shallow copy semantics
-
-   public:
+   
+  public:
     typedef Out<keyT, valueT> output_terminal_type;
     typedef keyT key_type;
     typedef valueT value_type;
+    
     static_assert(std::is_same<keyT, std::decay_t<keyT>>::value,
                   "Edge<keyT,valueT> assumes keyT is a non-decayable type");
     static_assert(std::is_same<valueT, std::decay_t<valueT>>::value,
                   "Edge<keyT,valueT> assumes valueT is a non-decayable type");
     static constexpr bool is_an_edge = true;
 
-    Edge(const std::string name = "anonymous edge") : p(1) { p[0] = std::make_shared<EdgeImpl>(name); }
+    Edge(const std::string name = "anonymous edge", bool is_pull = false) : p(1) {
+      p[0] = std::make_shared<EdgeImpl>(name, is_pull);
+    }
 
     template <typename... valuesT>
     Edge(const Edge<keyT, valuesT> &... edges) : p(0) {
@@ -1264,6 +1314,10 @@ namespace ttg {
 
     void set_out(TerminalBase *out) const {
       for (auto &edge : p) edge->set_out(out);
+    }
+
+    bool is_pull_edge() const {
+      return p.at(0)->is_pull_edge;
     }
 
     // this is currently just a hack, need to understand better whether this is a good idea
@@ -1384,7 +1438,7 @@ namespace ttg {
   struct edges_to_output_terminals<std::tuple<edgesT...>> {
     typedef std::tuple<typename edgesT::output_terminal_type...> type;
   };
-
+    
   /// A data sink for one input
     template <typename keyT, typename input_valueT>
     class OpSink : public ::ttg::OpBase {
@@ -1411,7 +1465,6 @@ namespace ttg {
             auto send_callback = [](const keyT &key, const valueT &value) {};
             auto setsize_callback = [](const keyT &key, std::size_t size) {};
             auto finalize_callback = [](const keyT &key) {};
-            
             input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
         }
         
