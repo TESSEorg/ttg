@@ -200,7 +200,7 @@ namespace ttg {
     void connect_base(TerminalBase *successor) { successors_.push_back(successor); connected = true; successor->connected = true;}
     
     void connect_pull(TerminalBase *predecessor) {
-      std::cout << "set_out : " << this->get_name() << "-> has predecessor " << predecessor->get_name() << std::endl; 
+      //std::cout << "set_out : " << this->get_name() << "-> has predecessor " << predecessor->get_name() << std::endl; 
       predecessors_.push_back(predecessor); 
       connected = true; 
       predecessor->connected = true; 
@@ -249,7 +249,7 @@ namespace ttg {
     /// Returns true if this terminal (input or output) is connected
     bool is_connected() const {return connected;}
 
-    template <typename keyT = void>
+    template <typename keyT>
     void invoke_predecessor(keyT &key) {
       for (auto && predecessor : predecessors_) {
         static_cast<Out<keyT, void>*>(predecessor)->invoke_callback(key);
@@ -280,7 +280,8 @@ namespace ttg {
     OpBase *containing_composite_op;  //< If part of a composite, points to composite operator
 
     bool executable;
-
+    static bool lazy_pull;
+ 
     // Default copy/move/assign all OK
     static uint64_t next_instance_id() {
       static uint64_t id = 0;
@@ -373,6 +374,11 @@ namespace ttg {
       return value;
     }
 
+    static bool set_lazy_pull(bool value) {
+      std::swap(lazy_pull, value);
+      return value;
+    }
+
     /// Sets trace for just this instance to value and returns previous setting
     bool set_trace_instance(bool value) {
       std::swap(trace_instance, value);
@@ -382,6 +388,7 @@ namespace ttg {
     /// Returns true if tracing set for either this instance or all instances
     bool get_trace() { return trace || trace_instance; }
     bool tracing() { return get_trace(); }
+    bool is_lazy_pull() { return lazy_pull; }
 
     void set_is_composite(bool value) { is_composite = value; }
     bool get_is_composite() const { return is_composite; }
@@ -462,7 +469,7 @@ namespace ttg {
 
   // With more than one source file this will need to be moved
   bool OpBase::trace = false;
-
+  bool OpBase::lazy_pull = false;
   void OpBase::make_executable() { executable = true; }
 
 

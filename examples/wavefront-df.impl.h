@@ -82,7 +82,7 @@ auto make_wavefront2(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
     int next_j = j + 1;
 
     int size = bottom_right.size(); 
-    std::cout << "wf2 " << i << " " << j << " " << "size: " << bottom_right.size() <<  std::endl;
+    //std::cout << "wf2 " << i << " " << j << " " << "size: " << bottom_right.size() <<  std::endl;
     BlockMatrix<T> res;
     if (i == MB - 1 && j == NB - 1)
       res = func(i, j, MB, NB, input, left, top, input, input);
@@ -172,7 +172,7 @@ auto initiator(Matrix<T>* m, Edge<Key, BlockMatrix<T>>& out0, Edge<Key, BlockMat
 template <typename T>
 auto make_getdata(Matrix<T>* m, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right0) {
   auto f = [m](const Key& key, std::tuple<Out<Key, std::vector<BlockMatrix<T>>>>& out) {
-    std::cout << "getdata called...\n";
+    //std::cout << "getdata called...\n";
     std::vector<BlockMatrix<T>> v;
     auto [i,j] = key;
     v.push_back((*m)(i,j+1));
@@ -187,7 +187,7 @@ auto make_getdata(Matrix<T>* m, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_r
 template <typename T>
 auto make_getdata2(Matrix<T>* m, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right1) {
   auto f = [m](const Key& key, std::tuple<Out<Key, std::vector<BlockMatrix<T>>>>& out) {
-      std::cout << "getdata2 called...\n";
+      //std::cout << "getdata2 called...\n";
       std::vector<BlockMatrix<T>> v;
       auto[i,j] = key;
       if ((i == 0 && j > 0) || (i > 0 && j == 0)) {
@@ -213,7 +213,7 @@ auto make_wavefront0(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
     int next_i = i + 1;
     int next_j = j + 1;
 
-    std::cout << "wf0 " << i << " " << j << " " << "size: " << bottom_right.size() <<  std::endl;
+    //std::cout << "wf0 " << i << " " << j << " " << "size: " << bottom_right.size() <<  std::endl;
     BlockMatrix<T> res = func(i, j, MB, NB, input, input, input, bottom_right[0], bottom_right[1]);  
     
     send<0>(Key(i,next_j), res, out);
@@ -238,7 +238,7 @@ auto make_wavefront1(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
     int next_i = i + 1;
     int next_j = j + 1;
 
-    std::cout << "wf1 " << i << " " << j << "size: " << bottom_right.size() <<  std::endl;
+    //std::cout << "wf1 " << i << " " << j << "size: " << bottom_right.size() <<  std::endl;
     BlockMatrix<T> res;
     int size = bottom_right.size();
       if (size == 1)
@@ -328,6 +328,7 @@ int main(int argc, char** argv) {
 
   ttg_initialize(argc, argv, -1);
   //OpBase::set_trace_all(true);
+  OpBase::set_lazy_pull(true);
   {
     auto i = initiator(m, input0, input1, input2, //bottom_right0, bottom_right1, 
                       bottom_right2);

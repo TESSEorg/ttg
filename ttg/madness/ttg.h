@@ -178,6 +178,7 @@ namespace madness {
       // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
       ::ttg::meta::detail::input_reducers_t<input_valueTs...>
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
+      int num_pullins = 0;
 
      public:
       World &get_world() const { return world; }
@@ -306,7 +307,6 @@ namespace madness {
       template <typename terminalT, std::size_t i, typename Key = keyT>
       void invoke_pull_terminal(terminalT &in, const Key& key) {
         if (in.is_pull_terminal) {
-          std::cout << "Invoking pull terminals for..." << get_name() << "\n"; 
           in.invoke_predecessor(key); 
         }
       }
@@ -388,12 +388,10 @@ namespace madness {
           accessorT acc;
           if (cache.insert(acc, key)) {
             acc->second = new OpArgs();  // It will be deleted by the task q
-            //Check if this Op has any pull input terminals and invoke the pull Op
-            //TODO: Specify options for lazy vs eager invoking of pull inputs.
-            //if (!pull_terminals_invoked) {
+            //Check if this Op has any pull input terminals and invoke the pull Op if set to Eager
+            if (!is_lazy_pull()) {
               invoke_pull_terminals(std::make_index_sequence<numins>{}, key);
-              //this->pull_terminals_invoked = true; //Set the flag so don't invoke them again.
-            //}
+            }
           }
           OpArgs *args = acc->second;
 
@@ -444,6 +442,12 @@ namespace madness {
             args->counter--;
           }
 
+          //If lazy pulling in enabled, check it here.
+          if (numins - args->counter == num_pullins) {
+            if (is_lazy_pull()) {
+              invoke_pull_terminals(std::make_index_sequence<numins>{}, key);
+            }
+          } else
           // ready to run the task?
           if (args->counter == 0) {
             if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
@@ -851,6 +855,9 @@ namespace madness {
                       "Op::register_input_callback(terminalT) -- incompatible terminalT");
         using valueT = std::decay_t<typename terminalT::value_type>;
 
+        if (input.is_pull_terminal) {
+          num_pullins++;
+        }
         //////////////////////////////////////////////////////////////////
         // case 1: nonvoid key, nonvoid value
         //////////////////////////////////////////////////////////////////
@@ -921,7 +928,6 @@ namespace madness {
         // case 3: nonvoid key, void value, no inputs
         //////////////////////////////////////////////////////////////////
         else if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
-          std::cout << "do we come here for pull?\n";
           auto send_callback = [this](const keyT &key) {
             set_arg<keyT>(key);
           };
@@ -1002,12 +1008,12 @@ namespace madness {
           }
      }
 
-      template <typename terminalT, std::size_t i>
+      /*template <typename terminalT, std::size_t i>
       void set_pull_op(terminalT &out) {
         if (out.is_pull_terminal) {
            out.set_pull_op(this);
         }
-      }
+      }*/
 
       template <std::size_t... IS>
       void set_pull_ops(std::index_sequence<IS...>) {
@@ -1068,10 +1074,11 @@ namespace madness {
         register_input_terminals(input_terminals, innames);
         register_output_terminals(output_terminals, outnames);
         
-        register_input_callbacks(std::make_index_sequence<numins>{});
-
         connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numins>{}, inedges);
         connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
+        
+        //DO NOT move this!
+        register_input_callbacks(std::make_index_sequence<numins>{});
         set_pull_ops(std::make_index_sequence<numouts>{});
       }
 
