@@ -55,6 +55,10 @@ if (TARGET MADworld)
   add_executable (mapreduce-mad madness/mapreduce.cc mapreduce.impl.h)
   target_link_libraries(mapreduce-mad LINK_PUBLIC ttg-mad)
 
+  # RandomAccess HPCC Benchmark
+  add_executable (randomaccess-mad madness/randomaccess.cc randomaccess.impl.h)
+  target_link_libraries(randomaccess-mad LINK_PUBLIC ttg-mad)
+
   # sparse matmul
   if (EIGEN3_FOUND)
     add_executable (spmm-mad madness/spmm.cc spmm.impl.h)

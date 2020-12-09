@@ -179,7 +179,7 @@ namespace madness {
       ::ttg::meta::detail::input_reducers_t<input_valueTs...>
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
       int num_pullins = 0;
-
+       
      public:
       World &get_world() const { return world; }
 
@@ -239,6 +239,7 @@ namespace madness {
         input_values_tuple_type input_values;   // The input values (does not include control)
         derivedT *derived;           // Pointer to derived class instance
         bool pull_terminals_invoked = false;
+        output_terminals_type pull_successor;
         std::conditional_t<::ttg::meta::is_void_v<keyT>,::ttg::Void,keyT> key;                    // Task key
 
         /// makes a tuple of references out of tuple of
@@ -307,6 +308,7 @@ namespace madness {
       template <typename terminalT, std::size_t i, typename Key = keyT>
       void invoke_pull_terminal(terminalT &in, const Key& key) {
         if (in.is_pull_terminal) {
+          std::cout << "Invoking pull terminal for " << get_name() << std::endl;
           in.invoke_predecessor(key); 
         }
       }
@@ -320,7 +322,7 @@ namespace madness {
 
       template <typename Key = keyT>
       std::enable_if_t<!::ttg::meta::is_void_v<Key>, void>
-      set_pull_arg(const Key &key) {
+	set_pull_arg(const Key &key) {
         const auto owner = keymap(key);
         if (owner != world.rank()) {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding pull argument : ");
@@ -336,8 +338,8 @@ namespace madness {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
           args->derived = static_cast<derivedT *>(this);
           args->key = key;
-
-          world.taskq.add(args);
+	            
+	  world.taskq.add(args);
 
           cache.erase(acc);
         }
@@ -994,8 +996,8 @@ namespace madness {
       void register_invoke_callback(terminalT &output) {
           if (output.is_pull_terminal) {
             if constexpr (!::ttg::meta::is_void_v<keyT>) {
-              auto invoke_callback = [this](const keyT &key) {
-                set_pull_arg(key);
+		auto invoke_callback = [this](const keyT &key) {
+		  set_pull_arg(key);
               };
               output.set_invoke_callback(invoke_callback);
             }
@@ -1007,13 +1009,6 @@ namespace madness {
             }
           }
      }
-
-      /*template <typename terminalT, std::size_t i>
-      void set_pull_op(terminalT &out) {
-        if (out.is_pull_terminal) {
-           out.set_pull_op(this);
-        }
-      }*/
 
       template <std::size_t... IS>
       void set_pull_ops(std::index_sequence<IS...>) {
@@ -1121,6 +1116,11 @@ namespace madness {
         }
         std::get<i>(input_reducers) = reducer;
       }
+  
+      template <typename Keymap>
+      void set_keymap(Keymap &&km) {
+        keymap = km;
+      }
 
       /// implementation of OpBase::make_executable()
       void make_executable() {
@@ -1175,7 +1175,7 @@ namespace madness {
         set_arg<Key>();
       }
 
-      template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>, void>
+      /*template <typename Key = keyT> std::enable_if_t<!::ttg::meta::is_void_v<Key>, void>
       invoke_pull(const Key& key) {
         set_pull_arg(key);
       }
@@ -1183,7 +1183,7 @@ namespace madness {
       template <typename Key = keyT> std::enable_if_t<::ttg::meta::is_void_v<Key>, void>
       invoke_pull() {
         set_pull_arg();
-      }
+      }*/
 
       /// keymap accessor
       /// @return the keymap

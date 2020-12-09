@@ -6,7 +6,7 @@
 #include <string>
 #include <memory>
 
-#define BLOCK_SIZE 16//1024
+#define BLOCK_SIZE 16
 
 #include TTG_RUNTIME_H
 IMPORT_TTG_RUNTIME_NS
@@ -17,46 +17,22 @@ using Key = std::pair<std::pair<std::string, T>, T>;
 template<typename T>
 using MapKey = std::multimap<std::string, T>;
 
-namespace ttg::overload {
-  inline size_t combine_hash(size_t seed, size_t hash) {
-    seed ^= hash + 0x9e3779b9 + (seed<<6) + (seed>>2);
-    return seed;
-  }
-
-  template <>
-  struct hash<std::string> {
-    std::size_t operator()(const std::string& s) const noexcept {
-      detail::FNVhasher hasher;
-      hasher.update(s.size(), reinterpret_cast<const std::byte*>(s.c_str()));
-      return hasher.value();
-    }
-  };
-
-  template <typename T, typename X>
-  struct hash<std::pair<T, X>> {
-    std::size_t operator()(const std::pair<T, X>& p) const noexcept {
-      hash<T> hasher1;
-      hash<X> hasher2;
-      
-      return combine_hash(hasher1(p.first), hasher2(p.second));
-    }
-  };
-}
-
 namespace madness {
   namespace archive {
     template <class Archive, typename T>
     struct ArchiveStoreImpl<Archive, MapKey<T>> {
       static inline void store(const Archive& ar, const MapKey<T>& mk) {
-        ar & mk.size();
+        int size = mk.size();;
+        ar & size;
+        typename MapKey<T>::const_iterator it = mk.begin();
         //std::cout << "Storing ..." << mk.size() << std::endl;
-        for (typename MapKey<T>::const_iterator it = mk.begin(); it != mk.end(); it++)
-        {
-          ar & it->first.size();
+        //for (typename MapKey<T>::const_iterator it = mk.begin(); it != mk.end(); it++)
+        while (size--) {
           ar & it->first;
-          ar & it->second; 
+          //std::cout << "Sent : " << it->first << std::endl;
+          ar & it->second;
+          it++;
         }
-        //ar << mk;
       }
     };
 
@@ -65,19 +41,14 @@ namespace madness {
       static inline void load(const Archive& ar, MapKey<T>& mk) {
         int size;
         ar & size;
-        //std::cout << "Loading ..." << size << std::endl;
-        for (int i = 0; i < size; i++) {
+        while (size--) {
           std::string s;
           T v;
-          int ss;
-          ar & ss;
-          while (s.size() < ss)
-            ar & s; 
+          ar & s;
           ar & v;
-          std::cout << "Loading..." << s << " " << v << std::endl;
+          //std::cout << "Loading..." << s << " " << v << std::endl;
           mk.insert(std::make_pair(s, v));
         }
-        //ar >> mk;
       }
     };
   }
@@ -168,8 +139,6 @@ auto make_mapper(const funcT& func, Edge<Key<T>, std::string>& mapEdge, Edge<Key
       func(chunk, resultMap);
       send<0>(key, resultMap, out);
     }
-    //for (MapKey<T>::iterator it = resultMap.begin(); it != resultMap.end(); it++)
-    //  std::cout << it->first << ":" << it->second << std::endl;
   };
   
   return wrap(f, edges(mapEdge), edges(reduceEdge), "mapper", {"mapEdge"}, {"reduceEdge"}); 
@@ -177,11 +146,11 @@ auto make_mapper(const funcT& func, Edge<Key<T>, std::string>& mapEdge, Edge<Key
 
 template <typename funcT, typename T>
 auto make_reducer(const funcT& func, Edge<Key<T>, MapKey<T>>& reduceEdge, 
-                Edge<Key<T>, std::pair<std::string, T>>& writerEdge)
+                Edge<void, std::pair<std::string, T>>& writerEdge)
 {
   auto f = [func](const Key<T>& key, MapKey<T>& inputMap, 
                 std::tuple<Out<Key<T>, MapKey<T>>,
-                Out<Key<T>, std::pair<std::string, T>>>& out)
+                Out<void, std::pair<std::string, T>>>& out)
   { 
     typename MapKey<T>::iterator iter;
     int value = 0;
@@ -194,6 +163,9 @@ auto make_reducer(const funcT& func, Edge<Key<T>, MapKey<T>>& reduceEdge,
     }*/
 
     iter = inputMap.begin();
+    //std::pair <typename MapKey<T>::iterator, typename MapKey<T>::iterator> range = inputMap.equal_range(iter->first);
+    //value = std::reduce(range.first, range.second, 0, func);
+
     //Count of elements with same key
     int count = inputMap.count(iter->first);
     if (count > 1) {
@@ -202,7 +174,7 @@ auto make_reducer(const funcT& func, Edge<Key<T>, MapKey<T>>& reduceEdge,
         value = func(value, iter->second); 
         count--;
         if (count == 0) {
-          send<1>(std::make_pair(key.first, tokenID), std::make_pair(iter->first, value), out);
+          sendv<1>(std::make_pair(iter->first, value), out);
           //std::get<1>(out).send(std::make_pair(key.first, tokenID), std::make_pair(iter->first, value));
           //std::cout << "Sent token " << tokenID << " <" << iter->first << " " << value << ">" << std::endl;
           value = 0;
@@ -215,7 +187,7 @@ auto make_reducer(const funcT& func, Edge<Key<T>, MapKey<T>>& reduceEdge,
       }
     }
     else {
-      send<1>(std::make_pair(key.first, tokenID), std::make_pair(iter->first, iter->second), out);
+      sendv<1>(std::make_pair(iter->first, iter->second), out);
       //std::get<1>(out).send(std::make_pair(key.first, tokenID), std::make_pair(iter->first, iter->second)); 
       //std::cout << "Sent token " << tokenID << " <" << iter->first << " " << iter->second << ">" << std::endl;
       inputMap.erase(iter);
@@ -231,17 +203,25 @@ auto make_reducer(const funcT& func, Edge<Key<T>, MapKey<T>>& reduceEdge,
             {"recurReduceEdge","writerEdge"});
 }
 
+template <typename T>
+struct Node {
+  T data;
+  Node* left;
+  Node* right;
+  Node* parent;
+};
+
 template<typename T>
-auto make_writer(std::map<std::string, T>& resultMap, std::mutex& mtx, Edge<Key<T>, std::pair<std::string, T>>& writerEdge)
+auto make_writer(std::map<std::string, T>& resultMap, Edge<void, std::pair<std::string, T>>& writerEdge)
 {
-  auto f = [&resultMap, &mtx](const Key<T>& key, std::pair<std::string, T> &value, std::tuple<>& out) {
+  auto f = [&resultMap](std::pair<std::string, T> &value, std::tuple<>& out) {
     //Lock is required since multiple threads can stream the tokens to this unique task.
-    std::lock_guard<std::mutex> lock(mtx);
     auto it = resultMap.find(value.first);
     if (it != resultMap.end())
       resultMap[value.first] += value.second;
     else
       resultMap.insert(value);
+    //std::cout << "Write Rank : " << ttg_default_execution_context().rank() << std::endl;
     //std::cout << key.second << ":" <<  value.first << " " << resultMap[value.first] << std::endl;
   };
 
@@ -251,8 +231,8 @@ auto make_writer(std::map<std::string, T>& resultMap, std::mutex& mtx, Edge<Key<
   //                        return a.second + b.second;
   //                      });
   //return w;
-  //std::unique_ptr makes a single task with streaming input.
-  return std::unique_ptr(wrap(f, edges(writerEdge), edges(), "writer", {"writerEdge"}, {}));
+  //return std::unique_ptr(wrap<void>(f, edges(writerEdge), edges(), "writer", {"writerEdge"}, {}));
+  return wrap<void>(f, edges(writerEdge), edges(), "writer", {"writerEdge"}, {}); 
 }
 
 int main(int argc, char* argv[]) {
@@ -271,15 +251,14 @@ int main(int argc, char* argv[]) {
   
   Edge<Key<int>, std::string> mapEdge;
   Edge<Key<int>, MapKey<int>> reduceEdge;
-  Edge<Key<int>, std::pair<std::string, int>> writerEdge;  
+  Edge<void, std::pair<std::string, int>> writerEdge;  
   
   auto rd = make_reader(mapEdge);
   auto m = make_mapper(mapper<int>, mapEdge, reduceEdge);
   auto r = make_reducer(std::plus<int>(), reduceEdge, writerEdge);
   
-  std::mutex mtx;
   std::map<std::string, int> result;
-  auto w = make_writer(result, mtx, writerEdge);
+  auto w = make_writer(result, writerEdge);
 
   /*w->set_input_reducer<0>([](std::pair<std::string, int> &&a, std::pair<std::string, int> &&b)
                         {
@@ -292,7 +271,7 @@ int main(int argc, char* argv[]) {
   auto connected = make_graph_executable(rd.get());
   assert(connected);
   TTGUNUSED(connected);
-  std::cout << "Graph is connected.\n";
+  //std::cout << "Graph is connected.\n";
 
   if (ttg_default_execution_context().rank() == 0) {
     //std::cout << "==== begin dot ====\n";
@@ -312,14 +291,23 @@ int main(int argc, char* argv[]) {
 
   if (ttg_default_execution_context().rank() == 0) {
     end = std::chrono::high_resolution_clock::now();
- 
+
+    /*std::cout << "==================== RESULT ===================\n"; 
     for(auto it : result) {
       std::cout << it.first << " " << it.second << std::endl;   
-    } 
+    } */
     std::cout << "Mapreduce took " << 
         (std::chrono::duration_cast<std::chrono::seconds>(end - beg).count()) << 
         " seconds" << std::endl;
+    for(auto it : result) {
+      std::cout << it.first << " " << it.second << std::endl;
+    }
   }
+  
+  /*std::cout << "==================== RESULT from rank " << ttg_default_execution_context().rank() << " ===================\n";
+    for(auto it : result) {
+      std::cout << it.first << " " << it.second << std::endl;
+    }*/
   ttg_finalize();
   return 0;
 }
