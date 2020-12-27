@@ -53,7 +53,7 @@ struct Key {
   }
 };
 
-namespace std {
+namespace ttg::overload {
   // specialize std::hash for Key
   template <>
   struct hash<Key> {

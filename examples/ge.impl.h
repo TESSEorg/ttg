@@ -45,7 +45,7 @@ struct Key {
   }
 };
 
-namespace std {
+namespace ttg::overload {
   // specialize std::hash for Key
   template <>
   struct hash<Key> {
@@ -542,7 +542,7 @@ int main(int argc, char** argv) {
     if (strcmp(argv[arg], "-dx") == 0) xterm_debug(argv[0], 0);
   }
 
-  OpBase::set_trace_all(false);
+  OpBase::set_trace_all(true);
 
   // NEW IMPLEMENTATION
   int problem_size;

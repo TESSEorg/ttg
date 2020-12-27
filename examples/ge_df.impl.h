@@ -50,7 +50,7 @@ struct Key {
   }
 };
 
-namespace std {
+namespace ttg::overload {
   // specialize std::hash for Key
   template <>
   struct hash<Key> {
@@ -625,7 +625,7 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
 void ge_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
-  OpBase::set_trace_all(false);
+  OpBase::set_trace_all(true);
 
   initialize(argc, argv);
   World world(SafeMPI::COMM_WORLD);

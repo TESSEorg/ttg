@@ -363,6 +363,7 @@ class ReductionTest {
     ::ttg::print("ReductionTest: produced ", value, " on rank ", ttg_default_execution_context().rank());
     send<0>(key, value, out);
   }
+
   static void consumer(const int &key, const int &value, std::tuple<> &out) {
     ::ttg::print("ReductionTest: consumed ", value);
   }

@@ -112,7 +112,7 @@ using kT = size_t; // k is the iteration index
 using kiT = std::pair<kT,iT>; // ki holds iteration k and vector index i
 using sumreskeyT = int; // type of key for sum destination
 
-namespace std {
+namespace ttg::overload {
     template <> struct hash<kiT> {
         size_t operator()(const kiT& s) const noexcept { return (s.first<<32) + s.second; }
     };

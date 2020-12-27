@@ -200,7 +200,7 @@ namespace ttg {
     void connect_base(TerminalBase *successor) { successors_.push_back(successor); connected = true; successor->connected = true;}
     
     void connect_pull(TerminalBase *predecessor) {
-      std::cout << "set_out : " << this->get_name() << "-> has predecessor " << predecessor->get_name() << std::endl; 
+      //std::cout << "set_out : " << this->get_name() << "-> has predecessor " << predecessor->get_name() << std::endl; 
       predecessors_.push_back(predecessor); 
       connected = true; 
       predecessor->connected = true; 
@@ -1007,8 +1007,8 @@ namespace ttg {
         in->connect_pull(this);
     }
     
-    void set_invoke_callback(const invoke_callback_type &invoke_callback = invoke_callback_type{}) {
-      std::cout << boost::core::demangle(typeid(this).name()) << std::endl;
+    void set_invoke_callback(const invoke_callback_type &invoke_callback) {// = invoke_callback_type{}) {
+      //std::cout << boost::core::demangle(typeid(this).name()) << std::endl;
       this->invoke_callback = invoke_callback;
     }
 
