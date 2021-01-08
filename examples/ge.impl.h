@@ -22,13 +22,13 @@ IMPORT_TTG_RUNTIME_NS
 struct Key {
   // ((I, J), K) where (I, J) is the tile coordiante and K is the iteration number
   std::pair<std::pair<int, int>, int> execution_info;
-  madness::hashT hash_val;
+  std::size_t hash_val;
 
   Key() : execution_info(std::make_pair(std::make_pair(0, 0), 0)) { rehash(); }
   Key(const std::pair<std::pair<int, int>, int>& e) : execution_info(e) { rehash(); }
   Key(int e_f_f, int e_f_s, int e_s) : execution_info(std::make_pair(std::make_pair(e_f_f, e_f_s), e_s)) { rehash(); }
 
-  madness::hashT hash() const { return hash_val; }
+  std::size_t hash() const { return hash_val; }
   void rehash() {
     std::hash<int> int_hasher;
     hash_val = int_hasher(execution_info.first.first) ^ int_hasher(execution_info.first.second) ^
@@ -83,7 +83,7 @@ struct Integer {
     std::hash<int> int_hasher;
     hash_val = int_hasher(value);
   }
-  
+
   // Equality test
   bool operator==(const Integer& b) const { return value == b.value; }
 
@@ -446,10 +446,11 @@ class GaussianElimination {
   FuncB funcB;
   FuncC funcC;
   FuncD funcD;
-  World& world;
 
   // Needed for Initiating the execution in Initiator data member (see the function start())
   int blocking_factor;
+
+  ttg::World world;
 
  public:
   GaussianElimination(double* adjacency_matrix_ttg, int problem_size, int blocking_factor,
@@ -459,7 +460,7 @@ class GaussianElimination {
       , funcB(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcB")
       , funcC(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcC")
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
-      , blocking_factor(blocking_factor), world(madness::World::get_default()) {
+      , blocking_factor(blocking_factor), world(ttg_default_execution_context()) {
     initiator.out<0>()->connect(funcA.in<0>());
     initiator.out<1>()->connect(funcB.in<0>());
     initiator.out<2>()->connect(funcC.in<0>());
@@ -478,7 +479,7 @@ class GaussianElimination {
     funcD.out<3>()->connect(funcD.in<0>());
 
     if (!make_graph_executable(&initiator)) throw "should be connected";
-    world.gop.fence();
+    fence();
   }
 
   void print() {}  //{Print()(&producer);}
@@ -534,15 +535,13 @@ int main(int argc, char** argv) {
 
   OpBase::set_trace_all(false); */
 
-  initialize(argc, argv);
-  World world(SafeMPI::COMM_WORLD);
-  set_default_world(world);
+  ttg_initialize(argc, argv);
 
   // world.taskq.add(world.rank(), hi);
-  world.gop.fence();
+  ttg_fence(ttg_default_execution_context());
 
   for (int arg = 1; arg < argc; ++arg) {
-    if (strcmp(argv[arg], "-dx") == 0) xterm_debug(argv[0], 0);
+    if (strcmp(argv[arg], "-dx") == 0) madness::xterm_debug(argv[0], 0);
   }
 
   OpBase::set_trace_all(false);
@@ -600,6 +599,8 @@ int main(int argc, char** argv) {
   if (verify_results) {
     free(adjacency_matrix_serial);
   }
+
+  ttg_finalize();
 
   return 0;
 }

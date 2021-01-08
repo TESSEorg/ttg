@@ -114,8 +114,8 @@ class Initiator : public Op<int,
     // This triggers for the immediate execution of function A at tile [0, 0]. But
     // functions B, C, and D have other dependencies to meet before execution; They wait
 #ifdef HAS_EXECUTION_HEADER
-    std::for_each(std::execution::par, adjacency_matrix_ttg->get().begin(), adjacency_matrix_ttg->get().end(), 
-      [&out](const std::pair<std::pair<int,int>, BlockMatrix<T>>& kv) 
+    std::for_each(std::execution::par, adjacency_matrix_ttg->get().begin(), adjacency_matrix_ttg->get().end(),
+      [&out](const std::pair<std::pair<int,int>, BlockMatrix<T>>& kv)
 #else
     std::for_each(adjacency_matrix_ttg->get().begin(), adjacency_matrix_ttg->get().end(),
       [&out](const std::pair<std::pair<int,int>, BlockMatrix<T>>& kv)
@@ -157,7 +157,7 @@ class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
       , blocking_factor(blocking_factor)
       , kernel_type(kernel_type)
       , recursive_fan_out(recursive_fan_out)
-      , base_size(base_size) 
+      , base_size(base_size)
       , verify_results(verify_results)
       , adjacency_matrix_serial(adjacency_matrix_serial) {}
 
@@ -650,11 +650,9 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
 void floyd_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
-  OpBase::set_trace_all(false); 
+  OpBase::set_trace_all(false);
 
-  initialize(argc, argv);
-  World world(SafeMPI::COMM_WORLD);
-  set_default_world(world);
+  ttg_initialize(argc, argv);
 
   using mpqc::Debugger;
   auto debugger = std::make_shared<Debugger>();
@@ -663,10 +661,10 @@ int main(int argc, char** argv) {
   debugger->set_prefix(ttg_default_execution_context().rank());
   debugger->set_cmd("lldb_xterm");
 
-  world.gop.fence();
+  ttg_fence(ttg_default_execution_context());
 
   for (int arg = 1; arg < argc; ++arg) {
-    if (strcmp(argv[arg], "-dx") == 0) xterm_debug(argv[0], 0);
+    if (strcmp(argv[arg], "-dx") == 0) madness::xterm_debug(argv[0], 0);
   }
 
   // NEW IMPLEMENTATION
@@ -693,9 +691,9 @@ int main(int argc, char** argv) {
   if (verify_results) {
     adjacency_matrix_serial = (double*)malloc(sizeof(double) * problem_size * problem_size);
   }
-   
+
   init_square_matrix(problem_size, blocking_factor, verify_results, adjacency_matrix_serial, m);
-  
+
   //Run in every process to be able to verify? Is there another way?
   // Calling the iterative fw-apsp
   if (verify_results) {
@@ -733,6 +731,9 @@ int main(int argc, char** argv) {
     free(adjacency_matrix_serial);
   }
   delete m;
+
+  ttg_finalize();
+
   return 0;
 }
 

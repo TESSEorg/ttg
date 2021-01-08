@@ -31,13 +31,50 @@
 #include <cstdlib>
 #include <cstring>
 
+/* PaRSEC function declarations */
 extern "C" {
     void parsec_taskpool_termination_detected(parsec_taskpool_t *tp);
     int parsec_add_fetch_runtime_task(parsec_taskpool_t *tp, int tasks);
 }
 
-namespace parsec {
-  namespace ttg {
+namespace ttg {
+
+  /* Definitions related to ttg::World */
+  namespace parsec {
+      class WorldImpl; // forward declaration
+  } // namespace parsec
+
+  using World = ::ttg::base::World<::ttg::parsec::WorldImpl>;
+
+  namespace detail {
+      ttg::World& default_world_accessor() {
+        static ttg::World world;
+        return world;
+      }
+
+      inline void set_default_world(ttg::World&  world) { detail::default_world_accessor() = world; }
+      inline void set_default_world(ttg::World&& world) { detail::default_world_accessor() = std::move(world); }
+
+      template <typename keyT>
+      struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
+      public:
+        default_keymap() = default;
+        default_keymap(ttg::World &world)
+        : ttg::detail::default_keymap_impl<keyT>(world.size())
+        { }
+      };
+
+  } // namespace detail
+
+  inline ttg::World &get_default_world() {
+    if (detail::default_world_accessor().is_valid()) {
+      return detail::default_world_accessor();
+    } else {
+      throw std::runtime_error("ttg::set_default_world() must be called before use");
+    }
+  }
+
+  namespace parsec {
       typedef void (*static_set_arg_fct_type)(void *, size_t, ::ttg::OpBase*);
       typedef std::pair<static_set_arg_fct_type, ::ttg::OpBase*> static_set_arg_fct_call_t;
       static std::map<uint64_t, static_set_arg_fct_call_t> static_id_to_op_map;
@@ -74,7 +111,7 @@ namespace parsec {
               assert(data_cpy != 0);
               memcpy(data_cpy, data, size);
               if(::ttg::tracing()) {
-                  ::ttg::print("parsec::ttg(", rank, ") Delaying delivery of message (", src_rank, ", ", op_id, ", ", data_cpy, ", ", size, ")");
+                  ::ttg::print("ttg::parsec(", rank, ") Delaying delivery of message (", src_rank, ", ", op_id, ", ", data_cpy, ", ", size, ")");
               }
               delayed_unpack_actions.insert(std::make_pair(op_id, std::make_tuple( src_rank, data_cpy, size )));
               static_map_mutex.unlock();
@@ -82,17 +119,17 @@ namespace parsec {
           }
     }
 
-    class World {
+    class WorldImpl : public ::ttg::base::WorldImplBase {
         const int _PARSEC_TTG_TAG = 10; // This TAG should be 'allocated' at the PaRSEC level
      public:
-        static const int PARSEC_TTG_MAX_AM_SIZE = 1024*1024;
-      World(int *argc, char **argv[], int ncores) {
+        static constexpr const int PARSEC_TTG_MAX_AM_SIZE = 1024*1024;
+      WorldImpl(int *argc, char **argv[], int ncores) {
           ctx = parsec_init(ncores, argc, argv);
           es = ctx->virtual_processes[0]->execution_streams[0];
 
-          parsec_ce.tag_register(_PARSEC_TTG_TAG, parsec::ttg::static_unpack_msg, this,
+          parsec_ce.tag_register(_PARSEC_TTG_TAG, static_unpack_msg, this,
                                  PARSEC_TTG_MAX_AM_SIZE);
-        
+
           tpool = (parsec_taskpool_t *)calloc(1, sizeof(parsec_taskpool_t));
           tpool->taskpool_id = -1;
           tpool->update_nb_runtime_task = parsec_add_fetch_runtime_task;
@@ -105,38 +142,49 @@ namespace parsec {
           // taskpool is not ready, i.e. some local tasks could still
           // be added by the main thread. It should then be initialized
           // to 0, execute will set it to 1 and mark the tpool as ready,
-          // and the fence() will decrease it back to 0. 
-          tpool->tdm.module->taskpool_set_nb_pa(tpool, 0); 
+          // and the fence() will decrease it back to 0.
+          tpool->tdm.module->taskpool_set_nb_pa(tpool, 0);
           parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
       }
 
-      ~World() {
-          while (!op_register.empty()) {
-              std::cout << "Destroying OpBase " << (*op_register.begin()) << std::endl;
-              (*op_register.begin())->release();
-          }
-          parsec_ce.tag_unregister(_PARSEC_TTG_TAG);
-          parsec_fini(&ctx);
-          free(tpool);
+      /* Deleted copy ctor */
+      WorldImpl(const WorldImpl& other) = delete;
+
+      /* Deleted move ctor */
+      WorldImpl(WorldImpl&& other) = delete;
+
+
+      /* Deleted copy assignment */
+      WorldImpl& operator=(const WorldImpl& other) = delete;
+
+      /* Deleted move assignment */
+      WorldImpl& operator=(WorldImpl&& other) = delete;
+
+
+      ~WorldImpl() {
+        destroy();
       }
 
       const int &parsec_ttg_tag() { return _PARSEC_TTG_TAG; }
-        
-      MPI_Comm comm() const { return MPI_COMM_WORLD; }
 
-      int size() const {
+      virtual int size() const override {
         int size;
+
         MPI_Comm_size(comm(), &size);
         return size;
       }
 
-      int rank() const {
+      virtual int rank() const override {
         int rank;
         MPI_Comm_rank(comm(), &rank);
         return rank;
       }
 
-      void execute() {
+      MPI_Comm comm() const {
+          return MPI_COMM_WORLD;
+      }
+
+      virtual void execute() override {
         parsec_enqueue(ctx, tpool);
         tpool->tdm.module->taskpool_addto_nb_pa(tpool, 1);
         tpool->tdm.module->taskpool_ready(tpool);
@@ -144,79 +192,52 @@ namespace parsec {
         if(ret != 0) throw std::runtime_error("TTG: parsec_context_start failed");
       }
 
+      virtual void destroy() override {
+        release_ops();
+        ttg::detail::deregister_world(*this);
+        parsec_ce.tag_unregister(_PARSEC_TTG_TAG);
+        parsec_fini(&ctx);
+        free(tpool);
+      }
+
       auto *context() { return ctx; }
       auto *execution_stream() { return es; }
       auto *taskpool() { return tpool; }
-
-      void fence() {
-          int rank;
-          parsec_taskpool_t *tp = taskpool();
-          if( ::ttg::tracing() ) {
-              MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-              ::ttg::print("parsec::ttg(", rank,  "): parsec taskpool is ready for completion");
-          }
-          // We are locally ready (i.e. we won't add new tasks)
-          tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
-          if( ::ttg::tracing() ) {
-              ::ttg::print("parsec::ttg(", rank, "): waiting for completion");
-          }
-          parsec_context_wait(ctx);
-      }
 
       void increment_created() { taskpool()->tdm.module->taskpool_addto_nb_tasks(taskpool(), 1); }
       void increment_sent_to_sched() { parsec_atomic_fetch_inc_int32(&sent_to_sched_counter()); }
 
       int32_t sent_to_sched() const { return this->sent_to_sched_counter(); }
 
-      void register_op(::ttg::OpBase* op) {
-          // TODO: do we need locking here?
-          op_register.push_back(op);
+    protected:
+
+      virtual void fence_impl(void) override {
+          int rank = this->rank();
+          parsec_taskpool_t *tp = taskpool();
+          if( ::ttg::tracing() ) {
+              ::ttg::print("ttg::parsec::(", rank,  "): parsec taskpool is ready for completion");
+          }
+          // We are locally ready (i.e. we won't add new tasks)
+          tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
+          if( ::ttg::tracing() ) {
+              ::ttg::print("ttg::parsec(", rank, "): waiting for completion");
+          }
+          parsec_context_wait(ctx);
       }
 
-      void deregister_op(::ttg::OpBase* op) {
-          // TODO: do we need locking here?
-          op_register.remove(op);
-      }
 
      private:
       parsec_context_t *ctx = nullptr;
       parsec_execution_stream_t *es = nullptr;
       parsec_taskpool_t *tpool = nullptr;
-      std::list<::ttg::OpBase*> op_register;
 
       volatile int32_t &sent_to_sched_counter() const {
         static volatile int32_t sent_to_sched = 0;
         return sent_to_sched;
       }
     };
-
-    namespace detail {
-      World *&default_world_accessor() {
-        static World *world_ptr = nullptr;
-        return world_ptr;
-      }
-    }  // namespace detail
-
-    inline World &get_default_world() {
-      if (detail::default_world_accessor() != nullptr) {
-        return *detail::default_world_accessor();
-      } else {
-        throw std::logic_error("parsec::ttg::set_default_world() must be called before use");
-      }
-    }
-    inline void set_default_world(World &world) { detail::default_world_accessor() = &world; }
-    inline void set_default_world(World *world) { detail::default_world_accessor() = world; }
-
-    /// the default keymap implementation maps key to ttg::hash{}(key) % nproc
-    template <typename keyT>
-    struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
-     public:
-      default_keymap() = default;
-      default_keymap(World &world) : ::ttg::detail::default_keymap_impl<keyT>(world.size()) {}
-    };
-
-  }  // namespace ttg
-}  // namespace parsec
+  }  // namespace parsec
+}  // namespace ttg
 
 extern "C" {
   typedef void (*parsec_static_op_t)(void *);  // static_op will be cast to this type
@@ -272,107 +293,58 @@ static parsec_key_fn_t parsec_tasks_hash_fcts = {
     .key_hash  = parsec_hash_table_generic_64bits_key_hash
 };
 
-namespace parsec {
-  namespace ttg {
-    namespace detail {
-    static inline std::map<World*, std::set<std::shared_ptr<void>>>& ptr_registry_accessor() {
-      static std::map<World*, std::set<std::shared_ptr<void>>> registry;
-      return registry;
-    };
-    static inline std::map<World*, ::ttg::Edge<>>& clt_edge_registry_accessor() {
-      static std::map<World*, ::ttg::Edge<>> registry;
-      return registry;
-    };
-    static inline std::map<World*, std::set<std::shared_ptr<std::promise<void>>>>& status_registry_accessor() {
-      static std::map<World*, std::set<std::shared_ptr<std::promise<void>>>> registry;
-      return registry;
-    };
-    }
+namespace ttg {
 
     template <typename... RestOfArgs>
     inline void ttg_initialize(int argc, char **argv, int taskpool_size, RestOfArgs &&...) {
       int provided;
       MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
-      set_default_world(new World(&argc, &argv, taskpool_size));
+
+      auto world_ptr = new parsec::WorldImpl{&argc, &argv, taskpool_size};
+      std::shared_ptr<::ttg::base::WorldImplBase> world_sptr{static_cast<::ttg::base::WorldImplBase*>(world_ptr)};
+      ::ttg::World world{std::move(world_sptr)};
+      ::ttg::detail::set_default_world(std::move(world));
     }
     inline void ttg_finalize() {
-      auto &status = ::parsec::ttg::detail::status_registry_accessor();
-      status.clear();
-      auto &edges = ::parsec::ttg::detail::clt_edge_registry_accessor();
-      edges.clear();
-      auto &ptrs = ::parsec::ttg::detail::ptr_registry_accessor();
-      ptrs.clear();
-      World *default_world = &get_default_world();
-      delete default_world;
-      set_default_world(nullptr);
+      ttg::detail::set_default_world(::ttg::World{}); // reset the default world
+      ttg::detail::destroy_worlds();
       MPI_Finalize();
     }
-    inline void ttg_abort() { MPI_Abort(get_default_world().comm(), 1); }
-    inline World &ttg_default_execution_context() { return get_default_world(); }
-    inline void ttg_execute(World &world) { world.execute(); }
-    inline void ttg_fence(World &world) {
-      world.fence();
-
-      // flag registered statuses
-      {
-        auto& registry = detail::status_registry_accessor();
-        auto iter = registry.find(&world);
-        if (iter != registry.end()) {
-          auto &statuses = iter->second;
-          for (auto &status: statuses) {
-            status->set_value();
-          }
-          statuses.clear();  // clear out the statuses
-        }
-      }
-
+    inline void ttg_abort() {
+      MPI_Abort(::ttg::get_default_world().impl().comm(), 1);
+    }
+    inline ::ttg::World &ttg_default_execution_context() {
+      return ::ttg::get_default_world();
+    }
+    inline void ttg_execute(::ttg::World &world) {
+      world.impl().execute();
+    }
+    inline void ttg_fence(::ttg::World &world) {
+      world.impl().fence();
     }
 
     template <typename T>
-    inline void ttg_register_ptr(World& world, const std::shared_ptr<T>& ptr) {
-      auto& registry = detail::ptr_registry_accessor();
-      auto iter = registry.find(&world);
-      if (iter != registry.end()) {
-        auto& ptr_set = iter->second;
-        assert(ptr_set.find(ptr) == ptr_set.end());  // prevent duplicate registration
-        ptr_set.insert(ptr);
-      } else {
-        registry.insert(std::make_pair(&world, std::set<std::shared_ptr<void>>({ptr})));
-      }
+    inline void ttg_register_ptr(::ttg::World& world, const std::shared_ptr<T>& ptr) {
+      world.impl().register_ptr(ptr);
     }
 
-    inline void ttg_register_status(World& world, const std::shared_ptr<std::promise<void>>& status_ptr) {
-      auto& registry = detail::status_registry_accessor();
-      auto iter = registry.find(&world);
-      if (iter != registry.end()) {
-        auto& ptr_set = iter->second;
-        assert(ptr_set.find(status_ptr) == ptr_set.end());  // prevent duplicate registration
-        ptr_set.insert(status_ptr);
-      } else {
-        registry.insert(std::make_pair(&world, std::set<std::shared_ptr<std::promise<void>>>({status_ptr})));
-      }
+    inline void ttg_register_status(::ttg::World& world, const std::shared_ptr<std::promise<void>>& status_ptr) {
+      world.impl().register_status(status_ptr);
     }
 
-    inline ::ttg::Edge<>& ttg_ctl_edge(World& world) {
-      auto& registry = detail::clt_edge_registry_accessor();
-      auto iter = registry.find(&world);
-      if (iter != registry.end()) {
-        return iter->second;
-      } else {
-        registry.insert(std::make_pair(&world, ::ttg::Edge<>{}));
-        return registry[&world];
-      }
+    inline ::ttg::Edge<>& ttg_ctl_edge(::ttg::World& world) {
+      return world.impl().ctl_edge();
     }
 
-    inline void ttg_sum(World &world, double &value) {
+    inline void ttg_sum(::ttg::World &world, double &value) {
       double result = 0.0;
-      MPI_Allreduce(&value, &result, 1, MPI_DOUBLE, MPI_SUM, world.comm());
+      MPI_Allreduce(&value, &result, 1, MPI_DOUBLE, MPI_SUM, world.impl().comm());
       value = result;
     }
     /// broadcast
     /// @tparam T a serializable type
     template <typename T>
-    void ttg_broadcast(World &world, T &data, int source_rank) {
+    void ttg_broadcast(::ttg::World &world, T &data, int source_rank) {
       assert(world.size() == 1);
     }
 
@@ -384,10 +356,11 @@ namespace parsec {
     };
     // std::map<int, ParsecBaseOp*> ParsecBaseOp::function_id_to_instance = {};
 
+  namespace parsec {
     namespace detail {
         struct msg_t {
             msg_header_t op_id;
-            unsigned char bytes[World::PARSEC_TTG_MAX_AM_SIZE - sizeof(msg_header_t)];
+            unsigned char bytes[WorldImpl::PARSEC_TTG_MAX_AM_SIZE - sizeof(msg_header_t)];
 
             msg_t() = default;
             msg_t(uint64_t op_id, uint32_t taskpool_id, std::size_t param_id) : op_id{taskpool_id, op_id, param_id} {}
@@ -448,14 +421,14 @@ namespace parsec {
       output_terminalsT output_terminals;
       std::array<void (Op::*)(void*, std::size_t), numins> set_arg_from_msg_fcts;
 
-      World &world;
+      ::ttg::World &world;
       ::ttg::meta::detail::keymap_t<keyT> keymap;
       // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
       ::ttg::meta::detail::input_reducers_t<input_valueTs...>
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
      public:
-      World &get_world() const { return world; }
+      ::ttg::World &get_world() const { return world; }
 
      private:
 
@@ -587,7 +560,7 @@ namespace parsec {
             }
           }
       }
-      
+
       // there are 6 types of set_arg:
       // - case 1: nonvoid Key, complete Value type
       // - case 2: nonvoid Key, void Value, mixed (data+control) inputs
@@ -687,9 +660,10 @@ namespace parsec {
 
         parsec_key_t hk = reinterpret_cast<parsec_key_t>(&key);
         my_op_t *task = NULL;
+        auto& world_impl = world.impl();
         if (NULL == (task = (my_op_t *)parsec_hash_table_find(&tasks_table, hk))) {
           my_op_t *newtask;
-          parsec_execution_stream_s *es = world.execution_stream();
+          parsec_execution_stream_s *es = world_impl.execution_stream();
           parsec_thread_mempool_t *mempool =
               &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
           newtask = (my_op_t *)parsec_thread_mempool_allocate(mempool);
@@ -698,7 +672,7 @@ namespace parsec {
 
           PARSEC_OBJ_CONSTRUCT(&newtask->parsec_task, parsec_list_item_t);
           newtask->parsec_task.task_class = &this->self;
-          newtask->parsec_task.taskpool = world.taskpool();
+          newtask->parsec_task.taskpool = world_impl.taskpool();
           newtask->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
           newtask->in_data_count = 0;
 
@@ -712,7 +686,7 @@ namespace parsec {
               keyT *new_key = new keyT(key);
               newtask->key = reinterpret_cast<parsec_key_t>(new_key);
           }
-          
+
           parsec_mfence();
           parsec_hash_table_lock_bucket(&tasks_table, hk);
           if (NULL != (task = (my_op_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
@@ -721,7 +695,7 @@ namespace parsec {
           } else {
             if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
             newtask->op_ht_item.key = newtask->key;
-            world.increment_created();
+            world_impl.increment_created();
             parsec_hash_table_nolock_insert(&tasks_table, &newtask->op_ht_item);
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
             task = newtask;
@@ -759,8 +733,8 @@ namespace parsec {
         assert(count <= self.dependencies_goal);
 
         if (count == self.dependencies_goal) {
-          world.increment_sent_to_sched();
-          parsec_execution_stream_t *es = world.execution_stream();
+          world_impl.increment_sent_to_sched();
+          parsec_execution_stream_t *es = world_impl.execution_stream();
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
           parsec_hash_table_remove(&tasks_table, hk);
           __parsec_schedule(es, &task->parsec_task, 0);
@@ -801,15 +775,16 @@ namespace parsec {
         // the corresponding peer.
         // TODO do we need to copy value?
         using msg_t = detail::msg_t;
-        msg_t* msg = new msg_t(get_instance_id(), world.taskpool()->taskpool_id, i);
+        auto& world_impl = world.impl();
+        msg_t* msg = new msg_t(get_instance_id(), world_impl.taskpool()->taskpool_id, i);
 
         uint64_t pos = 0;
         pos = pack(key, msg->bytes, pos);
         pos = pack(value, msg->bytes, pos);
-        parsec_taskpool_t *tp = world.taskpool();
-        tp->tdm.module->outgoing_message_start(tp, owner, NULL);       
+        parsec_taskpool_t *tp = world_impl.taskpool();
+        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
         tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-        parsec_ce.send_am(&parsec_ce, world.parsec_ttg_tag(), owner, static_cast<void*>(msg), sizeof(msg_header_t)+pos);
+        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void*>(msg), sizeof(msg_header_t)+pos);
         delete msg;
       }
 
@@ -820,11 +795,12 @@ namespace parsec {
         static_assert(::ttg::meta::is_empty_tuple_v<input_refs_tuple_type>, "logic error: set_arg (case 3) called but input_refs_tuple_type is nonempty");
 
         const auto owner = keymap(key);
+        auto& world_impl = world.impl();
         if( owner == ttg_default_execution_context().rank() ) {
           // create PaRSEC task
           // and give it to the scheduler
           my_op_t *task;
-          parsec_execution_stream_s *es = world.execution_stream();
+          parsec_execution_stream_s *es = world_impl.execution_stream();
           parsec_thread_mempool_t *mempool =
               &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
           task = (my_op_t *) parsec_thread_mempool_allocate(mempool);
@@ -833,7 +809,7 @@ namespace parsec {
 
           PARSEC_OBJ_CONSTRUCT(task, parsec_list_item_t);
           task->parsec_task.task_class = &this->self;
-          task->parsec_task.taskpool = world.taskpool();
+          task->parsec_task.taskpool = world_impl.taskpool();
           task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
 
           task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::Host)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::Host>);
@@ -844,22 +820,22 @@ namespace parsec {
           task->key = reinterpret_cast<parsec_key_t>(kp);
           task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
-          world.increment_created();
+          world_impl.increment_created();
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
-          world.increment_sent_to_sched();
+          world_impl.increment_sent_to_sched();
           __parsec_schedule(es, &task->parsec_task, 0);
         } else {
           using msg_t = detail::msg_t;
           // We pass -1 to signal that we just need to call set_arg(key) on the other end
-          msg_t* msg = new msg_t(get_instance_id(), world.taskpool()->taskpool_id, -1);
+          msg_t* msg = new msg_t(get_instance_id(), world_impl.taskpool()->taskpool_id, -1);
 
           uint64_t pos = 0;
           const ttg_data_descriptor *dKey = ::ttg::get_data_descriptor<Key>();
           pos = dKey->pack_payload(&key, sizeof(Key), pos, msg->bytes);
-          parsec_taskpool_t *tp = world.taskpool();
-          tp->tdm.module->outgoing_message_start(tp, owner, NULL);       
+          parsec_taskpool_t *tp = world_impl.taskpool();
+          tp->tdm.module->outgoing_message_start(tp, owner, NULL);
           tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-          parsec_ce.send_am(&parsec_ce, world.parsec_ttg_tag(), owner, static_cast<void*>(msg), sizeof(msg_header_t)+pos);
+          parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void*>(msg), sizeof(msg_header_t)+pos);
           delete msg;
         }
       }
@@ -876,7 +852,8 @@ namespace parsec {
           // create PaRSEC task
           // and give it to the scheduler
           my_op_t *task;
-          parsec_execution_stream_s *es = world.execution_stream();
+          auto& world_impl = world.impl();
+          parsec_execution_stream_s *es = world_impl.execution_stream();
           parsec_thread_mempool_t *mempool =
               &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
           task = (my_op_t *) parsec_thread_mempool_allocate(mempool);
@@ -885,7 +862,7 @@ namespace parsec {
 
           PARSEC_OBJ_CONSTRUCT(task, parsec_list_item_t);
           task->parsec_task.task_class = &this->self;
-          task->parsec_task.taskpool = world.taskpool();
+          task->parsec_task.taskpool = world_impl.taskpool();
           task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
 
           task->function_template_class_ptr[static_cast<std::size_t>(::ttg::ExecutionSpace::Host)] = reinterpret_cast<parsec_static_op_t>(&Op::static_op_noarg<::ttg::ExecutionSpace::Host>);
@@ -895,9 +872,9 @@ namespace parsec {
           task->key = 0;
           task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : creating task");
-          world.increment_created();
+          world_impl.increment_created();
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
-          world.increment_sent_to_sched();
+          world_impl.increment_sent_to_sched();
           __parsec_schedule(es, &task->parsec_task, 0);
         }
       }
@@ -1078,7 +1055,7 @@ namespace parsec {
             std::make_index_sequence<std::tuple_size<input_terminals_tupleT>::value>{}, flows);
       }
 
-      void fence() override { get_default_world().fence(); }
+      void fence() override { ::ttg::get_default_world().impl().fence(); }
 
       static int key_equal(parsec_key_t a, parsec_key_t b, void *user_data) {
           if constexpr (std::is_same_v<keyT, void>) {
@@ -1117,7 +1094,7 @@ namespace parsec {
           key_print,
           key_hash
       };
-      
+
      static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *task) {
          if constexpr (!::ttg::meta::is_void_v<keyT>) {
                  my_op_t *op = (my_op_t*)task;
@@ -1131,25 +1108,26 @@ namespace parsec {
          }
          return PARSEC_HOOK_RETURN_DONE;
      }
-        
+
      public:
-      template <typename keymapT = default_keymap<keyT>>
+      template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-         World &world, keymapT &&keymap_ = keymapT())
+         ::ttg::World &world, keymapT &&keymap_ = keymapT())
           : ::ttg::OpBase(name, numins, numouts)
           , set_arg_from_msg_fcts(make_set_args_fcts(std::make_index_sequence<numins>{}))
           , world(world)
           // if using default keymap, rebind to the given world
-          , keymap(std::is_same<keymapT, default_keymap<keyT>>::value
-                       ? decltype(keymap)(default_keymap<keyT>(world))
+          , keymap(std::is_same<keymapT, ::ttg::detail::default_keymap<keyT>>::value
+                       ? decltype(keymap)(::ttg::detail::default_keymap<keyT>(world))
                        : decltype(keymap)(std::forward<keymapT>(keymap_))) {
         // Cannot call these in base constructor since terminals not yet constructed
         if (innames.size() != std::tuple_size<input_terminals_type>::value)
-          throw std::logic_error("parsec::ttg::OP: #input names != #input terminals");
+          throw std::logic_error("ttg::parsec::OP: #input names != #input terminals");
         if (outnames.size() != std::tuple_size<output_terminalsT>::value)
-          throw std::logic_error("parsec::ttg::OP: #output names != #output terminals");
+          throw std::logic_error("ttg::parsec::OP: #output names != #output terminals");
 
-        world.register_op(this);
+        auto& world_impl = world.impl();
+        world_impl.register_op(this);
 
         register_input_terminals(input_terminals, innames);
         register_output_terminals(output_terminals, outnames);
@@ -1224,7 +1202,7 @@ namespace parsec {
         self.dependencies_goal = numins; /* (~(uint32_t)0) >> (32 - numins); */
 
         int k = 0;
-        auto *context = world.context();
+        auto *context = world_impl.context();
         for (int i = 0; i < context->nb_vp; i++) {
           for (int j = 0; j < context->virtual_processes[i]->nb_cores; j++) {
             mempools_index[std::pair<int, int>(i, j)] = k++;
@@ -1237,24 +1215,24 @@ namespace parsec {
         parsec_hash_table_init(&tasks_table, offsetof(my_op_t, op_ht_item), 8, tasks_hash_fcts, NULL);
       }
 
-      template <typename keymapT = default_keymap<keyT>>
+      template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-         keymapT &&keymap = keymapT(get_default_world()))
-          : Op(name, innames, outnames, get_default_world(), std::forward<keymapT>(keymap)) {}
+         keymapT &&keymap = keymapT(::ttg::get_default_world()))
+          : Op(name, innames, outnames, ::ttg::get_default_world(), std::forward<keymapT>(keymap)) {}
 
-      template <typename keymapT = default_keymap<keyT>>
+      template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
-         const std::vector<std::string> &innames, const std::vector<std::string> &outnames, World &world,
+         const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ::ttg::World &world,
          keymapT &&keymap_ = keymapT())
           : Op(name, innames, outnames, world, std::forward<keymapT>(keymap_)) {
         connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numins>{}, inedges);
         connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
       }
-      template <typename keymapT = default_keymap<keyT>>
+      template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
          const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-         keymapT &&keymap = keymapT(get_default_world()))
-          : Op(inedges, outedges, name, innames, outnames, get_default_world(), std::forward<keymapT>(keymap)) {}
+         keymapT &&keymap = keymapT(::ttg::get_default_world()))
+          : Op(inedges, outedges, name, innames, outnames, ::ttg::get_default_world(), std::forward<keymapT>(keymap)) {}
 
       // Destructor checks for unexecuted tasks
       ~Op() {
@@ -1279,7 +1257,7 @@ namespace parsec {
                 delete self.out[i];
             }
         }
-        world.deregister_op(this);
+        world.impl().deregister_op(this);
       }
 
       static constexpr const ::ttg::Runtime runtime = ::ttg::Runtime::PaRSEC;
@@ -1344,17 +1322,17 @@ namespace parsec {
           int rank;
           MPI_Comm_rank(MPI_COMM_WORLD, &rank);
           if (tracing()) {
-              ::ttg::print("parsec::ttg(", rank,  ") Inserting into static_id_to_op_map at ", get_instance_id());
+              ::ttg::print("ttg::parsec(", rank,  ") Inserting into static_id_to_op_map at ", get_instance_id());
           }
           static_set_arg_fct_call_t call = std::make_pair(&Op::static_set_arg, this);
-
+          auto& world_impl = world.impl();
           static_map_mutex.lock();
           static_id_to_op_map.insert(std::make_pair(get_instance_id(), call));
           if( delayed_unpack_actions.count(get_instance_id()) > 0 ) {
-              auto tp = world.taskpool();
+              auto tp = world_impl.taskpool();
 
               if (tracing()) {
-                  ::ttg::print("parsec::ttg(", rank, ") There are ", delayed_unpack_actions.count(get_instance_id()), " messages delayed with op_id ", get_instance_id());
+                  ::ttg::print("ttg::parsec(", rank, ") There are ", delayed_unpack_actions.count(get_instance_id()), " messages delayed with op_id ", get_instance_id());
               }
 
               auto se = delayed_unpack_actions.equal_range( get_instance_id() );
@@ -1368,10 +1346,10 @@ namespace parsec {
 
               for(auto it : tmp) {
                   if(tracing()) {
-                      ::ttg::print("parsec::ttg(", rank, ") Unpacking delayed message (", ", ",
+                      ::ttg::print("ttg::parsec(", rank, ") Unpacking delayed message (", ", ",
                                    get_instance_id(), ", ", std::get<1>(it), ", ", std::get<2>(it), ")");
                   }
-                  int rc = static_unpack_msg(&parsec_ce, world.parsec_ttg_tag(),  std::get<1>(it), std::get<2>(it), std::get<0>(it), NULL);
+                  int rc = static_unpack_msg(&parsec_ce, world_impl.parsec_ttg_tag(),  std::get<1>(it), std::get<2>(it), std::get<0>(it), NULL);
                   assert(rc == 0);
                   free(std::get<1>(it));
               }
@@ -1382,10 +1360,17 @@ namespace parsec {
           }
       }
     };
+  }  // namespace parsec
+
+  /* elevate some types into ttg namespace */
+
+  template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
+  using Op = parsec::Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
 
 #include "../wrap.h"
 
-  }  // namespace ttg
-}  // namespace parsec
+  constexpr const Runtime ttg_runtime = ::ttg::Runtime::PaRSEC;
+
+}  // namespace ttg
 
 #endif  // PARSEC_TTG_H_INCLUDED

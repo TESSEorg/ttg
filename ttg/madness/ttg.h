@@ -24,25 +24,47 @@
 
 #include <madness/world/world_task_queue.h>
 
-namespace madness {
-  namespace ttg {
+#define TTG_MADNESS_NS madness_ttg
 
-    namespace detail {
-      World *&default_world_accessor() {
-        static World *world_ptr = nullptr;
-        return world_ptr;
-      }
-    }  // namespace detail
+namespace ttg {
 
-    inline World &get_default_world() {
-      if (detail::default_world_accessor() != nullptr) {
-        return *detail::default_world_accessor();
-      } else {
-        throw std::runtime_error("madness::ttg::set_default_world() must be called before use");
+  /* Definitions related to ttg::World */
+  namespace TTG_MADNESS_NS {
+      class WorldImpl; // forward declaration
+  } // namespace TTG_MADNESS_NS
+
+  using World = ::ttg::base::World<::ttg::TTG_MADNESS_NS::WorldImpl>;
+
+  namespace detail {
+      ttg::World& default_world_accessor() {
+        static ttg::World world;
+        return world;
       }
+
+      inline void set_default_world(ttg::World&  world) { detail::default_world_accessor() = world; }
+      inline void set_default_world(ttg::World&& world) { detail::default_world_accessor() = std::move(world); }
+
+      template <typename keyT>
+      struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
+      public:
+        default_keymap() = default;
+        default_keymap(ttg::World &world)
+        : ttg::detail::default_keymap_impl<keyT>(world.size())
+        { }
+      };
+
+  } // namespace detail
+
+  inline ttg::World &get_default_world() {
+    if (detail::default_world_accessor().is_valid()) {
+      return detail::default_world_accessor();
+    } else {
+      throw std::runtime_error("ttg::set_default_world() must be called before use");
     }
-    inline void set_default_world(World &world) { detail::default_world_accessor() = &world; }
-    inline void set_default_world(World *world) { detail::default_world_accessor() = world; }
+  }
+
+
+  namespace TTG_MADNESS_NS {
 
 #if 0
     class Control;
@@ -61,103 +83,126 @@ namespace madness {
   };
 #endif
 
-  namespace detail {
-  static inline std::map<World*, std::set<std::shared_ptr<void>>>& ptr_registry_accessor() {
-    static std::map<World*, std::set<std::shared_ptr<void>>> registry;
-    return registry;
+  class WorldImpl final : public ::ttg::base::WorldImplBase {
+  private:
+        ::madness::World& m_impl;
+        bool m_allocated = false;
+
+  public:
+        WorldImpl(::madness::World& world)
+        : m_impl(world)
+        { }
+
+        WorldImpl(const SafeMPI::Intracomm& comm)
+        : m_impl(*new ::madness::World(comm))
+        , m_allocated(true)
+        { }
+
+        /* Deleted copy ctor */
+        WorldImpl(const WorldImpl& other) = delete;
+
+        /* Deleted move ctor */
+        WorldImpl(WorldImpl&& other) = delete;
+
+        virtual ~WorldImpl() override
+        {
+            destroy();
+        }
+
+        /* Deleted copy assignment */
+        WorldImpl& operator=(const WorldImpl& other) = delete;
+
+        /* Deleted move assignment */
+        WorldImpl& operator=(WorldImpl&& other) = delete;
+
+        virtual int size(void) const override
+        {
+            return m_impl.size();
+        }
+
+        virtual int rank(void) const override
+        {
+            return m_impl.rank();
+        }
+
+        virtual void fence_impl(void) override
+        {
+            m_impl.gop.fence();
+        }
+
+        virtual void destroy(void) override {
+            release_ops();
+            ttg::detail::deregister_world(*this);
+            if (m_allocated) {
+                delete &m_impl;
+                m_allocated = false;
+            }
+        }
+
+        /* Return an unmanaged reference to the implementation object */
+        ::madness::World& impl()
+        {
+            return m_impl;
+        }
+
+        const ::madness::World& impl() const
+        {
+            return m_impl;
+        }
   };
-  static inline std::map<World*, ::ttg::Edge<>>& clt_edge_registry_accessor() {
-    static std::map<World*, ::ttg::Edge<>> registry;
-    return registry;
-  };
-  static inline std::map<World*, std::set<std::shared_ptr<std::promise<void>>>>& status_registry_accessor() {
-    static std::map<World*, std::set<std::shared_ptr<std::promise<void>>>> registry;
-    return registry;
-  };
-  }
+
+  } // namespace TTG_MADNESS_NS
 
   template <typename... RestOfArgs>
     inline void ttg_initialize(int argc, char **argv, RestOfArgs &&...) {
-      World &world = madness::initialize(argc, argv);
-      set_default_world(world);
+      ::madness::World &madworld = ::madness::initialize(argc, argv);
+      auto *world_ptr = new ttg::TTG_MADNESS_NS::WorldImpl{madworld};
+      std::shared_ptr<::ttg::base::WorldImplBase> world_sptr{static_cast<::ttg::base::WorldImplBase*>(world_ptr)};
+      ::ttg::World world{std::move(world_sptr)};
+      ::ttg::detail::set_default_world(std::move(world));
     }
-    inline void ttg_finalize() { madness::finalize(); }
+    inline void ttg_finalize() {
+      ::ttg::detail::set_default_world(::ttg::World{}); // reset the default world
+      ::ttg::detail::destroy_worlds();
+      ::madness::finalize();
+    }
     inline void ttg_abort() { MPI_Abort(MPI_COMM_WORLD, 1); }
-    inline World &ttg_default_execution_context() { return get_default_world(); }
-    inline void ttg_execute(World &world) {
+    inline ::ttg::World& ttg_default_execution_context() {
+      return ::ttg::get_default_world();
+    }
+    inline void ttg_execute(::ttg::World world) {
       // World executes tasks eagerly
     }
-    inline void ttg_fence(World &world) {
-      world.gop.fence();
-
-      // flag registered statuses
-      {
-        auto& registry = detail::status_registry_accessor();
-        auto iter = registry.find(&world);
-        if (iter != registry.end()) {
-          auto &statuses = iter->second;
-          for (auto &status: statuses) {
-            status->set_value();
-          }
-          statuses.clear();  // clear out the statuses
-        }
-      }
-
+    inline void ttg_fence(::ttg::World world) {
+      world.impl().fence();
     }
 
     template <typename T>
-    inline void ttg_register_ptr(World& world, const std::shared_ptr<T>& ptr) {
-      auto& registry = detail::ptr_registry_accessor();
-      auto iter = registry.find(&world);
-      if (iter != registry.end()) {
-        auto& ptr_set = iter->second;
-        assert(ptr_set.find(ptr) == ptr_set.end());  // prevent duplicate registration
-        ptr_set.insert(ptr);
-      } else {
-        registry.insert(std::make_pair(&world, std::set<std::shared_ptr<void>>({ptr})));
-      }
+    inline void ttg_register_ptr(::ttg::World& world, const std::shared_ptr<T>& ptr) {
+        world.impl().register_ptr(ptr);
     }
 
-    inline void ttg_register_status(World& world, const std::shared_ptr<std::promise<void>>& status_ptr) {
-      auto& registry = detail::status_registry_accessor();
-      auto iter = registry.find(&world);
-      if (iter != registry.end()) {
-        auto& ptr_set = iter->second;
-        assert(ptr_set.find(status_ptr) == ptr_set.end());  // prevent duplicate registration
-        ptr_set.insert(status_ptr);
-      } else {
-        registry.insert(std::make_pair(&world, std::set<std::shared_ptr<std::promise<void>>>({status_ptr})));
-      }
+    inline void ttg_register_status(::ttg::World& world, const std::shared_ptr<std::promise<void>>& status_ptr) {
+        world.impl().register_status(status_ptr);
     }
 
-    inline ::ttg::Edge<>& ttg_ctl_edge(World& world) {
-      auto& registry = detail::clt_edge_registry_accessor();
-      auto iter = registry.find(&world);
-      if (iter != registry.end()) {
-        return iter->second;
-      } else {
-        registry.insert(std::make_pair(&world, ::ttg::Edge<>{}));
-        return registry[&world];
-      }
+    inline ::ttg::Edge<>& ttg_ctl_edge(::ttg::World& world) {
+        return world.impl().ctl_edge();
     }
 
   template <typename T>
-    void ttg_sum(World &world, T &value) {
-      world.gop.sum(value);
+    void ttg_sum(::ttg::World &world, T &value) {
+        world.impl().impl().gop.sum(value);
     }
     /// broadcast
     /// @tparam T a serializable type
     template <typename T>
-    void ttg_broadcast(World &world, T &data, int source_rank) {
-      world.gop.broadcast_serializable(data, source_rank);
+    void ttg_broadcast(::ttg::World &world, T &data, int source_rank) {
+        world.impl().impl().gop.broadcast_serializable(data, source_rank);
     }
 
-    template <typename keyT>
-    struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
-     public:
-      default_keymap() = default;
-      default_keymap(World &world) : ::ttg::detail::default_keymap_impl<keyT>(world.mpi.size()) {}
-    };
+
+  namespace TTG_MADNESS_NS {
 
     /// CRTP base for MADNESS-based Op classes
     /// \tparam keyT a Key type
@@ -167,24 +212,24 @@ namespace madness {
     ///         flowing into this Op; a const type indicates nonmutating (read-only) use, nonconst type
     ///         indicates mutating use (e.g. the corresponding input can be used as scratch, moved-from, etc.)
     template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
-    class Op : public ::ttg::OpBase, public WorldObject<Op<keyT, output_terminalsT, derivedT, input_valueTs...>> {
+    class Op : public ::ttg::OpBase, public ::madness::WorldObject<Op<keyT, output_terminalsT, derivedT, input_valueTs...>> {
      public:
       /// preconditions
       static_assert((!std::is_reference_v<input_valueTs> && ...), "input_valueTs cannot contain reference types");
 
      private:
-      World &world;
+      ::ttg::World &world;
       ::ttg::meta::detail::keymap_t<keyT> keymap;
       // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
       ::ttg::meta::detail::input_reducers_t<input_valueTs...>
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
      public:
-      World &get_world() const { return world; }
+      ::ttg::World &get_world() const { return world; }
 
      protected:
       using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
-      using worldobjT = WorldObject<opT>;
+      using worldobjT = ::madness::WorldObject<opT>;
 
       static constexpr int numins = sizeof...(input_valueTs);                    // number of input arguments
       static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or
@@ -222,7 +267,7 @@ namespace madness {
       input_terminals_type input_terminals;
       output_terminalsT output_terminals;
 
-      struct OpArgs : TaskInterface {
+      struct OpArgs : ::madness::TaskInterface {
        public:
         int counter;                            // Tracks the number of arguments finalized
         std::array<std::size_t, numins> nargs;  // Tracks the number of expected values
@@ -256,7 +301,9 @@ namespace madness {
           std::fill(nargs.begin(), nargs.end(), std::numeric_limits<std::size_t>::max());
         }
 
-        void run(World &world) {
+
+        virtual
+        void run(::madness::World &world) override {
           // ::ttg::print("starting task");
 
           using ::ttg::hash;
@@ -286,7 +333,7 @@ namespace madness {
         virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
 
        private:
-        madness::Spinlock lock_;                          // synchronizes access to data
+        ::madness::Spinlock lock_;                          // synchronizes access to data
        public:
         void lock() {
           lock_.lock();
@@ -298,7 +345,7 @@ namespace madness {
       };
 
       using hashable_keyT = std::conditional_t<::ttg::meta::is_void_v<keyT>,int,keyT>;
-      using cacheT = ConcurrentHashMap<hashable_keyT, OpArgs *, ::ttg::hash<hashable_keyT>>;
+      using cacheT = ::madness::ConcurrentHashMap<hashable_keyT, OpArgs *, ::ttg::hash<hashable_keyT>>;
       using accessorT = typename cacheT::accessor;
       cacheT cache;
 
@@ -396,7 +443,7 @@ namespace madness {
             auto curhash = hash<keyT>{}(key);
 
             if (curhash == threaddata.key_hash && threaddata.call_depth<6) { // Needs to be externally configurable
-                
+
                 //::ttg::print("directly invoking:", get_name(), key, curhash, threaddata.key_hash, threaddata.call_depth);
                 opT::threaddata.call_depth++;
                 if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
@@ -409,13 +456,13 @@ namespace madness {
                   static_cast<derivedT *>(this)->op(output_terminals); // Runs immediately
                 } else abort();
                 opT::threaddata.call_depth--;
-                
+
             }
             else {
                 //::ttg::print("enqueuing task", get_name(), key, curhash, threaddata.key_hash, threaddata.call_depth);
-                world.taskq.add(args);
+                world.impl().impl().taskq.add(args);
             }
-            
+
 
             cache.erase(acc);
           }
@@ -501,7 +548,7 @@ namespace madness {
             if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
             args->derived = static_cast<derivedT *>(this);
 
-            world.taskq.add(args);
+            world.impl().impl().taskq.add(args);
 
             cache.erase(acc);
           }
@@ -534,7 +581,7 @@ namespace madness {
           args->derived = static_cast<derivedT *>(this);
           args->key = key;
 
-          world.taskq.add(args);
+          world.impl().impl().taskq.add(args);
           // static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals);// runs immediately
 
           cache.erase(acc);
@@ -556,7 +603,7 @@ namespace madness {
           if (tracing()) ::ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
           task->derived = static_cast<derivedT *>(this);
 
-          world.taskq.add(task);
+          world.impl().impl().taskq.add(task);
         }
       }
 
@@ -709,7 +756,7 @@ namespace madness {
             args->derived = static_cast<derivedT *>(this);
             args->key = key;
 
-            world.taskq.add(args);
+            world.impl().impl().taskq.add(args);
             // static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
 
             cache.erase(acc);
@@ -763,7 +810,7 @@ namespace madness {
             }
             args->derived = static_cast<derivedT *>(this);
 
-            world.taskq.add(args);
+            world.impl().impl().taskq.add(args);
             // static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals); // Runs immediately
 
             cache.erase(acc);
@@ -926,15 +973,15 @@ namespace madness {
       }
 
      public:
-      template <typename keymapT = default_keymap<keyT>>
+      template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-         World &world, keymapT &&keymap_ = keymapT())
+         ::ttg::World &world, keymapT &&keymap_ = keymapT())
           : ::ttg::OpBase(name, numins, numouts)
-          , worldobjT(world)
+          , worldobjT(world.impl().impl())
           , world(world)
           // if using default keymap, rebind to the given world
-          , keymap(std::is_same<keymapT, default_keymap<keyT>>::value
-                       ? decltype(keymap)(default_keymap<keyT>(world))
+          , keymap(std::is_same<keymapT, ::ttg::detail::default_keymap<keyT>>::value
+                       ? decltype(keymap)(::ttg::detail::default_keymap<keyT>(world))
                        : decltype(keymap)(std::forward<keymapT>(keymap_))) {
         // Cannot call these in base constructor since terminals not yet constructed
           if (innames.size() != std::tuple_size<input_terminals_type>::value) {
@@ -950,21 +997,21 @@ namespace madness {
         register_input_callbacks(std::make_index_sequence<numins>{});
       }
 
-      template <typename keymapT = default_keymap<keyT>>
+      template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-         keymapT &&keymap = keymapT(get_default_world()))
-          : Op(name, innames, outnames, get_default_world(), std::forward<keymapT>(keymap)) {}
+         keymapT &&keymap = keymapT(::ttg::get_default_world()))
+          : Op(name, innames, outnames, ::ttg::get_default_world(), std::forward<keymapT>(keymap)) {}
 
-      template <typename keymapT = default_keymap<keyT>>
+      template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
-         const std::vector<std::string> &innames, const std::vector<std::string> &outnames, World &world,
+         const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ::ttg::World &world,
          keymapT &&keymap_ = keymapT())
           : ::ttg::OpBase(name, numins, numouts)
-          , worldobjT(get_default_world())
-          , world(get_default_world())
+          , worldobjT(::ttg::get_default_world().impl().impl())
+          , world(::ttg::get_default_world())
           // if using default keymap, rebind to the given world
-          , keymap(std::is_same<keymapT, default_keymap<keyT>>::value
-                       ? decltype(keymap)(default_keymap<keyT>(world))
+          , keymap(std::is_same<keymapT, ::ttg::detail::default_keymap<keyT>>::value
+                       ? decltype(keymap)(::ttg::detail::default_keymap<keyT>(world))
                        : decltype(keymap)(std::forward<keymapT>(keymap_))) {
         // Cannot call in base constructor since terminals not yet constructed
           if (innames.size() != std::tuple_size<input_terminals_type>::value) {
@@ -983,11 +1030,13 @@ namespace madness {
         connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
       }
 
-      template <typename keymapT = default_keymap<keyT>>
+      template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
          const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-         keymapT &&keymap = keymapT(get_default_world()))
-          : Op(inedges, outedges, name, innames, outnames, get_default_world(), std::forward<keymapT>(keymap)) {}
+         keymapT &&keymap = keymapT(::ttg::get_default_world()))
+          : Op(inedges, outedges, name, innames, outnames,
+               ::ttg::get_default_world(), std::forward<keymapT>(keymap))
+          {}
 
       // Destructor checks for unexecuted tasks
       virtual ~Op() {
@@ -1003,7 +1052,7 @@ namespace madness {
               std::cerr << "   etc." << std::endl;
               break;
             }
-            using madness::operators::operator<<;
+            using ::madness::operators::operator<<;
             std::cerr << world.rank() << ":"
                       << "   unused: " << item.first << " : ( ";
             for (std::size_t i = 0; i < numins; i++) std::cerr << (item.second->nargs[i] == 0 ? "T" : "F") << " ";
@@ -1094,12 +1143,16 @@ namespace madness {
       owner() const { return keymap(); }
 
     };
+  }  // namespace TTG_MADNESS_NS
+
+  template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
+  using Op = ::ttg::TTG_MADNESS_NS::Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
 
 #include "../wrap.h"
 
-  }  // namespace ttg
-}  // namespace madness
+  constexpr const Runtime ttg_runtime = ::ttg::Runtime::MADWorld;
 
+}  // namespace ttg
 #include "../madness/watch.h"
 
 #endif  // MADNESS_TTG_H_INCLUDED

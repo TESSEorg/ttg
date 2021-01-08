@@ -49,11 +49,11 @@ namespace madness {
     /// must be called from main thread before setting watchpoints
     inline void initialize_watchpoints() {
 #if defined(HAVE_INTEL_TBB)
-      ::ttg::print_error(ttg_default_execution_context().rank(),
+      ::ttg::print_error(::ttg::ttg_default_execution_context().rank(),
                          "WARNING: watchpoints are only supported with MADWorld using the legacy threadpool");
 #endif
 #if !defined(__APPLE__)
-      ::ttg::print_error(ttg_default_execution_context().rank(), "WARNING: watchpoints are only supported on macOS");
+      ::ttg::print_error(::ttg::ttg_default_execution_context().rank(), "WARNING: watchpoints are only supported on macOS");
 #endif
       ::ttg::detail::MemoryWatchpoint_x86_64::Pool::initialize_instance(detail::watchpoints_threads());
     }

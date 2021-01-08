@@ -497,7 +497,7 @@ class FloydWarshall {
   FuncB funcB;
   FuncC funcC;
   FuncD funcD;
-  World& world;
+  ttg::World& world;
 
   // Needed for Initiating the execution in Initiator data member (see the function start())
   int blocking_factor;
@@ -510,7 +510,7 @@ class FloydWarshall {
       , funcB(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcB")
       , funcC(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcC")
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
-      , world(madness::World::get_default())
+      , world(ttg_default_execution_context())
       , blocking_factor(blocking_factor) {
     initiator.out<0>()->connect(funcA.in<0>());
     initiator.out<1>()->connect(funcB.in<0>());
@@ -542,7 +542,7 @@ class FloydWarshall {
     funcD.out<3>()->connect(funcD.in<0>());
 
     if (!make_graph_executable(&initiator)) throw "should be connected";
-    world.gop.fence();
+    ttg_fence(world);
   }
 
   void print() {}  //{Print()(&producer);}
@@ -598,15 +598,11 @@ int main(int argc, char** argv) {
 
   OpBase::set_trace_all(false); */
 
-  initialize(argc, argv);
-  World world(SafeMPI::COMM_WORLD);
-  set_default_world(world);
-
-  // world.taskq.add(world.rank(), hi);
-  world.gop.fence();
+  ttg::ttg_initialize(argc, argv);
+  ttg_fence(ttg_default_execution_context());
 
   for (int arg = 1; arg < argc; ++arg) {
-    if (strcmp(argv[arg], "-dx") == 0) xterm_debug(argv[0], 0);
+    if (strcmp(argv[arg], "-dx") == 0) madness::xterm_debug(argv[0], 0);
   }
 
   OpBase::set_trace_all(false);
@@ -661,6 +657,8 @@ int main(int argc, char** argv) {
   if (verify_results) {
     free(adjacency_matrix_serial);
   }
+
+  ttg_finalize();
 
   return 0;
 }

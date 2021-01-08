@@ -86,7 +86,7 @@ struct Integer {
     std::hash<int> int_hasher;
     hash_val = int_hasher(value);
   }
-  
+
   // Equality test
   bool operator==(const Integer& b) const { return value == b.value; }
 
@@ -126,7 +126,7 @@ class Initiator
     // functions B, C, and D have other dependencies to meet before execution; They wait
 #ifdef HAS_EXECUTION_HEADER
       std::for_each(std::execution::par, adjacency_matrix_ttg->get().begin(), adjacency_matrix_ttg->get().end(),
-        [&out](const std::pair<std::pair<int,int>, BlockMatrix<T>>& kv) 
+        [&out](const std::pair<std::pair<int,int>, BlockMatrix<T>>& kv)
 #else
     std::for_each(adjacency_matrix_ttg->get().begin(), adjacency_matrix_ttg->get().end(),
       [&out](const std::pair<std::pair<int,int>, BlockMatrix<T>>& kv)
@@ -168,7 +168,7 @@ class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
       , blocking_factor(blocking_factor)
       , kernel_type(kernel_type)
       , recursive_fan_out(recursive_fan_out)
-      , base_size(base_size) 
+      , base_size(base_size)
       , verify_results(verify_results)
       , adjacency_matrix_serial(adjacency_matrix_serial) {}
 
@@ -256,7 +256,7 @@ class FuncA : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
-  
+
     //std::cout << "FuncA " << I << " " << J << " " << K << std::endl;
     BlockMatrix<T> m_ij = get<0>(t);
     // Executing the update
@@ -377,7 +377,7 @@ class FuncB : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
     for (int i = K + 1; i < blocking_factor; ++i) {
       ::send<0>(Key(std::make_pair(std::make_pair(i, J), K)), m_ij, out);
     }
-    //Send result 
+    //Send result
     ::send<1>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
   }
 };
@@ -421,6 +421,7 @@ class FuncC : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
  
     //std::cout << "FuncC " << I << " " << J << " " << K << std::endl; 
     BlockMatrix<T> m_ij = get<0>(t);
+
     // Executing the update
     if (kernel_type == "iterative") {
       //m_ij = 
@@ -554,14 +555,15 @@ class GaussianElimination {
   FuncC<T> funcC;
   FuncD<T> funcD;
   Finalizer<T> finalizer;
-  World& world;
 
   // Needed for Initiating the execution in Initiator data member (see the function start())
   int blocking_factor;
 
+  ttg::World world;
+
  public:
   GaussianElimination(Matrix<T>* adjacency_matrix_ttg, Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor,
-                      const std::string& kernel_type, int recursive_fan_out, int base_size, 
+                      const std::string& kernel_type, int recursive_fan_out, int base_size,
                       T* adjacency_matrix_serial, bool verify_results = false)
       : initiator(adjacency_matrix_ttg, "initiator")
       , funcA(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcA")
@@ -569,7 +571,7 @@ class GaussianElimination {
       , funcC(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcC")
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
       , finalizer(result_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "finalizer", adjacency_matrix_serial, verify_results)
-      , blocking_factor(blocking_factor), world(madness::World::get_default()) {
+      , blocking_factor(blocking_factor), world(ttg_default_execution_context()) {
     initiator.template out<0>()->connect(funcA.template in<0>());
     initiator.template out<1>()->connect(funcB.template in<0>());
     initiator.template out<2>()->connect(funcC.template in<0>());
@@ -632,15 +634,15 @@ void ge_iterative(double* adjacency_matrix_serial, int problem_size);
 int main(int argc, char** argv) {
   OpBase::set_trace_all(false);
 
-  initialize(argc, argv);
-  World world(SafeMPI::COMM_WORLD);
-  set_default_world(world);
+  ttg_initialize(argc, argv);
+
+  auto world = ttg_default_execution_context();
 
   // world.taskq.add(world.rank(), hi);
-  world.gop.fence();
+  ttg_fence(world);
 
   for (int arg = 1; arg < argc; ++arg) {
-    if (strcmp(argv[arg], "-dx") == 0) xterm_debug(argv[0], 0);
+    if (strcmp(argv[arg], "-dx") == 0) madness::xterm_debug(argv[0], 0);
   }
 
   // NEW IMPLEMENTATION
@@ -705,6 +707,8 @@ int main(int argc, char** argv) {
   if (verify_results) {
     free(adjacency_matrix_serial);
   }
+
+  ttg_finalize();
 
   return 0;
 }

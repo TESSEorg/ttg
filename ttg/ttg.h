@@ -11,6 +11,8 @@
 #include <string>
 #include <tuple>
 #include <vector>
+#include <future>
+#include <list>
 
 #include <boost/callable_traits.hpp>  // needed for wrap.h
 #include <boost/core/demangle.hpp>
@@ -45,35 +47,37 @@ namespace ttg {
     return me;
   }
 
-/// @brief A complete version of void
+  /// @brief A complete version of void
 
-/// Void can be used interchangeably with void as key or value type, but is also hashable, etc.
-/// May reduce the amount of metaprogramming relative to void.
-class Void {
- public:
-  Void() = default;
-  template <typename T> Void(T&&) {}
-};
+  /// Void can be used interchangeably with void as key or value type, but is also hashable, etc.
+  /// May reduce the amount of metaprogramming relative to void.
+  class Void {
+  public:
+    Void() = default;
+    template <typename T> Void(T&&) {}
+  };
 
-bool operator==(const Void&, const Void&) { return true; }
+  static inline
+  bool operator==(const Void&, const Void&) { return true; }
+  static inline
+  bool operator!=(const Void&, const Void&) { return false; }
 
-bool operator!=(const Void&, const Void&) { return false; }
+  static inline
+  std::ostream& operator<<(std::ostream& os, const ttg::Void&) {
+    return os;
+  }
 
-std::ostream& operator<<(std::ostream& os, const ttg::Void&) {
-  return os;
-}
-
-static_assert(meta::is_empty_tuple_v<std::tuple<>>,"ouch");
-static_assert(meta::is_empty_tuple_v<std::tuple<Void>>,"ouch");
+  static_assert(meta::is_empty_tuple_v<std::tuple<>>,"ouch");
+  static_assert(meta::is_empty_tuple_v<std::tuple<Void>>,"ouch");
 
 }  // namespace ttg
 
 namespace std {
-template <>
-struct hash<ttg::Void> {
-  template <typename ... Args> int64_t operator()(Args&& ... args) const { return 0; }
-};
-}
+  template <>
+  struct hash<ttg::Void> {
+    template <typename ... Args> int64_t operator()(Args&& ... args) const { return 0; }
+  };
+} // namespace std
 
 namespace ttg {
   namespace detail {
@@ -103,14 +107,18 @@ namespace ttg {
   }  // namespace detail
 
   namespace detail {
+    static inline
     bool &trace_accessor() {
       static bool trace = false;
       return trace;
     }
   }  // namespace detail
 
+  static inline
   bool tracing() { return detail::trace_accessor(); }
+  static inline
   void trace_on() { detail::trace_accessor() = true; }
+  static inline
   void trace_off() { detail::trace_accessor() = false; }
 
   namespace detail {
@@ -1392,20 +1400,20 @@ namespace ttg {
     class OpSink : public ::ttg::OpBase {
         static constexpr int numins = 1;
         static constexpr int numouts = 0;
-        
+
         using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueT>>;
         using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueT>>>;
         using output_terminals_type = std::tuple<>;
-        
+
     private:
         input_terminals_type input_terminals;
         output_terminals_type output_terminals;
-        
+
         OpSink(const OpSink &other) = delete;
         OpSink &operator=(const OpSink &other) = delete;
         OpSink(OpSink &&other) = delete;
         OpSink &operator=(OpSink &&other) = delete;
-        
+
         template <typename terminalT>
         void register_input_callback(terminalT &input) {
             using valueT = std::decay_t<typename terminalT::value_type>;
@@ -1413,30 +1421,30 @@ namespace ttg {
             auto send_callback = [](const keyT &key, const valueT &value) {};
             auto setsize_callback = [](const keyT &key, std::size_t size) {};
             auto finalize_callback = [](const keyT &key) {};
-            
+
             input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
         }
-        
+
     public:
         OpSink(const std::string& inname="junk") : ::ttg::OpBase("sink", numins, numouts) {
             register_input_terminals(input_terminals, std::vector<std::string>{inname});
             register_input_callback(std::get<0>(input_terminals));
         }
-        
+
         OpSink(const input_edges_type &inedges, const std::string& inname="junk") : ::ttg::OpBase("sink", numins, numouts) {
             register_input_terminals(input_terminals, std::vector<std::string>{inname});
             register_input_callback(std::get<0>(input_terminals));
             std::get<0>(inedges).set_out(&std::get<0>(input_terminals));
         }
-        
+
         virtual ~OpSink() {}
 
         void fence() {}
-        
+
         void make_executable() {
             OpBase::make_executable();
         }
-        
+
         /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned
         template <std::size_t i>
         typename std::tuple_element<i, input_terminals_type>::type *in() {
@@ -1445,6 +1453,170 @@ namespace ttg {
         }
     };
 
+  /** WORLD STUFF **/
+
+  namespace base {
+      class WorldImplBase; // forward decl
+  } // namespace base
+
+  namespace detail {
+
+      /* TODO: how should the MADNESS and PaRSEC init/finalize play together? */
+      void register_world(ttg::base::WorldImplBase& world);
+      void deregister_world(ttg::base::WorldImplBase& world);
+      void destroy_worlds(void);
+
+  } //namespace detail
+
+  namespace base {
+
+      /// Base class for implementation-specific Worlds
+      class WorldImplBase {
+
+      private:
+
+        std::list<::ttg::OpBase*> op_register;
+        std::set<std::shared_ptr<std::promise<void>>> m_statuses;
+        std::set<std::shared_ptr<void>> m_ptrs;
+        ::ttg::Edge<> m_ctl_edge;
+
+      protected:
+
+        virtual void fence_impl(void) = 0;
+
+        void release_ops(void) {
+          while (!op_register.empty()) {
+              std::cout << "Destroying OpBase " << (*op_register.begin()) << std::endl;
+              (*op_register.begin())->release();
+          }
+        }
+
+      public:
+        WorldImplBase(void)
+        {
+            ::ttg::detail::register_world(*this);
+        }
+
+        virtual
+        ~WorldImplBase(void)
+        {
+            ::ttg::detail::deregister_world(*this);
+        }
+
+        virtual int size(void) const = 0;
+
+        virtual int rank(void) const = 0;
+
+        virtual void destroy(void) = 0;
+
+        template<typename T>
+        void register_ptr(const std::shared_ptr<T>& ptr)
+        {
+            m_ptrs.insert(ptr);
+        }
+
+        void register_status(const std::shared_ptr<std::promise<void>>& status_ptr)
+        {
+            m_statuses.insert(status_ptr);
+        }
+
+        ::ttg::Edge<>& ctl_edge()
+        {
+            return m_ctl_edge;
+        }
+
+        const ::ttg::Edge<>& ctl_edge() const
+        {
+            return m_ctl_edge;
+        }
+
+        void fence(void)
+        {
+            fence_impl();
+            for (auto &status: m_statuses) {
+              status->set_value();
+            }
+            m_statuses.clear();  // clear out the statuses
+        }
+
+        virtual void execute()
+        { }
+
+        void register_op(::ttg::OpBase* op) {
+            // TODO: do we need locking here?
+            op_register.push_back(op);
+        }
+
+        void deregister_op(::ttg::OpBase* op) {
+            // TODO: do we need locking here?
+            op_register.remove(op);
+        }
+      };
+
+
+      template<typename WorldImplT>
+      class World {
+      private:
+          std::shared_ptr<ttg::base::WorldImplBase> m_impl;
+      public:
+
+          World(void)
+          { }
+
+
+          World(std::shared_ptr<ttg::base::WorldImplBase> world_impl) : m_impl(world_impl)
+          { }
+
+          /* Defaulted copy ctor */
+          World(const World& other) = default;
+
+          /* Defaulted move ctor */
+          World(World&& other) = default;
+
+          ~World()
+          { }
+
+          /* Defaulted copy assignment */
+          World& operator=(const World& other) = default;
+
+          /* Defaulted move assignment */
+          World& operator=(World&& other) = default;
+
+          /* Get the number of ranks in this world */
+          int size() const
+          {
+              assert(is_valid());
+              return m_impl->size();
+          }
+
+          /* Get the current rank in this world */
+          int rank() const
+          {
+              assert(is_valid());
+              return m_impl->rank();
+          }
+
+          /* Returns true if the World instance is valid, i.e., if it has a valid
+           * pointer to a World implementation object */
+          bool is_valid(void) const
+          {
+              return static_cast<bool>(m_impl);
+          }
+
+          /* Get an unmanaged reference to the world implementation */
+          WorldImplT& impl(void)
+          {
+              assert(is_valid());
+              return *reinterpret_cast<WorldImplT*>(m_impl.get());
+          }
+
+          const WorldImplT& impl(void) const
+          {
+              assert(is_valid());
+              return *reinterpret_cast<WorldImplT*>(m_impl.get());
+          }
+      };
+  } // namespace base
 }  // namespace ttg
 
 // This provides an efficent API for serializing/deserializing a data type.
@@ -1473,4 +1645,15 @@ namespace ttg {
 
 }  // namespace ttg
 
+#if 0
+#if defined(TTG_USE_MADNESS)
+#include "madness/ttg.h"
+#elif defined(TTG_USE_PARSEC)
+#include "parsec/ttg.h"
+#else
+/* For now we use MADNESS as the default, change later? */
+#include "madness/ttg.h"
+//#error "Please select either the MADNESS or PaRSEC backend by defining TTG_USE_MADNESS or TTG_USE_PARSEC."
+#endif // TTG_USE_MADNESS|PARSEC
+#endif // 0
 #endif  // TTG_H_INCLUDED

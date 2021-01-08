@@ -17,6 +17,7 @@ set(ttg-sources
         ${CMAKE_CURRENT_SOURCE_DIR}/util/tree.h
         ${CMAKE_CURRENT_SOURCE_DIR}/util/version.h
         ${CMAKE_CURRENT_SOURCE_DIR}/util/version.cc
+        ${CMAKE_CURRENT_SOURCE_DIR}/util/world.cpp
     )
 add_library(ttg ${ttg-sources})
 target_include_directories(ttg PUBLIC

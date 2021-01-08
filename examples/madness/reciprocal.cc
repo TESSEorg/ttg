@@ -1,11 +1,8 @@
 // TTG AND MADNESS RUNTIME STUFF
 
 #define WORLD_INSTANTIATE_STATIC_TEMPLATES
-#include <madness/world/worldmutex.h>
 #include "madness/ttg.h"
-// using namespace madness; // don't want this to avoid collisions with new mad stuff  
-using namespace madness::ttg;
-using namespace ::ttg;
+using namespace ttg;
 
 // APPLICATION STUFF BELOW
 #include <cmath>
@@ -23,11 +20,11 @@ using namespace ::ttg;
      ** possible for the same key to arrive at the same time it is
      ** permissible to reuse keys in op playing the same algorithmic role on
      ** successive iterations
-     ** 
+     **
      ** e.g., a reduce operation in an iterative solve --- since it is
      ** a syncrhonization point it is not possible for multiple identical keys to
      ** arrive at the same time
-     ** 
+     **
      ** e.g., instead of key being pair(iteration,vector-index) it
      ** suffices to just use key=vector-index.
      **
@@ -58,7 +55,7 @@ using namespace ::ttg;
      binarysum(errsq[i],k) --> errsqsum[k]
 
      convergence_test[k](errsqsum[k],xynew[i]) --> sends xynew[k][i] to either result[i] or xy[k+1][i]
-     
+
  ***/
 
 template <typename X, typename Y>
@@ -87,21 +84,21 @@ auto make_binary_reduce(Edge<size_t,valueT>& in, Edge<sumresultkeyT,valueT>& res
         else            ::send<0>(up, sum, out);         // left=even
         if (N>1 && i==(N-1) && Nisodd) ::send<1>(up, valueT(0.0), out); // Missing element
     };
-        
+
     // Takes vec[i] (i in [0,N]) as input and initiates reduction
     auto startfn = [N,logic](const size_t& i, const valueT& value, outT& out) {logic(iNT(i,N), value, out);};
-    
+
     auto reducefn = [logic](const iNT& iN, const valueT& left, const valueT& right, outT& out) {logic(iN, left+right, out);};
-    
+
     Edge<iNT,valueT> left, right;
     auto start = wrap<size_t>(startfn, edges(in), edges(left,right,result), "startsum", {"in"}, {"left","right","result"});
     auto reduce= wrap<iNT>(reducefn, edges(left,right), edges(left,right,result), "reducesum", {"left","right"}, {"left","right","result"});
     auto ins = std::make_tuple(start-> template in<0>());
     auto outs = std::make_tuple(reduce-> template out<2>());
     std::vector<std::unique_ptr<OpBase>> ops(2);
-    ops[0] = std::move(start); 
+    ops[0] = std::move(start);
     ops[1] = std::move(reduce);
-    return make_composite_op(std::move(ops), ins, outs, "reduce");    
+    return make_composite_op(std::move(ops), ins, outs, "reduce");
 }
 
 using xT = double; // type of x
@@ -168,7 +165,7 @@ auto make_sum_result(Edge<sumreskeyT,kT>& k, Edge<sumreskeyT,yT>& sumresult, Edg
 }
 
 /// Use residual for this iteration (k) to produce boolean converged flag
-auto make_converged(Edge<kT,yT>& errsqsum, Edge<kT,bool>& converged) { 
+auto make_converged(Edge<kT,yT>& errsqsum, Edge<kT,bool>& converged) {
     auto f = [](const kT& k, const yT& errsqsum, std::tuple<Out<kT,bool>>& out) {
         bool converged = (errsqsum < 1e-10);
         ::ttg::print(" residual ", std::sqrt(errsqsum), " converged ", converged?"yes":"no");
@@ -220,7 +217,7 @@ auto make_dev_null(const Edge<keyT, valueT>& in) {
     return wrap(func, edges(in), edges(), "devnull", {"input"});
 }
 
-int main(int argc, char** argv) 
+int main(int argc, char** argv)
 {
     ttg_initialize(argc, argv, 2);
     std::cout << "Hello from reciprocal\n";
@@ -239,9 +236,9 @@ int main(int argc, char** argv)
         Edge<kiT,bool> bcast;
         Edge<sumreskeyT,yT> sumresult;
         Edge<sumreskeyT,kT> k;
-        
+
         const size_t N = 900;
-        
+
         auto start = make_start(x, N);
         auto guess = make_guess(x, xyguess);
         auto iteration = make_iteration(fuse(xy,xyguess), xynew);
@@ -253,7 +250,7 @@ int main(int argc, char** argv)
         auto loop = make_loop(bcast, xynew, xy, result);
         //auto printer = make_printer(result, "result: ");
         auto devnull = make_dev_null(result);
-        
+
         auto connected = make_graph_executable(start.get());
         assert(connected);
         if (ttg_default_execution_context().rank() == 0) {
@@ -261,11 +258,11 @@ int main(int argc, char** argv)
             std::cout << "==== begin dot ====\n";
             std::cout << Dot()(start.get()) << std::endl;
             std::cout << "====  end dot  ====\n";
-            
+
             // This kicks off the entire computation
             start->invoke(0);
         }
-        
+
         ttg_execute(ttg_default_execution_context());
         ttg_fence(ttg_default_execution_context());
     }
@@ -275,8 +272,8 @@ int main(int argc, char** argv)
     catch (const char* e) {
         std::cout << "char* Exception: " << e << std::endl;
     }
-    
-    get_default_world().gop.fence();
+
+    ttg_fence(ttg_default_execution_context());
     ttg_finalize();
     return 0;
 }
