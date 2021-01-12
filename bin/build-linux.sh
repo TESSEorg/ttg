@@ -89,14 +89,11 @@ for RUNTIME in mad parsec
 do
 for EXAMPLE in test t9 spmm bspmm
 do
-  # run {b}spmm-parsec only with 1 rank for now
-  if [ "$RUNTIME" = "parsec" ] && [ "$EXAMPLE" = "spmm" -o "$EXAMPLE" = "bspmm" ]; then
-    export NPROC=1
-  else
-    export NPROC=2
-  fi
+for NPROC in 1 2
+do
   examples/$EXAMPLE-$RUNTIME
   setarch `uname -m` -R ${MPI_HOME}/bin/mpirun -n $NPROC examples/$EXAMPLE-$RUNTIME
+done
 done
 done
 
