@@ -6,6 +6,8 @@
 #include "../util/serialization.h"
 #include "../ttg/util/hash.h"
 
+#include <madness/world/archive.h>
+
 #include <array>
 #include <cassert>
 #include <experimental/type_traits>
@@ -349,11 +351,30 @@ namespace parsec {
       MPI_Allreduce(&value, &result, 1, MPI_DOUBLE, MPI_SUM, world.comm());
       value = result;
     }
+
     /// broadcast
     /// @tparam T a serializable type
     template <typename T>
     void ttg_broadcast(World &world, T &data, int source_rank) {
-      assert(world.size() == 1);
+      int64_t BUFLEN;
+      if (world.rank() == source_rank) {
+        madness::archive::BufferOutputArchive count;
+        count & data;
+        BUFLEN = count.size();
+      }
+      MPI_Bcast(&BUFLEN, 1, MPI_INT64_T, source_rank, world.comm());
+
+      unsigned char* buf = new unsigned char[BUFLEN];
+      if (world.rank() == source_rank) {
+        madness::archive::BufferOutputArchive ar(buf,BUFLEN);
+        ar & data;
+      }
+      MPI_Bcast(buf, BUFLEN, MPI_UNSIGNED_CHAR, source_rank, world.comm());
+      if (world.rank() != source_rank) {
+        madness::archive::BufferInputArchive ar(buf,BUFLEN);
+        ar & data;
+      }
+      delete [] buf;
     }
 
     struct ParsecBaseOp {
