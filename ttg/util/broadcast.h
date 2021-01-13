@@ -7,7 +7,10 @@
 
 #include <tuple>
 
-#include "../../ttg/util/tree.h"
+#include "util/tree.h"
+#include "util/func.h"
+#include "util/op.h"
+#include "util/world.h"
 
 namespace ttg {
 

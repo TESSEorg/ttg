@@ -1,10 +1,27 @@
 #ifndef MADNESS_TTG_H_INCLUDED
 #define MADNESS_TTG_H_INCLUDED
 
+
+/* set up env if this header was included directly */
+#if !defined(TTG_IMPL_NAME)
+#define TTG_USE_MADNESS 1
+#endif // !defined(TTG_IMPL_NAME)
+
+#include "util/impl_selector.h"
+
+/* include ttg header to make symbols available in case this header is included directly */
 #include "../ttg.h"
-#include "../ttg/util/bug.h"
-#include "../ttg/util/hash.h"
-#include "../util/meta.h"
+#include "util/bug.h"
+#include "util/hash.h"
+#include "util/meta.h"
+#include "util/world.h"
+#include "base/op.h"
+#include "base/keymap.h"
+#include "util/op.h"
+#include "util/void.h"
+#include "util/runtimes.h"
+#include "util/macro.h"
+#include "util/func.h"
 
 #include <array>
 #include <cassert>
@@ -24,45 +41,9 @@
 
 #include <madness/world/world_task_queue.h>
 
-#define TTG_MADNESS_NS madness_ttg
+#include <boost/callable_traits.hpp>  // needed for wrap.h
 
 namespace ttg {
-
-  /* Definitions related to ttg::World */
-  namespace TTG_MADNESS_NS {
-      class WorldImpl; // forward declaration
-  } // namespace TTG_MADNESS_NS
-
-  using World = ::ttg::base::World<::ttg::TTG_MADNESS_NS::WorldImpl>;
-
-  namespace detail {
-      ttg::World& default_world_accessor() {
-        static ttg::World world;
-        return world;
-      }
-
-      inline void set_default_world(ttg::World&  world) { detail::default_world_accessor() = world; }
-      inline void set_default_world(ttg::World&& world) { detail::default_world_accessor() = std::move(world); }
-
-      template <typename keyT>
-      struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
-      public:
-        default_keymap() = default;
-        default_keymap(ttg::World &world)
-        : ttg::detail::default_keymap_impl<keyT>(world.size())
-        { }
-      };
-
-  } // namespace detail
-
-  inline ttg::World &get_default_world() {
-    if (detail::default_world_accessor().is_valid()) {
-      return detail::default_world_accessor();
-    } else {
-      throw std::runtime_error("ttg::set_default_world() must be called before use");
-    }
-  }
-
 
   namespace TTG_MADNESS_NS {
 
@@ -88,6 +69,7 @@ namespace ttg {
         ::madness::World& m_impl;
         bool m_allocated = false;
 
+        ttg::Edge<> m_ctl_edge;
   public:
         WorldImpl(::madness::World& world)
         : m_impl(world)
@@ -130,6 +112,17 @@ namespace ttg {
             m_impl.gop.fence();
         }
 
+        ::ttg::Edge<>& ctl_edge()
+        {
+            return m_ctl_edge;
+        }
+
+        const ::ttg::Edge<>& ctl_edge() const
+        {
+            return m_ctl_edge;
+        }
+
+
         virtual void destroy(void) override {
             release_ops();
             ttg::detail::deregister_world(*this);
@@ -154,52 +147,52 @@ namespace ttg {
   } // namespace TTG_MADNESS_NS
 
   template <typename... RestOfArgs>
-    inline void ttg_initialize(int argc, char **argv, RestOfArgs &&...) {
-      ::madness::World &madworld = ::madness::initialize(argc, argv);
-      auto *world_ptr = new ttg::TTG_MADNESS_NS::WorldImpl{madworld};
-      std::shared_ptr<::ttg::base::WorldImplBase> world_sptr{static_cast<::ttg::base::WorldImplBase*>(world_ptr)};
-      ::ttg::World world{std::move(world_sptr)};
-      ::ttg::detail::set_default_world(std::move(world));
-    }
-    inline void ttg_finalize() {
-      ::ttg::detail::set_default_world(::ttg::World{}); // reset the default world
-      ::ttg::detail::destroy_worlds();
-      ::madness::finalize();
-    }
-    inline void ttg_abort() { MPI_Abort(MPI_COMM_WORLD, 1); }
-    inline ::ttg::World& ttg_default_execution_context() {
-      return ::ttg::get_default_world();
-    }
-    inline void ttg_execute(::ttg::World world) {
-      // World executes tasks eagerly
-    }
-    inline void ttg_fence(::ttg::World world) {
-      world.impl().fence();
-    }
-
-    template <typename T>
-    inline void ttg_register_ptr(::ttg::World& world, const std::shared_ptr<T>& ptr) {
-        world.impl().register_ptr(ptr);
-    }
-
-    inline void ttg_register_status(::ttg::World& world, const std::shared_ptr<std::promise<void>>& status_ptr) {
-        world.impl().register_status(status_ptr);
-    }
-
-    inline ::ttg::Edge<>& ttg_ctl_edge(::ttg::World& world) {
-        return world.impl().ctl_edge();
-    }
+  static inline void ttg_initialize(int argc, char **argv, RestOfArgs &&...) {
+    ::madness::World &madworld = ::madness::initialize(argc, argv);
+    auto *world_ptr = new ttg::TTG_MADNESS_NS::WorldImpl{madworld};
+    std::shared_ptr<::ttg::base::WorldImplBase> world_sptr{static_cast<::ttg::base::WorldImplBase*>(world_ptr)};
+    ::ttg::World world{std::move(world_sptr)};
+    ::ttg::detail::set_default_world(std::move(world));
+  }
+  static inline void ttg_finalize() {
+    ::ttg::detail::set_default_world(::ttg::World{}); // reset the default world
+    ::ttg::detail::destroy_worlds<ttg::TTG_MADNESS_NS::WorldImpl>();
+    ::madness::finalize();
+  }
+  static inline void ttg_abort() { MPI_Abort(MPI_COMM_WORLD, 1); }
+  static inline ::ttg::World& ttg_default_execution_context() {
+    return ::ttg::get_default_world();
+  }
+  static inline void ttg_execute(::ttg::World& world) {
+    // World executes tasks eagerly
+  }
+  static inline void ttg_fence(::ttg::World& world) {
+    world.impl().fence();
+  }
 
   template <typename T>
-    void ttg_sum(::ttg::World &world, T &value) {
-        world.impl().impl().gop.sum(value);
-    }
-    /// broadcast
-    /// @tparam T a serializable type
-    template <typename T>
-    void ttg_broadcast(::ttg::World &world, T &data, int source_rank) {
-        world.impl().impl().gop.broadcast_serializable(data, source_rank);
-    }
+  static inline void ttg_register_ptr(::ttg::World& world, const std::shared_ptr<T>& ptr) {
+      world.impl().register_ptr(ptr);
+  }
+
+  static inline void ttg_register_status(::ttg::World& world, const std::shared_ptr<std::promise<void>>& status_ptr) {
+      world.impl().register_status(status_ptr);
+  }
+
+  static inline ::ttg::Edge<>& ttg_ctl_edge(::ttg::World& world) {
+      return world.impl().ctl_edge();
+  }
+
+  template <typename T>
+  static inline void ttg_sum(::ttg::World &world, T &value) {
+      world.impl().impl().gop.sum(value);
+  }
+  /// broadcast
+  /// @tparam T a serializable type
+  template <typename T>
+  static inline void ttg_broadcast(::ttg::World &world, T &data, int source_rank) {
+      world.impl().impl().gop.broadcast_serializable(data, source_rank);
+  }
 
 
   namespace TTG_MADNESS_NS {
@@ -212,7 +205,7 @@ namespace ttg {
     ///         flowing into this Op; a const type indicates nonmutating (read-only) use, nonconst type
     ///         indicates mutating use (e.g. the corresponding input can be used as scratch, moved-from, etc.)
     template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
-    class Op : public ::ttg::OpBase, public ::madness::WorldObject<Op<keyT, output_terminalsT, derivedT, input_valueTs...>> {
+    class Op : public ::ttg::base::OpBase, public ::madness::WorldObject<Op<keyT, output_terminalsT, derivedT, input_valueTs...>> {
      public:
       /// preconditions
       static_assert((!std::is_reference_v<input_valueTs> && ...), "input_valueTs cannot contain reference types");
@@ -976,7 +969,7 @@ namespace ttg {
       template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
          ::ttg::World &world, keymapT &&keymap_ = keymapT())
-          : ::ttg::OpBase(name, numins, numouts)
+          : ::ttg::base::OpBase(name, numins, numouts)
           , worldobjT(world.impl().impl())
           , world(world)
           // if using default keymap, rebind to the given world
@@ -1006,7 +999,7 @@ namespace ttg {
       Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
          const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ::ttg::World &world,
          keymapT &&keymap_ = keymapT())
-          : ::ttg::OpBase(name, numins, numouts)
+          : ::ttg::base::OpBase(name, numins, numouts)
           , worldobjT(::ttg::get_default_world().impl().impl())
           , world(::ttg::get_default_world())
           // if using default keymap, rebind to the given world
@@ -1061,8 +1054,6 @@ namespace ttg {
           abort();
         }
       }
-
-      static constexpr const ::ttg::Runtime runtime = ::ttg::Runtime::MADWorld;
 
       template <std::size_t i, typename Reducer>
       void set_input_reducer(Reducer &&reducer) {
@@ -1145,12 +1136,20 @@ namespace ttg {
     };
   }  // namespace TTG_MADNESS_NS
 
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
-  using Op = ::ttg::TTG_MADNESS_NS::Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
+  //template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
+  //using Op = ::ttg::TTG_MADNESS_NS::Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
 
-#include "../wrap.h"
+  /* Slim wrapper class around parsec::Op */
+  template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
+  class Op : public TTG_MADNESS_NS::Op<keyT, output_terminalsT, derivedT, input_valueTs...>
+  {
+    /* use ctor directly */
+    using TTG_MADNESS_NS::Op<keyT, output_terminalsT, derivedT, input_valueTs...>::Op;
+  };
 
   constexpr const Runtime ttg_runtime = ::ttg::Runtime::MADWorld;
+
+#include "wrap.h"
 
 }  // namespace ttg
 #include "../madness/watch.h"

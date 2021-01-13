@@ -2,6 +2,7 @@
 #define CXXAPI_META_H
 
 #include <type_traits>
+#include <functional>
 
 namespace ttg {
 

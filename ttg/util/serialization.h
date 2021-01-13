@@ -3,7 +3,9 @@
 
 #include <cstring>  // for std::memcpy
 
-#include "meta.h"
+#include "util/meta.h"
+#include "util/data_descriptor.h"
+#include "util/void.h"
 
 /**
    \file serialization.h
@@ -45,6 +47,7 @@ namespace ttg {
 
   template <typename T>
   struct default_data_descriptor<T, std::enable_if_t<std::is_trivially_copyable<T>::value>> {
+
     static uint64_t header_size(const void* object) { return static_cast<uint64_t>(0); }
 
     static uint64_t payload_size(const void* object) { return static_cast<uint64_t>(sizeof(T)); }
@@ -109,6 +112,9 @@ namespace ttg {
   struct default_data_descriptor<
       T, std::enable_if_t<!std::is_trivially_copyable<T>::value && detail::is_madness_serializable<T>::value>> {
     static uint64_t header_size(const void* object) { return static_cast<uint64_t>(0); }
+
+
+    static constexpr const bool is_const_size = false;
 
     static uint64_t payload_size(const void* object) {
       madness::archive::BufferOutputArchive ar;

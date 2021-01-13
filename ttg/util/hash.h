@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "util/void.h"
+
 namespace ttg {
   namespace detail {
     /// @brief byte-wise hasher

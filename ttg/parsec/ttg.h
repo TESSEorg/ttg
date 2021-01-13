@@ -1,10 +1,30 @@
 #ifndef PARSEC_TTG_H_INCLUDED
 #define PARSEC_TTG_H_INCLUDED
 
+/* set up env if this header was included directly */
+#if !defined(TTG_IMPL_NAME)
+#define TTG_USE_PARSEC 1
+#endif // !defined(TTG_IMPL_NAME)
+
+#include "util/impl_selector.h"
+
+/* include ttg header to make symbols available in case this header is included directly */
 #include "../ttg.h"
-#include "../util/meta.h"
-#include "../util/serialization.h"
-#include "../ttg/util/hash.h"
+
+#include "base/world.h"
+#include "base/op.h"
+#include "util/meta.h"
+#include "util/serialization.h"
+#include "util/hash.h"
+#include "base/keymap.h"
+#include "util/trace.h"
+#include "util/print.h"
+#include "util/execution.h"
+#include "edge.h"
+#include "terminal.h"
+#include "util/runtimes.h"
+#include "util/op.h"
+#include "util/func.h"
 
 #include <array>
 #include <cassert>
@@ -28,8 +48,11 @@
 #include <parsec/interfaces/interface.h>
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
+//#include <parsec/parsec_comm_engine.h>
 #include <cstdlib>
 #include <cstring>
+
+#include <boost/callable_traits.hpp>  // needed for wrap.h
 
 /* PaRSEC function declarations */
 extern "C" {
@@ -39,44 +62,9 @@ extern "C" {
 
 namespace ttg {
 
-  /* Definitions related to ttg::World */
   namespace parsec {
-      class WorldImpl; // forward declaration
-  } // namespace parsec
-
-  using World = ::ttg::base::World<::ttg::parsec::WorldImpl>;
-
-  namespace detail {
-      ttg::World& default_world_accessor() {
-        static ttg::World world;
-        return world;
-      }
-
-      inline void set_default_world(ttg::World&  world) { detail::default_world_accessor() = world; }
-      inline void set_default_world(ttg::World&& world) { detail::default_world_accessor() = std::move(world); }
-
-      template <typename keyT>
-      struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
-      public:
-        default_keymap() = default;
-        default_keymap(ttg::World &world)
-        : ttg::detail::default_keymap_impl<keyT>(world.size())
-        { }
-      };
-
-  } // namespace detail
-
-  inline ttg::World &get_default_world() {
-    if (detail::default_world_accessor().is_valid()) {
-      return detail::default_world_accessor();
-    } else {
-      throw std::runtime_error("ttg::set_default_world() must be called before use");
-    }
-  }
-
-  namespace parsec {
-      typedef void (*static_set_arg_fct_type)(void *, size_t, ::ttg::OpBase*);
-      typedef std::pair<static_set_arg_fct_type, ::ttg::OpBase*> static_set_arg_fct_call_t;
+      typedef void (*static_set_arg_fct_type)(void *, size_t, ttg::base::OpBase*);
+      typedef std::pair<static_set_arg_fct_type, ttg::base::OpBase*> static_set_arg_fct_call_t;
       static std::map<uint64_t, static_set_arg_fct_call_t> static_id_to_op_map;
       static std::mutex static_map_mutex;
       typedef std::tuple<int, void *, size_t>static_set_arg_fct_arg_t;
@@ -119,32 +107,36 @@ namespace ttg {
           }
     }
 
-    class WorldImpl : public ::ttg::base::WorldImplBase {
+    class WorldImpl : public ttg::base::WorldImplBase {
         const int _PARSEC_TTG_TAG = 10; // This TAG should be 'allocated' at the PaRSEC level
+
+        ttg::Edge<> m_ctl_edge;
      public:
         static constexpr const int PARSEC_TTG_MAX_AM_SIZE = 1024*1024;
       WorldImpl(int *argc, char **argv[], int ncores) {
-          ctx = parsec_init(ncores, argc, argv);
-          es = ctx->virtual_processes[0]->execution_streams[0];
 
-          parsec_ce.tag_register(_PARSEC_TTG_TAG, static_unpack_msg, this,
-                                 PARSEC_TTG_MAX_AM_SIZE);
+        ttg::detail::register_world(*this);
+        ctx = parsec_init(ncores, argc, argv);
+        es = ctx->virtual_processes[0]->execution_streams[0];
 
-          tpool = (parsec_taskpool_t *)calloc(1, sizeof(parsec_taskpool_t));
-          tpool->taskpool_id = -1;
-          tpool->update_nb_runtime_task = parsec_add_fetch_runtime_task;
-          tpool->taskpool_type = PARSEC_TASKPOOL_TYPE_TTG;
-          parsec_taskpool_reserve_id(tpool);
+        parsec_ce.tag_register(_PARSEC_TTG_TAG, static_unpack_msg, this,
+                                PARSEC_TTG_MAX_AM_SIZE);
 
-          parsec_termdet_open_dyn_module(tpool);
-          tpool->tdm.module->monitor_taskpool(tpool, parsec_taskpool_termination_detected);
-          // In TTG, we use the pending actions to denote that the
-          // taskpool is not ready, i.e. some local tasks could still
-          // be added by the main thread. It should then be initialized
-          // to 0, execute will set it to 1 and mark the tpool as ready,
-          // and the fence() will decrease it back to 0.
-          tpool->tdm.module->taskpool_set_nb_pa(tpool, 0);
-          parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
+        tpool = (parsec_taskpool_t *)calloc(1, sizeof(parsec_taskpool_t));
+        tpool->taskpool_id = -1;
+        tpool->update_nb_runtime_task = parsec_add_fetch_runtime_task;
+        tpool->taskpool_type = PARSEC_TASKPOOL_TYPE_TTG;
+        parsec_taskpool_reserve_id(tpool);
+
+        parsec_termdet_open_dyn_module(tpool);
+        tpool->tdm.module->monitor_taskpool(tpool, parsec_taskpool_termination_detected);
+        // In TTG, we use the pending actions to denote that the
+        // taskpool is not ready, i.e. some local tasks could still
+        // be added by the main thread. It should then be initialized
+        // to 0, execute will set it to 1 and mark the tpool as ready,
+        // and the fence() will decrease it back to 0.
+        tpool->tdm.module->taskpool_set_nb_pa(tpool, 0);
+        parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
       }
 
       /* Deleted copy ctor */
@@ -199,6 +191,17 @@ namespace ttg {
         parsec_fini(&ctx);
         free(tpool);
       }
+
+      ::ttg::Edge<>& ctl_edge()
+      {
+          return m_ctl_edge;
+      }
+
+      const ::ttg::Edge<>& ctl_edge() const
+      {
+          return m_ctl_edge;
+      }
+
 
       auto *context() { return ctx; }
       auto *execution_stream() { return es; }
@@ -301,13 +304,13 @@ namespace ttg {
       MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
 
       auto world_ptr = new parsec::WorldImpl{&argc, &argv, taskpool_size};
-      std::shared_ptr<::ttg::base::WorldImplBase> world_sptr{static_cast<::ttg::base::WorldImplBase*>(world_ptr)};
+      std::shared_ptr<ttg::base::WorldImplBase> world_sptr{static_cast<ttg::base::WorldImplBase*>(world_ptr)};
       ::ttg::World world{std::move(world_sptr)};
       ::ttg::detail::set_default_world(std::move(world));
     }
     inline void ttg_finalize() {
       ttg::detail::set_default_world(::ttg::World{}); // reset the default world
-      ttg::detail::destroy_worlds();
+      ttg::detail::destroy_worlds<::ttg::parsec::WorldImpl>();
       MPI_Finalize();
     }
     inline void ttg_abort() {
@@ -336,7 +339,8 @@ namespace ttg {
       return world.impl().ctl_edge();
     }
 
-    inline void ttg_sum(::ttg::World &world, double &value) {
+    template<>
+    inline void ttg_sum<double>(::ttg::World &world, double &value) {
       double result = 0.0;
       MPI_Allreduce(&value, &result, 1, MPI_DOUBLE, MPI_SUM, world.impl().comm());
       value = result;
@@ -348,16 +352,16 @@ namespace ttg {
       assert(world.size() == 1);
     }
 
-    struct ParsecBaseOp {
-     protected:
-      //  static std::map<int, ParsecBaseOp*> function_id_to_instance;
-      parsec_hash_table_t tasks_table;
-      parsec_task_class_t self;
-    };
-    // std::map<int, ParsecBaseOp*> ParsecBaseOp::function_id_to_instance = {};
-
   namespace parsec {
     namespace detail {
+
+        struct ParsecBaseOp {
+        protected:
+          //  static std::map<int, ParsecBaseOp*> function_id_to_instance;
+          parsec_hash_table_t tasks_table;
+          parsec_task_class_t self;
+        };
+
         struct msg_t {
             msg_header_t op_id;
             unsigned char bytes[WorldImpl::PARSEC_TTG_MAX_AM_SIZE - sizeof(msg_header_t)];
@@ -368,7 +372,7 @@ namespace ttg {
     }  // namespace detail
 
     template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
-    class Op : public ::ttg::OpBase, ParsecBaseOp {
+    class Op : public ttg::base::OpBase, detail::ParsecBaseOp {
      private:
       using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
       parsec_mempool_t mempools;
@@ -536,7 +540,7 @@ namespace ttg {
         return pos + payload_size;
       }
 
-      static void static_set_arg(void *data, std::size_t size, ::ttg::OpBase *bop) {
+      static void static_set_arg(void *data, std::size_t size, ttg::base::OpBase *bop) {
           assert(size >= sizeof(msg_header_t) &&
                  "Trying to unpack as message that does not hold enough bytes to represent a single header");
           msg_header_t *hd = static_cast<msg_header_t*>(data);
@@ -1113,7 +1117,7 @@ namespace ttg {
       template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
          ::ttg::World &world, keymapT &&keymap_ = keymapT())
-          : ::ttg::OpBase(name, numins, numouts)
+          : ttg::base::OpBase(name, numins, numouts)
           , set_arg_from_msg_fcts(make_set_args_fcts(std::make_index_sequence<numins>{}))
           , world(world)
           // if using default keymap, rebind to the given world
@@ -1364,13 +1368,20 @@ namespace ttg {
 
   /* elevate some types into ttg namespace */
 
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
-  using Op = parsec::Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
+  //template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
+  //using Op = parsec::Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
 
-#include "../wrap.h"
+  /* Slim wrapper class around parsec::Op */
+  template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
+  class Op : public parsec::Op<keyT, output_terminalsT, derivedT, input_valueTs...>
+  {
+    /* use ctor directly */
+    using parsec::Op<keyT, output_terminalsT, derivedT, input_valueTs...>::Op;
+  };
 
   constexpr const Runtime ttg_runtime = ::ttg::Runtime::PaRSEC;
 
+#include "wrap.h"
 }  // namespace ttg
 
 #endif  // PARSEC_TTG_H_INCLUDED

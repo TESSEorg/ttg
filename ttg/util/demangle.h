@@ -5,6 +5,8 @@
 #include <cxxabi.h>
 #include <string>
 #include <typeinfo>
+#include <memory>
+#include <boost/core/demangle.hpp>
 #define HAVE_CXA_DEMANGLE
 #ifdef HAVE_CXA_DEMANGLE
 
