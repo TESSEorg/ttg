@@ -185,11 +185,15 @@ namespace ttg {
       }
 
       virtual void destroy() override {
-        release_ops();
-        ttg::detail::deregister_world(*this);
-        parsec_ce.tag_unregister(_PARSEC_TTG_TAG);
-        parsec_fini(&ctx);
-        free(tpool);
+        if (is_valid()) {
+          std::cout << "Destroying parsec::WorldImpl " << this << std::endl;
+          release_ops();
+          ttg::detail::deregister_world(*this);
+          parsec_ce.tag_unregister(_PARSEC_TTG_TAG);
+          parsec_fini(&ctx);
+          free(tpool);
+          mark_invalid();
+        }
       }
 
       ::ttg::Edge<>& ctl_edge()
@@ -425,14 +429,14 @@ namespace ttg {
       output_terminalsT output_terminals;
       std::array<void (Op::*)(void*, std::size_t), numins> set_arg_from_msg_fcts;
 
-      ::ttg::World &world;
+      ::ttg::World world;
       ::ttg::meta::detail::keymap_t<keyT> keymap;
       // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
       ::ttg::meta::detail::input_reducers_t<input_valueTs...>
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
      public:
-      ::ttg::World &get_world() const { return world; }
+      ::ttg::World get_world() const { return world; }
 
      private:
 

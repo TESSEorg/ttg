@@ -38,18 +38,23 @@ namespace ttg {
 
       private:
 
-        std::list<ttg::base::OpBase*> op_register;
+        std::list<ttg::base::OpBase*> m_op_register;
         std::set<std::shared_ptr<std::promise<void>>> m_statuses;
         std::set<std::shared_ptr<void>> m_ptrs;
+        bool m_is_valid = true;
 
       protected:
+
+        void mark_invalid() {
+          m_is_valid = false;
+        }
 
         virtual void fence_impl(void) = 0;
 
         void release_ops(void) {
-          while (!op_register.empty()) {
-              std::cout << "Destroying OpBase " << (*op_register.begin()) << std::endl;
-              (*op_register.begin())->release();
+          while (!m_op_register.empty()) {
+              std::cout << "Destroying OpBase " << (*m_op_register.begin()) << std::endl;
+              (*m_op_register.begin())->release();
           }
         }
 
@@ -59,7 +64,9 @@ namespace ttg {
 
         virtual
         ~WorldImplBase(void)
-        { }
+        {
+          m_is_valid = false;
+        }
 
         virtual int size(void) const = 0;
 
@@ -92,12 +99,16 @@ namespace ttg {
 
         void register_op(ttg::base::OpBase* op) {
             // TODO: do we need locking here?
-            op_register.push_back(op);
+            m_op_register.push_back(op);
         }
 
         void deregister_op(ttg::base::OpBase* op) {
             // TODO: do we need locking here?
-            op_register.remove(op);
+            m_op_register.remove(op);
+        }
+
+        bool is_valid(void) const {
+            return m_is_valid;
         }
       };
 

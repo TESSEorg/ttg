@@ -124,11 +124,14 @@ namespace ttg {
 
 
         virtual void destroy(void) override {
-            release_ops();
-            ttg::detail::deregister_world(*this);
-            if (m_allocated) {
-                delete &m_impl;
-                m_allocated = false;
+            if (is_valid()) {
+                release_ops();
+                ttg::detail::deregister_world(*this);
+                if (m_allocated) {
+                    delete &m_impl;
+                    m_allocated = false;
+                }
+                mark_invalid();
             }
         }
 
