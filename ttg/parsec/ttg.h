@@ -533,32 +533,27 @@ namespace parsec {
      protected:
       template <typename T> uint64_t unpack(T &obj, void *_bytes, uint64_t pos) {
         const ttg_data_descriptor *dObj = ::ttg::get_data_descriptor<T>();
-        uint64_t header_size, payload_size;
-        void *buffer;
-        char *bytes = static_cast<char *>(_bytes);
-        int contiguous;
-        dObj->get_info(static_cast<void*>(&bytes[pos]), &header_size, &payload_size, &contiguous, &buffer);
-        assert(0 == header_size);
-        if (NULL != buffer) {
-          dObj->unpack_payload(&obj, payload_size, 0, buffer);
+        uint64_t payload_size;
+        if constexpr(!::ttg::default_data_descriptor<T>::serialize_size_is_const) {
+          const ttg_data_descriptor *dSiz = ::ttg::get_data_descriptor<uint64_t>();
+          dSiz->unpack_payload(&payload_size, sizeof(uint64_t), pos, _bytes);
+          pos += sizeof(uint64_t);
         } else {
-          dObj->unpack_payload(&obj, payload_size, pos, _bytes);
+          payload_size = dObj->payload_size(&obj);
         }
+        dObj->unpack_payload(&obj, payload_size, pos, _bytes);
         return pos + payload_size;
       }
 
       template <typename T> uint64_t pack(T &obj, void *bytes, uint64_t pos) {
         const ttg_data_descriptor *dObj = ::ttg::get_data_descriptor<T>();
-        uint64_t header_size, payload_size;
-        void *buffer;
-        int contiguous;
-        dObj->get_info(&obj, &header_size, &payload_size, &contiguous, &buffer);
-        assert(0 == header_size);
-        if (NULL != buffer) {
-          dObj->pack_payload(buffer, payload_size, pos, bytes);
-        } else {
-          dObj->pack_payload(&obj, payload_size, pos, bytes);
+        uint64_t payload_size = dObj->payload_size(&obj);
+        if constexpr (!::ttg::default_data_descriptor<T>::serialize_size_is_const) {
+          const ttg_data_descriptor *dSiz = ::ttg::get_data_descriptor<uint64_t>();
+          dSiz->pack_payload(&payload_size, sizeof(uint64_t), pos, bytes);
+          pos += sizeof(uint64_t);
         }
+        dObj->pack_payload(&obj, payload_size, pos, bytes);
         return pos + payload_size;
       }
 
@@ -741,17 +736,6 @@ namespace parsec {
           parsec_data_copy_t *copy =  PARSEC_OBJ_NEW(parsec_data_copy_t);
           copy->device_private = (void*)( new valueT(value) );
           task->parsec_task.data[i].data_in = copy;
-
-          // uncomment this if you want to test deserialization ... also comment out the placement new above
-          //    auto* ddesc = ::ttg::get_data_descriptor<valueT>();
-          //    void* value_ptr = (void*)&value;
-          //    uint64_t hs, ps;
-          //    int is_contiguous;
-          //    void* buf;
-          //    (*(ddesc->get_info))(value_ptr, &hs, &ps, &is_contiguous, &buf);
-          //    assert(is_contiguous);
-          //    (*(ddesc->unpack_header))(copy->device_private, hs, value_ptr);
-          //    (*(ddesc->unpack_payload))(copy->device_private, ps, 0, value_ptr);
         }
 
         int32_t count = parsec_atomic_fetch_inc_int32(&task->in_data_count)+1;
@@ -853,8 +837,7 @@ namespace parsec {
           msg_t* msg = new msg_t(get_instance_id(), world.taskpool()->taskpool_id, -1);
 
           uint64_t pos = 0;
-          const ttg_data_descriptor *dKey = ::ttg::get_data_descriptor<Key>();
-          pos = dKey->pack_payload(&key, sizeof(Key), pos, msg->bytes);
+          pos = pack(key, msg->bytes, pos);
           parsec_taskpool_t *tp = world.taskpool();
           tp->tdm.module->outgoing_message_start(tp, owner, NULL);       
           tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
