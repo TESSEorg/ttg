@@ -320,31 +320,31 @@ namespace ttg {
     inline void ttg_abort() {
       MPI_Abort(::ttg::get_default_world().impl().comm(), 1);
     }
-    inline ::ttg::World &ttg_default_execution_context() {
+    inline ::ttg::World ttg_default_execution_context() {
       return ::ttg::get_default_world();
     }
-    inline void ttg_execute(::ttg::World &world) {
+    inline void ttg_execute(::ttg::World world) {
       world.impl().execute();
     }
-    inline void ttg_fence(::ttg::World &world) {
+    inline void ttg_fence(::ttg::World world) {
       world.impl().fence();
     }
 
     template <typename T>
-    inline void ttg_register_ptr(::ttg::World& world, const std::shared_ptr<T>& ptr) {
+    inline void ttg_register_ptr(::ttg::World world, const std::shared_ptr<T>& ptr) {
       world.impl().register_ptr(ptr);
     }
 
-    inline void ttg_register_status(::ttg::World& world, const std::shared_ptr<std::promise<void>>& status_ptr) {
+    inline void ttg_register_status(::ttg::World world, const std::shared_ptr<std::promise<void>>& status_ptr) {
       world.impl().register_status(status_ptr);
     }
 
-    inline ::ttg::Edge<>& ttg_ctl_edge(::ttg::World& world) {
+    inline ::ttg::Edge<>& ttg_ctl_edge(::ttg::World world) {
       return world.impl().ctl_edge();
     }
 
     template<>
-    inline void ttg_sum<double>(::ttg::World &world, double &value) {
+    inline void ttg_sum<double>(::ttg::World world, double &value) {
       double result = 0.0;
       MPI_Allreduce(&value, &result, 1, MPI_DOUBLE, MPI_SUM, world.impl().comm());
       value = result;
@@ -352,7 +352,7 @@ namespace ttg {
     /// broadcast
     /// @tparam T a serializable type
     template <typename T>
-    void ttg_broadcast(::ttg::World &world, T &data, int source_rank) {
+    void ttg_broadcast(::ttg::World world, T &data, int source_rank) {
       assert(world.size() == 1);
     }
 
@@ -1120,7 +1120,7 @@ namespace ttg {
      public:
       template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-         ::ttg::World &world, keymapT &&keymap_ = keymapT())
+         ::ttg::World world, keymapT &&keymap_ = keymapT())
           : ttg::base::OpBase(name, numins, numouts)
           , set_arg_from_msg_fcts(make_set_args_fcts(std::make_index_sequence<numins>{}))
           , world(world)
@@ -1230,7 +1230,7 @@ namespace ttg {
 
       template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
-         const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ::ttg::World &world,
+         const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ::ttg::World world,
          keymapT &&keymap_ = keymapT())
           : Op(name, innames, outnames, world, std::forward<keymapT>(keymap_)) {
         connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numins>{}, inedges);

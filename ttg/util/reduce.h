@@ -34,7 +34,7 @@ namespace ttg {
                      BinaryTreeReduce<Value, BinaryOp, OutKey>, Value, Value, Value>;
 
     BinaryTreeReduce(Edge<int, Value> &in, Edge<OutKey, Value> &out, int root = 0, OutKey dest_key = OutKey(),
-                     BinaryOp op = BinaryOp{}, World &world = ttg_default_execution_context(), int max_key = -1,
+                     BinaryOp op = BinaryOp{}, World world = ttg_default_execution_context(), int max_key = -1,
                      Edge<int, Value> inout = Edge<int, Value>{}, Edge<int, Value> inout_l = Edge<int, Value>{},
                      Edge<int, Value> inout_r = Edge<int, Value>{})
         : baseT(edges(fuse(in, inout), inout_l, inout_r), edges(inout, inout_l, inout_r, out), "BinaryTreeReduce",

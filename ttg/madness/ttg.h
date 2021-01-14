@@ -163,37 +163,37 @@ namespace ttg {
     ::madness::finalize();
   }
   static inline void ttg_abort() { MPI_Abort(MPI_COMM_WORLD, 1); }
-  static inline ::ttg::World& ttg_default_execution_context() {
+  static inline ::ttg::World ttg_default_execution_context() {
     return ::ttg::get_default_world();
   }
-  static inline void ttg_execute(::ttg::World& world) {
+  static inline void ttg_execute(::ttg::World world) {
     // World executes tasks eagerly
   }
-  static inline void ttg_fence(::ttg::World& world) {
+  static inline void ttg_fence(::ttg::World world) {
     world.impl().fence();
   }
 
   template <typename T>
-  static inline void ttg_register_ptr(::ttg::World& world, const std::shared_ptr<T>& ptr) {
+  static inline void ttg_register_ptr(::ttg::World world, const std::shared_ptr<T>& ptr) {
       world.impl().register_ptr(ptr);
   }
 
-  static inline void ttg_register_status(::ttg::World& world, const std::shared_ptr<std::promise<void>>& status_ptr) {
+  static inline void ttg_register_status(::ttg::World world, const std::shared_ptr<std::promise<void>>& status_ptr) {
       world.impl().register_status(status_ptr);
   }
 
-  static inline ::ttg::Edge<>& ttg_ctl_edge(::ttg::World& world) {
+  static inline ::ttg::Edge<>& ttg_ctl_edge(::ttg::World world) {
       return world.impl().ctl_edge();
   }
 
   template <typename T>
-  static inline void ttg_sum(::ttg::World &world, T &value) {
+  static inline void ttg_sum(::ttg::World world, T &value) {
       world.impl().impl().gop.sum(value);
   }
   /// broadcast
   /// @tparam T a serializable type
   template <typename T>
-  static inline void ttg_broadcast(::ttg::World &world, T &data, int source_rank) {
+  static inline void ttg_broadcast(::ttg::World world, T &data, int source_rank) {
       world.impl().impl().gop.broadcast_serializable(data, source_rank);
   }
 
@@ -214,14 +214,14 @@ namespace ttg {
       static_assert((!std::is_reference_v<input_valueTs> && ...), "input_valueTs cannot contain reference types");
 
      private:
-      ::ttg::World &world;
+      ::ttg::World world;
       ::ttg::meta::detail::keymap_t<keyT> keymap;
       // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
       ::ttg::meta::detail::input_reducers_t<input_valueTs...>
           input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
      public:
-      ::ttg::World &get_world() const { return world; }
+      ::ttg::World get_world() const { return world; }
 
      protected:
       using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
@@ -971,7 +971,7 @@ namespace ttg {
      public:
       template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-         ::ttg::World &world, keymapT &&keymap_ = keymapT())
+         ::ttg::World world, keymapT &&keymap_ = keymapT())
           : ::ttg::base::OpBase(name, numins, numouts)
           , worldobjT(world.impl().impl())
           , world(world)
@@ -1000,7 +1000,7 @@ namespace ttg {
 
       template <typename keymapT = ::ttg::detail::default_keymap<keyT>>
       Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
-         const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ::ttg::World &world,
+         const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ::ttg::World world,
          keymapT &&keymap_ = keymapT())
           : ::ttg::base::OpBase(name, numins, numouts)
           , worldobjT(::ttg::get_default_world().impl().impl())

@@ -112,6 +112,11 @@ namespace ttg {
         }
       };
 
+      /**
+       * Slim wrapper around World implementation objects
+       * This wrapper should be passed by value, not by reference, to avoid
+       * lifetime issues of the world object.
+       */
       template<typename WorldImplT>
       class World {
       private:

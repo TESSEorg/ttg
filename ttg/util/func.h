@@ -6,15 +6,10 @@
 
 #include "base/op.h"
 #include "util/traverse.h"
+#include "terminal.h"
 #include "edge.h"
 
 namespace ttg {
-
-  class OpBase;  // forward decl
-  template <typename keyT, typename valueT>
-  class In;  // forward decl
-  template <typename keyT, typename valueT>
-  class Out;  // forward decl
 
   /// applies @c make_executable method to every op in the graph
   /// return true if there are no dangling out terminals
@@ -159,26 +154,26 @@ namespace ttg {
 
   static inline void ttg_abort();
 
-  static inline ::ttg::World &ttg_default_execution_context();
+  static inline ::ttg::World ttg_default_execution_context();
 
-  static inline void ttg_execute(::ttg::World &world);
+  static inline void ttg_execute(::ttg::World world);
 
-  static inline void ttg_fence(::ttg::World &world);
+  static inline void ttg_fence(::ttg::World world);
 
   template <typename T>
-  static inline void ttg_register_ptr(::ttg::World& world, const std::shared_ptr<T>& ptr);
+  static inline void ttg_register_ptr(::ttg::World world, const std::shared_ptr<T>& ptr);
 
-  static inline void ttg_register_status(::ttg::World& world, const std::shared_ptr<std::promise<void>>& status_ptr);
+  static inline void ttg_register_status(::ttg::World world, const std::shared_ptr<std::promise<void>>& status_ptr);
 
-  static inline Edge<>& ttg_ctl_edge(::ttg::World& world);
+  static inline Edge<>& ttg_ctl_edge(::ttg::World world);
 
   template<typename T>
-  static inline void ttg_sum(::ttg::World &world, T &value);
+  static inline void ttg_sum(::ttg::World world, T &value);
 
   /// broadcast
   /// @tparam T a serializable type
   template <typename T>
-  static inline void ttg_broadcast(::ttg::World &world, T &data, int source_rank);
+  static inline void ttg_broadcast(::ttg::World world, T &data, int source_rank);
 
 }  // namespace ttg
 

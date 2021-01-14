@@ -1,6 +1,6 @@
 #include <array>
 
-#include "../ttg/ttg.h"
+#include "ttg.h"
 
 class Fred {
   int value;
