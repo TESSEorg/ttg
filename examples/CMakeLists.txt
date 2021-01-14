@@ -1,6 +1,7 @@
 if (TARGET MADworld)
   # sanity check
-  add_executable (test-mad madness/test.cc test.impl.h)
+  add_executable (test-mad test/test.cc)
+  target_compile_definitions(test-mad PUBLIC TTG_USE_MADNESS=1;WORLD_INSTANTIATE_STATIC_TEMPLATES=1)
   target_link_libraries(test-mad LINK_PUBLIC ttg-mad)
 
   # madness-1d example (not yet runtime-agnostic)
@@ -12,7 +13,8 @@ if (TARGET MADworld)
   target_link_libraries(reciprocal-mad LINK_PUBLIC ttg-mad)
 
   # T9 example
-  add_executable (t9-mad madness/t9.cc t9.impl.h)
+  add_executable (t9-mad t9/t9.cc)
+  target_compile_definitions(t9-mad PUBLIC TTG_USE_MADNESS=1;WORLD_INSTANTIATE_STATIC_TEMPLATES=1)
   target_link_libraries(t9-mad LINK_PUBLIC ttg-mad)
 
 	#Wavefront example (workflow with shared data)
@@ -48,7 +50,8 @@ if (TARGET MADworld)
   endif(TARGET std::execution)
 
   # Smith Waterman Algorithm
-  add_executable (sw-mad madness/sw.cc sw.impl.h)
+  add_executable (sw-mad sw/sw.cc)
+  target_compile_definitions(sw-mad PUBLIC TTG_USE_MADNESS=1;WORLD_INSTANTIATE_STATIC_TEMPLATES=1)
   target_link_libraries(sw-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
 
   # sparse matmul
@@ -75,15 +78,20 @@ endif(TARGET MADworld)
 # "new" PaRSEC is not usable yet
 if (TARGET PaRSEC::parsec)
   # sanity check
-  add_executable (test-parsec parsec/test.cc test.impl.h)
+  add_executable (test-parsec test/test.cc)
+  target_compile_definitions(test-parsec PUBLIC TTG_USE_PARSEC=1)
   target_link_libraries(test-parsec LINK_PUBLIC ttg-parsec)
 
   if (TRUE)
-	  # T9 example
-      add_executable (t9-parsec parsec/t9.cc t9.impl.h)
+      # T9 example
+      #add_executable (t9-parsec parsec/t9.cc t9.impl.h)
+      add_executable (t9-parsec t9/t9.cc)
+      target_compile_definitions(t9-parsec PUBLIC TTG_USE_PARSEC=1)
       target_link_libraries(t9-parsec LINK_PUBLIC ttg-parsec)
 
-      add_executable (sw-parsec parsec/sw.cc sw.impl.h)
+      add_executable (sw-parsec sw/sw.cc)
+      target_compile_definitions(sw-parsec PUBLIC TTG_USE_PARSEC=1)
+      target_compile_options(sw-parsec PUBLIC -g)
       target_link_libraries(sw-parsec LINK_PUBLIC ttg-parsec MADworld)
 
       # sparse matmul need MADNESS for serialization of ttg::matrix::Shape (part of next-gen prototype)

@@ -1,6 +1,11 @@
 #include <cmath>
 #include <iostream>
 
+#include "ttg.h"
+
+/* TODO: get rid of the using statement! */
+using namespace ttg;
+
 /*!
   \file t9.impl.h
   \brief Multiresolution computation on a 1-D spatial tree
@@ -124,9 +129,6 @@ std::ostream& operator<<(std::ostream& s, const Control& ctl) {
   s << "Ctl";
   return s;
 }
-
-#include TTG_RUNTIME_H
-IMPORT_TTG_RUNTIME_NS
 
 using nodeEdge = Edge<Key, Node>;
 using doubleEdge = Edge<Key, double>;
