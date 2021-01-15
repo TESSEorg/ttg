@@ -544,7 +544,7 @@ int main(int argc, char** argv) {
     if (strcmp(argv[arg], "-dx") == 0) madness::xterm_debug(argv[0], 0);
   }
 
-  OpBase::set_trace_all(false);
+  ttg::base::OpBase::set_trace_all(false);
 
   // NEW IMPLEMENTATION
   int problem_size;

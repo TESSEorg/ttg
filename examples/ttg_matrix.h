@@ -395,7 +395,7 @@ namespace ttg {
     data_edge_t data_edge_{};
     shape_edge_t shape_edge_{};
     ctl_edge_t ctl_edge_{};
-    World& world_ = ttg_default_execution_context();
+    World world_ = ttg_default_execution_context();
   };
 
   template <typename T>

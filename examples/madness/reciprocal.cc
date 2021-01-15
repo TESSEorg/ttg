@@ -95,7 +95,7 @@ auto make_binary_reduce(Edge<size_t,valueT>& in, Edge<sumresultkeyT,valueT>& res
     auto reduce= wrap<iNT>(reducefn, edges(left,right), edges(left,right,result), "reducesum", {"left","right"}, {"left","right","result"});
     auto ins = std::make_tuple(start-> template in<0>());
     auto outs = std::make_tuple(reduce-> template out<2>());
-    std::vector<std::unique_ptr<OpBase>> ops(2);
+    std::vector<std::unique_ptr<ttg::base::OpBase>> ops(2);
     ops[0] = std::move(start);
     ops[1] = std::move(reduce);
     return make_composite_op(std::move(ops), ins, outs, "reduce");

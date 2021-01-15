@@ -557,7 +557,7 @@ class FloydWarshall {
   FuncC<T> funcC;
   FuncD<T> funcD;
   Finalizer<T> finalizer;
-  World& world;
+  ttg::World world;
 
   // Needed for Initiating the execution in Initiator data member (see the function start())
   int blocking_factor;
@@ -573,7 +573,7 @@ class FloydWarshall {
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
       , finalizer(result_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
                   "finalizer", adjacency_matrix_serial, verify_results)
-      , world(madness::World::get_default())
+      , world(ttg::get_default_world())
       , blocking_factor(blocking_factor) {
     initiator.template out<0>()->connect(funcA.template in<0>());
     initiator.template out<1>()->connect(funcB.template in<0>());
@@ -609,16 +609,16 @@ class FloydWarshall {
     funcD.template out<4>()->connect(finalizer.template in<0>());
 
     if (!make_graph_executable(&initiator)) throw "should be connected";
-    world.gop.fence();
+    fence();
   }
 
   void print() {}  //{Print()(&producer);}
   std::string dot() { return Dot()(&initiator); }
   void start() {
     if (world.rank() == 0) initiator.invoke(blocking_factor);
-    ttg_execute(ttg_default_execution_context());
+    ttg_execute(world);
   }
-  void fence() { ttg_fence(ttg_default_execution_context()); }
+  void fence() { ttg_fence(world); }
 };
 
 /* How to call? ./floyd
@@ -650,9 +650,11 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
 void floyd_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
-  OpBase::set_trace_all(false);
+  ttg::base::OpBase::set_trace_all(false);
 
   ttg_initialize(argc, argv);
+
+  ttg::World world = ttg::get_default_world();
 
   using mpqc::Debugger;
   auto debugger = std::make_shared<Debugger>();

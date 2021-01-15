@@ -8,8 +8,8 @@
 #include <stdlib.h>
 #include <utility>
 
-
-#include "../ttg/madness/ttg.h"
+#define TTG_USE_MADNESS 1
+#include "ttg.h"
 
 #include "Vector.h"
 #include "Matrix.h"
@@ -1386,7 +1386,7 @@ int main(int argc, char** argv) {
      if (strcmp(argv[arg], "-dx") == 0) madness::xterm_debug(argv[0], 0);
    }
 
-   OpBase::set_trace_all(false);
+   ttg::base::OpBase::set_trace_all(false);
 
 
    init_twoscale(k);

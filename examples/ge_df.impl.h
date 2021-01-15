@@ -593,16 +593,16 @@ class GaussianElimination {
     funcD.template out<3>()->connect(funcD.template in<0>());
 
     if (!make_graph_executable(&initiator)) throw "should be connected";
-    world.gop.fence();
+    fence();
   }
 
   void print() {}  //{Print()(&producer);}
   std::string dot() { return Dot()(&initiator); }
   void start() {
     if (world.rank() == 0) initiator.invoke(Integer(blocking_factor));
-    ttg_execute(ttg_default_execution_context());
+    ttg_execute(world);
   }
-  void fence() { ttg_fence(ttg_default_execution_context()); }
+  void fence() { ttg_fence(world); }
 };
 
 /* How to call? ./ge
@@ -632,7 +632,7 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
 void ge_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
-  OpBase::set_trace_all(false);
+  ttg::base::OpBase::set_trace_all(false);
 
   ttg_initialize(argc, argv);
 

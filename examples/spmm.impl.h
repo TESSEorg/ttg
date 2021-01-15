@@ -555,7 +555,7 @@ int main(int argc, char **argv) {
 
   {
     ::ttg::trace_on();
-    OpBase::set_trace_all(true);
+    ttg::base::OpBase::set_trace_all(true);
 
     const int n = 2;
     const int m = 3;
