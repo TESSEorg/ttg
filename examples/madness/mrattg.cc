@@ -1,7 +1,7 @@
 // TTG AND MADNESS RUNTIME STUFF
 
 #define WORLD_INSTANTIATE_STATIC_TEMPLATES
-#include "madness/ttg.h"
+#include "ttg/madness/ttg.h"
 // using namespace madness; // don't want this to avoid collisions with new mad stuff
 using namespace ttg;
 
@@ -269,7 +269,7 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
 
     auto ins = std::make_tuple(s-> template in<0>());
     auto outs = std::make_tuple(c-> template out<num_children>());
-    std::vector<std::unique_ptr<ttg::base::OpBase>> ops(2);
+    std::vector<std::unique_ptr<ttg::OpBase>> ops(2);
     ops[0] = std::move(s);
     ops[1] = std::move(c);
 
@@ -457,7 +457,7 @@ void test1() {
 
     ctlEdge<NDIM> ctl("start");
     auto start = make_start(ctl);
-    std::vector<std::unique_ptr<ttg::base::OpBase>> ops;
+    std::vector<std::unique_ptr<ttg::OpBase>> ops;
     for (auto i : range(3)) {
         TTGUNUSED(i);
         rnodeEdge<T,K,NDIM> a("a"), c("c");

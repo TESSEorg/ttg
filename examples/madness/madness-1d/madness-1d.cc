@@ -1386,7 +1386,7 @@ int main(int argc, char** argv) {
      if (strcmp(argv[arg], "-dx") == 0) madness::xterm_debug(argv[0], 0);
    }
 
-   ttg::base::OpBase::set_trace_all(false);
+   ttg::OpBase::set_trace_all(false);
 
 
    init_twoscale(k);

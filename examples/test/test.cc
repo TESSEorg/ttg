@@ -13,9 +13,6 @@ using keyT = uint64_t;
 
 #include "ttg.h"
 
-#include "../ttg/util/broadcast.h"
-#include "../ttg/util/reduce.h"
-
 class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int> {
   using baseT = Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int>;
 
@@ -113,9 +110,9 @@ class Everything {
 };
 
 class EverythingBase {
-  std::unique_ptr<base::OpBase> producer;
-  std::unique_ptr<base::OpBase> a;
-  std::unique_ptr<base::OpBase> consumer;
+  std::unique_ptr<OpBase> producer;
+  std::unique_ptr<OpBase> a;
+  std::unique_ptr<OpBase> consumer;
 
  public:
   EverythingBase() : producer(new Producer("producer")), a(new A("A")), consumer(new Consumer("consumer")) {
@@ -312,8 +309,8 @@ class Everything5 {
 #endif  // !PaRSEC
 
 class EverythingComposite {
-  std::unique_ptr<base::OpBase> P;
-  std::unique_ptr<base::OpBase> AC;
+  std::unique_ptr<OpBase> P;
+  std::unique_ptr<OpBase> AC;
 
  public:
   EverythingComposite() {
@@ -321,18 +318,18 @@ class EverythingComposite {
     auto a = std::make_unique<A>("A");
     auto c = std::make_unique<Consumer>("C");
 
-    ::ttg::print("P out<0>", (void *)(ttg::base::TerminalBase *)(p->out<0>()));
-    ::ttg::print("A  in<0>", (void *)(ttg::base::TerminalBase *)(a->in<0>()));
-    ::ttg::print("A out<0>", (void *)(ttg::base::TerminalBase *)(a->out<0>()));
-    ::ttg::print("C  in<0>", (void *)(ttg::base::TerminalBase *)(c->in<0>()));
+    ::ttg::print("P out<0>", (void *)(ttg::TerminalBase *)(p->out<0>()));
+    ::ttg::print("A  in<0>", (void *)(ttg::TerminalBase *)(a->in<0>()));
+    ::ttg::print("A out<0>", (void *)(ttg::TerminalBase *)(a->out<0>()));
+    ::ttg::print("C  in<0>", (void *)(ttg::TerminalBase *)(c->in<0>()));
 
     connect<1, 0>(a, a);  // a->out<1>()->connect(a->in<0>());
     connect<0, 0>(a, c);  // a->out<0>()->connect(c->in<0>());
     const auto q = std::make_tuple(a->in<0>());
-    ::ttg::print("q  in<0>", (void *)(ttg::base::TerminalBase *)(std::get<0>(q)));
+    ::ttg::print("q  in<0>", (void *)(ttg::TerminalBase *)(std::get<0>(q)));
 
     // std::array<std::unique_ptr<OpBase>,2> ops{std::move(a),std::move(c)};
-    std::vector<std::unique_ptr<base::OpBase>> ops(2);
+    std::vector<std::unique_ptr<OpBase>> ops(2);
     ops[0] = std::move(a);
     ops[1] = std::move(c);
     ::ttg::print("opsin(0)", (void *)(ops[0]->in(0)));
@@ -340,7 +337,7 @@ class EverythingComposite {
 
     auto ac = make_composite_op(std::move(ops), q, std::make_tuple(), "Fred");
 
-    ::ttg::print("AC in<0>", (void *)(ttg::base::TerminalBase *)(ac->in<0>()));
+    ::ttg::print("AC in<0>", (void *)(ttg::TerminalBase *)(ac->in<0>()));
     connect<0, 0>(p, ac);  // p->out<0>()->connect(ac->in<0>());
 
     verify(p.get());
@@ -504,7 +501,7 @@ int try_main(int argc, char **argv) {
   //  debugger->set_cmd("gdb_xterm");
 
   {
-    ttg::base::OpBase::set_trace_all(false);
+    ttg::OpBase::set_trace_all(false);
 
     ttg_execute(ttg_default_execution_context());
 
