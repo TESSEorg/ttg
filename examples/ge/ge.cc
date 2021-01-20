@@ -26,7 +26,7 @@ using namespace ttg;
 struct Key {
   // ((I, J), K) where (I, J) is the tile coordiante and K is the iteration number
   std::pair<std::pair<int, int>, int> execution_info;
-  madness:hashT hash_val;
+  madness::hashT hash_val;
 
   Key() : execution_info(std::make_pair(std::make_pair(0, 0), 0)) { rehash(); }
   Key(const std::pair<std::pair<int, int>, int>& e) : execution_info(e) { rehash(); }
