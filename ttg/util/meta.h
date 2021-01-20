@@ -201,7 +201,6 @@ namespace ttg {
       using type = std::function<void()>;
     };
     template <typename Key, typename Value> using send_callback_t = typename send_callback<Key,Value>::type;
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // move_callback_t<key,value> = std::function<void(const key&, value&&>, protected against void key or value
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -292,6 +291,21 @@ struct input_reducers {
   using type = std::tuple<typename input_reducer_type<valueTs>::type...>;
 };
 template<typename ... valueTs> using input_reducers_t = typename input_reducers<valueTs...>::type;
+
+///////////////////////////////
+//Defining invoke type for OpBase for handling pull requests.
+//////////////////////////////
+template<typename Key, typename Enabler = void>
+struct invoke_callback;
+template<typename Key>
+struct invoke_callback<Key, std::enable_if_t<!is_void_v<Key>>> {
+using type = std::function<void(const Key &)>;
+};
+template<typename Key>
+struct invoke_callback<Key, std::enable_if_t<is_void_v<Key>>> {
+using type = std::function<void()>;
+};
+template <typename Key> using invoke_callback_t = typename invoke_callback<Key>::type;
 
 }  // only used by deep internals
 
