@@ -261,7 +261,13 @@ namespace ttg {
 
     void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
       std::lock_guard<std::mutex> lock(mtx_);
-      ::ttg::print("Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem));
+      if( ::ttg::tracing() ) {
+        auto &w = get_default_world();
+        ::ttg::print(w.rank(), "/", static_cast<unsigned long int>(pthread_self()),
+                     "ttg_matrix.h Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem),
+                     " in ", static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_),
+                     " for object @", static_cast<void *>(this));
+      }
       matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
     }
 
