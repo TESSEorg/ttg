@@ -111,7 +111,11 @@ namespace parsec {
           parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
       }
 
-      ~World() { parsec_ce.tag_unregister(_PARSEC_TTG_TAG); parsec_fini(&ctx); free(tpool); }
+      ~World() {
+        parsec_taskpool_free(tpool);
+        parsec_ce.tag_unregister(_PARSEC_TTG_TAG);
+        parsec_fini(&ctx);
+      }
 
       const int &parsec_ttg_tag() { return _PARSEC_TTG_TAG; }
         
@@ -143,7 +147,6 @@ namespace parsec {
 
       void fence() {
           int rank;
-          parsec_taskpool_t *tp = taskpool();
           if( ::ttg::tracing() ) {
               MPI_Comm_rank(MPI_COMM_WORLD, &rank);
               ::ttg::print("parsec::ttg(", rank,  "): parsec taskpool is ready for completion");
@@ -154,6 +157,10 @@ namespace parsec {
               ::ttg::print("parsec::ttg(", rank, "): waiting for completion");
           }
           parsec_context_wait(ctx);
+
+          // And we start again
+          tpool->tdm.module->monitor_taskpool(tpool, parsec_taskpool_termination_detected);
+          tpool->tdm.module->taskpool_set_nb_pa(tpool, 0);
       }
 
       void increment_created() { taskpool()->tdm.module->taskpool_addto_nb_tasks(taskpool(), 1); }
