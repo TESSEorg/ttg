@@ -269,6 +269,9 @@ namespace ttg {
                      " for object @", static_cast<void *>(this));
       }
       matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
+      if( ::ttg::tracing() ) {
+        ::ttg::print(get_default_world().rank(), "/", "Write::op: ttg_matrix.h matrix_\n", matrix_);
+      }
     }
 
     /// grab completion status as a future<void>
