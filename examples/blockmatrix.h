@@ -15,7 +15,10 @@ class BlockMatrix {
   BlockMatrix(int rows, int cols) : _rows(rows), _cols(cols) {
     // Deallocator is required since we are allocating a pointer
     m_block = std::shared_ptr<T>(new T[_rows * _cols], [](T* p) { delete[] p; });
+    //m_block = std::shared_ptr<T>((T*)aligned_alloc(64, sizeof(T) * _rows * _cols), [](T* p) { free(p); });
   }
+
+  BlockMatrix(int rows, int cols, T* block) : _rows(rows), _cols(cols), m_block(block) {}
 
   //Copy constructor
   /*BlockMatrix(const BlockMatrix<T>& other) : _rows(other._rows), _cols(other._cols),
@@ -38,8 +41,8 @@ class BlockMatrix {
   int rows() const { return _rows; }
   int cols() const { return _cols; }
   const T* get() const { return m_block.get(); }
-  T* get() { return m_block.get(); }
-  
+  T* get() { return m_block.get(); } 
+ 
   void fill() {
     // Initialize all elements of the matrix to 1
     for (int i = 0; i < _rows; ++i) {
@@ -77,7 +80,7 @@ class BlockMatrix {
   }
  
   //Return by value
-  T& operator() (int row, int col) { return m_block.get()[row * _cols + col]; }
+  inline T& operator() (int row, int col) { return m_block.get()[row * _cols + col]; }
 
   void operator() (int row, int col, T val) {
     m_block.get()[row * _cols + col] = val;
