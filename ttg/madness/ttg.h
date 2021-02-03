@@ -1023,6 +1023,11 @@ namespace madness {
         std::get<i>(input_reducers) = reducer;
       }
 
+      template <typename Keymap>
+      void set_keymap(Keymap &&km) {
+        keymap = km;
+      }
+
       /// implementation of OpBase::make_executable()
       void make_executable() {
         this->process_pending();
