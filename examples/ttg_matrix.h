@@ -241,6 +241,8 @@ namespace ttg {
 
     void op(typename baseT::input_values_tuple_type && ins, std::tuple<> &out) {
       const auto& shape = baseT::template get<0>(ins);
+      if(::ttg::tracing())
+        ::ttg::print("Resizing ", static_cast<void*>(&matrix_));
       matrix_.resize(shape.nrows(), shape.ncols());
     }
 
