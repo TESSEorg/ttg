@@ -81,24 +81,9 @@ cmake ${TRAVIS_BUILD_DIR} -G "${CMAKE_GENERATOR}" \
     -DBOOST_ROOT="${INSTALL_PREFIX}/boost" \
     -DCMAKE_CXX_FLAGS="${CXX_FLAGS} ${EXTRAFLAGS} ${CODECOVCXXFLAGS}"
 
-### examples
-cmake --build .
+### build and run examples
 export MPI_HOME=${INSTALL_PREFIX}/mpich
-# run examples
-for RUNTIME in mad parsec
-do
-for EXAMPLE in test t9 spmm bspmm
-do
-  # run {b}spmm-parsec only with 1 rank for now
-  if [ "$RUNTIME" = "parsec" ] && [ "$EXAMPLE" = "spmm" -o "$EXAMPLE" = "bspmm" ]; then
-    export NPROC=1
-  else
-    export NPROC=2
-  fi
-  examples/$EXAMPLE-$RUNTIME
-  setarch `uname -m` -R ${MPI_HOME}/bin/mpirun -n $NPROC examples/$EXAMPLE-$RUNTIME
-done
-done
+cmake --build . --target check
 
 ### tests
 cmake --build . --target serialization
