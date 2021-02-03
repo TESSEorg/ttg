@@ -559,7 +559,7 @@ int main(int argc, char **argv) {
 //  initialize_watchpoints();
 
   {
-    //::ttg::trace_on();
+    ::ttg::trace_on();
     //OpBase::set_trace_all(true);
 
     const int n = 2;
@@ -631,8 +631,8 @@ int main(int argc, char **argv) {
     // ready, go! need only 1 kick, so must be done by 1 thread only
     if (ttg_default_execution_context().rank() == 0) control.start();
 
-    ttg_execute(ttg_default_execution_context());
-    ttg_fence(ttg_default_execution_context());
+    //ttg_execute(ttg_default_execution_context());
+    //ttg_fence(ttg_default_execution_context());
 
     ///////////////////////////////////////////////////////////////////////////
     // copy matrix using ttg::Matrix
