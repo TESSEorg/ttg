@@ -42,7 +42,7 @@ if (TARGET MADworld)
     add_executable (fw-apsp-df-mad floyd-warshall/floyd_warshall_df.cc)
     target_compile_definitions(fw-apsp-df-mad PUBLIC TTG_USE_MADNESS=1;WORLD_INSTANTIATE_STATIC_TEMPLATES=1)
     target_link_libraries(fw-apsp-df-mad LINK_PUBLIC ttg-mad OpenMP::OpenMP_CXX std::execution)
-  endif()
+  endif ()
 
   # Guassian Elimination Example
   add_executable (ge-mad ge/ge.cc)
@@ -59,7 +59,11 @@ if (TARGET MADworld)
   # Smith Waterman Algorithm
   add_executable (sw-mad sw/sw.cc)
   target_compile_definitions(sw-mad PUBLIC TTG_USE_MADNESS=1;WORLD_INSTANTIATE_STATIC_TEMPLATES=1)
-  target_link_libraries(sw-mad LINK_PUBLIC ttg-mad ${MADNESS_DISABLEPIE_LINKER_FLAG})
+
+  # RandomAccess HPCC Benchmark
+  # TODO convert to new example format
+  #add_executable (randomaccess-mad madness/randomaccess.cc randomaccess.impl.h)
+  #target_link_libraries(randomaccess-mad LINK_PUBLIC ttg-mad)
 
   # sparse matmul
   if (EIGEN3_FOUND)
@@ -145,7 +149,7 @@ if (TARGET PaRSEC::parsec)
 
 
       # sparse matmul need MADNESS for serialization of ttg::matrix::Shape (part of next-gen prototype)
-      if (EIGEN3_FOUND AND TARGET MADworld)
+      if (TARGET eigen3 AND TARGET MADworld)
         add_executable (spmm-parsec spmm/spmm.cc)
         target_compile_definitions(spmm-parsec PUBLIC TTG_USE_PARSEC=1;WORLD_INSTANTIATE_STATIC_TEMPLATES=1)
         target_link_libraries(spmm-parsec LINK_PUBLIC ttg-parsec eigen3 MADworld)
@@ -155,6 +159,6 @@ if (TARGET PaRSEC::parsec)
           target_compile_definitions(bspmm-parsec PUBLIC BLOCK_SPARSE_GEMM=1;TTG_USE_PARSEC=1;WORLD_INSTANTIATE_STATIC_TEMPLATES=1)
           target_link_libraries(bspmm-parsec LINK_PUBLIC ttg-parsec eigen3 BTAS Boost::boost MADworld -ldl)
         endif (TARGET BTAS::BTAS)
-      endif(EIGEN3_FOUND AND TARGET MADworld)
+      endif(TARGET eigen3 AND TARGET MADworld)
   endif (TRUE)
 endif(TARGET PaRSEC::parsec)
