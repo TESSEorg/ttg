@@ -203,7 +203,7 @@ namespace ttg {
       friend class MemoryWatchPool;
 
       void init(bool create) {
-#if __APPLE__
+#if defined(__APPLE__) && defined(__x86_64__)
         x86_debug_state dr;
         mach_msg_type_number_t dr_count = x86_DEBUG_STATE_COUNT;
 
@@ -238,7 +238,7 @@ namespace ttg {
 
         if (create && rc != KERN_SUCCESS)
           throw std::runtime_error("MemoryWatchpoint_x86_64::MemoryWatchpoint_x86_64(): thread_set_state failed");
-#endif  // defined(__APPLE__)
+#endif  // defined(__APPLE__) && defined(__x86_64__)
       }
     };
 
