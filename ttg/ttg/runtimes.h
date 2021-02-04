@@ -5,7 +5,7 @@
 #ifndef TTG_TRAITS_H
 #define TTG_TRAITS_H
 
-#include "execution.h"
+#include "ttg/execution.h"
 
 namespace ttg {
 

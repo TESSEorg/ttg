@@ -11,6 +11,7 @@
 #include "ttg/func.h"
 #include "ttg/op.h"
 #include "ttg/world.h"
+#include "ttg/fwd.h"
 
 namespace ttg {
 

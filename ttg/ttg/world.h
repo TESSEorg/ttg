@@ -9,14 +9,15 @@
 #include "ttg/base/world.h"
 #include "ttg/base/keymap.h"
 
+#include "ttg/fwd.h"
+
 namespace ttg {
 
-
-  /* Definitions related to ttg::World */
-  namespace TTG_IMPL_NS {
-      class WorldImpl; // forward declaration
-  } // namespace TTG_IMPL_NS
-  using World = ttg::base::World<ttg::TTG_IMPL_NS::WorldImpl>;
+  /* Slim wrapper to allow for forward declaration */
+  class World : public ttg::base::World<ttg::TTG_IMPL_NS::WorldImpl>
+  {
+      using ttg::base::World<ttg::TTG_IMPL_NS::WorldImpl>::World;
+  };
 
   namespace detail {
       template<typename WorldT>

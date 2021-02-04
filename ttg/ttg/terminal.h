@@ -5,6 +5,7 @@
 #include <type_traits>
 #include <stdexcept>
 
+#include "ttg/fwd.h"
 #include "ttg/base/terminal.h"
 #include "ttg/util/meta.h"
 #include "ttg/util/trace.h"
@@ -12,10 +13,6 @@
 #include "ttg/world.h"
 
 namespace ttg {
-
-  template <typename keyT, typename valueT>
-  class Edge;  // Forward decl.
-
 
   template <typename keyT = void, typename valueT = void>
   class In : public TerminalBase {

@@ -5,8 +5,11 @@
 #ifndef TTG_WATCH_H
 #define TTG_WATCH_H
 
-namespace madness {
-  namespace ttg {
+#include "ttg/impl_selector.h"
+#include "ttg/util/bug.h"
+
+namespace ttg {
+  TTG_IMPL_MADNESS_INLINE_NS namespace ttg_madness {
     // clang-format off
 /*
  * This allows programmatic control of watchpoints. Requires MADWorld using legacy ThreadPool and macOS. Example:
@@ -26,7 +29,7 @@ namespace madness {
  */
     // clang-format on
 
-    namespace detail {
+    namespace ttg_madness_detail {
       inline const std::vector<const pthread_t *> &watchpoints_threads() {
         static std::vector<const pthread_t *> threads;
         // can set watchpoints only with the legacy MADNESS threadpool
@@ -55,21 +58,21 @@ namespace madness {
 #if !defined(__APPLE__)
       ::ttg::print_error(::ttg::ttg_default_execution_context().rank(), "WARNING: watchpoints are only supported on macOS");
 #endif
-      ::ttg::detail::MemoryWatchpoint_x86_64::Pool::initialize_instance(detail::watchpoints_threads());
+      ::ttg::detail::MemoryWatchpoint_x86_64::Pool::initialize_instance(::ttg::ttg_madness_detail::watchpoints_threads());
     }
 
     /// sets a hardware watchpoint for window @c [addr,addr+size) and condition @c cond
     template <typename T>
     inline void watchpoint_set(T *addr, ::ttg::detail::MemoryWatchpoint_x86_64::Size size,
                                ::ttg::detail::MemoryWatchpoint_x86_64::Condition cond) {
-      const auto &threads = detail::watchpoints_threads();
+      const auto &threads = ttg_madness_detail::watchpoints_threads();
       for (auto t : threads) ::ttg::detail::MemoryWatchpoint_x86_64::Pool::instance()->set(addr, size, cond, t);
     }
 
     /// clears the hardware watchpoint for window @c [addr,addr+size) previously created with watchpoint_set<T>
     template <typename T>
     inline void watchpoint_clear(T *addr) {
-      const auto &threads = detail::watchpoints_threads();
+      const auto &threads = ttg_madness_detail::watchpoints_threads();
       for (auto t : threads) ::ttg::detail::MemoryWatchpoint_x86_64::Pool::instance()->clear(addr, t);
     }
 

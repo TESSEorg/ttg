@@ -4,14 +4,12 @@
 #include <vector>
 #include <memory>
 
+#include "ttg/fwd.h"
+
 #include "ttg/base/op.h"
 #include "ttg/edge.h"
 
 namespace ttg {
-
-  /* Forward decl, eventually provided by implementations */
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
-  class Op;
 
   template <typename input_terminalsT, typename output_terminalsT>
   class CompositeOp : public OpBase {

@@ -143,38 +143,6 @@ namespace ttg {
     std::get<i>(t).finalize();
   }
 
-  /**
-   * Implementation-specific functions
-   */
-
-  template <typename... RestOfArgs>
-  static inline void ttg_initialize(int argc, char **argv, RestOfArgs &&...);
-
-  static inline void ttg_finalize();
-
-  static inline void ttg_abort();
-
-  static inline ::ttg::World ttg_default_execution_context();
-
-  static inline void ttg_execute(::ttg::World world);
-
-  static inline void ttg_fence(::ttg::World world);
-
-  template <typename T>
-  static inline void ttg_register_ptr(::ttg::World world, const std::shared_ptr<T>& ptr);
-
-  static inline void ttg_register_status(::ttg::World world, const std::shared_ptr<std::promise<void>>& status_ptr);
-
-  static inline Edge<>& ttg_ctl_edge(::ttg::World world);
-
-  template<typename T>
-  static inline void ttg_sum(::ttg::World world, T &value);
-
-  /// broadcast
-  /// @tparam T a serializable type
-  template <typename T>
-  static inline void ttg_broadcast(::ttg::World world, T &data, int source_rank);
-
 }  // namespace ttg
 
 #endif // TTG_UTIL_FUNC_H
