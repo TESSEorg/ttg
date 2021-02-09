@@ -22,7 +22,7 @@ set -ev
 
 # download latest Doxygen
 if [ "$DEPLOY" = "1" ]; then
-  DOXYGEN_VERSION=1.8.20
+  DOXYGEN_VERSION=1.9.1
   if [ ! -d ${INSTALL_PREFIX}/doxygen-${DOXYGEN_VERSION} ]; then
     cd ${BUILD_PREFIX} && wget http://doxygen.nl/files/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
     cd ${INSTALL_PREFIX} && tar xzf ${BUILD_PREFIX}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
