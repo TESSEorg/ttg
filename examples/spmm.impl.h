@@ -590,7 +590,7 @@ int main(int argc, char **argv) {
 //  initialize_watchpoints();
 
   {
-    ::ttg::trace_on();
+    //::ttg::trace_on();
     //OpBase::set_trace_all(true);
 
     const int n = 2;
@@ -675,7 +675,7 @@ int main(int argc, char **argv) {
     aflow.pushall();
     Control control2(ttg_ctl_edge(ttg_default_execution_context()));
     {
-      std::cout << "matrix copy using ttg::Matrix" << std::endl;
+      //std::cout << "matrix copy using ttg::Matrix" << std::endl;
 //      if (ttg_default_execution_context().rank() == 0) std::cout << Dot{}(&control2) << std::endl;
 
       // ready to run!
