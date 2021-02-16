@@ -2,7 +2,7 @@ name: CMake
 
 on: [push]
 
-env:
+#env:
 
 jobs:
   build:
