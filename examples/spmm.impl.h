@@ -259,7 +259,7 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
     std::lock_guard<std::mutex> lock(mtx_);
     if( ::ttg::tracing() ) {
       auto &w = get_default_world();
-      ::ttg::print(w.rank(), "/", static_cast<unsigned long int>(pthread_self()), "spmm.impl.h Write_SpMatrix wrote {",
+      ::ttg::print(w.rank(), "/", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.impl.h Write_SpMatrix wrote {",
                    key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
                    " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
     }
