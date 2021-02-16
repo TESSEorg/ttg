@@ -4,9 +4,6 @@
   - [Clang](https://clang.llvm.org/), version 5 or higher
   - [Apple Clang](https://en.wikipedia.org/wiki/Xcode), version 9.3 or higher
   - [Intel C++ compiler](https://software.intel.com/en-us/c-compilers), version 19 or higher
-
-  See the current [Travis CI matrix](.travis.yml) for the most up-to-date list of compilers that are known to work.
-
 - [CMake](https://cmake.org/), version 3.10 or higher; if CUDA support is needed, CMake 3.17 or higher is required.
 - [Git]() 1.8 or later (required to obtain TiledArray and MADNESS source code from GitHub)
 - [Boost](https://boost.org/) version 1.66 or later; installed, if not found
