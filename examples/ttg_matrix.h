@@ -226,22 +226,28 @@ namespace ttg {
     const SpMatrix<Blk> &matrix_;
   };
 
-  // WriteShape commits shape to an existing SpMatrix on rank 0 and sends control message for every block
+  // WriteShape commits shape to an existing SpMatrix on rank 0 and sends it on
   // since SpMatrix supports random inserts there is no need to commit the shape into the matrix, other than get the dimensions
   template <typename Blk = blk_t>
-  class WriteShape : public Op<void, std::tuple<>, WriteShape<Blk>, Shape> {
+  class WriteShape : public Op<void, std::tuple<Out<void, Shape>>, WriteShape<Blk>, Shape> {
    public:
-    using baseT = Op<void, std::tuple<>, WriteShape<Blk>, Shape>;
+    using baseT = Op<void, std::tuple<Out<void, Shape>>, WriteShape<Blk>, Shape>;
     static constexpr const int owner = 0;  // where data resides
 
-    WriteShape(const char *label, SpMatrix<Blk> &matrix, Edge<void, Shape> &in)
-        : baseT(edges(in), edges(), std::string("write_spmatrix_shape(") + label + ")", {std::string("shape[") + label + "]"}, {},
+    WriteShape(const char *label, SpMatrix<Blk> &matrix, Edge<void, Shape> &in, Edge<void, Shape> &out)
+        : baseT(edges(in), edges(out),
+                std::string("write_spmatrix_shape(") + label + ")",
+                {std::string("shape_in[") + label + "]"},
+                {std::string("shape_out[") + label + "]"},
         /* keymap */ []() { return owner; })
         , matrix_(matrix) {}
 
-    void op(typename baseT::input_values_tuple_type && ins, std::tuple<> &out) {
+    void op(typename baseT::input_values_tuple_type && ins, std::tuple<Out<void, Shape>> &out) {
       const auto& shape = baseT::template get<0>(ins);
+      if(::ttg::tracing())
+        ::ttg::print("Resizing ", static_cast<void*>(&matrix_));
       matrix_.resize(shape.nrows(), shape.ncols());
+      ::sendv<0>(shape, out);
     }
 
    private:
@@ -261,8 +267,16 @@ namespace ttg {
 
     void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
       std::lock_guard<std::mutex> lock(mtx_);
-      ::ttg::print("Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem));
+      if( ::ttg::tracing() ) {
+        auto &w = get_default_world();
+        ::ttg::print(w.rank(), "/", reinterpret_cast<std::uintptr_t>(pthread_self()),
+                     "ttg_matrix.h Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem),
+                     " in ", static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_),
+                     " for object @", static_cast<void *>(this));
+      }
       matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
+      if(::ttg::tracing())
+        ::ttg::print(get_default_world().rank(), "/", "Write::op: ttg_matrix.h matrix_\n", matrix_);
     }
 
     /// grab completion status as a future<void>
@@ -350,10 +364,9 @@ namespace ttg {
     Matrix() = default;
 
     Matrix(shape_edge_t && shape_edge, ctl_edge_t && ctl_edge, data_edge_t && data_edge) :
-    shape_edge_(std::move(shape_edge)),
-    ctl_edge_(std::move(ctl_edge)),
-    data_edge_(std::move(data_edge)) {
-    }
+        data_edge_(std::move(data_edge)),
+        shape_edge_(std::move(shape_edge)),
+        ctl_edge_(std::move(ctl_edge)) {}
 
     auto& data() { return data_edge_; }
     auto& shape() { return shape_edge_; }
@@ -378,12 +391,12 @@ namespace ttg {
     /// @note up to the user to ensure completion before reading destination_matrix
     auto operator>>(SpMatrix<T>& destination_matrix) {
       // shape writer writes shape to destination_matrix
-      ttg_register_ptr(world_, std::make_shared<matrix::WriteShape<T>>("Matrix.WriteShape", destination_matrix, shape_edge_));
+      ttg_register_ptr(world_, std::make_shared<matrix::WriteShape<T>>("Matrix.WriteShape", destination_matrix, shape_edge_, shape_writer_push_edge_));
       // this converts shape to control messages to ensure that shape and data flows are consistent (i.e. if shape says there should be a block {r,c} Write will expect the data for it)
       // TODO if pushall had been called ctl_edge_ is already live, hence can just attach to it
       ctl_edge_t ctl_edge;
       if (!ctl_edge_.live())
-        ttg_register_ptr(world_, std::make_shared<matrix::Push>("Matrix.Push2", shape_edge_, ctl_edge));
+        ttg_register_ptr(world_, std::make_shared<matrix::Push>("Matrix.Push2", shape_writer_push_edge_, ctl_edge));
       auto result = std::make_shared<matrix::Write<T>>("Matrix.Write", destination_matrix, data_edge_, (ctl_edge_.live() ? ctl_edge_ : ctl_edge));
       ttg_register_ptr(world_, result);
 
@@ -392,9 +405,12 @@ namespace ttg {
     }
 
    private:
-    data_edge_t data_edge_{};
-    shape_edge_t shape_edge_{};
-    ctl_edge_t ctl_edge_{};
+    data_edge_t data_edge_{"data_edge_"};
+    shape_edge_t shape_edge_{"shape_edge_"};
+    ctl_edge_t ctl_edge_{"ctl_edge_"};
+
+    /// this is used internally for pushing shape to the writer tasks
+    shape_edge_t shape_writer_push_edge_{"shape_writer_push_edge_"};
     World& world_ = ttg_default_execution_context();
   };
 

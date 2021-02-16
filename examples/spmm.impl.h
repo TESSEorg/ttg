@@ -257,7 +257,12 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
 
   void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
     std::lock_guard<std::mutex> lock(mtx_);
-    ::ttg::print("Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem));
+    if( ::ttg::tracing() ) {
+      auto &w = get_default_world();
+      ::ttg::print(w.rank(), "/", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.impl.h Write_SpMatrix wrote {",
+                   key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
+                   " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
+    }
     matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
   }
 
@@ -573,7 +578,7 @@ std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
 
 int main(int argc, char **argv) {
 
-  ttg_initialize(argc, argv, 2);
+  ttg_initialize(argc, argv, 4);
 
 //  using mpqc::Debugger;
 //  auto debugger = std::make_shared<Debugger>();
@@ -585,8 +590,8 @@ int main(int argc, char **argv) {
 //  initialize_watchpoints();
 
   {
-    ::ttg::trace_on();
-    OpBase::set_trace_all(true);
+    //::ttg::trace_on();
+    //OpBase::set_trace_all(true);
 
     const int n = 2;
     const int m = 3;
@@ -657,6 +662,9 @@ int main(int argc, char **argv) {
     // ready, go! need only 1 kick, so must be done by 1 thread only
     if (ttg_default_execution_context().rank() == 0) control.start();
 
+    //ttg_execute(ttg_default_execution_context());
+    //ttg_fence(ttg_default_execution_context());
+
     ///////////////////////////////////////////////////////////////////////////
     // copy matrix using ttg::Matrix
     Matrix<blk_t> aflow;
@@ -667,7 +675,7 @@ int main(int argc, char **argv) {
     aflow.pushall();
     Control control2(ttg_ctl_edge(ttg_default_execution_context()));
     {
-      std::cout << "matrix copy using ttg::Matrix" << std::endl;
+      //std::cout << "matrix copy using ttg::Matrix" << std::endl;
 //      if (ttg_default_execution_context().rank() == 0) std::cout << Dot{}(&control2) << std::endl;
 
       // ready to run!
@@ -706,9 +714,11 @@ int main(int argc, char **argv) {
       std::tie(norm_2_square, norm_inf) = norms<blk_t>(Acopy - A);
       std::cout << "||Acopy - A||_2      = " << std::sqrt(norm_2_square) << std::endl;
       std::cout << "||Acopy - A||_\\infty = " << norm_inf << std::endl;
+      if(::ttg::tracing()) {
+        std::cout << "Acopy (" << static_cast<void *>(&Acopy) << "):\n" << Acopy << std::endl;
+        std::cout << "A (" << static_cast<void *>(&A) << "):\n" << A << std::endl;
+      }
       if (norm_inf != 0) {
-        std::cout << "Acopy:\n" << Acopy << std::endl;
-        std::cout << "A:\n" << A << std::endl;
         ttg_abort();
       }
     }
