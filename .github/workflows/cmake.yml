@@ -10,9 +10,9 @@ jobs:
       fail-fast: false
       matrix:
         build_type : [ Release, Debug ]
-        os : [ macos-latest, ubuntu-latest ]
+        os : [ macos-latest, ubuntu-20.04 ]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-20.04
             cxx: /usr/bin/g++-9
           - os: macos-latest
             cxx: clang++
@@ -39,13 +39,19 @@ jobs:
       run: brew install ninja gcc@10 boost eigen open-mpi bison
 
     - name: Install prerequisites Ubuntu packages
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.os == 'ubuntu-20.04' }}
       run: |
-        sudo apt install software-properties-common
-        sudo add-apt-repository ppa:ubuntu-toolchain-r/test
-        sudo add-apt-repository ppa:mhier/libboost-latest
-        sudo apt update
-        sudo apt-get install ninja-build g++-9 liblapack-dev libboost1.68-dev libeigen3-dev openmpi-bin libopenmpi-dev
+        sudo apt-get install ninja-build g++-9 liblapack-dev libboost-dev libeigen3-dev openmpi-bin libopenmpi-dev
+        if [ ${{matrix.build_type}} = "Release" ]; then
+          sudo apt-get install libclang1-9 graphviz fonts-liberation
+          export DOXYGEN_VERSION=1.9.1
+          cd ${{github.workspace}}/build
+          wget https://downloads.sourceforge.net/project/doxygen/rel-${DOXYGEN_VERSION}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
+          tar xzf ./doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
+          export PATH=${{github.workspace}}/build/doxygen-${DOXYGEN_VERSION}/bin:$PATH
+          which doxygen
+          doxygen --version
+        fi
 
     - name: Configure CMake
       # Use a bash shell so we can use the same syntax for environment variable
@@ -83,7 +89,13 @@ jobs:
           done
 
     - name: Build+Deploy Dox
-      if: ${{ matrix.os == 'ubuntu-latest' && matrix.build_type == 'Release' }}
+      if: ${{ matrix.os == 'ubuntu-20.04' && matrix.build_type == 'Release' }}
+      working-directory: ${{github.workspace}}/build
+      shell: bash
       run: |
-        echo "will deploy dox soon"
+        echo "== deploying dox =="
+        git config --global user.email "eduard@valeyev.net"
+        git config --global user.name "GitHub Actions"
+        cmake --build . --config $BUILD_TYPE --target html
+
 
