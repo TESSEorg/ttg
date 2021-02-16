@@ -38,13 +38,13 @@ jobs:
 
     - name: Install prerequisite MacOS packages
       if: ${{ matrix.os == 'macos-latest' }}
-      run: brew install ninja gcc@10 boost eigen open-mpi bison
+      run: brew install ninja gcc@10 boost eigen open-mpi bison ccache
 
     - name: Install prerequisites Ubuntu packages
       if: ${{ matrix.os == 'ubuntu-20.04' }}
       run: |
-        sudo apt-get install ninja-build g++-9 liblapack-dev libboost-dev libeigen3-dev openmpi-bin libopenmpi-dev
-        if [ ${{matrix.build_type}} = "Release" ]; then
+        sudo apt-get install ninja-build g++-9 liblapack-dev libboost-dev libeigen3-dev openmpi-bin libopenmpi-dev ccache
+        if [ "${{matrix.build_type}}" = "Release" ]; then
           sudo apt-get install libclang1-9 graphviz fonts-liberation
           cd ${{github.workspace}}/build
           wget https://downloads.sourceforge.net/project/doxygen/rel-${DOXYGEN_VERSION}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
@@ -53,6 +53,21 @@ jobs:
           which doxygen
           doxygen --version
         fi
+
+    - name: Prepare ccache timestamp
+      id: ccache_cache_timestamp
+      shell: cmake -P {0}
+      run: |
+        string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
+        message("::set-output name=timestamp::${current_date}")
+
+    - name: ccache cache files
+      uses: actions/cache@v1.1.0
+      with:
+        path: .ccache
+        key: ${{ matrix.config.name }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
+        restore-keys: |
+          ${{ matrix.config.name }}-ccache-
 
     - name: Configure CMake
       # Use a bash shell so we can use the same syntax for environment variable
