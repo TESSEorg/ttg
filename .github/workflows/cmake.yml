@@ -10,9 +10,9 @@ jobs:
       fail-fast: false
       matrix:
         build_type : [ Release, Debug ]
-        os : [ macos-latest, ubuntu-latest ]
+        os : [ macos-latest, ubuntu-20.04 ]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-20.04
             cxx: /usr/bin/g++-9
           - os: macos-latest
             cxx: clang++
@@ -21,11 +21,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       CXX : ${{ matrix.cxx }}
+      DOXYGEN_VERSION : 1.9.1
+      GH_TTG_TOKEN : ${{ secrets.GH_TTG_TOKEN }}
+      CCACHE_DIR : ${{github.workspace}}/build/.ccache
+      CCACHE_COMPRESS : true
+      CCACHE_COMPRESSLEVEL : 6
       BUILD_CONFIG : >
         -G Ninja
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DCMAKE_PREFIX_PATH=/usr/local/opt/bison
-        -DMPIEXEC_PREFLAGS='--bind-to;none;--allow-run-as-root'
+        -DBUILD_SHARED_LIBS=OFF
 
     steps:
     - uses: actions/checkout@v2
@@ -37,16 +42,37 @@ jobs:
 
     - name: Install prerequisite MacOS packages
       if: ${{ matrix.os == 'macos-latest' }}
-      run: brew install ninja gcc@10 boost eigen open-mpi bison
+      run: brew install ninja gcc@10 boost eigen open-mpi bison ccache
 
     - name: Install prerequisites Ubuntu packages
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.os == 'ubuntu-20.04' }}
       run: |
-        sudo apt install software-properties-common
-        sudo add-apt-repository ppa:ubuntu-toolchain-r/test
-        sudo add-apt-repository ppa:mhier/libboost-latest
-        sudo apt update
-        sudo apt-get install ninja-build g++-9 liblapack-dev libboost1.68-dev libeigen3-dev openmpi-bin libopenmpi-dev
+        sudo apt-get install ninja-build g++-9 liblapack-dev libboost-dev libeigen3-dev openmpi-bin libopenmpi-dev ccache
+        if [ "${{matrix.build_type}}" = "Release" ]; then
+          sudo apt-get install libclang1-9 graphviz fonts-liberation
+          cd ${{github.workspace}}/build
+          wget https://downloads.sourceforge.net/project/doxygen/rel-${DOXYGEN_VERSION}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
+          tar xzf ./doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
+          export DOXYGEN_DIR=${{github.workspace}}/build/doxygen-${DOXYGEN_VERSION}
+          ${DOXYGEN_DIR}/bin/doxygen --version
+          # doxygen should be in PATH in subsequent steps
+          echo "${DOXYGEN_DIR}/bin" >> $GITHUB_PATH
+        fi
+
+    - name: Prepare ccache timestamp
+      id: ccache_cache_timestamp
+      shell: cmake -P {0}
+      run: |
+        string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
+        message("::set-output name=timestamp::${current_date}")
+
+    - name: Setup ccache cache files
+      uses: actions/cache@v1.1.0
+      with:
+        path: ${{github.workspace}}/build/.ccache
+        key: ${{ matrix.config.name }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
+        restore-keys: |
+          ${{ matrix.config.name }}-ccache-
 
     - name: Configure CMake
       # Use a bash shell so we can use the same syntax for environment variable
@@ -62,11 +88,64 @@ jobs:
       working-directory: ${{github.workspace}}/build
       shell: bash
       # Execute the build.  You can specify a specific target with "--target <NAME>"
-      run: cmake --build . --config $BUILD_TYPE
+      run: ccache -p && ccache -z && cmake --build . --config $BUILD_TYPE && ccache -s
 
     - name: Test
       working-directory: ${{github.workspace}}/build
       shell: bash
       # Execute tests defined by the CMake configuration.  
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: ctest -C $BUILD_TYPE
+      # run: ctest -C $BUILD_TYPE
+      run: |
+          for RUNTIME in mad parsec
+          do
+          for EXAMPLE in test t9 spmm bspmm
+          do
+          for NPROC in 1 2
+          do
+            echo "== running $EXAMPLE using runtime $RUNTIME with $NPROC ranks =="
+            mpirun --bind-to none --allow-run-as-root -n $NPROC examples/$EXAMPLE-$RUNTIME
+          done
+          done
+          done
+
+    - name: Build+Deploy Dox
+      if: ${{ matrix.os == 'ubuntu-20.04' && matrix.build_type == 'Release' }}
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: |
+        echo "== deploying dox =="
+        git config --global user.email "eduard@valeyev.net"
+        git config --global user.name "GitHub Actions"
+        cmake --build . --config $BUILD_TYPE --target html
+        git clone --depth=1 https://github.com/TESSEorg/ttg.git --branch gh-pages --single-branch ttg-docs-current
+        git clone --depth=1 https://github.com/TESSEorg/ttg.git --branch gh-pages-template --single-branch ttg-docs-template
+        mkdir ttg-docs
+        cp -rp ttg-docs-current/* ttg-docs
+        rm -rf ttg-docs-current
+        cp -p ttg-docs-template/* ttg-docs
+        rm -rf ttg-docs-template
+        cd ttg-docs
+        # copy TTG's README.md into index.md
+        cp ${{github.workspace}}/README.md index.md
+        # update dox
+        if [ -d dox-master ]; then
+          rm -rf dox-master
+        fi
+        mv ${{github.workspace}}/build/doc/dox/html dox-master
+        # Jekyll does not allow files with "special" names, e.g. whose names start with underscore
+        # must "include" such files explicitly
+        # re: how file names must be formatted: see https://github.com/jekyll/jekyll/issues/1352
+        echo "include:" >> _config.yml
+        find dox-master -name "_*" | sed "s/dox-master\//  \- /g" >> _config.yml
+        # make empty repo to ensure gh-pages contains no history
+        git init
+        git add *
+        git commit -a -q -m "rebuilt TTG master docs via GitHub Actions build: $GITHUB_RUN_NUMBER"
+        git checkout -b gh-pages
+        git remote add origin https://${GH_TTG_TOKEN}@github.com/TESSEorg/ttg.git > /dev/null 2>&1
+        git push origin +gh-pages --force
+        cd ..
+        rm -rf ttg-docs
+
+
