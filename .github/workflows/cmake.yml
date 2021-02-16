@@ -50,9 +50,10 @@ jobs:
           cd ${{github.workspace}}/build
           wget https://downloads.sourceforge.net/project/doxygen/rel-${DOXYGEN_VERSION}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
           tar xzf ./doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
-          export PATH=${{github.workspace}}/build/doxygen-${DOXYGEN_VERSION}/bin:$PATH
-          which doxygen
-          doxygen --version
+          export DOXYGEN_DIR=${{github.workspace}}/build/doxygen-${DOXYGEN_VERSION}
+          ${DOXYGEN_DIR}/bin/doxygen --version
+          # doxygen should be in PATH in subsequent steps
+          echo "${DOXYGEN_DIR}/bin" >> $GITHUB_PATH
         fi
 
     - name: Prepare ccache timestamp
