@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.com/TESSEorg/ttg.svg?branch=master)](https://travis-ci.com/TESSEorg/ttg)
+![Build Status](https://github.com/TESSEorg/ttg/workflows/CMake/badge.svg)
 
 # TTG
 This is the C++ API for the Template Task Graph (TTG) programming model for flowgraph-based composition of high-performance algorithms executable on distributed heterogeneous computer platforms. The TTG API abstracts out the details of the underlying task and data flow runtime; the current realization is implemented using [MADNESS](https://github.com/m-a-d-n-e-s-s/madness) and [PaRSEC](https://bitbucket.org/icldistcomp/parsec.git) runtimes as backends.
