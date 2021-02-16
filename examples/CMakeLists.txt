@@ -80,14 +80,14 @@ endif(TARGET MADworld)
 if (TARGET PaRSEC::parsec)
   # sanity check
   add_executable (test-parsec parsec/test.cc test.impl.h)
-  target_link_libraries(test-parsec LINK_PUBLIC ttg-parsec)
+  target_link_libraries(test-parsec LINK_PUBLIC ttg-parsec MADworld)
 
   if (TRUE)
 	  # T9 example
-  	add_executable (t9-parsec parsec/t9.cc t9.impl.h)
-  	target_link_libraries(t9-parsec LINK_PUBLIC ttg-parsec)
+      add_executable (t9-parsec parsec/t9.cc t9.impl.h)
+      target_link_libraries(t9-parsec LINK_PUBLIC ttg-parsec MADworld)
 
-    add_executable (sw-parsec parsec/sw.cc sw.impl.h)    
+    add_executable (sw-parsec parsec/sw.cc sw.impl.h)
     target_link_libraries(sw-parsec LINK_PUBLIC ttg-parsec MADworld)
 
   	# sparse matmul need MADNESS for serialization of ttg::matrix::Shape (part of next-gen prototype)

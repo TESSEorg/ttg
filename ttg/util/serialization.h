@@ -45,35 +45,18 @@ namespace ttg {
 
   template <typename T>
   struct default_data_descriptor<T, std::enable_if_t<std::is_trivially_copyable<T>::value>> {
-    static uint64_t header_size(const void* object) { return static_cast<uint64_t>(0); }
+    static constexpr const bool serialize_size_is_const = true;
 
-    static uint64_t payload_size(const void* object) { return static_cast<uint64_t>(sizeof(T)); }
+    static uint64_t payload_size(const void *object) { return static_cast<uint64_t>(sizeof(T)); }
 
-    static void get_info(const void* object, uint64_t* hs, uint64_t* ps, int* is_contiguous_mask, void** buf) {
-      *hs = header_size(object);
-      *ps = payload_size(object);
-      *is_contiguous_mask = 1;
-      // on the receiving side request that payload goes directly to object
-      *buf = const_cast<void*>(object);
-    }
-
-    static void pack_header(const void* object, uint64_t header_size, void** buf) {}
-
-    /// t --- obj to be serialized
+    /// object --- obj to be serialized
     /// chunk_size --- inputs max amount of data to output, and on output returns amount actually output
     /// pos --- position in the input buffer to resume serialization
-    /// ptr[chunk_size] --- place for output
+    /// buf[pos] --- place for output
     static uint64_t pack_payload(const void* object, uint64_t chunk_size, uint64_t pos, void* _buf) {
         unsigned char *buf = reinterpret_cast<unsigned char*>(_buf);
         std::memcpy(&buf[pos], object, chunk_size);
         return pos + chunk_size;
-    }
-
-    // t points to some memory in which we will construct an object from the header
-    static void unpack_header(void* object, uint64_t header_size, const void* buf) {
-      assert(header_size == 0);
-      using decT = std::decay_t<T>;
-      new (object) decT;
     }
 
     static void unpack_payload(void* object, uint64_t chunk_size, uint64_t pos, const void* _buf) {
@@ -108,27 +91,18 @@ namespace ttg {
   template <typename T>
   struct default_data_descriptor<
       T, std::enable_if_t<!std::is_trivially_copyable<T>::value && detail::is_madness_serializable<T>::value>> {
-    static uint64_t header_size(const void* object) { return static_cast<uint64_t>(0); }
+    static constexpr const bool serialize_size_is_const = false;
 
-    static uint64_t payload_size(const void* object) {
+    static uint64_t payload_size(const void *object) {
       madness::archive::BufferOutputArchive ar;
       ar&(*(T*)object);
       return static_cast<uint64_t>(ar.size());
     }
 
-    static void get_info(const void* object, uint64_t* hs, uint64_t* ps, int* is_contiguous_mask, void** buf) {
-      *hs = header_size(object);
-      *ps = payload_size(object);
-      *is_contiguous_mask = 0;
-      *buf = nullptr;
-    }
-
-    static void pack_header(const void* object, uint64_t header_size, void** buf) {}
-
-    /// t --- obj to be serialized
+    /// object --- obj to be serialized
     /// chunk_size --- inputs max amount of data to output, and on output returns amount actually output
     /// pos --- position in the input buffer to resume serialization
-    /// ptr[chunk_size] --- place for output
+    /// buf[pos] --- place for output
     static uint64_t pack_payload(const void* object, uint64_t chunk_size, uint64_t pos, void* _buf) {
         unsigned char *buf = reinterpret_cast<unsigned char*>(_buf);
         madness::archive::BufferOutputArchive ar(&buf[pos], chunk_size);
@@ -136,16 +110,10 @@ namespace ttg {
         return pos+chunk_size;
     }
 
-    // t points to some memory in which we will construct an object from the header
-    static void unpack_header(void* object, uint64_t header_size, const void* buf) {
-      assert(header_size == 0);
-      if constexpr(std::is_const_v<T>) {
-        std::abort();
-      } else {
-        new (object) T;
-      }
-    }
-
+    /// object --- obj to be deserialized
+    /// chunk_size --- amount of data for input
+    /// pos --- position in the input buffer to resume deserialization
+    /// object -- pointer to the object to fill up
     static void unpack_payload(void* object, uint64_t chunk_size, uint64_t pos, const void* _buf) {
       const unsigned char *buf = reinterpret_cast<const unsigned char*>(_buf);
       madness::archive::BufferInputArchive ar(&buf[pos], chunk_size);
@@ -164,10 +132,8 @@ namespace ttg {
   template <typename T>
   const ttg_data_descriptor* get_data_descriptor() {
     static const ttg_data_descriptor d = {typeid(T).name(),
-                                          &default_data_descriptor<T>::get_info,
-                                          &default_data_descriptor<T>::pack_header,
+                                          &default_data_descriptor<T>::payload_size,
                                           &default_data_descriptor<T>::pack_payload,
-                                          &default_data_descriptor<T>::unpack_header,
                                           &default_data_descriptor<T>::unpack_payload,
                                           &detail::printer_helper<T>::print};
     return &d;
