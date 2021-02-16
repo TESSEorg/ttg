@@ -22,7 +22,10 @@ jobs:
     env:
       CXX : ${{ matrix.cxx }}
       DOXYGEN_VERSION : 1.9.1
-      GH_TTG_TOKEN: ${{ secrets.GH_TTG_TOKEN }}
+      GH_TTG_TOKEN : ${{ secrets.GH_TTG_TOKEN }}
+      CCACHE_DIR : ${{github.workspace}}/build/.ccache
+      CCACHE_COMPRESS : true
+      CCACHE_COMPRESSLEVEL : 6
       BUILD_CONFIG : >
         -G Ninja
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
@@ -63,10 +66,10 @@ jobs:
         string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
         message("::set-output name=timestamp::${current_date}")
 
-    - name: ccache cache files
+    - name: Setup ccache cache files
       uses: actions/cache@v1.1.0
       with:
-        path: .ccache
+        path: ${{github.workspace}}/build/.ccache
         key: ${{ matrix.config.name }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
         restore-keys: |
           ${{ matrix.config.name }}-ccache-
@@ -85,7 +88,7 @@ jobs:
       working-directory: ${{github.workspace}}/build
       shell: bash
       # Execute the build.  You can specify a specific target with "--target <NAME>"
-      run: cmake --build . --config $BUILD_TYPE
+      run: ccache -p && ccache -z && cmake --build . --config $BUILD_TYPE && ccache -s
 
     - name: Test
       working-directory: ${{github.workspace}}/build
