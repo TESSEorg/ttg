@@ -22,6 +22,7 @@ jobs:
     env:
       CXX : ${{ matrix.cxx }}
       DOXYGEN_VERSION : 1.9.1
+      GH_TTG_TOKEN: ${{ secrets.GH_TTG_TOKEN }}
       BUILD_CONFIG : >
         -G Ninja
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
@@ -118,5 +119,34 @@ jobs:
         git config --global user.email "eduard@valeyev.net"
         git config --global user.name "GitHub Actions"
         cmake --build . --config $BUILD_TYPE --target html
+        git clone --depth=1 https://github.com/TESSEorg/ttg.git --branch gh-pages --single-branch ttg-docs-current
+        git clone --depth=1 https://github.com/TESSEorg/ttg.git --branch gh-pages-template --single-branch ttg-docs-template
+        mkdir ttg-docs
+        cp -rp ttg-docs-current/* ttg-docs
+        rm -rf ttg-docs-current
+        cp -p ttg-docs-template/* ttg-docs
+        rm -rf ttg-docs-template
+        cd ttg-docs
+        # copy TTG's README.md into index.md
+        cp ${{github.workspace}}/README.md index.md
+        # update dox
+        if [ -d dox-master ]; then
+          rm -rf dox-master
+        fi
+        mv ${{github.workspace}}/build/doc/dox/html dox-master
+        # Jekyll does not allow files with "special" names, e.g. whose names start with underscore
+        # must "include" such files explicitly
+        # re: how file names must be formatted: see https://github.com/jekyll/jekyll/issues/1352
+        echo "include:" >> _config.yml
+        find dox-master -name "_*" | sed "s/dox-master\//  \- /g" >> _config.yml
+        # make empty repo to ensure gh-pages contains no history
+        git init
+        git add *
+        git commit -a -q -m "rebuilt TTG master docs via GitHub Actions build: $GITHUB_RUN_NUMBER"
+        git checkout -b gh-pages
+        git remote add origin https://${GH_TTG_TOKEN}@github.com/TESSEorg/ttg.git > /dev/null 2>&1
+        git push origin +gh-pages --force
+        cd ..
+        rm -rf ttg-docs
 
 
