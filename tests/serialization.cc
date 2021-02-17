@@ -1,6 +1,6 @@
 #include <array>
 
-#include "../ttg/ttg.h"
+#include "ttg.h"
 
 class Fred {
   int value;
@@ -41,7 +41,7 @@ std::ostream& operator<<(std::ostream& s, const std::vector<T>& vec) {
   return s;
 }
 
-#include "../ttg/util/serialization.h"
+#include "ttg/util/serialization.h"
 
 // Test code written as if calling from C
 template <typename T>

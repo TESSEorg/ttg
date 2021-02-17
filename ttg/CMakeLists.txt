@@ -1,22 +1,54 @@
 ########################
 ####### Runtime-neutral
 ########################
-set(ttg-sources
+set(ttg-util-header
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/bug.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/demangle.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/dot.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/future.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/hash.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/macro.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/meta.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/print.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/serialization.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/trace.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/tree.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/void.h
+    )
+set(ttg-base-header
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/keymap.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/op.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/terminal.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/world.h
+    )
+set(ttg-impl-header
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/impl_selector.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/broadcast.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/data_descriptor.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/edge.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/execution.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/func.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/op.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/reduce.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/runtimes.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/terminal.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/traverse.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/world.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/wrap.h
+    )
+set(ttg-header
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/wrap.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/backtrace.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/backtrace.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/broadcast.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/bug.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/bug.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/demangle.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/future.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/meta.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/reduce.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/serialization.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/tree.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/version.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/util/version.cc
+    )
+set(ttg-sources
+        ${ttg-header}
+        ${ttg-impl-header}
+        ${ttg-base-header}
+        ${ttg-util-header}
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/bug.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
     )
 add_library(ttg ${ttg-sources})
 target_include_directories(ttg PUBLIC
@@ -27,8 +59,17 @@ target_link_libraries(ttg PUBLIC Boost::boost)
 if (TARGET TTG_Libunwind)
   target_link_libraries(ttg PUBLIC TTG_Libunwind)
 endif(TARGET TTG_Libunwind)
-install(FILES ${ttg-sources}
+install(FILES ${ttg-header}
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        COMPONENT ttg)
+install(FILES ${ttg-impl-header}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ttg/
+        COMPONENT ttg)
+install(FILES ${ttg-util-header}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ttg/util
+        COMPONENT ttg)
+install(FILES ${ttg-base-header}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ttg/base
         COMPONENT ttg)
 
 #########################
@@ -41,10 +82,10 @@ if (TARGET MADworld)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   )
-  set(ttg-mad_headers madness/ttg.h)
+  set(ttg-mad_headers ttg/madness/ttg.h ttg/madness/watch.h)
   target_sources(ttg-mad INTERFACE ${ttg-mad_headers})
   install(FILES ${ttg-mad_headers}
-          DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+          DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ttg/madness/
           COMPONENT ttg-mad)
   # Use current CMAKE_CXX_FLAGS to compile targets dependent on this library
   string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
@@ -63,13 +104,16 @@ if (TARGET PaRSEC::parsec)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   )
-  set(ttg-parsec_headers parsec/ttg.h)
+  set(ttg-parsec_headers ttg/parsec/ttg.h)
   target_sources(ttg-parsec INTERFACE ${ttg-parsec_headers})
   install(FILES ${ttg-parsec_headers}
-          DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+          DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ttg/parsec/
           COMPONENT ttg-parsec)
   # Use current CMAKE_CXX_FLAGS to compile targets dependent on this library
   string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
   target_compile_options(ttg-parsec INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
-  target_link_libraries(ttg-parsec INTERFACE PaRSEC::parsec)
+  if (NOT TARGET MADworld)
+    message(FATAL_ERROR "PaRSEC backend requires MADworld for serialization (this requirement is to be lifted soon)")
+  endif(NOT TARGET MADworld)
+  target_link_libraries(ttg-parsec INTERFACE PaRSEC::parsec MADworld)
 endif(TARGET PaRSEC::parsec)

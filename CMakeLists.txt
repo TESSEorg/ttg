@@ -70,6 +70,9 @@ endif(TARGET MADworld)
 #### Components
 ##########################
 add_subdirectory(ttg)
+
+enable_testing(true)
+add_custom_target_subproject(ttg check USES_TERMINAL COMMAND ${CMAKE_CTEST_COMMAND} -V -R "ttg/test/" )
 add_subdirectory(tests)
 add_subdirectory(examples)
 add_subdirectory(doc)

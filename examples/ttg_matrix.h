@@ -267,16 +267,15 @@ namespace ttg {
 
     void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
       std::lock_guard<std::mutex> lock(mtx_);
-      if( ::ttg::tracing() ) {
+      if (ttg::tracing()) {
         auto &w = get_default_world();
-        ::ttg::print(w.rank(), "/", reinterpret_cast<std::uintptr_t>(pthread_self()),
-                     "ttg_matrix.h Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem),
-                     " in ", static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_),
-                     " for object @", static_cast<void *>(this));
+        ttg::print(w.rank(), "/", reinterpret_cast<std::uintptr_t>(pthread_self()),
+                   "ttg_matrix.h Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem),
+                   " in ", static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_), " for object @",
+                   static_cast<void *>(this));
       }
       matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
-      if(::ttg::tracing())
-        ::ttg::print(get_default_world().rank(), "/", "Write::op: ttg_matrix.h matrix_\n", matrix_);
+      if (ttg::tracing()) ttg::print(get_default_world().rank(), "/", "Write::op: ttg_matrix.h matrix_\n", matrix_);
     }
 
     /// grab completion status as a future<void>
@@ -411,7 +410,7 @@ namespace ttg {
 
     /// this is used internally for pushing shape to the writer tasks
     shape_edge_t shape_writer_push_edge_{"shape_writer_push_edge_"};
-    World& world_ = ttg_default_execution_context();
+    World world_ = ttg_default_execution_context();
   };
 
   template <typename T>

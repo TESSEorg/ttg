@@ -72,9 +72,7 @@ class Printer : public Op<int, std::tuple<>, Printer, Value> {
 };
 
 int main(int argc, char** argv) {
-  initialize(argc, argv);
-  World world(SafeMPI::COMM_WORLD);
-  set_default_world(world);
+  ttg_initialize(argc, argv);
 
   std::cout << "a\n";
   Value a;
@@ -99,7 +97,7 @@ int main(int argc, char** argv) {
   connect<0, 0>(&x, &p);
   x.in<0>()->send(0, Value(33));
 
-  world.gop.fence();
-  finalize();
+  ttg_fence(ttg_default_execution_context());
+  ttg_finalize();
   return 0;
 }
