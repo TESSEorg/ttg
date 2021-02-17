@@ -752,24 +752,24 @@ public:
 
 // EXAMPLE 1
 class Everything : public Op<Key, std::tuple<>, Everything> {
-	using baseT = Op<Key, std::tuple<>, Everything>;
+  using baseT = Op<Key, std::tuple<>, Everything>;
 
-	Producer producer;
-	Project project;
-	Printer printer;
+  Producer producer;
+  Project project;
+  Printer printer;
 
-	::ttg::World& world;
+  ttg::World &world;
 
-public:
-
-
-
-	Everything()
-		: baseT("everything", {}, {}), producer("producer"), project(&funcA, "Project"), printer("Printer"), world(::ttg::get_default_world())
-	{
-		producer.out<0>()->connect(project.in<0>());
-		project.out<1>()->connect(printer.in<0>());
-		project.out<0>()->connect(project.in<0>());
+ public:
+  Everything()
+      : baseT("everything", {}, {})
+      , producer("producer")
+      , project(&funcA, "Project")
+      , printer("Printer")
+      , world(ttg::get_default_world()) {
+    producer.out<0>()->connect(project.in<0>());
+    project.out<1>()->connect(printer.in<0>());
+    project.out<0>()->connect(project.in<0>());
 
 		if (!make_graph_executable(&producer)) throw "should be connected";
 		fence();
@@ -793,30 +793,29 @@ class Everything_comp_rec_test {
    BinaryOp minusOp;
    Printer printer;
 
-   ::ttg::World& world;
+   ttg::World &world;
 
-public:
+  public:
    Everything_comp_rec_test()
-   : producer("producer")
-   , project(&funcA, "Project_funcA")
-   , compress_prologue("Compress_prologue")
-   , compress_doIt("Compress_doIt")
-   , reconstruct_prologue("Reconstruct_prologue")
-   , reconstruct_doIt("Reconstruct_doIt")
-   , minusOp(&sub, "minusOp")
-   , printer("Printer")
-   , world(::ttg::get_default_world()) {
+       : producer("producer")
+       , project(&funcA, "Project_funcA")
+       , compress_prologue("Compress_prologue")
+       , compress_doIt("Compress_doIt")
+       , reconstruct_prologue("Reconstruct_prologue")
+       , reconstruct_doIt("Reconstruct_doIt")
+       , minusOp(&sub, "minusOp")
+       , printer("Printer")
+       , world(ttg::get_default_world()) {
+     producer.out<0>()->connect(project.in<0>());
+     project.out<0>()->connect(project.in<0>());
+     project.out<1>()->connect(compress_prologue.in<0>());
 
-      producer.out<0>()->connect(project.in<0>());
-      project.out<0>()->connect(project.in<0>());
-      project.out<1>()->connect(compress_prologue.in<0>());
+     project.out<1>()->connect(minusOp.in<1>());
 
-      project.out<1>()->connect(minusOp.in<1>());
+     compress_prologue.out<0>()->connect(compress_doIt.in<0>());
+     compress_prologue.out<2>()->connect(compress_doIt.in<1>());
 
-      compress_prologue.out<0>()->connect(compress_doIt.in<0>());
-      compress_prologue.out<2>()->connect(compress_doIt.in<1>());
-
-      compress_doIt.out<0>()->connect(compress_doIt.in<0>());
+     compress_doIt.out<0>()->connect(compress_doIt.in<0>());
       compress_doIt.out<2>()->connect(compress_doIt.in<1>());
 
       compress_prologue.out<1>()->connect(reconstruct_prologue.in<0>());
@@ -863,28 +862,26 @@ class Everything_cnc {
 
 
 public:
-   Everything_cnc()
-	: producer("producer")
-	, project_funcA(&funcA, "Project_funcA")
-	, project_funcB(&funcB, "Project_funcB")
-	, project_funcC(&funcC, "Project_funcC")
-	, multOp(&mult, "A multiply B")
-	, addOp(&add, "(A multiply B) add C")
-	, printer("Printer")
-	, world(::ttg::get_default_world()) {
+ Everything_cnc()
+     : producer("producer")
+     , project_funcA(&funcA, "Project_funcA")
+     , project_funcB(&funcB, "Project_funcB")
+     , project_funcC(&funcC, "Project_funcC")
+     , multOp(&mult, "A multiply B")
+     , addOp(&add, "(A multiply B) add C")
+     , printer("Printer")
+     , world(ttg::get_default_world()) {
+   producer.out<0>()->connect(project_funcA.in<0>());
+   producer.out<0>()->connect(project_funcB.in<0>());
+   producer.out<0>()->connect(project_funcC.in<0>());
 
-      producer.out<0>()->connect(project_funcA.in<0>());
-      producer.out<0>()->connect(project_funcB.in<0>());
-      producer.out<0>()->connect(project_funcC.in<0>());
+   project_funcA.out<0>()->connect(project_funcA.in<0>());
+   project_funcA.out<1>()->connect(multOp.in<0>());
 
-      project_funcA.out<0>()->connect(project_funcA.in<0>());
-      project_funcA.out<1>()->connect(multOp.in<0>());
+   project_funcB.out<0>()->connect(project_funcB.in<0>());
+   project_funcB.out<1>()->connect(multOp.in<1>());
 
-      project_funcB.out<0>()->connect(project_funcB.in<0>());
-      project_funcB.out<1>()->connect(multOp.in<1>());
-
-
-      multOp.out<0>()->connect(multOp.in<0>());
+   multOp.out<0>()->connect(multOp.in<0>());
       multOp.out<2>()->connect(multOp.in<1>());
       multOp.out<1>()->connect(addOp.in<0>());
 
@@ -917,29 +914,28 @@ class Everything_compress {
    Reconstruct_doIt reconstruct_doIt;
    Printer printer;
 
-   ::ttg::World &world;
+   ttg::World &world;
 
-public:
+  public:
    Everything_compress()
-   : producer("producer")
-   , project(&funcA, "Project_funcA")
-   , compress_prologue("Compress_prologue")
-   , compress_doIt("Compress_doIt")
-   , reconstruct_prologue("Reconstruct_prologue")
-   , reconstruct_doIt("Reconstruct_doIt")
-   , printer("Printer")
-   , world(::ttg::get_default_world()) {
+       : producer("producer")
+       , project(&funcA, "Project_funcA")
+       , compress_prologue("Compress_prologue")
+       , compress_doIt("Compress_doIt")
+       , reconstruct_prologue("Reconstruct_prologue")
+       , reconstruct_doIt("Reconstruct_doIt")
+       , printer("Printer")
+       , world(ttg::get_default_world()) {
+     producer.out<0>()->connect(project.in<0>());
 
-      producer.out<0>()->connect(project.in<0>());
+     project.out<0>()->connect(project.in<0>());
+     project.out<1>()->connect(compress_prologue.in<0>());
 
-      project.out<0>()->connect(project.in<0>());
-      project.out<1>()->connect(compress_prologue.in<0>());
+     compress_prologue.out<0>()->connect(compress_doIt.in<0>());
+     compress_prologue.out<2>()->connect(compress_doIt.in<1>());
 
-      compress_prologue.out<0>()->connect(compress_doIt.in<0>());
-      compress_prologue.out<2>()->connect(compress_doIt.in<1>());
-
-      compress_prologue.out<1>()->connect(reconstruct_prologue.in<0>());
-      compress_prologue.out<1>()->connect(reconstruct_doIt.in<1>());
+     compress_prologue.out<1>()->connect(reconstruct_prologue.in<0>());
+     compress_prologue.out<1>()->connect(reconstruct_doIt.in<1>());
 
       compress_doIt.out<0>()->connect(compress_doIt.in<0>());
       compress_doIt.out<2>()->connect(compress_doIt.in<1>());
@@ -981,33 +977,32 @@ class Everything_gaxpy_test2 {
 
    Printer printer;
 
-   ::ttg::World &world;
+   ttg::World &world;
 
-public:
+  public:
    Everything_gaxpy_test2()
    : producer("producer")
-   , project_funcA1(&funcA, "project_funcA1")
-   , project_funcA2(&funcA, "project_funcA2")
-   , compress_prologue_funcA1("compress_prologue_funcA1")
-   , compress_doIt_funcA1("compress_doIt_funcA1")
-   , compress_prologue_funcA2("compress_prologue_funcA2")
-   , compress_doIt_funcA2("compress_doIt_funcA2")
-   , gaxpyOp(1.0, -1.0, "gaxpyOp")
-   , reconstruct_prologue("reconstruct_prologue")
-   , reconstruct_doIt("reconstruct_doIt")
-   , printer("printer")
-   , world(::ttg::get_default_world()) {
+       , project_funcA1(&funcA, "project_funcA1")
+       , project_funcA2(&funcA, "project_funcA2")
+       , compress_prologue_funcA1("compress_prologue_funcA1")
+       , compress_doIt_funcA1("compress_doIt_funcA1")
+       , compress_prologue_funcA2("compress_prologue_funcA2")
+       , compress_doIt_funcA2("compress_doIt_funcA2")
+       , gaxpyOp(1.0, -1.0, "gaxpyOp")
+       , reconstruct_prologue("reconstruct_prologue")
+       , reconstruct_doIt("reconstruct_doIt")
+       , printer("printer")
+       , world(ttg::get_default_world()) {
+     producer.out<0>()->connect(project_funcA1.in<0>());
+     producer.out<0>()->connect(project_funcA2.in<0>());
 
-      producer.out<0>()->connect(project_funcA1.in<0>());
-      producer.out<0>()->connect(project_funcA2.in<0>());
+     project_funcA1.out<0>()->connect(project_funcA1.in<0>());
+     project_funcA2.out<0>()->connect(project_funcA2.in<0>());
 
-      project_funcA1.out<0>()->connect(project_funcA1.in<0>());
-      project_funcA2.out<0>()->connect(project_funcA2.in<0>());
+     project_funcA1.out<1>()->connect(compress_prologue_funcA1.in<0>());
+     project_funcA2.out<1>()->connect(compress_prologue_funcA2.in<0>());
 
-      project_funcA1.out<1>()->connect(compress_prologue_funcA1.in<0>());
-      project_funcA2.out<1>()->connect(compress_prologue_funcA2.in<0>());
-
-      compress_prologue_funcA1.out<0>()->connect(compress_doIt_funcA1.in<0>());
+     compress_prologue_funcA1.out<0>()->connect(compress_doIt_funcA1.in<0>());
       compress_prologue_funcA1.out<2>()->connect(compress_doIt_funcA1.in<1>());
       compress_doIt_funcA1.out<0>()->connect(compress_doIt_funcA1.in<0>());
       compress_doIt_funcA1.out<2>()->connect(compress_doIt_funcA1.in<1>());
@@ -1074,37 +1069,36 @@ class Everything_gaxpy_test3 {
    Reconstruct_doIt reconstruct_doIt;
 
    Printer printer;
-   ::ttg::World &world;
+   ttg::World &world;
 
-public:
+  public:
    Everything_gaxpy_test3()
    : producer("producer")
    , project_funcA(&funcA, "project_funcA")
    , project_funcB(&funcB, "project_funcB")
    , minusOp(&sub, "minusOp")
    , compress_prologue("compress_prologue")
-   , compress_doIt("compress_doIt")
-   , compress_prologueA("compress_prologueA")
-   , compress_doItA("compress_doItA")
-   , compress_prologueB("compress_prologueB")
-   , compress_doItB("compress_doItB")
-   , gaxpyOp_minus(1.0, -1.0, "gaxpyOp_minus")
-   , gaxpyOp_minus2(1.0, -1.0, "gaxpyOp_minus2")
-   , reconstruct_prologue("reconstruct_prologue")
-   , reconstruct_doIt("reconstruct_doIt")
-   , printer("printer")
-   , world(::ttg::get_default_world()) {
+       , compress_doIt("compress_doIt")
+       , compress_prologueA("compress_prologueA")
+       , compress_doItA("compress_doItA")
+       , compress_prologueB("compress_prologueB")
+       , compress_doItB("compress_doItB")
+       , gaxpyOp_minus(1.0, -1.0, "gaxpyOp_minus")
+       , gaxpyOp_minus2(1.0, -1.0, "gaxpyOp_minus2")
+       , reconstruct_prologue("reconstruct_prologue")
+       , reconstruct_doIt("reconstruct_doIt")
+       , printer("printer")
+       , world(ttg::get_default_world()) {
+     producer.out<0>()->connect(project_funcA.in<0>());
+     producer.out<0>()->connect(project_funcB.in<0>());
 
-	producer.out<0>()->connect(project_funcA.in<0>());
-	producer.out<0>()->connect(project_funcB.in<0>());
+     project_funcA.out<0>()->connect(project_funcA.in<0>());
+     project_funcB.out<0>()->connect(project_funcB.in<0>());
 
-	project_funcA.out<0>()->connect(project_funcA.in<0>());
-	project_funcB.out<0>()->connect(project_funcB.in<0>());
-
-	project_funcA.out<1>()->connect(minusOp.in<0>());
-	minusOp.out<0>()->connect(minusOp.in<0>());
-	project_funcB.out<1>()->connect(minusOp.in<1>());
-	minusOp.out<2>()->connect(minusOp.in<1>());
+     project_funcA.out<1>()->connect(minusOp.in<0>());
+     minusOp.out<0>()->connect(minusOp.in<0>());
+     project_funcB.out<1>()->connect(minusOp.in<1>());
+     minusOp.out<2>()->connect(minusOp.in<1>());
 
 	project_funcA.out<1>()->connect(compress_prologueA.in<0>());
 	project_funcB.out<1>()->connect(compress_prologueB.in<0>());
@@ -1179,35 +1173,34 @@ class Everything_gaxpy_test {
 	Compress_prologue compress_prologue_funcB;
 	Compress_doIt compress_doIt_funcB;
 
-	GaxpyOp gaxpyOp;
+        GaxpyOp gaxpyOp;
 
-	Reconstruct_prologue reconstruct_prologue;
-	Reconstruct_doIt reconstruct_doIt;
+        Reconstruct_prologue reconstruct_prologue;
+        Reconstruct_doIt reconstruct_doIt;
 
-	BinaryOp minusOp;
-	BinaryOp subOp;
+        BinaryOp minusOp;
+        BinaryOp subOp;
 
-	Printer printer;
+        Printer printer;
 
-	::ttg::World &world;
+        ttg::World &world;
 
-public:
-	Everything_gaxpy_test()
-	: producer("producer")
-	, project_funcA(&funcA, "project_funcA")
-	, project_funcB(&funcB, "project_funcB")
-	, compress_prologue_funcA("compress_prologue_funcA")
-	, compress_doIt_funcA("compress_doIt_funcA")
-	, compress_prologue_funcB("compress_prologue_funcB")
-	, compress_doIt_funcB("compress_doIt_funcB")
-	, gaxpyOp(1.0, -1.0, "gaxpyOp")
-	, reconstruct_prologue("reconstruct_prologue")
-	, reconstruct_doIt("reconstruct_doIt")
-	, minusOp(&sub, "minusOp")
-	, subOp(&sub, "subOp")
-	, printer("printer")
-	, world(::ttg::get_default_world())
-	{
+       public:
+        Everything_gaxpy_test()
+            : producer("producer")
+            , project_funcA(&funcA, "project_funcA")
+            , project_funcB(&funcB, "project_funcB")
+            , compress_prologue_funcA("compress_prologue_funcA")
+            , compress_doIt_funcA("compress_doIt_funcA")
+            , compress_prologue_funcB("compress_prologue_funcB")
+            , compress_doIt_funcB("compress_doIt_funcB")
+            , gaxpyOp(1.0, -1.0, "gaxpyOp")
+            , reconstruct_prologue("reconstruct_prologue")
+            , reconstruct_doIt("reconstruct_doIt")
+            , minusOp(&sub, "minusOp")
+            , subOp(&sub, "subOp")
+            , printer("printer")
+            , world(ttg::get_default_world()) {
 		producer.out<0>()->connect(project_funcA.in<0>());
 		producer.out<0>()->connect(project_funcB.in<0>());
 
@@ -1283,27 +1276,26 @@ class Everything_diff {
    Diff_doIt diff_doIt;
    Printer printer;
 
-   ::ttg::World &world;
+   ttg::World &world;
 
-public:
+  public:
    Everything_diff()
-   : producer("producer")
-   , project(&funcD, "Project_funcD")
-   , diff_prologue("Diff_prologue")
-   , diff_doIt("Diff_doIt")
-   , printer("Printer")
-   , world(::ttg::get_default_world()) {
+       : producer("producer")
+       , project(&funcD, "Project_funcD")
+       , diff_prologue("Diff_prologue")
+       , diff_doIt("Diff_doIt")
+       , printer("Printer")
+       , world(ttg::get_default_world()) {
+     producer.out<0>()->connect(project.in<0>());
 
-      producer.out<0>()->connect(project.in<0>());
+     project.out<0>()->connect(project.in<0>());
+     project.out<1>()->connect(diff_prologue.in<0>());
 
-      project.out<0>()->connect(project.in<0>());
-      project.out<1>()->connect(diff_prologue.in<0>());
+     diff_prologue.out<0>()->connect(diff_doIt.in<0>());
+     diff_prologue.out<1>()->connect(diff_doIt.in<1>());
+     diff_prologue.out<2>()->connect(diff_doIt.in<2>());
 
-      diff_prologue.out<0>()->connect(diff_doIt.in<0>());
-      diff_prologue.out<1>()->connect(diff_doIt.in<1>());
-      diff_prologue.out<2>()->connect(diff_doIt.in<2>());
-
-      diff_doIt.out<0>()->connect(diff_doIt.in<0>());
+     diff_doIt.out<0>()->connect(diff_doIt.in<0>());
       diff_doIt.out<1>()->connect(diff_doIt.in<1>());
       diff_doIt.out<2>()->connect(diff_doIt.in<2>());
 
@@ -1335,27 +1327,24 @@ class Everything_diff_test {
    Diff_doIt diff_doIt;
    BinaryOp minusOp;
    Printer printer;
-   ::ttg::World &world;
+   ttg::World &world;
 
    //Edge<Key, Node> p1, p2, inter, l, c, r, op1, op2, out;
 
 public:
-   Everything_diff_test()
-   : producer(edges(fuse(p1, p2)), "producer")
-   , project_funcD(&funcD, edges(fuse(r1, p1)), edges(r1, inter), "Project_funcD")
-   , project_funcDD(&funcDD, edges(fuse(r2, p2)), edges(r2, op2), "Project_funcDD")
-   , diff_prologue(edges(inter), edges(l, c, r), "Diff_prologue")
-   , diff_doIt(edges(l, c, r), edges(l, c, r, op1), "Diff_doIt")
-   , minusOp(&sub, edges(fuse(op1, r3), fuse(op2, r4)), edges(r3, out, r4), "diff_funcD sub funcDD")
-   , printer(edges(out), "Printer")
-   ,  world(::ttg::get_default_world()) {
+ Everything_diff_test()
+     : producer(edges(fuse(p1, p2)), "producer")
+     , project_funcD(&funcD, edges(fuse(r1, p1)), edges(r1, inter), "Project_funcD")
+     , project_funcDD(&funcDD, edges(fuse(r2, p2)), edges(r2, op2), "Project_funcDD")
+     , diff_prologue(edges(inter), edges(l, c, r), "Diff_prologue")
+     , diff_doIt(edges(l, c, r), edges(l, c, r, op1), "Diff_doIt")
+     , minusOp(&sub, edges(fuse(op1, r3), fuse(op2, r4)), edges(r3, out, r4), "diff_funcD sub funcDD")
+     , printer(edges(out), "Printer")
+     , world(ttg::get_default_world()) {
+   fence();
+ }
 
-    fence();
-}
-
-
-
-   void print() {}//{Print()(&producer);}
+ void print() {}//{Print()(&producer);}
    std::string dot() {return Dot()(&producer);}
    void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
    void fence() { ttg_fence(world); }
@@ -1378,8 +1367,8 @@ int main(int argc, char** argv) {
 
 
     ttg_initialize(argc, argv);
-    auto& world = ::ttg::get_default_world();
-   //world.taskq.add(world.rank(), hi);
+    auto &world = ttg::get_default_world();
+    //world.taskq.add(world.rank(), hi);
    ttg_fence(world);
 
    for (int arg = 1; arg < argc; ++arg) {

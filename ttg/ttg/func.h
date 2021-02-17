@@ -17,7 +17,8 @@ namespace ttg {
   std::enable_if_t<(std::is_convertible_v<std::remove_const_t<std::remove_reference_t<OpBasePtrs>>, OpBase *> && ...),
                    bool>
   make_graph_executable(OpBasePtrs &&... ops) {
-    return ::ttg::make_traverse([](auto&&x) { std::forward<decltype(x)>(x)->make_executable(); })(std::forward<OpBasePtrs>(ops)...);
+    return ttg::make_traverse([](auto &&x) { std::forward<decltype(x)>(x)->make_executable(); })(
+        std::forward<OpBasePtrs>(ops)...);
   }
 
   template <typename keyT, typename valueT>

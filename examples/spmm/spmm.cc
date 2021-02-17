@@ -258,11 +258,11 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
 
   void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
     std::lock_guard<std::mutex> lock(mtx_);
-    if( ::ttg::tracing() ) {
+    if (ttg::tracing()) {
       auto &w = get_default_world();
-      ::ttg::print(w.rank(), "/", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.impl.h Write_SpMatrix wrote {",
-                   key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
-                   " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
+      ttg::print(w.rank(), "/", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.impl.h Write_SpMatrix wrote {",
+                 key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
+                 " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
     }
     matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
   }
@@ -325,7 +325,7 @@ class SpMM {
       // broadcast a_ik to all existing {i,j,k}
       std::vector<Key<3>> ijk_keys;
       for (auto &j : b_rowidx_to_colidx_[k]) {
-        if (tracing()) ::ttg::print("Broadcasting A[", i, "][", k, "] to j=", j);
+        if (tracing()) ttg::print("Broadcasting A[", i, "][", k, "] to j=", j);
         ijk_keys.emplace_back(Key<3>({i, j, k}));
       }
       ::broadcast<0>(ijk_keys, baseT::template get<0>(a_ik), a_ijk);
@@ -350,7 +350,7 @@ class SpMM {
       // broadcast b_kj to *jk
       std::vector<Key<3>> ijk_keys;
       for (auto &i : a_colidx_to_rowidx_[k]) {
-        if (tracing()) ::ttg::print("Broadcasting B[", k, "][", j, "] to i=", i);
+        if (tracing()) ttg::print("Broadcasting B[", k, "][", j, "] to i=", i);
         ijk_keys.emplace_back(Key<3>({i, j, k}));
       }
       ::broadcast<0>(ijk_keys, baseT::template get<0>(b_kj), b_ijk);
@@ -390,11 +390,11 @@ class SpMM {
               bool have_k;
               std::tie(k, have_k) = compute_first_k(i, j);
               if (have_k) {
-                if (tracing()) ::ttg::print("Initializing C[", i, "][", j, "] to zero");
+                if (tracing()) ttg::print("Initializing C[", i, "][", j, "] to zero");
                 this->template in<2>()->send(Key<3>({i, j, k}), Blk(0));
                 // this->set_arg<2>(Key<3>({i,j,k}), Blk(0));
               } else {
-                if (tracing()) ::ttg::print("C[", i, "][", j, "] is empty");
+                if (tracing()) ttg::print("C[", i, "][", j, "] is empty");
               }
             }
           }
@@ -411,8 +411,8 @@ class SpMM {
       bool have_next_k;
       std::tie(next_k, have_next_k) = compute_next_k(i, j, k);
       if (tracing()) {
-        ::ttg::print("Multiplying A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
-                     (have_next_k ? std::to_string(next_k) : "does not exist"));
+        ttg::print("Multiplying A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
+                   (have_next_k ? std::to_string(next_k) : "does not exist"));
       }
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow
@@ -591,8 +591,8 @@ int main(int argc, char **argv) {
 //  initialize_watchpoints();
 
   {
-    //::ttg::trace_on();
-    //OpBase::set_trace_all(true);
+    // ttg::trace_on();
+    // OpBase::set_trace_all(true);
 
     const int n = 2;
     const int m = 3;

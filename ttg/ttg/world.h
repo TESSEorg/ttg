@@ -14,9 +14,8 @@
 namespace ttg {
 
   /* Slim wrapper to allow for forward declaration */
-  class World : public ttg::base::World<ttg::TTG_IMPL_NS::WorldImpl>
-  {
-      using ttg::base::World<ttg::TTG_IMPL_NS::WorldImpl>::World;
+  class World : public ttg::base::World<TTG_IMPL_NS::WorldImpl> {
+    using ttg::base::World<TTG_IMPL_NS::WorldImpl>::World;
   };
 
   namespace detail {
@@ -32,12 +31,10 @@ namespace ttg {
       inline void set_default_world(WorldT&& world) { detail::default_world_accessor<WorldT>() = std::move(world); }
 
       template <typename keyT>
-      struct default_keymap : ::ttg::detail::default_keymap_impl<keyT> {
-      public:
+      struct default_keymap : ttg::detail::default_keymap_impl<keyT> {
+       public:
         default_keymap() = default;
-        default_keymap(ttg::World &world)
-        : ttg::detail::default_keymap_impl<keyT>(world.size())
-        { }
+        default_keymap(ttg::World& world) : ttg::detail::default_keymap_impl<keyT>(world.size()) {}
       };
 
       template<typename WorldImplT>

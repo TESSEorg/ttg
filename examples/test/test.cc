@@ -28,7 +28,7 @@ class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
   void op(const keyT &key, const baseT::input_refs_tuple_type& t, baseT::output_terminals_type &out) {
     // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int
     auto &value = baseT::get<0>(t);
-    ::ttg::print("A got value ", value);
+    ttg::print("A got value ", value);
     if (value >= 100) {
       ::sendv<0>(value, out);
     } else {
@@ -39,7 +39,7 @@ class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
   void op_cuda(const keyT &key, const baseT::input_refs_tuple_type& t, baseT::output_terminals_type &out) {
     // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int
     auto &value = baseT::get<0>(t);
-    ::ttg::print("A got value ", value);
+    ttg::print("A got value ", value);
     if (value >= 100) {
       ::sendv<0>(value, out);
     } else {
@@ -60,7 +60,7 @@ class Producer : public Op<void, std::tuple<Out<keyT, int>>, Producer> {
       : baseT(edges(), outedges, name, {}, {"output"}) {}
 
   void op(baseT::output_terminals_type &out) {
-    ::ttg::print("produced ", 0);
+    ttg::print("produced ", 0);
     ::send<0>(0, 0, out);
   }
 
@@ -73,7 +73,7 @@ class Consumer : public Op<void, std::tuple<>, Consumer, const int> {
  public:
   Consumer(const std::string &name) : baseT(name, {"input"}, {}) {}
   void op(const baseT::input_refs_tuple_type& t, baseT::output_terminals_type &out) {
-    ::ttg::print("consumed ", baseT::get<0>(t));
+    ttg::print("consumed ", baseT::get<0>(t));
   }
 
   Consumer(const typename baseT::input_edges_type &inedges, const std::string &name)
@@ -167,7 +167,7 @@ class Everything2 {
 
 class Everything3 {
   static void p(const std::tuple<> &, std::tuple<Out<keyT, int>> &out) {
-    ::ttg::print("produced ", 0);
+    ttg::print("produced ", 0);
     send<0>(0, int(0), out);
   }
 
@@ -180,9 +180,7 @@ class Everything3 {
     }
   }
 
-  static void c(const std::tuple<const int&> &t, std::tuple<> &out) {
-    ::ttg::print("consumed ", std::get<0>(t));
-  }
+  static void c(const std::tuple<const int&> &t, std::tuple<> &out) { ttg::print("consumed ", std::get<0>(t)); }
 
   // !!!! Edges must be constructed before classes that use them
   Edge<keyT, int> P2A, A2A;
@@ -215,7 +213,7 @@ class Everything3 {
 
 class Everything4 {
   static void p(std::tuple<Out<keyT, int>> &out) {
-    ::ttg::print("produced ", 0);
+    ttg::print("produced ", 0);
     send<0>(0, 0, out);
   }
 
@@ -227,7 +225,7 @@ class Everything4 {
     }
   }
 
-  static void c(const int &value, std::tuple<> &out) { ::ttg::print("consumed ", value); }
+  static void c(const int &value, std::tuple<> &out) { ttg::print("consumed ", value); }
 
   // !!!! Edges must be constructed before classes that use them
   Edge<keyT, int> P2A, A2A;
@@ -262,7 +260,7 @@ class Everything4 {
 #ifndef PARSEC_TTG_H_INCLUDED  // TODO Teach PaRSEC streaming terminals
 class Everything5 {
   static void p(std::tuple<Out<keyT, int>> &out) {
-    ::ttg::print("produced ", 0);
+    ttg::print("produced ", 0);
     send<0>(0, 0, out);
   }
 
@@ -273,7 +271,7 @@ class Everything5 {
     }
   }
 
-  static void c(const int &value, std::tuple<> &out) { ::ttg::print("consumed ", value); }
+  static void c(const int &value, std::tuple<> &out) { ttg::print("consumed ", value); }
 
   // !!!! Edges must be constructed before classes that use them
   Edge<keyT, int> P2A, A2A;
@@ -318,26 +316,26 @@ class EverythingComposite {
     auto a = std::make_unique<A>("A");
     auto c = std::make_unique<Consumer>("C");
 
-    ::ttg::print("P out<0>", (void *)(ttg::TerminalBase *)(p->out<0>()));
-    ::ttg::print("A  in<0>", (void *)(ttg::TerminalBase *)(a->in<0>()));
-    ::ttg::print("A out<0>", (void *)(ttg::TerminalBase *)(a->out<0>()));
-    ::ttg::print("C  in<0>", (void *)(ttg::TerminalBase *)(c->in<0>()));
+    ttg::print("P out<0>", (void *)(ttg::TerminalBase *)(p->out<0>()));
+    ttg::print("A  in<0>", (void *)(ttg::TerminalBase *)(a->in<0>()));
+    ttg::print("A out<0>", (void *)(ttg::TerminalBase *)(a->out<0>()));
+    ttg::print("C  in<0>", (void *)(ttg::TerminalBase *)(c->in<0>()));
 
     connect<1, 0>(a, a);  // a->out<1>()->connect(a->in<0>());
     connect<0, 0>(a, c);  // a->out<0>()->connect(c->in<0>());
     const auto q = std::make_tuple(a->in<0>());
-    ::ttg::print("q  in<0>", (void *)(ttg::TerminalBase *)(std::get<0>(q)));
+    ttg::print("q  in<0>", (void *)(ttg::TerminalBase *)(std::get<0>(q)));
 
     // std::array<std::unique_ptr<OpBase>,2> ops{std::move(a),std::move(c)};
     std::vector<std::unique_ptr<OpBase>> ops(2);
     ops[0] = std::move(a);
     ops[1] = std::move(c);
-    ::ttg::print("opsin(0)", (void *)(ops[0]->in(0)));
-    ::ttg::print("ops size", ops.size());
+    ttg::print("opsin(0)", (void *)(ops[0]->in(0)));
+    ttg::print("ops size", ops.size());
 
     auto ac = make_composite_op(std::move(ops), q, std::make_tuple(), "Fred");
 
-    ::ttg::print("AC in<0>", (void *)(ttg::TerminalBase *)(ac->in<0>()));
+    ttg::print("AC in<0>", (void *)(ttg::TerminalBase *)(ac->in<0>()));
     connect<0, 0>(p, ac);  // p->out<0>()->connect(ac->in<0>());
 
     verify(p.get());
@@ -362,11 +360,11 @@ class EverythingComposite {
 class ReductionTest {
   static void generator(const int &key, std::tuple<Out<int, int>> &out) {
     const auto value = std::rand();
-    ::ttg::print("ReductionTest: produced ", value, " on rank ", ttg_default_execution_context().rank());
+    ttg::print("ReductionTest: produced ", value, " on rank ", ttg_default_execution_context().rank());
     send<0>(key, value, out);
   }
   static void consumer(const int &key, const int &value, std::tuple<> &out) {
-    ::ttg::print("ReductionTest: consumed ", value);
+    ttg::print("ReductionTest: consumed ", value);
   }
 
   Edge<int, int> G2R, R2C;  // !!!! Edges must be constructed before classes that use them
@@ -398,11 +396,11 @@ class ReductionTest {
 class BroadcastTest {
   static void generator(const int &key, std::tuple<Out<int, int>> &out) {
     const auto value = std::rand();
-    ::ttg::print("BroadcastTest: produced ", value, " on rank ", ttg_default_execution_context().rank());
+    ttg::print("BroadcastTest: produced ", value, " on rank ", ttg_default_execution_context().rank());
     send<0>(key, value, out);
   }
   static void consumer(const int &key, const int &value, std::tuple<> &out) {
-    ::ttg::print("BroadcastTest: consumed ", value, " on rank ", ttg_default_execution_context().rank());
+    ttg::print("BroadcastTest: consumed ", value, " on rank ", ttg_default_execution_context().rank());
   }
 
   Edge<int, int> G2B, B2C;
@@ -460,7 +458,7 @@ class Fibonacci {
   }
 
   static void consume(const int &key, const int &value, std::tuple<> &out) {
-    ::ttg::print("sum of Fibonacci numbers up to ", max(), " = ", value);
+    ttg::print("sum of Fibonacci numbers up to ", max(), " = ", value);
   }
 
   Edge<int, int> N2N, N2C;  // !!!! Edges must be constructed before classes that use them
@@ -606,7 +604,7 @@ int try_main(int argc, char **argv) {
         };
 
         auto print = [max](const int &value, std::tuple<> &out) {
-          ::ttg::print("sum of Fibonacci numbers up to ", max, " = ", value);
+          ttg::print("sum of Fibonacci numbers up to ", max, " = ", value);
           {  // validate the result
             auto ref_value = 0;
             // recursive lambda pattern from http://pedromelendez.com/blog/2015/07/16/recursive-lambdas-in-c14/

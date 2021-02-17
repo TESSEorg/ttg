@@ -12,9 +12,6 @@
 
 namespace ttg {
 
-  template <typename keyT = void, typename valueT = void>
-  class Edge;  // Forward decl.
-
   namespace base {
       // forward decl
       class WorldImplBase;

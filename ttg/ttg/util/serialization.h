@@ -27,7 +27,7 @@ namespace ttg {
     struct is_printable : std::false_type {};
 
     template <class T>
-    struct is_printable<T, ::ttg::meta::void_t<decltype(std::declval<std::ostream&>() << std::declval<T>())>>
+    struct is_printable<T, ttg::meta::void_t<decltype(std::declval<std::ostream&>() << std::declval<T>())>>
         : std::true_type {};
 
     template <typename T, typename Enabler = void>
@@ -84,7 +84,7 @@ namespace ttg {
 
     template <class T>
     struct is_madness_serializable<
-        T, ::ttg::meta::void_t<decltype(std::declval<madness::archive::BufferOutputArchive&>() & std::declval<T>())>>
+        T, ttg::meta::void_t<decltype(std::declval<madness::archive::BufferOutputArchive&>() & std::declval<T>())>>
         : std::true_type {};
   }  // namespace detail
 

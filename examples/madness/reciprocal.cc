@@ -167,11 +167,11 @@ auto make_sum_result(Edge<sumreskeyT,kT>& k, Edge<sumreskeyT,yT>& sumresult, Edg
 /// Use residual for this iteration (k) to produce boolean converged flag
 auto make_converged(Edge<kT,yT>& errsqsum, Edge<kT,bool>& converged) {
     auto f = [](const kT& k, const yT& errsqsum, std::tuple<Out<kT,bool>>& out) {
-        bool converged = (errsqsum < 1e-10);
-        ::ttg::print(" residual ", std::sqrt(errsqsum), " converged ", converged?"yes":"no");
-        //::ttg::print(" residual ", (errsqsum), " converged ", converged?"yes":"no");
-        ::send<0>(k,converged, out);
-    };
+    bool converged = (errsqsum < 1e-10);
+    ttg::print(" residual ", std::sqrt(errsqsum), " converged ", converged ? "yes" : "no");
+    // ttg::print(" residual ", (errsqsum), " converged ", converged?"yes":"no");
+    ::send<0>(k, converged, out);
+  };
     return wrap<kT>(f, edges(errsqsum), edges(converged), "convtest", {"errsqsum"}, {"converged"});
 }
 
@@ -204,9 +204,7 @@ auto make_loop(Edge<kiT,bool>& bcast, Edge<kiT,xyT>& xynew, Edge<kiT,xyT>& xy, E
 /// Makes an operation that prints a stream
 template <typename keyT, typename valueT>
 auto make_printer(const Edge<keyT, valueT>& in, const char* str = "") {
-    auto func = [str](const keyT& key, const valueT& value, std::tuple<>& out) {
-        ::ttg::print(str,":",key,":",value);
-    };
+    auto func = [str](const keyT& key, const valueT& value, std::tuple<>& out) { ttg::print(str, ":", key, ":", value); };
     return wrap(func, edges(in), edges(), "printer", {"input"});
 }
 

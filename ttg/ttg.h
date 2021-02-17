@@ -1,7 +1,7 @@
 #ifndef TTG_H_INCLUDED
 #define TTG_H_INCLUDED
 
-#include "ttg/impl_selector.h"
+#include "ttg/fwd.h"
 
 #include "ttg/util/demangle.h"
 #include "ttg/util/meta.h"

@@ -403,7 +403,7 @@ public:
         }
         static const T diagndim = T(0.5)*std::sqrt(T(NDIM));
         T boxradplusr = maxw*diagndim + maxr;
-        //::ttg::print(box, boxradplusr, bool(boxradplusr*boxradplusr < rsq));
+        // ttg::print(box, boxradplusr, bool(boxradplusr*boxradplusr < rsq));
         return (boxradplusr*boxradplusr < rsq);
     }
 };

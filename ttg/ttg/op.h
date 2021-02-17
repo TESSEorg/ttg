@@ -80,11 +80,11 @@ namespace ttg {
     static constexpr int numins = 1;
     static constexpr int numouts = 0;
 
-    using input_terminals_type = std::tuple<::ttg::In<keyT, input_valueT>>;
-    using input_edges_type = std::tuple<::ttg::Edge<keyT, std::decay_t<input_valueT>>>;
+    using input_terminals_type = std::tuple<ttg::In<keyT, input_valueT>>;
+    using input_edges_type = std::tuple<ttg::Edge<keyT, std::decay_t<input_valueT>>>;
     using output_terminals_type = std::tuple<>;
 
-  private:
+   private:
     input_terminals_type input_terminals;
     output_terminals_type output_terminals;
 

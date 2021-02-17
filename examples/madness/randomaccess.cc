@@ -5,6 +5,6 @@
   using namespace madness;      \
   using namespace madness::ttg; \
   using namespace ::ttg;        \
-  constexpr const ::ttg::Runtime ttg_runtime = ::ttg::Runtime::MADWorld;
+  constexpr const ttg::Runtime ttg_runtime = ttg::Runtime::MADWorld;
 
 #include "../randomaccess.impl.h"
