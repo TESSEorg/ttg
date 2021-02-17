@@ -65,6 +65,7 @@ int parsec_add_fetch_runtime_task(parsec_taskpool_t *tp, int tasks);
 }
 
 namespace ttg_parsec {
+  static __thread parsec_task_t *parsec_ttg_caller;
 
   typedef void (*static_set_arg_fct_type)(void *, size_t, ttg::OpBase *);
   typedef std::pair<static_set_arg_fct_type, ttg::OpBase *> static_set_arg_fct_call_t;
@@ -546,6 +547,8 @@ namespace ttg_parsec {
       detail::my_op_t *task = (detail::my_op_t *)my_task;
       opT *baseobj = (opT *)task->object_ptr;
       derivedT *obj = (derivedT *)task->object_ptr;
+      assert(parsec_ttg_caller == NULL);
+      parsec_ttg_caller = my_task;
       if (obj->tracing()) {
         if constexpr (!ttg::meta::is_void_v<keyT>)
           ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", *(keyT *)task->key, ": executing");
@@ -565,6 +568,7 @@ namespace ttg_parsec {
         baseobj->template op<Space>(obj->output_terminals);
       } else
         abort();
+      parsec_ttg_caller = NULL;
 
       if (obj->tracing()) {
         if constexpr (!ttg::meta::is_void_v<keyT>)
@@ -579,12 +583,15 @@ namespace ttg_parsec {
       detail::my_op_t *task = (detail::my_op_t *)my_task;
       opT *baseobj = (opT *)task->object_ptr;
       derivedT *obj = (derivedT *)task->object_ptr;
+      assert(parsec_ttg_caller == NULL);
+      parsec_ttg_caller = my_task;
       if constexpr (!ttg::meta::is_void_v<keyT>) {
         baseobj->template op<Space>(*(keyT *)task->key, obj->output_terminals);
       } else if constexpr (ttg::meta::is_void_v<keyT>) {
         baseobj->template op<Space>(obj->output_terminals);
       } else
         abort();
+      parsec_ttg_caller = NULL;
     }
 
    protected:
@@ -802,6 +809,7 @@ namespace ttg_parsec {
     void set_arg_local_impl(const Key &key, const Value &value) {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
+      constexpr const bool valueT_is_Const = ::std::is_const_v<::std::remove_reference_t<Value>>;
 
       if (tracing()) {
         if constexpr (!valueT_is_Void) {
@@ -859,6 +867,9 @@ namespace ttg_parsec {
         }
       }
 
+      parsec_data_copy_t *copy = NULL;
+      assert(parsec_ttg_caller != NULL);
+
       if constexpr (!valueT_is_Void) {
         if (NULL != task->parsec_task.data[i].data_in) {
           ttg::print_error(get_name(), " : ", key, ": error argument is already set : ", i);
@@ -870,8 +881,20 @@ namespace ttg_parsec {
         //    - if it is a const type, then the source task cannot modify it, and
         //    - if the target task uses the data as read-only, it is not necessary to
         //    - create a new data copy and we should reuse it
-        parsec_data_copy_t *copy = PARSEC_OBJ_NEW(parsec_data_copy_t);
-        copy->device_private = (void *)(new valueT(value));
+        if constexpr (valueT_is_Const) {
+          for(int j = 0; j < parsec_ttg_caller->task_class->nb_flows; j++) {
+            if (NULL != parsec_ttg_caller->data[j].data_in &&
+                parsec_ttg_caller->data[j].data_in->device_private == static_cast<const void *>(&value)) {
+              copy = parsec_ttg_caller->data[j].data_in;
+              PARSEC_OBJ_RETAIN(copy);
+              break;
+            }
+          }
+        }
+        if( NULL == copy ) {
+          copy = PARSEC_OBJ_NEW(parsec_data_copy_t);
+          copy->device_private = (void *)(new valueT(value));
+        }
         task->parsec_task.data[i].data_in = copy;
       }
 
