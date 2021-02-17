@@ -47,7 +47,6 @@ namespace ttg {
     /// broadcast
     /// @tparam T a serializable type
     template <typename T>
-    static
     void ttg_broadcast(::ttg::World world, T &data, int source_rank);
 
 

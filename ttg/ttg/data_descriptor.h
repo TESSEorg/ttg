@@ -9,12 +9,10 @@
 // backend-specific implementations may be available in backend/serialization.h .
 extern "C" struct ttg_data_descriptor {
   const char *name;
-  void (*get_info)(const void *object, uint64_t *hs, uint64_t *ps, int *is_contiguous_mask, void **buf);
-  void (*pack_header)(const void *object, uint64_t header_size, void **buf);
+  uint64_t (*payload_size)(const void *object);
   uint64_t (*pack_payload)(const void *object, uint64_t chunk_size, uint64_t pos, void *buf);
-  void (*unpack_header)(void *object, uint64_t header_size, const void *buf);
-  void (*unpack_payload)(void *object, uint64_t chunk_size, uint64_t pos, const void *buf);
-  void (*print)(const void *object);
+  void     (*unpack_payload)(void *object, uint64_t chunk_size, uint64_t pos, const void *buf);
+  void     (*print)(const void *object);
 };
 
 namespace ttg {
