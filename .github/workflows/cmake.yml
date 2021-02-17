@@ -99,7 +99,7 @@ jobs:
       run: cmake --build . --config $BUILD_TYPE --target check-ttg
 
     - name: Build+Deploy Dox
-      if: ${{ matrix.os == 'ubuntu-20.04' && matrix.build_type == 'Release' }}
+      if: ${{ matrix.os == 'ubuntu-20.04' && matrix.build_type == 'Release' && github.ref == 'refs/heads/master' }}
       working-directory: ${{github.workspace}}/build
       shell: bash
       run: |
