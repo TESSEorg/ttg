@@ -1354,73 +1354,72 @@ public:
 //void hi() { std::cout << "hi\n"; }
 
 int main(int argc, char** argv) {
-    /*
-    initialize(argc, argv);
-    World world(SafeMPI::COMM_WORLD);
+  /*
+  initialize(argc, argv);
+  World world(SafeMPI::COMM_WORLD);
 
-    for (int arg=1; arg<argc; ++arg) {
-        if (strcmp(argv[arg],"-dx")==0)
-            xterm_debug(argv[0], 0);
-    }
+  for (int arg=1; arg<argc; ++arg) {
+      if (strcmp(argv[arg],"-dx")==0)
+          xterm_debug(argv[0], 0);
+  }
 
-    OpBase::set_trace_all(false); */
+  OpBase::set_trace_all(false); */
 
+  ttg_initialize(argc, argv);
+  auto &world = ttg::get_default_world();
+  // world.taskq.add(world.rank(), hi);
+  ttg_fence(world);
 
-    ttg_initialize(argc, argv);
-    auto &world = ttg::get_default_world();
-    //world.taskq.add(world.rank(), hi);
-   ttg_fence(world);
+  for (int arg = 1; arg < argc; ++arg) {
+    if (strcmp(argv[arg], "-dx") == 0) madness::xterm_debug(argv[0], 0);
+  }
 
-   for (int arg = 1; arg < argc; ++arg) {
-     if (strcmp(argv[arg], "-dx") == 0) madness::xterm_debug(argv[0], 0);
-   }
+  ttg::OpBase::set_trace_all(false);
 
-   ttg::OpBase::set_trace_all(false);
+  init_twoscale(k);
+  init_quadrature(k);
+  make_dc_periodic();
 
-
-   init_twoscale(k);
-   init_quadrature(k);
-   make_dc_periodic();
-
+  try {
     /* doing all the initializtions */
 
     // FIRST EXAMPLE
     /* {
-    	Everything x;
-    	x.print();
-    	std::cout << x.dot() << std::endl;
-    	x.start();
-    	x.wait();
+        Everything x;
+        x.print();
+        std::cout << x.dot() << std::endl;
+        x.start();
+        x.wait();
     } */
 
-   // SECOND EXAMPLE
-   {
+    // SECOND EXAMPLE
+    {
       Everything_cnc x;
-      //x.print();
-      //std::cout << x.dot() << std::endl;
+      // x.print();
+      // std::cout << x.dot() << std::endl;
       x.start();
       x.fence();
-   }
+    }
 
-   // THIRD EXAMPLE
-   /* {
-      Everything_compress x;
-      x.print();
-      std::cout << x.dot() << std::endl;
-      x.start();
-      x.wait();
-   } */
+    // THIRD EXAMPLE
+    /* {
+       Everything_compress x;
+       x.print();
+       std::cout << x.dot() << std::endl;
+       x.start();
+       x.wait();
+    } */
 
-   // FORTH EXAMPLE
-   /*{
-      Everything_diff_test x; // previously it was Everything_diff x;
-      x.print();
-      std::cout << x.dot() << std::endl;
-      x.start();
-      x.fence();
-   }*/
+    // FORTH EXAMPLE
+    /*{
+       Everything_diff_test x; // previously it was Everything_diff x;
+       x.print();
+       std::cout << x.dot() << std::endl;
+       x.start();
+       x.fence();
+    }*/
 
-   // FIFTH EXAMPLE
+    // FIFTH EXAMPLE
     /* {
       Everything_gaxpy_test x; // previously it was Everything_diff x;
       //x.print();
@@ -1430,23 +1429,32 @@ int main(int argc, char** argv) {
       x.fence();
    } */
 
-   // SIXTH EXAMPLE
-   /* {
-      Everything_comp_rec_test x;
-      x.print();
-      std::cout << x.dot() << std::endl;
-      x.start();
-      x.wait();
-   } */
+    // SIXTH EXAMPLE
+    /* {
+       Everything_comp_rec_test x;
+       x.print();
+       std::cout << x.dot() << std::endl;
+       x.start();
+       x.wait();
+    } */
 
-   // SEVENTH EXAMPLE
-   /* {
-      Everything_gaxpy_test2 x;
-      x.print();
-      std::cout << x.dot() << std::endl;
-      x.start();
-      x.wait();
-   } */
-    return 0;
+    // SEVENTH EXAMPLE
+    /* {
+       Everything_gaxpy_test2 x;
+       x.print();
+       std::cout << x.dot() << std::endl;
+       x.start();
+       x.wait();
+    } */
+  } catch (std::exception &x) {
+    std::cerr << "Caught a std::exception: " << x.what() << std::endl;
+    return 1;
+  } catch (...) {
+    std::cerr << "Caught an unknown exception: " << std::endl;
+    return 1;
+  }
+
+  ttg_fence(ttg_default_execution_context());
+  ttg_finalize();
+  return 0;
 }
-
