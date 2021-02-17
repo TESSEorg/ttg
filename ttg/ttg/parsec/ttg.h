@@ -258,20 +258,20 @@ namespace ttg_parsec {
       parsec_key_t key;
     } my_op_t;
 
-    static inline parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *task) {
+    inline parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *task) {
       detail::my_op_t *me = (detail::my_op_t *)task;
       me->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)](task);
       (void)es;
       return PARSEC_HOOK_RETURN_DONE;
     }
-    static inline parsec_hook_return_t hook_cuda(struct parsec_execution_stream_s *es, parsec_task_t *task) {
+    inline parsec_hook_return_t hook_cuda(struct parsec_execution_stream_s *es, parsec_task_t *task) {
       detail::my_op_t *me = (detail::my_op_t *)task;
       me->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)](task);
       (void)es;
       return PARSEC_HOOK_RETURN_DONE;
     }
 
-    static inline uint64_t parsec_tasks_hash_fct(parsec_key_t key, int nb_bits, void *data) {
+    inline uint64_t parsec_tasks_hash_fct(parsec_key_t key, int nb_bits, void *data) {
       /* Use all the bits of the 64 bits key, project on the lowest base bits (0 <= hash < 1024) */
       int b = 0;
       uint64_t mask = ~0ULL >> (64 - nb_bits);

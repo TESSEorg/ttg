@@ -14,13 +14,10 @@ namespace ttg {
     template <typename T> Void(T&&) {}
   };
 
-  static inline
-  bool operator==(const Void&, const Void&) { return true; }
-  static inline
-  bool operator!=(const Void&, const Void&) { return false; }
+  inline bool operator==(const Void&, const Void&) { return true; }
+  inline bool operator!=(const Void&, const Void&) { return false; }
 
-  static inline
-  std::ostream& operator<<(std::ostream& os, const ttg::Void&) {
+  inline std::ostream& operator<<(std::ostream& os, const ttg::Void&) {
     return os;
   }
 

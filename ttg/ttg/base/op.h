@@ -14,7 +14,7 @@ namespace ttg {
 
   namespace detail {
     // If true prints trace of all assignments and all op invocations
-    static inline bool& op_base_trace_accessor(void) {
+    inline bool &op_base_trace_accessor(void) {
       static bool trace = false;
       return trace;
     }

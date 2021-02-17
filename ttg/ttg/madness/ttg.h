@@ -117,44 +117,44 @@ namespace ttg_madness {
   };
 
   template <typename... RestOfArgs>
-  static inline void ttg_initialize(int argc, char **argv, RestOfArgs &&...) {
+  inline void ttg_initialize(int argc, char **argv, RestOfArgs &&...) {
     ::madness::World &madworld = ::madness::initialize(argc, argv);
     auto *world_ptr = new ttg_madness::WorldImpl{madworld};
     std::shared_ptr<ttg::base::WorldImplBase> world_sptr{static_cast<ttg::base::WorldImplBase *>(world_ptr)};
     ttg::World world{std::move(world_sptr)};
     ttg::detail::set_default_world(std::move(world));
   }
-  static inline void ttg_finalize() {
+  inline void ttg_finalize() {
     ttg::detail::set_default_world(ttg::World{});  // reset the default world
     ttg::detail::destroy_worlds<ttg_madness::WorldImpl>();
     ::madness::finalize();
   }
-  static inline void ttg_abort() { MPI_Abort(MPI_COMM_WORLD, 1); }
-  static inline ttg::World ttg_default_execution_context() { return ttg::get_default_world(); }
-  static inline void ttg_execute(ttg::World world) {
+  inline void ttg_abort() { MPI_Abort(MPI_COMM_WORLD, 1); }
+  inline ttg::World ttg_default_execution_context() { return ttg::get_default_world(); }
+  inline void ttg_execute(ttg::World world) {
     // World executes tasks eagerly
   }
-  static inline void ttg_fence(ttg::World world) { world.impl().fence(); }
+  inline void ttg_fence(ttg::World world) { world.impl().fence(); }
 
   template <typename T>
-  static inline void ttg_register_ptr(ttg::World world, const std::shared_ptr<T> &ptr) {
+  inline void ttg_register_ptr(ttg::World world, const std::shared_ptr<T> &ptr) {
     world.impl().register_ptr(ptr);
   }
 
-  static inline void ttg_register_status(ttg::World world, const std::shared_ptr<std::promise<void>> &status_ptr) {
+  inline void ttg_register_status(ttg::World world, const std::shared_ptr<std::promise<void>> &status_ptr) {
     world.impl().register_status(status_ptr);
   }
 
-  static inline ttg::Edge<> &ttg_ctl_edge(ttg::World world) { return world.impl().ctl_edge(); }
+  inline ttg::Edge<> &ttg_ctl_edge(ttg::World world) { return world.impl().ctl_edge(); }
 
   template <typename T>
-  static inline void ttg_sum(ttg::World world, T &value) {
+  inline void ttg_sum(ttg::World world, T &value) {
     world.impl().impl().gop.sum(value);
   }
   /// broadcast
   /// @tparam T a serializable type
   template <typename T>
-  static inline void ttg_broadcast(ttg::World world, T &data, int source_rank) {
+  inline void ttg_broadcast(ttg::World world, T &data, int source_rank) {
     world.impl().impl().gop.broadcast_serializable(data, source_rank);
   }
 
