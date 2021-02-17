@@ -190,7 +190,6 @@ namespace ttg_parsec {
         parsec_taskpool_free(tpool);
         parsec_ce.tag_unregister(_PARSEC_TTG_TAG);
         parsec_fini(&ctx);
-        free(tpool);
         mark_invalid();
       }
     }
