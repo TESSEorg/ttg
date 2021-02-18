@@ -30,13 +30,13 @@ endif (TARGET MADworld)
 add_ttg_executable(wavefront-df wavefront/wavefront-df.cc LINK_LIBRARIES MADworld)
 #add_ttg_executable(fw-apsp floyd-warshall/floyd_warshall.cc LINK_LIBRARIES MADworld)
 if (OpenMP_CXX_FOUND AND TARGET std::execution)
-    #    add_ttg_executable(fw-apsp-df floyd-warshall/floyd_warshall_df.cc LINK_LIBRARIES OpenMP::OpenMP_CXX std::execution)
+        add_ttg_executable(fw-apsp-df floyd-warshall/floyd_warshall_df.cc LINK_LIBRARIES OpenMP::OpenMP_CXX std::execution)
 endif ()
 #add_ttg_executable(ge ge/ge.cc LINK_LIBRARIES MADworld)
 if (TARGET std::execution)
-    #    add_ttg_executable(ge-df ge/ge_df.cc LINK_LIBRARIES std::execution)
+        add_ttg_executable(ge-df ge/ge_df.cc LINK_LIBRARIES std::execution)
 endif (TARGET std::execution)
-#add_ttg_executable(sw sw/sw.cc LINK_LIBRARIES MADworld)
+add_ttg_executable(sw sw/sw.cc LINK_LIBRARIES MADworld)
 
 # RandomAccess HPCC Benchmark
-# TODO convert to new example format
+#add_ttg_executable(randomaccess randomaccess/randomaccess.cc LINK_LIBRARIES MADworld)

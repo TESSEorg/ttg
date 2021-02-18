@@ -218,15 +218,20 @@ auto make_sw1(const funcT& func, int block_size, const std::string &a, const std
 }
 
 int main(int argc, char* argv[]) {
-  if (argc < 6)
-  {
-    std::cout << "Usage: ./sw -n <String length> -b <block_size> <1/0 - verify>\n";
-    exit(-1);
-  }
+  int problem_size;
+  int block_size;
+  bool verify;
 
-  int problem_size = std::atoi(argv[2]);
-  int block_size = std::atoi(argv[4]);
-  bool verify = std::atoi(argv[5]);
+  if (argc < 6) {
+    problem_size = 1024;
+    block_size = 32;
+    verify = false;    
+  }
+  else {
+    problem_size = std::atoi(argv[2]);
+    block_size = std::atoi(argv[4]);
+    verify = std::atoi(argv[5]);
+  }
 
   char chars[] = {'A', 'C', 'G', 'T'};
   std::string a, b;
@@ -270,9 +275,11 @@ int main(int argc, char* argv[]) {
 
   ttg_execute(ttg_default_execution_context());
   ttg_fence(ttg_default_execution_context());
-  end = std::chrono::high_resolution_clock::now();
-  std::cout << "TTG Execution Time (milliseconds) : "
+  if (ttg_default_execution_context().rank() == 0) {
+    end = std::chrono::high_resolution_clock::now();
+    std::cout << "TTG Execution Time (milliseconds) : "
               << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
+  }
   ttg_finalize();
 }
 

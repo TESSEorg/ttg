@@ -653,9 +653,8 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
 void floyd_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
+  ttg_initialize(argc, argv); 
   ttg::OpBase::set_trace_all(false);
-
-  ttg_initialize(argc, argv);
 
   ttg::World world = ttg::get_default_world();
 
@@ -680,7 +679,14 @@ int main(int argc, char** argv) {
   int recursive_fan_out;
   int base_size;
   bool verify_results;
-  parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, verify_results);
+  if (argc != 5) {
+    problem_size = 2048;
+    blocking_factor = 32;
+    kernel_type = "iterative";
+    verify_results = false;
+  } else {
+    parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, verify_results);
+  }
 
   double* adjacency_matrix_serial = nullptr;  // Using for the verification (if needed)
   // double *adjacency_matrix_ttg = nullptr; // Using for running the blocked implementation of FW-APSP algorithm on ttg

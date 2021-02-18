@@ -538,7 +538,6 @@ int main(int argc, char** argv) {
   }
 
   OpBase::set_trace_all(false); */
-
   ttg_initialize(argc, argv, -1);
 
   // world.taskq.add(world.rank(), hi);
@@ -558,7 +557,14 @@ int main(int argc, char** argv) {
   int recursive_fan_out;
   int base_size;
   bool verify_results;
-  parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, verify_results);
+  if (argc != 5) {
+    problem_size = 2048;
+    blocking_factor = 32;
+    kernel_type = "iterative";
+    verify_results = false;
+  } else {
+    parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, verify_results);
+  }
 
   double* adjacency_matrix_serial;  // Using for the verification (if needed)
   //__declspec(align(16)) 

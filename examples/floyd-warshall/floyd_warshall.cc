@@ -179,7 +179,7 @@ class FuncA : public Op<Key,
 
     // Executing the update
     if (kernel_type == "iterative") {
-      std::cout << "FuncA: " << K << " " << I << " " << J << std::endl;
+      //std::cout << "FuncA: " << K << " " << I << " " << J << std::endl;
       floyd_iterative_kernel(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg);
     } else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
@@ -272,7 +272,7 @@ class FuncB
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    std::cout << "FuncB: " << K << " " << I << " " << J << std::endl;
+    //std::cout << "FuncB: " << K << " " << I << " " << J << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
       floyd_iterative_kernel(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg);
@@ -364,7 +364,7 @@ class FuncC
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    std::cout << "FuncC: " << K << " " << I << " " << J << std::endl;
+    //std::cout << "FuncC: " << K << " " << I << " " << J << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
       floyd_iterative_kernel(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg);
@@ -451,7 +451,7 @@ class FuncD : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
-    std::cout << "FuncD: " << K << " " << I << " " << J << std::endl;
+    //std::cout << "FuncD: " << K << " " << I << " " << J << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
       floyd_iterative_kernel(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg);
@@ -618,7 +618,14 @@ int main(int argc, char** argv) {
   int recursive_fan_out;
   int base_size;
   bool verify_results;
-  parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, verify_results);
+  if (argc != 5) {
+    problem_size = 2048;
+    blocking_factor = 32;
+    kernel_type = "iterative";
+    verify_results = false;
+  } else {
+    parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, verify_results);
+  }
 
   double* adjacency_matrix_serial = nullptr;  // Using for the verification (if needed)
   double* adjacency_matrix_ttg =
