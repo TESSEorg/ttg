@@ -3,21 +3,22 @@
 # See https://opensource.org/licenses/BSD-3-Clause for details.
 
 #
-# add_ttg_executable(X sources_list [RUNTIMES runtime_list] [LINK_LIBRARIES link_libraries] [COMPILE_DEFINITIONS compile_definitions] [COMPILE_FEATURES compile_features])
+# add_ttg_executable(X sources_list [RUNTIMES runtime_list] [LINK_LIBRARIES link_libraries] [COMPILE_DEFINITIONS compile_definitions] [COMPILE_FEATURES compile_features] [SINGLERANKONLY])
 #
 # creates executable X-r for every r in runtime_list:
 # * if RUNTIMES is omitted, will use all known runtimes, otherwise use the specified runtimes
 #
-# example: add_ttg_executable(test "test/test1.cc;test/test2.cc" "mad" "BTAS" "COOL_DEFINE=1" "cxx_std_20")
+# example: add_ttg_executable(test "test/test1.cc;test/test2.cc" RUNTIMES "mad" LINK_LIBRARIES "BTAS" COMPILE_DEFINITIONG "COOL_DEFINE=1" COMPILE_FEATURES "cxx_std_20")
 #
 
 include(AddTTGTestExecutable)
 
 macro(add_ttg_executable)
 
+    set(optionArgs SINGLERANKONLY)
     set(multiValueArgs RUNTIMES LINK_LIBRARIES COMPILE_DEFINITIONS COMPILE_FEATURES)
-    cmake_parse_arguments(ADD_TTG_EXECUTABLE "" ""
-            "${multiValueArgs}" ${ARGN} )
+    cmake_parse_arguments(ADD_TTG_EXECUTABLE "${optionArgs}" ""
+            "${multiValueArgs}" ${ARGN})
 
     list(LENGTH ADD_TTG_EXECUTABLE_UNPARSED_ARGUMENTS _num_unparsed_args)
     if (${_num_unparsed_args} LESS 2)
@@ -65,16 +66,22 @@ macro(add_ttg_executable)
         set(_compile_features )
         if (DEFINED ADD_TTG_EXECUTABLE_COMPILE_FEATURES)
             list(APPEND _compile_features "${ADD_TTG_EXECUTABLE_COMPILE_FEATURES}")
-        endif()
+        endif ()
 
-        add_executable (${_executable}-${r} ${_sources_list})
+        add_executable(${_executable}-${r} ${_sources_list})
         target_compile_definitions(${_executable}-${r} PRIVATE "${_compile_definitions}")
         target_link_libraries(${_executable}-${r} PRIVATE "${_link_libraries}")
         if (_compile_features)
             target_compile_features(${_executable}-${r} PRIVATE "${_compile_features}")
-        endif(_compile_features)
+        endif (_compile_features)
 
-        add_ttg_test_executable(${_executable}-${r})
+        set(_ranksrange 1)
+        if (ADD_TTG_EXECUTABLE_SINGLERANKONLY)
+            list(APPEND _ranksrange 1)
+        else ()
+            list(APPEND _ranksrange 2)
+        endif ()
+        add_ttg_test_executable(${_executable}-${r} "${_ranksrange}")
     endforeach()
 
 endmacro()
