@@ -49,7 +49,6 @@ namespace ttg {
 
         void release_ops(void) {
           while (!m_op_register.empty()) {
-              std::cout << "Destroying OpBase " << (*m_op_register.begin()) << std::endl;
               (*m_op_register.begin())->release();
           }
         }

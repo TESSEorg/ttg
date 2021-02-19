@@ -150,7 +150,6 @@ int main(int argc, char** argv) {
     std::cout << "This is a shared memory version of Wavefront. Please run it on a single process.\n";
     ttg_abort();
   }
-
   M = N = 2048;
   B = 64;
 
