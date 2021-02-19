@@ -5,11 +5,14 @@
 #include <iomanip>
 #include <string>
 #include <memory>
-#include "blockmatrix.h"
+#include "../blockmatrix.h"
 
 #define TABLE_SIZE 524288
 #define CHUNK    1024
 #define CHUNKBIG (32*CHUNK)
+
+#include "ttg.h"
+using namespace ttg;
 
 typedef struct params {
   long LocalTableSize; /* local size of the table may be rounded up >= MinLocalTableSize */
@@ -85,9 +88,6 @@ namespace madness {
       };
   }
 }
-
-#include TTG_RUNTIME_H
-IMPORT_TTG_RUNTIME_NS
 
 using Key = std::pair<std::pair<int, int>, int>; //Proc#, #iterations, #logNumProcs to exchange data
 

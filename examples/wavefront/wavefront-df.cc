@@ -286,38 +286,38 @@ int main(int argc, char** argv) {
             << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1e3 << std::endl;
   }
 
+  ttg_initialize(argc, argv, -1);
   Edge<Key, BlockMatrix<double>> input0("input0"), input1("input1"), input2("input2"), toporleft("toporleft"),
         output1("output1"), output2("output2"), result("result");
   Edge<Key, std::vector<BlockMatrix<double>>> bottom_right0("bottom_right0"), bottom_right1("bottom_right1"),
         bottom_right2("bottom_right2");
 
-  ttg_initialize(argc, argv, -1);
-  {
-    auto i = initiator(m, input0, input1, input2, bottom_right0, bottom_right1, bottom_right2);
-    auto s0 = make_wavefront0(stencil_computation<double>, n_brows, n_bcols, input0, toporleft, bottom_right0, result);
-    auto s1 = make_wavefront1(stencil_computation<double>, n_brows, n_bcols, input1, toporleft, bottom_right1, output1, output2, result);
-    auto s2 = make_wavefront2(stencil_computation<double>, n_brows, n_bcols, input2, output1, output2, bottom_right2, result);
-    auto res = make_result(r2, result);
+  auto i = initiator(m, input0, input1, input2, bottom_right0, bottom_right1, bottom_right2);
+  auto s0 = make_wavefront0(stencil_computation<double>, n_brows, n_bcols, input0, toporleft, bottom_right0, result);
+  auto s1 = make_wavefront1(stencil_computation<double>, n_brows, n_bcols, input1, toporleft, bottom_right1, output1, output2, result);
+  auto s2 = make_wavefront2(stencil_computation<double>, n_brows, n_bcols, input2, output1, output2, bottom_right2, result);
+  auto res = make_result(r2, result);
 
-    auto connected = make_graph_executable(i.get());
-    assert(connected);
-    TTGUNUSED(connected);
-    std::cout << "Graph is connected.\n";
+  auto connected = make_graph_executable(i.get());
+  assert(connected);
+  TTGUNUSED(connected);
+  std::cout << "Graph is connected.\n";
 
-    if (ttg_default_execution_context().rank() == 0) {
-      //std::cout << "==== begin dot ====\n";
-      //std::cout << Dot()(i.get()) << std::endl;
-      //std::cout << "==== end dot ====\n";
+  if (ttg_default_execution_context().rank() == 0) {
+    //std::cout << "==== begin dot ====\n";
+    //std::cout << Dot()(i.get()) << std::endl;
+    //std::cout << "==== end dot ====\n";
 
-      beg = std::chrono::high_resolution_clock::now();
-      i->invoke(Key(0,0));
-      //i->in<0>()->send(Key(0, 0), Control());
-      // This doesn't work!
-      // s->send<0>(Key(0,0), Control());
-    }
+    beg = std::chrono::high_resolution_clock::now();
+    i->invoke(Key(0,0));
+    //i->in<0>()->send(Key(0, 0), Control());
+    // This doesn't work!
+    // s->send<0>(Key(0,0), Control());
+  }
 
-    ttg_execute(ttg_default_execution_context());
-    ttg_fence(ttg_default_execution_context());
+  ttg_execute(ttg_default_execution_context());
+  ttg_fence(ttg_default_execution_context());
+  if (ttg_default_execution_context().rank() == 0) {
     end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "
               << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;

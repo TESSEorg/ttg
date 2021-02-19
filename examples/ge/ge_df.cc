@@ -11,7 +11,7 @@
 #include <execution>
 #define HAS_EXECUTION_HEADER
 #endif
-#include "blockmatrix.h"
+#include "../blockmatrix.h"
 
 // #include <omp.h> //
 
@@ -19,8 +19,10 @@
 //#include "GE/GERecursiveParallelKernel.h"  // contains the recursive but serial kernels
 #include "GE/GERecursiveSerialKernel.h"    // contains the recursive and parallel kernels
 
-#include TTG_RUNTIME_H
-IMPORT_TTG_RUNTIME_NS
+#include "ttg.h"
+using namespace ttg;
+
+#include <madness/world/world.h>
 
 struct Key {
   // ((I, J), K) where (I, J) is the tile coordiante and K is the iteration number
@@ -632,9 +634,8 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
 void ge_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
-  ttg::OpBase::set_trace_all(false);
-
   ttg_initialize(argc, argv);
+  ttg::OpBase::set_trace_all(false);
 
   auto world = ttg_default_execution_context();
 
@@ -653,7 +654,16 @@ int main(int argc, char** argv) {
   int recursive_fan_out;
   int base_size;
   bool verify_results;
-  parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, verify_results);
+  if (argc != 5) {
+    std::cout << "Usage: ./ge-df-<runtime - mad/parsec> <problem size> <blocking factor> <kernel type - iterative/recursive-serial/recursive-parallel> verify-results/do-not-verify-results\n";
+    problem_size = 2048;
+    blocking_factor = 32;
+    kernel_type = "iterative";
+    verify_results = false;
+    std::cout << "Running with problem size: " << problem_size << ", blocking factor: " << blocking_factor << ", kernel type: " << kernel_type << ", verify results: " << verify_results << std::endl;
+  } else {
+    parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, verify_results);
+  }
 
   double* adjacency_matrix_serial;  // Using for the verification (if needed)
   //double* adjacency_matrix_ttg;     // Using for running the blocked implementation of GE algorithm on ttg runtime

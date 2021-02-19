@@ -271,6 +271,11 @@ auto make_wavefront(const funcT& func, Matrix<T>* m, Edge<Key, BlockMatrix<T>>& 
 }
 
 int main(int argc, char** argv) {
+  ttg_initialize(argc, argv, -1);
+  if (ttg_default_execution_context().size() > 1) {
+    std::cout << "This is a shared memory version of Wavefront. Please run it on a single process.\n";
+    ttg_abort();
+  }
   int n_rows, n_cols, B;
   int n_brows, n_bcols;
 
@@ -286,29 +291,29 @@ int main(int argc, char** argv) {
   Edge<Key, BlockMatrix<double>> parent1("parent1"), parent2("parent2");
   std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
 
-  ttg_initialize(argc, argv, -1);
-  {
-    auto s = make_wavefront(stencil_computation<double>, m, parent1, parent2);
-    auto s2 = make_wavefront2(stencil_computation<double>, m, parent1, parent2);
+  auto s = make_wavefront(stencil_computation<double>, m, parent1, parent2);
+  auto s2 = make_wavefront2(stencil_computation<double>, m, parent1, parent2);
 
-    auto connected = make_graph_executable(s.get());
-    assert(connected);
-    TTGUNUSED(connected);
-    std::cout << "Graph is connected.\n";
+  auto connected = make_graph_executable(s.get());
+  assert(connected);
+  TTGUNUSED(connected);
+  std::cout << "Graph is connected.\n";
 
-    if (ttg_default_execution_context().rank() == 0) {
-      // std::cout << "==== begin dot ====\n";
-      // std::cout << Dot()(s.get()) << std::endl;
-      // std::cout << "==== end dot ====\n";
+  if (ttg_default_execution_context().rank() == 0) {
+    // std::cout << "==== begin dot ====\n";
+    // std::cout << Dot()(s.get()) << std::endl;
+    // std::cout << "==== end dot ====\n";
 
-      beg = std::chrono::high_resolution_clock::now();
-      s->in<0>()->send(Key(0, 0), (*m)(0, 0));
-      // This doesn't work!
-      // s->send<0>(Key(0,0), Control());
-    }
+    beg = std::chrono::high_resolution_clock::now();
+    s->in<0>()->send(Key(0, 0), (*m)(0, 0));
+    // This doesn't work!
+    // s->send<0>(Key(0,0), Control());
+  }
 
-    ttg_execute(ttg_default_execution_context());
-    ttg_fence(ttg_default_execution_context());
+  ttg_execute(ttg_default_execution_context());
+  ttg_fence(ttg_default_execution_context());
+    
+  if (ttg_default_execution_context().rank() == 0) {
     end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "
               << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
