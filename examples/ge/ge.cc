@@ -661,12 +661,20 @@ void init_square_matrix(double* adjacency_matrix_ttg, int problem_size, bool ver
 
 void parse_arguments(int argc, char** argv, int& problem_size, int& blocking_factor, string& kernel_type,
                      int& recursive_fan_out, int& base_size, bool& verify_results) {
+  if (argc < 4) {
+    cout << argv[0] << " <problem_size> <blocking_factor> <kernel_type=[recursive-serial or recursive-parallel]> <verify-results>" << endl;
+    ttg_abort();
+  }
   problem_size = atoi(argv[1]);     // e.g., 1024
   blocking_factor = atoi(argv[2]);  // e.g., 16
   kernel_type = argv[3];            // e.g., iterative/recursive-serial/recursive-parallel
-  string verify_res(argv[4]);
-  verify_results = (verify_res == "verify-results");
 
+  if (argc > 4) {
+    string verify_res(argv[4]);
+    verify_results = (verify_res == "verify-results");
+  } else {
+    verify_results = false;
+  }
   //cout << "Problem_size: " << problem_size << ", blocking_factor: " << blocking_factor
   //     << ", kernel_type: " << kernel_type << ", verify_results: " << boolalpha << verify_results;
   if (argc > 5) {
