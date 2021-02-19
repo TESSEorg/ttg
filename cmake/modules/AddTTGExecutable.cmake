@@ -3,7 +3,7 @@
 # See https://opensource.org/licenses/BSD-3-Clause for details.
 
 #
-# add_ttg_executable(X sources_list [RUNTIMES runtime_list] [LINK_LIBRARIES link_libraries] [COMPILE_DEFINITIONS compile_definitions] [COMPILE_FEATURES compile_features] [SINGLERANKONLY])
+# add_ttg_executable(X sources_list [RUNTIMES runtime_list] [LINK_LIBRARIES link_libraries] [COMPILE_DEFINITIONS compile_definitions] [COMPILE_FEATURES compile_features] [SINGLERANKONLY] [TEST_CMDARGS test_cmdline_args])
 #
 # creates executable X-r for every r in runtime_list:
 # * if RUNTIMES is omitted, will use all known runtimes, otherwise use the specified runtimes
@@ -16,7 +16,7 @@ include(AddTTGTestExecutable)
 macro(add_ttg_executable)
 
     set(optionArgs SINGLERANKONLY)
-    set(multiValueArgs RUNTIMES LINK_LIBRARIES COMPILE_DEFINITIONS COMPILE_FEATURES)
+    set(multiValueArgs RUNTIMES LINK_LIBRARIES COMPILE_DEFINITIONS COMPILE_FEATURES TEST_CMDARGS)
     cmake_parse_arguments(ADD_TTG_EXECUTABLE "${optionArgs}" ""
             "${multiValueArgs}" ${ARGN})
 
@@ -81,7 +81,8 @@ macro(add_ttg_executable)
         else ()
             list(APPEND _ranksrange 2)
         endif ()
-        add_ttg_test_executable(${_executable}-${r} "${_ranksrange}")
+
+        add_ttg_test_executable(${_executable}-${r} "${_ranksrange}" "${ADD_TTG_EXECUTABLE_TEST_CMDARGS}")
     endforeach()
 
 endmacro()
