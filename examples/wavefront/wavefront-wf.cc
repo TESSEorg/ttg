@@ -146,8 +146,8 @@ auto make_wavefront(std::shared_ptr<double> m, const funcT& func, Edge<Key, Cont
 
 int main(int argc, char** argv) {
   ttg_initialize(argc, argv, -1);
-  M = N = 16384;
-  B = 128;
+  M = N = 2048;
+  B = 64;
 
   MB = (M / B) + (M % B > 0);
   NB = (N / B) + (N % B > 0);
