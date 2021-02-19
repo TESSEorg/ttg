@@ -74,7 +74,6 @@ auto make_potrf(Matrix<T>* A,
     /* send the tile to outputs */
     for (int m = I+1; m < A->rows(); ++m) {
       /* send tile to trsm */
-      //std::cout << "POTRF(" << key << "): sending output to " << Key{m, J, K} << std::endl;
       ttg::send<1>(Key(m, J, K), tile_kk, out);
     }
   };
