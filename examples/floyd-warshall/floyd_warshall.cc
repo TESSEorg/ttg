@@ -619,10 +619,12 @@ int main(int argc, char** argv) {
   int base_size;
   bool verify_results;
   if (argc != 5) {
+    std::cout << "Usage: ./fw-apsp-<runtime - mad/parsec> <problem size> <blocking factor> <kernel type - iterative/recursive-serial/recursive-parallel> verify-results/do-not-verify-results\n";
     problem_size = 2048;
     blocking_factor = 32;
     kernel_type = "iterative";
     verify_results = false;
+    std::cout << "Running with problem size: " << problem_size << ", blocking factor: " << blocking_factor << ", kernel type: " << kernel_type << ", verify results: " << verify_results << std::endl;
   } else {
     parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, verify_results);
   }

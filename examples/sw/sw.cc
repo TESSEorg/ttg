@@ -223,9 +223,11 @@ int main(int argc, char* argv[]) {
   bool verify;
 
   if (argc < 6) {
+    std::cout << "Usage: ./sw-<runtime - mad/parsec> -n <string length> -b <base size> <verify - 1/0>\n"; 
     problem_size = 1024;
     block_size = 32;
-    verify = false;    
+    verify = false;
+    std::cout << "Running with string length: " << problem_size << ", block size: " << block_size << ", verify: " << verify << std::endl;
   }
   else {
     problem_size = std::atoi(argv[2]);
