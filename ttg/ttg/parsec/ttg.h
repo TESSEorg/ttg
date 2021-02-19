@@ -184,7 +184,6 @@ namespace ttg_parsec {
 
     virtual void destroy() override {
       if (is_valid()) {
-        std::cout << "Destroying parsec::WorldImpl " << this << std::endl;
         release_ops();
         ttg::detail::deregister_world(*this);
         parsec_taskpool_free(tpool);
@@ -1215,7 +1214,6 @@ namespace ttg_parsec {
     ~Op() { release(); }
 
     virtual void release() override {
-      std::cout << "Op dtor " << this << std::endl;
       if (!alive) {
         return;
       }
