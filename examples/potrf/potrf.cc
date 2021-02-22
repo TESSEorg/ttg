@@ -1,10 +1,10 @@
-
+#define TTG_USE_PARSEC 1
 
 #include <ttg.h>
 //#include <madness.h>
 #include "../blockmatrix.h"
 
-#include <mkl.h>
+#include <lapack.hh>
 
 // needed for madness::hashT and xterm_debug
 #include <madness/world/world.h>
@@ -63,10 +63,10 @@ auto make_potrf(Matrix<T>* A,
     const int K = key.K;
     assert(I == J);
     assert(I == K);
-    // TODO: apply potrf to tile!
-    //LAPACKE_potrf();
 
-    std::cout << "POTRF(" << key << ")" << std::endl;
+    lapack::potrf(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.get(), tile_kk.rows());
+
+    //std::cout << "POTRF(" << key << ")" << std::endl;
 
     /* tile is done */
     ttg::send<0>(key, tile_kk, out);
@@ -74,7 +74,7 @@ auto make_potrf(Matrix<T>* A,
     /* send the tile to outputs */
     for (int m = I+1; m < A->rows(); ++m) {
       /* send tile to trsm */
-      std::cout << "POTRF(" << key << "): sending output to " << Key{m, J, K} << std::endl;
+      //std::cout << "POTRF(" << key << "): sending output to " << Key{m, J, K} << std::endl;
       ttg::send<1>(Key(m, J, K), tile_kk, out);
     }
   };
@@ -101,27 +101,41 @@ auto make_trsm(Matrix<T>* A,
     const int J = key.J;
     const int K = key.K;
     assert(I > K); // we're below (k, k) in row i, column j [k+1 .. NB, k]
-    // TODO: apply trsm to tile!
 
-    std::cout << "TRSM(" << key << ")" << std::endl;
+    /* No support for different tile sizes yet */
+    assert(tile_mk.rows() == tile_kk.rows());
+    assert(tile_mk.cols() == tile_kk.cols());
+
+    auto m = tile_mk.rows();
+
+    blas::trsm(blas::Layout::RowMajor,
+               blas::Side::Right,
+               lapack::Uplo::Lower,
+               blas::Op::Trans,
+               blas::Diag::NonUnit,
+               tile_kk.rows(), m, 1.0,
+               tile_kk.get(), m,
+               tile_mk.get(), m);
+
+    //std::cout << "TRSM(" << key << ")" << std::endl;
 
     /* tile is done */
     ttg::send<0>(key, tile_kk, out);
 
     //if (I+1 < A->rows()) {
       /* send tile to syrk on diagonal */
-      std::cout << "TRSM(" << key << "): sending output to diag " << Key{I, I, K} << std::endl;
+      //std::cout << "TRSM(" << key << "): sending output to diag " << Key{I, I, K} << std::endl;
       ttg::send<1>(Key(I, I, K), tile_mk, out);
 
       /* send the tile to all gemms across in row i */
       for (int n = J+1; n < I; ++n) {
-        std::cout << "TRSM(" << key << "): sending output to row " << Key{I, n, K} << std::endl;
+        //std::cout << "TRSM(" << key << "): sending output to row " << Key{I, n, K} << std::endl;
         ttg::send<2>(Key(I, n, K), tile_mk, out);
       }
 
       /* send the tile to all gemms down in column i */
       for (int m = I+1; m < A->rows(); ++m) {
-        std::cout << "TRSM(" << key << "): sending output to col " << Key{m, I, K} << std::endl;
+        //std::cout << "TRSM(" << key << "): sending output to col " << Key{m, I, K} << std::endl;
         ttg::send<3>(Key(m, I, K), tile_mk, out);
       }
     //}
@@ -149,17 +163,29 @@ auto make_syrk(Matrix<T>* A,
     assert(I == J);
     assert(I > K);
     assert(I+1 < A->rows());
-    // TODO: apply syrk to tile!
 
-    std::cout << "SYRK(" << key << ")" << std::endl;
+    /* No support for different tile sizes yet */
+    assert(tile_mk.rows() == tile_mm.rows());
+    assert(tile_mk.cols() == tile_mm.cols());
+
+    auto m = tile_mk.rows();
+
+    blas::syrk(blas::Layout::RowMajor,
+               lapack::Uplo::Lower,
+               blas::Op::NoTrans,
+               tile_mk.rows(), m, -1.0,
+               tile_mk.get(), m, 1.0,
+               tile_mm.get(), m);
+
+    //std::cout << "SYRK(" << key << ")" << std::endl;
 
     if (I == K+1) {
       /* send the tile to potrf */
-      std::cout << "SYRK(" << key << "): sending output to POTRF " << Key{I, I, K+1} << std::endl;
+      //std::cout << "SYRK(" << key << "): sending output to POTRF " << Key{I, I, K+1} << std::endl;
       ttg::send<0>(Key(I, I, K+1), tile_mm, out);
     } else {
       /* send output to next syrk */
-      std::cout << "SYRK(" << key << "): sending output to SYRK " << Key{I, I, K+1} << std::endl;
+      //std::cout << "SYRK(" << key << "): sending output to SYRK " << Key{I, I, K+1} << std::endl;
       ttg::send<1>(Key(I, I, K+1), tile_mm, out);
     }
 
@@ -189,18 +215,31 @@ auto make_gemm(Matrix<T>* A,
     const int J = key.J;
     const int K = key.K;
     assert(I != J && I > K && J > K);
-    // TODO: apply gemm to tile!
 
-    std::cout << "GEMM(" << key << ")" << std::endl;
+    /* No support for different tile sizes yet */
+    assert(tile_nk.rows() == tile_mk.rows() && tile_nk.rows() == tile_nm.rows());
+    assert(tile_nk.cols() == tile_mk.cols() && tile_nk.cols() == tile_nm.cols());
+
+    auto m = tile_nk.rows();
+
+    blas::gemm(blas::Layout::RowMajor,
+               blas::Op::NoTrans,
+               blas::Op::Trans,
+               m, m, m, -1.0,
+               tile_nk.get(), m,
+               tile_mk.get(), m, 1.0,
+               tile_nm.get(), m);
+
+    //std::cout << "GEMM(" << key << ")" << std::endl;
 
     /* send the tile to output */
     if (J == K+1) {
       /* send the tile to trsm */
-      std::cout << "GEMM(" << key << "): sending output to TRSM " << Key{I, J, K+1} << std::endl;
+      //std::cout << "GEMM(" << key << "): sending output to TRSM " << Key{I, J, K+1} << std::endl;
       ttg::send<0>(Key(I, J, K+1), tile_nm, out);
     } else {
       /* send the tile to the next gemm */
-      std::cout << "GEMM(" << key << "): sending output to GEMM " << Key{I, J, K+1} << std::endl;
+      //std::cout << "GEMM(" << key << "): sending output to GEMM " << Key{I, J, K+1} << std::endl;
       ttg::send<1>(Key(I, J, K+1), tile_nm, out);
     }
   };
@@ -244,7 +283,7 @@ template <typename T>
 auto make_result(Matrix<T> *A, const ttg::Edge<Key, BlockMatrix<T>>& result) {
   auto f = [](const Key& key, BlockMatrix<T>&& tile, std::tuple<>& out) {
     /* TODO: is this node actually needed? */
-    std::cout << "FINAL " << key << std::endl;
+    //std::cout << "FINAL " << key << std::endl;
   };
 
   return ttg::wrap(f, ttg::edges(result), ttg::edges(), "Final Output", {"result"}, {});
@@ -272,6 +311,7 @@ int main(int argc, char **argv)
   int n_cols = (M / NB) + (M % NB > 0);
 
   Matrix<double>* A = new Matrix<double>(n_rows, n_cols, NB, NB);
+  A->fill();
 
   /* TODO: how to properly initialize A? */
 
