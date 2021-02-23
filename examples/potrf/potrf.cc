@@ -6,6 +6,8 @@
 
 #include <lapack.hh>
 
+#include "core_dplgsy.h"
+
 // needed for madness::hashT and xterm_debug
 #include <madness/world/world.h>
 
@@ -47,6 +49,19 @@ namespace std {
 std::ostream& operator<<(std::ostream& s, const Key& key) {
   s << "Key(" << key.I << "," << key.J << "," << key.K << ")";
   return s;
+}
+
+void plgsy(Matrix<double>* A)
+{
+  auto bump = A->rows();
+  auto seed = 42;
+  for (int i = 0; i < A->rows(); ++i) {
+    for (int j = 0; j < A->cols(); ++j) {
+      auto tile = (*A)(i, j);
+      CORE_dplgsy(bump, tile.rows(), tile.cols(), tile.get(), tile.rows(),
+                  A->rows(), i*tile.rows(), j*tile.cols(), seed);
+    }
+  }
 }
 
 template <typename T>
@@ -162,7 +177,6 @@ auto make_syrk(Matrix<T>* A,
     const int K = key.K;
     assert(I == J);
     assert(I > K);
-    assert(I+1 < A->rows());
 
     /* No support for different tile sizes yet */
     assert(tile_mk.rows() == tile_mm.rows());
@@ -311,9 +325,6 @@ int main(int argc, char **argv)
   int n_cols = (M / NB) + (M % NB > 0);
 
   Matrix<double>* A = new Matrix<double>(n_rows, n_cols, NB, NB);
-  A->fill();
-
-  /* TODO: how to properly initialize A? */
 
   ttg::Edge<Key, BlockMatrix<double>> potrf_trsm("potrf_trsm"),
                                       trsm_syrk("trsm_syrk"),
@@ -324,6 +335,9 @@ int main(int argc, char **argv)
                                       trsm_gemm_row("trsm_gemm_row"),
                                       trsm_gemm_col("trsm_gemm_col"),
                                       result("result");
+
+  /* initialize the matrix */
+  plgsy(A);
 
   auto op_init  = initiator(A, syrk_potrf, gemm_trsm, syrk_syrk, gemm_gemm);
   auto op_potrf = make_potrf(A, syrk_potrf, potrf_trsm, result);
@@ -360,6 +374,7 @@ int main(int argc, char **argv)
               << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
   }
 
+  delete A;
   ttg::ttg_finalize();
   return 0;
 }
