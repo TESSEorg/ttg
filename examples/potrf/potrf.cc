@@ -19,8 +19,9 @@ struct Key {
 
   madness::hashT hash() const { return hash_val; }
   void rehash() {
-    std::hash<int> int_hasher;
-    hash_val = int_hasher(I) ^ int_hasher(J) ^ int_hasher(K);
+    hash_val = (static_cast<madness::hashT>(I) << 48)
+             ^ (static_cast<madness::hashT>(J) << 32)
+             ^ (K << 16);
   }
 
   // Equality test
