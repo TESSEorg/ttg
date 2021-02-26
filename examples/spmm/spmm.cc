@@ -579,7 +579,7 @@ std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
 
 int main(int argc, char **argv) {
 
-  ttg_initialize(argc, argv, 4);
+  ttg_initialize(argc, argv, -1);
 
 //  using mpqc::Debugger;
 //  auto debugger = std::make_shared<Debugger>();
