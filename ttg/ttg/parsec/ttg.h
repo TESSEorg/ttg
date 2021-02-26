@@ -653,7 +653,7 @@ namespace ttg_parsec {
     void set_arg_local_impl(const Key &key, Value &&value) {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
-      constexpr const bool valueT_is_Const = ::std::is_const_v<::std::remove_reference_t<Value>>;
+      constexpr const bool value_is_Const = ::std::is_const_v<::std::remove_reference_t<Value>>;
 
       if (tracing()) {
         if constexpr (!valueT_is_Void) {
@@ -711,7 +711,6 @@ namespace ttg_parsec {
       }
 
       parsec_data_copy_t *copy = NULL;
-      assert(parsec_ttg_caller != NULL);
 
       if constexpr (!valueT_is_Void) {
         if (NULL != task->parsec_task.data[i].data_in) {
@@ -724,13 +723,15 @@ namespace ttg_parsec {
         //    - if it is a const type, then the source task cannot modify it, and
         //    - if the target task uses the data as read-only, it is not necessary to
         //    - create a new data copy and we should reuse it
-        if constexpr (valueT_is_Const) {
-          for(int j = 0; j < parsec_ttg_caller->task_class->nb_flows; j++) {
-            if (NULL != parsec_ttg_caller->data[j].data_in &&
-                parsec_ttg_caller->data[j].data_in->device_private == static_cast<const void *>(&value)) {
-              copy = parsec_ttg_caller->data[j].data_in;
-              PARSEC_OBJ_RETAIN(copy);
-              break;
+        if constexpr (value_is_Const) {
+          if( NULL != parsec_ttg_caller ) {
+            for(int j = 0; j < parsec_ttg_caller->task_class->nb_flows; j++) {
+              if (NULL != parsec_ttg_caller->data[j].data_in &&
+                  parsec_ttg_caller->data[j].data_in->device_private == static_cast<const void *>(&value)) {
+                copy = parsec_ttg_caller->data[j].data_in;
+                PARSEC_OBJ_RETAIN(copy);
+                break;
+              }
             }
           }
         }
