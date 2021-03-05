@@ -1,6 +1,6 @@
 #include <array>
 
-#include "../ttg/ttg.h"
+#include "ttg.h"
 
 class Fred {
   int value;
@@ -41,7 +41,7 @@ std::ostream& operator<<(std::ostream& s, const std::vector<T>& vec) {
   return s;
 }
 
-#include "../ttg/util/serialization.h"
+#include "ttg/util/serialization.h"
 
 // Test code written as if calling from C
 template <typename T>
@@ -56,7 +56,6 @@ void test_serialization(const T& t) {
   // Serialize into a buffer
   char buf[256];
   void* buf_ptr = (void*)buf;
-  d->pack_header(vt, 0, &buf_ptr);
   uint64_t pos = 0;
   pos = d->pack_payload(vt, sizeof(T), pos, buf_ptr);
   printf("serialized ");
@@ -64,7 +63,6 @@ void test_serialization(const T& t) {
 
   T g_obj;
   void* g = (void*)&g_obj;
-  d->unpack_header(g, 0, (const void*)buf);
   d->unpack_payload(g, sizeof(T), 0, (const void*)buf);
   printf("deserialized ");
   d->print(g);

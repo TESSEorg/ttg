@@ -1,5 +1,6 @@
+include(AddTTGExecutable)
+
 # serialization (needs MADNESS)
 if (TARGET MADworld)
-  add_executable (serialization serialization.cc)
-  target_link_libraries(serialization LINK_PUBLIC ttg MADworld)
+  add_ttg_executable(serialization serialization.cc RUNTIMES "mad" SINGLERANKONLY)
 endif(TARGET MADworld)

@@ -35,14 +35,6 @@ include(AddCustomTargetSubproject)
 ##########################
 #### prerequisites
 ##########################
-# MRA code needs CBLAS
-find_package(CBLAS)
-if (CBLAS_FOUND)
-  message(STATUS "** CBLAS_LIBRARIES = ${CBLAS_LIBRARIES}")
-  message(STATUS "** CBLAS_INCLUDE_DIR = ${CBLAS_INCLUDE_DIR}")
-  message(STATUS "** CBLAS_INCLUDE_FILE = ${CBLAS_INCLUDE_FILE}")
-endif()
-
 # sparse tensor algorithms need Eigen
 find_package(Eigen3)
 message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
@@ -53,7 +45,7 @@ if (EIGEN3_FOUND)
 endif (EIGEN3_FOUND)
 # Boost
 include(FindOrFetchBoost)
-# block-sparse tensor algorithms also need BTAS and (header-only) Boost.Iterator and Boost.Containers
+# BTAS brings in linear algebra (BLAS++/LAPACK++)
 include(FindOrFetchBTAS)
 # OpenMP may also be used by some examples
 find_package(OpenMP COMPONENTS CXX)
@@ -78,6 +70,9 @@ endif(TARGET MADworld)
 #### Components
 ##########################
 add_subdirectory(ttg)
+
+enable_testing(true)
+add_custom_target_subproject(ttg check USES_TERMINAL COMMAND ${CMAKE_CTEST_COMMAND} -V -R "ttg/test/" )
 add_subdirectory(tests)
 add_subdirectory(examples)
 add_subdirectory(doc)
