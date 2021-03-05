@@ -6,7 +6,7 @@
 * Unlike earlier CI setups, there is no need to cache TTG prerequisites; default system-wide packages are used for most prerequisites, and the rest is compiled from source every time. 
 * Doxygen documentation deployment uses a Github token that is defined as variable `GH_TTG_TOKEN` in GHA's TTG repo settings' [secrets](https://github.com/TESSEorg/ttg/settings/secrets/actions).
 
-# Debugging Travis-CI jobs
+# Debugging GitHub Actions jobs
 
 ## Local debugging
 

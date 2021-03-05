@@ -11,10 +11,10 @@ and for Markdown pages (with `.md` extension). The use of Markdown is encouraged
 ## Administration
 
 - Generation and deployment of TTG's documentation is performed by successful
-Travis-CI jobs, using [this script](https://github.com/TESSEorg/ttg/blob/master/bin/deploy-linux.sh). The script
-assembles [the TTG website](https://tesseorg.github.io/ttg) by combining
+CI jobs defined [here](https://github.com/TESSEorg/ttg/blob/master/.github/workflows/cmake.yml). The `Build+Deploy Dox`
+step assembles [the TTG website](https://tesseorg.github.io/ttg) by combining
   - the frontmatter: currently just TTG's [README.md](https://github.com/TESSEorg/ttg/blob/master/README.md) file),
   - the rest of the website content located on the [gh-pages-template branch](https://github.com/TESSEorg/ttg/tree/gh-pages-template)
 of the TTG repo
   - the Doxygen html documentation
-- The deployment script is invoked via [.travis.yml](https://github.com/TESSEorg/ttg/blob/master/.travis.yml).
+- Dox deployment uses a GitHub token that is defined as variable `GH_TTG_TOKEN` in GHA's TTG repo settings' [secrets](https://github.com/TESSEorg/ttg/settings/secrets/actions).
