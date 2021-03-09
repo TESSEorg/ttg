@@ -575,8 +575,6 @@ std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
   return std::make_tuple(norm_2_square, norm_inf);
 }
 
-#include "../ttg_matrix.h"
-
 int main(int argc, char **argv) {
 
   ttg_initialize(argc, argv, 4);
@@ -663,32 +661,6 @@ int main(int argc, char **argv) {
     // ready, go! need only 1 kick, so must be done by 1 thread only
     if (ttg_default_execution_context().rank() == 0) control.start();
 
-    //ttg_execute(ttg_default_execution_context());
-    //ttg_fence(ttg_default_execution_context());
-
-    ///////////////////////////////////////////////////////////////////////////
-    // copy matrix using ttg::Matrix
-    Matrix<blk_t> aflow;
-    aflow << A;
-    SpMatrix<> Acopy(A.rows(), A.cols());  // resizing will be automatic in the future when shape computation is complete .. see Matrix::operator>>
-    auto copy_status = aflow >> Acopy;
-    assert(!has_value(copy_status));
-    aflow.pushall();
-    Control control2(ttg_ctl_edge(ttg_default_execution_context()));
-    {
-      //std::cout << "matrix copy using ttg::Matrix" << std::endl;
-//      if (ttg_default_execution_context().rank() == 0) std::cout << Dot{}(&control2) << std::endl;
-
-      // ready to run!
-      auto connected = make_graph_executable(&control2);
-      assert(connected);
-      TTGUNUSED(connected);
-
-      // ready, go! need only 1 kick, so must be done by 1 thread only
-      if (ttg_default_execution_context().rank() == 0) control2.start();
-    }
-    //////////////////////////////////////////////////////////////////////////
-
     ttg_execute(ttg_default_execution_context());
     ttg_fence(ttg_default_execution_context());
 
@@ -704,22 +676,6 @@ int main(int argc, char **argv) {
       if (norm_inf > 1e-9) {
         std::cout << "Cref:\n" << Cref << std::endl;
         std::cout << "C:\n" << C << std::endl;
-        ttg_abort();
-      }
-    }
-
-    // validate Acopy=A against the reference output
-    assert(has_value(copy_status));
-    if (ttg_default_execution_context().rank() == 0) {
-      double norm_2_square, norm_inf;
-      std::tie(norm_2_square, norm_inf) = norms<blk_t>(Acopy - A);
-      std::cout << "||Acopy - A||_2      = " << std::sqrt(norm_2_square) << std::endl;
-      std::cout << "||Acopy - A||_\\infty = " << norm_inf << std::endl;
-      if(::ttg::tracing()) {
-        std::cout << "Acopy (" << static_cast<void *>(&Acopy) << "):\n" << Acopy << std::endl;
-        std::cout << "A (" << static_cast<void *>(&A) << "):\n" << A << std::endl;
-      }
-      if (norm_inf != 0) {
         ttg_abort();
       }
     }
