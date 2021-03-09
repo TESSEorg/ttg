@@ -1,7 +1,7 @@
 // to be #include'd within runtime::ttg namespace
 
-#ifndef CXXAPI_WRAP_H
-#define CXXAPI_WRAP_H
+#ifndef TTG_COMMON_WRAP_H
+#define TTG_COMMON_WRAP_H
 
 // Class to wrap a callable with signature
 //
@@ -267,4 +267,4 @@ inline auto aliasname(Args&&... args) \
 
 TTG_UTIL_ALIAS_TEMPLATE_FUNCTION(make_op, wrap);
 
-#endif  // CXXAPI_WRAP_H
+#endif  // TTG_COMMON_WRAP_H

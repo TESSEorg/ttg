@@ -5,16 +5,19 @@
 #ifndef TTG_MATRIX_H
 #define TTG_MATRIX_H
 
+#include <Eigen/SparseCore>
+
 #include <vector>
 
 namespace ttg {
 
   namespace matrix {
 
-  // matrix shape = maps {column,row} index to {row,column} indices
-  class Shape : public std::vector<std::vector<long>> {
-    using base_t = std::vector<std::vector<long>>;
-   public:
+    // matrix shape = maps {column,row} index to {row,column} indices
+    class Shape : public std::vector<std::vector<long>> {
+      using base_t = std::vector<std::vector<long>>;
+
+     public:
     enum class Type {col2row, row2col, invalid};
     Shape() = default;
     ~Shape() = default;

@@ -36,7 +36,7 @@ set(ttg-impl-header
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/terminal.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/traverse.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/world.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/wrap.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/common/wrap.h
     )
 set(ttg-header
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg.h

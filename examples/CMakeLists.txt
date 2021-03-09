@@ -8,6 +8,7 @@ if (TARGET eigen3)
     # MADworld used for MADNESS serialization
     add_ttg_executable(spmm spmm/spmm.cc LINK_LIBRARIES eigen3 MADworld)
     add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES eigen3 BTAS Boost::boost MADworld COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1)
+    add_ttg_executable(test-matrix matrix/test-matrix.cc LINK_LIBRARIES eigen3 BTAS Boost::boost MADworld COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1)
 endif(TARGET eigen3)
 
 if (TARGET MADworld)

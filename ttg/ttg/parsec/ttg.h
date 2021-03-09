@@ -1341,7 +1341,8 @@ namespace ttg_parsec {
 
   constexpr const ttg::Runtime ttg_runtime = ttg::Runtime::PaRSEC;
 
-#include "ttg/wrap.h"
+#include "ttg/common/ctl.h"
+#include "ttg/common/wrap.h"
 
 }  // namespace ttg_parsec
 

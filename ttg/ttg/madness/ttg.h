@@ -11,17 +11,18 @@
 
 /* include ttg header to make symbols available in case this header is included directly */
 #include "../../ttg.h"
+#include "ttg/base/keymap.h"
+#include "ttg/base/op.h"
+#include "ttg/func.h"
+#include "ttg/op.h"
+#include "ttg/runtimes.h"
+#include "ttg/terminal.h"
 #include "ttg/util/bug.h"
 #include "ttg/util/hash.h"
-#include "ttg/util/meta.h"
-#include "ttg/world.h"
-#include "ttg/base/op.h"
-#include "ttg/base/keymap.h"
-#include "ttg/op.h"
-#include "ttg/util/void.h"
-#include "ttg/runtimes.h"
 #include "ttg/util/macro.h"
-#include "ttg/func.h"
+#include "ttg/util/meta.h"
+#include "ttg/util/void.h"
+#include "ttg/world.h"
 
 #include <array>
 #include <cassert>
@@ -1070,7 +1071,8 @@ namespace ttg_madness {
 
   constexpr const ttg::Runtime ttg_runtime = ttg::Runtime::MADWorld;
 
-#include "ttg/wrap.h"
+#include "ttg/common/ctl.h"
+#include "ttg/common/wrap.h"
 
 }  // namespace ttg_madness
 
