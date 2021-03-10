@@ -296,6 +296,77 @@ struct input_reducers {
 };
 template<typename ... valueTs> using input_reducers_t = typename input_reducers<valueTs...>::type;
 
+///////////////////////////////
+//Defining invoke type for OpBase for handling pull requests.
+//////////////////////////////
+//template <typename Key, typename... Ks>
+//using AllKeys = typename std::enable_if<
+//  std::conjunction<std::is_convertible<Ks, Key>...>::value>::type;
+/*
+template<typename Key, typename Enabler = void, typename ... Keys>
+struct invoke_callback;
+
+template<typename Key, typename ... Keys>
+struct invoke_callback<Key, std::enable_if_t<!is_void_v<Key> &&
+                              (std::is_same<Key, Keys>::value && ...)>, Keys...>
+{
+  using type = std::function<void(Key const&, Keys const&...)>;
+};
+template<typename Key, typename ... Keys>
+struct invoke_callback<Key, std::enable_if_t<is_void_v<Key>>, Keys...> {
+using type = std::function<void()>;
+};
+template <typename Key, typename ... Keys> using invoke_callback_t =
+  typename invoke_callback<Key, Keys...>::type;
+*/
+
+//Callback type for generator/reader Ops which are implemented as pure tasks.
+template<typename Key, typename Enabler = void>
+struct invoke_puretask_callback;
+
+template<typename Key>
+struct invoke_puretask_callback<Key, std::enable_if_t<!is_void_v<Key>>>
+{
+  using type = std::function<void(std::tuple<Key, Key> const&, std::size_t const)>;
+};
+template<typename Key>
+struct invoke_puretask_callback<Key, std::enable_if_t<is_void_v<Key>>> {
+using type = std::function<void()>;
+};
+template <typename Key> using invoke_puretask_callback_t =
+  typename invoke_puretask_callback<Key>::type;
+
+//Callback type for pull Ops.
+template<typename Key, typename Enabler = void>
+struct invoke_callback;
+
+template<typename Key>
+struct invoke_callback<Key, std::enable_if_t<!is_void_v<Key>>>
+{
+  using type = std::function<void(Key const&)>;
+};
+template<typename Key>
+struct invoke_callback<Key, std::enable_if_t<is_void_v<Key>>> {
+using type = std::function<void()>;
+};
+template <typename Key> using invoke_callback_t =
+  typename invoke_callback<Key>::type;
+
+///////////////////
+//Defining a mapping function for indexing into data structures using pull terminals
+//////////////////
+template<typename Key, typename Enabler = void>
+struct mapper_function;
+template<typename Key>
+struct mapper_function<Key, std::enable_if_t<!is_void_v<Key>>> {
+  using type = std::function<std::vector<Key>(const Key &)>;
+};
+template<typename Key>
+struct mapper_function<Key, std::enable_if_t<is_void_v<Key>>> {
+  using type = std::function<void()>;
+};
+template <typename Key> using mapper_function_t = typename mapper_function<Key>::type;
+
 }  // only used by deep internals
 
 }  // namespace meta
