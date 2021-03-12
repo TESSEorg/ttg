@@ -2,9 +2,9 @@
 #define TTG_BASE_OP_H
 
 #include <cstdint>
-#include <string>
 #include <iostream>
 #include <sstream>
+#include <string>
 #include <vector>
 
 #include "ttg/base/terminal.h"
@@ -19,16 +19,16 @@ namespace ttg {
       return trace;
     }
 
-		inline bool &op_base_lazy_pull_accessor(void) {
-			static bool lazy_pull = false;
-			return lazy_pull;
-		}
-  } // namespace detail
+    inline bool &op_base_lazy_pull_accessor(void) {
+      static bool lazy_pull = false;
+      return lazy_pull;
+    }
+  }  // namespace detail
 
   /// Provides basic information and graph connectivity (eventually statistics,
   /// etc.)
   class OpBase {
-  private:
+   private:
     uint64_t instance_id;  //< Unique ID for object
 
     std::string name;
@@ -40,7 +40,7 @@ namespace ttg {
     OpBase *containing_composite_op;  //< If part of a composite, points to composite operator
 
     bool executable;
-		bool lazy_pull_instance;
+    bool lazy_pull_instance = false;
 
     // Default copy/move/assign all OK
     static uint64_t next_instance_id() {
@@ -48,24 +48,24 @@ namespace ttg {
       return id++;
     }
 
-  protected:
+   protected:
     void set_input(size_t i, TerminalBase *t) {
-      if (i >= inputs.size()) throw(name+":OpBase: out of range i setting input");
+      if (i >= inputs.size()) throw(name + ":OpBase: out of range i setting input");
       inputs[i] = t;
     }
 
     void set_output(size_t i, TerminalBase *t) {
-      if (i >= outputs.size()) throw(name+":OpBase: out of range i setting output");
+      if (i >= outputs.size()) throw(name + ":OpBase: out of range i setting output");
       outputs[i] = t;
     }
 
     template <bool out, typename terminalT, std::size_t i, typename setfuncT>
     void register_terminal(terminalT &term, const std::string &name, const setfuncT setfunc) {
       term.set(this, i, name, detail::demangled_type_name<typename terminalT::key_type>(),
-              detail::demangled_type_name<typename terminalT::value_type>(),
-              out ? TerminalBase::Type::Write
-                  : (std::is_const<typename terminalT::value_type>::value ? TerminalBase::Type::Read
-                                                                          : TerminalBase::Type::Consume));
+               detail::demangled_type_name<typename terminalT::value_type>(),
+               out ? TerminalBase::Type::Write
+                   : (std::is_const<typename terminalT::value_type>::value ? TerminalBase::Type::Read
+                                                                           : TerminalBase::Type::Consume));
       (this->*setfunc)(i, &term);
     }
 
@@ -89,7 +89,7 @@ namespace ttg {
     template <typename terminalsT, typename namesT>
     void register_output_terminals(terminalsT &terms, const namesT &names) {
       register_terminals<true>(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, names,
-                              &OpBase::set_output);
+                               &OpBase::set_output);
     }
 
     // Used by composite op ... terminalsT will be a tuple of pointers to terminals
@@ -105,13 +105,13 @@ namespace ttg {
       set_terminals(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, setfunc);
     }
 
-  private:
+   private:
     OpBase(const OpBase &) = delete;
     OpBase &operator=(const OpBase &) = delete;
     OpBase(OpBase &&) = delete;
     OpBase &operator=(OpBase &&) = delete;
 
-  public:
+   public:
     OpBase(const std::string &name, size_t numins, size_t numouts)
         : instance_id(next_instance_id())
         , name(name)
@@ -127,7 +127,7 @@ namespace ttg {
 
     virtual ~OpBase() = default;
 
-    virtual void release() { }
+    virtual void release() {}
 
     /// Sets trace for all operations to value and returns previous setting
     static bool set_trace_all(bool value) {
@@ -135,7 +135,7 @@ namespace ttg {
       return value;
     }
 
-	static bool set_lazy_pull(bool value) {
+    static bool set_lazy_pull(bool value) {
       std::swap(ttg::detail::op_base_lazy_pull_accessor(), value);
       return value;
     }
@@ -145,15 +145,15 @@ namespace ttg {
       return value;
     }
 
-		bool set_lazy_pull_instance(bool value) {
-			std::swap(lazy_pull_instance, value);
-			return value;
-		}
+    bool set_lazy_pull_instance(bool value) {
+      std::swap(lazy_pull_instance, value);
+      return value;
+    }
 
     /// Returns true if tracing set for either this instance or all instances
     bool get_trace() { return ttg::detail::op_base_trace_accessor() || trace_instance; }
     bool tracing() { return get_trace(); }
-		bool is_lazy_pull() { return ttg::detail::op_base_lazy_pull_accessor() || lazy_pull_instance; }
+    bool is_lazy_pull() { return ttg::detail::op_base_lazy_pull_accessor() || lazy_pull_instance; }
 
     void set_is_composite(bool value) { is_composite = value; }
     bool get_is_composite() const { return is_composite; }
@@ -171,9 +171,7 @@ namespace ttg {
     const std::string &get_name() const { return name; }
 
     /// Gets the demangled class name (uses RTTI)
-    std::string get_class_name() const {
-      return boost::core::demangle(typeid(*this).name());
-    }
+    std::string get_class_name() const { return boost::core::demangle(typeid(*this).name()); }
 
     /// Returns the vector of input terminals
     const std::vector<TerminalBase *> &get_inputs() const { return inputs; }
@@ -221,20 +219,18 @@ namespace ttg {
     /// Asserts that this is executable
     /// Use this macro from inside a derived class
     /// @throw std::logic_error if this is not executable
-#define TTG_OP_ASSERT_EXECUTABLE() \
-      do { \
-        if (!this->is_executable()) { \
-          std::ostringstream oss; \
-          oss << "Op is not executable at " << __FILE__ << ":" << __LINE__; \
-          throw std::logic_error(oss.str().c_str()); \
-        } \
-      } while (0);
-
+#define TTG_OP_ASSERT_EXECUTABLE()                                      \
+  do {                                                                  \
+    if (!this->is_executable()) {                                       \
+      std::ostringstream oss;                                           \
+      oss << "Op is not executable at " << __FILE__ << ":" << __LINE__; \
+      throw std::logic_error(oss.str().c_str());                        \
+    }                                                                   \
+  } while (0);
   };
-
 
   inline void OpBase::make_executable() { executable = true; }
 
-} // namespace ttg
+}  // namespace ttg
 
-#endif // TTG_BASE_OP_H
+#endif  // TTG_BASE_OP_H

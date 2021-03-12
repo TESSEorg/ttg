@@ -22,19 +22,19 @@ namespace ttg {
 
     template<class T, std::enable_if_t<!std::is_same<std::decay_t<T>,
                                                      Container>{}, bool> = true>
+    //Store a pointer to the user's container in std::any, no copies
     Container(T &t) : std::any(&t)
                          ,get([](keyT const& key, Container const& self) {
-                           std::cout << "Getting " << key.first << ":" << key.second << std::endl;
-                           auto d = (std::any_cast<T*>(self))->at(key);
-                           return d;
+                           //at method returns a const ref to the item.
+                           return (std::any_cast<T*>(self))->at(key);
                          })
       {}
   };
-  
-  template <typename keyT> struct Container<keyT, void> {
+
+  template <typename valueT> struct Container<void, valueT> {
     std::function<void ()> get = nullptr;
   };
-  
+
   template <typename keyT, typename valueT>
   class Out;  // forward decl
   template <typename keyT = void, typename valueT = void>
@@ -197,37 +197,6 @@ namespace ttg {
     Type get_type() const override {
       return std::is_const<valueT>::value ? TerminalBase::Type::Read : TerminalBase::Type::Consume;
     }
-	
-	template <typename Key>
-    void invoke_predecessor(Key &key) {
-      for (auto && predecessor : predecessors_) {
-        static_cast<Out<Key, void>*>(predecessor)->
-          invoke_callback(key);
-      }
-    }
-
-    template <typename Key>
-    void invoke_puretask_predecessor(const std::tuple<Key, Key> &keys,
-                                     std::size_t const i) {
-      //TODO: What happens when there are multiple predecessors?
-      std::size_t s = 0;
-      bool found = false;
-      for (auto && predecessor : predecessors_) {
-        //Find out which successor I am
-        for (auto && successor : predecessor->successors_) {
-          if (successor != this)
-            s++;
-          else {
-            found = true;
-            break;
-          }
-        }
-        if (found) {
-          static_cast<Out<Key, void>*>(predecessor)->invokek(keys, s);
-        }
-        else std::cout << "Puretask successor not found!!\n";
-      }
-    }
   };
 
   // Output terminal
@@ -236,15 +205,12 @@ namespace ttg {
    public:
     typedef valueT value_type;
     typedef keyT key_type;
-    //static_assert(std::is_same<keyT, std::decay_t<keyT>>::value,
-    //              "Out<keyT,valueT> assumes keyT is a non-decayable type");
+    static_assert(std::is_same<keyT, std::decay_t<keyT>>::value,
+                  "Out<keyT,valueT> assumes keyT is a non-decayable type");
     static_assert(std::is_same<valueT, std::decay_t<valueT>>::value,
                   "Out<keyT,valueT> assumes valueT is a non-decayable type");
     typedef Edge<keyT, valueT> edge_type;
     static constexpr bool is_an_output_terminal = true;
-    using invoke_callback_type = meta::detail::invoke_callback_t<keyT>;
-    using invoke_puretask_callback_type = meta::detail::invoke_puretask_callback_t<keyT>;
-    invoke_callback_type invoke_callback;
 
    private:
     // No moving, copying, assigning permitted
@@ -252,8 +218,6 @@ namespace ttg {
     Out(const Out &other) = delete;
     Out &operator=(const Out &other) = delete;
     Out &operator=(const Out &&other) = delete;
-
-    invoke_puretask_callback_type invoke_puretask_callback;
 
    public:
     Out() {}
@@ -283,23 +247,6 @@ namespace ttg {
       //If I am a pull terminal, add me as (in)'s predecessor
       if (is_pull_terminal)
         in->connect_pull(this);
-    }
-    
-    void set_invoke_callback(const invoke_callback_type &invoke_callback) {// = invoke_callback_type{}) {
-      //std::cout << boost::core::demangle(typeid(this).name()) << std::endl;
-      this->invoke_callback = invoke_callback;
-    }
-
-    void set_invoke_puretask_callback(const invoke_puretask_callback_type &invoke_puretask_callback) {
-      this->invoke_puretask_callback = invoke_puretask_callback;
-    }
-
-    template <typename Key = keyT>
-    std::enable_if_t<!meta::is_void_v<Key>, void>
-    invokek(const std::tuple<Key, Key>& keys, const std::size_t s) {
-      if (!invoke_puretask_callback)
-        throw std::runtime_error("pure task invoke callback not initialized");
-      invoke_puretask_callback(keys, s);
     }
 
     auto nsuccessors() const {
@@ -401,9 +348,8 @@ namespace ttg {
     std::enable_if_t<meta::is_none_void_v<Key,Value> && std::is_same_v<Value,std::remove_reference_t<Value>>,void>
     send_to(const Key &key, Value &&value, std::size_t i)
     {
-      std::cout << "send_to called for successor " << i << " " << get_name() << "\n";
+      //std::cout << "send_to called for successor " << i << " " << get_name() << "\n";
       TerminalBase *successor = successors().at(i);
-      std::cout << "Successfully found successor\n";
       if (successor->get_type() == TerminalBase::Type::Read) {
         static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
       } else if (successor->get_type() == TerminalBase::Type::Consume) {

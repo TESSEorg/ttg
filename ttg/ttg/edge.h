@@ -38,14 +38,14 @@ namespace ttg {
 
       EdgeImpl() : name(""), outs(), ins() {}
 
-	  EdgeImpl(const std::string &name, bool is_pull = false) : name(name),
+      EdgeImpl(const std::string &name, bool is_pull = false) : name(name),
                 is_pull_edge(is_pull), outs(), ins() {}
-				
-	  EdgeImpl(const std::string &name, bool is_pull, Container<keyT, valueT> &c,
-               mapper_function_type mapper) :
+
+      EdgeImpl(const std::string &name, bool is_pull, Container<keyT, valueT> &c,
+               mapper_function_type &mapper) :
         name(name),
         is_pull_edge(is_pull),
-        container(std::move(c)),
+        container(c),
         mapper_function(mapper),
         outs(),
         ins() {}
@@ -79,12 +79,17 @@ namespace ttg {
 
       void try_to_connect_new_out(TerminalBase *out) const {
         assert(out->get_type() != TerminalBase::Type::Write);  // out must be an In<>
-        for (auto in : ins)
-          if (in && out) in->connect(out);
+        if (out->is_pull_terminal) {
+          out->connect_pull_nopred(out);
+        }
+        else {
+          for (auto in : ins)
+            if (in && out) in->connect(out);
+        }
       }
 
       ~EdgeImpl() {
-        if (ins.size() == 0 || outs.size() == 0) {
+        if ((ins.size() == 0 || outs.size() == 0) && !is_pull_edge) {
             std::cerr << "Edge: destroying edge pimpl ('" << name << "') with either in or out not "
                        "assigned --- graph may be incomplete"
                     << std::endl;
@@ -110,8 +115,9 @@ namespace ttg {
       p[0] = std::make_shared<EdgeImpl>(name, is_pull);
     }
 
+    //TODO: Take reference to the container instead of copying.
     Edge(const std::string name, bool is_pull, Container<keyT, valueT> c,
-         mapper_function_type mapper) : p(1) {
+         mapper_function_type &mapper) : p(1) {
       p[0] = std::make_shared<EdgeImpl>(name, is_pull, c, mapper);
     }
 
