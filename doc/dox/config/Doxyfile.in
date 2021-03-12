@@ -830,7 +830,6 @@ WARN_LOGFILE           =
 # Note: If this tag is empty the current directory is searched.
 
 INPUT                  = @PROJECT_SOURCE_DIR@/ttg \
-                         @PROJECT_SOURCE_DIR@/examples \
                          @PROJECT_SOURCE_DIR@/doc/dox/user \
                          @PROJECT_SOURCE_DIR@/doc/dox/dev \
                          @PROJECT_SOURCE_DIR@/doc/dox/contrib \
