@@ -530,17 +530,6 @@ class SpMM {
   }
 };
 
-class Control : public Op<void, std::tuple<Out<>>, Control> {
-  using baseT = Op<void, std::tuple<Out<>>, Control>;
-
- public:
-  Control(Edge<> &ctl) : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}) {}
-
-  void op(std::tuple<Out<>> &out) { ::send<0>(out); }
-
-  void start() { invoke(); }
-};
-
 #ifdef BTAS_IS_USABLE
 template <typename _T, class _Range, class _Store>
 std::tuple<_T, _T> norms(const btas::Tensor<_T, _Range, _Store> &t) {
@@ -641,7 +630,7 @@ int main(int argc, char **argv) {
 
     // flow graph needs to exist on every node
     Edge<> ctl("control");
-    Control control(ctl);
+    Ctl control(ctl);
     Edge<Key<2>, blk_t> eA, eB, eC;
     Read_SpMatrix<> a("A", A, ctl, eA);
     Read_SpMatrix<> b("B", B, ctl, eB);

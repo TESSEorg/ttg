@@ -63,18 +63,6 @@ std::ostream& operator<<(std::ostream& s, const Key& key) {
   return s;
 }
 
-// An empty class used for pure control flows
-class Control {
- public:
-  template <typename Archive>
-  void serialize(Archive& ar) {}
-};
-
-std::ostream& operator<<(std::ostream& s, const Control& ctl) {
-  s << "Ctl";
-  return s;
-}
-
 struct Integer {
   int value;
   madness::hashT hash_val;

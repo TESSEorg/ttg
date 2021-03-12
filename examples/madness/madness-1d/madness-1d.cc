@@ -295,19 +295,6 @@ std::ostream& operator<<(std::ostream&s, const Node& node) {
     return s;
 }
 
-// An empty class used for pure control flows
-class Control {
-public:
-   template <typename Archive>
-   void serialize(Archive& ar) {}
-
-};
-
-std::ostream& operator<<(std::ostream&s, const Control& ctl) {
-    s << "Ctl";
-    return s;
-}
-
 class Printer : public Op<Key, std::tuple<>, Printer, Node> {
     using baseT = Op<Key, std::tuple<>, Printer, Node>;
 public:
@@ -670,41 +657,39 @@ public:
 
 };
 
-
-class Project : public  Op<Key, std::tuple<Out<Key,Control>, Out<Key,Node>>, Project, Control> {
-    using baseT = 	Op<Key, std::tuple<Out<Key,Control>, Out<Key,Node>>, Project, Control>;
+class Project : public Op<Key, std::tuple<Out<Key, void>, Out<Key, Node>>, Project, void> {
+  using baseT = Op<Key, std::tuple<Out<Key, void>, Out<Key, Node>>, Project, void>;
 
  public:
-    using funcT = double(*)(double);
+  using funcT = double (*)(double);
 
-    Project(const funcT& func, const std::string& name) : baseT(name, {"input"}, {"recurse","result"}), f(func) {}
+  Project(const funcT &func, const std::string &name) : baseT(name, {"input"}, {"recurse", "result"}), f(func) {}
 
-    Project(const funcT& func, const typename baseT::input_edges_type& inedges,
-    		const typename baseT::output_edges_type& outedges, const std::string& name)
-        : baseT(inedges, outedges, name, {"input"}, {"result", "recurse"}), f(func) {}
+  Project(const funcT &func, const typename baseT::input_edges_type &inedges,
+          const typename baseT::output_edges_type &outedges, const std::string &name)
+      : baseT(inedges, outedges, name, {"input"}, {"result", "recurse"}), f(func) {}
 
-	~Project() {std::cout << "Project destructor\n";}
+  ~Project() {std::cout << "Project destructor\n";}
 
-    void op(const Key& key, const std::tuple<Control>& t, baseT::output_terminals_type& out) {
+  void op(const Key &key, baseT::output_terminals_type &out) {
+    Vector s0 = sValues(key.n + 1, 2 * key.l);
+    Vector s1 = sValues(key.n + 1, 2 * key.l + 1);
 
-                Vector s0 = sValues(key.n + 1, 2 * key.l);
-		Vector s1 = sValues(key.n + 1, 2 * key.l + 1);
+    Vector s(s0 | s1);
+    Vector d(s * (*hgT));
 
-		Vector s(s0 | s1);
-		Vector d(s * (*hgT));
-
-		/* if the error is less than the threshhold or we have reached max_level */
-		if (d.normf(k, 2*k) < thresh ||  key.n >= max_level - 1) {
-			::send<1>(key, Node(key, Vector(), Vector(), true), out);
-			::send<1>(Key(key.n+1, 2 * key.l), Node(key, s0, Vector(), false), out);
+    /* if the error is less than the threshhold or we have reached max_level */
+    if (d.normf(k, 2 * k) < thresh || key.n >= max_level - 1) {
+      ::send<1>(key, Node(key, Vector(), Vector(), true), out);
+      ::send<1>(Key(key.n+1, 2 * key.l), Node(key, s0, Vector(), false), out);
 			::send<1>(Key(key.n+1, 2 * key.l + 1), Node(key, s1, Vector(), false), out);
 		}
 		else {
-			::send<0>(key.left_child(), Control(), out);
-			::send<0>(key.right_child(), Control(), out);
-			::send<1>(key, Node(key, Vector(), Vector(), true), out);
-		}
+      ::sendk<0>(key.left_child(), out);
+      ::sendk<0>(key.right_child(), out);
+      ::send<1>(key, Node(key, Vector(), Vector(), true), out);
     }
+  }
 
 private:
 	funcT f;
@@ -731,22 +716,22 @@ private:
 
 };
 
-class Producer : public Op<Key, std::tuple<Out<Key, Control>>, Producer> {
-	using baseT = 		Op<Key, std::tuple<Out<Key, Control>>, Producer>;
+class Producer : public Op<Key, std::tuple<Out<Key, void>>, Producer> {
+  using baseT = Op<Key, std::tuple<Out<Key, void>>, Producer>;
 
-public:
-	Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
-	Producer(const typename baseT::output_edges_type &outedges, const std::string &name)
-		: baseT(edges(), outedges, name, {}, {"output"}) {}
+ public:
+  Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
+  Producer(const typename baseT::output_edges_type &outedges, const std::string &name)
+      : baseT(edges(), outedges, name, {}, {"output"}) {}
 
-	~Producer() {std::cout << "Producer destructor\n";}
+  ~Producer() { std::cout << "Producer destructor\n"; }
 
-    //void op(const Key &key, const std::tuple<>& t, baseT::output_terminals_type &out) {
-	void op(const Key &key, baseT::output_terminals_type &out) {
-		Key root(0, 0);
-		//std::cout << "Produced the root node whose key is " << root << std::endl;
-		::send<0>(root, Control(), out);
-	}
+  // void op(const Key &key, const std::tuple<>& t, baseT::output_terminals_type &out) {
+  void op(const Key &key, baseT::output_terminals_type &out) {
+    Key root(0, 0);
+    // std::cout << "Produced the root node whose key is " << root << std::endl;
+    ::sendk<0>(root, out);
+  }
 };
 
 
@@ -1315,12 +1300,10 @@ class Everything_diff {
 
 // EXAMPLE 5
 class Everything_diff_test {
+  Edge<Key, Node> inter, l, c, r, op1, op2, out, r3, r4;
+  Edge<Key, void> p1, p2, r1, r2;
 
-   Edge<Key, Node> inter, l, c, r, op1, op2, out, r3, r4;
-   Edge<Key, Control> p1, p2, r1, r2;
-
-
-   Producer producer;
+  Producer producer;
    Project project_funcD;
    Project project_funcDD;
    Diff_prologue diff_prologue;

@@ -130,9 +130,6 @@ class Matrix {
   void serialize(Archive& ar) {}
 };
 
-// An empty class used for pure control flows
-struct Control {};
-
 template <typename T>
 inline void stencil_computation(int i, int j, int M, int N, BlockMatrix<T>& bm, BlockMatrix<T>& left, BlockMatrix<T>& top,
                          BlockMatrix<T>& right, BlockMatrix<T>& bottom) {
@@ -303,8 +300,6 @@ int main(int argc, char** argv) {
 
       beg = std::chrono::high_resolution_clock::now();
       s->in<0>()->send(Key(0, 0), (*m)(0, 0));
-      // This doesn't work!
-      // s->send<0>(Key(0,0), Control());
     }
 
     ttg_execute(ttg_default_execution_context());
