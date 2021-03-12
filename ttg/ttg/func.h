@@ -8,6 +8,7 @@
 #include "ttg/traverse.h"
 #include "ttg/terminal.h"
 #include "ttg/edge.h"
+#include "ttg/util/serialization.h"
 
 namespace ttg {
 
@@ -62,6 +63,11 @@ namespace ttg {
   }
 
   template <typename keyT, typename valueT, typename output_terminalT>
+  void send(const keyT &key, const valueT &value, output_terminalT &t) {
+    t.send(key, std::forward<valueT>(value));
+  }
+
+  template <typename keyT, typename valueT, typename output_terminalT>
   void send(const keyT &key, valueT &&value, output_terminalT &t) {
     t.send(key, std::forward<valueT>(value));
   }
@@ -107,10 +113,67 @@ namespace ttg {
     std::get<i>(t).send();
   }
 
+  namespace detail {
+
+#if 0
+    template <size_t i, typename ...RangesT, typename valueT, typename... output_terminalsT>
+    void broadcast(const std::tuple<RangesT...>& keylists, std::shared_ptr<valueT> &value_ptr, std::tuple<output_terminalsT...> &t) {
+      std::get<i>(t).broadcast(std::get<i>(keylists), value_ptr);
+    }
+#endif
+
+    template <size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT>
+    void broadcast(const std::tuple<RangesT...>& keylists, std::shared_ptr<const valueT> &value_ptr, std::tuple<output_terminalsT...> &t) {
+      std::get<i>(t).broadcast(std::get<i>(keylists), value_ptr);
+
+      if constexpr(sizeof...(I) > 0) {
+        broadcast<I...>(keylists, value_ptr, t);
+      }
+    }
+  } // namespace detail
+
   template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT>
   void broadcast(const rangeT &keylist, valueT &&value, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).broadcast(keylist, std::forward<valueT>(value));
   }
+
+  template <size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT>
+  void broadcast(const std::tuple<RangesT...>& keylists, valueT &&value, std::tuple<output_terminalsT...> &t) {
+    if constexpr(has_split_metadata<valueT>::value) {
+      /* move value into an object on the heap */
+      std::shared_ptr<const valueT> value_ptr = std::make_shared<const valueT>(std::forward<valueT>(value));
+      detail::broadcast<i, I...>(keylists, value_ptr, t);
+    } else {
+      /* make sure we keep the ownership */
+      const valueT& vref = value;
+      std::get<i>(t).broadcast(std::get<i>(keylists), vref);
+      if constexpr(sizeof...(I) > 0) {
+        broadcast<I...>(keylists, vref, t);
+      }
+    }
+  }
+
+#if 0
+  template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT>
+  void broadcast(const rangeT &keylist, const valueT &value, std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).broadcast(keylist, value);
+  }
+#endif
+
+  template <size_t i, size_t... I, typename ...RangesT, typename rangeT, typename valueT, typename... output_terminalsT>
+  void broadcast(const std::tuple<RangesT...>& keylists, const valueT &value, std::tuple<output_terminalsT...> &t) {
+    if constexpr(has_split_metadata<valueT>::value) {
+      /* create a copy on the heap that we control */
+      std::shared_ptr<valueT> value_ptr = std::make_shared<valueT>(value);
+      detail::broadcast<i, I...>(keylists, value_ptr, t);
+    } else {
+      std::get<i>(t).broadcast(std::get<i>(keylists), value);
+      if constexpr(sizeof...(I) > 0) {
+        broadcast<I...>(keylists, value, t);
+      }
+    }
+  }
+
 
   template <typename keyT, typename output_terminalT>
   void set_size(const keyT &key, const std::size_t size, output_terminalT &t) {

@@ -3,7 +3,7 @@
 
 #if defined(TTG_SELECTED_DEFAULT_IMPL)
 #error "A default TTG implementation has already been selected"
-#endif // defined(TTG_SELECTED_DEFAULT_IMPL)
+#endif  // defined(TTG_SELECTED_DEFAULT_IMPL)
 
 #define TTG_SELECTED_DEFAULT_IMPL parsec
 #define TTG_PARSEC_IMPORTED 1
@@ -14,6 +14,6 @@ namespace ttg {
   /* Mark the ttg_parsec namespace as the default */
   using namespace ttg_parsec;
 
-}
+}  // namespace ttg
 
-#endif // TTG_PARSEC_IMPORT_H
+#endif  // TTG_PARSEC_IMPORT_H

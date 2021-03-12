@@ -796,7 +796,7 @@ namespace ttg_madness {
         };
         auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
         auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
-        input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, move_callback, {}, {}, setsize_callback, finalize_callback);
       }
       //////////////////////////////////////////////////////////////////
       // case 4: void key, nonvoid value
@@ -807,7 +807,7 @@ namespace ttg_madness {
         auto send_callback = [this](const valueT &value) { set_arg<i, keyT, const valueT &>(value); };
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
         auto finalize_callback = [this]() { finalize_argstream<i>(); };
-        input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, move_callback, {}, {}, setsize_callback, finalize_callback);
       }
       //////////////////////////////////////////////////////////////////
       // case 2: nonvoid key, void value, mixed inputs
@@ -817,7 +817,7 @@ namespace ttg_madness {
         auto send_callback = [this](const keyT &key) { set_arg<i, keyT, void>(key); };
         auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
         auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
-        input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, send_callback, {}, {}, setsize_callback, finalize_callback);
       }
       //////////////////////////////////////////////////////////////////
       // case 5: void key, void value, mixed inputs
@@ -827,7 +827,7 @@ namespace ttg_madness {
         auto send_callback = [this]() { set_arg<i, keyT, void>(); };
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
         auto finalize_callback = [this]() { finalize_argstream<i>(); };
-        input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, send_callback, {}, {}, setsize_callback, finalize_callback);
       }
       //////////////////////////////////////////////////////////////////
       // case 3: nonvoid key, void value, no inputs
@@ -837,7 +837,7 @@ namespace ttg_madness {
         auto send_callback = [this](const keyT &key) { set_arg<keyT>(key); };
         auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
         auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
-        input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, send_callback, {}, {}, setsize_callback, finalize_callback);
       }
       //////////////////////////////////////////////////////////////////
       // case 6: void key, void value, no inputs
@@ -847,7 +847,7 @@ namespace ttg_madness {
         auto send_callback = [this]() { set_arg<keyT>(); };
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
         auto finalize_callback = [this]() { finalize_argstream<i>(); };
-        input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, send_callback, {}, {}, setsize_callback, finalize_callback);
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : set callbacks for terminal ", input.get_name(),
                      " assuming void {key,value} and no input");

@@ -79,6 +79,7 @@ install(FILES ${ttg-base-header}
 set(ttg-serialization-source
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/splitmd_data_descriptor.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/data_descriptor.h

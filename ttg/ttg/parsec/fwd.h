@@ -17,8 +17,7 @@ namespace ttg_parsec {
 
   inline void ttg_finalize();
 
-  static
-    inline void ttg_abort();
+  static inline void ttg_abort();
 
   inline ttg::World ttg_default_execution_context();
 
@@ -36,10 +35,10 @@ namespace ttg_parsec {
   inline void ttg_sum(ttg::World world, double &value);
 
   /// broadcast
-    /// @tparam T a serializable type
-    template <typename T>
-    static void ttg_broadcast(ttg::World world, T &data, int source_rank);
+  /// @tparam T a serializable type
+  template <typename T>
+  static void ttg_broadcast(ttg::World world, T &data, int source_rank);
 
-} // namespace ttg_parsec
+}  // namespace ttg_parsec
 
-#endif // TTG_PARSEC_FWD_H
+#endif  // TTG_PARSEC_FWD_H

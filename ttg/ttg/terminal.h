@@ -27,6 +27,8 @@ namespace ttg {
     using edge_type = Edge<keyT, valueT>;
     using send_callback_type = meta::detail::send_callback_t<keyT, std::decay_t<valueT>>;
     using move_callback_type = meta::detail::move_callback_t<keyT, std::decay_t<valueT>>;
+    using broadcast_callback_type = meta::detail::broadcast_callback_t<keyT, std::decay_t<valueT>>;
+    using splitmd_broadcast_callback_type = meta::detail::splitmd_broadcast_callback_t<keyT, std::decay_t<valueT>>;
     using setsize_callback_type = meta::detail::setsize_callback_t<keyT>;
     using finalize_callback_type = meta::detail::finalize_callback_t<keyT>;
     static constexpr bool is_an_input_terminal = true;
@@ -34,6 +36,8 @@ namespace ttg {
    private:
     send_callback_type send_callback;
     move_callback_type move_callback;
+    broadcast_callback_type broadcast_callback;
+    splitmd_broadcast_callback_type splitmd_bcast_callback;
     setsize_callback_type setsize_callback;
     finalize_callback_type finalize_callback;
 
@@ -51,10 +55,14 @@ namespace ttg {
     In() {}
 
     void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback,
+                      const broadcast_callback_type &bcast_callback = broadcast_callback_type{},
+                      const splitmd_broadcast_callback_type &splitmd_bcast_callback = splitmd_broadcast_callback_type{},
                       const setsize_callback_type &setsize_callback = setsize_callback_type{},
                       const finalize_callback_type &finalize_callback = finalize_callback_type{}) {
       this->send_callback = send_callback;
       this->move_callback = move_callback;
+      this->broadcast_callback = bcast_callback;
+      this->splitmd_bcast_callback = splitmd_bcast_callback;
       this->setsize_callback = setsize_callback;
       this->finalize_callback = finalize_callback;
     }
@@ -104,8 +112,64 @@ namespace ttg {
     template <typename rangeT, typename Value = valueT>
     std::enable_if_t<!meta::is_void_v<Value>,void>
     broadcast(const rangeT &keylist, const Value &value) {
-      for (auto key : keylist) send(key, value);
+      if (broadcast_callback) {
+        std::vector<keyT> vkl;
+        const std::vector<keyT>* vklref;
+        if constexpr (std::is_same_v<std::vector<keyT>, rangeT>) {
+          vklref = &keylist;
+        } else {
+          vkl = std::vector<keyT>{std::begin(keylist), std::end(keylist)};
+          vklref = &vkl;
+        }
+        broadcast_callback(*vklref, value);
+      } else {
+        for (auto key : keylist) send(key, value);
+      }
     }
+
+    template <typename rangeT, typename Value = valueT>
+    std::enable_if_t<!meta::is_void_v<Value>,void>
+    broadcast(const rangeT &keylist, Value &&value) {
+      if (broadcast_callback) {
+        std::vector<keyT> vkl;
+        const std::vector<keyT>* vref;
+        if constexpr (std::is_same_v<std::vector<keyT>, rangeT>) {
+          vref = &keylist;
+        } else {
+          vkl = std::vector<keyT>{std::begin(keylist), std::end(keylist)};
+          vref = &vkl;
+        }
+        const Value& v = value;
+        broadcast_callback(*vref, v);
+      } else {
+        const Value& vref = value;
+        for (auto key : keylist) send(key, vref);
+      }
+    }
+
+    template <typename rangeT, typename Value = valueT>
+    std::enable_if_t<!meta::is_void_v<Value>,void>
+    broadcast(const rangeT &keylist, std::shared_ptr<const Value> &value_ptr) {
+      if (broadcast_callback || splitmd_bcast_callback) {
+        std::vector<keyT> vkl;
+        const std::vector<keyT>* vref;
+        if constexpr (std::is_same_v<std::vector<keyT>, rangeT>) {
+          vref = &keylist;
+        } else {
+          vkl = std::vector<keyT>{std::begin(keylist), std::end(keylist)};
+          vref = &vkl;
+        }
+        if (splitmd_bcast_callback) {
+          splitmd_bcast_callback(*vref, value_ptr);
+        } else {
+          broadcast_callback(*vref, *value_ptr);
+        }
+      } else {
+        const Value& vref = *value_ptr;
+        for (auto key : keylist) send(key, vref);
+      }
+    }
+
 
     template <typename Key = keyT>
     std::enable_if_t<!meta::is_void_v<Key>,void>
@@ -294,6 +358,21 @@ namespace ttg {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->broadcast(keylist, value);
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
           static_cast<In<keyT, valueT> *>(successor)->broadcast(keylist, value);
+        }
+      }
+    }
+
+    // An optimized implementation will need a separate callback for broadcast
+    // with a specific value for rangeT
+    template<typename rangeT, typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<meta::is_none_void_v<Key,Value>,void>
+    broadcast(const rangeT &keylist, std::shared_ptr<const Value> &value_ptr) {  // NO MOVE YET
+      for (auto && successor : successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->broadcast(keylist, value_ptr);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          static_cast<In<keyT, valueT> *>(successor)->broadcast(keylist, value_ptr);
         }
       }
     }
