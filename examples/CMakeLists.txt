@@ -34,6 +34,9 @@ add_ttg_executable(fw-apsp floyd-warshall/floyd_warshall.cc LINK_LIBRARIES MADwo
 add_executable(potrf-parsec potrf/potrf.cc)
 target_link_libraries(potrf-parsec PRIVATE blaspp lapackpp ttg-parsec)
 
+add_executable(potrf-pdc-parsec potrf/potrf_pdc.cc)
+target_link_libraries(potrf-pdc-parsec PRIVATE blaspp lapackpp DPLASMA::dplasma ttg-parsec)
+
 if (OpenMP_CXX_FOUND AND TARGET std::execution)
         add_ttg_executable(fw-apsp-df floyd-warshall/floyd_warshall_df.cc LINK_LIBRARIES OpenMP::OpenMP_CXX std::execution MADworld)
 endif ()

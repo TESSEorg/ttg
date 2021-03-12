@@ -58,7 +58,6 @@ include(FindOrFetchBTAS)
 find_package(OpenMP COMPONENTS CXX)
 # std::execution may also be used by some examples
 find_package(CXXStdExecution)
-include(FindDPLASMA)
 
 ##########################
 #### prerequisite runtimes
@@ -73,6 +72,8 @@ include(FindOrFetchMADNESS)
 if (TARGET MADworld)
   message(STATUS "MADNESS_FOUND=1")
 endif(TARGET MADworld)
+
+include(FindDPLASMA)
 
 ##########################
 #### Components
