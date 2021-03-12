@@ -14,7 +14,7 @@ namespace ttg {
   class TerminalBase {
   public:
     static constexpr bool is_a_terminal = true;
-		bool is_pull_terminal = false; //< Default is push terminal
+    bool is_pull_terminal = false; //< Default is push terminal
 
     /// describes the terminal type
     enum class Type {
@@ -58,12 +58,11 @@ namespace ttg {
     /// Add directed connection (this --> successor) in internal representation of the TTG.
     /// This is called by the derived class's connect method
     void connect_base(TerminalBase *successor) { successors_.push_back(successor); connected = true; successor->connected = true;}
-    
+
     void connect_pull(TerminalBase *predecessor) {
-      //std::cout << "set_out : " << this->get_name() << "-> has predecessor " << predecessor->get_name() << std::endl; 
-      predecessors_.push_back(predecessor); 
-      connected = true; 
-      predecessor->connected = true; 
+      predecessors_.push_back(predecessor);
+      predecessor->connected = true;
+      connected = true;
     }
 
   public:
@@ -105,6 +104,12 @@ namespace ttg {
 
     // Get connections to predecessors
     const std::vector<TerminalBase *> &get_predecessors() const {return predecessors_; }
+
+    //Connect Container pull terminals without incoming terminals
+    //This is a hack, is there a better way?
+    void connect_pull_nopred(TerminalBase *p) {
+      p->connected = true;
+    }
 
     /// Returns true if this terminal (input or output) is connected
     bool is_connected() const {return connected;}
