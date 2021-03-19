@@ -6,8 +6,8 @@ if (NOT TARGET MADworld)
   set(ENABLE_PARSEC ON CACHE BOOL "Whether to use PaRSEC as the task backend of MADWorld")
   FetchContent_Declare(
           MADNESS
-          GIT_REPOSITORY      https://github.com/m-a-d-n-e-s-s/madness.git
-          GIT_TAG             ${TTG_TRACKED_MADNESS_TAG}
+          GIT_REPOSITORY https://github.com/m-a-d-n-e-s-s/madness.git
+          GIT_TAG ${TTG_TRACKED_MADNESS_TAG}
   )
   FetchContent_MakeAvailable(MADNESS)
   FetchContent_GetProperties(MADNESS
@@ -15,6 +15,9 @@ if (NOT TARGET MADworld)
           BINARY_DIR MADNESS_BINARY_DIR
           )
   set_property(DIRECTORY ${MADNESS_SOURCE_DIR} PROPERTY EXCLUDE_FROM_ALL TRUE)
+  # making madness target EXCLUDE_FROM_ALL via the above makes its install statement "UB": https://cmake.org/cmake/help/latest/command/install.html#installing-targets
+  # force 'all' target to build madness using this dummy target
+  add_custom_target(ttg-force-all-to-build-madness-target ALL DEPENDS madness)
 
 endif(NOT TARGET MADworld)
 
