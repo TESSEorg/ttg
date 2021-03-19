@@ -15,9 +15,9 @@ if (NOT TARGET MADworld)
           BINARY_DIR MADNESS_BINARY_DIR
           )
   set_property(DIRECTORY ${MADNESS_SOURCE_DIR} PROPERTY EXCLUDE_FROM_ALL TRUE)
-  # making madness target EXCLUDE_FROM_ALL via the above makes its install statement "UB": https://cmake.org/cmake/help/latest/command/install.html#installing-targets
-  # force 'all' target to build madness using this dummy target
-  add_custom_target(ttg-force-all-to-build-madness-target ALL DEPENDS madness)
+  # making madness targets EXCLUDE_FROM_ALL via the above makes its install statement "UB": https://cmake.org/cmake/help/latest/command/install.html#installing-targets
+  # force 'all' target to build madness and MADworld using this dummy target
+  add_custom_target(ttg-force-all-to-build-madness-target ALL DEPENDS madness MADworld)
 
 endif(NOT TARGET MADworld)
 
