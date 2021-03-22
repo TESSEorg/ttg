@@ -346,7 +346,7 @@ int main(int argc, char **argv)
                             trsm_syrk, trsm_gemm_row, trsm_gemm_col, result);
   auto op_syrk  = make_syrk(A, trsm_syrk, syrk_syrk, syrk_potrf, syrk_syrk);
   auto op_gemm  = make_gemm(A,
-                            trsm_gemm_col, trsm_gemm_row, gemm_gemm,
+                            trsm_gemm_row, trsm_gemm_col, gemm_gemm,
                             gemm_trsm, gemm_gemm);
   auto op_result = make_result(A, result);
 
