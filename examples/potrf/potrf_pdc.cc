@@ -6,8 +6,6 @@
 
 #include "lapack.hh"
 
-#include "core_dplgsy.h"
-
 #include <parsec.h>
 #include <parsec/data_internal.h>
 #include <parsec/data_dist/matrix/matrix.h>
@@ -20,38 +18,10 @@
 
 #define USE_DPLASMA
 
-static inline void
+static void
 dplasma_dprint_tile( int m, int n,
                      const parsec_tiled_matrix_dc_t* descA,
-                     const double *M )
-{
-    int tempmm = ( m == descA->mt-1 ) ? descA->m - m*descA->mb : descA->mb;
-    int tempnn = ( n == descA->nt-1 ) ? descA->n - n*descA->nb : descA->nb;
-    int ldam = BLKLDD( descA, m );
-
-    int ii, jj;
-
-    fflush(stdout);
-    for(ii=0; ii<tempmm; ii++) {
-        if ( ii == 0 )
-            fprintf(stdout, "(%2d, %2d) :", m, n);
-        else
-            fprintf(stdout, "          ");
-        for(jj=0; jj<tempnn; jj++) {
-#if defined(PRECISION_z) || defined(PRECISION_c)
-            fprintf(stdout, " (% e, % e)",
-                    creal( M[jj*ldam + ii] ),
-                    cimag( M[jj*ldam + ii] ));
-#else
-            fprintf(stdout, " % e", M[jj*ldam + ii]);
-#endif
-        }
-        fprintf(stdout, "\n");
-    }
-    fflush(stdout);
-    usleep(1000);
-}
-
+                     const double *M );
 
 /* C++ type to PaRSEC's matrix_type mapping */
 template<typename T>
@@ -111,19 +81,6 @@ std::ostream& operator<<(std::ostream& s, const Key& key) {
   return s;
 }
 
-void plgsy(Matrix<double>* A)
-{
-  auto bump = A->rows();
-  auto seed = 42;
-  for (int i = 0; i < A->rows(); ++i) {
-    for (int j = 0; j < A->cols(); ++j) {
-      auto tile = (*A)(i, j);
-      CORE_dplgsy(bump, tile.rows(), tile.cols(), tile.get(), tile.rows(),
-                  A->rows(), i*tile.rows(), j*tile.cols(), seed);
-    }
-  }
-}
-
 template<typename T>
 class MatrixTile {
 
@@ -171,6 +128,17 @@ public:
   MatrixTile(const metadata_t& metadata, T* data)
   : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), data)
   { }
+
+
+  /* Copy dtor and operator with a static_assert to catch unexpected copying */
+  MatrixTile(const MatrixTile& other) {
+    static_assert("Oops, copy ctor called?!");
+  }
+
+  MatrixTile& operator=(const MatrixTile& other) {
+    static_assert("Oops, copy ctor called?!");
+  }
+
 
   void set_metadata(metadata_t meta) {
     _rows = std::get<0>(meta);
@@ -978,4 +946,36 @@ int check_daxmb( parsec_context_t *parsec, int loud,
     }
 
     return info_solution;
+}
+
+static void
+dplasma_dprint_tile( int m, int n,
+                     const parsec_tiled_matrix_dc_t* descA,
+                     const double *M )
+{
+    int tempmm = ( m == descA->mt-1 ) ? descA->m - m*descA->mb : descA->mb;
+    int tempnn = ( n == descA->nt-1 ) ? descA->n - n*descA->nb : descA->nb;
+    int ldam = BLKLDD( descA, m );
+
+    int ii, jj;
+
+    fflush(stdout);
+    for(ii=0; ii<tempmm; ii++) {
+        if ( ii == 0 )
+            fprintf(stdout, "(%2d, %2d) :", m, n);
+        else
+            fprintf(stdout, "          ");
+        for(jj=0; jj<tempnn; jj++) {
+#if defined(PRECISION_z) || defined(PRECISION_c)
+            fprintf(stdout, " (% e, % e)",
+                    creal( M[jj*ldam + ii] ),
+                    cimag( M[jj*ldam + ii] ));
+#else
+            fprintf(stdout, " % e", M[jj*ldam + ii]);
+#endif
+        }
+        fprintf(stdout, "\n");
+    }
+    fflush(stdout);
+    usleep(1000);
 }
