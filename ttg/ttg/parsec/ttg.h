@@ -689,6 +689,11 @@ namespace ttg_parsec {
           std::memcpy(&num_iovecs, msg->bytes + pos, sizeof(num_iovecs));
           pos += sizeof(num_iovecs);
 
+          /* extract the callback tag */
+          parsec_ce_tag_t cbtag;
+          std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
+          pos += sizeof(cbtag);
+
           /* create the value from the metadata */
           auto activation = new detail::rma_delayed_activate{
               key, descr.create_from_metadata(metadata), num_iovecs,
@@ -721,7 +726,7 @@ namespace ttg_parsec {
             parsec_ce.get(
                 &parsec_ce, lreg, 0, rreg, 0, iov.num_bytes, remote, &detail::get_complete_cb<ActivationT>, activation,
                 /*world.impl().parsec_ttg_rma_tag()*/
-                reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb), fn_ptr, sizeof(std::intptr_t));
+                cbtag, fn_ptr, sizeof(std::intptr_t));
           }
 
           assert(num_iovecs == nv);
@@ -964,6 +969,13 @@ namespace ttg_parsec {
         std::memcpy(msg->bytes + pos, &num_iovs, sizeof(num_iovs));
         pos += sizeof(num_iovs);
 
+        /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
+         * raw function pointer instead of a preregistered AM tag, so play that game.
+         * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
+        parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
+        std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
+        pos += sizeof(cbtag);
+
         /**
          * register the generic iovecs and pack the registration handles
          * memory layout: [<lreg_size, lreg, lreg_id>, ...]
@@ -994,12 +1006,12 @@ namespace ttg_parsec {
           std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
           pos += sizeof(fn_ptr);
         }
+        parsec_taskpool_t *tp = world_impl.taskpool();
+        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
+        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
+        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
+                          sizeof(msg_header_t) + pos);
       }
-      parsec_taskpool_t *tp = world_impl.taskpool();
-      tp->tdm.module->outgoing_message_start(tp, owner, NULL);
-      tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-      parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-                        sizeof(msg_header_t) + pos);
     }
 
     // case 3
@@ -1213,6 +1225,13 @@ namespace ttg_parsec {
           /* pack the number of iovecs */
           std::memcpy(msg->bytes + pos, &num_iovs, sizeof(num_iovs));
           pos += sizeof(num_iovs);
+
+          /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
+          * raw function pointer instead of a preregistered AM tag, so play that game.
+          * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
+          parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
+          std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
+          pos += sizeof(cbtag);
 
           /**
            * pack the registration handles
