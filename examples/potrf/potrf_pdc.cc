@@ -726,7 +726,7 @@ int main(int argc, char **argv)
     auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
     end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "
-              << elapsed / 1000 << " : Flops " << (FLOPS_DPOTRF(uint64_t(N))/1E9)/(elapsed/1E3) << " GF/s" << std::endl;
+              << elapsed / 1E3 << " : Flops " << (FLOPS_DPOTRF(N)) << " " << (FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
   }
 
 #ifdef USE_DPLASMA
