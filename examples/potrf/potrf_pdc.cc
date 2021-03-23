@@ -574,22 +574,22 @@ auto initiator(MatrixT<T>& A,
     /* kick off first POTRF */
     //std::cout << "Initiator called with " << key << std::endl;
     if (A.is_local(0, 0)) {
-      ttg::send<0>(Key{0, 0, 0}, A(0, 0), out);
+      ttg::send<0>(Key{0, 0, 0}, std::move(A(0, 0)), out);
     }
     for (int i = 1; i < A.rows(); i++) {
       /* send gemm input to TRSM */
       if (A.is_local(i, 0)) {
         //std::cout << "Initiating TRSM " << Key{i, 0, 0} << std::endl;
-        ttg::send<1>(Key{i, 0, 0}, A(i, 0), out);
+        ttg::send<1>(Key{i, 0, 0}, std::move(A(i, 0)), out);
       }
       /* send syrk to SYRK */
       if (A.is_local(i, i)) {
-        ttg::send<2>(Key{i, i, 0}, A(i, i), out);
+        ttg::send<2>(Key{i, i, 0}, std::move(A(i, i)), out);
       }
       for (int j = 1; j < i; j++) {
         /* send gemm to GEMM */
         if (A.is_local(i, j)) {
-          ttg::send<3>(Key{i, j, 0}, A(i, j), out);
+          ttg::send<3>(Key{i, j, 0}, std::move(A(i, j)), out);
         }
       }
     }
