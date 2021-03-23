@@ -117,6 +117,12 @@ namespace ttg_parsec {
 
     static int get_remote_complete_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg, size_t msg_size,
                                       int src, void *cb_data);
+
+    template<typename T>
+    static void delete_type(void *ptr) {
+      T* typed_ptr = reinterpret_cast<T*>(ptr);
+      delete typed_ptr;
+    }
   }  // namespace detail
 
   class WorldImpl : public ttg::base::WorldImplBase {
@@ -774,25 +780,26 @@ namespace ttg_parsec {
     template <std::size_t i, typename Key, typename Value>
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void> set_arg_local(
         const Key &key, Value &&value) {
-      set_arg_local_impl<i>(key, std::forward<Value>(value));
+      set_arg_local_impl<i>(key, std::forward<Value>(value), true);
     }
 
     template <std::size_t i, typename Key = keyT, typename Value>
     std::enable_if_t<ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void> set_arg_local(
         Value &&value) {
-      set_arg_local_impl<i>(ttg::Void{}, std::forward<Value>(value));
+      set_arg_local_impl<i>(ttg::Void{}, std::forward<Value>(value), true);
     }
 
     template <std::size_t i, typename Key, typename Value>
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void> set_arg_local(
         const Key &key, const Value &value) {
-      set_arg_local_impl<i>(key, value);
+      set_arg_local_impl<i>(key, value, false);
     }
 
     template <std::size_t i, typename Key = keyT, typename Value>
     std::enable_if_t<ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void> set_arg_local(
         const Value &value) {
-      set_arg_local_impl<i>(ttg::Void{}, value);
+      set_arg_local_impl<i>(ttg::Void{}, value, false);
+    }
     }
 
     template <typename Key = keyT>
@@ -806,7 +813,7 @@ namespace ttg_parsec {
 
     // Used to set the i'th argument
     template <std::size_t i, typename Key, typename Value>
-    void set_arg_local_impl(const Key &key, const Value &value) {
+    void set_arg_local_impl(const Key &key, Value&& value, bool is_move) {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
       constexpr const bool value_is_Const = ::std::is_const_v<::std::remove_reference_t<Value>>;
@@ -880,13 +887,16 @@ namespace ttg_parsec {
         //    - if it is a const type, then the source task cannot modify it, and
         //    - if the target task uses the data as read-only, it is not necessary to
         //    - create a new data copy and we should reuse it
-        if constexpr (value_is_Const) {
+        if (value_is_Const || is_move) {
           if( NULL != parsec_ttg_caller ) {
             for(int j = 0; j < parsec_ttg_caller->task_class->nb_flows; j++) {
               if (NULL != parsec_ttg_caller->data[j].data_in &&
                   parsec_ttg_caller->data[j].data_in->device_private == static_cast<const void *>(&value)) {
                 copy = parsec_ttg_caller->data[j].data_in;
                 PARSEC_OBJ_RETAIN(copy);
+                /* TODO: check that the target is const, otherwise we may have to allocate a true copy if the target is not the only target */
+                int32_t readers = parsec_atomic_fetch_inc_int32(&parsec_ttg_caller->data[j].data_in->readers);
+                assert(readers > 0);
                 break;
               }
             }
@@ -894,7 +904,13 @@ namespace ttg_parsec {
         }
         if( NULL == copy ) {
           copy = PARSEC_OBJ_NEW(parsec_data_copy_t);
-          copy->device_private = (void *)(new valueT(value));
+          if (is_move) {
+            copy->device_private = (void *)(new valueT(std::move(value)));
+          } else {
+            copy->device_private = (void *)(new valueT(value));
+          }
+          copy->readers = 1;
+          copy->delete_fn = &detail::delete_type<valueT>;
         }
         task->parsec_task.data[i].data_in = copy;
       }
@@ -1513,6 +1529,13 @@ namespace ttg_parsec {
       }
       for (int i = 0; i < MAX_PARAM_COUNT; i++) {
         if (NULL != task->data[i].data_in) {
+          if (nullptr != task->data[i].data_in->device_private) {
+            int32_t readers = parsec_atomic_fetch_dec_int32(&task->data[i].data_in->readers);
+            if (1 == readers) {
+              task->data[i].data_in->delete_fn(task->data[i].data_in->device_private);
+              task->data[i].data_in->device_private = NULL;
+            }
+          }
           PARSEC_OBJ_RELEASE(task->data[i].data_in);
         }
       }
