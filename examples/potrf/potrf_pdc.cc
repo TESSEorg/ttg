@@ -18,10 +18,18 @@
 
 #define USE_DPLASMA
 
+//#define PRINT_TILES
+
 static void
 dplasma_dprint_tile( int m, int n,
                      const parsec_tiled_matrix_dc_t* descA,
                      const double *M );
+
+/* FLOP macros taken from DPLASMA */
+#define FMULS_POTRF(__n) ((double)(__n) * (((1. / 6.) * (double)(__n) + 0.5) * (double)(__n) + (1. / 3.)))
+#define FADDS_POTRF(__n) ((double)(__n) * (((1. / 6.) * (double)(__n)      ) * (double)(__n) - (1. / 6.)))
+#define FLOPS_DPOTRF(__n) (     FMULS_POTRF((__n)) +       FADDS_POTRF((__n)) )
+
 
 /* C++ type to PaRSEC's matrix_type mapping */
 template<typename T>
@@ -281,14 +289,19 @@ auto make_potrf(MatrixT<T>& A,
     assert(I == J);
     assert(I == K);
 
-    //std::cout << "POTRF BEFORE:" << std::endl;
-    //dplasma_dprint_tile(I, I, &A.parsec()->super, tile_kk.data());
+#ifdef PRINT_TILES
+    std::cout << "POTRF BEFORE:" << std::endl;
+    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_kk.data());
+#endif // PRINT_TILES
 
     lapack::potrf(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.rows());
 
-    //std::cout << "POTRF(" << key << ")" << std::endl;
-    //std::cout << "POTRF AFTER:" << std::endl;
-    //dplasma_dprint_tile(I, I, &A.parsec()->super, tile_kk.data());
+#ifdef PRINT_TILES
+    std::cout << "POTRF(" << key << ")" << std::endl;
+    std::cout << "POTRF AFTER:" << std::endl;
+    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_kk.data());
+#endif // PRINT_TILES
+
     /* tile is done */
     //ttg::send<0>(key, tile_kk, out);
 
@@ -333,10 +346,13 @@ auto make_trsm(MatrixT<T>& A,
 
     auto m = tile_mk.rows();
 
-    //std::cout << "TRSM BEFORE: kk" << std::endl;
-    //dplasma_dprint_tile(I, J, &A.parsec()->super, tile_kk.data());
-    //std::cout << "TRSM BEFORE: mk" << std::endl;
-    //dplasma_dprint_tile(I, J, &A.parsec()->super, tile_mk.data());
+#ifdef PRINT_TILES
+    std::cout << "TRSM BEFORE: kk" << std::endl;
+    dplasma_dprint_tile(I, J, &A.parsec()->super, tile_kk.data());
+    std::cout << "TRSM BEFORE: mk" << std::endl;
+    dplasma_dprint_tile(I, J, &A.parsec()->super, tile_mk.data());
+#endif // PRINT_TILES
+
     blas::trsm(blas::Layout::ColMajor,
                blas::Side::Right,
                lapack::Uplo::Lower,
@@ -346,10 +362,12 @@ auto make_trsm(MatrixT<T>& A,
                tile_kk.data(), m,
                tile_mk.data(), m);
 
-    //std::cout << "TRSM AFTER: kk" << std::endl;
-    //dplasma_dprint_tile(I, J, &A.parsec()->super, tile_kk.data());
-    //std::cout << "TRSM AFTER: mk" << std::endl;
-    //dplasma_dprint_tile(I, J, &A.parsec()->super, tile_mk.data());
+#ifdef PRINT_TILES
+    std::cout << "TRSM AFTER: kk" << std::endl;
+    dplasma_dprint_tile(I, J, &A.parsec()->super, tile_kk.data());
+    std::cout << "TRSM AFTER: mk" << std::endl;
+    dplasma_dprint_tile(I, J, &A.parsec()->super, tile_mk.data());
+#endif // PRINT_TILES
 
     //std::cout << "TRSM(" << key << ")" << std::endl;
 
@@ -413,10 +431,13 @@ auto make_syrk(MatrixT<T>& A,
 
     auto m = tile_mk.rows();
 
-    //std::cout << "SYRK BEFORE: mk" << std::endl;
-    //dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mk.data());
-    //std::cout << "SYRK BEFORE: mk" << std::endl;
-    //dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mm.data());
+#ifdef PRINT_TILES
+    std::cout << "SYRK BEFORE: mk" << std::endl;
+    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mk.data());
+    std::cout << "SYRK BEFORE: mk" << std::endl;
+    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mm.data());
+#endif // PRINT_TILES
+
     blas::syrk(blas::Layout::ColMajor,
                lapack::Uplo::Lower,
                blas::Op::NoTrans,
@@ -424,11 +445,13 @@ auto make_syrk(MatrixT<T>& A,
                tile_mk.data(), m, 1.0,
                tile_mm.data(), m);
 
-    //std::cout << "SYRK AFTER: mk" << std::endl;
-    //dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mk.data());
-    //std::cout << "SYRK AFTER: nk" << std::endl;
-    //dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mm.data());
-    //std::cout << "SYRK(" << key << ")" << std::endl;
+#ifdef PRINT_TILES
+    std::cout << "SYRK AFTER: mk" << std::endl;
+    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mk.data());
+    std::cout << "SYRK AFTER: nk" << std::endl;
+    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mm.data());
+    std::cout << "SYRK(" << key << ")" << std::endl;
+#endif // PRINT_TILES
 
     if (I == K+1) {
       /* send the tile to potrf */
@@ -473,12 +496,15 @@ auto make_gemm(MatrixT<T>& A,
 
     auto m = tile_nk.rows();
 
-    //std::cout << "GEMM BEFORE: nk" << std::endl;
-    //dplasma_dprint_tile(I, I, &A.parsec()->super, tile_nk.data());
-    //std::cout << "GEMM BEFORE: mk" << std::endl;
-    //dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mk.data());
-    //std::cout << "GEMM BEFORE: nm" << std::endl;
-    //dplasma_dprint_tile(I, I, &A.parsec()->super, tile_nm.data());
+#ifdef PRINT_TILES
+    std::cout << "GEMM BEFORE: nk" << std::endl;
+    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_nk.data());
+    std::cout << "GEMM BEFORE: mk" << std::endl;
+    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mk.data());
+    std::cout << "GEMM BEFORE: nm" << std::endl;
+    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_nm.data());
+#endif // PRINT_TILES
+
     blas::gemm(blas::Layout::ColMajor,
                blas::Op::NoTrans,
                blas::Op::Trans,
@@ -487,13 +513,15 @@ auto make_gemm(MatrixT<T>& A,
                tile_mk.data(), m, 1.0,
                tile_nm.data(), m);
 
-    //std::cout << "GEMM AFTER: nk" << std::endl;
-    //dplasma_dprint_tile(I, I, &A.parsec()->super, tile_nk.data());
-    //std::cout << "GEMM AFTER: mk" << std::endl;
-    //dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mk.data());
-    //std::cout << "GEMM AFTER: nm" << std::endl;
-    //dplasma_dprint_tile(I, I, &A.parsec()->super, tile_nm.data());
-    //std::cout << "GEMM(" << key << ")" << std::endl;
+#ifdef PRINT_TILES
+    std::cout << "GEMM AFTER: nk" << std::endl;
+    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_nk.data());
+    std::cout << "GEMM AFTER: mk" << std::endl;
+    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mk.data());
+    std::cout << "GEMM AFTER: nm" << std::endl;
+    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_nm.data());
+    std::cout << "GEMM(" << key << ")" << std::endl;
+#endif // PRINT_TILES
 
     /* send the tile to output */
     if (J == K+1) {
@@ -677,8 +705,10 @@ int main(int argc, char **argv)
   ttg::ttg_fence(world);
   if (world.rank() == 0) {
     end = std::chrono::high_resolution_clock::now();
+    auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
+    end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "
-              << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
+              << elapsed / 1000 << " : Flops " << (FLOPS_DPOTRF(uint64_t(N))/1E9)/(elapsed/1E3) << " GF/s" << std::endl;
   }
 
 #ifdef USE_DPLASMA
