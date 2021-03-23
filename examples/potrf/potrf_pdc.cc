@@ -103,6 +103,7 @@ private:
 
   // (Re)allocate the tile memory
   void realloc() {
+    //std::cout << "Reallocating new tile" << std::endl;
     _data = std::shared_ptr<T>(new T[_rows * _cols], [](T* p) { delete[] p; });
   }
 
@@ -149,6 +150,22 @@ public:
   }
 #endif
 
+
+  MatrixTile(MatrixTile<T>&& other)  = default;
+
+  MatrixTile& operator=(MatrixTile<T>&& other)  = default;
+
+
+  /* Defaulted copy ctor and op for shallow copies, see comment below */
+  MatrixTile(const MatrixTile<T>& other)  = default;
+
+  MatrixTile& operator=(const MatrixTile<T>& other)  = default;
+
+  /* Deep copy ctor und op are not needed for PO since tiles will never be read
+   * and written concurrently. Hence shallow copies are enough, will all
+   * receiving tasks sharing tile data. Re-enable this once the PaRSEC backend
+   * can handle data sharing without excessive copying */
+#if 0
   MatrixTile(const MatrixTile<T>& other)
   : _rows(other._rows), _cols(other._cols)
   {
@@ -162,6 +179,7 @@ public:
     this->realloc();
     std::copy_n(other.data(), _rows*_cols, this->data());
   }
+#endif // 0
 
   void set_metadata(metadata_t meta) {
     _rows = std::get<0>(meta);
