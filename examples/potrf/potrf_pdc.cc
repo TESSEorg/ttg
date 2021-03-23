@@ -130,6 +130,7 @@ public:
   { }
 
 
+#if 0
   /* Copy dtor and operator with a static_assert to catch unexpected copying */
   MatrixTile(const MatrixTile& other) {
     static_assert("Oops, copy ctor called?!");
@@ -138,7 +139,21 @@ public:
   MatrixTile& operator=(const MatrixTile& other) {
     static_assert("Oops, copy ctor called?!");
   }
+#endif
 
+  MatrixTile(const MatrixTile<T>& other)
+  : _rows(other._rows), _cols(other._cols)
+  {
+    this->realloc();
+    std::copy_n(other.data(), _rows*_cols, this->data());
+  }
+
+  MatrixTile& operator=(const MatrixTile<T>& other) {
+    this->_rows = other._rows;
+    this->_cols = other._cols;
+    this->realloc();
+    std::copy_n(other.data(), _rows*_cols, this->data());
+  }
 
   void set_metadata(metadata_t meta) {
     _rows = std::get<0>(meta);
@@ -539,9 +554,14 @@ auto initiator(MatrixT<T>& A,
 
 template <typename T>
 auto make_result(MatrixT<T>& A, const ttg::Edge<Key, MatrixTile<T>>& result) {
-  auto f = [](const Key& key, MatrixTile<T>&& tile, std::tuple<>& out) {
-    /* TODO: is this node actually needed? */
-    //std::cout << "FINAL " << key << std::endl;
+  auto f = [=](const Key& key, MatrixTile<T>&& tile, std::tuple<>& out) {
+    /* write back any tiles that are not in the matrix already */
+    const int I = key.I;
+    const int J = key.J;
+    if (A(I, J).data() != tile.data()) {
+      std::cout << "Writing back tile {" << I << ", " << J << "} " << std::endl;
+      std::copy_n(tile.data(), tile.rows()*tile.cols(), A(I, J).data());
+    }
   };
 
   return ttg::wrap(f, ttg::edges(result), ttg::edges(), "Final Output", {"result"}, {});
