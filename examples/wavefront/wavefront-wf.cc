@@ -7,6 +7,7 @@
 #include <iostream>
 #include <random>
 #include <thread>
+#include <utility>
 
 #include "ttg.h"
 
@@ -18,11 +19,13 @@ int MB, NB;
 std::shared_ptr<double> matrix;
 std::shared_ptr<double> matrix2;
 
-using Key = std::pair<int, int>;
-std::ostream& operator<<(std::ostream& out, Key const& k) {
-  out << "Key(" << k.first << ", " << k.second << ")";
-  return out;
-}
+using Key = std::pair<int, int>;  // I, J
+namespace std {
+  std::ostream& operator<<(std::ostream& out, Key const& k) {
+    out << "Key(" << k.first << ", " << k.second << ")";
+    return out;
+  }
+}  // namespace std
 
 // An empty class used for pure control flows
 struct Control {};

@@ -23,6 +23,12 @@ using namespace ttg;
 */
 
 using Key = std::pair<int, int>;
+namespace std {
+  std::ostream& operator<<(std::ostream& out, Key const& k) {
+    out << "Key(" << k.first << ", " << k.second << ")";
+    return out;
+  }
+}  // namespace std
 
 template <typename T>
 class BlockMatrix {
@@ -134,8 +140,8 @@ class Matrix {
 struct Control {};
 
 template <typename T>
-inline void stencil_computation(int i, int j, int M, int N, BlockMatrix<T>& bm, BlockMatrix<T>& left, BlockMatrix<T>& top,
-                         BlockMatrix<T>& right, BlockMatrix<T>& bottom) {
+inline void stencil_computation(int i, int j, int M, int N, BlockMatrix<T>& bm, BlockMatrix<T>& left,
+                                BlockMatrix<T>& top, BlockMatrix<T>& right, BlockMatrix<T>& bottom) {
   // i==0 -> no top block
   // j==0 -> no left block
   // i==M-1 -> no bottom block
@@ -155,7 +161,7 @@ inline void stencil_computation(int i, int j, int M, int N, BlockMatrix<T>& bm, 
   }*/
   for (int ii = 0; ii < MB; ++ii) {
     for (int jj = 0; jj < NB; ++jj) {
-      T& val = bm(ii,jj);
+      T& val = bm(ii, jj);
       val += (ii == 0) ? (i > 0 ? top(MB - 1, jj) : 0.0) : bm(ii - 1, jj);
       val += (ii == MB - 1) ? (i < M - 1 ? bottom(0, jj) : 0.0) : bm(ii + 1, jj);
       val += (jj == 0) ? (j > 0 ? left(ii, NB - 1) : 0.0) : bm(ii, jj - 1);
@@ -181,7 +187,6 @@ void wavefront_serial(Matrix<T>* m, int n_brows, int n_bcols) {
     }
   }
 }
-
 
 // Method to generate  wavefront tasks with two inputs.
 template <typename funcT, typename T>
@@ -312,7 +317,7 @@ int main(int argc, char** argv) {
 
   ttg_execute(ttg_default_execution_context());
   ttg_fence(ttg_default_execution_context());
-    
+
   if (ttg_default_execution_context().rank() == 0) {
     end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "
