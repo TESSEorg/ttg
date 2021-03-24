@@ -63,6 +63,12 @@ struct Key {
   void serialize(Archive& ar) {
     ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
   }
+
+  friend std::ostream& operator<<(std::ostream& out, Key const& k) {
+    out << "Key((" << k.execution_info.first.first << "," << k.execution_info.first.second << "),"
+        << k.execution_info.second << ")";
+    return out;
+  }
 };
 
 namespace std {
@@ -72,12 +78,6 @@ namespace std {
     std::size_t operator()(const Key& s) const noexcept { return s.hash(); }
   };
 }  // namespace std
-
-std::ostream& operator<<(std::ostream& s, const Key& key) {
-  s << "Key((" << key.execution_info.first.first << "," << key.execution_info.first.second << "), "
-    << key.execution_info.second << ")";
-  return s;
-}
 
 // An empty class used for pure control flows
 class Control {
