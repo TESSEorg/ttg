@@ -187,20 +187,19 @@ class FuncA : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
       ge_recursive_serial_kernelA(adjacency_matrix_ttg, problem_size, block_size, i_lb, j_lb, k_lb, recursive_fan_out,
                                   base_size);
     } else {
-      // int block_size = problem_size/blocking_factor;
-      // int i_lb = I * block_size;
-      // int j_lb = J * block_size;
-      // int k_lb = K * block_size;
-      // #pragma omp prallel
-      // {
-      //         #pragma omp single
-      //         {
-      //                 #pragma omp task
-      //                 ge_recursive_parallel_kernelA(adjacency_matrix_ttg, problem_size,
-      //                                                                       block_size, i_lb, j_lb, k_lb,
-      //                                                                       recursive_fan_out, base_size);
-      //         }
-      // }
+//      int block_size = problem_size / blocking_factor;
+//      int i_lb = I * block_size;
+//      int j_lb = J * block_size;
+//      int k_lb = K * block_size;
+//#pragma omp prallel
+//      {
+//#pragma omp single
+//        {
+//#pragma omp task
+//          ge_recursive_parallel_kernelA(adjacency_matrix_ttg, problem_size, block_size, i_lb, j_lb, k_lb,
+//                                        recursive_fan_out, base_size);
+//        }
+//      }
     }*/
 
     // Making u_ready/v_ready for all the B/C function calls in the CURRENT iteration
@@ -269,20 +268,20 @@ class FuncB : public Op<Key, std::tuple<Out<Key, Control>>, FuncB, Control, Cont
                                   k_lb, recursive_fan_out, base_size);
     } */
     else {
-      // int block_size = problem_size/blocking_factor;
-      // int i_lb = I * block_size;
-      // int j_lb = J * block_size;
-      // int k_lb = K * block_size;
-      // #pragma omp prallel
-      // {
-      //         #pragma omp single
-      //         {
-      //                 #pragma omp task
-      //                 ge_recursive_parallel_kernelB(adjacency_matrix_ttg, adjacency_matrix_ttg,
-      //                                                                           problem_size, block_size, i_lb, j_lb,
-      // k_lb,                                                                           recursive_fan_out, base_size);
-      //         }
-      // }
+      //      int block_size = problem_size / blocking_factor;
+      //      int i_lb = I * block_size;
+      //      int j_lb = J * block_size;
+      //      int k_lb = K * block_size;
+      //#pragma omp prallel
+      //      {
+      //#pragma omp single
+      //        {
+      //#pragma omp task
+      //          ge_recursive_parallel_kernelB(adjacency_matrix_ttg, adjacency_matrix_ttg, problem_size, block_size,
+      //          i_lb,
+      //                                        j_lb, k_lb, recursive_fan_out, base_size);
+      //        }
+      //      }
     }
 
     // Making v_ready for all the D function calls in the CURRENT iteration
@@ -341,20 +340,20 @@ class FuncC : public Op<Key, std::tuple<Out<Key, Control>>, FuncC, Control, Cont
                                   k_lb, recursive_fan_out, base_size);
     } */
     else {
-      // int block_size = problem_size/blocking_factor;
-      // int i_lb = I * block_size;
-      // int j_lb = J * block_size;
-      // int k_lb = K * block_size;
-      // #pragma omp prallel
-      // {
-      //         #pragma omp single
-      //         {
-      //                 #pragma omp task
-      //                 ge_recursive_parallel_kernelC(adjacency_matrix_ttg, adjacency_matrix_ttg,
-      //                                                                           problem_size, block_size, i_lb, j_lb,
-      // k_lb,                                                                           recursive_fan_out, base_size);
-      //         }
-      // }
+      //      int block_size = problem_size / blocking_factor;
+      //      int i_lb = I * block_size;
+      //      int j_lb = J * block_size;
+      //      int k_lb = K * block_size;
+      //#pragma omp prallel
+      //      {
+      //#pragma omp single
+      //        {
+      //#pragma omp task
+      //          ge_recursive_parallel_kernelC(adjacency_matrix_ttg, adjacency_matrix_ttg, problem_size, block_size,
+      //          i_lb,
+      //                                        j_lb, k_lb, recursive_fan_out, base_size);
+      //        }
+      //      }
     }
 
     // Making u_ready for all the D function calls in the CURRENT iteration
@@ -417,21 +416,20 @@ class FuncD : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
                                   base_size);
     } */
     else {
-      // int block_size = problem_size/blocking_factor;
-      // int i_lb = I * block_size;
-      // int j_lb = J * block_size;
-      // int k_lb = K * block_size;
-      // #pragma omp prallel
-      // {
-      //         #pragma omp single
-      //         {
-      //                 #pragma omp task
-      //                 ge_recursive_parallel_kernelD(adjacency_matrix_ttg, adjacency_matrix_ttg,
-      //                                                                           adjacency_matrix_ttg,
-      // adjacency_matrix_ttg,                                                                           problem_size,
-      // block_size, i_lb, j_lb, k_lb, recursive_fan_out, base_size);
-      //         }
-      // }
+      //      int block_size = problem_size / blocking_factor;
+      //      int i_lb = I * block_size;
+      //      int j_lb = J * block_size;
+      //      int k_lb = K * block_size;
+      //#pragma omp prallel
+      //      {
+      //#pragma omp single
+      //        {
+      //#pragma omp task
+      //          ge_recursive_parallel_kernelD(adjacency_matrix_ttg, adjacency_matrix_ttg, adjacency_matrix_ttg,
+      //                                        adjacency_matrix_ttg, problem_size, block_size, i_lb, j_lb, k_lb,
+      //                                        recursive_fan_out, base_size);
+      //        }
+      //      }
     }
 
     // making x_ready for the computation on the SAME block in the NEXT iteration

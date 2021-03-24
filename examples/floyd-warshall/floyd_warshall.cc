@@ -465,20 +465,20 @@ class FuncD : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
       floyd_recursive_serial_kernelD(adjacency_matrix_ttg, adjacency_matrix_ttg, adjacency_matrix_ttg, problem_size,
                                      block_size, i_lb, j_lb, k_lb, recursive_fan_out, base_size);
     } else {
-      // int block_size = problem_size/blocking_factor;
-      // int i_lb = I * block_size;
-      // int j_lb = J * block_size;
-      // int k_lb = K * block_size;
-      // #pragma omp prallel
-      // {
-      //         #pragma omp single
-      //         {
-      //                 #pragma omp task
-      //                 floyd_recursive_serial_kernelD(adjacency_matrix_ttg, adjacency_matrix_ttg,
-      //                                               adjacency_matrix_ttg, problem_size,
-      //                                               block_size, i_lb, j_lb, k_lb, recursive_fan_out, base_size);
-      //         }
-      // }
+      //      int block_size = problem_size / blocking_factor;
+      //      int i_lb = I * block_size;
+      //      int j_lb = J * block_size;
+      //      int k_lb = K * block_size;
+      //#pragma omp prallel
+      //      {
+      //#pragma omp single
+      //        {
+      //#pragma omp task
+      //          floyd_recursive_serial_kernelD(adjacency_matrix_ttg, adjacency_matrix_ttg, adjacency_matrix_ttg,
+      //          problem_size,
+      //                                         block_size, i_lb, j_lb, k_lb, recursive_fan_out, base_size);
+      //        }
+      //      }
     }
 
     // making x_ready for the computation on the SAME block in the NEXT iteration
