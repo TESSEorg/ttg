@@ -15,9 +15,9 @@
 
 // #include <omp.h> //
 
-#include "GE/GEIterativeKernelDF.h"          // contains the iterative kernel
+#include "GE/GEIterativeKernelDF.h"  // contains the iterative kernel
 //#include "GE/GERecursiveParallelKernel.h"  // contains the recursive but serial kernels
-#include "GE/GERecursiveSerialKernel.h"    // contains the recursive and parallel kernels
+#include "GE/GERecursiveSerialKernel.h"  // contains the recursive and parallel kernels
 
 #include "ttg.h"
 using namespace ttg;
@@ -36,7 +36,7 @@ struct Key {
   madness::hashT hash() const { return hash_val; }
   void rehash() {
     std::hash<int> int_hasher;
-    hash_val = int_hasher(execution_info.first.first) ^ int_hasher(execution_info.first.second) ^
+    hash_val = int_hasher(execution_info.first.first) * 2654435769 + int_hasher(execution_info.first.second) * 40503 +
                int_hasher(execution_info.second);
   }
 
@@ -61,7 +61,8 @@ namespace std {
 }  // namespace std
 
 std::ostream& operator<<(std::ostream& s, const Key& key) {
-  s << "Key((" << key.execution_info.first.first << "," << key.execution_info.first.second << "), " << key.execution_info.second << ")";
+  s << "Key((" << key.execution_info.first.first << "," << key.execution_info.first.second << "), "
+    << key.execution_info.second << ")";
   return s;
 }
 
@@ -97,7 +98,7 @@ struct Integer {
 
   template <typename Archive>
   void serialize(Archive& ar) {
-    //ar& value;
+    // ar& value;
   }
 };
 
@@ -107,15 +108,20 @@ std::ostream& operator<<(std::ostream& s, const Integer& intVal) {
 }
 
 template <typename T>
-class Initiator
-    : public Op<Integer, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                Initiator<T>> {
-  using baseT =
-      Op<Integer, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, Initiator>;
+class Initiator : public Op<Integer,
+                            std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
+                                       Out<Key, BlockMatrix<T>>>,
+                            Initiator<T>> {
+  using baseT = Op<Integer,
+                   std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
+                              Out<Key, BlockMatrix<T>>>,
+                   Initiator>;
 
   Matrix<T>* adjacency_matrix_ttg;
+
  public:
-  Initiator(Matrix<T>* adjacency_matrix_ttg, const std::string& name) : baseT(name, {}, {"outA", "outB", "outC", "outD"}), adjacency_matrix_ttg(adjacency_matrix_ttg) {}
+  Initiator(Matrix<T>* adjacency_matrix_ttg, const std::string& name)
+      : baseT(name, {}, {"outA", "outB", "outC", "outD"}), adjacency_matrix_ttg(adjacency_matrix_ttg) {}
   Initiator(Matrix<T>* adjacency_matrix_ttg, const typename baseT::output_edges_type& outedges, const std::string& name)
       : baseT(edges(), outedges, name, {}, {"outA", "outB", "outC", "outD"})
       , adjacency_matrix_ttg(adjacency_matrix_ttg) {}
@@ -127,24 +133,24 @@ class Initiator
     // This triggers for the immediate execution of function A at tile [0, 0]. But
     // functions B, C, and D have other dependencies to meet before execution; They wait
 #ifdef HAS_EXECUTION_HEADER
-      std::for_each(std::execution::par, adjacency_matrix_ttg->get().begin(), adjacency_matrix_ttg->get().end(),
-        [&out](const std::pair<std::pair<int,int>, BlockMatrix<T>>& kv)
+    std::for_each(std::execution::par, adjacency_matrix_ttg->get().begin(), adjacency_matrix_ttg->get().end(),
+                  [&out](const std::pair<std::pair<int, int>, BlockMatrix<T>>& kv)
 #else
     std::for_each(adjacency_matrix_ttg->get().begin(), adjacency_matrix_ttg->get().end(),
-      [&out](const std::pair<std::pair<int,int>, BlockMatrix<T>>& kv)
+                  [&out](const std::pair<std::pair<int, int>, BlockMatrix<T>>& kv)
 #endif
-      {
-        auto [i,j] = kv.first;
-        if (i == 0 && j == 0) {  // A function call
-          ::send<0>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
-        } else if (i == 0) {  // B function call
-          ::send<1>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
-        } else if (j == 0) {  // C function call
-          ::send<2>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
-        } else {  // D function call
-          ::send<3>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
-        }
-      });
+                  {
+                    auto [i, j] = kv.first;
+                    if (i == 0 && j == 0) {  // A function call
+                      ::send<0>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
+                    } else if (i == 0) {  // B function call
+                      ::send<1>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
+                    } else if (j == 0) {  // C function call
+                      ::send<2>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
+                    } else {  // D function call
+                      ::send<3>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
+                    }
+                  });
   }
 };
 
@@ -162,8 +168,8 @@ class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
 
  public:
   Finalizer(Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
-            int recursive_fan_out, int base_size, const std::string& name,
-            T* adjacency_matrix_serial, bool verify_results = false)
+            int recursive_fan_out, int base_size, const std::string& name, T* adjacency_matrix_serial,
+            bool verify_results = false)
       : baseT(name, {"input"}, {})
       , result_matrix_ttg(result_matrix_ttg)
       , problem_size(problem_size)
@@ -185,8 +191,7 @@ class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
       , recursive_fan_out(recursive_fan_out)
       , base_size(base_size) {}
 
-  void op(const Key& key, const std::tuple<BlockMatrix<T>>&& t,
-          typename baseT::output_terminals_type& out) {
+  void op(const Key& key, const std::tuple<BlockMatrix<T>>&& t, typename baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
     int block_size = problem_size / blocking_factor;
@@ -205,10 +210,11 @@ class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
             int blockY = j / block_size;
             if (blockY == J) {
               int y = j % block_size;
-              double v1 = bm(x,y);
+              double v1 = bm(x, y);
               double v2 = adjacency_matrix_serial[row + j];
               if (fabs(v1 - v2) > numeric_limits<double>::epsilon()) {
-                cout << "ERROR in block [" << I << "," << J << "], element[" << i << ", " << j << "]: " << v2 << "!=" << v1 << endl;
+                cout << "ERROR in block [" << I << "," << J << "], element[" << i << ", " << j << "]: " << v2
+                     << "!=" << v1 << endl;
                 equal = false;
                 break;
               }
@@ -223,8 +229,14 @@ class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
 };
 
 template <typename T>
-class FuncA : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncA<T>, BlockMatrix<T>> {
-  using baseT = Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncA, BlockMatrix<T>>;
+class FuncA : public Op<Key,
+                        std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
+                                   Out<Key, BlockMatrix<T>>>,
+                        FuncA<T>, BlockMatrix<T>> {
+  using baseT = Op<Key,
+                   std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
+                              Out<Key, BlockMatrix<T>>>,
+                   FuncA, BlockMatrix<T>>;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -259,12 +271,13 @@ class FuncA : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    //std::cout << "FuncA " << I << " " << J << " " << K << std::endl;
+    // std::cout << "FuncA " << I << " " << J << " " << K << std::endl;
     BlockMatrix<T> m_ij = get<0>(t);
     // Executing the update
     if (kernel_type == "iterative") {
-      //m_ij = 
-      ge_iterative_kernel(problem_size / blocking_factor, I, J, K, m_ij.get(), get<0>(t).get(), get<0>(t).get(), get<0>(t).get());
+      // m_ij =
+      ge_iterative_kernel(problem_size / blocking_factor, I, J, K, m_ij.get(), get<0>(t).get(), get<0>(t).get(),
+                          get<0>(t).get());
     } /*else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
       int i_lb = I * block_size;
@@ -272,20 +285,21 @@ class FuncA : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
       int k_lb = K * block_size;
       ge_recursive_serial_kernelA(adjacency_matrix_ttg, problem_size, block_size, i_lb, j_lb, k_lb, recursive_fan_out,
                                   base_size);
-    } */else {
+    } */
+    else {
       // int block_size = problem_size/blocking_factor;
       // int i_lb = I * block_size;
       // int j_lb = J * block_size;
       // int k_lb = K * block_size;
       // #pragma omp prallel
       // {
-      // 	#pragma omp single
-      // 	{
-      // 		#pragma omp task
-      // 		ge_recursive_parallel_kernelA(adjacency_matrix_ttg, problem_size,
-      // 								      block_size, i_lb, j_lb, k_lb,
-      // 								      recursive_fan_out, base_size);
-      // 	}
+      //     #pragma omp single
+      //     {
+      //         #pragma omp task
+      //         ge_recursive_parallel_kernelA(adjacency_matrix_ttg, problem_size,
+      //                                       block_size, i_lb, j_lb, k_lb,
+      //                                       recursive_fan_out, base_size);
+      //     }
       // }
     }
 
@@ -303,14 +317,16 @@ class FuncA : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
         ::send<2>(Key(std::make_pair(std::make_pair(i, j), K)), m_ij, out);
       }
     }
-    //Send result
+    // Send result
     ::send<3>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
   }
 };
 
 template <typename T>
-class FuncB : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncB<T>, BlockMatrix<T>, BlockMatrix<T>> {
-  using baseT = Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncB, BlockMatrix<T>, BlockMatrix<T>>;
+class FuncB : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncB<T>, BlockMatrix<T>,
+                        BlockMatrix<T>> {
+  using baseT =
+      Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncB, BlockMatrix<T>, BlockMatrix<T>>;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -340,17 +356,19 @@ class FuncB : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
       , recursive_fan_out(recursive_fan_out)
       , base_size(base_size) {}
 
-  void op(const Key& key, const std::tuple<BlockMatrix<T>, BlockMatrix<T>>& t, typename baseT::output_terminals_type& out) {
+  void op(const Key& key, const std::tuple<BlockMatrix<T>, BlockMatrix<T>>& t,
+          typename baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    //std::cout << "FuncB " << I << " " << J << " " << K << std::endl;
+    // std::cout << "FuncB " << I << " " << J << " " << K << std::endl;
     BlockMatrix<T> m_ij = get<0>(t);
     // Executing the update
     if (kernel_type == "iterative") {
-      //m_ij = 
-      ge_iterative_kernel(problem_size / blocking_factor, I, J, K, m_ij.get(), get<1>(t).get(), get<0>(t).get(), get<1>(t).get());
+      // m_ij =
+      ge_iterative_kernel(problem_size / blocking_factor, I, J, K, m_ij.get(), get<1>(t).get(), get<0>(t).get(),
+                          get<1>(t).get());
     } /*else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
       int i_lb = I * block_size;
@@ -358,20 +376,21 @@ class FuncB : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
       int k_lb = K * block_size;
       ge_recursive_serial_kernelB(adjacency_matrix_ttg, adjacency_matrix_ttg, problem_size, block_size, i_lb, j_lb,
                                   k_lb, recursive_fan_out, base_size);
-    } */else {
+    } */
+    else {
       // int block_size = problem_size/blocking_factor;
       // int i_lb = I * block_size;
       // int j_lb = J * block_size;
       // int k_lb = K * block_size;
       // #pragma omp prallel
       // {
-      // 	#pragma omp single
-      // 	{
-      // 		#pragma omp task
-      // 		ge_recursive_parallel_kernelB(adjacency_matrix_ttg, adjacency_matrix_ttg,
-      // 									  problem_size, block_size, i_lb, j_lb,
-      // k_lb, 									  recursive_fan_out, base_size);
-      // 	}
+      //     #pragma omp single
+      //     {
+      //         #pragma omp task
+      //         ge_recursive_parallel_kernelB(adjacency_matrix_ttg, adjacency_matrix_ttg,
+      //                                       problem_size, block_size, i_lb, j_lb,
+      // k_lb,                                       recursive_fan_out, base_size);
+      //     }
       // }
     }
 
@@ -379,14 +398,16 @@ class FuncB : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
     for (int i = K + 1; i < blocking_factor; ++i) {
       ::send<0>(Key(std::make_pair(std::make_pair(i, J), K)), m_ij, out);
     }
-    //Send result
+    // Send result
     ::send<1>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
   }
 };
 
 template <typename T>
-class FuncC : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncC<T>, BlockMatrix<T>, BlockMatrix<T>> {
-  using baseT = Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncC, BlockMatrix<T>, BlockMatrix<T>>;
+class FuncC : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncC<T>, BlockMatrix<T>,
+                        BlockMatrix<T>> {
+  using baseT =
+      Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncC, BlockMatrix<T>, BlockMatrix<T>>;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -416,18 +437,20 @@ class FuncC : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
       , recursive_fan_out(recursive_fan_out)
       , base_size(base_size) {}
 
-  void op(const Key& key, const std::tuple<BlockMatrix<T>, BlockMatrix<T>>& t, typename baseT::output_terminals_type& out) {
+  void op(const Key& key, const std::tuple<BlockMatrix<T>, BlockMatrix<T>>& t,
+          typename baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
- 
-    //std::cout << "FuncC " << I << " " << J << " " << K << std::endl; 
+
+    // std::cout << "FuncC " << I << " " << J << " " << K << std::endl;
     BlockMatrix<T> m_ij = get<0>(t);
 
     // Executing the update
     if (kernel_type == "iterative") {
-      //m_ij = 
-      ge_iterative_kernel(problem_size / blocking_factor, I, J, K, m_ij.get(), get<0>(t).get(),  get<1>(t).get(), get<1>(t).get());
+      // m_ij =
+      ge_iterative_kernel(problem_size / blocking_factor, I, J, K, m_ij.get(), get<0>(t).get(), get<1>(t).get(),
+                          get<1>(t).get());
     } /*else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
       int i_lb = I * block_size;
@@ -435,20 +458,21 @@ class FuncC : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
       int k_lb = K * block_size;
       ge_recursive_serial_kernelC(adjacency_matrix_ttg, adjacency_matrix_ttg, problem_size, block_size, i_lb, j_lb,
                                   k_lb, recursive_fan_out, base_size);
-    }*/ else {
+    }*/
+    else {
       // int block_size = problem_size/blocking_factor;
       // int i_lb = I * block_size;
       // int j_lb = J * block_size;
       // int k_lb = K * block_size;
       // #pragma omp prallel
       // {
-      // 	#pragma omp single
-      // 	{
-      // 		#pragma omp task
-      // 		ge_recursive_parallel_kernelC(adjacency_matrix_ttg, adjacency_matrix_ttg,
-      // 									  problem_size, block_size, i_lb, j_lb,
-      // k_lb, 									  recursive_fan_out, base_size);
-      // 	}
+      //     #pragma omp single
+      //     {
+      //         #pragma omp task
+      //         ge_recursive_parallel_kernelC(adjacency_matrix_ttg, adjacency_matrix_ttg,
+      //                                       problem_size, block_size, i_lb, j_lb,
+      // k_lb,                                       recursive_fan_out, base_size);
+      //     }
       // }
     }
 
@@ -456,16 +480,20 @@ class FuncC : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
     for (int j = K + 1; j < blocking_factor; ++j) {
       ::send<0>(Key(std::make_pair(std::make_pair(I, j), K)), m_ij, out);
     }
-    //Send result
+    // Send result
     ::send<1>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
   }
 };
 
 template <typename T>
-class FuncD : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
+class FuncD : public Op<Key,
+                        std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
+                                   Out<Key, BlockMatrix<T>>>,
                         FuncD<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>> {
-  using baseT = Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncD,
-                   BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>>;
+  using baseT = Op<Key,
+                   std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
+                              Out<Key, BlockMatrix<T>>>,
+                   FuncD, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>>;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -495,17 +523,18 @@ class FuncD : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
       , recursive_fan_out(recursive_fan_out)
       , base_size(base_size) {}
 
-  void op(const Key& key, const std::tuple<BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>>&& t, typename baseT::output_terminals_type& out) {
+  void op(const Key& key, const std::tuple<BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>>&& t,
+          typename baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
-    //std::cout << "FuncD " << I << " " << J << " " << K << std::endl;
+    // std::cout << "FuncD " << I << " " << J << " " << K << std::endl;
     BlockMatrix<T> m_ij = get<0>(t);
     // Executing the update
     if (kernel_type == "iterative") {
-      //m_ij = 
-      ge_iterative_kernel(problem_size /blocking_factor, I, J, K, m_ij.get(), 
-          get<2>(t).get(), get<1>(t).get(), get<3>(t).get());
+      // m_ij =
+      ge_iterative_kernel(problem_size / blocking_factor, I, J, K, m_ij.get(), get<2>(t).get(), get<1>(t).get(),
+                          get<3>(t).get());
     } /*else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
       int i_lb = I * block_size;
@@ -514,20 +543,22 @@ class FuncD : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
       ge_recursive_serial_kernelD(adjacency_matrix_ttg, adjacency_matrix_ttg, adjacency_matrix_ttg,
                                   adjacency_matrix_ttg, problem_size, block_size, i_lb, j_lb, k_lb, recursive_fan_out,
                                   base_size);
-    }*/ else {
+    }*/
+    else {
       // int block_size = problem_size/blocking_factor;
       // int i_lb = I * block_size;
       // int j_lb = J * block_size;
       // int k_lb = K * block_size;
       // #pragma omp prallel
       // {
-      // 	#pragma omp single
-      // 	{
-      // 		#pragma omp task
-      // 		ge_recursive_parallel_kernelD(adjacency_matrix_ttg, adjacency_matrix_ttg,
-      // 									  adjacency_matrix_ttg,
-      // adjacency_matrix_ttg, 									  problem_size, block_size, i_lb, j_lb, k_lb, 									  recursive_fan_out, base_size);
-      // 	}
+      //     #pragma omp single
+      //     {
+      //         #pragma omp task
+      //         ge_recursive_parallel_kernelD(adjacency_matrix_ttg, adjacency_matrix_ttg,
+      //                                       adjacency_matrix_ttg,
+      // adjacency_matrix_ttg,                                       problem_size,
+      // block_size, i_lb, j_lb, k_lb, recursive_fan_out, base_size);
+      //     }
       // }
     }
 
@@ -543,9 +574,9 @@ class FuncD : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
         ::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
       }
     }
-    //else
-      //Send result when all iterations are done.
-      //::send<4>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
+    // else
+    // Send result when all iterations are done.
+    //::send<4>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
   }
 };
 
@@ -564,16 +595,18 @@ class GaussianElimination {
   ttg::World world;
 
  public:
-  GaussianElimination(Matrix<T>* adjacency_matrix_ttg, Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor,
-                      const std::string& kernel_type, int recursive_fan_out, int base_size,
+  GaussianElimination(Matrix<T>* adjacency_matrix_ttg, Matrix<T>* result_matrix_ttg, int problem_size,
+                      int blocking_factor, const std::string& kernel_type, int recursive_fan_out, int base_size,
                       T* adjacency_matrix_serial, bool verify_results = false)
       : initiator(adjacency_matrix_ttg, "initiator")
       , funcA(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcA")
       , funcB(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcB")
       , funcC(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcC")
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
-      , finalizer(result_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "finalizer", adjacency_matrix_serial, verify_results)
-      , blocking_factor(blocking_factor), world(ttg_default_execution_context()) {
+      , finalizer(result_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
+                  "finalizer", adjacency_matrix_serial, verify_results)
+      , blocking_factor(blocking_factor)
+      , world(ttg_default_execution_context()) {
     initiator.template out<0>()->connect(funcA.template in<0>());
     initiator.template out<1>()->connect(funcB.template in<0>());
     initiator.template out<2>()->connect(funcC.template in<0>());
@@ -624,8 +657,8 @@ class GaussianElimination {
 void parse_arguments(int argc, char** argv, int& problem_size, int& blocking_factor, string& kernel_type,
                      int& recursive_fan_out, int& base_size, bool& verify_results);
 // Initializes the adjacency matrices
-void init_square_matrix(int problem_size, int blocking_factor, bool verify_results,
-                        double* adjacency_matrix_serial, Matrix<double>* m);
+void init_square_matrix(int problem_size, int blocking_factor, bool verify_results, double* adjacency_matrix_serial,
+                        Matrix<double>* m);
 // Checking the equality of two double values
 bool equals(double v1, double v2);
 // Checking the equality of the two matrix after computing ge on them
@@ -655,22 +688,25 @@ int main(int argc, char** argv) {
   int base_size;
   bool verify_results;
   if (argc != 5) {
-    std::cout << "Usage: ./ge-df-<runtime - mad/parsec> <problem size> <blocking factor> <kernel type - iterative/recursive-serial/recursive-parallel> verify-results/do-not-verify-results\n";
+    std::cout << "Usage: ./ge-df-<runtime - mad/parsec> <problem size> <blocking factor> <kernel type - "
+                 "iterative/recursive-serial/recursive-parallel> verify-results/do-not-verify-results\n";
     problem_size = 2048;
     blocking_factor = 32;
     kernel_type = "iterative";
     verify_results = false;
-    std::cout << "Running with problem size: " << problem_size << ", blocking factor: " << blocking_factor << ", kernel type: " << kernel_type << ", verify results: " << verify_results << std::endl;
+    std::cout << "Running with problem size: " << problem_size << ", blocking factor: " << blocking_factor
+              << ", kernel type: " << kernel_type << ", verify results: " << verify_results << std::endl;
   } else {
-    parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, verify_results);
+    parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
+                    verify_results);
   }
 
   double* adjacency_matrix_serial;  // Using for the verification (if needed)
-  //double* adjacency_matrix_ttg;     // Using for running the blocked implementation of GE algorithm on ttg runtime
+  // double* adjacency_matrix_ttg;     // Using for running the blocked implementation of GE algorithm on ttg runtime
   if (verify_results) {
     adjacency_matrix_serial = (double*)malloc(sizeof(double) * problem_size * problem_size);
   }
-  //adjacency_matrix_ttg = (double*)malloc(sizeof(double) * problem_size * problem_size);
+  // adjacency_matrix_ttg = (double*)malloc(sizeof(double) * problem_size * problem_size);
   int block_size = problem_size / blocking_factor;
   int n_brows = (problem_size / block_size) + (problem_size % block_size > 0);
   int n_bcols = n_brows;
@@ -679,29 +715,28 @@ int main(int argc, char** argv) {
   Matrix<double>* r = new Matrix<double>(n_brows, n_bcols, block_size, block_size);
 
   init_square_matrix(problem_size, blocking_factor, verify_results, adjacency_matrix_serial, m);
-  //m->print();
+  // m->print();
   // Calling the iterative ge
   if (verify_results) {
-    //std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+    // std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     ge_iterative(adjacency_matrix_serial, problem_size);
-    //std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
-    //auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-    //cout << problem_size << " " << blocking_factor << " " << duration / 1000000.0 << endl;
-    //cout << "iterative ge took: " << duration / 1000000.0 << " seconds" << endl;
+    // std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+    // cout << problem_size << " " << blocking_factor << " " << duration / 1000000.0 << endl;
+    // cout << "iterative ge took: " << duration / 1000000.0 << " seconds" << endl;
   }
 
   // Running the ttg version
   std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
   // Calling the blocked implementation of GE algorithm on ttg runtime
-  GaussianElimination<double> ge(m, r, problem_size, blocking_factor, kernel_type, recursive_fan_out,
-                         base_size, adjacency_matrix_serial, verify_results);
-  //std::cout << ge.dot() << std::endl;
+  GaussianElimination<double> ge(m, r, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
+                                 adjacency_matrix_serial, verify_results);
+  // std::cout << ge.dot() << std::endl;
   ge.start();
   ge.fence();
   std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-  if (world.rank() == 0)
-    cout << problem_size << " " << blocking_factor << " " << duration / 1000000.0 << endl;
+  if (world.rank() == 0) cout << problem_size << " " << blocking_factor << " " << duration / 1000000.0 << endl;
   /*if (verify_results && world.rank() == 0) {
     if (equals(r, adjacency_matrix_serial, problem_size, blocking_factor)) {
       cout << "Serial and TTG implementation matches!" << endl;
@@ -710,7 +745,7 @@ int main(int argc, char** argv) {
     }
   }*/
   // deallocating the allocated memories
-  //free(adjacency_matrix_ttg);
+  // free(adjacency_matrix_ttg);
   delete m;
   delete r;
 
@@ -762,9 +797,9 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
   return true;
 }
 
-void init_square_matrix(int problem_size, int blocking_factor,bool verify_results,
-                        double* adjacency_matrix_serial, Matrix<double>* m) {
-  //srand(123);  // srand(time(nullptr));
+void init_square_matrix(int problem_size, int blocking_factor, bool verify_results, double* adjacency_matrix_serial,
+                        Matrix<double>* m) {
+  // srand(123);  // srand(time(nullptr));
   int block_size = problem_size / blocking_factor;
   for (int i = 0; i < problem_size; ++i) {
     int row = i * problem_size;
@@ -773,7 +808,7 @@ void init_square_matrix(int problem_size, int blocking_factor,bool verify_result
     for (int j = 0; j < problem_size; ++j) {
       int blockY = j / block_size;
       int y = j % block_size;
-      double value = i * blocking_factor + j;//rand() % 100 + 1;
+      double value = i * blocking_factor + j;  // rand() % 100 + 1;
       ((*m)(blockX, blockY))(x, y, value);
       if (verify_results) {
         adjacency_matrix_serial[row + j] = value;
@@ -790,7 +825,7 @@ void parse_arguments(int argc, char** argv, int& problem_size, int& blocking_fac
   string verify_res(argv[4]);
   verify_results = (verify_res == "verify-results");
 
-  //cout << "Problem_size: " << problem_size << ", blocking_factor: " << blocking_factor
+  // cout << "Problem_size: " << problem_size << ", blocking_factor: " << blocking_factor
   //     << ", kernel_type: " << kernel_type << ", verify_results: " << boolalpha << verify_results;
   if (argc > 5) {
     recursive_fan_out = atoi(argv[5]);

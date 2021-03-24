@@ -10,7 +10,7 @@
 
 // #include <omp.h> //
 
-#include "GE/GEIterativeKernel.h"          // contains the iterative kernel
+#include "GE/GEIterativeKernel.h"  // contains the iterative kernel
 //#include "GE/GERecursiveParallelKernel.h"  // contains the recursive but serial kernels
 //#include "GE/GERecursiveSerialKernel.h"    // contains the recursive and parallel kernels
 
@@ -35,7 +35,7 @@ struct Key {
   madness::hashT hash() const { return hash_val; }
   void rehash() {
     std::hash<int> int_hasher;
-    hash_val = int_hasher(execution_info.first.first) ^ int_hasher(execution_info.first.second) ^
+    hash_val = int_hasher(execution_info.first.first) * 2654435769 + int_hasher(execution_info.first.second) * 40503 +
                int_hasher(execution_info.second);
   }
 
@@ -60,7 +60,8 @@ namespace std {
 }  // namespace std
 
 std::ostream& operator<<(std::ostream& s, const Key& key) {
-  s << "Key((" << key.execution_info.first.first << "," << key.execution_info.first.second << "), " << key.execution_info.second << ")";
+  s << "Key((" << key.execution_info.first.first << "," << key.execution_info.first.second << "), "
+    << key.execution_info.second << ")";
   return s;
 }
 
@@ -96,7 +97,7 @@ struct Integer {
 
   template <typename Archive>
   void serialize(Archive& ar) {
-    //ar& value;
+    // ar& value;
   }
 };
 
@@ -174,7 +175,7 @@ class FuncA : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    //std::cout << "FuncA " << I << " " << J << " " << K << " " << std::endl;
+    // std::cout << "FuncA " << I << " " << J << " " << K << " " << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
       ge_iterative_kernelA(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg);
@@ -192,13 +193,13 @@ class FuncA : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
       // int k_lb = K * block_size;
       // #pragma omp prallel
       // {
-      // 	#pragma omp single
-      // 	{
-      // 		#pragma omp task
-      // 		ge_recursive_parallel_kernelA(adjacency_matrix_ttg, problem_size,
-      // 								      block_size, i_lb, j_lb, k_lb,
-      // 								      recursive_fan_out, base_size);
-      // 	}
+      //         #pragma omp single
+      //         {
+      //                 #pragma omp task
+      //                 ge_recursive_parallel_kernelA(adjacency_matrix_ttg, problem_size,
+      //                                                                       block_size, i_lb, j_lb, k_lb,
+      //                                                                       recursive_fan_out, base_size);
+      //         }
       // }
     }*/
 
@@ -255,7 +256,7 @@ class FuncB : public Op<Key, std::tuple<Out<Key, Control>>, FuncB, Control, Cont
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    //std::cout << "FuncB " << I << " " << J << " " << K << " " << std::endl;
+    // std::cout << "FuncB " << I << " " << J << " " << K << " " << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
       ge_iterative_kernelB(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg, adjacency_matrix_ttg);
@@ -266,20 +267,21 @@ class FuncB : public Op<Key, std::tuple<Out<Key, Control>>, FuncB, Control, Cont
       int k_lb = K * block_size;
       ge_recursive_serial_kernelB(adjacency_matrix_ttg, adjacency_matrix_ttg, problem_size, block_size, i_lb, j_lb,
                                   k_lb, recursive_fan_out, base_size);
-    } */else {
+    } */
+    else {
       // int block_size = problem_size/blocking_factor;
       // int i_lb = I * block_size;
       // int j_lb = J * block_size;
       // int k_lb = K * block_size;
       // #pragma omp prallel
       // {
-      // 	#pragma omp single
-      // 	{
-      // 		#pragma omp task
-      // 		ge_recursive_parallel_kernelB(adjacency_matrix_ttg, adjacency_matrix_ttg,
-      // 									  problem_size, block_size, i_lb, j_lb,
-      // k_lb, 									  recursive_fan_out, base_size);
-      // 	}
+      //         #pragma omp single
+      //         {
+      //                 #pragma omp task
+      //                 ge_recursive_parallel_kernelB(adjacency_matrix_ttg, adjacency_matrix_ttg,
+      //                                                                           problem_size, block_size, i_lb, j_lb,
+      // k_lb,                                                                           recursive_fan_out, base_size);
+      //         }
       // }
     }
 
@@ -326,7 +328,7 @@ class FuncC : public Op<Key, std::tuple<Out<Key, Control>>, FuncC, Control, Cont
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    //std::cout << "FuncC " << I << " " << J << " " << K << " " << std::endl;
+    // std::cout << "FuncC " << I << " " << J << " " << K << " " << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
       ge_iterative_kernelC(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg, adjacency_matrix_ttg);
@@ -337,20 +339,21 @@ class FuncC : public Op<Key, std::tuple<Out<Key, Control>>, FuncC, Control, Cont
       int k_lb = K * block_size;
       ge_recursive_serial_kernelC(adjacency_matrix_ttg, adjacency_matrix_ttg, problem_size, block_size, i_lb, j_lb,
                                   k_lb, recursive_fan_out, base_size);
-    } */else {
+    } */
+    else {
       // int block_size = problem_size/blocking_factor;
       // int i_lb = I * block_size;
       // int j_lb = J * block_size;
       // int k_lb = K * block_size;
       // #pragma omp prallel
       // {
-      // 	#pragma omp single
-      // 	{
-      // 		#pragma omp task
-      // 		ge_recursive_parallel_kernelC(adjacency_matrix_ttg, adjacency_matrix_ttg,
-      // 									  problem_size, block_size, i_lb, j_lb,
-      // k_lb, 									  recursive_fan_out, base_size);
-      // 	}
+      //         #pragma omp single
+      //         {
+      //                 #pragma omp task
+      //                 ge_recursive_parallel_kernelC(adjacency_matrix_ttg, adjacency_matrix_ttg,
+      //                                                                           problem_size, block_size, i_lb, j_lb,
+      // k_lb,                                                                           recursive_fan_out, base_size);
+      //         }
       // }
     }
 
@@ -399,11 +402,11 @@ class FuncD : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    //std::cout << "FuncD " << I << " " << J << " " << K << " " << std::endl;
+    // std::cout << "FuncD " << I << " " << J << " " << K << " " << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
-      ge_iterative_kernelD(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg,
-          adjacency_matrix_ttg, adjacency_matrix_ttg, adjacency_matrix_ttg);
+      ge_iterative_kernelD(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg, adjacency_matrix_ttg,
+                           adjacency_matrix_ttg, adjacency_matrix_ttg);
     } /*else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
       int i_lb = I * block_size;
@@ -412,20 +415,22 @@ class FuncD : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
       ge_recursive_serial_kernelD(adjacency_matrix_ttg, adjacency_matrix_ttg, adjacency_matrix_ttg,
                                   adjacency_matrix_ttg, problem_size, block_size, i_lb, j_lb, k_lb, recursive_fan_out,
                                   base_size);
-    } */else {
+    } */
+    else {
       // int block_size = problem_size/blocking_factor;
       // int i_lb = I * block_size;
       // int j_lb = J * block_size;
       // int k_lb = K * block_size;
       // #pragma omp prallel
       // {
-      // 	#pragma omp single
-      // 	{
-      // 		#pragma omp task
-      // 		ge_recursive_parallel_kernelD(adjacency_matrix_ttg, adjacency_matrix_ttg,
-      // 									  adjacency_matrix_ttg,
-      // adjacency_matrix_ttg, 									  problem_size, block_size, i_lb, j_lb, k_lb, 									  recursive_fan_out, base_size);
-      // 	}
+      //         #pragma omp single
+      //         {
+      //                 #pragma omp task
+      //                 ge_recursive_parallel_kernelD(adjacency_matrix_ttg, adjacency_matrix_ttg,
+      //                                                                           adjacency_matrix_ttg,
+      // adjacency_matrix_ttg,                                                                           problem_size,
+      // block_size, i_lb, j_lb, k_lb, recursive_fan_out, base_size);
+      //         }
       // }
     }
 
@@ -464,7 +469,8 @@ class GaussianElimination {
       , funcB(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcB")
       , funcC(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcC")
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
-      , blocking_factor(blocking_factor), world(ttg_default_execution_context()) {
+      , blocking_factor(blocking_factor)
+      , world(ttg_default_execution_context()) {
     initiator.out<0>()->connect(funcA.in<0>());
     initiator.out<1>()->connect(funcB.in<0>());
     initiator.out<2>()->connect(funcC.in<0>());
@@ -558,20 +564,23 @@ int main(int argc, char** argv) {
   int base_size;
   bool verify_results;
   if (argc != 5) {
-    std::cout << "Usage: ./ge-<runtime - mad/parsec> <problem size> <blocking factor> <kernel type - iterative/recursive-serial/recursive-parallel> verify-results/do-not-verify-results\n";
+    std::cout << "Usage: ./ge-<runtime - mad/parsec> <problem size> <blocking factor> <kernel type - "
+                 "iterative/recursive-serial/recursive-parallel> verify-results/do-not-verify-results\n";
     problem_size = 2048;
     blocking_factor = 32;
     kernel_type = "iterative";
     verify_results = false;
-    std::cout << "Running with problem size: " << problem_size << ", blocking factor: " << blocking_factor << ", kernel type: " << kernel_type << ", verify results: " << verify_results << std::endl;
+    std::cout << "Running with problem size: " << problem_size << ", blocking factor: " << blocking_factor
+              << ", kernel type: " << kernel_type << ", verify results: " << verify_results << std::endl;
   } else {
-    parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, verify_results);
+    parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
+                    verify_results);
   }
 
   double* adjacency_matrix_serial;  // Using for the verification (if needed)
-  //__declspec(align(16)) 
-  double* adjacency_matrix_ttg;     // Using for running the blocked implementation of GE algorithm on ttg runtime
-  
+  //__declspec(align(16))
+  double* adjacency_matrix_ttg;  // Using for running the blocked implementation of GE algorithm on ttg runtime
+
   if (verify_results) {
     adjacency_matrix_serial = (double*)malloc(sizeof(double) * problem_size * problem_size);
   }
@@ -592,7 +601,7 @@ int main(int argc, char** argv) {
   // Calling the blocked implementation of GE algorithm on ttg runtime
   GaussianElimination ge(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out,
                          base_size);
-  //std::cout << ge.dot() << std::endl;
+  // std::cout << ge.dot() << std::endl;
   ge.start();
   ge.fence();
   std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
@@ -633,7 +642,7 @@ void ge_iterative(double* adjacency_matrix_serial, int problem_size) {
   }
 }
 
-bool equals(double v1, double v2) { return fabs(v1 - v2) < 0.0000000001; }//numeric_limits<double>::epsilon(); }
+bool equals(double v1, double v2) { return fabs(v1 - v2) < 0.0000000001; }  // numeric_limits<double>::epsilon(); }
 
 bool equals(double* matrix1, double* matrix2, int problem_size) {
   for (int i = 0; i < problem_size; ++i) {
@@ -644,7 +653,7 @@ bool equals(double* matrix1, double* matrix2, int problem_size) {
       if (!equals(v1, v2)) {
         cout << "matrix1[" << i << ", " << j << "]: " << v1 << endl;
         cout << "matrix2[" << i << ", " << j << "]: " << v2 << endl;
-        cout << "fabs: " << fabs(v1 - v2) << " is not less than " << numeric_limits<double>::epsilon()<< endl;
+        cout << "fabs: " << fabs(v1 - v2) << " is not less than " << numeric_limits<double>::epsilon() << endl;
         return false;
       }
     }
@@ -670,7 +679,9 @@ void init_square_matrix(double* adjacency_matrix_ttg, int problem_size, bool ver
 void parse_arguments(int argc, char** argv, int& problem_size, int& blocking_factor, string& kernel_type,
                      int& recursive_fan_out, int& base_size, bool& verify_results) {
   if (argc < 4) {
-    cout << argv[0] << " <problem_size> <blocking_factor> <kernel_type=[recursive-serial or recursive-parallel]> <verify-results>" << endl;
+    cout << argv[0]
+         << " <problem_size> <blocking_factor> <kernel_type=[recursive-serial or recursive-parallel]> <verify-results>"
+         << endl;
     ttg_abort();
   }
   problem_size = atoi(argv[1]);     // e.g., 1024
@@ -683,7 +694,7 @@ void parse_arguments(int argc, char** argv, int& problem_size, int& blocking_fac
   } else {
     verify_results = false;
   }
-  //cout << "Problem_size: " << problem_size << ", blocking_factor: " << blocking_factor
+  // cout << "Problem_size: " << problem_size << ", blocking_factor: " << blocking_factor
   //     << ", kernel_type: " << kernel_type << ", verify_results: " << boolalpha << verify_results;
   if (argc > 5) {
     recursive_fan_out = atoi(argv[5]);
