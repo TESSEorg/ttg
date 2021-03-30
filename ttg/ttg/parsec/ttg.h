@@ -1240,8 +1240,8 @@ namespace ttg_parsec {
           int32_t lreg_size_i = lreg_size;
           std::memcpy(msg->bytes + pos, &lreg_size_i, sizeof(lreg_size_i));
           pos += sizeof(lreg_size_i);
-          std::memcpy(msg->bytes + pos, &lreg, lreg_size_i);
-          pos += lreg_size;
+          std::memcpy(msg->bytes + pos, lreg, lreg_size_i);
+          pos += lreg_size_i;
           /* TODO: can we avoid the extra indirection of going through std::function? */
           std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
             /* shared_ptr of value and registration captured by value so resetting
