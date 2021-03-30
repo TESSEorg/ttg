@@ -1152,7 +1152,7 @@ namespace ttg_parsec {
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>> &&
                          !ttg::has_split_metadata<std::decay_t<Value>>::value,
                      void>
-    broadcast_arg(const std::vector<Key> &keylist, const Value &value) {
+    broadcast_arg(const ttg::span<const Key> &keylist, const Value &value) {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       int owner;
       int num_remote = 0;
@@ -1199,7 +1199,8 @@ namespace ttg_parsec {
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>> &&
                          ttg::has_split_metadata<std::decay_t<Value>>::value,
                      void>
-    splitmd_broadcast_arg(const std::vector<Key> &keylist, std::shared_ptr<const Value> &value_ptr) {
+    splitmd_broadcast_arg(const ttg::span<const Key> &keylist, std::shared_ptr<const Value> &value_ptr)
+    {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
 
       int owner;
@@ -1399,13 +1400,13 @@ namespace ttg_parsec {
           set_arg<i, keyT, const valueT &>(key, value);
         };
         if constexpr (ttg::has_split_metadata<std::decay_t<valueT>>::value) {
-          auto splitmd_broadcast_callback = [this](const std::vector<keyT> &keylist,
+          auto splitmd_broadcast_callback = [this](const ttg::span<const keyT> &keylist,
                                                    std::shared_ptr<const valueT> &value_ptr) {
             splitmd_broadcast_arg<i, keyT, valueT>(keylist, value_ptr);
           };
           input.set_callback(send_callback, move_callback, {}, splitmd_broadcast_callback);
         } else {
-          auto broadcast_callback = [this](const std::vector<keyT> &keylist, const valueT &value) {
+          auto broadcast_callback = [this](const ttg::span<const keyT> &keylist, const valueT &value) {
             broadcast_arg<i, keyT, valueT>(keylist, value);
           };
           input.set_callback(send_callback, move_callback, broadcast_callback);

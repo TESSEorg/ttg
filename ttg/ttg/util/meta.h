@@ -4,6 +4,8 @@
 #include <functional>
 #include <type_traits>
 
+#include "ttg/util/span.h"
+
 namespace ttg {
 
   class Void;
@@ -319,11 +321,11 @@ template<typename Key, typename Value, typename Enabler = void>
 struct broadcast_callback;
 template<typename Key, typename Value>
 struct broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
-using type = std::function<void(const std::vector<Key>&, const Value&)>;
+using type = std::function<void(const ttg::span<const Key>&, const Value&)>;
 };
 template<typename Key, typename Value>
 struct broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
-using type = std::function<void(const std::vector<Key>&)>;
+using type = std::function<void(const ttg::span<const Key>&)>;
 };
 template<typename Key, typename Value>
 struct broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
@@ -343,11 +345,11 @@ template<typename Key, typename Value, typename Enabler = void>
 struct splitmd_broadcast_callback;
 template<typename Key, typename Value>
 struct splitmd_broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
-using type = std::function<void(const std::vector<Key>&, std::shared_ptr<const Value>&)>;
+using type = std::function<void(const ttg::span<const Key>&, std::shared_ptr<const Value>&)>;
 };
 template<typename Key, typename Value>
 struct splitmd_broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
-using type = std::function<void(const std::vector<Key>&)>;
+using type = std::function<void(const ttg::span<const Key>&)>;
 };
 template<typename Key, typename Value>
 struct splitmd_broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {

@@ -113,15 +113,7 @@ namespace ttg {
     std::enable_if_t<!meta::is_void_v<Value>,void>
     broadcast(const rangeT &keylist, const Value &value) {
       if (broadcast_callback) {
-        std::vector<keyT> vkl;
-        const std::vector<keyT>* vklref;
-        if constexpr (std::is_same_v<std::vector<keyT>, rangeT>) {
-          vklref = &keylist;
-        } else {
-          vkl = std::vector<keyT>{std::begin(keylist), std::end(keylist)};
-          vklref = &vkl;
-        }
-        broadcast_callback(*vklref, value);
+        broadcast_callback(ttg::span(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), value);
       } else {
         for (auto key : keylist) send(key, value);
       }
@@ -131,16 +123,8 @@ namespace ttg {
     std::enable_if_t<!meta::is_void_v<Value>,void>
     broadcast(const rangeT &keylist, Value &&value) {
       if (broadcast_callback) {
-        std::vector<keyT> vkl;
-        const std::vector<keyT>* vref;
-        if constexpr (std::is_same_v<std::vector<keyT>, rangeT>) {
-          vref = &keylist;
-        } else {
-          vkl = std::vector<keyT>{std::begin(keylist), std::end(keylist)};
-          vref = &vkl;
-        }
         const Value& v = value;
-        broadcast_callback(*vref, v);
+        broadcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), v);
       } else {
         const Value& vref = value;
         for (auto key : keylist) send(key, vref);
@@ -151,18 +135,10 @@ namespace ttg {
     std::enable_if_t<!meta::is_void_v<Value>,void>
     broadcast(const rangeT &keylist, std::shared_ptr<const Value> &value_ptr) {
       if (broadcast_callback || splitmd_bcast_callback) {
-        std::vector<keyT> vkl;
-        const std::vector<keyT>* vref;
-        if constexpr (std::is_same_v<std::vector<keyT>, rangeT>) {
-          vref = &keylist;
-        } else {
-          vkl = std::vector<keyT>{std::begin(keylist), std::end(keylist)};
-          vref = &vkl;
-        }
         if (splitmd_bcast_callback) {
-          splitmd_bcast_callback(*vref, value_ptr);
+          splitmd_bcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), value_ptr);
         } else {
-          broadcast_callback(*vref, *value_ptr);
+          broadcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), *value_ptr);
         }
       } else {
         const Value& vref = *value_ptr;
