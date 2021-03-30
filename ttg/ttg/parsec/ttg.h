@@ -1303,16 +1303,15 @@ namespace ttg_parsec {
       } else {
         using msg_t = detail::msg_t;
         // We pass -1 to signal that we just need to call set_arg(key) on the other end
-        msg_t *msg = new msg_t(get_instance_id(), world_impl.taskpool()->taskpool_id, -1);
+        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id, -1, 1);
 
         uint64_t pos = 0;
         pos = pack(key, msg->bytes, pos);
         parsec_taskpool_t *tp = world_impl.taskpool();
         tp->tdm.module->outgoing_message_start(tp, owner, NULL);
         tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg),
+        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
                           sizeof(msg_header_t) + pos);
-        delete msg;
       }
     }
 
