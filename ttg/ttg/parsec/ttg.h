@@ -303,8 +303,8 @@ namespace ttg_parsec {
       void *object_ptr;
       void (*static_set_arg)(int, int);
       parsec_key_t key;
-      int num_deferred; // number of times the release of this task has been deferred
       std::function<void(my_op_s*)> *deferred_release; // callback used to release the task from with the static context of complete_task_and_release
+      ttg::span<const bool> input_args_const; // whether the Op's input values are const
     } my_op_t;
 
     inline parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *task) {
@@ -481,6 +481,9 @@ namespace ttg_parsec {
     // check for a non-type member named have_cuda_op
     template <typename T>
     using have_cuda_op_non_type_t = decltype(&T::have_cuda_op);
+
+    /* mark whether input values of the task are const */
+    static constexpr const std::array<bool, sizeof...(input_valueTs)> input_args_const = {std::is_const_v<input_valueTs>...};
 
     bool alive = true;
 
@@ -699,6 +702,10 @@ namespace ttg_parsec {
         dummy->parsec_task.data[0].data_in->readers = 1;
         dummy->parsec_task.data[0].data_in->delete_fn  = &detail::typed_delete_t<decay_valueT>::delete_type;
         dummy->parsec_task.data[0].data_in->delete_arg = val_copy;
+
+        /* set the data as const */
+        std::array<bool, 1> input_args_const = {true};
+        dummy->input_args_const = ttg::span<const bool>(&input_args_const[0], 1);
 
         /* save the current task and set the dummy task */
         auto parsec_ttg_caller_save = parsec_ttg_caller;
@@ -947,7 +954,6 @@ namespace ttg_parsec {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
       constexpr const bool keyT_is_Void   = ttg::meta::is_void_v<Key>;
-      constexpr const bool value_is_Const = ::std::is_const_v<::std::remove_reference_t<Value>>;
 
       if (tracing()) {
         if constexpr (!valueT_is_Void) {
@@ -973,6 +979,7 @@ namespace ttg_parsec {
         newtask = (detail::my_op_t *)parsec_thread_mempool_allocate(mempool);
         memset((void *)newtask, 0, sizeof(detail::my_op_t));
         newtask->parsec_task.mempool_owner = mempool;
+        newtask->input_args_const = ttg::span<const bool>(&input_args_const[0], input_args_const.size());
 
         PARSEC_OBJ_CONSTRUCT(&newtask->parsec_task, parsec_list_item_t);
         newtask->parsec_task.task_class = &this->self;
@@ -1025,16 +1032,17 @@ namespace ttg_parsec {
           ttg::print_error(get_name(), " : ", key, ": error argument is already set : ", i);
           throw std::logic_error("bad set arg");
         }
-        // TODO:
-        //    - find if value (which is a ref) exists in data[?].data_in
-        //    - if it does, drop the reference, and check if it was a const type or not
-        //    - if it is a const type, then the source task cannot modify it, and
-        //    - if the target task uses the data as read-only, it is not necessary to
-        //    - create a new data copy and we should reuse it
-        if (value_is_Const || is_move) {
-          if( NULL != parsec_ttg_caller ) {
-            int idx;
-            std::tie(copy, idx) = find_copy_in_task(parsec_ttg_caller, &value);
+        // Try to figure out whether the data is const:
+        // Query the calling task for the copy of the data and if found check if the argument was const
+        if (nullptr != parsec_ttg_caller) {
+          bool value_is_const = false;
+          int idx;
+          std::tie(copy, idx) = find_copy_in_task(parsec_ttg_caller, &value);
+          detail::my_op_t *parsec_ttg_caller_op = (detail::my_op_t *)parsec_ttg_caller;
+          if (idx < parsec_ttg_caller_op->input_args_const.size()) {
+            value_is_const = parsec_ttg_caller_op->input_args_const[idx];
+          }
+          if( value_is_const || is_move ) {
             if (nullptr != copy) {
               if (copy->readers < 0) {
                 /* someone is going to write into this copy -> we need to make a copy for ourselves */
@@ -1074,6 +1082,7 @@ namespace ttg_parsec {
             }
           }
         }
+
         if( NULL == copy ) {
           copy = PARSEC_OBJ_NEW(parsec_data_copy_t);
           if (is_move) {
@@ -1383,7 +1392,7 @@ namespace ttg_parsec {
         }
 
         for (auto it = local_begin; it != local_end; ++it) {
-          set_arg_local<i, keyT, Value>(*it, *value_ptr);
+          set_arg_local_impl<i>(*it, *value_ptr, true);
         }
       }
     }
