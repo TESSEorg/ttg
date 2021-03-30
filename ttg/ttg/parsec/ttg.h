@@ -755,7 +755,6 @@ namespace ttg_parsec {
           assert(keymap(key) == rank);
           keylist.push_back(std::move(key));
         }
-        std::cout << std::endl;
         // case 1
         if constexpr (!ttg::meta::is_empty_tuple_v<input_refs_tuple_type> &&
                       !std::is_void_v<valueT>) {
@@ -772,7 +771,6 @@ namespace ttg_parsec {
             using metadata_t = decltype(descr.get_metadata(std::declval<decvalueT>()));
             size_t metadata_size = sizeof(metadata_t);
 
-            std::cout << "Received " << msg->op_id.num_keys << " keys, starting unpack at pos " << pos << std::endl;
             /* unpack the metadata */
             metadata_t metadata;
             std::memcpy(&metadata, msg->bytes + pos, metadata_size);
@@ -799,7 +797,6 @@ namespace ttg_parsec {
             auto activation = new detail::rma_delayed_activate(
                 std::move(keylist), descr.create_from_metadata(metadata), num_iovecs,
                 [this, num_keys](std::vector<keyT> &&keylist, valueT &&value) {
-                  std::cout << "Calling set_arg_from_msg_keylist in delayed activation with " << num_keys << " keys " << std::endl;
                   set_arg_from_msg_keylist<i>(keylist, value);
                 });
             auto &val = activation->value();
@@ -829,7 +826,6 @@ namespace ttg_parsec {
               size_t lreg_size;
               parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
                                     iov.num_bytes, &lreg, &lreg_size);
-              std::cout << "Posting GET with completion callback fn_ptr " << (void*)fn_ptr << " at pos " << pos - sizeof(fn_ptr) << " rreg_size " << rreg_size_i << std::endl;
               /* TODO: PaRSEC should treat the remote callback as a tag, not a function pointer! */
               parsec_ce.get(
                   &parsec_ce, lreg, 0, rreg, 0, iov.num_bytes, remote, &detail::get_complete_cb<ActivationT>, activation,
@@ -1266,7 +1262,6 @@ namespace ttg_parsec {
       parsec_taskpool_t *tp = world_impl.taskpool();
       tp->tdm.module->outgoing_message_start(tp, owner, NULL);
       tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-      std::cout << "Sending AM with " << msg->op_id.num_keys << " keys " << std::endl;
       parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
                         sizeof(msg_header_t) + pos);
     }
@@ -1563,15 +1558,12 @@ namespace ttg_parsec {
           int num_keys = 0;
           uint64_t pos = 0;
           /* pack all keys for this owner */
-          //std::cout << "Sending AM with keys ";
           do {
             ++num_keys;
             pos = pack(*it, msg->bytes, pos);
-            //std::cout << *it << ", ";
             ++it;
           } while (it < keylist_sorted.end() && keymap(*it) == owner);
           msg->op_id.num_keys = num_keys;
-          //std::cout << std::endl;
 
           /* pack the metadata */
           std::memcpy(msg->bytes + pos, &metadata, metadata_size);
@@ -1865,7 +1857,6 @@ namespace ttg_parsec {
             /* Release the task if it was deferrred */
             detail::my_op_t *deferred_op = (detail::my_op_t *)copy->push_task;
             assert(deferred_op->deferred_release);
-            std::cout << "Releasing deferred task" << std::endl;
             (*deferred_op->deferred_release)(deferred_op);
             copy->push_task = NULL;
           }
