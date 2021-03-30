@@ -118,11 +118,26 @@ namespace ttg_parsec {
     static int get_remote_complete_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg, size_t msg_size,
                                       int src, void *cb_data);
 
+
+    /* Helper function to properly delete a pointer, with the potential for
+     * template speciailization */
     template<typename T>
-    static void delete_type(void *ptr) {
-      T* typed_ptr = reinterpret_cast<T*>(ptr);
-      delete typed_ptr;
-    }
+    struct typed_delete_t {
+      static void delete_type(void *ptr) {
+        T* typed_ptr = reinterpret_cast<T*>(ptr);
+        delete typed_ptr;
+      }
+    };
+
+    template<typename T>
+    struct typed_delete_t<std::shared_ptr<T>> {
+      static void delete_type(void *ptr) {
+        std::shared_ptr<T>* typed_ptr = reinterpret_cast<std::shared_ptr<T>*>(ptr);
+        typed_ptr->reset();
+        delete typed_ptr;
+      }
+    };
+
   }  // namespace detail
 
   class WorldImpl : public ttg::base::WorldImplBase {
@@ -288,6 +303,8 @@ namespace ttg_parsec {
       void *object_ptr;
       void (*static_set_arg)(int, int);
       parsec_key_t key;
+      int num_deferred; // number of times the release of this task has been deferred
+      std::function<void(my_op_s*)> *deferred_release; // callback used to release the task from with the static context of complete_task_and_release
     } my_op_t;
 
     inline parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *task) {
@@ -800,6 +817,11 @@ namespace ttg_parsec {
         const Value &value) {
       set_arg_local_impl<i>(ttg::Void{}, value, false);
     }
+
+    template <std::size_t i, typename Key = keyT, typename Value>
+    std::enable_if_t<ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void> set_arg_local(
+        std::shared_ptr<const Value> &valueptr) {
+      set_arg_local_impl<i>(ttg::Void{}, *valueptr, false);
     }
 
     template <typename Key = keyT>
@@ -811,11 +833,48 @@ namespace ttg_parsec {
       parsec_mempool_free(&mempools, task);
     }
 
+    std::tuple<parsec_data_copy_t*, int>
+    find_copy_in_task(parsec_task_t* task, const void *ptr) {
+      parsec_data_copy_t* copy = nullptr;
+      int j = -1;
+      if (task != nullptr || ptr != nullptr) {
+        while(++j < MAX_CALL_PARAM_COUNT) {
+          if (NULL != task->data[j].data_in &&
+              task->data[j].data_in->device_private == ptr)
+          {
+            copy = task->data[j].data_in;
+            break;
+          }
+        }
+      }
+      return std::make_tuple(copy, j);
+    }
+
+    bool add_copy_to_task(parsec_data_copy_t* copy, parsec_task_t* task) {
+      if (task == nullptr || copy == nullptr) {
+        return false;
+      }
+
+      int j = 0;
+      while (j < MAX_PARAM_COUNT && nullptr != task->data[j].data_in) {
+        ++j;
+      }
+
+      if (MAX_PARAM_COUNT > j) {
+        PARSEC_OBJ_RETAIN(copy);
+        task->data[j].data_in = copy;
+        return true;
+      }
+      return false;
+    }
+
+
     // Used to set the i'th argument
     template <std::size_t i, typename Key, typename Value>
     void set_arg_local_impl(const Key &key, Value&& value, bool is_move) {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
+      constexpr const bool keyT_is_Void   = ttg::meta::is_void_v<Key>;
       constexpr const bool value_is_Const = ::std::is_const_v<::std::remove_reference_t<Value>>;
 
       if (tracing()) {
@@ -825,6 +884,10 @@ namespace ttg_parsec {
         } else {
           ttg::print(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
         }
+      }
+
+      if constexpr (!keyT_is_Void) {
+        assert(keymap(key) == world.rank());
       }
 
       parsec_key_t hk = reinterpret_cast<parsec_key_t>(&key);
@@ -876,6 +939,15 @@ namespace ttg_parsec {
 
       parsec_data_copy_t *copy = NULL;
 
+      // TODO: figure out when to defer a task!
+      bool needs_deferring = false;
+
+      /* if we find a copy that is marked as mutable and we are read-only we create
+       * a new copy and replace the mutable one */
+      int replace_copy_idx = -1;
+
+      constexpr const bool input_is_const = std::is_const_v<std::tuple_element_t<i, input_terminals_type>>;
+
       if constexpr (!valueT_is_Void) {
         if (NULL != task->parsec_task.data[i].data_in) {
           ttg::print_error(get_name(), " : ", key, ": error argument is already set : ", i);
@@ -889,15 +961,43 @@ namespace ttg_parsec {
         //    - create a new data copy and we should reuse it
         if (value_is_Const || is_move) {
           if( NULL != parsec_ttg_caller ) {
-            for(int j = 0; j < parsec_ttg_caller->task_class->nb_flows; j++) {
-              if (NULL != parsec_ttg_caller->data[j].data_in &&
-                  parsec_ttg_caller->data[j].data_in->device_private == static_cast<const void *>(&value)) {
-                copy = parsec_ttg_caller->data[j].data_in;
+            int idx;
+            std::tie(copy, idx) = find_copy_in_task(parsec_ttg_caller, &value);
+            if (nullptr != copy) {
+              if (copy->readers < 0) {
+                /* someone is going to write into this copy -> we need to make a copy for ourselves */
+                copy = NULL;
+                if (input_is_const) {
+                  replace_copy_idx = idx;
+                }
+              } else {
+                if (input_is_const) {
+                  /* simply increment the number of readers */
+                  int32_t readers = parsec_atomic_fetch_inc_int32(&copy->readers);
+                  assert(readers > 1);
+                } else {
+                  /* this task will mutate the data
+                    * check whether there are other readers already and potentially
+                    * defer the release of this task to give following readers a
+                    * chance to make a copy of the data before this task mutates it
+                    */
+                  if (copy->readers == 1) {
+                    /**
+                      * no other readers, mark copy as mutable and defer the release
+                      * of the task
+                      */
+                    copy->readers = -1;
+                    assert(NULL == copy->push_task);
+                    copy->push_task = &task->parsec_task;
+                    needs_deferring = true;
+                  } else {
+                    /* there are readers of this copy already, make a copy that we can mutate */
+                    copy = NULL;
+                  }
+                }
+              }
+              if (NULL != copy) {
                 PARSEC_OBJ_RETAIN(copy);
-                /* TODO: check that the target is const, otherwise we may have to allocate a true copy if the target is not the only target */
-                int32_t readers = parsec_atomic_fetch_inc_int32(&parsec_ttg_caller->data[j].data_in->readers);
-                assert(readers > 0);
-                break;
               }
             }
           }
@@ -910,23 +1010,56 @@ namespace ttg_parsec {
             copy->device_private = (void *)(new valueT(value));
           }
           copy->readers = 1;
-          copy->delete_fn = &detail::delete_type<valueT>;
+          copy->delete_fn  = &detail::typed_delete_t<valueT>::delete_type;
+          copy->delete_arg = copy->device_private;
+          if (replace_copy_idx >= 0) {
+            auto replace_copy = parsec_ttg_caller->data[replace_copy_idx].data_in;
+            /* replace the task that was deferred */
+            assert(NULL != replace_copy->push_task);
+            detail::my_op_t *deferred_op = (detail::my_op_t *)replace_copy->push_task;
+            assert(deferred_op->deferred_release);
+            (*deferred_op->deferred_release)(deferred_op);
+            replace_copy->push_task = NULL;
+            /* replace the copy in parsec_ttg_caller to allow following tasks to use it */
+            parsec_ttg_caller->data[replace_copy_idx].data_in = copy;
+            ++copy->readers;
+          }
         }
         task->parsec_task.data[i].data_in = copy;
       }
 
-      int32_t count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
-      assert(count <= self.dependencies_goal);
+      auto release_fn = [this, key](detail::my_op_t *task) {
+        int32_t count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
+        assert(count <= self.dependencies_goal);
+        auto &world_impl = world.impl();
 
-      // std::cout << "task " << task << " has count " << count << " and dependency_goal " << self.dependencies_goal <<
-      // " and key " << task->key << " task_table has length " << tasks_table_size << std::endl;
-      if (count == self.dependencies_goal) {
-        world_impl.increment_sent_to_sched();
-        parsec_execution_stream_t *es = world_impl.execution_stream();
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
-        parsec_hash_table_remove(&tasks_table, hk);
-        --tasks_table_size;
-        __parsec_schedule(es, &task->parsec_task, 0);
+        // std::cout << "task " << task << " has count " << count << " and dependency_goal " << self.dependencies_goal <<
+        // " and key " << task->key << " task_table has length " << tasks_table_size << std::endl;
+        if (count == self.dependencies_goal) {
+          /* reset the reader counters of all mutable copies to 1 */
+          for(int j = 0; j < task->parsec_task.task_class->nb_flows; j++) {
+            if (NULL != task->parsec_task.data[j].data_in &&
+                task->parsec_task.data[j].data_in->readers < 0) {
+              task->parsec_task.data[j].data_in->readers = 1;
+            }
+          }
+
+          world_impl.increment_sent_to_sched();
+          parsec_execution_stream_t *es = world_impl.execution_stream();
+          parsec_key_t hk = reinterpret_cast<parsec_key_t>(&key);
+          if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+          parsec_hash_table_remove(&tasks_table, hk);
+          --tasks_table_size;
+          __parsec_schedule(es, &task->parsec_task, 0);
+        }
+      };
+
+      if (needs_deferring) {
+        if (nullptr == task->deferred_release) {
+          task->deferred_release = new std::function(release_fn);
+        }
+      } else {
+        release_fn(task);
       }
     }
 
@@ -940,7 +1073,7 @@ namespace ttg_parsec {
     template <std::size_t i, typename Key, typename Value>
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void> set_arg(
         const Key &key, const Value &value) {
-      set_arg_impl<i>(key, std::forward<Value>(value), false);
+      set_arg_impl<i>(key, value, false);
     }
 
     // cases 4+5
@@ -960,11 +1093,12 @@ namespace ttg_parsec {
     void set_arg_impl(const Key &key, Value &&value, bool is_move) {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       int owner;
+
       if constexpr (!ttg::meta::is_void_v<Key>)
         owner = keymap(key);
       else
         owner = keymap();
-      if (owner == ttg_default_execution_context().rank()) {
+      if (owner == world.rank()) {
         if constexpr (!ttg::meta::is_void_v<keyT>)
           set_arg_local<i, keyT, Value>(key, std::forward<Value>(value));
         else
@@ -1523,22 +1657,37 @@ namespace ttg_parsec {
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
 
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *task) {
-      if constexpr (!ttg::meta::is_void_v<keyT>) {
-        detail::my_op_t *op = (detail::my_op_t *)task;
-        keyT *key = (keyT *)op->key;
-        delete (key);
-      }
       for (int i = 0; i < MAX_PARAM_COUNT; i++) {
-        if (NULL != task->data[i].data_in) {
-          if (nullptr != task->data[i].data_in->device_private) {
-            int32_t readers = parsec_atomic_fetch_dec_int32(&task->data[i].data_in->readers);
-            if (1 == readers) {
-              task->data[i].data_in->delete_fn(task->data[i].data_in->device_private);
-              task->data[i].data_in->device_private = NULL;
+        auto copy = task->data[i].data_in;
+        if (nullptr != copy) {
+          if (nullptr != copy->device_private) {
+            if (copy->readers > 0) {
+              int32_t readers = parsec_atomic_fetch_dec_int32(&copy->readers);
+              if (1 == readers) {
+                copy->delete_fn(copy->delete_arg);
+                copy->device_private = copy->delete_arg = NULL;
+              }
             }
           }
-          PARSEC_OBJ_RELEASE(task->data[i].data_in);
+          if (NULL != copy->push_task) {
+            /* Release the task if it was deferrred */
+            detail::my_op_t *deferred_op = (detail::my_op_t *)copy->push_task;
+            assert(deferred_op->deferred_release);
+            std::cout << "Releasing deferred task" << std::endl;
+            (*deferred_op->deferred_release)(deferred_op);
+            copy->push_task = NULL;
+          }
+          PARSEC_OBJ_RELEASE(copy);
         }
+      }
+      detail::my_op_t *op = (detail::my_op_t *)task;
+      if (op->deferred_release) {
+        delete op->deferred_release;
+        op->deferred_release = nullptr;
+      }
+      if constexpr (!ttg::meta::is_void_v<keyT>) {
+        keyT *key = (keyT *)op->key;
+        delete (key);
       }
       return PARSEC_HOOK_RETURN_DONE;
     }
