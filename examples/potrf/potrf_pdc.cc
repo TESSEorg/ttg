@@ -51,7 +51,7 @@ struct type2matrixtype<double>
 
 struct Key {
   // ((I, J), K) where (I, J) is the tile coordiante and K is the iteration number
-  const int I = 0, J = 0, K = 0;
+  int I = 0, J = 0, K = 0;
   madness::hashT hash_val;
 
   Key() { rehash(); }
