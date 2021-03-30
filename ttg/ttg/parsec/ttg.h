@@ -86,9 +86,7 @@ namespace ttg_parsec {
     static int static_unpack_msg(parsec_comm_engine_t *ce, uint64_t tag, void *data, long unsigned int size,
                                  int src_rank, void *obj) {
       static_set_arg_fct_type static_set_arg_fct;
-      int rank;
       parsec_taskpool_t *tp = NULL;
-      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
       msg_header_t *msg = static_cast<msg_header_t *>(data);
       uint64_t op_id = msg->op_id;
       tp = parsec_taskpool_lookup(msg->taskpool_id);
@@ -107,7 +105,8 @@ namespace ttg_parsec {
         assert(data_cpy != 0);
         memcpy(data_cpy, data, size);
         if (ttg::tracing()) {
-          ttg::print("ttg_parsec(", rank, ") Delaying delivery of message (", src_rank, ", ", op_id, ", ", data_cpy,
+          ttg::print("ttg_parsec(", ttg_default_execution_context().rank(),
+                     ") Delaying delivery of message (", src_rank, ", ", op_id, ", ", data_cpy,
                      ", ", size, ")");
         }
         delayed_unpack_actions.insert(std::make_pair(op_id, std::make_tuple(src_rank, data_cpy, size)));
@@ -543,6 +542,7 @@ namespace ttg_parsec {
     ttg::World get_world() const { return world; }
 
    private:
+
     template <std::size_t... IS>
     static auto make_set_args_fcts(std::index_sequence<IS...>) {
       using resultT = decltype(set_arg_from_msg_fcts);
@@ -1270,7 +1270,7 @@ namespace ttg_parsec {
 
       const auto owner = keymap(key);
       auto &world_impl = world.impl();
-      if (owner == ttg_default_execution_context().rank()) {
+      if (owner == world.rank()) {
         // create PaRSEC task
         // and give it to the scheduler
         detail::my_op_t *task;
