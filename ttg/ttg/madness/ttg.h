@@ -1068,8 +1068,6 @@ namespace ttg_madness {
     }
   };
 
-  constexpr const ttg::Runtime ttg_runtime = ttg::Runtime::MADWorld;
-
 #include "ttg/wrap.h"
 
 }  // namespace ttg_madness

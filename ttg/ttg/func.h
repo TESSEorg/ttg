@@ -9,8 +9,42 @@
 #include "ttg/terminal.h"
 #include "ttg/edge.h"
 #include "ttg/util/serialization.h"
+#include "ttg/impl_selector.h"
 
 namespace ttg {
+
+  namespace detail {
+
+
+    /* Wrapper allowing implementations to provide copies of data the user
+     * passed to send and broadcast. The value returned by operator() will
+     * be passed to all terminals. By default, the user-provided copy is
+     * returned.
+     * Implementations may provide specializations using the ttg::Runtime tag.
+     * TODO: can we avoid the three overloads?
+     */
+    template<ttg::Runtime Runtime>
+    struct value_copy_handler {
+      template<typename Value>
+      inline constexpr
+      Value&& operator()(Value&& value) const {
+        return std::forward(value);
+      }
+
+      template<typename Value>
+      inline constexpr
+      const Value& operator()(const Value& value) const {
+        return value;
+      }
+
+      template<typename Value>
+      inline constexpr
+      Value& operator()(Value& value) const {
+        return value;
+      }
+    };
+
+  } // namespace detail
 
   /// applies @c make_executable method to every op in the graph
   /// return true if there are no dangling out terminals
@@ -62,14 +96,16 @@ namespace ttg {
     return std::make_tuple(args...);
   }
 
-  template <typename keyT, typename valueT, typename output_terminalT>
+  template <typename keyT, typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg_runtime>
   void send(const keyT &key, const valueT &value, output_terminalT &t) {
-    t.send(key, std::forward<valueT>(value));
+    detail::value_copy_handler<Runtime> copy_handler;
+    t.send(key, copy_handler(value));
   }
 
-  template <typename keyT, typename valueT, typename output_terminalT>
+  template <typename keyT, typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg_runtime>
   void send(const keyT &key, valueT &&value, output_terminalT &t) {
-    t.send(key, std::forward<valueT>(value));
+    detail::value_copy_handler<Runtime> copy_handler;
+    t.send(key, copy_handler(std::forward<valueT>(value)));
   }
 
   template <typename keyT, typename output_terminalT>
@@ -78,9 +114,10 @@ namespace ttg {
   }
 
   // TODO if sendk is removed, rename to send
-  template <typename valueT, typename output_terminalT>
+  template <typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg_runtime>
   void sendv(valueT &&value, output_terminalT &t) {
-    t.sendv(std::forward<valueT>(value));
+    detail::value_copy_handler<Runtime> copy_handler;
+    t.sendv(copy_handler(std::forward<valueT>(value)));
   }
 
   template <typename keyT, typename valueT, typename output_terminalT>
@@ -88,10 +125,11 @@ namespace ttg {
     t.send();
   }
 
-  template <size_t i, typename keyT, typename valueT, typename... output_terminalsT>
+  template <size_t i, typename keyT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg_runtime>
   std::enable_if_t<meta::is_none_void_v<keyT,std::decay_t<valueT>>,void>
       send(const keyT &key, valueT &&value, std::tuple<output_terminalsT...> &t) {
-    std::get<i>(t).send(key, std::forward<valueT>(value));
+    detail::value_copy_handler<Runtime> copy_handler;
+    std::get<i>(t).send(key, copy_handler(std::forward<valueT>(value)));
   }
 
   // TODO decide whether we need this ... (how common will be pure control flow?)
@@ -102,10 +140,11 @@ namespace ttg {
   }
 
   // TODO if sendk is removed, rename to send
-  template <size_t i, typename valueT, typename... output_terminalsT>
+  template <size_t i, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg_runtime>
   std::enable_if_t<!meta::is_void_v<valueT>,void>
   sendv(valueT &&value, std::tuple<output_terminalsT...> &t) {
-    std::get<i>(t).sendv(std::forward<valueT>(value));
+    detail::value_copy_handler<Runtime> copy_handler;
+    std::get<i>(t).sendv(copy_handler(std::forward<valueT>(value)));
   }
 
   template <size_t i, typename... output_terminalsT>
@@ -123,35 +162,25 @@ namespace ttg {
 #endif
 
     template <size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT>
-    void broadcast(const std::tuple<RangesT...>& keylists, std::shared_ptr<const valueT> &value_ptr, std::tuple<output_terminalsT...> &t) {
+    void broadcast(const std::tuple<RangesT...>& keylists, valueT&& value, std::tuple<output_terminalsT...> &t) {
       if (std::get<i>(keylists).size() > 0) {
-        std::get<i>(t).broadcast(std::get<i>(keylists), value_ptr);
+        std::get<i>(t).broadcast(std::get<i>(keylists), value);
       }
       if constexpr(sizeof...(I) > 0) {
-        broadcast<I...>(keylists, value_ptr, t);
+        detail::broadcast<I...>(keylists, value, t);
       }
     }
   } // namespace detail
 
   template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT>
   void broadcast(const rangeT &keylist, valueT &&value, std::tuple<output_terminalsT...> &t) {
-    std::get<i>(t).broadcast(keylist, std::forward<valueT>(value));
+    std::get<i>(t).broadcast(keylist, copy_handler(std::forward(value)));
   }
 
-  template <size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT>
+  template <size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg_runtime>
   void broadcast(const std::tuple<RangesT...>& keylists, valueT &&value, std::tuple<output_terminalsT...> &t) {
-    if constexpr(has_split_metadata<valueT>::value) {
-      /* move value into an object on the heap */
-      std::shared_ptr<const valueT> value_ptr = std::make_shared<const valueT>(std::forward<valueT>(value));
-      detail::broadcast<i, I...>(keylists, value_ptr, t);
-    } else {
-      /* make sure we keep the ownership */
-      const valueT& vref = value;
-      std::get<i>(t).broadcast(std::get<i>(keylists), vref);
-      if constexpr(sizeof...(I) > 0) {
-        broadcast<I...>(keylists, vref, t);
-      }
-    }
+    detail::value_copy_handler<Runtime> copy_handler;
+    detail::broadcast<i, I...>(keylists, copy_handler(std::forward<valueT>(value)), t);
   }
 
 #if 0
@@ -160,21 +189,6 @@ namespace ttg {
     std::get<i>(t).broadcast(keylist, value);
   }
 #endif
-
-  template <size_t i, size_t... I, typename ...RangesT, typename rangeT, typename valueT, typename... output_terminalsT>
-  void broadcast(const std::tuple<RangesT...>& keylists, const valueT &value, std::tuple<output_terminalsT...> &t) {
-    if constexpr(has_split_metadata<valueT>::value) {
-      /* create a copy on the heap that we control */
-      std::shared_ptr<valueT> value_ptr = std::make_shared<valueT>(value);
-      detail::broadcast<i, I...>(keylists, value_ptr, t);
-    } else {
-      std::get<i>(t).broadcast(std::get<i>(keylists), value);
-      if constexpr(sizeof...(I) > 0) {
-        broadcast<I...>(keylists, value, t);
-      }
-    }
-  }
-
 
   template <typename keyT, typename output_terminalT>
   void set_size(const keyT &key, const std::size_t size, output_terminalT &t) {

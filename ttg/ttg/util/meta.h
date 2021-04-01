@@ -292,29 +292,6 @@ namespace ttg {
       using move_callback_t = typename move_callback<Key, Value>::type;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// move_callback_t<key,value> = std::function<void(const key&, value&&>, protected against void key or value
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-template<typename Key, typename Value, typename Enabler = void>
-struct move_callback;
-template<typename Key, typename Value>
-struct move_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
-using type = std::function<void(const Key&, Value&&)>;
-};
-template<typename Key, typename Value>
-struct move_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
-using type = std::function<void(const Key&)>;
-};
-template<typename Key, typename Value>
-struct move_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
-using type = std::function<void(Value&&)>;
-};
-template<typename Key, typename Value>
-struct move_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
-using type = std::function<void()>;
-};
-template <typename Key, typename Value> using move_callback_t = typename move_callback<Key,Value>::type;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // broadcast_callback_t<key,value> = std::function<void(const key&, value&&>, protected against void key or value
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template<typename Key, typename Value, typename Enabler = void>
@@ -336,30 +313,6 @@ struct broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void
 using type = std::function<void()>;
 };
 template <typename Key, typename Value> using broadcast_callback_t = typename broadcast_callback<Key,Value>::type;
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// splitmd_broadcast_callback_t<key,value> = std::function<void(const key&, std::shared_ptr<value>&>, protected against void key or value
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-template<typename Key, typename Value, typename Enabler = void>
-struct splitmd_broadcast_callback;
-template<typename Key, typename Value>
-struct splitmd_broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
-using type = std::function<void(const ttg::span<const Key>&, std::shared_ptr<const Value>&)>;
-};
-template<typename Key, typename Value>
-struct splitmd_broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
-using type = std::function<void(const ttg::span<const Key>&)>;
-};
-template<typename Key, typename Value>
-struct splitmd_broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
-using type = std::function<void(std::shared_ptr<const Value>&)>;
-};
-template<typename Key, typename Value>
-struct splitmd_broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
-using type = std::function<void()>;
-};
-template <typename Key, typename Value> using splitmd_broadcast_callback_t = typename splitmd_broadcast_callback<Key,Value>::type;
 
 
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -434,7 +387,6 @@ template <typename Key, typename Value> using splitmd_broadcast_callback_t = typ
       using input_reducers_t = typename input_reducers<valueTs...>::type;
 
     }  // namespace detail
-
 }  // namespace ttg
 
 #endif  // CXXAPI_SERIALIZATION_H_H

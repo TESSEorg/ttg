@@ -28,7 +28,6 @@ namespace ttg {
     using send_callback_type = meta::detail::send_callback_t<keyT, std::decay_t<valueT>>;
     using move_callback_type = meta::detail::move_callback_t<keyT, std::decay_t<valueT>>;
     using broadcast_callback_type = meta::detail::broadcast_callback_t<keyT, std::decay_t<valueT>>;
-    using splitmd_broadcast_callback_type = meta::detail::splitmd_broadcast_callback_t<keyT, std::decay_t<valueT>>;
     using setsize_callback_type = meta::detail::setsize_callback_t<keyT>;
     using finalize_callback_type = meta::detail::finalize_callback_t<keyT>;
     static constexpr bool is_an_input_terminal = true;
@@ -37,7 +36,6 @@ namespace ttg {
     send_callback_type send_callback;
     move_callback_type move_callback;
     broadcast_callback_type broadcast_callback;
-    splitmd_broadcast_callback_type splitmd_bcast_callback;
     setsize_callback_type setsize_callback;
     finalize_callback_type finalize_callback;
 
@@ -56,13 +54,11 @@ namespace ttg {
 
     void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback,
                       const broadcast_callback_type &bcast_callback = broadcast_callback_type{},
-                      const splitmd_broadcast_callback_type &splitmd_bcast_callback = splitmd_broadcast_callback_type{},
                       const setsize_callback_type &setsize_callback = setsize_callback_type{},
                       const finalize_callback_type &finalize_callback = finalize_callback_type{}) {
       this->send_callback = send_callback;
       this->move_callback = move_callback;
       this->broadcast_callback = bcast_callback;
-      this->splitmd_bcast_callback = splitmd_bcast_callback;
       this->setsize_callback = setsize_callback;
       this->finalize_callback = finalize_callback;
     }
@@ -134,12 +130,8 @@ namespace ttg {
     template <typename rangeT, typename Value = valueT>
     std::enable_if_t<!meta::is_void_v<Value>,void>
     broadcast(const rangeT &keylist, std::shared_ptr<const Value> &value_ptr) {
-      if (broadcast_callback || splitmd_bcast_callback) {
-        if (splitmd_bcast_callback) {
-          splitmd_bcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), value_ptr);
-        } else {
-          broadcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), *value_ptr);
-        }
+      if (broadcast_callback) {
+        broadcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), *value_ptr);
       } else {
         const Value& vref = *value_ptr;
         for (auto key : keylist) send(key, vref);
