@@ -28,7 +28,7 @@ namespace ttg {
       template<typename Value>
       inline constexpr
       Value&& operator()(Value&& value) const {
-        return std::forward(value);
+        return std::forward<Value>(value);
       }
 
       template<typename Value>
@@ -172,9 +172,10 @@ namespace ttg {
     }
   } // namespace detail
 
-  template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT>
+  template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg_runtime>
   void broadcast(const rangeT &keylist, valueT &&value, std::tuple<output_terminalsT...> &t) {
-    std::get<i>(t).broadcast(keylist, copy_handler(std::forward(value)));
+    detail::value_copy_handler<Runtime> copy_handler;
+    std::get<i>(t).broadcast(keylist, copy_handler(std::forward<valueT>(value)));
   }
 
   template <size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg_runtime>

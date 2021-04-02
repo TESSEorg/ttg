@@ -2210,7 +2210,7 @@ public:
        */
       copy = PARSEC_OBJ_NEW(parsec_data_copy_t);
       value_ptr = new Value(value);
-      copy->device_private = value_ptr;
+      copy->device_private = const_cast<Value*>(value_ptr);
       copy->readers = 1;
       copy->delete_fn  = &ttg_parsec::detail::typed_delete_t<Value>::delete_type;
       copy->delete_arg = copy->device_private;
