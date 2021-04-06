@@ -26,9 +26,9 @@ if (TARGET MADworld)
     endif ()
 endif (TARGET MADworld)
 
-add_ttg_executable(wavefront-wf wavefront/wavefront-wf.cc SINGLERANKONLY)
-add_ttg_executable(wavefront-wf2 wavefront/wavefront-wf2.cc SINGLERANKONLY)
-add_ttg_executable(wavefront-df wavefront/wavefront-df.cc)
+add_ttg_executable(wavefront-wf wavefront/wavefront-wf.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
+add_ttg_executable(wavefront-wf2 wavefront/wavefront-wf2.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
+add_ttg_executable(wavefront-df wavefront/wavefront-df.cc LINK_LIBRARIES MADworld RUNTIMES "mad")
 add_ttg_executable(fw-apsp floyd-warshall/floyd_warshall.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
 
 
