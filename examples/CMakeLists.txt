@@ -27,7 +27,7 @@ endif (TARGET MADworld)
 
 add_ttg_executable(wavefront-wf wavefront/wavefront-wf.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
 add_ttg_executable(wavefront-wf2 wavefront/wavefront-wf2.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
-add_ttg_executable(wavefront-df wavefront/wavefront-df.cc LINK_LIBRARIES MADworld)
+add_ttg_executable(wavefront-df wavefront/wavefront-df.cc LINK_LIBRARIES MADworld RUNTIMES "mad")
 add_ttg_executable(fw-apsp floyd-warshall/floyd_warshall.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
 if (OpenMP_CXX_FOUND AND TARGET std::execution)
         add_ttg_executable(fw-apsp-df floyd-warshall/floyd_warshall_df.cc LINK_LIBRARIES OpenMP::OpenMP_CXX std::execution)
