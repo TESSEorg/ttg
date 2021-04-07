@@ -14,6 +14,7 @@
 #include "ttg/world.h"
 
 namespace ttg {
+
   template<typename keyT, typename valueT>
   struct Container : std::any {
     std::function<valueT (keyT const& key, Container const&)> get = nullptr;
@@ -27,12 +28,21 @@ namespace ttg {
                          ,get([](keyT const& key, Container const& self) {
                            //at method returns a const ref to the item.
                            return (std::any_cast<T*>(self))->at(key);
+
                          })
       {}
   };
 
   template <typename valueT> struct Container<void, valueT> {
-    std::function<void ()> get = nullptr;
+    std::function<std::nullptr_t ()> get = nullptr;
+  };
+
+  template <typename keyT> struct Container<keyT, void> {
+    std::function<std::nullptr_t (keyT const& key, Container const& self)> get = nullptr;
+  };
+
+  template <> struct Container<void, void> {
+    std::function<std::nullptr_t ()> get = nullptr;
   };
 
   template <typename keyT, typename valueT>
