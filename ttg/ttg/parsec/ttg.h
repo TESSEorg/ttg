@@ -1293,6 +1293,13 @@ namespace ttg_parsec {
     /// @return the keymap
     const decltype(keymap) &get_keymap() const { return keymap; }
 
+    /// keymap setter
+    /// @return the keymap
+    template <typename Keymap>
+    void set_keymap(Keymap &&km) {
+      keymap = km;
+    }
+
     // Register the static_op function to associate it to instance_id
     void register_static_op_function(void) {
       int rank;
