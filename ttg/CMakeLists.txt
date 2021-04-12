@@ -177,7 +177,8 @@ if (TARGET PaRSEC::parsec)
           ttg/parsec/fwd.h
           ttg/parsec/import.h
           ttg/parsec/ttg.h)
-  target_sources(ttg-parsec INTERFACE ${ttg-parsec_headers})
+  target_sources(ttg-parsec INTERFACE ${ttg-parsec_headers}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/parsec_ttg.cc)
   install(FILES ${ttg-parsec_headers}
           DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ttg/parsec/
           COMPONENT ttg-parsec)

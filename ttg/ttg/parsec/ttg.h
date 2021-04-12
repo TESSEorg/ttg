@@ -58,6 +58,8 @@
 
 #include <boost/callable_traits.hpp>  // needed for wrap.h
 
+#include "ttg/parsec/ttg_data_copy.h"
+
 /* PaRSEC function declarations */
 extern "C" {
 void parsec_taskpool_termination_detected(parsec_taskpool_t *tp);
@@ -138,17 +140,17 @@ namespace ttg_parsec {
       }
     };
 
-    std::tuple<parsec_data_copy_t*, int>
+    std::tuple<ttg_data_copy_t*, int>
     inline
     find_copy_in_task(parsec_task_t* task, const void *ptr) {
-      parsec_data_copy_t* copy = nullptr;
+      ttg_data_copy_t* copy = nullptr;
       int j = -1;
       if (task != nullptr || ptr != nullptr) {
         while(++j < MAX_CALL_PARAM_COUNT) {
           if (NULL != task->data[j].data_in &&
               task->data[j].data_in->device_private == ptr)
           {
-            copy = task->data[j].data_in;
+            copy = reinterpret_cast<ttg_data_copy_t*>(task->data[j].data_in);
             break;
           }
         }
@@ -157,7 +159,7 @@ namespace ttg_parsec {
     }
 
     inline
-    bool add_copy_to_task(parsec_data_copy_t* copy, parsec_task_t* task) {
+    bool add_copy_to_task(ttg_data_copy_t* copy, parsec_task_t* task) {
       if (task == nullptr || copy == nullptr) {
         return false;
       }
@@ -175,7 +177,7 @@ namespace ttg_parsec {
       return false;
     }
 
-    inline void remove_data_copy(parsec_data_copy_t* copy, parsec_task_t *task)
+    inline void remove_data_copy(ttg_data_copy_t* copy, parsec_task_t *task)
     {
       for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
         if (copy == task->data[i].data_in) {
@@ -438,14 +440,14 @@ namespace ttg_parsec {
       return PARSEC_SUCCESS;
     }
 
-    inline void release_data_copy(parsec_data_copy_t* copy) {
+    inline void release_data_copy(ttg_data_copy_t* copy) {
       if (nullptr != copy) {
         if (nullptr != copy->device_private) {
           if (copy->readers > 0) {
             int32_t readers = parsec_atomic_fetch_dec_int32(&copy->readers);
             if (1 == readers) {
-              copy->delete_fn(copy->delete_arg);
-              copy->device_private = copy->delete_arg = NULL;
+              copy->delete_fn(copy->device_private);
+              copy->device_private = NULL;
             }
           }
         }
@@ -465,10 +467,10 @@ namespace ttg_parsec {
     }
 
     template<typename Value>
-    inline parsec_data_copy_t*
-    register_data_copy(parsec_data_copy_t *copy_in, my_op_t* task, bool readonly)
+    inline ttg_data_copy_t*
+    register_data_copy(ttg_data_copy_t *copy_in, my_op_t* task, bool readonly)
     {
-      parsec_data_copy_t *copy_res = copy_in;
+      ttg_data_copy_t *copy_res = copy_in;
       bool replace = false;
       int32_t readers = -1;
       if (readonly && copy_in->readers > 0) {
@@ -509,19 +511,18 @@ namespace ttg_parsec {
       }
 
       if( NULL == copy_res ) {
-        parsec_data_copy_t *new_copy;
-        new_copy = PARSEC_OBJ_NEW(parsec_data_copy_t);
+        ttg_data_copy_t *new_copy;
+        new_copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
         new_copy->device_private = (void *)(new Value(*static_cast<Value*>(copy_in->device_private)));
         new_copy->readers = 1;
         new_copy->delete_fn  = &detail::typed_delete_t<Value>::delete_type;
-        new_copy->delete_arg = new_copy->device_private;
         if (replace) {
           /* TODO: Make sure there is no race condition with the release in release_data_copy,
            * in particular when it comes to setting the callback and replacing the data */
 
           /* replace the task that was deferred */
           detail::my_op_t *deferred_op = (detail::my_op_t *)copy_in->push_task;
-          parsec_data_copy_t* deferred_replace_copy;
+          ttg_data_copy_t* deferred_replace_copy;
           int deferred_replace_copy_idx;
           std::tie(deferred_replace_copy,
                     deferred_replace_copy_idx) = detail::find_copy_in_task(copy_in->push_task, copy_in->device_private);
@@ -849,11 +850,11 @@ namespace ttg_parsec {
       /* set the received value as the dummy's only data */
       using decay_valueT = std::decay_t<valueT>;
       auto *val_copy = new decay_valueT(std::move(value));
-      dummy->parsec_task.data[0].data_in = PARSEC_OBJ_NEW(parsec_data_copy_t);
-      dummy->parsec_task.data[0].data_in->device_private = val_copy;
-      dummy->parsec_task.data[0].data_in->readers = 1;
-      dummy->parsec_task.data[0].data_in->delete_fn  = &detail::typed_delete_t<decay_valueT>::delete_type;
-      dummy->parsec_task.data[0].data_in->delete_arg = val_copy;
+      ttg_data_copy_t* copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
+      copy->device_private = val_copy;
+      copy->readers = 1;
+      copy->delete_fn  = &detail::typed_delete_t<decay_valueT>::delete_type;
+      dummy->parsec_task.data[0].data_in = copy;
 
       /* set the data as const */
       std::array<bool, 1> input_args_const = {true};
@@ -1137,7 +1138,7 @@ namespace ttg_parsec {
         assert(nullptr != parsec_ttg_caller);
 
         int idx; // ignored
-        parsec_data_copy_t *copy;
+        ttg_data_copy_t *copy;
         /* assuming that this is always called from within a task */
         assert(nullptr != parsec_ttg_caller);
         std::tie(copy, idx) = detail::find_copy_in_task(parsec_ttg_caller, &value);
@@ -1243,7 +1244,7 @@ namespace ttg_parsec {
       if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
         pos = pack(value, msg->bytes, pos);
       } else {
-        parsec_data_copy_t *copy;
+        ttg_data_copy_t *copy;
         int idx; // ignored
         std::tie(copy, idx) = detail::find_copy_in_task(parsec_ttg_caller, &value);
         copy = detail::register_data_copy<decvalueT>(copy, nullptr, true);
@@ -1343,7 +1344,7 @@ namespace ttg_parsec {
         task->object_ptr = static_cast<derivedT *>(this);
         keyT *kp = new keyT(key);
         task->key = reinterpret_cast<parsec_key_t>(kp);
-        task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
+        task->parsec_task.data[0].data_in = static_cast<ttg_data_copy_t *>(NULL);
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
         world_impl.increment_created();
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
@@ -1395,7 +1396,7 @@ namespace ttg_parsec {
               reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op_noarg<ttg::ExecutionSpace::CUDA>);
         task->object_ptr = static_cast<derivedT *>(this);
         task->key = 0;
-        task->parsec_task.data[0].data_in = static_cast<parsec_data_copy_t *>(NULL);
+        task->parsec_task.data[0].data_in = static_cast<ttg_data_copy_t *>(NULL);
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : creating task");
         world_impl.increment_created();
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
@@ -1554,7 +1555,7 @@ namespace ttg_parsec {
         auto metadata = descr.get_metadata(value);
         size_t metadata_size = sizeof(metadata);
 
-        parsec_data_copy_t *copy;
+        ttg_data_copy_t *copy;
         int idx;
         std::tie(copy, idx) = detail::find_copy_in_task(parsec_ttg_caller, &value);
         assert(nullptr != copy);
@@ -1862,7 +1863,7 @@ namespace ttg_parsec {
 
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *task) {
       for (int i = 0; i < MAX_PARAM_COUNT; i++) {
-        auto copy = task->data[i].data_in;
+        ttg_data_copy_t* copy = reinterpret_cast<ttg_data_copy_t*>(task->data[i].data_in);
         detail::release_data_copy(copy);
         task->data[i].data_in = nullptr;
       }
@@ -2152,7 +2153,7 @@ template<>
 struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
 
 private:
-  parsec_data_copy_t *copy_to_remove = nullptr;
+  ttg_data_copy_t *copy_to_remove = nullptr;
 
 public:
 
@@ -2170,7 +2171,7 @@ public:
     if (nullptr == parsec_ttg_caller) {
       ttg::print("ERROR: ttg_send or ttg_broadcast called outside of a task!\n");
     }
-    parsec_data_copy_t* copy;
+    ttg_data_copy_t* copy;
     int   idx; // ignored
     std::tie(copy, idx) = ttg_parsec::detail::find_copy_in_task(parsec_ttg_caller, &value);
     Value* value_ptr = &value;
@@ -2179,12 +2180,11 @@ public:
        * the value is not known, create a copy that we can track
        * depending on Value, this uses either the copy or move constructor
        */
-      copy = PARSEC_OBJ_NEW(parsec_data_copy_t);
+      copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
       value_ptr = new Value(std::forward<Value>(value));
       copy->device_private = value_ptr;
       copy->readers = 1;
       copy->delete_fn  = &ttg_parsec::detail::typed_delete_t<Value>::delete_type;
-      copy->delete_arg = copy->device_private;
       bool inserted = ttg_parsec::detail::add_copy_to_task(copy, parsec_ttg_caller);
       assert(inserted);
       copy_to_remove = copy;
@@ -2199,7 +2199,7 @@ public:
     if (nullptr == parsec_ttg_caller) {
       ttg::print("ERROR: ttg_send or ttg_broadcast called outside of a task!\n");
     }
-    parsec_data_copy_t* copy;
+    ttg_data_copy_t* copy;
     int   idx; // ignored
     std::tie(copy, idx) = ttg_parsec::detail::find_copy_in_task(parsec_ttg_caller, &value);
     const Value* value_ptr = &value;
@@ -2208,12 +2208,11 @@ public:
        * the value is not known, create a copy that we can track
        * depending on Value, this uses either the copy or move constructor
        */
-      copy = PARSEC_OBJ_NEW(parsec_data_copy_t);
+      copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
       value_ptr = new Value(value);
       copy->device_private = const_cast<Value*>(value_ptr);
       copy->readers = 1;
       copy->delete_fn  = &ttg_parsec::detail::typed_delete_t<Value>::delete_type;
-      copy->delete_arg = copy->device_private;
       bool inserted = ttg_parsec::detail::add_copy_to_task(copy, parsec_ttg_caller);
       assert(inserted);
       copy_to_remove = copy;
@@ -2230,14 +2229,13 @@ public:
     if (nullptr == parsec_ttg_caller) {
       ttg::print("ERROR: ttg_send or ttg_broadcast called outside of a task!\n");
     }
-    parsec_data_copy_t* copy;
+    ttg_data_copy_t* copy;
     /* the value is not known, create a copy that we can track */
-    copy = PARSEC_OBJ_NEW(parsec_data_copy_t);
+    copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
     Value* value_ptr = new Value(value);
     copy->device_private = value_ptr;
     copy->readers = 1;
     copy->delete_fn  = &ttg_parsec::detail::typed_delete_t<Value>::delete_type;
-    copy->delete_arg = copy->device_private;
     bool inserted = ttg_parsec::detail::add_copy_to_task(copy, parsec_ttg_caller);
     assert(inserted);
     copy_to_remove = copy;
