@@ -296,6 +296,37 @@ struct input_reducers {
 };
 template<typename ... valueTs> using input_reducers_t = typename input_reducers<valueTs...>::type;
 
+///////////////////
+// Defining a mapping function for indexing into data structures using pull terminals
+//////////////////
+template <typename Key, typename Enabler = void>
+struct mapper_function;
+template <typename Key>
+struct mapper_function<Key, std::enable_if_t<!is_void_v<Key>>> {
+  using type = std::function<Key (const Key &)>;
+};
+template <typename Key>
+struct mapper_function<Key, std::enable_if_t<is_void_v<Key>>> {
+  using type = std::function<void()>;
+};
+template <typename Key>
+using mapper_function_t = typename mapper_function<Key>::type;
+
+// Callback type for generator/reader Ops which are implemented as pure tasks.
+template <typename Key, typename Enabler = void>
+struct invoke_puretask_callback;
+
+template <typename Key>
+struct invoke_puretask_callback<Key, std::enable_if_t<!is_void_v<Key>>> {
+  using type = std::function<void(std::tuple<Key, Key> const &, std::size_t const)>;
+};
+template <typename Key>
+struct invoke_puretask_callback<Key, std::enable_if_t<is_void_v<Key>>> {
+  using type = std::function<void()>;
+};
+template <typename Key>
+using invoke_puretask_callback_t = typename invoke_puretask_callback<Key>::type;
+
 }  // only used by deep internals
 
 }  // namespace meta

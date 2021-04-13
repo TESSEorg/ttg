@@ -14,7 +14,8 @@ namespace ttg {
   class TerminalBase {
   public:
     static constexpr bool is_a_terminal = true;
-
+    bool is_pull_terminal = false; //< Default is push terminal
+    
     /// describes the terminal type
     enum class Type {
       Write,   /// can only be written to
@@ -31,6 +32,7 @@ namespace ttg {
     std::string value_type_str;  //< String describing value type
 
     std::vector<TerminalBase *> successors_;
+    std::vector<TerminalBase *> predecessors_; //This is required for pull terminals.
 
     TerminalBase(const TerminalBase &) = delete;
     TerminalBase(TerminalBase &&) = delete;
@@ -56,6 +58,15 @@ namespace ttg {
     /// Add directed connection (this --> successor) in internal representation of the TTG.
     /// This is called by the derived class's connect method
     void connect_base(TerminalBase *successor) { successors_.push_back(successor); connected = true; successor->connected = true;}
+
+    void connect_pull(TerminalBase *predecessor) {
+      std::cout << "set_out : " << this->get_name() << "-> has predecessor " << predecessor->get_name() << std::endl;
+      if (this != predecessor) {
+        predecessors_.push_back(predecessor);
+        predecessor->connected = true;
+      }
+      connected = true;
+    }
 
   public:
     /// Return ptr to containing op
@@ -93,6 +104,9 @@ namespace ttg {
 
     /// Get connections to successors
     const std::vector<TerminalBase *> &get_connections() const { return successors_; }
+
+    // Get connections to predecessors
+    const std::vector<TerminalBase *> &get_predecessors() const {return predecessors_; }
 
     /// Returns true if this terminal (input or output) is connected
     bool is_connected() const {return connected;}

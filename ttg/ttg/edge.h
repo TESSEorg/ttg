@@ -15,6 +15,7 @@ namespace ttg {
   template <typename keyT, typename valueT>
   class Edge {
    private:
+    using mapper_function_type = meta::detail::mapper_function_t<keyT>;
     // An EdgeImpl represents a single edge that most usually will
     // connect a single output terminal with a single
     // input terminal.  However, we had to relax this constraint in
@@ -28,17 +29,28 @@ namespace ttg {
     // to a single terminal.
     struct EdgeImpl {
       std::string name;
+      bool is_pull_edge = false;
       std::vector<TerminalBase *> outs;  // In<keyT, valueT> or In<keyT, const valueT>
       std::vector<Out<keyT, valueT> *> ins;
+      mapper_function_type mapper_function;
 
       EdgeImpl() : name(""), outs(), ins() {}
 
-      EdgeImpl(const std::string &name) : name(name), outs(), ins() {}
+      EdgeImpl(const std::string &name, bool is_pull = false) : name(name),
+                is_pull_edge(is_pull), outs(), ins() {}
+
+      EdgeImpl(const std::string &name, bool is_pull, mapper_function_type &mapper) :
+        name(name),
+        is_pull_edge(is_pull),
+        mapper_function(mapper),
+        outs(),
+        ins() {}
 
       void set_in(Out<keyT, valueT> *in) {
         if (ins.size() && tracing()) {
           print("Edge: ", name, " : has multiple inputs");
         }
+        in->is_pull_terminal = is_pull_edge;
         ins.push_back(in);
         try_to_connect_new_in(in);
       }
@@ -47,6 +59,8 @@ namespace ttg {
         if (outs.size() && tracing()) {
           print("Edge: ", name, " : has multiple outputs");
         }
+        out->is_pull_terminal = is_pull_edge;
+        static_cast<In<keyT, valueT>*>(out)->mapper = mapper_function;
         outs.push_back(out);
         try_to_connect_new_out(out);
       }
@@ -85,7 +99,13 @@ namespace ttg {
                   "Edge<keyT,valueT> assumes valueT is a non-decayable type");
     static constexpr bool is_an_edge = true;
 
-    Edge(const std::string name = "anonymous edge") : p(1) { p[0] = std::make_shared<EdgeImpl>(name); }
+    Edge(const std::string name = "anonymous edge", bool is_pull = false) : p(1) {
+      p[0] = std::make_shared<EdgeImpl>(name, is_pull);
+    }
+
+    Edge(const std::string name, bool is_pull, mapper_function_type &mapper) : p(1) {
+      p[0] = std::make_shared<EdgeImpl>(name, is_pull, mapper);
+    }
 
     template <typename... valuesT>
     Edge(const Edge<keyT, valuesT> &... edges) : p(0) {
@@ -111,6 +131,10 @@ namespace ttg {
 
     void set_out(TerminalBase *out) const {
       for (auto &edge : p) edge->set_out(out);
+    }
+
+     bool is_pull_edge() const {
+      return p.at(0)->is_pull_edge;
     }
 
     // this is currently just a hack, need to understand better whether this is a good idea

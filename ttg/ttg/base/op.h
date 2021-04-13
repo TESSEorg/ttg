@@ -18,6 +18,11 @@ namespace ttg {
       static bool trace = false;
       return trace;
     }
+
+    inline bool &op_base_lazy_pull_accessor(void) {
+      static bool lazy_pull = false;
+      return lazy_pull;
+    }
   } // namespace detail
 
   /// Provides basic information and graph connectivity (eventually statistics,
@@ -35,6 +40,7 @@ namespace ttg {
     OpBase *containing_composite_op;  //< If part of a composite, points to composite operator
 
     bool executable;
+    bool lazy_pull_instance = false;
 
     // Default copy/move/assign all OK
     static uint64_t next_instance_id() {
@@ -129,15 +135,26 @@ namespace ttg {
       return value;
     }
 
+    static bool set_lazy_pull(bool value) {
+      std::swap(ttg::detail::op_base_lazy_pull_accessor(), value);
+      return value;
+    }
+
     /// Sets trace for just this instance to value and returns previous setting
     bool set_trace_instance(bool value) {
       std::swap(trace_instance, value);
       return value;
     }
 
+    bool set_lazy_pull_instance(bool value) {
+      std::swap(lazy_pull_instance, value);
+      return value;
+    }
+
     /// Returns true if tracing set for either this instance or all instances
     bool get_trace() { return ttg::detail::op_base_trace_accessor() || trace_instance; }
     bool tracing() { return get_trace(); }
+    bool is_lazy_pull() { return ttg::detail::op_base_lazy_pull_accessor() || lazy_pull_instance; }
 
     void set_is_composite(bool value) { is_composite = value; }
     bool get_is_composite() const { return is_composite; }

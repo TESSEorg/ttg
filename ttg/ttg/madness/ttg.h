@@ -178,6 +178,7 @@ namespace ttg_madness {
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<input_valueTs...>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
+    int num_pullins = 0;
 
    public:
     ttg::World get_world() const { return world; }
@@ -243,6 +244,7 @@ namespace ttg_madness {
                                                     // inputs (0 = unbounded stream, >0 = bounded stream)
       input_values_tuple_type input_values;         // The input values (does not include control)
       derivedT *derived;                            // Pointer to derived class instance
+      bool pull_terminals_invoked = false;
       std::conditional_t<ttg::meta::is_void_v<keyT>, ttg::Void, keyT> key;  // Task key
 
       /// makes a tuple of references out of tuple of
@@ -302,6 +304,70 @@ namespace ttg_madness {
     cacheT cache;
 
    protected:
+
+    template <typename terminalT, std::size_t i, typename Key = keyT>
+    void invoke_pull_terminal(terminalT &in, const Key &key, OpArgs *args) {
+      if (in.is_pull_terminal) {
+        if (in.mapper) {
+          std::cout << "Calling mapper function to get destination keys\n";
+          const auto k = in.mapper(key);
+          in.invoke_puretask_predecessor(std::make_tuple(std::remove_reference_t<Key>(k), std::remove_reference_t<Key>(key)), i);
+        } else std::cout << "Where's the mapper?\n";
+      }
+    }
+
+    template <std::size_t... IS, typename Key = keyT>
+    void invoke_pull_terminals(std::index_sequence<IS...>, const Key &key, OpArgs *args) {
+      int junk[] = {0, (invoke_pull_terminal<typename std::tuple_element<IS, input_terminals_type>::type, IS>(
+                            std::get<IS>(input_terminals), key, args),
+                        0)...};
+      junk[0]++;
+    }
+
+    template <typename Key>  //, typename Value>
+    std::enable_if_t<!::ttg::meta::is_void_v<Key> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, void>
+    set_puretask_pull_arg(const std::tuple<Key, Key> &keys, std::size_t i) {
+      const Key &myKey = std::get<0>(keys);
+      const Key &destKey = std::get<1>(keys);
+      const auto owner = keymap(myKey);
+      std::cout << "In puretask_pull_arg " << myKey.first << " " << myKey.second << std::endl;
+      if (owner != world.rank()) {
+        //std::cout << world.rank() << " forwarding to " << get_name() << " : " << myKey.first << " " << myKey.second
+        //          << " - " << owner << std::endl;
+        if (tracing()) ::ttg::print(world.rank(), ":", get_name(), ":", myKey, ": forwarding data request argument : ");
+
+        worldobjT::send(owner, &opT::template set_puretask_pull_arg<keyT>, keys, i);
+        //std::cout << world.rank() << " sent pull request to another process " << owner << " for " << myKey.first << ":"<< myKey.second << std::endl;
+      } else {
+        //std::cout << world.rank() << " received local request for " << get_name() << " : " << myKey.first << " "
+        //          << myKey.second << std::endl;
+
+        if (tracing())
+          ::ttg::print(world.rank(), ":", get_name(), " : ", myKey, ": received value for pure task pull argument");
+
+        auto value = static_cast<derivedT *>(this)->op(myKey, output_terminals);
+        if constexpr (!std::is_same_v<std::remove_const_t<decltype(value)>, std::nullptr_t>) {
+          // Assuming a single output terminal, verify compile time checking in wrap!!
+          std::cout << "Do we come to the if?\n";
+          (std::get<0>(output_terminals)).send_to(destKey, std::remove_reference_t<decltype(value)>(value), i);
+        }
+      }
+    }
+
+    template <typename Key>
+    std::enable_if_t<!::ttg::meta::is_void_v<Key> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>, void>
+    set_puretask_pull_arg(const std::tuple<Key, Key> &keys, const std::size_t i) {
+      std::cout << "We can't be here! Can a datasource Op have inputs?\n";
+    }
+
+    template <typename Key>
+    std::enable_if_t<::ttg::meta::is_void_v<Key>  //&&
+                                                  //::ttg::meta::is_empty_tuple_v<input_values_tuple_type>
+                     ,
+                     void>
+    set_puretask_pull_arg() {
+      std::cout << "What to do if key is empty? We currently don't have a use case\n";
+    }
     // there are 6 types of set_arg:
     // - case 1: nonvoid Key, complete Value type
     // - case 2: nonvoid Key, void Value, mixed (data+control) inputs
@@ -320,6 +386,7 @@ namespace ttg_madness {
                     "Op::set_arg(key,value) given value of type incompatible with Op");
 
       const auto owner = keymap(key);
+      std::cout << "Task created for " << key.first << ":" << key.second << std::endl;
       if (owner != world.rank()) {
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
         // should be able on the other end to consume value (since it is just a temporary byproduct of serialization)
@@ -333,10 +400,17 @@ namespace ttg_madness {
         worldobjT::send(owner, &opT::template set_arg<i, Key, const std::remove_reference_t<Value> &>, key, value);
       } else {
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
-
+        bool pullT_invoked = false;
         accessorT acc;
-        if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
+        if (cache.insert(acc, key)) {
+          acc->second = new OpArgs();  // It will be deleted by the task q
+          if (!is_lazy_pull()) {
+            invoke_pull_terminals(std::make_index_sequence<numins>{}, key, acc->second);
+            pullT_invoked = true;
+          }
+        }
         OpArgs *args = acc->second;
+        if (!is_lazy_pull() && pullT_invoked) args->pull_terminals_invoked = true;
 
         if (args->nargs[i] == 0) {
           ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error argument is already finalized : ", i);
@@ -380,6 +454,14 @@ namespace ttg_madness {
           }
           args->nargs[i] = 0;
           args->counter--;
+        }
+
+        // If lazy pulling in enabled, check it here.
+        if (numins - args->counter == num_pullins) {
+          if (is_lazy_pull() && !args->pull_terminals_invoked) {
+            // std::cout << "Invoking pull terminals from 2nd for process " << world.rank() << std::endl;
+            invoke_pull_terminals(std::make_index_sequence<numins>{}, key, args);
+          }
         }
 
         // ready to run the task?
@@ -888,6 +970,39 @@ namespace ttg_madness {
       }
     }
 
+    template <typename terminalT, std::size_t i>
+    void register_invoke_puretask_callback(terminalT &output) {
+      if (output.is_pull_terminal) {
+        if constexpr (!::ttg::meta::is_void_v<keyT> && ::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+          auto invoke_puretask_callback = [this](std::tuple<keyT, keyT> const &keys, std::size_t const ti) {
+            set_puretask_pull_arg(keys, ti);
+          };
+          output.set_invoke_puretask_callback(invoke_puretask_callback);
+        } else if constexpr (!::ttg::meta::is_void_v<keyT> && !::ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+          auto invoke_puretask_callback = [this](std::tuple<keyT, keyT> const &keys, std::size_t const ti) {
+            set_puretask_pull_arg(keys, ti);
+          };
+          output.set_invoke_puretask_callback(invoke_puretask_callback);
+        } else {
+          auto invoke_puretask_callback = [this]() { set_puretask_pull_arg(); };
+          output.set_invoke_puretask_callback(invoke_puretask_callback);
+        }
+      }
+    }
+
+    template <std::size_t... IS>
+    void set_pull_ops(std::index_sequence<IS...>) {
+      // int junk[] = {0, (register_invoke_callback<
+      //                  typename std::tuple_element<
+      //                  IS, output_terminals_type>::type, IS>
+      //                  (std::get<IS>(output_terminals)), 0)...};
+      // junk[0]++;
+      int junk2[] = {
+          0, (register_invoke_puretask_callback<typename std::tuple_element<IS, output_terminals_type>::type, IS>(
+                  std::get<IS>(output_terminals)),
+              0)...};
+    }
+
    public:
     template <typename keymapT = ttg::detail::default_keymap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
@@ -942,10 +1057,12 @@ namespace ttg_madness {
       register_input_terminals(input_terminals, innames);
       register_output_terminals(output_terminals, outnames);
 
-      register_input_callbacks(std::make_index_sequence<numins>{});
-
       connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numins>{}, inedges);
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
+
+      // DO NOT move this!
+      register_input_callbacks(std::make_index_sequence<numins>{});
+      set_pull_ops(std::make_index_sequence<numouts>{});
     }
 
     template <typename keymapT = ttg::detail::default_keymap<keyT>>
