@@ -49,13 +49,66 @@ struct type2matrixtype<double>
 };
 
 
-struct Key {
+struct Key1 {
+  // ((I, J), K) where (I, J) is the tile coordiante and K is the iteration number
+  int K = 0;
+  madness::hashT hash_val;
+
+  Key1() { rehash(); }
+  Key1(int K) : K(K){ rehash(); }
+
+  madness::hashT hash() const { return hash_val; }
+  void rehash() {
+    hash_val = K;
+  }
+
+  // Equality test
+  bool operator==(const Key1& b) const { return K == b.K; }
+
+  // Inequality test
+  bool operator!=(const Key1& b) const { return !((*this) == b); }
+
+  template <typename Archive>
+  void serialize(Archive& ar) {
+    ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
+  }
+};
+
+
+struct Key2 {
+  // ((I, J), K) where (I, J) is the tile coordiante and K is the iteration number
+  int I = 0, J = 0;
+  madness::hashT hash_val;
+
+  Key2() { rehash(); }
+  Key2(int I, int J) : I(I), J(J){ rehash(); }
+
+  madness::hashT hash() const { return hash_val; }
+  void rehash() {
+    hash_val = (static_cast<madness::hashT>(I) << 32)
+             ^ (static_cast<madness::hashT>(J));
+  }
+
+  // Equality test
+  bool operator==(const Key2& b) const { return I == b.I && J == b.J; }
+
+  // Inequality test
+  bool operator!=(const Key2& b) const { return !((*this) == b); }
+
+  template <typename Archive>
+  void serialize(Archive& ar) {
+    ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
+  }
+};
+
+
+struct Key3 {
   // ((I, J), K) where (I, J) is the tile coordiante and K is the iteration number
   int I = 0, J = 0, K = 0;
   madness::hashT hash_val;
 
-  Key() { rehash(); }
-  Key(int I, int J, int K) : I(I), J(J), K(K) { rehash(); }
+  Key3() { rehash(); }
+  Key3(int I, int J, int K) : I(I), J(J), K(K) { rehash(); }
 
   madness::hashT hash() const { return hash_val; }
   void rehash() {
@@ -65,10 +118,10 @@ struct Key {
   }
 
   // Equality test
-  bool operator==(const Key& b) const { return I == b.I && J == b.J && K == b.K; }
+  bool operator==(const Key3& b) const { return I == b.I && J == b.J && K == b.K; }
 
   // Inequality test
-  bool operator!=(const Key& b) const { return !((*this) == b); }
+  bool operator!=(const Key3& b) const { return !((*this) == b); }
 
   template <typename Archive>
   void serialize(Archive& ar) {
@@ -78,16 +131,37 @@ struct Key {
 
 namespace std {
   // specialize std::hash for Key
-  template <>
-  struct hash<Key> {
-    std::size_t operator()(const Key& s) const noexcept { return s.hash(); }
-  };
-}  // namespace std
 
-std::ostream& operator<<(std::ostream& s, const Key& key) {
-  s << "Key(" << key.I << "," << key.J << "," << key.K << ")";
-  return s;
-}
+  template <>
+  struct hash<Key1> {
+    std::size_t operator()(const Key1& s) const noexcept { return s.hash(); }
+  };
+
+  template <>
+  struct hash<Key2> {
+    std::size_t operator()(const Key2& s) const noexcept { return s.hash(); }
+  };
+
+  template <>
+  struct hash<Key3> {
+    std::size_t operator()(const Key3& s) const noexcept { return s.hash(); }
+  };
+
+  std::ostream& operator<<(std::ostream& s, const Key1& key) {
+    s << "Key(" << key.K << ")";
+    return s;
+  }
+
+  std::ostream& operator<<(std::ostream& s, const Key2& key) {
+    s << "Key(" << key.I << "," << key.J << ")";
+    return s;
+  }
+
+  std::ostream& operator<<(std::ostream& s, const Key3& key) {
+    s << "Key(" << key.I << "," << key.J << "," << key.K << ")";
+    return s;
+  }
+}  // namespace std
 
 template<typename T>
 class MatrixTile {
@@ -293,70 +367,61 @@ using MatrixT = PaRSECMatrixWrapper<sym_two_dim_block_cyclic_t, ValueT>;
 
 template <typename T>
 auto make_potrf(MatrixT<T>& A,
-                ttg::Edge<Key, MatrixTile<T>>& input,
-                ttg::Edge<Key, MatrixTile<T>>& output_trsm,
-                ttg::Edge<Key, MatrixTile<T>>& output_result)
+                ttg::Edge<Key1, MatrixTile<T>>& input,
+                ttg::Edge<Key2, MatrixTile<T>>& output_trsm,
+                ttg::Edge<Key2, MatrixTile<T>>& output_result)
 {
-  auto f = [=](const Key& key,
-               MatrixTile<T>&& tile_kk,
-               std::tuple<ttg::Out<Key, MatrixTile<T>>,
-                          ttg::Out<Key, MatrixTile<T>>>& out){
+#if 0
+  auto trsm_keygen = [=](const Key& key){
     const int I = key.I;
     const int J = key.J;
     const int K = key.K;
-    assert(I == J);
-    assert(I == K);
+    for (int m = I+1; m < A.rows(); ++m) {
+      co_yield Key(m, J, K);
+    }
+  };
+#endif // 0
+  auto f = [=](const Key1& key,
+               MatrixTile<T>&& tile_kk,
+               std::tuple<ttg::Out<Key2, MatrixTile<T>>,
+                          ttg::Out<Key2, MatrixTile<T>>>& out){
+    const int K = key.K;
 
-#ifdef PRINT_TILES
-    std::cout << "POTRF BEFORE:" << std::endl;
-    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_kk.data());
-#endif // PRINT_TILES
+    //std::cout << "POTF " << key << std::endl;
 
     lapack::potrf(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.rows());
 
-#ifdef PRINT_TILES
-    std::cout << "POTRF(" << key << ")" << std::endl;
-    std::cout << "POTRF AFTER:" << std::endl;
-    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_kk.data());
-#endif // PRINT_TILES
-
-    /* tile is done */
-    //ttg::send<0>(key, tile_kk, out);
-
     /* send the tile to outputs */
-    std::vector<Key> keylist;
-    keylist.reserve(A.rows() - I);
-    for (int m = I+1; m < A.rows(); ++m) {
+    std::vector<Key2> keylist;
+    keylist.reserve(A.rows() - K);
+    for (int m = K+1; m < A.rows(); ++m) {
       /* send tile to trsm */
-      //std::cout << "POTRF(" << key << "): sending output to " << Key{m, J, K} << std::endl;
-      //ttg::send<1>(Key(m, J, K), tile_kk, out);
-      keylist.push_back(Key(m, J, K));
+      keylist.push_back(Key2(m, K));
     }
-    ttg::broadcast<0, 1>(std::make_tuple(std::array<Key, 1>{key}, keylist), std::move(tile_kk), out);
+    ttg::broadcast<0, 1>(std::make_tuple(std::array<Key2, 1>{Key2(K, K)}, keylist), std::move(tile_kk), out);
   };
   return ttg::wrap(f, ttg::edges(input), ttg::edges(output_result, output_trsm), "POTRF", {"tile_kk"}, {"output_result", "output_trsm"});
 }
 
 template <typename T>
 auto make_trsm(MatrixT<T>& A,
-               ttg::Edge<Key, MatrixTile<T>>& input_kk,
-               ttg::Edge<Key, MatrixTile<T>>& input_mk,
-               ttg::Edge<Key, MatrixTile<T>>& output_diag,
-               ttg::Edge<Key, MatrixTile<T>>& output_row,
-               ttg::Edge<Key, MatrixTile<T>>& output_col,
-               ttg::Edge<Key, MatrixTile<T>>& output_result)
+               ttg::Edge<Key2, MatrixTile<T>>& input_kk,    // from POTRF
+               ttg::Edge<Key2, MatrixTile<T>>& input_mk,    // from previous GEMM
+               ttg::Edge<Key2, MatrixTile<T>>& output_diag, // to SYRK
+               ttg::Edge<Key3, MatrixTile<T>>& output_row,   // to GEMM
+               ttg::Edge<Key3, MatrixTile<T>>& output_col,   // to GEMM
+               ttg::Edge<Key2, MatrixTile<T>>& output_result)
 {
-  auto f = [=](const Key& key,
+  auto f = [=](const Key2& key,
                const MatrixTile<T>&  tile_kk,
                      MatrixTile<T>&& tile_mk,
-                     std::tuple<ttg::Out<Key, MatrixTile<T>>,
-                                ttg::Out<Key, MatrixTile<T>>,
-                                ttg::Out<Key, MatrixTile<T>>,
-                                ttg::Out<Key, MatrixTile<T>>>& out){
+                     std::tuple<ttg::Out<Key2, MatrixTile<T>>,
+                                ttg::Out<Key2, MatrixTile<T>>,
+                                ttg::Out<Key3, MatrixTile<T>>,
+                                ttg::Out<Key3, MatrixTile<T>>>& out){
     const int I = key.I;
     const int J = key.J;
-    const int K = key.K;
-    assert(I > K); // we're below (k, k) in row i, column j [k+1 .. NB, k]
+    const int K = key.J; // the column equals the outer most look K (same as PO)
 
     /* No support for different tile sizes yet */
     assert(tile_mk.rows() == tile_kk.rows());
@@ -389,9 +454,9 @@ auto make_trsm(MatrixT<T>& A,
 
     //std::cout << "TRSM(" << key << ")" << std::endl;
 
-    std::vector<Key> keylist_row;
+    std::vector<Key3> keylist_row;
     keylist_row.reserve(I-J-1);
-    std::vector<Key> keylist_col;
+    std::vector<Key3> keylist_col;
     keylist_row.reserve(A.rows()-I-1);
 
     /* tile is done */
@@ -405,18 +470,18 @@ auto make_trsm(MatrixT<T>& A,
     for (int n = J+1; n < I; ++n) {
       //std::cout << "TRSM(" << key << "): sending output to row " << Key{I, n, K} << std::endl;
       //ttg::send<2>(Key(I, n, K), tile_mk, out);
-      keylist_row.push_back(Key(I, n, K));
+      keylist_row.push_back(Key3(I, n, K));
     }
 
     /* send the tile to all gemms down in column i */
     for (int m = I+1; m < A.rows(); ++m) {
       //std::cout << "TRSM(" << key << "): sending output to col " << Key{m, I, K} << std::endl;
       //ttg::send<3>(Key(m, I, K), tile_mk, out);
-      keylist_col.push_back(Key(m, I, K));
+      keylist_col.push_back(Key3(m, I, K));
     }
 
-    ttg::broadcast<0, 1, 2, 3>(std::make_tuple(std::array<Key, 1>{key},
-                                               std::array<Key, 1>{Key(I, I, K)},
+    ttg::broadcast<0, 1, 2, 3>(std::make_tuple(std::array<Key2, 1>{key},
+                                               std::array<Key2, 1>{Key2(I, K)},
                                                keylist_row, keylist_col),
                             std::move(tile_mk), out);
   };
@@ -427,21 +492,18 @@ auto make_trsm(MatrixT<T>& A,
 
 template <typename T>
 auto make_syrk(MatrixT<T>& A,
-               ttg::Edge<Key, MatrixTile<T>>& input_mk,
-               ttg::Edge<Key, MatrixTile<T>>& input_mm,
-               ttg::Edge<Key, MatrixTile<T>>& output_potrf,
-               ttg::Edge<Key, MatrixTile<T>>& output_syrk)
+               ttg::Edge<Key2, MatrixTile<T>>& input_mk,    // from TRSM
+               ttg::Edge<Key2, MatrixTile<T>>& input_mm,    // from SYRK
+               ttg::Edge<Key1, MatrixTile<T>>& output_potrf,// to POTRF
+               ttg::Edge<Key2, MatrixTile<T>>& output_syrk)
 {
-  auto f = [=](const Key& key,
+  auto f = [=](const Key2& key,
                const MatrixTile<T>&  tile_mk,
                      MatrixTile<T>&& tile_mm,
-                     std::tuple<ttg::Out<Key, MatrixTile<T>>,
-                                ttg::Out<Key, MatrixTile<T>>>& out){
+                     std::tuple<ttg::Out<Key1, MatrixTile<T>>,
+                                ttg::Out<Key2, MatrixTile<T>>>& out){
     const int I = key.I;
-    const int J = key.J;
-    const int K = key.K;
-    assert(I == J);
-    assert(I > K);
+    const int K = key.J;
 
     /* No support for different tile sizes yet */
     assert(tile_mk.rows() == tile_mm.rows());
@@ -455,6 +517,8 @@ auto make_syrk(MatrixT<T>& A,
     std::cout << "SYRK BEFORE: mk" << std::endl;
     dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mm.data());
 #endif // PRINT_TILES
+
+    //std::cout << "SYRK " << key << std::endl;
 
     blas::syrk(blas::Layout::ColMajor,
                lapack::Uplo::Lower,
@@ -474,11 +538,11 @@ auto make_syrk(MatrixT<T>& A,
     if (I == K+1) {
       /* send the tile to potrf */
       //std::cout << "SYRK(" << key << "): sending output to POTRF " << Key{I, I, K+1} << std::endl;
-      ttg::send<0>(Key(I, I, K+1), std::move(tile_mm), out);
+      ttg::send<0>(Key1(K+1), std::move(tile_mm), out);
     } else {
       /* send output to next syrk */
       //std::cout << "SYRK(" << key << "): sending output to SYRK " << Key{I, I, K+1} << std::endl;
-      ttg::send<1>(Key(I, I, K+1), std::move(tile_mm), out);
+      ttg::send<1>(Key2(I, K+1), std::move(tile_mm), out);
     }
 
   };
@@ -491,18 +555,18 @@ auto make_syrk(MatrixT<T>& A,
 
 template <typename T>
 auto make_gemm(MatrixT<T>& A,
-               ttg::Edge<Key, MatrixTile<T>>& input_nk,
-               ttg::Edge<Key, MatrixTile<T>>& input_mk,
-               ttg::Edge<Key, MatrixTile<T>>& input_nm,
-               ttg::Edge<Key, MatrixTile<T>>& output_trsm,
-               ttg::Edge<Key, MatrixTile<T>>& output_gemm)
+               ttg::Edge<Key3, MatrixTile<T>>& input_nk,    // from TRSM
+               ttg::Edge<Key3, MatrixTile<T>>& input_mk,    // from TRSM
+               ttg::Edge<Key3, MatrixTile<T>>& input_nm,    // from TRSM
+               ttg::Edge<Key2, MatrixTile<T>>& output_trsm, // to TRSM
+               ttg::Edge<Key3, MatrixTile<T>>& output_gemm)
 {
-  auto f = [=](const Key& key,
+  auto f = [=](const Key3& key,
               const MatrixTile<T>& tile_nk,
               const MatrixTile<T>& tile_mk,
                     MatrixTile<T>&& tile_nm,
-                    std::tuple<ttg::Out<Key, MatrixTile<T>>,
-                               ttg::Out<Key, MatrixTile<T>>>& out){
+                    std::tuple<ttg::Out<Key2, MatrixTile<T>>,
+                               ttg::Out<Key3, MatrixTile<T>>>& out){
     const int I = key.I;
     const int J = key.J;
     const int K = key.K;
@@ -522,6 +586,8 @@ auto make_gemm(MatrixT<T>& A,
     std::cout << "GEMM BEFORE: nm" << std::endl;
     dplasma_dprint_tile(I, I, &A.parsec()->super, tile_nm.data());
 #endif // PRINT_TILES
+
+    //std::cout << "GEMM " << key << std::endl;
 
     blas::gemm(blas::Layout::ColMajor,
                blas::Op::NoTrans,
@@ -545,11 +611,11 @@ auto make_gemm(MatrixT<T>& A,
     if (J == K+1) {
       /* send the tile to trsm */
       //std::cout << "GEMM(" << key << "): sending output to TRSM " << Key{I, J, K+1} << std::endl;
-      ttg::send<0>(Key(I, J, K+1), std::move(tile_nm), out);
+      ttg::send<0>(Key2(I, J), std::move(tile_nm), out);
     } else {
       /* send the tile to the next gemm */
       //std::cout << "GEMM(" << key << "): sending output to GEMM " << Key{I, J, K+1} << std::endl;
-      ttg::send<1>(Key(I, J, K+1), std::move(tile_nm), out);
+      ttg::send<1>(Key3(I, J, K+1), std::move(tile_nm), out);
     }
   };
   return ttg::wrap(f,
@@ -561,46 +627,46 @@ auto make_gemm(MatrixT<T>& A,
 
 template<typename T>
 auto initiator(MatrixT<T>& A,
-               ttg::Edge<Key, MatrixTile<T>>& syrk_potrf,
-               ttg::Edge<Key, MatrixTile<T>>& gemm_trsm,
-               ttg::Edge<Key, MatrixTile<T>>& syrk_syrk,
-               ttg::Edge<Key, MatrixTile<T>>& gemm_gemm)
+               ttg::Edge<Key1, MatrixTile<T>>& syrk_potrf, // to POTRF
+               ttg::Edge<Key2, MatrixTile<T>>& gemm_trsm,  // to TRSM
+               ttg::Edge<Key2, MatrixTile<T>>& syrk_syrk,  // TO SYRK
+               ttg::Edge<Key3, MatrixTile<T>>& gemm_gemm)
 {
-  auto f = [=](const Key& key,
-               std::tuple<ttg::Out<Key, MatrixTile<T>>,
-                          ttg::Out<Key, MatrixTile<T>>,
-                          ttg::Out<Key, MatrixTile<T>>,
-                          ttg::Out<Key, MatrixTile<T>>>& out){
+  auto f = [=](const Key3& key,
+               std::tuple<ttg::Out<Key1, MatrixTile<T>>,
+                          ttg::Out<Key2, MatrixTile<T>>,
+                          ttg::Out<Key2, MatrixTile<T>>,
+                          ttg::Out<Key3, MatrixTile<T>>>& out){
     /* kick off first POTRF */
     //std::cout << "Initiator called with " << key << std::endl;
     if (A.is_local(0, 0)) {
-      ttg::send<0>(Key{0, 0, 0}, std::move(A(0, 0)), out);
+      ttg::send<0>(Key1(0), std::move(A(0, 0)), out);
     }
     for (int i = 1; i < A.rows(); i++) {
       /* send gemm input to TRSM */
       if (A.is_local(i, 0)) {
         //std::cout << "Initiating TRSM " << Key{i, 0, 0} << std::endl;
-        ttg::send<1>(Key{i, 0, 0}, std::move(A(i, 0)), out);
+        ttg::send<1>(Key2(i, 0), std::move(A(i, 0)), out);
       }
       /* send syrk to SYRK */
       if (A.is_local(i, i)) {
-        ttg::send<2>(Key{i, i, 0}, std::move(A(i, i)), out);
+        ttg::send<2>(Key2(i, 0), std::move(A(i, i)), out);
       }
       for (int j = 1; j < i; j++) {
         /* send gemm to GEMM */
         if (A.is_local(i, j)) {
-          ttg::send<3>(Key{i, j, 0}, std::move(A(i, j)), out);
+          ttg::send<3>(Key3(i, j, 0), std::move(A(i, j)), out);
         }
       }
     }
   };
 
-  return ttg::wrap<Key>(f, ttg::edges(), ttg::edges(syrk_potrf, gemm_trsm, syrk_syrk, gemm_gemm), "INITIATOR");
+  return ttg::wrap<Key3>(f, ttg::edges(), ttg::edges(syrk_potrf, gemm_trsm, syrk_syrk, gemm_gemm), "INITIATOR");
 }
 
 template <typename T>
-auto make_result(MatrixT<T>& A, const ttg::Edge<Key, MatrixTile<T>>& result) {
-  auto f = [=](const Key& key, MatrixTile<T>&& tile, std::tuple<>& out) {
+auto make_result(MatrixT<T>& A, const ttg::Edge<Key2, MatrixTile<T>>& result) {
+  auto f = [=](const Key2& key, MatrixTile<T>&& tile, std::tuple<>& out) {
     /* write back any tiles that are not in the matrix already */
     const int I = key.I;
     const int J = key.J;
@@ -622,9 +688,7 @@ int main(int argc, char **argv)
   int M = N;
   int NB = 128;
   int check = 0;
-  ttg::ttg_initialize(argc, argv, 1);
-
-  auto world = ttg::ttg_default_execution_context();
+  int nthreads = -1;
 
   if (argc > 1) {
     N = M = atoi(argv[1]);
@@ -637,6 +701,14 @@ int main(int argc, char **argv)
   if (argc > 3) {
     check = atoi(argv[3]);
   }
+
+  if (argc > 4) {
+    nthreads = atoi(argv[4]);
+  }
+
+  ttg::ttg_initialize(argc, argv, nthreads);
+
+  auto world = ttg::ttg_default_execution_context();
 
   int n_rows = (N / NB) + (N % NB > 0);
   int n_cols = (M / NB) + (M % NB > 0);
@@ -657,15 +729,16 @@ int main(int argc, char **argv)
                                  (size_t)parsec_datadist_getsizeoftype(dcA.super.mtype));
   parsec_data_collection_set_key((parsec_data_collection_t*)&dcA, "Matrix A");
 
-  ttg::Edge<Key, MatrixTile<double>> potrf_trsm("potrf_trsm"),
+  ttg::Edge<Key1, MatrixTile<double>> syrk_potrf("syrk_potrf");
+
+  ttg::Edge<Key2, MatrixTile<double>> potrf_trsm("potrf_trsm"),
                                       trsm_syrk("trsm_syrk"),
-                                      syrk_potrf("syrk_potrf"),
-                                      syrk_syrk("syrk_syrk"),
-                                      gemm_gemm("gemm_gemm"),
                                       gemm_trsm("gemm_trsm"),
-                                      trsm_gemm_row("trsm_gemm_row"),
-                                      trsm_gemm_col("trsm_gemm_col"),
+                                      syrk_syrk("syrk_syrk"),
                                       result("result");
+  ttg::Edge<Key3, MatrixTile<double>> gemm_gemm("gemm_gemm"),
+                                      trsm_gemm_row("trsm_gemm_row"),
+                                      trsm_gemm_col("trsm_gemm_col");
 
   //Matrix<double>* A = new Matrix<double>(n_rows, n_cols, NB, NB);
   MatrixT<double> A{&dcA};
@@ -681,28 +754,38 @@ int main(int argc, char **argv)
   //dplasma_dprint(world.impl().context(), matrix_Lower, dcA);
   // plgsy(A);
 
-  auto keymap = [&](const Key& key) {
+  auto keymap1 = [&](const Key1& key) {
+    //std::cout << "Key " << key << " is at rank " << A.rank_of(key.I, key.J) << std::endl;
+    return A.rank_of(key.K, key.K);
+  };
+
+  auto keymap2 = [&](const Key2& key) {
+    //std::cout << "Key " << key << " is at rank " << A.rank_of(key.I, key.J) << std::endl;
+    return A.rank_of(key.I, key.J);
+  };
+
+  auto keymap3 = [&](const Key3& key) {
     //std::cout << "Key " << key << " is at rank " << A.rank_of(key.I, key.J) << std::endl;
     return A.rank_of(key.I, key.J);
   };
 
   auto op_init  = initiator(A, syrk_potrf, gemm_trsm, syrk_syrk, gemm_gemm);
   /* op_init gets a special keymap where all keys are local */
-  op_init->set_keymap([&](const Key&){ return world.rank(); });
+  op_init->set_keymap([&](const Key3&){ return world.rank(); });
   auto op_potrf = make_potrf(A, syrk_potrf, potrf_trsm, result);
-  op_potrf->set_keymap(keymap);
+  op_potrf->set_keymap(keymap1);
   auto op_trsm  = make_trsm(A,
                             potrf_trsm, gemm_trsm,
                             trsm_syrk, trsm_gemm_row, trsm_gemm_col, result);
-  op_trsm->set_keymap(keymap);
+  op_trsm->set_keymap(keymap2);
   auto op_syrk  = make_syrk(A, trsm_syrk, syrk_syrk, syrk_potrf, syrk_syrk);
-  op_syrk->set_keymap(keymap);
+  op_syrk->set_keymap(keymap2);
   auto op_gemm  = make_gemm(A,
                             trsm_gemm_row, trsm_gemm_col, gemm_gemm,
                             gemm_trsm, gemm_gemm);
-  op_gemm->set_keymap(keymap);
+  op_gemm->set_keymap(keymap3);
   auto op_result = make_result(A, result);
-  op_result->set_keymap(keymap);
+  op_result->set_keymap(keymap2);
 
   auto connected = make_graph_executable(op_init.get());
   assert(connected);
@@ -717,7 +800,7 @@ int main(int argc, char **argv)
 #endif // 0
     beg = std::chrono::high_resolution_clock::now();
   }
-  op_init->invoke(Key{0, 0, 0});
+  op_init->invoke(Key3{0, 0, 0});
 
   ttg::ttg_execute(world);
   ttg::ttg_fence(world);
