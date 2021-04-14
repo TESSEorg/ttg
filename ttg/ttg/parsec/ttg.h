@@ -141,6 +141,13 @@ namespace ttg_parsec {
       // and the fence() will decrease it back to 0.
       tpool->tdm.module->taskpool_set_nb_pa(tpool, 0);
       parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
+
+      // Termination detection in PaRSEC requires to synchronize the
+      // taskpool enabling, to avoid a race condition that would keep
+      // termination detection-related messages in a waiting queue
+      // forever
+      MPI_Barrier(comm());
+
       parsec_taskpool_started = false;
     }
 
