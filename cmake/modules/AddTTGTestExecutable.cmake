@@ -20,7 +20,6 @@ macro(add_ttg_test_executable _executable _ranksrange _cmdline_args)
         else (MPIEXEC_EXECUTABLE)
             set(_ttg_test_${_executable}_run_cmd_${p} echo "skipped TTG run test for executable ${_executable}: MPIEXEC_EXECUTABLE not found/given, see documentation for CMake's FindMPI module for instructions on how to help find it")
         endif (MPIEXEC_EXECUTABLE)
-        message(WARNING "_cmdline_args=${_cmdline_args}")
         add_test(NAME ttg/test/${_executable}/run-np-${p}
                 COMMAND ${_ttg_test_${_executable}_run_cmd_${p}} ${_cmdline_args})
         set_tests_properties(ttg/test/${_executable}/run-np-${p}

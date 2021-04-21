@@ -141,6 +141,14 @@ namespace ttg_parsec {
       // and the fence() will decrease it back to 0.
       tpool->tdm.module->taskpool_set_nb_pa(tpool, 0);
       parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
+
+      // Termination detection in PaRSEC requires to synchronize the
+      // taskpool enabling, to avoid a race condition that would keep
+      // termination detection-related messages in a waiting queue
+      // forever
+      MPI_Barrier(comm());
+
+      parsec_taskpool_started = false;
     }
 
     /* Deleted copy ctor */
@@ -179,6 +187,7 @@ namespace ttg_parsec {
       tpool->tdm.module->taskpool_addto_nb_pa(tpool, 1);
       tpool->tdm.module->taskpool_ready(tpool);
       int ret = parsec_context_start(ctx);
+      parsec_taskpool_started = true;
       if (ret != 0) throw std::runtime_error("TTG: parsec_context_start failed");
     }
 
@@ -209,6 +218,13 @@ namespace ttg_parsec {
    protected:
     virtual void fence_impl(void) override {
       int rank = this->rank();
+      if (!parsec_taskpool_started) {
+        if (ttg::tracing()) {
+          ttg::print("ttg_parsec::(", rank, "): parsec taskpool has not been started, fence is a simple MPI_Barrier");
+        }
+        MPI_Barrier(ttg::get_default_world().impl().comm());
+        return;
+      }
       if (ttg::tracing()) {
         ttg::print("ttg_parsec::(", rank, "): parsec taskpool is ready for completion");
       }
@@ -228,6 +244,7 @@ namespace ttg_parsec {
     parsec_context_t *ctx = nullptr;
     parsec_execution_stream_t *es = nullptr;
     parsec_taskpool_t *tpool = nullptr;
+    bool parsec_taskpool_started = false;
 
     volatile int32_t &sent_to_sched_counter() const {
       static volatile int32_t sent_to_sched = 0;
@@ -447,7 +464,7 @@ namespace ttg_parsec {
 
     /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
     template <ttg::ExecutionSpace Space, typename... Args>
-    void op(Args &&...args) {
+    void op(Args &&... args) {
       derivedT *derived = static_cast<derivedT *>(this);
       if constexpr (Space == ttg::ExecutionSpace::Host)
         derived->op(std::forward<Args>(args)...);
