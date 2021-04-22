@@ -7,6 +7,16 @@
 #include "ttg/data_descriptor.h"
 #include "ttg/util/void.h"
 
+#if __has_include(<madness/world/archive.h>)
+#include <type_traits>
+
+#include <madness/world/archive.h>
+#include <madness/world/buffer_archive.h>
+
+#define TTG_HAVE_MADNESS_ARCHIVE 1
+
+#endif // __has_include(<madness/world/archive.h>)
+
 /**
    \file serialization.h
 
@@ -22,6 +32,21 @@
 namespace ttg {
 
   namespace detail {
+
+    template <class, class = void>
+    struct is_madness_serializable : std::false_type {};
+
+#if TTG_HAVE_MADNESS_ARCHIVE
+    template <class T>
+    struct is_madness_serializable<
+        T,
+        /* make the proper ArchiveStoreImpl and ArchiveLoadImpl are defined */
+        std::enable_if_t<std::is_same_v<ttg::meta::void_t<madness::archive::ArchiveStoreImpl<
+                                                            madness::archive::BufferOutputArchive, T>>,
+                                        ttg::meta::void_t<madness::archive::ArchiveLoadImpl<
+                                                            madness::archive::BufferInputArchive, T>>>>>
+        : std::true_type {};
+#endif // TTG_HAVE_MADNESS_ARCHIVE
 
     template <class, class = void>
     struct is_printable : std::false_type {};
@@ -46,7 +71,8 @@ namespace ttg {
   struct default_data_descriptor;
 
   template <typename T>
-  struct default_data_descriptor<T, std::enable_if_t<std::is_trivially_copyable<T>::value>> {
+  struct default_data_descriptor<T, std::enable_if_t<std::is_trivially_copyable_v<T>
+                                                 && !detail::is_madness_serializable<T>::value>> {
     static constexpr const bool serialize_size_is_const = true;
 
     static uint64_t payload_size(const void *object) { return static_cast<uint64_t>(sizeof(T)); }
@@ -67,31 +93,13 @@ namespace ttg {
     }
   };
 
-}  // namespace ttg
 
-#if __has_include(<madness/world/archive.h>)
-#include <type_traits>
-
-#include <madness/world/archive.h>
-#include <madness/world/buffer_archive.h>
-
-namespace ttg {
-
-  namespace detail {
-
-    template <class, class = void>
-    struct is_madness_serializable : std::false_type {};
-
-    template <class T>
-    struct is_madness_serializable<
-        T, ttg::meta::void_t<decltype(std::declval<madness::archive::BufferOutputArchive&>() & std::declval<T>())>>
-        : std::true_type {};
-  }  // namespace detail
+#ifdef TTG_HAVE_MADNESS_ARCHIVE
 
   // The default implementation for non-POD data types that support MADNESS serialization
   template <typename T>
   struct default_data_descriptor<
-      T, std::enable_if_t<!std::is_trivially_copyable<T>::value && detail::is_madness_serializable<T>::value>> {
+      T, std::enable_if_t<detail::is_madness_serializable<T>::value>> {
     static constexpr const bool serialize_size_is_const = false;
 
     static uint64_t payload_size(const void *object) {
@@ -122,9 +130,10 @@ namespace ttg {
     }
   };
 
+#endif  // TTG_HAVE_MADNESS_ARCHIVE
+
 }  // namespace ttg
 
-#endif  // has MADNESS serialization
 
 namespace ttg {
 
