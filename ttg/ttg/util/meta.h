@@ -4,6 +4,7 @@
 #include <functional>
 #include <type_traits>
 #include "ttg/util/span.h"
+#include <any>
 
 namespace ttg {
 
@@ -342,44 +343,6 @@ using type = std::function<void()>;
 };
 template <typename Key> using finalize_callback_t = typename finalize_callback<Key>::type;
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // keymap_t<key,value> = std::function<int(const key&>, protected against void key
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    template<typename Key, typename Enabler = void>
-    struct keymap;
-    template<typename Key>
-    struct keymap<Key, std::enable_if_t<!is_void_v<Key>>> {
-      using type = std::function<int(const Key&)>;
-    };
-    template<typename Key>
-    struct keymap<Key, std::enable_if_t<is_void_v<Key>>> {
-      using type = std::function<int()>;
-    };
-    template <typename Key> using keymap_t = typename keymap<Key>::type;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// input_reducers_t<valueTs...> = std::tuple<
-//   std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs> &&)>...>
-// protected against void valueTs
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-template<typename T, typename Enabler = void>
-struct input_reducer_type;
-template<typename T>
-struct input_reducer_type<T, std::enable_if_t<!is_void_v<T>>>
-{
-  using type = std::function<std::decay_t<T>(std::decay_t<T> &&, std::decay_t<T> &&)>;
-};
-template<typename T>
-struct input_reducer_type<T, std::enable_if_t<is_void_v<T>>>
-{
-using type = std::function<void()>;
-};
-template<typename ... valueTs>
-struct input_reducers {
-  using type = std::tuple<typename input_reducer_type<valueTs>::type...>;
-};
-template<typename ... valueTs> using input_reducers_t = typename input_reducers<valueTs...>::type;
-
 ///////////////////////////////
 //Defining invoke type for OpBase for handling pull requests.
 //////////////////////////////
@@ -454,6 +417,66 @@ template <typename Key> using mapper_function_t = typename mapper_function<Key>:
 }  // only used by deep internals
 
 }  // namespace meta
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // keymap_t<key,value> = std::function<int(const key&>, protected against void key
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      template <typename Key, typename Enabler = void>
+      struct keymap;
+      template <typename Key>
+      struct keymap<Key, std::enable_if_t<!is_void_v<Key>>> {
+        using type = std::function<int(const Key &)>;
+      };
+      template <typename Key>
+      struct keymap<Key, std::enable_if_t<is_void_v<Key>>> {
+        using type = std::function<int()>;
+      };
+      template <typename Key>
+      using keymap_t = typename keymap<Key>::type;
+
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // input_reducers_t<valueTs...> = std::tuple<
+      //   std::function<std::decay_t<input_valueTs>(std::decay_t<input_valueTs> &&, std::decay_t<input_valueTs>
+      //   &&)>...>
+      // protected against void valueTs
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      template <typename T, typename Enabler = void>
+      struct input_reducer_type;
+      template <typename T>
+      struct input_reducer_type<T, std::enable_if_t<!is_void_v<T>>> {
+        using type = std::function<std::decay_t<T>(std::decay_t<T> &&, std::decay_t<T> &&)>;
+      };
+      template <typename T>
+      struct input_reducer_type<T, std::enable_if_t<is_void_v<T>>> {
+        using type = std::function<void()>;
+      };
+      template <typename... valueTs>
+      struct input_reducers {
+        using type = std::tuple<typename input_reducer_type<valueTs>::type...>;
+      };
+      template <typename... valueTs>
+      using input_reducers_t = typename input_reducers<valueTs...>::type;
+
+      ///////////////////////////////
+      // Defining invoke type for OpBase for handling pull requests.
+      //////////////////////////////
+      // template <typename Key, typename... Ks>
+      // using AllKeys = typename std::enable_if<
+      //  std::conjunction<std::is_convertible<Ks, Key>...>::value>::type;
+
+      struct IndexKey : std::any {
+        IndexKey() = default;
+        template<class T, std::enable_if_t<!std::is_same<std::decay_t<T>,
+                                                         IndexKey>{}, bool> = true>
+        IndexKey(T t) : std::any(t)
+        {}
+
+        template <typename Archive>
+        void serialize(Archive &ar) {
+        }
+      };
+
+
+  }  // namespace meta
 
 }  // namespace ttg
 

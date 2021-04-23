@@ -327,10 +327,10 @@ namespace ttg_madness {
     void invoke_pull_terminal(terminalT &in, const Key &key, OpArgs *args) {
       if (in.is_pull_terminal) {
         if (in.mapper) {
-          const auto k = in.mapper(std::move(key));
-            const auto owner = keymap(k);
+          const auto k = in.mapper(key);
+            const auto owner = in.container.keymap(k);
             if (owner != world.rank()) {
-              get_terminal_data<i, Key>(k, key);
+              get_terminal_data<i, Key>(owner, k, key);
             } else {
               auto value = (in.container).get(k, in.container);
               if (args->nargs[i] == 0) {
@@ -356,10 +356,11 @@ namespace ttg_madness {
     }
 
     template <std::size_t i, typename Key>
-    void get_terminal_data(const Key &key, const Key &destKey) {
-      const auto owner = keymap(key);
+    void get_terminal_data(const int owner,
+                           const ttg::meta::detail::IndexKey &key,
+                           const Key &destKey) {
       if (owner != world.rank()) {
-        worldobjT::send(owner, &opT::template get_terminal_data<i, Key>, key, destKey);
+        worldobjT::send(owner, &opT::template get_terminal_data<i, Key>, owner, key, destKey);
       }
       else {
         auto &in = std::get<i>(input_terminals);

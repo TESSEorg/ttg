@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <memory>
+#include <boost/callable_traits.hpp>
 
 #include "ttg/base/terminal.h"
 #include "ttg/util/print.h"
@@ -15,7 +16,8 @@ namespace ttg {
   template <typename keyT, typename valueT>
   class Edge {
    private:
-	using mapper_function_type = meta::detail::mapper_function_t<keyT>;
+    using mapper_function_type = meta::detail::mapper_function_t<keyT>;
+    using mapper_ret_type = boost::callable_traits::return_type_t<mapper_function_type>;
     // An EdgeImpl represents a single edge that most usually will
     // connect a single output terminal with a single
     // input terminal.  However, we had to relax this constraint in
@@ -33,7 +35,7 @@ namespace ttg {
 
       std::vector<TerminalBase *> outs;  // In<keyT, valueT> or In<keyT, const valueT>
       std::vector<Out<keyT, valueT> *> ins;
-      Container<keyT, valueT> container;
+      Container<mapper_ret_type, valueT> container;
       mapper_function_type mapper_function;
 
       EdgeImpl() : name(""), outs(), ins() {}
@@ -41,7 +43,7 @@ namespace ttg {
       EdgeImpl(const std::string &name, bool is_pull = false) : name(name),
                 is_pull_edge(is_pull), outs(), ins() {}
 
-      EdgeImpl(const std::string &name, bool is_pull, Container<keyT, valueT> &c,
+      EdgeImpl(const std::string &name, bool is_pull, Container<mapper_ret_type, valueT> &c,
                mapper_function_type &mapper) :
         name(name),
         is_pull_edge(is_pull),
@@ -116,8 +118,11 @@ namespace ttg {
     }
 
     //TODO: Take reference to the container instead of copying.
-    Edge(const std::string name, bool is_pull, Container<keyT, valueT> c,
-         mapper_function_type &mapper) : p(1) {
+    Edge(const std::string name, bool is_pull, Container<mapper_ret_type, valueT> c,
+         mapper_function_type &mapper,
+         ttg::meta::detail::keymap_t<mapper_ret_type> ckeymap
+         ) : p(1) {
+      c.keymap = ckeymap;
       p[0] = std::make_shared<EdgeImpl>(name, is_pull, c, mapper);
     }
 
