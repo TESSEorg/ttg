@@ -57,13 +57,13 @@ void test_serialization(const T& t) {
   char buf[256];
   void* buf_ptr = (void*)buf;
   uint64_t pos = 0;
-  pos = d->pack_payload(vt, sizeof(T), pos, buf_ptr);
+  pos = d->pack_payload(vt, d->payload_size(vt), pos, buf_ptr);
   printf("serialized ");
   d->print(vt);
 
   T g_obj;
   void* g = (void*)&g_obj;
-  d->unpack_payload(g, sizeof(T), 0, (const void*)buf);
+  d->unpack_payload(g, d->payload_size(vt), 0, (const void*)buf);
   printf("deserialized ");
   d->print(g);
 }
