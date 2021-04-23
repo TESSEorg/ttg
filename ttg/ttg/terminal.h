@@ -12,12 +12,16 @@
 #include "ttg/util/trace.h"
 #include "ttg/util/demangle.h"
 #include "ttg/world.h"
+#include "ttg/base/keymap.h"
 
 namespace ttg {
 
   template<typename keyT, typename valueT>
   struct Container : std::any {
     std::function<valueT (keyT const& key, Container const&)> get = nullptr;
+    ttg::meta::detail::keymap_t<keyT> keymap;
+
+    //meta::detail::mapper_function_t<keyT> mapper;
 
     Container() = default;
 
@@ -26,10 +30,11 @@ namespace ttg {
     //Store a pointer to the user's container in std::any, no copies
     Container(T &t) : std::any(&t)
                          ,get([](keyT const& key, Container const& self) {
-                           //at method returns a const ref to the item.
-                           return (std::any_cast<T*>(self))->at(key);
-
-                         })
+                            //at method returns a const ref to the item.
+                            //TODO: Compile-time error handling
+                            using key_type = typename T::key_type;
+                            return (std::any_cast<T*>(self))->at(std::any_cast<key_type>(key));
+                          })
       {}
   };
 
@@ -64,7 +69,8 @@ namespace ttg {
     using finalize_callback_type = meta::detail::finalize_callback_t<keyT>;
     static constexpr bool is_an_input_terminal = true;
 
-    Container<keyT, valueT> container;
+    using mapper_ret_type = boost::callable_traits::return_type_t<meta::detail::mapper_function_t<keyT>>;
+    Container<mapper_ret_type, valueT> container;
     meta::detail::mapper_function_t<keyT> mapper;
 
    private:

@@ -87,41 +87,41 @@ auto initiator(int MB, int NB, std::unordered_map<Key, BlockMatrix<T>, pair_hash
                    {"out0"});
 }
 
-Key get_bottomindex(const Key& key, int MB, int NB) {
+auto get_bottomindex(const Key& key, int MB, int NB) {
   // std::tuple<std::pair<int, int>> t;
   auto [i, j] = key;
   //std::cout << "called get_bottomindex with " << i << " " << j << std::endl;
   if (i == 0 && j == 0) {
-    return std::make_pair(i + 1, j);
+    return std::make_pair(i+1, j);
   }
   else if ((i == 0 && j > 0) || (i > 0 && j == 0)) {
     if (i < MB - 1) {
-      return std::make_pair(i + 1, j);
+      return std::make_pair(i+1, j);
     }
   }
   else if (i > 0 && j > 0) {
     if (i < MB - 1) {
-      return std::make_pair(i + 1, j);
+      return std::make_pair(i+1,j);
     }
   }
   return key; // We should never come here!
 }
 
-Key get_rightindex(const Key& key, int MB, int NB) {
+auto get_rightindex(const Key& key, int MB, int NB) {
   // std::tuple<std::pair<int, int>> t;
   auto [i, j] = key;
   //std::cout << "called get_rightindex with " << i << " " << j << std::endl;
   if (i == 0 && j == 0) {
-    return std::make_pair(i, j + 1);
+    return std::make_pair(i,j+1);
   }
   else if ((i == 0 && j > 0) || (i > 0 && j == 0)) {
     if (j < NB - 1) {
-      return std::make_pair(i, j + 1);
+      return std::make_pair(i,j+1);
     }
   }
   else if (i > 0 && j > 0) {
     if (j < NB - 1) {
-      return std::make_pair(i, j + 1);
+      return std::make_pair(i,j+1);
     }
   }
   return key; // We should never come here!
@@ -499,22 +499,32 @@ int main(int argc, char** argv) {
     delete m2;
   }
 
-  std::function<std::pair<int, int>(const Key&)> get_bottomindex_func = [n_brows, n_bcols](const Key& key) {
+  std::function<ttg::meta::detail::IndexKey (const Key&)> get_bottomindex_func =
+    [n_brows, n_bcols](const Key& key) {
     //std::cout << "Getting bottom index for " << key.first << ":" << key.second << std::endl;
-    return get_bottomindex(key, n_brows, n_bcols);
+      return get_bottomindex(key, n_brows, n_bcols);
   };
 
-  std::function<std::pair<int, int>(const Key&)> get_rightindex_func = [n_brows, n_bcols](const Key& key) {
+  std::function<ttg::meta::detail::IndexKey (const Key&)> get_rightindex_func =
+    [n_brows, n_bcols](const Key& key) {
     //std::cout << "Getting right index for " << key.first << ":" << key.second << std::endl;
-    return get_rightindex(key, n_brows, n_bcols);
+      return get_rightindex(key, n_brows, n_bcols);
   };
 
   //Should return single piece of data, not a vector.
   //User will take care of tiling if needed.
   //Input key and output key types can be different.
-  std::function<std::pair<int, int>(const Key&)> get_inputindex_func = [n_brows, n_bcols](const Key& key) {
-    return key;
+  std::function<ttg::meta::detail::IndexKey (const Key&)> get_inputindex_func =
+    [n_brows, n_bcols](const Key& key) {
+      return key;
   };
+
+  auto keymap = [local_row_count](const Key& key) { return key.first / local_row_count; };
+
+  auto container_keymap = [local_row_count](const ttg::meta::detail::IndexKey &key) {
+                            auto k = std::any_cast<std::pair<int, int>>(key);
+                            return k.first / local_row_count;
+                          };
 
   Edge<Key, BlockMatrix<double>> input0("input0"), toporleft("toporleft"),
     toporleftLR("toporleftLR"), toporleftLB("toporleftLB"), output1("output1"), output2("output2"),
@@ -522,10 +532,10 @@ int main(int argc, char** argv) {
     outputLB("outputLB"), outputLR("outputLR"), output2R("output2R"), output2B("output2B"),
     output2TL("output2TL"), output2LL("output2LL"),
     result("result");
-  Edge<Key, BlockMatrix<double>> bottom0("bottom0", true, m, get_bottomindex_func);
-  Edge<Key, BlockMatrix<double>> right0("right0", true, m, get_rightindex_func);
+  Edge<Key, BlockMatrix<double>> bottom0("bottom0", true, m, get_bottomindex_func, container_keymap);
+  Edge<Key, BlockMatrix<double>> right0("right0", true, m, get_rightindex_func, container_keymap);
 
-  Edge<Key, BlockMatrix<double>> block("block", true, m, get_inputindex_func);
+  Edge<Key, BlockMatrix<double>> block("block", true, m, get_inputindex_func, container_keymap);
   // OpBase::set_trace_all(true);
   OpBase::set_lazy_pull(false);
 
@@ -552,7 +562,6 @@ int main(int argc, char** argv) {
   //A specialization of default_keymap can be implemented in ttg/detail namespace
   //Have a singleton for keymap which can keep global data.
   if (world_size > 1) {
-    auto keymap = [local_row_count](const Key& key) { return key.first / local_row_count; };
     i->set_keymap(keymap);
     s0->set_keymap(keymap);
     s1->set_keymap(keymap);
