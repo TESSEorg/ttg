@@ -35,7 +35,7 @@ namespace ttg {
 
       std::vector<TerminalBase *> outs;  // In<keyT, valueT> or In<keyT, const valueT>
       std::vector<Out<keyT, valueT> *> ins;
-      Container<mapper_ret_type, valueT> container;
+      Container<keyT, mapper_ret_type, valueT> container;
       mapper_function_type mapper_function;
 
       EdgeImpl() : name(""), outs(), ins() {}
@@ -43,7 +43,7 @@ namespace ttg {
       EdgeImpl(const std::string &name, bool is_pull = false) : name(name),
                 is_pull_edge(is_pull), outs(), ins() {}
 
-      EdgeImpl(const std::string &name, bool is_pull, Container<mapper_ret_type, valueT> &c,
+      EdgeImpl(const std::string &name, bool is_pull, Container<keyT, mapper_ret_type, valueT> &c,
                mapper_function_type &mapper) :
         name(name),
         is_pull_edge(is_pull),
@@ -118,11 +118,12 @@ namespace ttg {
     }
 
     //TODO: Take reference to the container instead of copying.
-    Edge(const std::string name, bool is_pull, Container<mapper_ret_type, valueT> c,
-         mapper_function_type &mapper,
+    Edge(const std::string name, bool is_pull, Container<keyT, mapper_ret_type, valueT> c,
+         mapper_function_type mapper,
          ttg::meta::detail::keymap_t<mapper_ret_type> ckeymap
          ) : p(1) {
       c.keymap = ckeymap;
+      c.mapper = mapper;
       p[0] = std::make_shared<EdgeImpl>(name, is_pull, c, mapper);
     }
 

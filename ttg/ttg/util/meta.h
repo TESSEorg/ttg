@@ -471,7 +471,10 @@ template <typename Key> using mapper_function_t = typename mapper_function<Key>:
         {}
 
         template <typename Archive>
-        void serialize(Archive &ar) {
+        void serialize(Archive &ar)
+        {
+         std::cout << "Do we come here to serialize?\n";
+         //ar & madness::archive::wrap((unsigned char*)this, sizeof(*this));
         }
       };
 
