@@ -16,12 +16,11 @@
 
 namespace ttg {
 
-  template<typename keyT, typename valueT>
+  template<typename tkeyT, typename keyT, typename valueT>
   struct Container : std::any {
     std::function<valueT (keyT const& key, Container const&)> get = nullptr;
     ttg::meta::detail::keymap_t<keyT> keymap;
-
-    //meta::detail::mapper_function_t<keyT> mapper;
+    meta::detail::mapper_function_t<tkeyT> mapper;
 
     Container() = default;
 
@@ -29,7 +28,7 @@ namespace ttg {
                                                      Container>{}, bool> = true>
     //Store a pointer to the user's container in std::any, no copies
     Container(T &t) : std::any(&t)
-                         ,get([](keyT const& key, Container const& self) {
+                    ,get([this](keyT const &key, Container const& self) {
                             //at method returns a const ref to the item.
                             //TODO: Compile-time error handling
                             using key_type = typename T::key_type;
@@ -38,15 +37,15 @@ namespace ttg {
       {}
   };
 
-  template <typename valueT> struct Container<void, valueT> {
+  template <typename valueT> struct Container<void, void, valueT> {
     std::function<std::nullptr_t ()> get = nullptr;
   };
 
-  template <typename keyT> struct Container<keyT, void> {
+  template <typename keyT> struct Container<void, keyT, void> {
     std::function<std::nullptr_t (keyT const& key, Container const& self)> get = nullptr;
   };
 
-  template <> struct Container<void, void> {
+  template <> struct Container<void, void, void> {
     std::function<std::nullptr_t ()> get = nullptr;
   };
 
@@ -70,7 +69,7 @@ namespace ttg {
     static constexpr bool is_an_input_terminal = true;
 
     using mapper_ret_type = boost::callable_traits::return_type_t<meta::detail::mapper_function_t<keyT>>;
-    Container<mapper_ret_type, valueT> container;
+    Container<keyT, mapper_ret_type, valueT> container;
     meta::detail::mapper_function_t<keyT> mapper;
 
    private:
