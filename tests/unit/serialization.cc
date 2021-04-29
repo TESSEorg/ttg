@@ -43,32 +43,35 @@ std::ostream& operator<<(std::ostream& s, const std::vector<T>& vec) {
 
 #include "ttg/util/serialization.h"
 
-// Test code written as if calling from C
-template <typename T>
-void test_serialization(const T& t) {
-  // This line has to be in a piece of C++ that knows the type T
-  const ttg_data_descriptor* d = ttg::get_data_descriptor<T>();
+#include <catch2/catch.hpp>
 
-  // The rest could be in C ... deliberately use printf below rather than C++ streamio
-  void* vt = (void*)&t;
-  // printf("%s header_size=%llu, payload_size=%llu\n", d->name, d->header_size(vt), d->payload_size(vt));
+TEST_CASE("Serialization", "[serialization]") {
+  // Test code written as if calling from C
+  auto test_serialization = [](const auto& t) {
+    using T = std::decay_t<decltype(t)>;
 
-  // Serialize into a buffer
-  char buf[256];
-  void* buf_ptr = (void*)buf;
-  uint64_t pos = 0;
-  pos = d->pack_payload(vt, sizeof(T), pos, buf_ptr);
-  printf("serialized ");
-  d->print(vt);
+    // This line has to be in a piece of C++ that knows the type T
+    const ttg_data_descriptor* d = ttg::get_data_descriptor<T>();
 
-  T g_obj;
-  void* g = (void*)&g_obj;
-  d->unpack_payload(g, sizeof(T), 0, (const void*)buf);
-  printf("deserialized ");
-  d->print(g);
-}
+    // The rest could be in C ... deliberately use printf below rather than C++ streamio
+    void* vt = (void*)&t;
+    // printf("%s header_size=%llu, payload_size=%llu\n", d->name, d->header_size(vt), d->payload_size(vt));
 
-int main(int argc, char** argv) {
+    // Serialize into a buffer
+    char buf[256];
+    void* buf_ptr = (void*)buf;
+    uint64_t pos = 0;
+    CHECK_NOTHROW(pos = d->pack_payload(vt, sizeof(T), pos, buf_ptr));
+    printf("serialized ");
+    d->print(vt);
+
+    T g_obj;
+    void* g = (void*)&g_obj;
+    CHECK_NOTHROW(d->unpack_payload(g, sizeof(T), 0, (const void*)buf));
+    printf("deserialized ");
+    d->print(g);
+  };
+
   test_serialization(99);
   test_serialization(Fred(33));
   test_serialization(99.0);
@@ -78,6 +81,4 @@ int main(int argc, char** argv) {
   Fred b[4] = {Fred(1), Fred(2), Fred(3), Fred(4)};
   test_serialization(b);
   test_serialization(std::vector<int>{1, 2, 3});
-
-  return 0;
 }
