@@ -43,8 +43,8 @@ namespace ttg {
   }
 
   /// Connected producer output terminal outindex to consumer input terminal inindex (via OpBase pointers)
-  void connect(size_t outindex, size_t inindex, OpBase* producer, OpBase* consumer) {
-      connect(producer->out(outindex), consumer->in(inindex));
+  inline void connect(size_t outindex, size_t inindex, OpBase *producer, OpBase *consumer) {
+    connect(producer->out(outindex), consumer->in(inindex));
   }
 
   // Fuse edges into one ... all the types have to be the same ... just using
