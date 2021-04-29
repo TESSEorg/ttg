@@ -2,6 +2,36 @@
 
 #include "ttg.h"
 
+namespace madness {
+  namespace archive {
+
+    template <typename Archive, typename T, typename Enabler = void>
+    inline constexpr bool is_serializable_v = false;
+
+    template <typename Archive, typename T>
+    inline constexpr bool
+        is_serializable_v<Archive, T, std::void_t<decltype(std::declval<Archive&>() & std::declval<T&>())>> = true;
+
+  }  // namespace archive
+}  // namespace madness
+
+#include <boost/archive/binary_iarchive.hpp>
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/serialization/serialization.hpp>
+
+namespace boost {
+  namespace serialization {
+
+    template <typename Archive, typename T, typename Enabler = void>
+    inline constexpr bool is_serializable_v = false;
+
+    template <typename Archive, typename T>
+    inline constexpr bool
+        is_serializable_v<Archive, T, std::void_t<decltype(std::declval<Archive&>() & std::declval<T&>())>> = true;
+
+  }  // namespace serialization
+}  // namespace boost
+
 class Fred {
   int value;
 
@@ -45,10 +75,13 @@ std::ostream& operator<<(std::ostream& s, const std::vector<T>& vec) {
 
 #include <catch2/catch.hpp>
 
-TEST_CASE("Serialization", "[serialization]") {
+TEST_CASE("MADNESS Serialization", "[serialization]") {
   // Test code written as if calling from C
-  auto test_serialization = [](const auto& t) {
+  auto test = [](const auto& t) {
     using T = std::decay_t<decltype(t)>;
+
+    CHECK(madness::archive::is_serializable_v<madness::archive::BufferOutputArchive, T>);
+    CHECK(madness::archive::is_serializable_v<madness::archive::BufferInputArchive, T>);
 
     // This line has to be in a piece of C++ that knows the type T
     const ttg_data_descriptor* d = ttg::get_data_descriptor<T>();
@@ -72,13 +105,31 @@ TEST_CASE("Serialization", "[serialization]") {
     d->print(g);
   };
 
-  test_serialization(99);
-  test_serialization(Fred(33));
-  test_serialization(99.0);
-  test_serialization(std::array<Fred, 3>{{Fred(55), Fred(66), Fred(77)}});
+  test(99);
+  test(Fred(33));
+  test(99.0);
+  test(std::array<Fred, 3>{{Fred(55), Fred(66), Fred(77)}});
   int a[4] = {1, 2, 3, 4};
-  test_serialization(a);
+  test(a);
   Fred b[4] = {Fred(1), Fred(2), Fred(3), Fred(4)};
-  test_serialization(b);
-  test_serialization(std::vector<int>{1, 2, 3});
+  test(b);
+  test(std::vector<int>{1, 2, 3});
+}
+
+TEST_CASE("Boost Serialization", "[serialization]") {
+  auto test = [](const auto& t) {
+    using T = std::decay_t<decltype(t)>;
+    CHECK(boost::serialization::is_serializable_v<boost::archive::binary_iarchive, T>);
+    CHECK(boost::serialization::is_serializable_v<boost::archive::binary_oarchive, T>);
+  };
+
+  test(99);
+  test(Fred(33));
+  test(99.0);
+  test(std::array<Fred, 3>{{Fred(55), Fred(66), Fred(77)}});
+  int a[4] = {1, 2, 3, 4};
+  test(a);
+  Fred b[4] = {Fred(1), Fred(2), Fred(3), Fred(4)};
+  test(b);
+  test(std::vector<int>{1, 2, 3});
 }
