@@ -15,6 +15,7 @@ namespace madness {
   }  // namespace archive
 }  // namespace madness
 
+#ifdef SERIALIZATION_TEST_HAS_BOOST
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/serialization/serialization.hpp>
@@ -31,6 +32,44 @@ namespace boost {
 
   }  // namespace serialization
 }  // namespace boost
+#endif  // SERIALIZATION_TEST_HAS_BOOST
+
+#ifdef SERIALIZATION_TEST_HAS_CEREAL
+#include <cereal/archives/binary.hpp>
+#include <cereal/cereal.hpp>
+#include <cereal/types/vector.hpp>
+
+namespace cereal {
+  //! Saving types to binary
+  template <class T>
+  inline typename std::enable_if<!std::is_arithmetic<T>::value && std::is_trivially_copyable<T>::value, void>::type
+  CEREAL_SAVE_FUNCTION_NAME(BinaryOutputArchive& ar, T const& t) {
+    ar.saveBinary(std::addressof(t), sizeof(t));
+  }
+
+  //! Loading POD types from binary
+  template <class T>
+  inline typename std::enable_if<!std::is_arithmetic<T>::value && std::is_trivially_copyable<T>::value, void>::type
+  CEREAL_LOAD_FUNCTION_NAME(BinaryInputArchive& ar, T& t) {
+    ar.loadBinary(std::addressof(t), sizeof(t));
+  }
+
+  //! Saving static-sized array of serializable types
+  template <class Archive, class T, std::size_t N>
+  inline typename std::enable_if<cereal::traits::is_output_serializable<T, Archive>::value, void>::type
+  CEREAL_SAVE_FUNCTION_NAME(Archive& ar, T const (&t)[N]) {
+    for (std::size_t i = 0; i != N; ++i) ar(t[i]);
+  }
+
+  //! Loading for POD types from binary
+  template <class Archive, class T, std::size_t N>
+  inline typename std::enable_if<cereal::traits::is_input_serializable<T, Archive>::value, void>::type
+  CEREAL_LOAD_FUNCTION_NAME(Archive& ar, T (&t)[N]) {
+    for (std::size_t i = 0; i != N; ++i) ar(t[i]);
+  }
+}  // namespace cereal
+
+#endif  // SERIALIZATION_TEST_HAS_CEREAL
 
 class Fred {
   int value;
@@ -116,11 +155,13 @@ TEST_CASE("MADNESS Serialization", "[serialization]") {
   test(std::vector<int>{1, 2, 3});
 }
 
+#ifdef SERIALIZATION_TEST_HAS_BOOST
 TEST_CASE("Boost Serialization", "[serialization]") {
   auto test = [](const auto& t) {
-    using T = std::decay_t<decltype(t)>;
-    CHECK(boost::serialization::is_serializable_v<boost::archive::binary_iarchive, T>);
+    using T = std::remove_reference_t<decltype(t)>;
     CHECK(boost::serialization::is_serializable_v<boost::archive::binary_oarchive, T>);
+    using Tnc = std::remove_const_t<T>;
+    CHECK(boost::serialization::is_serializable_v<boost::archive::binary_iarchive, Tnc>);
   };
 
   test(99);
@@ -133,3 +174,25 @@ TEST_CASE("Boost Serialization", "[serialization]") {
   test(b);
   test(std::vector<int>{1, 2, 3});
 }
+#endif
+
+#ifdef SERIALIZATION_TEST_HAS_CEREAL
+TEST_CASE("Cereal Serialization", "[serialization]") {
+  auto test = [](const auto& t) {
+    using T = std::remove_reference_t<decltype(t)>;
+    CHECK(cereal::traits::is_output_serializable<T, cereal::BinaryOutputArchive>::value);
+    using Tnc = std::remove_const_t<T>;
+    CHECK(cereal::traits::is_input_serializable<Tnc, cereal::BinaryInputArchive>::value);
+  };
+
+  test(99);
+  test(Fred(33));
+  test(99.0);
+  test(std::array<Fred, 3>{{Fred(55), Fred(66), Fred(77)}});
+  int a[4] = {1, 2, 3, 4};
+  test(a);
+  Fred b[4] = {Fred(1), Fred(2), Fred(3), Fred(4)};
+  test(b);
+  test(std::vector<int>{1, 2, 3});
+}
+#endif
