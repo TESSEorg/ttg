@@ -4,6 +4,7 @@
 #include <exception>
 #include <type_traits>
 #include <stdexcept>
+#include <any>
 
 #include "ttg/fwd.h"
 #include "ttg/base/terminal.h"
@@ -11,9 +12,49 @@
 #include "ttg/util/trace.h"
 #include "ttg/util/demangle.h"
 #include "ttg/world.h"
+#include "ttg/base/keymap.h"
 
 namespace ttg {
 
+  template<typename tkeyT, typename keyT, typename valueT>
+  struct Container : std::any {
+    std::function<valueT (keyT const& key, Container const&)> get = nullptr;
+    ttg::meta::detail::keymap_t<keyT> keymap;
+    meta::detail::mapper_function_t<tkeyT> mapper;
+
+    Container() = default;
+
+    template<class T, std::enable_if_t<!std::is_same<std::decay_t<T>,
+                                                     Container>{}, bool> = true>
+    //Store a pointer to the user's container in std::any, no copies
+    Container(T &t) : std::any(&t)
+                    ,get([this](keyT const &key, Container const& self) {
+                            //at method returns a const ref to the item.
+                            //TODO: Compile-time error handling
+                            using key_type = typename T::key_type;
+                            return (std::any_cast<T*>(self))->at(std::any_cast<key_type>(key));
+                          })
+      {}
+  };
+
+  template <typename valueT> struct Container<void, void, valueT> {
+    std::function<std::nullptr_t ()> get = nullptr;
+  };
+
+  template <typename keyT> struct Container<void, keyT, void> {
+    std::function<std::nullptr_t (keyT const& key, Container const& self)> get = nullptr;
+  };
+
+  template <typename valueT> struct Container<ttg::Void, void, valueT> {
+    std::function<std::nullptr_t ()> get = nullptr;
+  };
+
+  template <> struct Container<void, void, void> {
+    std::function<std::nullptr_t ()> get = nullptr;
+  };
+
+  template <typename keyT, typename valueT>
+  class Out;  // forward decl
   template <typename keyT = void, typename valueT = void>
   class In : public TerminalBase {
    public:
@@ -30,6 +71,10 @@ namespace ttg {
     using setsize_callback_type = meta::detail::setsize_callback_t<keyT>;
     using finalize_callback_type = meta::detail::finalize_callback_t<keyT>;
     static constexpr bool is_an_input_terminal = true;
+
+    using mapper_ret_type = boost::callable_traits::return_type_t<meta::detail::mapper_function_t<keyT>>;
+    Container<keyT, mapper_ret_type, valueT> container;
+    meta::detail::mapper_function_t<keyT> mapper;
 
    private:
     send_callback_type send_callback;
@@ -186,6 +231,9 @@ namespace ttg {
       }
 #endif
       this->connect_base(in);
+      //If I am a pull terminal, add me as (in)'s predecessor
+      if (is_pull_terminal)
+        in->connect_pull(this);
     }
 
     auto nsuccessors() const {
@@ -280,6 +328,19 @@ namespace ttg {
           TerminalBase *successor = successors().at(move_terminal);
           static_cast<In<keyT, valueT> *>(successor)->send(key, std::forward<Value>(value));
         }
+      }
+    }
+
+    template <typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<meta::is_none_void_v<Key,Value> && std::is_same_v<Value,std::remove_reference_t<Value>>,void>
+    send_to(const Key &key, Value &&value, std::size_t i)
+    {
+      //std::cout << "send_to called for successor " << i << " " << get_name() << "\n";
+      TerminalBase *successor = successors().at(i);
+      if (successor->get_type() == TerminalBase::Type::Read) {
+        static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
+      } else if (successor->get_type() == TerminalBase::Type::Consume) {
+        static_cast<In<keyT, valueT> *>(successor)->send(key, value);
       }
     }
 

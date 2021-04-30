@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <memory>
+#include <boost/callable_traits.hpp>
 
 #include "ttg/base/terminal.h"
 #include "ttg/util/print.h"
@@ -15,6 +16,8 @@ namespace ttg {
   template <typename keyT, typename valueT>
   class Edge {
    private:
+    using mapper_function_type = meta::detail::mapper_function_t<keyT>;
+    using mapper_ret_type = boost::callable_traits::return_type_t<mapper_function_type>;
     // An EdgeImpl represents a single edge that most usually will
     // connect a single output terminal with a single
     // input terminal.  However, we had to relax this constraint in
@@ -28,17 +31,33 @@ namespace ttg {
     // to a single terminal.
     struct EdgeImpl {
       std::string name;
+      bool is_pull_edge = false;
+
       std::vector<TerminalBase *> outs;  // In<keyT, valueT> or In<keyT, const valueT>
       std::vector<Out<keyT, valueT> *> ins;
+      Container<keyT, mapper_ret_type, valueT> container;
+      mapper_function_type mapper_function;
 
       EdgeImpl() : name(""), outs(), ins() {}
 
-      EdgeImpl(const std::string &name) : name(name), outs(), ins() {}
+      EdgeImpl(const std::string &name, bool is_pull = false) : name(name),
+                is_pull_edge(is_pull), outs(), ins() {}
+
+      EdgeImpl(const std::string &name, bool is_pull, Container<keyT, mapper_ret_type, valueT> &c,
+               mapper_function_type &mapper) :
+        name(name),
+        is_pull_edge(is_pull),
+        container(c),
+        mapper_function(mapper),
+        outs(),
+        ins() {}
 
       void set_in(Out<keyT, valueT> *in) {
         if (ins.size() && tracing()) {
           print("Edge: ", name, " : has multiple inputs");
         }
+        in->is_pull_terminal = is_pull_edge;
+        //std::cout << "set_in : " << in->get_name() << " " << in->is_pull_terminal << std::endl;
         ins.push_back(in);
         try_to_connect_new_in(in);
       }
@@ -47,6 +66,10 @@ namespace ttg {
         if (outs.size() && tracing()) {
           print("Edge: ", name, " : has multiple outputs");
         }
+        out->is_pull_terminal = is_pull_edge;
+        static_cast<In<keyT, valueT>*>(out)->mapper = mapper_function;
+        static_cast<In<keyT, valueT>*>(out)->container = container;
+        //std::cout << "set_out : " << out->get_name() << " " << out->is_pull_terminal << std::endl;
         outs.push_back(out);
         try_to_connect_new_out(out);
       }
@@ -58,12 +81,17 @@ namespace ttg {
 
       void try_to_connect_new_out(TerminalBase *out) const {
         assert(out->get_type() != TerminalBase::Type::Write);  // out must be an In<>
-        for (auto in : ins)
-          if (in && out) in->connect(out);
+        if (out->is_pull_terminal) {
+          out->connect_pull_nopred(out);
+        }
+        else {
+          for (auto in : ins)
+            if (in && out) in->connect(out);
+        }
       }
 
       ~EdgeImpl() {
-        if (ins.size() == 0 || outs.size() == 0) {
+        if ((ins.size() == 0 || outs.size() == 0) && !is_pull_edge) {
             std::cerr << "Edge: destroying edge pimpl ('" << name << "') with either in or out not "
                        "assigned --- graph may be incomplete"
                     << std::endl;
@@ -85,7 +113,19 @@ namespace ttg {
                   "Edge<keyT,valueT> assumes valueT is a non-decayable type");
     static constexpr bool is_an_edge = true;
 
-    Edge(const std::string name = "anonymous edge") : p(1) { p[0] = std::make_shared<EdgeImpl>(name); }
+    Edge(const std::string name = "anonymous edge", bool is_pull = false) : p(1) {
+      p[0] = std::make_shared<EdgeImpl>(name, is_pull);
+    }
+
+    //TODO: Take reference to the container instead of copying.
+    Edge(const std::string name, bool is_pull, Container<keyT, mapper_ret_type, valueT> c,
+         mapper_function_type mapper,
+         ttg::meta::detail::keymap_t<mapper_ret_type> ckeymap
+         ) : p(1) {
+      c.keymap = ckeymap;
+      c.mapper = mapper;
+      p[0] = std::make_shared<EdgeImpl>(name, is_pull, c, mapper);
+    }
 
     template <typename... valuesT>
     Edge(const Edge<keyT, valuesT> &... edges) : p(0) {
@@ -111,6 +151,10 @@ namespace ttg {
 
     void set_out(TerminalBase *out) const {
       for (auto &edge : p) edge->set_out(out);
+    }
+
+    bool is_pull_edge() const {
+      return p.at(0)->is_pull_edge;
     }
 
     // this is currently just a hack, need to understand better whether this is a good idea
