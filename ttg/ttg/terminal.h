@@ -45,6 +45,10 @@ namespace ttg {
     std::function<std::nullptr_t (keyT const& key, Container const& self)> get = nullptr;
   };
 
+  template <typename valueT> struct Container<ttg::Void, void, valueT> {
+    std::function<std::nullptr_t ()> get = nullptr;
+  };
+
   template <> struct Container<void, void, void> {
     std::function<std::nullptr_t ()> get = nullptr;
   };
