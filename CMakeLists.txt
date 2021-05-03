@@ -45,6 +45,8 @@ if (EIGEN3_FOUND)
 endif (EIGEN3_FOUND)
 # Boost
 include(FindOrFetchBoost)
+# Cereal
+include(FindOrFetchCereal)
 # BTAS brings in linear algebra (BLAS++/LAPACK++)
 include(FindOrFetchBTAS)
 # OpenMP may also be used by some examples
@@ -76,5 +78,3 @@ add_custom_target_subproject(ttg check USES_TERMINAL COMMAND ${CMAKE_CTEST_COMMA
 add_subdirectory(tests)
 add_subdirectory(examples)
 add_subdirectory(doc)
-
-

@@ -11,7 +11,6 @@ set(ttg-util-header
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/macro.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/meta.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/print.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/trace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/tree.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.h
@@ -26,7 +25,6 @@ set(ttg-base-header
 set(ttg-impl-header
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/impl_selector.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/broadcast.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/data_descriptor.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/edge.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/execution.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/func.h
@@ -56,9 +54,11 @@ target_include_directories(ttg PUBLIC
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
         )
 target_link_libraries(ttg PUBLIC Boost::boost)
+# optional dependencies
 if (TARGET TTG_Libunwind)
   target_link_libraries(ttg PUBLIC TTG_Libunwind)
 endif(TARGET TTG_Libunwind)
+
 install(FILES ${ttg-header}
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         COMPONENT ttg)
@@ -71,6 +71,38 @@ install(FILES ${ttg-util-header}
 install(FILES ${ttg-base-header}
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ttg/base
         COMPONENT ttg)
+
+########################
+####### Serialization
+########################
+set(ttg-serialization-headers
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/data_descriptor.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/all.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/boost.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/cereal.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/madness.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/traits.h
+   )
+add_library(ttg-serialization ${ttg-serialization-headers})
+target_include_directories(ttg-serialization PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+        )
+if (TARGET MADworld)
+  target_link_libraries(ttg-serialization PUBLIC MADworld)  # serialization
+  target_compile_definitions(ttg-serialization PUBLIC TTG_SERIALIZATION_SUPPORTS_MADNESS=1)
+endif(TARGET MADworld)
+if (TARGET Boost::serialization)
+  target_link_libraries(ttg-serialization PUBLIC Boost::serialization)  # serialization
+  target_compile_definitions(ttg-serialization PUBLIC TTG_SERIALIZATION_SUPPORTS_BOOST=1)
+endif(TARGET Boost::serialization)
+if (TARGET cereal::cereal)
+  target_link_libraries(ttg-serialization PUBLIC cereal::cereal)  # serialization
+  target_compile_definitions(ttg-serialization PUBLIC TTG_SERIALIZATION_SUPPORTS_CEREAL=1)
+endif(TARGET cereal::cereal)
 
 #########################
 ####### MADNESS-specific
@@ -91,6 +123,7 @@ if (TARGET MADworld)
   string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
   target_compile_options(ttg-mad INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
   target_link_libraries(ttg-mad INTERFACE MADworld)
+  # ttg-mad can use MADNESS serialization only
 endif(TARGET MADworld)
 
 ########################
@@ -115,5 +148,7 @@ if (TARGET PaRSEC::parsec)
   if (NOT TARGET MADworld)
     message(FATAL_ERROR "PaRSEC backend requires MADworld for serialization (this requirement is to be lifted soon)")
   endif(NOT TARGET MADworld)
-  target_link_libraries(ttg-parsec INTERFACE PaRSEC::parsec MADworld)
+  target_link_libraries(ttg-parsec INTERFACE PaRSEC::parsec)
+  # parsec depends on TTG's serialization layer since it does not provide its own
+  target_link_libraries(ttg-parsec INTERFACE ttg-serialization)
 endif(TARGET PaRSEC::parsec)

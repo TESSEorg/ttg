@@ -5,7 +5,9 @@
 #include <clocale>
 #include <iostream>
 
-#include "ttg.h"
+#ifdef TTG_EXECUTABLE
+#include <ttg.h>
+#endif
 
 int main(int argc, char** argv) {
   Catch::Session session;
@@ -23,16 +25,20 @@ int main(int argc, char** argv) {
   std::wcout.sync_with_stdio(true);
   std::wcerr.sync_with_stdio(true);
 
+#ifdef TTG_EXECUTABLE
   ttg::ttg_initialize(argc, argv);
 
   const auto nranks = ttg::ttg_default_execution_context().size();
   std::cout << "ready to run TTG unit tests with " << nranks << " ranks" << (nranks > 1 ? "s" : "") << std::endl;
+#endif
 
   int result = session.run(argc, argv);
 
   // global clean-up...
+#ifdef TTG_EXECUTABLE
   ttg::ttg_fence(ttg::ttg_default_execution_context());
   ttg::ttg_finalize();
+#endif
 
   return result;
 }
