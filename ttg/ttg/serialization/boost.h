@@ -17,6 +17,7 @@ namespace ttg::detail {
   template <typename Archive, typename T, class = void>
   struct is_boost_serializable : std::false_type {};
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
   template <typename Archive, typename T>
   struct is_boost_serializable<
       Archive, T,
@@ -24,6 +25,7 @@ namespace ttg::detail {
                   std::enable_if<std::is_base_of_v<boost::archive::detail::basic_iarchive, Archive> ||
                                  std::is_base_of_v<boost::archive::detail::basic_oarchive, Archive>>>>
       : std::true_type {};
+#endif  //  TTG_SERIALIZATION_SUPPORTS_BOOST
 
   template <typename Archive, typename T>
   inline static constexpr bool is_boost_serializable_v = is_boost_serializable<Archive, T>::value;

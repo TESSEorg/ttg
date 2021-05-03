@@ -47,11 +47,13 @@ namespace ttg::detail {
   template <typename Archive, typename T, class = void>
   struct is_cereal_serializable : std::false_type {};
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
   template <typename Archive, typename T>
   struct is_cereal_serializable<Archive, T,
                                 std::enable_if_t<cereal::traits::is_output_serializable<T, Archive>::value ||
                                                  cereal::traits::is_input_serializable<T, Archive>::value>>
       : std::true_type {};
+#endif  // TTG_SERIALIZATION_SUPPORTS_CEREAL
 
   template <typename Archive, typename T>
   inline static constexpr bool is_cereal_serializable_v = is_cereal_serializable<Archive, T>::value;
