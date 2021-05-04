@@ -1134,24 +1134,34 @@ namespace ttg_parsec {
           ttg::print_error(get_name(), " : ", key, ": error argument is already set : ", i);
           throw std::logic_error("bad set arg");
         }
-        /* this should never be called outside of a task */
-        assert(nullptr != parsec_ttg_caller);
 
-        int idx; // ignored
-        ttg_data_copy_t *copy;
-        /* assuming that this is always called from within a task */
-        assert(nullptr != parsec_ttg_caller);
-        std::tie(copy, idx) = detail::find_copy_in_task(parsec_ttg_caller, &value);
-        /* assuming that we always have a tracked copy */
-        assert(nullptr != copy);
-        /* register_data_copy might provide us with a different copy if input_is_const != nullptr */
-        copy = detail::register_data_copy<valueT>(copy, task, input_is_const);
-        /* if we registered as a writer and were the first to register with this copy
-         * we need to defer the release of this task to give other tasks a chance to
-         * make a copy of the original data */
-        needs_deferring = (copy->readers < 0);
+        if (nullptr != parsec_ttg_caller) {
 
-        task->parsec_task.data[i].data_in = copy;
+          int idx; // ignored
+          ttg_data_copy_t *copy;
+          std::tie(copy, idx) = detail::find_copy_in_task(parsec_ttg_caller, &value);
+          /* assuming that we always have a tracked copy */
+          assert(nullptr != copy);
+          /* register_data_copy might provide us with a different copy if input_is_const != nullptr */
+          copy = detail::register_data_copy<valueT>(copy, task, input_is_const);
+          /* if we registered as a writer and were the first to register with this copy
+          * we need to defer the release of this task to give other tasks a chance to
+          * make a copy of the original data */
+          needs_deferring = (copy->readers < 0);
+
+          task->parsec_task.data[i].data_in = copy;
+
+        } else {
+
+          using decay_valueT = std::decay_t<valueT>;
+          auto *val_copy = new decay_valueT(std::move(value));
+          ttg_data_copy_t* copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
+          copy->device_private = val_copy;
+          copy->readers = 1;
+          copy->delete_fn  = &detail::typed_delete_t<decay_valueT>::delete_type;
+          task->parsec_task.data[i].data_in = copy;
+
+        }
       }
 
       auto release_fn = [this, key](detail::my_op_t *task) {
