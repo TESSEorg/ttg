@@ -96,13 +96,13 @@ namespace ttg {
     return std::make_tuple(args...);
   }
 
-  template <typename keyT, typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg_runtime>
+  template <typename keyT, typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg::ttg_runtime>
   void send(const keyT &key, const valueT &value, output_terminalT &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     t.send(key, copy_handler(value));
   }
 
-  template <typename keyT, typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg_runtime>
+  template <typename keyT, typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg::ttg_runtime>
   void send(const keyT &key, valueT &&value, output_terminalT &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     t.send(key, copy_handler(std::forward<valueT>(value)));
@@ -114,7 +114,7 @@ namespace ttg {
   }
 
   // TODO if sendk is removed, rename to send
-  template <typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg_runtime>
+  template <typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg::ttg_runtime>
   void sendv(valueT &&value, output_terminalT &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     t.sendv(copy_handler(std::forward<valueT>(value)));
@@ -125,7 +125,7 @@ namespace ttg {
     t.send();
   }
 
-  template <size_t i, typename keyT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg_runtime>
+  template <size_t i, typename keyT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg::ttg_runtime>
   std::enable_if_t<meta::is_none_void_v<keyT,std::decay_t<valueT>>,void>
       send(const keyT &key, valueT &&value, std::tuple<output_terminalsT...> &t) {
     detail::value_copy_handler<Runtime> copy_handler;
@@ -140,7 +140,7 @@ namespace ttg {
   }
 
   // TODO if sendk is removed, rename to send
-  template <size_t i, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg_runtime>
+  template <size_t i, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg::ttg_runtime>
   std::enable_if_t<!meta::is_void_v<valueT>,void>
   sendv(valueT &&value, std::tuple<output_terminalsT...> &t) {
     detail::value_copy_handler<Runtime> copy_handler;
@@ -172,13 +172,13 @@ namespace ttg {
     }
   } // namespace detail
 
-  template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg_runtime>
+  template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg::ttg_runtime>
   void broadcast(const rangeT &keylist, valueT &&value, std::tuple<output_terminalsT...> &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     std::get<i>(t).broadcast(keylist, copy_handler(std::forward<valueT>(value)));
   }
 
-  template <size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg_runtime>
+  template <size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg::ttg_runtime>
   void broadcast(const std::tuple<RangesT...>& keylists, valueT &&value, std::tuple<output_terminalsT...> &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     detail::broadcast<i, I...>(keylists, copy_handler(std::forward<valueT>(value)), t);

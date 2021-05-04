@@ -11,13 +11,13 @@
 #define TTG_MADNESS_IMPORTED 1
 #define TTG_IMPL_NS ttg_madness
 
-constexpr const ttg::Runtime ttg_runtime = ttg::Runtime::MADWorld;
-
 namespace ttg_madness {};
 
 namespace ttg {
 
   using namespace ::ttg_madness;
+
+  constexpr const ttg::Runtime ttg_runtime = ttg::Runtime::MADWorld;
 
 }
 

@@ -11,12 +11,13 @@
 #define TTG_PARSEC_IMPORTED 1
 #define TTG_IMPL_NS ttg_parsec
 
-constexpr const ttg::Runtime ttg_runtime = ttg::Runtime::PaRSEC;
-
 namespace ttg {
 
   /* Mark the ttg_parsec namespace as the default */
   using namespace ttg_parsec;
+
+  constexpr const ttg::Runtime ttg_runtime = ttg::Runtime::PaRSEC;
+
 
 }  // namespace ttg
 
