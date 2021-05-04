@@ -8,9 +8,10 @@ include(Catch)
 add_executable(serialization serialization.cc unit_main.cpp)
 target_link_libraries(serialization "Catch2::Catch2;ttg-serialization")
 
-if (TARGET MADworld)
-  add_ttg_executable(splitmd_serialization splitmd_serialization.cc RUNTIMES "parsec")
-endif(TARGET MADworld)
+# TODO: convert into unit test
+#if (TARGET MADworld)
+#add_executable(splitmd_serialization splitmd_serialization.cc unit_main.cpp)
+#endif(TARGET MADworld)
 
 
 catch_discover_tests(serialization)

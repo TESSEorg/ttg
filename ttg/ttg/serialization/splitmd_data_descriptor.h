@@ -2,6 +2,7 @@
 #define TTG_SERIALIZATION_SPLITMD_DATA_DESCRIPTOR_H
 
 #include <type_traits>
+#include "ttg/util/meta.h"
 
 namespace ttg {
 

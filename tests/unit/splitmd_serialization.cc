@@ -3,6 +3,8 @@
 
 #include "ttg.h"
 
+#include <catch2/catch.hpp>
+
 using value_t = int;
 constexpr const int N = 10, M = 10;
 
@@ -156,10 +158,7 @@ auto make_consumer(ttg::Edge<int, MatrixTile<T>>& in, int instance)
     std::cout << "CONSUMER with key " << key << " on process " << world.rank() << std::endl;
     for (int i = 0; i < N; ++i) {
       for (int j = 0; j < M; ++j) {
-        if (tile(i, j) != i*1000+j) {
-          std::cerr << "WARN: value in tile(" << i << ", " << j << ") expected "
-                    << i*1000+j << " but found " << tile(i, j) << std::endl;
-        }
+        CHECK(tile(i, j) != i*1000+j);
       }
     }
   };
@@ -167,10 +166,8 @@ auto make_consumer(ttg::Edge<int, MatrixTile<T>>& in, int instance)
 }
 
 
-int main(int argc, char **argv)
+TEST_CASE("Split-Metadata Serialization", "[serialization]") {
 {
-  ttg::ttg_initialize(argc, argv, 2);
-
   auto world = ttg::ttg_default_execution_context();
 
   std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
@@ -194,9 +191,7 @@ int main(int argc, char **argv)
 
 
   auto connected = make_graph_executable(producer.get());
-  assert(connected);
-  TTGUNUSED(connected);
-  std::cout << "Graph is connected: " << connected << std::endl;
+  CHECK(connected);
 
   if (world.rank() == 0) {
     std::cout << "==== begin dot ====\n";
@@ -217,8 +212,6 @@ int main(int argc, char **argv)
               << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
   }
 
-
-  ttg::ttg_finalize();
   return 0;
 }
 

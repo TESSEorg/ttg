@@ -8,7 +8,6 @@
 #include "ttg/traverse.h"
 #include "ttg/terminal.h"
 #include "ttg/edge.h"
-#include "ttg/util/serialization.h"
 #include "ttg/impl_selector.h"
 
 namespace ttg {
