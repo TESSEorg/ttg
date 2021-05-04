@@ -1,0 +1,8 @@
+//
+// Created by Eduard Valeyev on 5/3/21.
+//
+
+#ifndef TTG_SERIALIZATION_BUFFER_ARCHIVE_H
+#define TTG_SERIALIZATION_BUFFER_ARCHIVE_H
+
+#endif  // TTG_SERIALIZATION_BUFFER_ARCHIVE_H

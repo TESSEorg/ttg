@@ -23,12 +23,11 @@
 #include "ttg/util/hash.h"
 #include "ttg/util/meta.h"
 #include "ttg/util/print.h"
-#include "ttg/util/serialization.h"
 #include "ttg/util/trace.h"
 
-#include "ttg/parsec/fwd.h"
+#include "ttg/serialization/data_descriptor.h"
 
-#include <madness/world/archive.h>
+#include "ttg/parsec/fwd.h"
 
 #include <array>
 #include <cassert>
@@ -348,21 +347,17 @@ namespace ttg_parsec {
   void ttg_broadcast(::ttg::World world, T &data, int source_rank) {
     int64_t BUFLEN;
     if (world.rank() == source_rank) {
-      madness::archive::BufferOutputArchive count;
-      count &data;
-      BUFLEN = count.size();
+      BUFLEN = ttg::default_data_descriptor<T>::payload_size(&data);
     }
     MPI_Bcast(&BUFLEN, 1, MPI_INT64_T, source_rank, world.impl().comm());
 
     unsigned char *buf = new unsigned char[BUFLEN];
     if (world.rank() == source_rank) {
-      madness::archive::BufferOutputArchive ar(buf, BUFLEN);
-      ar &data;
+      ttg::default_data_descriptor<T>::pack_payload(&data, BUFLEN, 0, buf);
     }
     MPI_Bcast(buf, BUFLEN, MPI_UNSIGNED_CHAR, source_rank, world.impl().comm());
     if (world.rank() != source_rank) {
-      madness::archive::BufferInputArchive ar(buf, BUFLEN);
-      ar &data;
+      ttg::default_data_descriptor<T>::unpack_payload(&data, BUFLEN, 0, buf);
     }
     delete[] buf;
   }
@@ -464,7 +459,7 @@ namespace ttg_parsec {
 
     /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
     template <ttg::ExecutionSpace Space, typename... Args>
-    void op(Args &&... args) {
+    void op(Args &&...args) {
       derivedT *derived = static_cast<derivedT *>(this);
       if constexpr (Space == ttg::ExecutionSpace::Host)
         derived->op(std::forward<Args>(args)...);
