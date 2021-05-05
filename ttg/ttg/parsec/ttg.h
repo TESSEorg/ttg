@@ -140,8 +140,9 @@ namespace ttg_parsec {
       }
     };
 
-    std::tuple<ttg_data_copy_t*, int>
+
     inline
+    ttg_data_copy_t*
     find_copy_in_task(parsec_task_t* task, const void *ptr) {
       ttg_data_copy_t* copy = nullptr;
       int j = -1;
@@ -155,7 +156,7 @@ namespace ttg_parsec {
           }
         }
       }
-      return std::make_tuple(copy, j);
+      return copy;
     }
 
     inline
@@ -523,9 +524,7 @@ namespace ttg_parsec {
           /* replace the task that was deferred */
           detail::my_op_t *deferred_op = (detail::my_op_t *)copy_in->push_task;
           ttg_data_copy_t* deferred_replace_copy;
-          int deferred_replace_copy_idx;
-          std::tie(deferred_replace_copy,
-                    deferred_replace_copy_idx) = detail::find_copy_in_task(copy_in->push_task, copy_in->device_private);
+          deferred_replace_copy = detail::find_copy_in_task(copy_in->push_task, copy_in->device_private);
           /* replace the copy in the deferred task */
           for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
             if (copy_in->push_task->data[i].data_in == copy_in) {
@@ -909,7 +908,7 @@ namespace ttg_parsec {
           using decvalueT = std::decay_t<valueT>;
           if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
             decvalueT val;
-            unpack(val, msg->bytes, num_keys*sizeof(keyT));
+            unpack(val, msg->bytes, pos);
 
             set_arg_from_msg_keylist<i>(ttg::span<keyT>(&keylist[0], num_keys),
                                         std::move(val));
@@ -1135,13 +1134,14 @@ namespace ttg_parsec {
           throw std::logic_error("bad set arg");
         }
 
-        if (nullptr != parsec_ttg_caller) {
+        ttg_data_copy_t *copy = nullptr;
 
-          int idx; // ignored
-          ttg_data_copy_t *copy;
-          std::tie(copy, idx) = detail::find_copy_in_task(parsec_ttg_caller, &value);
-          /* assuming that we always have a tracked copy */
-          assert(nullptr != copy);
+        if (nullptr != parsec_ttg_caller) {
+          copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
+        }
+
+        if (nullptr != copy) {
+
           /* register_data_copy might provide us with a different copy if input_is_const != nullptr */
           copy = detail::register_data_copy<valueT>(copy, task, input_is_const);
           /* if we registered as a writer and were the first to register with this copy
@@ -1251,12 +1251,13 @@ namespace ttg_parsec {
       using decvalueT = std::decay_t<Value>;
       /* pack the key */
       pos = pack(key, msg->bytes, pos);
+      msg->op_id.num_keys = 1;
       if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
+        //std::cout << "set_arg_from_msg unpacking from offset " << sizeof(keyT) << std::endl;
         pos = pack(value, msg->bytes, pos);
       } else {
         ttg_data_copy_t *copy;
-        int idx; // ignored
-        std::tie(copy, idx) = detail::find_copy_in_task(parsec_ttg_caller, &value);
+        copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
         copy = detail::register_data_copy<decvalueT>(copy, nullptr, true);
 
         ttg::SplitMetadataDescriptor<decvalueT> descr;
@@ -1566,8 +1567,7 @@ namespace ttg_parsec {
         size_t metadata_size = sizeof(metadata);
 
         ttg_data_copy_t *copy;
-        int idx;
-        std::tie(copy, idx) = detail::find_copy_in_task(parsec_ttg_caller, &value);
+        copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
         assert(nullptr != copy);
 
         parsec_taskpool_t *tp = world_impl.taskpool();
@@ -2182,8 +2182,7 @@ public:
       ttg::print("ERROR: ttg_send or ttg_broadcast called outside of a task!\n");
     }
     ttg_data_copy_t* copy;
-    int   idx; // ignored
-    std::tie(copy, idx) = ttg_parsec::detail::find_copy_in_task(parsec_ttg_caller, &value);
+    copy = ttg_parsec::detail::find_copy_in_task(parsec_ttg_caller, &value);
     Value* value_ptr = &value;
     if (nullptr == copy) {
       /**
@@ -2210,8 +2209,7 @@ public:
       ttg::print("ERROR: ttg_send or ttg_broadcast called outside of a task!\n");
     }
     ttg_data_copy_t* copy;
-    int   idx; // ignored
-    std::tie(copy, idx) = ttg_parsec::detail::find_copy_in_task(parsec_ttg_caller, &value);
+    copy = ttg_parsec::detail::find_copy_in_task(parsec_ttg_caller, &value);
     const Value* value_ptr = &value;
     if (nullptr == copy) {
       /**
