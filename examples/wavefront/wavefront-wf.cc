@@ -7,6 +7,7 @@
 #include <iostream>
 #include <random>
 #include <thread>
+#include <utility>
 
 #include "ttg.h"
 
@@ -18,7 +19,13 @@ int MB, NB;
 std::shared_ptr<double> matrix;
 std::shared_ptr<double> matrix2;
 
-using Key = std::pair<int, int>;
+using Key = std::pair<int, int>;  // I, J
+namespace std {
+  std::ostream& operator<<(std::ostream& out, Key const& k) {
+    out << "Key(" << k.first << ", " << k.second << ")";
+    return out;
+  }
+}  // namespace std
 
 // An empty class used for pure control flows
 struct Control {};
@@ -57,7 +64,7 @@ inline void delete_matrix() {
   delete matrix2.get();
 }
 
-inline void stencil_computation(int i, int j, std::shared_ptr<double>  m) {
+inline void stencil_computation(int i, int j, std::shared_ptr<double> m) {
   int start_i = i * B;
   int end_i = (i * B + B > M) ? M : i * B + B;
   int start_j = j * B;
@@ -84,10 +91,10 @@ void wavefront_serial() {
   }
 }
 
-
 // Method to generate  wavefront tasks with two inputs.
 template <typename funcT>
-auto make_wavefront2(std::shared_ptr<double> m, const funcT& func, Edge<Key, Control>& input1, Edge<Key, Control>& input2) {
+auto make_wavefront2(std::shared_ptr<double> m, const funcT& func, Edge<Key, Control>& input1,
+                     Edge<Key, Control>& input2) {
   auto f = [m, func](const Key& key, const Control& ctl1, const Control& ctl2,
                      std::tuple<Out<Key, Control>, Out<Key, Control>>& out) {
     auto [i, j] = key;
@@ -117,7 +124,8 @@ auto make_wavefront2(std::shared_ptr<double> m, const funcT& func, Edge<Key, Con
 
 // Method to generate wavefront task with single input.
 template <typename funcT>
-auto make_wavefront(std::shared_ptr<double> m, const funcT& func, Edge<Key, Control>& input1, Edge<Key, Control>& input2) {
+auto make_wavefront(std::shared_ptr<double> m, const funcT& func, Edge<Key, Control>& input1,
+                    Edge<Key, Control>& input2) {
   auto f = [m, func](const Key& key, const Control& ctl,
                      std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>& out) {
     auto [i, j] = key;
@@ -179,12 +187,11 @@ int main(int argc, char** argv) {
     s->in<0>()->send(Key(0, 0), c);
     // This doesn't work!
     // s->send<0>(Key(0,0), Control());
+  }
 
-  }    
-  
   ttg_execute(ttg_default_execution_context());
   ttg_fence(ttg_default_execution_context());
-  
+
   if (ttg_default_execution_context().rank() == 0) {
     end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "
@@ -201,12 +208,12 @@ int main(int argc, char** argv) {
   std::cout << "Serial Execution Time (milliseconds) : "
             << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1e3 << std::endl;
 
-  //print_matrix();
+  // print_matrix();
   std::cout << "Verifying the result....";
   bool success = true;
   for (int i = 0; i < M; i++) {
     for (int j = 0; j < N; j++) {
-      if (matrix.get()[i*N + j] - matrix2.get()[i*N + j] != 0) {
+      if (matrix.get()[i * N + j] - matrix2.get()[i * N + j] != 0) {
         success = false;
         std::cout << "ERROR (" << i << "," << j << ")\n";
       }
@@ -216,7 +223,7 @@ int main(int argc, char** argv) {
   std::cout << "....done!" << std::endl;
   std::cout << (success ? "SUCCESS!!!" : "FAILED!!!") << std::endl;
 
-  //delete_matrix();
+  // delete_matrix();
 
   return 0;
 }

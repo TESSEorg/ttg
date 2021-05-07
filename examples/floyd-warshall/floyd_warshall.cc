@@ -46,13 +46,19 @@ struct Key {
   madness::hashT hash() const { return hash_val; }
   void rehash() {
     std::hash<int> int_hasher;
-    hash_val = int_hasher(execution_info.first.first) ^ int_hasher(execution_info.first.second) ^
+    hash_val = int_hasher(execution_info.first.first) * 2654435769 + int_hasher(execution_info.first.second) * 40503 +
                int_hasher(execution_info.second);
   }
 
   template <typename Archive>
   void serialize(Archive& ar) {
     ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
+  }
+
+  friend std::ostream& operator<<(std::ostream& out, Key const& k) {
+    out << "Key((" << k.execution_info.first.first << "," << k.execution_info.first.second << "),"
+        << k.execution_info.second << ")";
+    return out;
   }
 };
 
@@ -63,12 +69,6 @@ namespace std {
     std::size_t operator()(const Key& s) const noexcept { return s.hash(); }
   };
 }  // namespace std
-
-std::ostream& operator<<(std::ostream& s, const Key& key) {
-  s << "Key((" << key.execution_info.first.first << "," << key.execution_info.first.second << "), "
-    << key.execution_info.second << ")";
-  return s;
-}
 
 // An empty class used for pure control flows
 class Control {
@@ -179,7 +179,7 @@ class FuncA : public Op<Key,
 
     // Executing the update
     if (kernel_type == "iterative") {
-      //std::cout << "FuncA: " << K << " " << I << " " << J << std::endl;
+      // std::cout << "FuncA: " << K << " " << I << " " << J << std::endl;
       floyd_iterative_kernel(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg);
     } else if (kernel_type == "recursive-serial") {
       int block_size = problem_size / blocking_factor;
@@ -195,13 +195,13 @@ class FuncA : public Op<Key,
       // int k_lb = K * block_size;
       // #pragma omp prallel
       // {
-      // 	#pragma omp single
-      // 	{
-      // 		#pragma omp task
-      // 		floyd_recursive_serial_kernelA(adjacency_matrix_ttg, problem_size,
-      // 								   block_size, i_lb, j_lb, k_lb,
-      // 								   recursive_fan_out, base_size);
-      // 	}
+      //        #pragma omp single
+      //         {
+      //                 #pragma omp task
+      //                 floyd_recursive_serial_kernelA(adjacency_matrix_ttg, problem_size,
+      //                                                                    block_size, i_lb, j_lb, k_lb,
+      //                                                                    recursive_fan_out, base_size);
+      //         }
       // }
     }
 
@@ -272,7 +272,7 @@ class FuncB
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    //std::cout << "FuncB: " << K << " " << I << " " << J << std::endl;
+    // std::cout << "FuncB: " << K << " " << I << " " << J << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
       floyd_iterative_kernel(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg);
@@ -290,13 +290,14 @@ class FuncB
       // int k_lb = K * block_size;
       // #pragma omp prallel
       // {
-      // 	#pragma omp single
-      // 	{
-      // 		#pragma omp task
-      // 		floyd_recursive_serial_kernelB(adjacency_matrix_ttg, adjacency_matrix_ttg,
-      // 									   problem_size, block_size, i_lb, j_lb,
-      // k_lb, 									   recursive_fan_out, base_size);
-      // 	}
+      //         #pragma omp single
+      //         {
+      //                 #pragma omp task
+      //                 floyd_recursive_serial_kernelB(adjacency_matrix_ttg, adjacency_matrix_ttg,
+      //                                                                            problem_size, block_size, i_lb,
+      //                                                                            j_lb,
+      // k_lb,                                                                            recursive_fan_out, base_size);
+      //         }
       // }
     }
 
@@ -364,7 +365,7 @@ class FuncC
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
 
-    //std::cout << "FuncC: " << K << " " << I << " " << J << std::endl;
+    // std::cout << "FuncC: " << K << " " << I << " " << J << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
       floyd_iterative_kernel(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg);
@@ -382,13 +383,14 @@ class FuncC
       // int k_lb = K * block_size;
       // #pragma omp prallel
       // {
-      // 	#pragma omp single
-      // 	{
-      // 		#pragma omp task
-      // 		floyd_recursive_serial_kernelC(adjacency_matrix_ttg, adjacency_matrix_ttg,
-      // 									   problem_size, block_size, i_lb, j_lb,
-      // k_lb, 									   recursive_fan_out, base_size);
-      // 	}
+      //         #pragma omp single
+      //         {
+      //                 #pragma omp task
+      //                 floyd_recursive_serial_kernelC(adjacency_matrix_ttg, adjacency_matrix_ttg,
+      //                                                                            problem_size, block_size, i_lb,
+      //                                                                            j_lb,
+      // k_lb,                                                                            recursive_fan_out, base_size);
+      //         }
       // }
     }
 
@@ -451,7 +453,7 @@ class FuncD : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
-    //std::cout << "FuncD: " << K << " " << I << " " << J << std::endl;
+    // std::cout << "FuncD: " << K << " " << I << " " << J << std::endl;
     // Executing the update
     if (kernel_type == "iterative") {
       floyd_iterative_kernel(problem_size, blocking_factor, I, J, K, adjacency_matrix_ttg);
@@ -463,20 +465,20 @@ class FuncD : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
       floyd_recursive_serial_kernelD(adjacency_matrix_ttg, adjacency_matrix_ttg, adjacency_matrix_ttg, problem_size,
                                      block_size, i_lb, j_lb, k_lb, recursive_fan_out, base_size);
     } else {
-      // int block_size = problem_size/blocking_factor;
-      // int i_lb = I * block_size;
-      // int j_lb = J * block_size;
-      // int k_lb = K * block_size;
-      // #pragma omp prallel
-      // {
-      // 	#pragma omp single
-      // 	{
-      // 		#pragma omp task
-      // 		floyd_recursive_serial_kernelD(adjacency_matrix_ttg,
-      // 									   adjacency_matrix_ttg,
-      // adjacency_matrix_ttg, 									   problem_size, block_size, i_lb, j_lb, k_lb, 									   recursive_fan_out, base_size);
-      // 	}
-      // }
+      //      int block_size = problem_size / blocking_factor;
+      //      int i_lb = I * block_size;
+      //      int j_lb = J * block_size;
+      //      int k_lb = K * block_size;
+      //#pragma omp prallel
+      //      {
+      //#pragma omp single
+      //        {
+      //#pragma omp task
+      //          floyd_recursive_serial_kernelD(adjacency_matrix_ttg, adjacency_matrix_ttg, adjacency_matrix_ttg,
+      //          problem_size,
+      //                                         block_size, i_lb, j_lb, k_lb, recursive_fan_out, base_size);
+      //        }
+      //      }
     }
 
     // making x_ready for the computation on the SAME block in the NEXT iteration
@@ -619,14 +621,17 @@ int main(int argc, char** argv) {
   int base_size;
   bool verify_results;
   if (argc != 5) {
-    std::cout << "Usage: ./fw-apsp-<runtime - mad/parsec> <problem size> <blocking factor> <kernel type - iterative/recursive-serial/recursive-parallel> verify-results/do-not-verify-results\n";
+    std::cout << "Usage: ./fw-apsp-<runtime - mad/parsec> <problem size> <blocking factor> <kernel type - "
+                 "iterative/recursive-serial/recursive-parallel> verify-results/do-not-verify-results\n";
     problem_size = 2048;
     blocking_factor = 32;
     kernel_type = "iterative";
     verify_results = false;
-    std::cout << "Running with problem size: " << problem_size << ", blocking factor: " << blocking_factor << ", kernel type: " << kernel_type << ", verify results: " << verify_results << std::endl;
+    std::cout << "Running with problem size: " << problem_size << ", blocking factor: " << blocking_factor
+              << ", kernel type: " << kernel_type << ", verify results: " << verify_results << std::endl;
   } else {
-    parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, verify_results);
+    parse_arguments(argc, argv, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
+                    verify_results);
   }
 
   double* adjacency_matrix_serial = nullptr;  // Using for the verification (if needed)

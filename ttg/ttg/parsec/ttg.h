@@ -39,6 +39,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -459,7 +460,7 @@ namespace ttg_parsec {
 
     /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
     template <ttg::ExecutionSpace Space, typename... Args>
-    void op(Args &&...args) {
+    void op(Args &&... args) {
       derivedT *derived = static_cast<derivedT *>(this);
       if constexpr (Space == ttg::ExecutionSpace::Host)
         derived->op(std::forward<Args>(args)...);
@@ -1066,7 +1067,8 @@ namespace ttg_parsec {
       } else {
         keyT kk = *(reinterpret_cast<keyT *>(k));
         using ttg::hash;
-        return hash<decltype(kk)>{}(kk);
+        uint64_t hv = hash<decltype(kk)>{}(kk);
+        return hv;
       }
     }
 
@@ -1076,8 +1078,10 @@ namespace ttg_parsec {
         return buffer;
       } else {
         keyT kk = *(reinterpret_cast<keyT *>(k));
-        // use streambuf here?
-        snprintf(buffer, buffer_size, "%lu", k);
+        std::stringstream iss;
+        iss << kk;
+        memset(buffer, 0, buffer_size);
+        iss.get(buffer, buffer_size);
         return buffer;
       }
     }
