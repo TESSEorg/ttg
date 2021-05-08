@@ -128,7 +128,7 @@ namespace intrusive::symmetric::c_v {
 
 }  // namespace intrusive::symmetric::c_v
 
-#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
 CEREAL_CLASS_VERSION(intrusive::symmetric::c_v::NonPOD, 17);
 #endif
 
