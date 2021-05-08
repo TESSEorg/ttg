@@ -218,7 +218,7 @@ struct type_printer;
 TEST_CASE("MADNESS Serialization", "[serialization]") {
   // Test code written as if calling from C
   auto test = [](const auto& t) {
-    using T = std::decay_t<decltype(t)>;
+    using T = std::remove_cv_t<std::remove_reference_t<decltype(t)>>;
 
     CHECK(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, T>);
     CHECK(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, T>);
@@ -263,7 +263,7 @@ TEST_CASE("MADNESS Serialization", "[serialization]") {
   // static_assert(!ttg::detail::is_madness_output_serializable_v<madness::archive::BufferOutputArchive, NonPOD>);
 
   auto test_nonpod = [&test](const auto& t) {
-    using T = std::decay_t<decltype(t)>;
+    using T = std::remove_cv_t<std::remove_reference_t<decltype(t)>>;
     static_assert(ttg::detail::is_madness_input_serializable_v<madness::archive::BufferInputArchive, T>);
     static_assert(ttg::detail::is_madness_output_serializable_v<madness::archive::BufferOutputArchive, T>);
     test(T(33));
