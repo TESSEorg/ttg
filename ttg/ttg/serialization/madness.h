@@ -5,6 +5,8 @@
 #ifndef TTG_SERIALIZATION_MADNESS_H
 #define TTG_SERIALIZATION_MADNESS_H
 
+#include <type_traits>
+
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
 #include <madness/world/archive.h>
 #include <madness/world/type_traits.h>

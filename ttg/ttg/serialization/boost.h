@@ -5,6 +5,8 @@
 #ifndef TTG_SERIALIZATION_BOOST_H
 #define TTG_SERIALIZATION_BOOST_H
 
+#include <type_traits>
+
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>

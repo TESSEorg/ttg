@@ -5,6 +5,8 @@
 #ifndef TTG_SERIALIZATION_CEREAL_H
 #define TTG_SERIALIZATION_CEREAL_H
 
+#include <type_traits>
+
 #ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
 #include <cereal/archives/binary.hpp>
 #include <cereal/cereal.hpp>
