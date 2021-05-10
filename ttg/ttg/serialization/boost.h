@@ -30,6 +30,23 @@ namespace ttg::detail {
   template <typename Archive, typename T>
   inline static constexpr bool is_boost_serializable_v = is_boost_serializable<Archive, T>::value;
 
+  template <typename T, class = void>
+  struct is_boost_buffer_serializable
+      : std::bool_constant<is_boost_serializable_v<boost::archive::binary_iarchive, T> &&
+                           is_boost_serializable_v<boost::archive::binary_oarchive, T>> {};
+
+  /// evaluates to true if can serialize @p T to/from buffer using Boost serialization
+  template <typename T>
+  inline constexpr bool is_boost_buffer_serializable_v = is_boost_buffer_serializable<T>::value;
+
+  template <typename T, class = void>
+  struct is_boost_user_buffer_serializable : is_boost_buffer_serializable<T> {};
+
+  /// evaluates to true if can serialize @p T to/from buffer using user-provided Boost serialization
+  template <typename T>
+  inline constexpr bool is_boost_user_buffer_serializable_v =
+      is_boost_user_buffer_serializable<T>::value && !std::is_fundamental_v<T>;
+
 }  // namespace ttg::detail
 
 #endif  // TTG_SERIALIZATION_BOOST_H

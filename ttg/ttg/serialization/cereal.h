@@ -58,6 +58,23 @@ namespace ttg::detail {
   template <typename Archive, typename T>
   inline static constexpr bool is_cereal_serializable_v = is_cereal_serializable<Archive, T>::value;
 
+  template <typename T, class = void>
+  struct is_cereal_buffer_serializable : std::bool_constant<is_cereal_serializable_v<cereal::BinaryInputArchive, T> &&
+                                                            is_cereal_serializable_v<cereal::BinaryOutputArchive, T>> {
+  };
+
+  /// evaluates to true if can serialize @p T to/from buffer using Cereal serialization
+  template <typename T>
+  inline constexpr bool is_cereal_buffer_serializable_v = is_cereal_buffer_serializable<T>::value;
+
+  template <typename T, class = void>
+  struct is_cereal_user_buffer_serializable : is_cereal_buffer_serializable<T> {};
+
+  /// evaluates to true if can serialize @p T to/from buffer using user-provided Cereal serialization
+  template <typename T>
+  inline constexpr bool is_cereal_user_buffer_serializable_v =
+      is_cereal_user_buffer_serializable<T>::value && !std::is_fundamental_v<T>;
+
 }  // namespace ttg::detail
 
 #endif  // TTG_SERIALIZATION_SUPPORTS_CEREAL

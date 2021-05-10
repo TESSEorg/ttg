@@ -46,6 +46,25 @@ static_assert(!std::is_trivially_copyable_v<NonPOD>);
 
 namespace intrusive::symmetric::any {
 
+  // POD with serialization specified explicitly, to ensure that user-provided serialization takes precedence over
+  // bitcopy
+  class POD {
+    int value;
+
+   public:
+    POD() = default;
+    POD(int value) : value(value) {}
+
+    int get() const { return value; }
+
+    template <typename Archive>
+    void serialize(Archive& ar) {
+      std::int64_t junk = 17;
+      ar& value& junk;
+    }
+  };
+  static_assert(std::is_trivially_copyable_v<POD>);
+
   class NonPOD {
     int value;
 
@@ -63,6 +82,12 @@ namespace intrusive::symmetric::any {
   };
   static_assert(!std::is_trivially_copyable_v<NonPOD>);
 }  // namespace intrusive::symmetric::any
+
+static_assert(madness::has_member_serialize_v<intrusive::symmetric::any::POD, madness::archive::BufferOutputArchive>);
+static_assert(madness::has_member_serialize_v<intrusive::symmetric::any::POD, madness::archive::BufferInputArchive>);
+static_assert(madness::is_user_serializable_v<madness::archive::BufferOutputArchive, intrusive::symmetric::any::POD>);
+static_assert(madness::is_user_serializable_v<madness::archive::BufferInputArchive, intrusive::symmetric::any::POD>);
+static_assert(madness::is_output_archive_v<madness::archive::BufferOutputArchive>);
 
 namespace intrusive::symmetric::bc_v {
 
@@ -211,8 +236,17 @@ namespace freestanding::symmetric::bc {
 
 #include <catch2/catch.hpp>
 
-template <typename T>
-struct type_printer;
+static_assert(ttg::detail::is_madness_buffer_serializable_v<int>);
+static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<int>);
+static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<int>);
+static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<int>);
+static_assert(!ttg::detail::is_user_buffer_serializable_v<int>);
+static_assert(ttg::detail::is_madness_buffer_serializable_v<int[4]>);
+static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<int[4]>);
+// static_assert(std::is_fundamental_v<int[4]>);
+// static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<int[4]>);
+// static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<int[4]>);
+static_assert(!ttg::detail::is_user_buffer_serializable_v<int[4]>);
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
 TEST_CASE("MADNESS Serialization", "[serialization]") {
@@ -258,9 +292,8 @@ TEST_CASE("MADNESS Serialization", "[serialization]") {
   POD b[4] = {POD(1), POD(2), POD(3), POD(4)};
   test(b);
 
-  // these should pass, but don't due to MADNESS not properly disabling operator&(Archive,Obj) (?)
-  // static_assert(!ttg::detail::is_madness_input_serializable_v<madness::archive::BufferInputArchive, NonPOD>);
-  // static_assert(!ttg::detail::is_madness_output_serializable_v<madness::archive::BufferOutputArchive, NonPOD>);
+  static_assert(!ttg::detail::is_madness_input_serializable_v<madness::archive::BufferInputArchive, NonPOD>);
+  static_assert(!ttg::detail::is_madness_output_serializable_v<madness::archive::BufferOutputArchive, NonPOD>);
 
   auto test_nonpod = [&test](const auto& t) {
     using T = std::remove_cv_t<std::remove_reference_t<decltype(t)>>;
@@ -276,6 +309,22 @@ TEST_CASE("MADNESS Serialization", "[serialization]") {
   test_nonpod(intrusive::symmetric::bc_v::NonPOD{});
   test_nonpod(nonintrusive::symmetric::m::NonPOD{});
   test_nonpod(nonintrusive::asymmetric::m::NonPOD{});
+
+  {  // test that user-provided serialization overrides the default
+    using nonpod_t = intrusive::symmetric::any::NonPOD;
+    static_assert(!std::is_trivially_copyable_v<nonpod_t> && ttg::detail::is_user_buffer_serializable_v<nonpod_t>);
+    const ttg_data_descriptor* d_nonpod = ttg::get_data_descriptor<nonpod_t>();
+
+    using pod_t = intrusive::symmetric::any::POD;
+    // ! user-defined serialization method overrides the default methods
+    static_assert(std::is_trivially_copyable_v<pod_t> && ttg::detail::is_user_buffer_serializable_v<pod_t>);
+    const ttg_data_descriptor* d_pod = ttg::get_data_descriptor<pod_t>();
+
+    nonpod_t nonpod;
+    pod_t pod;
+    CHECK_NOTHROW(d_pod->payload_size(&pod));
+    CHECK(d_nonpod->payload_size(&nonpod) + sizeof(std::int64_t) == d_pod->payload_size(&pod));
+  }
 }
 #endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
 
