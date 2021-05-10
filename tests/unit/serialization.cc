@@ -324,6 +324,8 @@ TEST_CASE("MADNESS Serialization", "[serialization]") {
     pod_t pod;
     CHECK_NOTHROW(d_pod->payload_size(&pod));
     CHECK(d_nonpod->payload_size(&nonpod) + sizeof(std::int64_t) == d_pod->payload_size(&pod));
+    // MADNESS buffer archives do not use cookies, so should be as efficient as direct copy
+    CHECK(d_nonpod->payload_size(&nonpod) == sizeof(nonpod));
   }
 }
 #endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
