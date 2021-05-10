@@ -243,10 +243,10 @@ static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<int>);
 static_assert(!ttg::detail::is_user_buffer_serializable_v<int>);
 static_assert(ttg::detail::is_madness_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<int[4]>);
-// static_assert(std::is_fundamental_v<int[4]>);
-// static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<int[4]>);
+static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<int[4]>);
 // static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_user_buffer_serializable_v<int[4]>);
+static_assert(!ttg::detail::is_user_buffer_serializable_v<std::array<int, 4>>);
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
 TEST_CASE("MADNESS Serialization", "[serialization]") {
@@ -348,6 +348,9 @@ TEST_CASE("Boost Serialization", "[serialization]") {
   POD b[4] = {POD(1), POD(2), POD(3), POD(4)};
   test(b);
   test(std::vector<int>{1, 2, 3});
+  test(intrusive::symmetric::any::NonPOD{});
+  test(intrusive::symmetric::bc_v::NonPOD{});
+  test(intrusive::symmetric::any::POD{});
 }
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
