@@ -14,6 +14,16 @@
 
 namespace ttg::detail {
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+  //////// is_archive_v for madness archives
+  template <typename T>
+  inline constexpr bool is_archive_v<T, std::enable_if_t<madness::is_archive_v<T>>> = true;
+  template <typename T>
+  inline constexpr bool is_input_archive_v<T, std::enable_if_t<madness::is_input_archive_v<T>>> = true;
+  template <typename T>
+  inline constexpr bool is_output_archive_v<T, std::enable_if_t<madness::is_output_archive_v<T>>> = true;
+#endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
+
   //////// is_madness_serializable
 
   template <typename Archive, typename T, class = void>

@@ -1,7 +1,7 @@
 if (NOT TARGET cereal::cereal)
   # find_package(cereal ${TTG_TRACKED_CEREAL_VERSION} QUIET)
   # homebrew on macos provides cereal-config with version "unknown"
-  find_package(cereal)
+  #find_package(cereal)
   if (cereal_FOUND AND NOT TARGET cereal::cereal)
     if (TARGET cereal)
       add_library(cereal::cereal ALIAS cereal)

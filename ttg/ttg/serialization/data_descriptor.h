@@ -7,7 +7,7 @@
 #include <madness/world/buffer_archive.h>
 #endif
 
-#include "ttg/serialization/all.h"
+#include "ttg/serialization/backends.h"
 
 static_assert(ttg::detail::is_madness_output_serializable_v<madness::archive::BufferOutputArchive, std::vector<int>>);
 static_assert(ttg::detail::is_madness_input_serializable_v<madness::archive::BufferInputArchive, std::vector<int>>);
