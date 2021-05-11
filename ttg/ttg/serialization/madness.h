@@ -5,6 +5,8 @@
 #ifndef TTG_SERIALIZATION_MADNESS_H
 #define TTG_SERIALIZATION_MADNESS_H
 
+#include <type_traits>
+
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
 #include <madness/world/archive.h>
 #include <madness/world/type_traits.h>
@@ -20,10 +22,8 @@ namespace ttg::detail {
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
   template <typename Archive, typename T>
   struct is_madness_output_serializable<
-      Archive, T,
-      std::void_t<decltype(madness::archive::ArchiveStoreImpl<Archive, T>::store(std::declval<Archive&>(),
-                                                                                 std::declval<const T&>())),
-                  std::enable_if<madness::archive::is_output_archive<Archive>::value>>> : std::true_type {};
+      Archive, T, std::enable_if_t<madness::is_output_archive_v<Archive> && madness::is_serializable_v<Archive, T>>>
+      : std::true_type {};
 #endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
 
   template <typename Archive, typename T>
@@ -34,10 +34,8 @@ namespace ttg::detail {
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
   template <typename Archive, typename T>
-  struct is_madness_input_serializable<Archive, T,
-                                       std::void_t<decltype(madness::archive::ArchiveLoadImpl<Archive, T>::load(
-                                                       std::declval<Archive&>(), std::declval<T&>())),
-                                                   std::enable_if<madness::archive::is_input_archive<Archive>::value>>>
+  struct is_madness_input_serializable<
+      Archive, T, std::enable_if_t<madness::is_input_archive_v<Archive> && madness::is_serializable_v<Archive, T>>>
       : std::true_type {};
 #endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
 
@@ -47,6 +45,36 @@ namespace ttg::detail {
   template <typename Archive, typename T>
   inline static constexpr bool is_madness_serializable_v =
       is_madness_input_serializable_v<Archive, T> || is_madness_output_serializable_v<Archive, T>;
+
+  template <typename T, class = void>
+  struct is_madness_buffer_serializable : std::false_type {};
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+  template <typename T>
+  struct is_madness_buffer_serializable<
+      T, std::enable_if_t<is_madness_input_serializable_v<madness::archive::BufferInputArchive, T> &&
+                          is_madness_output_serializable_v<madness::archive::BufferOutputArchive, T>>>
+      : std::true_type {};
+#endif
+
+  /// evaluates to true if can serialize @p T to/from buffer using MADNESS serialization
+  template <typename T>
+  inline constexpr bool is_madness_buffer_serializable_v = is_madness_buffer_serializable<T>::value;
+
+  template <typename T, class = void>
+  struct is_madness_user_buffer_serializable : std::false_type {};
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+  template <typename T>
+  struct is_madness_user_buffer_serializable<
+      T, std::enable_if_t<madness::is_user_serializable_v<madness::archive::BufferInputArchive, T> &&
+                          madness::is_user_serializable_v<madness::archive::BufferOutputArchive, T>>> : std::true_type {
+  };
+#endif
+
+  /// evaluates to true if can serialize @p T to/from buffer using user-provided MADNESS serialization
+  template <typename T>
+  inline constexpr bool is_madness_user_buffer_serializable_v = is_madness_user_buffer_serializable<T>::value;
 
 }  // namespace ttg::detail
 

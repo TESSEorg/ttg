@@ -5,6 +5,8 @@
 #ifndef TTG_SERIALIZATION_CEREAL_H
 #define TTG_SERIALIZATION_CEREAL_H
 
+#include <type_traits>
+
 #ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
 #include <cereal/archives/binary.hpp>
 #include <cereal/cereal.hpp>
@@ -39,6 +41,7 @@ namespace cereal {
     for (std::size_t i = 0; i != N; ++i) ar(t[i]);
   }
 }  // namespace cereal
+#endif
 
 namespace ttg::detail {
 
@@ -58,8 +61,28 @@ namespace ttg::detail {
   template <typename Archive, typename T>
   inline static constexpr bool is_cereal_serializable_v = is_cereal_serializable<Archive, T>::value;
 
-}  // namespace ttg::detail
+  template <typename T, class = void>
+  struct is_cereal_buffer_serializable : std::false_type {};
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
+  template <typename T>
+  struct is_cereal_buffer_serializable<T, std::enable_if_t<is_cereal_serializable_v<cereal::BinaryInputArchive, T> &&
+                                                           is_cereal_serializable_v<cereal::BinaryOutputArchive, T>>>
+      : std::true_type {};
 #endif  // TTG_SERIALIZATION_SUPPORTS_CEREAL
+
+  /// evaluates to true if can serialize @p T to/from buffer using Cereal serialization
+  template <typename T>
+  inline constexpr bool is_cereal_buffer_serializable_v = is_cereal_buffer_serializable<T>::value;
+
+  template <typename T, class = void>
+  struct is_cereal_user_buffer_serializable : is_cereal_buffer_serializable<T> {};
+
+  /// evaluates to true if can serialize @p T to/from buffer using user-provided Cereal serialization
+  template <typename T>
+  inline constexpr bool is_cereal_user_buffer_serializable_v =
+      is_cereal_user_buffer_serializable<T>::value && !std::is_fundamental_v<T>;
+
+}  // namespace ttg::detail
 
 #endif  // TTG_SERIALIZATION_CEREAL_H

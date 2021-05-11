@@ -3,11 +3,11 @@
 
 #include <cstdint>
 
-#include "ttg/serialization/all.h"
-
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
 #include <madness/world/buffer_archive.h>
 #endif
+
+#include "ttg/serialization/all.h"
 
 static_assert(ttg::detail::is_madness_output_serializable_v<madness::archive::BufferOutputArchive, std::vector<int>>);
 static_assert(ttg::detail::is_madness_input_serializable_v<madness::archive::BufferInputArchive, std::vector<int>>);
@@ -44,7 +44,8 @@ namespace ttg {
   /// default_data_descriptor for trivially-copyable types
   /// @tparam T a trivially-copyable type
   template <typename T>
-  struct default_data_descriptor<T, std::enable_if_t<std::is_trivially_copyable<T>::value>> {
+  struct default_data_descriptor<
+      T, std::enable_if_t<std::is_trivially_copyable<T>::value && !detail::is_user_buffer_serializable_v<T>>> {
     static constexpr const bool serialize_size_is_const = true;
 
     /// @param[in] object pointer to the object to be serialized
@@ -89,8 +90,7 @@ namespace ttg {
   // The default implementation for non-POD data types that support MADNESS serialization
   template <typename T>
   struct default_data_descriptor<
-      T, std::enable_if_t<!std::is_trivially_copyable<T>::value &&
-                          detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, T>>> {
+      T, std::enable_if_t<!std::is_trivially_copyable<T>::value || detail::is_madness_user_buffer_serializable_v<T>>> {
     static constexpr const bool serialize_size_is_const = false;
 
     static uint64_t payload_size(const void *object) {
