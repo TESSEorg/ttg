@@ -121,6 +121,10 @@ namespace ttg {
 
 #if defined(TTG_SERIALIZATION_SUPPORTS_BOOST)
 
+#include <boost/iostreams/device/array.hpp>
+#include <boost/iostreams/stream.hpp>
+#include <boost/serialization/array.hpp>
+
 namespace ttg {
 
   // The default implementation for non-POD data types that support MADNESS serialization
