@@ -83,14 +83,36 @@ namespace ttg::detail {
                  ttg::detail::has_freestanding_boost_serialize_with_version_v<ttg::meta::remove_cvr_t<T>, Archive>) ||
                 ttg::detail::has_member_serialize_with_version_v<ttg::meta::remove_cvr_t<T>, Archive> ||
                 (ttg::detail::has_member_load_with_version_v<T, Archive> &&
-                 ttg::detail::has_member_store_with_version_v<T, Archive>))))>> = true;
+                 ttg::detail::has_member_save_with_version_v<T, Archive>))))>> = true;
 #endif  //  TTG_SERIALIZATION_SUPPORTS_BOOST
 
   template <typename Archive, typename T>
   struct is_boost_serializable : std::bool_constant<is_boost_serializable_v<Archive, T>> {};
 
   template <typename Archive, typename T, class = void>
-  struct is_boost_default_serializable : std::bool_constant<std::is_trivially_copyable_v<T>> {};
+  struct is_boost_default_serializable : std::false_type {};
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+  /// @sa is_boost_serializable_v
+  template <typename Archive, typename T>
+  struct is_boost_default_serializable<
+      Archive, T,
+      std::enable_if_t<
+          // Archive is a boost archive
+          is_boost_archive_v<Archive>
+          // T is not not_serializable
+          && !std::is_same_v<typename boost::serialization::implementation_level<T>::type,
+                             boost::mpl::int_<boost::serialization::level_type::not_serializable>>
+          // T is primitive or T is an array of serializables or else T has serialize methods
+          && (std::is_same_v<typename boost::serialization::implementation_level<T>::type,
+                             boost::mpl::int_<boost::serialization::level_type::primitive_type>> ||
+              is_boost_array_serializable_v<Archive, T> ||
+              (!std::is_same_v<typename boost::serialization::implementation_level<T>::type,
+                               boost::mpl::int_<boost::serialization::level_type::primitive_type>> &&
+               (ttg::detail::is_stlcontainer_boost_serializable_v<Archive, T> &&
+                ttg::detail::has_freestanding_boost_serialize_with_version_v<ttg::meta::remove_cvr_t<T>, Archive>)))>>
+      : std::true_type {};
+#endif  //  TTG_SERIALIZATION_SUPPORTS_BOOST
 
   template <typename Archive, typename T>
   inline static constexpr bool is_boost_default_serializable_v = is_boost_default_serializable<Archive, T>::value;

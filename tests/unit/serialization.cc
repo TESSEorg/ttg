@@ -100,7 +100,7 @@ static_assert(madness::is_user_serializable_v<madness::archive::BufferOutputArch
 static_assert(madness::is_user_serializable_v<madness::archive::BufferInputArchive, intrusive::symmetric::mc::POD>);
 static_assert(madness::is_output_archive_v<madness::archive::BufferOutputArchive>);
 
-namespace intrusive::symmetric::bc_v {
+namespace intrusive::symmetric::any_v {
 
   class NonPOD {
     int value;
@@ -121,7 +121,7 @@ namespace intrusive::symmetric::bc_v {
     bool operator==(const NonPOD& other) const { return value == other.value; }
   };
   static_assert(!std::is_trivially_copyable_v<NonPOD>);
-}  // namespace intrusive::symmetric::bc_v
+}  // namespace intrusive::symmetric::any_v
 
 namespace intrusive::symmetric::c {
 
@@ -166,12 +166,38 @@ namespace intrusive::symmetric::c_v {
 
 }  // namespace intrusive::symmetric::c_v
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+namespace intrusive::asymmetric::mb_v {
+
+  class NonPOD {
+    int value;
+
+   public:
+    NonPOD() = default;
+    NonPOD(int value) : value(value) {}
+    NonPOD(const NonPOD& other) : value(other.value) {}
+
+    int get() const { return value; }
+
+    template <typename Archive>
+    void save(Archive& ar, const unsigned int version) const {
+      ar& value;
+    }
+
+    template <typename Archive>
+    void load(Archive& ar, const unsigned int version) {
+      ar& value;
+    }
+    BOOST_SERIALIZATION_SPLIT_MEMBER()
+    bool operator==(const NonPOD& other) const { return value == other.value; }
+  };
+  static_assert(!std::is_trivially_copyable_v<NonPOD>);
+}  // namespace intrusive::asymmetric::mb_v
+#endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
+
 #ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
 CEREAL_CLASS_VERSION(intrusive::symmetric::c_v::NonPOD, 17);
 #endif
-
-namespace intrusive::asymmetric::bc {}
-namespace intrusive::asymmetric::c {}
 
 namespace nonintrusive::symmetric::m {
 
@@ -224,7 +250,7 @@ namespace madness::archive {
   };
 }  // namespace madness::archive
 
-namespace freestanding::symmetric::bc_v {
+namespace freestanding::symmetric::any_v {
 
   class NonPOD {
     int value;
@@ -251,7 +277,7 @@ namespace freestanding::symmetric::bc_v {
     }
   }
 
-}  // namespace freestanding::symmetric::bc_v
+}  // namespace freestanding::symmetric::any_v
 
 #include <vector>
 
@@ -272,6 +298,71 @@ static_assert(!ttg::detail::is_user_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_user_buffer_serializable_v<std::array<int, 4>>);
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, int>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, int>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, int[4]>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, int[4]>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, std::array<int, 4>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, const std::array<int, 4>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, std::array<int, 4>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, const std::array<int, 4>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, std::vector<int>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, std::vector<int>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, POD>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, POD>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, POD[4]>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, POD[4]>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, std::array<POD, 4>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, std::array<POD, 4>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, std::vector<POD>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, std::vector<POD>>);
+static_assert(!ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, NonPOD>);
+static_assert(!ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, NonPOD>);
+// static_assert(!ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, NonPOD[4]>);
+// static_assert(!ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, NonPOD[4]>);
+// static_assert(!ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, std::array<NonPOD, 4>>);
+// static_assert(!ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, std::array<NonPOD, 4>>);
+// static_assert(!ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, std::vector<NonPOD>>);
+// static_assert(!ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, std::vector<NonPOD>>);
+// static_assert(!ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive,
+// intrusive::symmetric::mc::POD>);
+// static_assert(!ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive,
+// intrusive::symmetric::mc::POD>);
+// static_assert(!ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive,
+// intrusive::symmetric::mc::NonPOD>);
+// static_assert(!ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive,
+// intrusive::symmetric::mc::NonPOD>);
+
+static_assert(
+    ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, intrusive::symmetric::any_v::NonPOD>);
+static_assert(
+    ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, intrusive::symmetric::any_v::NonPOD>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive,
+                                                     intrusive::symmetric::any_v::NonPOD[4]>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive,
+                                                     intrusive::symmetric::any_v::NonPOD[4]>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive,
+                                                     std::array<intrusive::symmetric::any_v::NonPOD, 4>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive,
+                                                     std::array<intrusive::symmetric::any_v::NonPOD, 4>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive,
+                                                     std::vector<intrusive::symmetric::any_v::NonPOD>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive,
+                                                     std::vector<intrusive::symmetric::any_v::NonPOD>>);
+
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive,
+                                                     freestanding::symmetric::any_v::NonPOD>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive,
+                                                     freestanding::symmetric::any_v::NonPOD>);
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+static_assert(
+    ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, intrusive::asymmetric::mb_v::NonPOD>);
+static_assert(
+    ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, intrusive::asymmetric::mb_v::NonPOD>);
+#endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
+
 TEST_CASE("MADNESS Serialization", "[serialization]") {
   // Test code written as if calling from C
   auto test = [](const auto& t) {
@@ -325,7 +416,7 @@ TEST_CASE("MADNESS Serialization", "[serialization]") {
   };
 
   test_nonpod(intrusive::symmetric::mc::NonPOD{});
-  test_nonpod(intrusive::symmetric::bc_v::NonPOD{});
+  test_nonpod(intrusive::symmetric::any_v::NonPOD{});
   test_nonpod(nonintrusive::symmetric::m::NonPOD{});
   test_nonpod(nonintrusive::asymmetric::m::NonPOD{});
 
@@ -372,6 +463,7 @@ static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchi
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, const std::vector<int>>);
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, std::vector<int>>);
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, const std::vector<int>>);
+
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, POD>);
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, POD>);
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, POD[4]>);
@@ -380,6 +472,7 @@ static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarch
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, std::array<POD, 4>>);
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, std::vector<POD>>);
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, std::vector<POD>>);
+
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, NonPOD>);
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, NonPOD>);
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, NonPOD[4]>);
@@ -388,30 +481,38 @@ static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarch
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, std::array<NonPOD, 4>>);
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, std::vector<NonPOD>>);
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, std::vector<NonPOD>>);
+
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, intrusive::symmetric::mc::POD>);
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, intrusive::symmetric::mc::POD>);
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, intrusive::symmetric::mc::NonPOD>);
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, intrusive::symmetric::mc::NonPOD>);
+
 static_assert(
-    ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, intrusive::symmetric::bc_v::NonPOD>);
+    ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, intrusive::symmetric::any_v::NonPOD>);
 static_assert(
-    ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, intrusive::symmetric::bc_v::NonPOD>);
+    ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, intrusive::symmetric::any_v::NonPOD>);
 static_assert(
-    ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, intrusive::symmetric::bc_v::NonPOD[4]>);
+    ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, intrusive::symmetric::any_v::NonPOD[4]>);
 static_assert(
-    ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, intrusive::symmetric::bc_v::NonPOD[4]>);
+    ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, intrusive::symmetric::any_v::NonPOD[4]>);
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive,
-                                                   std::array<intrusive::symmetric::bc_v::NonPOD, 4>>);
+                                                   std::array<intrusive::symmetric::any_v::NonPOD, 4>>);
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive,
-                                                   std::array<intrusive::symmetric::bc_v::NonPOD, 4>>);
+                                                   std::array<intrusive::symmetric::any_v::NonPOD, 4>>);
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive,
-                                                   std::vector<intrusive::symmetric::bc_v::NonPOD>>);
+                                                   std::vector<intrusive::symmetric::any_v::NonPOD>>);
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive,
-                                                   std::vector<intrusive::symmetric::bc_v::NonPOD>>);
+                                                   std::vector<intrusive::symmetric::any_v::NonPOD>>);
+
 static_assert(
-    ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, freestanding::symmetric::bc_v::NonPOD>);
+    ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, intrusive::asymmetric::mb_v::NonPOD>);
 static_assert(
-    ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, freestanding::symmetric::bc_v::NonPOD>);
+    ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, intrusive::asymmetric::mb_v::NonPOD>);
+
+static_assert(
+    ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, freestanding::symmetric::any_v::NonPOD>);
+static_assert(
+    ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, freestanding::symmetric::any_v::NonPOD>);
 
 TEST_CASE("Boost Serialization", "[serialization]") {
   auto test = [](const auto& t) {
@@ -453,8 +554,8 @@ TEST_CASE("Boost Serialization", "[serialization]") {
   POD b[4] = {POD(1), POD(2), POD(3), POD(4)};
   test(b);
   test(std::vector<int>{1, 2, 3});
-  test(intrusive::symmetric::bc_v::NonPOD{17});
-  test(freestanding::symmetric::bc_v::NonPOD{18});
+  test(intrusive::symmetric::any_v::NonPOD{17});
+  test(freestanding::symmetric::any_v::NonPOD{18});
 }
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
@@ -478,3 +579,56 @@ TEST_CASE("Cereal Serialization", "[serialization]") {
   test(std::vector<int>{1, 2, 3});
 }
 #endif  // TTG_SERIALIZATION_SUPPORTS_CEREAL
+
+#if defined(TTG_SERIALIZATION_SUPPORTS_MADNESS) && defined(TTG_SERIALIZATION_SUPPORTS_BOOST)
+TEST_CASE("TTG Serialization", "[serialization]") {
+  // Test code written as if calling from C
+  auto test = [](const auto& t) {
+    using T = ttg::meta::remove_cvr_t<decltype(t)>;
+
+    // This line has to be in a piece of C++ that knows the type T
+    const ttg_data_descriptor* d = ttg::get_data_descriptor<T>();
+
+    // The rest could be in C ... deliberately use printf below rather than C++ streamio
+    void* vt = (void*)&t;
+    // printf("%s header_size=%llu, payload_size=%llu\n", d->name, d->header_size(vt), d->payload_size(vt));
+
+    // Serialize into a buffer
+    std::size_t obj_size;
+    CHECK_NOTHROW(obj_size = d->payload_size(vt));
+    auto buf = std::make_unique<char[]>(obj_size);
+    uint64_t pos = 0;
+    CHECK_NOTHROW(pos = d->pack_payload(vt, obj_size, pos, buf.get()));
+
+    T g_obj;
+    void* g = (void*)&g_obj;
+    CHECK_NOTHROW(d->unpack_payload(g, obj_size, 0, buf.get()));
+  };
+
+  test(99);
+  test(99.0);
+  int a[4] = {1, 2, 3, 4};
+  test(a);
+  test(std::array{1, 2, 3, 4});
+  test(std::vector<int>{1, 2, 3});
+
+  auto test_struct = [&test](const auto& t) {
+    using T = ttg::meta::remove_cvr_t<decltype(t)>;
+    test(T(33));
+    test(std::array{T(55), T(66), T(77)});
+    T b[4] = {T(1), T(2), T(3), T(4)};
+    test(b);
+  };
+
+  test_struct(POD{15});  // default
+  // test_struct(NonPOD{16});
+  test_struct(intrusive::symmetric::mc::POD{17});           // MADNESS
+  test_struct(intrusive::symmetric::mc::NonPOD{17});        // MADNESS
+  test_struct(intrusive::asymmetric::mb_v::NonPOD{21});     // MADNESS
+  test_struct(nonintrusive::symmetric::m::NonPOD{18});      // MADNESS
+  test_struct(nonintrusive::asymmetric::m::NonPOD{19});     // MADNESS
+  test_struct(intrusive::symmetric::any_v::NonPOD{20});     // MADNESS
+  test_struct(freestanding::symmetric::any_v::NonPOD{21});  // MADNESS
+}
+
+#endif

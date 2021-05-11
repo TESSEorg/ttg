@@ -49,13 +49,13 @@ namespace ttg::detail {
   /// accepts single argument of type `Archive`
   /// @note use in combination with ttg::meta::is_detected_v
   template <typename T, typename Archive>
-  using has_member_store_t = decltype(std::declval<T&>().store(std::declval<Archive&>()));
+  using has_member_save_t = decltype(std::declval<T&>().save(std::declval<Archive&>()));
 
   /// helps to detect that `T` has a member serialization method that
   /// accepts one argument of type `Archive` and an unsigned version
   /// @note use in combination with ttg::meta::is_detected_v
   template <typename T, typename Archive>
-  using has_member_store_with_version_t = decltype(std::declval<T&>().store(std::declval<Archive&>(), 0u));
+  using has_member_save_with_version_t = decltype(std::declval<T&>().save(std::declval<Archive&>(), 0u));
 
   /// helps to detect that `T` supports freestanding `serialize` function discoverable by ADL
   /// @note use in combination with std::is_detected_v or ttg::meta::is_detected_v
@@ -103,11 +103,11 @@ namespace ttg::detail {
   /// true if this is well-formed:
   /// \code
   ///   // T t; Archive ar;
-  ///   t.store(ar, 0u);
+  ///   t.save(ar, 0u);
   /// \endcode
   template <typename T, typename Archive>
-  inline constexpr bool has_member_store_with_version_v =
-      ttg::meta::is_detected_v<has_member_store_with_version_t, T, Archive>;
+  inline constexpr bool has_member_save_with_version_v =
+      ttg::meta::is_detected_v<has_member_save_with_version_t, T, Archive>;
 
   /// true if this is well-formed:
   /// \code
