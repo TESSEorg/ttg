@@ -8,8 +8,7 @@
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
 #include <boost/iostreams/device/array.hpp>
 #include <boost/iostreams/stream.hpp>
-#include <boost/serialization/array.hpp>
-#endif
+#endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
 class POD {
   int value;
@@ -22,11 +21,13 @@ class POD {
 };
 static_assert(std::is_trivially_copyable_v<POD>);
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
 // WTF?! std::array of non-Serializable is Serializable
 static_assert(!cereal::traits::is_input_serializable<POD, cereal::BinaryInputArchive>::value);
 static_assert(!cereal::traits::is_output_serializable<POD, cereal::BinaryOutputArchive>::value);
 static_assert(!cereal::traits::is_input_serializable<std::array<POD, 3>, cereal::BinaryInputArchive>::value);
 static_assert(!cereal::traits::is_output_serializable<std::array<POD, 3>, cereal::BinaryOutputArchive>::value);
+#endif  // TTG_SERIALIZATION_SUPPORTS_CEREAL
 
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<POD>);
 static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<POD>);
@@ -758,16 +759,22 @@ TEST_CASE("TTG Serialization", "[serialization]") {
 
   test_struct(POD{15});  // default
   // test_struct(NonPOD{16});
-  test_struct(intrusive::symmetric::mc::POD{17});          // MADNESS
-  test_struct(intrusive::symmetric::mc::NonPOD{17});       // MADNESS
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+  test_struct(intrusive::symmetric::mc::POD{17});        // MADNESS
+  test_struct(intrusive::symmetric::mc::NonPOD{17});     // MADNESS
+  test_struct(nonintrusive::symmetric::m::NonPOD{18});   // MADNESS
+  test_struct(nonintrusive::asymmetric::m::NonPOD{19});  // MADNESS
+#endif
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
   test_struct(intrusive::asymmetric::b_v::NonPOD{21});     // Boost
   test_struct(intrusive::asymmetric::b::NonPOD{21});       // Boost
-  test_struct(nonintrusive::symmetric::m::NonPOD{18});     // MADNESS
-  test_struct(nonintrusive::asymmetric::m::NonPOD{19});    // MADNESS
   test_struct(intrusive::symmetric::bc_v::NonPOD{20});     // Boost
   test_struct(freestanding::symmetric::bc_v::NonPOD{21});  // Boost
-  test_struct(intrusive::symmetric::c::NonPOD{22});        // Cereal
-  test_struct(intrusive::symmetric::c_v::NonPOD{23});      // Cereal
+#endif
+#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
+  test_struct(intrusive::symmetric::c::NonPOD{22});    // Cereal
+  test_struct(intrusive::symmetric::c_v::NonPOD{23});  // Cereal
+#endif
 
   // verify that turning off version and object tracking for Boost produces smaller archives
   {
