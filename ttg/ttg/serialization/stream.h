@@ -15,16 +15,16 @@ namespace ttg::detail {
     using std::streambuf::streambuf;
 
     /// @return the size of data put into `*this`
-    size_t size() const { return m_size; }
+    size_t size() const { return size_; }
 
    protected:
-    std::streamsize xsputn(const char_type* __s, std::streamsize __n) override {
-      this->m_size += __n;
-      return __n;
+    std::streamsize xsputn(const char_type* s, std::streamsize n) override {
+      this->size_ += n;
+      return n;
     }
 
    private:
-    size_t m_size = 0;
+    size_t size_ = 0;
   };
 }  // namespace ttg::detail
 

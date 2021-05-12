@@ -138,7 +138,7 @@ namespace ttg {
 
     static uint64_t payload_size(const void *object) {
       ttg::detail::counting_streambuf sbuf;
-      boost::archive::binary_oarchive oa(sbuf, boost::archive::no_header);
+      boost::archive::binary_oarchive oa(sbuf, boost::archive::no_header | boost::archive::no_codecvt);
       oa << (*(T *)object);
       return sbuf.size();
     }

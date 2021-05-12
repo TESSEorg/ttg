@@ -196,6 +196,8 @@ namespace intrusive::symmetric::c_v {
 }  // namespace intrusive::symmetric::c_v
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+
+// boost serialization, with version (and object) tracking
 namespace intrusive::asymmetric::b_v {
 
   class NonPOD {
@@ -222,6 +224,80 @@ namespace intrusive::asymmetric::b_v {
   };
   static_assert(!std::is_trivially_copyable_v<NonPOD>);
 }  // namespace intrusive::asymmetric::b_v
+
+// boost serialization, without version (and object) tracking
+namespace intrusive::asymmetric::b {
+
+  class NonPOD {
+    int value;
+
+   public:
+    NonPOD() = default;
+    NonPOD(int value) : value(value) {}
+    NonPOD(const NonPOD& other) : value(other.value) {}
+
+    int get() const { return value; }
+
+    template <typename Archive>
+    void save(Archive& ar, const unsigned int version) const {
+      ar& value;
+    }
+
+    template <typename Archive>
+    void load(Archive& ar, const unsigned int version) {
+      ar& value;
+    }
+    BOOST_SERIALIZATION_SPLIT_MEMBER()
+    bool operator==(const NonPOD& other) const { return value == other.value; }
+  };
+  static_assert(!std::is_trivially_copyable_v<NonPOD>);
+}  // namespace intrusive::asymmetric::b
+
+// turns off saving class info, including version
+BOOST_CLASS_IMPLEMENTATION(intrusive::asymmetric::b::NonPOD, boost::serialization::object_serializable)
+// turns off tracking
+BOOST_CLASS_TRACKING(intrusive::asymmetric::b::NonPOD, boost::serialization::track_never)
+
+#if 0  // uncomment to debug internals of serialization dispatch in boost.ser (see oserializer.hpp)
+template <typename Archive, typename T>
+using typex =
+typename boost::mpl::eval_if<
+    // if its primitive
+    boost::mpl::equal_to<
+    boost::serialization::implementation_level< T >,
+    boost::mpl::int_<boost::serialization::primitive_type>
+>,
+boost::mpl::identity<typename boost::archive::detail::save_non_pointer_type<Archive>::save_primitive>,
+// else
+typename boost::mpl::eval_if<
+    // class info / version
+    boost::mpl::greater_equal<
+    boost::serialization::implementation_level< T >,
+    boost::mpl::int_<boost::serialization::object_class_info>
+>,
+// do standard save
+boost::mpl::identity<typename boost::archive::detail::save_non_pointer_type<Archive>::save_standard>,
+// else
+typename boost::mpl::eval_if<
+    // no tracking
+    boost::mpl::equal_to<
+    boost::serialization::tracking_level< T >,
+    boost::mpl::int_<boost::serialization::track_never>
+>,
+// do a fast save
+boost::mpl::identity<typename boost::archive::detail::save_non_pointer_type<Archive>::save_only>,
+// else
+// do a fast save only tracking is turned off
+boost::mpl::identity<typename boost::archive::detail::save_non_pointer_type<Archive>::save_conditional>
+> > >::type;
+
+static_assert(std::is_same_v<typex<boost::archive::binary_oarchive, intrusive::asymmetric::b_v::NonPOD>,
+                             typename boost::archive::detail::save_non_pointer_type<boost::archive::binary_oarchive>::save_standard>);
+
+static_assert(std::is_same_v<typex<boost::archive::binary_oarchive, intrusive::asymmetric::b::NonPOD>,
+                             typename boost::archive::detail::save_non_pointer_type<boost::archive::binary_oarchive>::save_only>);
+#endif
+
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
@@ -656,10 +732,27 @@ TEST_CASE("TTG Serialization", "[serialization]") {
   test_struct(intrusive::symmetric::mc::POD{17});          // MADNESS
   test_struct(intrusive::symmetric::mc::NonPOD{17});       // MADNESS
   test_struct(intrusive::asymmetric::b_v::NonPOD{21});     // Boost
+  test_struct(intrusive::asymmetric::b::NonPOD{21});       // Boost
   test_struct(nonintrusive::symmetric::m::NonPOD{18});     // MADNESS
   test_struct(nonintrusive::asymmetric::m::NonPOD{19});    // MADNESS
   test_struct(intrusive::symmetric::bc_v::NonPOD{20});     // Boost
   test_struct(freestanding::symmetric::bc_v::NonPOD{21});  // Boost
+
+  // verify that turning off version and object tracking for Boost produces smaller archives
+  {
+    using tracked_t = intrusive::asymmetric::b_v::NonPOD;
+    const ttg_data_descriptor* d_tracked = ttg::get_data_descriptor<tracked_t>();
+
+    using untracked_t = intrusive::asymmetric::b::NonPOD;
+    const ttg_data_descriptor* d_untracked = ttg::get_data_descriptor<untracked_t>();
+
+    tracked_t obj_tracked;
+    untracked_t obj_untracked;
+    CHECK_NOTHROW(d_tracked->payload_size(&obj_tracked));
+    CHECK_NOTHROW(d_untracked->payload_size(&obj_untracked));
+    // with tracking ON pack version + other metadata
+    CHECK(d_tracked->payload_size(&obj_tracked) >= sizeof(unsigned int) + d_untracked->payload_size(&obj_untracked));
+  }
 }
 
 #endif
