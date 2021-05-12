@@ -9,6 +9,7 @@
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
 #include <madness/world/archive.h>
+#include <madness/world/buffer_archive.h>
 #include <madness/world/type_traits.h>
 #endif
 

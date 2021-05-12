@@ -21,4 +21,18 @@ namespace ttg::detail {
 
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
+#include <cereal/types/list.hpp>
+
+namespace ttg::detail {
+  template <typename Archive, typename T, typename A>
+  inline static constexpr bool is_stlcontainer_cereal_serializable_v<Archive, std::list<T, A>> =
+      is_cereal_serializable_v<Archive, T>;
+  template <typename Archive, typename T, typename A>
+  inline static constexpr bool is_stlcontainer_cereal_serializable_v<Archive, const std::list<T, A>> =
+      is_cereal_serializable_v<Archive, const T>;
+}  // namespace ttg::detail
+
+#endif
+
 #endif  // TTG_SERIALIZATION_STD_LIST_H

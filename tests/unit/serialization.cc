@@ -152,6 +152,7 @@ namespace intrusive_private::symmetric::bc_v {
   static_assert(!std::is_trivially_copyable_v<NonPOD>);
 }  // namespace intrusive_private::symmetric::bc_v
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
 namespace intrusive::symmetric::c {
 
   class NonPOD {
@@ -166,11 +167,21 @@ namespace intrusive::symmetric::c {
 
     // versioned
     template <class Archive>
-    void serialize(Archive& ar) {
+    std::enable_if_t<std::is_base_of_v<cereal::detail::InputArchiveBase, Archive> ||
+                     std::is_base_of_v<cereal::detail::OutputArchiveBase, Archive>>
+    serialize(Archive& ar) {
       ar(value);
     }
   };
   static_assert(!std::is_trivially_copyable_v<NonPOD>);
+
+  static_assert(ttg::detail::is_cereal_buffer_serializable_v<NonPOD>);
+  static_assert(!ttg::detail::is_boost_buffer_serializable_v<NonPOD>);
+  static_assert(!ttg::detail::is_madness_buffer_serializable_v<NonPOD>);
+  static_assert(ttg::detail::is_cereal_user_buffer_serializable_v<NonPOD>);
+  static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<NonPOD>);
+  static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<NonPOD>);
+
 }  // namespace intrusive::symmetric::c
 
 namespace intrusive::symmetric::c_v {
@@ -187,13 +198,25 @@ namespace intrusive::symmetric::c_v {
 
     // versioned
     template <class Archive>
-    void serialize(Archive& ar, std::uint32_t const version) {
+    std::enable_if_t<std::is_base_of_v<cereal::detail::InputArchiveBase, Archive> ||
+                     std::is_base_of_v<cereal::detail::OutputArchiveBase, Archive>>
+    serialize(Archive& ar, std::uint32_t const version) {
       ar(value);
     }
   };
   static_assert(!std::is_trivially_copyable_v<NonPOD>);
 
+  static_assert(ttg::detail::is_cereal_buffer_serializable_v<NonPOD>);
+  static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, NonPOD>);
+  static_assert(!ttg::detail::is_boost_buffer_serializable_v<NonPOD>);
+  static_assert(!ttg::detail::is_madness_buffer_serializable_v<NonPOD>);
+  static_assert(ttg::detail::is_cereal_user_buffer_serializable_v<NonPOD>);
+  static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<NonPOD>);
+  static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<NonPOD>);
+
 }  // namespace intrusive::symmetric::c_v
+
+#endif  // TTG_SERIALIZATION_SUPPORTS_CEREAL
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
 
@@ -398,7 +421,7 @@ static_assert(!ttg::detail::is_user_buffer_serializable_v<int>);
 static_assert(ttg::detail::is_madness_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<int[4]>);
-// static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<int[4]>);
+static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_user_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_user_buffer_serializable_v<std::array<int, 4>>);
 
@@ -675,15 +698,8 @@ TEST_CASE("Cereal Serialization", "[serialization]") {
     CHECK(ttg::detail::is_cereal_serializable_v<cereal::BinaryInputArchive, Tnc>);
   };
 
-  test(99);
-  test(POD(33));
-  test(99.0);
-  test(std::array<POD, 3>{{POD(55), POD(66), POD(77)}});
-  int a[4] = {1, 2, 3, 4};
-  test(a);
-  POD b[4] = {POD(1), POD(2), POD(3), POD(4)};
-  test(b);
-  test(std::vector<int>{1, 2, 3});
+  test(intrusive::symmetric::bc_v::NonPOD{17});
+  test(freestanding::symmetric::bc_v::NonPOD{18});
 }
 #endif  // TTG_SERIALIZATION_SUPPORTS_CEREAL
 
@@ -737,6 +753,8 @@ TEST_CASE("TTG Serialization", "[serialization]") {
   test_struct(nonintrusive::asymmetric::m::NonPOD{19});    // MADNESS
   test_struct(intrusive::symmetric::bc_v::NonPOD{20});     // Boost
   test_struct(freestanding::symmetric::bc_v::NonPOD{21});  // Boost
+  test_struct(intrusive::symmetric::c::NonPOD{22});        // Cereal
+  test_struct(intrusive::symmetric::c_v::NonPOD{23});      // Cereal
 
   // verify that turning off version and object tracking for Boost produces smaller archives
   {

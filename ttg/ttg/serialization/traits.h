@@ -174,11 +174,13 @@ namespace ttg::detail {
   template <typename T, typename Enabler = void>
   struct is_user_buffer_serializable : std::false_type {};
 
-  template <typename T>
-  struct is_user_buffer_serializable<T, std::enable_if_t<is_madness_user_buffer_serializable_v<T>>> : std::true_type {};
   //  template <typename T>
   //  struct is_user_buffer_serializable<T, std::enable_if_t<is_madness_user_buffer_serializable_v<T> ||
-  //  is_boost_user_buffer_serializable_v<T> || is_cereal_user_buffer_serializable_v<T>>> : std::true_type {};
+  //  is_boost_user_buffer_serializable_v<T>>> : std::true_type {};
+  template <typename T>
+  struct is_user_buffer_serializable<
+      T, std::enable_if_t<is_madness_user_buffer_serializable_v<T> || is_boost_user_buffer_serializable_v<T> ||
+                          is_cereal_user_buffer_serializable_v<T>>> : std::true_type {};
 
   template <typename T>
   inline constexpr bool is_user_buffer_serializable_v = is_user_buffer_serializable<T>::value;
