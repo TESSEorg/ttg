@@ -9,6 +9,8 @@
 
 #include "ttg/serialization/traits.h"
 
+#include "ttg/serialization/stream.h"
+
 #include <cstring>  // for std::memcpy
 
 // This provides an efficent API for serializing/deserializing a data type.
@@ -134,7 +136,12 @@ namespace ttg {
                            detail::is_boost_user_buffer_serializable_v<T>)>> {
     static constexpr const bool serialize_size_is_const = false;
 
-    static uint64_t payload_size(const void *object) { abort(); }
+    static uint64_t payload_size(const void *object) {
+      ttg::detail::counting_streambuf sbuf;
+      boost::archive::binary_oarchive oa(sbuf, boost::archive::no_header);
+      oa << (*(T *)object);
+      return sbuf.size();
+    }
 
     /// object --- obj to be serialized
     /// chunk_size --- inputs max amount of data to output, and on output returns amount actually output
@@ -143,7 +150,7 @@ namespace ttg {
     static uint64_t pack_payload(const void *object, uint64_t chunk_size, uint64_t pos, void *_buf) {
       boost::iostreams::basic_array_sink<char> oabuf(static_cast<char *>(_buf), chunk_size);
       boost::iostreams::stream<boost::iostreams::basic_array_sink<char>> sink(oabuf);
-      boost::archive::binary_oarchive oa(sink);
+      boost::archive::binary_oarchive oa(sink, boost::archive::no_header);
       oa << (*(T *)object);
       return pos + chunk_size;
     }
@@ -155,7 +162,7 @@ namespace ttg {
     static void unpack_payload(void *object, uint64_t chunk_size, uint64_t pos, const void *_buf) {
       boost::iostreams::basic_array_source<char> iabuf(static_cast<const char *>(_buf), chunk_size);
       boost::iostreams::stream<boost::iostreams::basic_array_source<char>> source(iabuf);
-      boost::archive::binary_iarchive ia(source);
+      boost::archive::binary_iarchive ia(source, boost::archive::no_header);
       ia >> (*(T *)object);
     }
   };
