@@ -22,6 +22,19 @@ class POD {
 };
 static_assert(std::is_trivially_copyable_v<POD>);
 
+// WTF?! std::array of non-Serializable is Serializable
+static_assert(!cereal::traits::is_input_serializable<POD, cereal::BinaryInputArchive>::value);
+static_assert(!cereal::traits::is_output_serializable<POD, cereal::BinaryOutputArchive>::value);
+static_assert(!cereal::traits::is_input_serializable<std::array<POD, 3>, cereal::BinaryInputArchive>::value);
+static_assert(!cereal::traits::is_output_serializable<std::array<POD, 3>, cereal::BinaryOutputArchive>::value);
+
+static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<POD>);
+static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<POD>);
+static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<POD>);
+static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<std::array<POD, 3>>);
+static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<std::array<POD, 3>>);
+static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<std::array<POD, 3>>);
+
 std::ostream& operator<<(std::ostream& s, const POD& f) {
   s << "POD(" << f.get() << ")";
   return s;
