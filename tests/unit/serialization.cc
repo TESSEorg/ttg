@@ -123,6 +123,35 @@ namespace intrusive::symmetric::any_v {
   static_assert(!std::is_trivially_copyable_v<NonPOD>);
 }  // namespace intrusive::symmetric::any_v
 
+namespace intrusive::symmetric::bc_v {
+
+  class NonPOD {
+    int value;
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+    friend class boost::serialization::access;
+#endif
+#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
+    friend class cereal::access;  // befriend the cereal version of access
+#endif
+
+    template <typename Archive>
+    void serialize(Archive& ar, const unsigned int version) {
+      ar& value;
+    }
+
+   public:
+    NonPOD() = default;
+    NonPOD(int value) : value(value) {}
+    NonPOD(const NonPOD& other) : value(other.value) {}
+
+    int get() const { return value; }
+
+    bool operator==(const NonPOD& other) const { return value == other.value; }
+  };
+  static_assert(!std::is_trivially_copyable_v<NonPOD>);
+}  // namespace intrusive::symmetric::bc_v
+
 namespace intrusive::symmetric::c {
 
   class NonPOD {
@@ -356,6 +385,12 @@ static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOut
 static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive,
                                                      freestanding::symmetric::any_v::NonPOD>);
 
+// private serialize method is not accessible to MADNESS
+static_assert(
+    !ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, intrusive::symmetric::bc_v::NonPOD>);
+static_assert(
+    !ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, intrusive::symmetric::bc_v::NonPOD>);
+
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
 static_assert(
     ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, intrusive::asymmetric::mb_v::NonPOD>);
@@ -503,6 +538,11 @@ static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchi
                                                    std::vector<intrusive::symmetric::any_v::NonPOD>>);
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive,
                                                    std::vector<intrusive::symmetric::any_v::NonPOD>>);
+
+static_assert(
+    ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, intrusive::symmetric::bc_v::NonPOD>);
+static_assert(
+    ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, intrusive::symmetric::bc_v::NonPOD>);
 
 static_assert(
     ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, intrusive::asymmetric::mb_v::NonPOD>);

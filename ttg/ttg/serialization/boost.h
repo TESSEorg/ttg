@@ -13,8 +13,6 @@
 #include <boost/serialization/level.hpp>
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
-#include "ttg/serialization/traits.h"
-
 namespace ttg::detail {
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST

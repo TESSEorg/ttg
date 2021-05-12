@@ -7,8 +7,6 @@
 #include <madness/world/buffer_archive.h>
 #endif
 
-#include "ttg/serialization/backends.h"
-
 #include "ttg/serialization/traits.h"
 
 #include <cstring>  // for std::memcpy
