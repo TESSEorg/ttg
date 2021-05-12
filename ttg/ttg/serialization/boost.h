@@ -7,6 +7,9 @@
 
 #include <type_traits>
 
+#include <boost/type_traits/is_array.hpp>
+#include <boost/type_traits/remove_extent.hpp>
+
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
