@@ -7,6 +7,10 @@
 
 #include "ttg/serialization/traits.h"
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+// MADNESS supports std::array serialization by default
+#endif
+
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
 #include <boost/serialization/array.hpp>
 

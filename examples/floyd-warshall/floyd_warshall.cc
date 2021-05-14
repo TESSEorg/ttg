@@ -24,8 +24,11 @@
 #include "ttg.h"
 using namespace ttg;
 
+#include "ttg/serialization.h"
+#include "ttg/serialization/std/pair.h"
+
 struct Key {
-  // ((I, J), K) where (I, J) is the tile coordiante and K is the iteration number
+  // ((I, J), K) where (I, J) is the tile coordinate and K is the iteration number
   std::pair<std::pair<int, int>, int> execution_info;
 
   bool operator==(const Key& b) const {
@@ -53,6 +56,13 @@ struct Key {
   template <typename Archive>
   void serialize(Archive& ar) {
     ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
+  }
+
+  // boost serialization
+  template <typename Archive>
+  void serialize(Archive& ar, const unsigned int) {
+    ar& execution_info;
+    if constexpr (ttg::detail::is_boost_input_archive_v<Archive>) rehash();
   }
 
   friend std::ostream& operator<<(std::ostream& out, Key const& k) {

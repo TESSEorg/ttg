@@ -1,34 +1,30 @@
+#include <ttg/serialization.h>
 #include <iostream>
 #include <unordered_map>
-#include <madness/world/archive.h>
 
 template <typename T>
 class BlockMatrix {
  private:
   int _rows;
   int _cols;
-  std::shared_ptr<T> m_block;
+  std::shared_ptr<T[]> m_block;
 
  public:
   BlockMatrix() = default;
 
-  BlockMatrix(int rows, int cols) : _rows(rows), _cols(cols) {
-    // Deallocator is required since we are allocating a pointer
-    m_block = std::shared_ptr<T>(new T[_rows * _cols], [](T* p) { delete[] p; });
-    //m_block = std::shared_ptr<T>((T*)aligned_alloc(64, sizeof(T) * _rows * _cols), [](T* p) { free(p); });
-  }
+  BlockMatrix(int rows, int cols) : _rows(rows), _cols(cols) { m_block = decltype(m_block)(new T[_rows * _cols]); }
 
   BlockMatrix(int rows, int cols, T* block) : _rows(rows), _cols(cols), m_block(block) {}
 
-  //Copy constructor
+  // Copy constructor
   /*BlockMatrix(const BlockMatrix<T>& other) : _rows(other._rows), _cols(other._cols),
               m_block(std::make_shared<T>(*other.m_block)) {}
-  
+
   //Move constructor
   BlockMatrix(BlockMatrix<T>&& other) : _rows(other._rows), _cols(other._cols),
-              m_block(std::make_shared<T>(*other.m_block)) //is it possible to use move instead? 
+              m_block(std::make_shared<T>(*other.m_block)) //is it possible to use move instead?
   {}
-  
+
   BlockMatrix<T> operator=(BlockMatrix<T> other) {
     //std::shared_ptr<T>(other.get()).swap(m_block);
     std::swap(*this, other);
@@ -41,8 +37,8 @@ class BlockMatrix {
   int rows() const { return _rows; }
   int cols() const { return _cols; }
   const T* get() const { return m_block.get(); }
-  T* get() { return m_block.get(); } 
- 
+  T* get() { return m_block.get(); }
+
   void fill() {
     // Initialize all elements of the matrix to 1
     for (int i = 0; i < _rows; ++i) {
@@ -52,7 +48,7 @@ class BlockMatrix {
     }
   }
 
-  bool operator==(const BlockMatrix& m) const { 
+  bool operator==(const BlockMatrix& m) const {
     bool equal = true;
     for (int i = 0; i < _rows; i++) {
       for (int j = 0; j < _cols; j++) {
@@ -78,37 +74,57 @@ class BlockMatrix {
 
     return notequal;
   }
- 
-  //Return by value
-  inline T& operator() (int row, int col) { return m_block.get()[row * _cols + col]; }
 
-  void operator() (int row, int col, T val) {
-    m_block.get()[row * _cols + col] = val;
+  // Return by value
+  inline T& operator()(int row, int col) { return m_block.get()[row * _cols + col]; }
+
+  void operator()(int row, int col, T val) { m_block.get()[row * _cols + col] = val; }
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+  template <typename Archive>
+  void save(Archive& ar, const unsigned int version) const {
+    ar << rows() << cols();
+    ar << boost::serialization::make_array(get(), rows() * cols());
   }
-     
+
+  template <typename Archive>
+  void load(Archive& ar, const unsigned int version) {
+    int rows, cols;
+    ar >> rows >> cols;
+    *this = BlockMatrix<T>(rows, cols);
+    ar >> boost::serialization::make_array(get(), this->rows() * this->cols());  // BlockMatrix<T>(bm.rows(),
+                                                                                 // bm.cols());
+  }
+  BOOST_SERIALIZATION_SPLIT_MEMBER();
+#endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 };
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
 namespace madness {
   namespace archive {
     template <class Archive, typename T>
     struct ArchiveStoreImpl<Archive, BlockMatrix<T>> {
       static inline void store(const Archive& ar, const BlockMatrix<T>& bm) {
         ar << bm.rows() << bm.cols();
-        ar << wrap(bm.get(), bm.rows() * bm.cols()); //BlockMatrix<T>(bm.rows(), bm.cols());
+        ar << wrap(bm.get(), bm.rows() * bm.cols());  // BlockMatrix<T>(bm.rows(), bm.cols());
       }
     };
-  
+
     template <class Archive, typename T>
     struct ArchiveLoadImpl<Archive, BlockMatrix<T>> {
       static inline void load(const Archive& ar, BlockMatrix<T>& bm) {
         int rows, cols;
         ar >> rows >> cols;
-        bm = BlockMatrix<T>(rows,cols);
-        ar >> wrap(bm.get(), bm.rows() * bm.cols()); //BlockMatrix<T>(bm.rows(), bm.cols());
+        bm = BlockMatrix<T>(rows, cols);
+        ar >> wrap(bm.get(), bm.rows() * bm.cols());  // BlockMatrix<T>(bm.rows(), bm.cols());
       }
     };
-  }
-}
+  }  // namespace archive
+}  // namespace madness
+
+static_assert(madness::is_serializable_v<madness::archive::BufferOutputArchive, BlockMatrix<double>>);
+
+#endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
 
 template <typename T>
 std::ostream& operator<<(std::ostream& s, BlockMatrix<T>& m) {
@@ -119,29 +135,29 @@ std::ostream& operator<<(std::ostream& s, BlockMatrix<T>& m) {
   return s;
 }
 
-//https://stackoverflow.com/questions/32685540/why-cant-i-compile-an-unordered-map-with-a-pair-as-key
-//We need this since pair cannot be hashed by unordered_map.
+// https://stackoverflow.com/questions/32685540/why-cant-i-compile-an-unordered-map-with-a-pair-as-key
+// We need this since pair cannot be hashed by unordered_map.
 struct pair_hash {
-    template <class T1, class T2>
-    std::size_t operator () (const std::pair<T1,T2> &p) const {
-        auto h1 = std::hash<T1>{}(p.first);
-        auto h2 = std::hash<T2>{}(p.second);
+  template <class T1, class T2>
+  std::size_t operator()(const std::pair<T1, T2>& p) const {
+    auto h1 = std::hash<T1>{}(p.first);
+    auto h2 = std::hash<T2>{}(p.second);
 
-        // Mainly for demonstration purposes, i.e. works but is overly simple
-        // In the real world, use sth. like boost.hash_combine
-        return h1 ^ h2;  
-    }
+    // Mainly for demonstration purposes, i.e. works but is overly simple
+    // In the real world, use sth. like boost.hash_combine
+    return h1 ^ h2;
+  }
 };
 
 template <typename T>
 class Matrix {
-  private:
+ private:
   int nb_row;  //# of blocks in a row
   int nb_col;  //# of blocks in a col
   int b_rows;  //# of rows in a block
   int b_cols;  //# of cols in a block
                // Array of BlockMatrix<T>
-  std::unordered_map<std::pair<int,int>, BlockMatrix<T>, pair_hash> m;
+  std::unordered_map<std::pair<int, int>, BlockMatrix<T>, pair_hash> m;
 
  public:
   Matrix() = default;
@@ -149,7 +165,7 @@ class Matrix {
       : nb_row(nb_row), nb_col(nb_col), b_rows(b_rows), b_cols(b_cols) {
     for (int i = 0; i < nb_row; i++)
       for (int j = 0; j < nb_col; j++) {
-        m[std::make_pair(i,j)] = BlockMatrix<T>(b_rows, b_cols);
+        m[std::make_pair(i, j)] = BlockMatrix<T>(b_rows, b_cols);
       }
   }
 
@@ -161,23 +177,19 @@ class Matrix {
   int rows() const { return nb_row; }
   // Return # of block cols
   int cols() const { return nb_col; }
-  std::unordered_map<std::pair<int,int>, BlockMatrix<T>, pair_hash> get() const { return m; }
-    
+  std::unordered_map<std::pair<int, int>, BlockMatrix<T>, pair_hash> get() const { return m; }
+
   void fill() {
     for (int i = 0; i < nb_row; i++)
-      for (int j = 0; j < nb_col; j++) 
-        m[std::make_pair(i,j)].fill();
+      for (int j = 0; j < nb_col; j++) m[std::make_pair(i, j)].fill();
   }
 
   bool operator==(const Matrix& matrix) const { return (matrix.m == m); }
 
   bool operator!=(const Matrix& matrix) const { return (matrix.m != m); }
 
-  //Return by value
-  BlockMatrix<T> operator()(int block_row, int block_col)
-  {
-    return m[std::make_pair(block_row,block_col)];
-  }
+  // Return by value
+  BlockMatrix<T> operator()(int block_row, int block_col) { return m[std::make_pair(block_row, block_col)]; }
 
   /*void operator=(int block_row, int block_col, BlockMatrix<T> val) {
     m[std::make_pair(block_row,block_col)] = val;
@@ -186,7 +198,7 @@ class Matrix {
   void print() {
     for (int i = 0; i < nb_row; i++) {
       for (int j = 0; j < nb_col; j++) {
-        std::cout << m[std::make_pair(i,j)];
+        std::cout << m[std::make_pair(i, j)];
       }
     }
   }

@@ -8,6 +8,10 @@
 #include "ttg/serialization/std/allocator.h"
 #include "ttg/serialization/traits.h"
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+// MADNESS supports std::list serialization by default
+#endif
+
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
 #include <boost/serialization/list.hpp>
 

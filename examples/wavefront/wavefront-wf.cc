@@ -11,6 +11,8 @@
 
 #include "ttg.h"
 
+#include "ttg/serialization/std/pair.h"
+
 using namespace ttg;
 
 int M, N, B;

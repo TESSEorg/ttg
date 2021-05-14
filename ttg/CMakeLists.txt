@@ -151,6 +151,7 @@ if (TARGET MADworld)
   target_compile_options(ttg-mad INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
   target_link_libraries(ttg-mad INTERFACE MADworld)
   # ttg-mad can use MADNESS serialization only
+  target_link_libraries(ttg-mad INTERFACE ttg-serialization-madness)
 endif(TARGET MADworld)
 
 ########################
