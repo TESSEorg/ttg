@@ -79,11 +79,11 @@ set(ttg-serialization-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/data_descriptor.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/boost.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/boost.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/cereal.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/madness.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/cereal.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/madness.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/traits.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/array.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/list.h
