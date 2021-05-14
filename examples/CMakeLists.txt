@@ -6,11 +6,11 @@ add_ttg_executable(t9 t9/t9.cc)
 # sparse matmul
 if (TARGET eigen3)
     # MADworld used for MADNESS serialization
-    add_ttg_executable(spmm spmm/spmm.cc LINK_LIBRARIES eigen3 MADworld)
+    add_ttg_executable(spmm spmm/spmm.cc LINK_LIBRARIES eigen3)
     # block-sparse needs BTAS
     if (TARGET BTAS::BTAS)
         # MADworld used for MADNESS serialization
-        add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES eigen3 BTAS Boost::boost MADworld COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1)
+        add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES eigen3 BTAS Boost::boost COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1)
     endif (TARGET BTAS::BTAS)
 endif(TARGET eigen3)
 

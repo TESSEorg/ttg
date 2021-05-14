@@ -598,10 +598,17 @@ static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchi
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, const std::array<int, 4>>);
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, std::array<int, 4>>);
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, const std::array<int, 4>>);
+static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, std::allocator<int>>);
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, std::vector<int>>);
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, const std::vector<int>>);
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, std::vector<int>>);
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, const std::vector<int>>);
+static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, std::vector<std::vector<int>>>);
+static_assert(
+    ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, const std::vector<std::vector<int>>>);
+static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, std::vector<std::vector<int>>>);
+static_assert(
+    ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, const std::vector<std::vector<int>>>);
 
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, POD>);
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, POD>);
