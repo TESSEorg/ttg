@@ -36,6 +36,13 @@ namespace ttg::detail {
   template <typename T>
   inline constexpr bool is_output_archive_v<T, std::enable_if_t<is_boost_output_archive_v<T>>> = true;
 
+#else   // TTG_SERIALIZATION_SUPPORTS_BOOST
+  template <typename T>
+  inline constexpr bool is_boost_archive_v = false;
+  template <typename T>
+  inline constexpr bool is_boost_input_archive_v = false;
+  template <typename T>
+  inline constexpr bool is_boost_output_archive_v = false;
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
   //////// is_boost_serializable
