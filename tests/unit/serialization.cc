@@ -3,6 +3,7 @@
 #include "ttg/util/meta.h"
 
 #include "ttg/serialization/std/array.h"
+#include "ttg/serialization/std/tuple.h"
 #include "ttg/serialization/std/vector.h"
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
@@ -451,6 +452,8 @@ static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInp
 static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, const std::array<int, 4>>);
 static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, std::vector<int>>);
 static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, std::vector<int>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, std::tuple<int, double>>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, std::tuple<int, double>>);
 static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, POD>);
 static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, POD>);
 static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, POD[4]>);
@@ -536,6 +539,7 @@ TEST_CASE("MADNESS Serialization", "[serialization]") {
   test(a);
   test(std::array{1, 2, 3, 4});
   test(std::vector<int>{1, 2, 3});
+  test(std::make_tuple(1, 2, 3));
 
   test(POD(33));
   test(std::array{POD(55), POD(66), POD(77)});
@@ -609,6 +613,8 @@ static_assert(
 static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, std::vector<std::vector<int>>>);
 static_assert(
     ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, const std::vector<std::vector<int>>>);
+static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, std::tuple<int, double>>);
+static_assert(ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, std::tuple<int, double>>);
 
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, POD>);
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, POD>);
@@ -705,6 +711,7 @@ TEST_CASE("Boost Serialization", "[serialization]") {
   POD b[4] = {POD(1), POD(2), POD(3), POD(4)};
   test(b);
   test(std::vector<int>{1, 2, 3});
+  test(std::make_tuple(1, 2, 3));
   test(intrusive::symmetric::bc_v::NonPOD{17});
   test(freestanding::symmetric::bc_v::NonPOD{18});
 }
