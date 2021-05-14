@@ -85,6 +85,7 @@ set(ttg-serialization-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/traits.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/allocator.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/array.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/list.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/vector.h
