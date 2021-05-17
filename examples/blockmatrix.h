@@ -7,12 +7,12 @@ class BlockMatrix {
  private:
   int _rows;
   int _cols;
-  std::shared_ptr<T[]> m_block;
+  std::shared_ptr<T> m_block;  // should become std::shared_ptr<T[]> but could not make older Apple clang to accept it
 
  public:
   BlockMatrix() = default;
 
-  BlockMatrix(int rows, int cols) : _rows(rows), _cols(cols) { m_block = decltype(m_block)(new T[_rows * _cols]); }
+  BlockMatrix(int rows, int cols) : _rows(rows), _cols(cols), m_block(new T[_rows * _cols], [](T* p) { delete[] p; }) {}
 
   BlockMatrix(int rows, int cols, T* block) : _rows(rows), _cols(cols), m_block(block) {}
 
