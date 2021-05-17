@@ -149,7 +149,7 @@ namespace ttg {
     /// pos --- position in the input buffer to resume serialization
     /// buf[pos] --- place for output
     static uint64_t pack_payload(const void *object, uint64_t chunk_size, uint64_t pos, void *_buf) {
-      boost::iostreams::basic_array_sink<char> oabuf(static_cast<char *>(_buf), chunk_size);
+      boost::iostreams::basic_array_sink<char> oabuf(static_cast<char *>(_buf) + pos, chunk_size);
       boost::iostreams::stream<boost::iostreams::basic_array_sink<char>> sink(oabuf);
       boost::archive::binary_oarchive oa(sink, boost::archive::no_header | boost::archive::no_codecvt);
       oa << (*(T *)object);
@@ -161,7 +161,7 @@ namespace ttg {
     /// pos --- position in the input buffer to resume deserialization
     /// object -- pointer to the object to fill up
     static void unpack_payload(void *object, uint64_t chunk_size, uint64_t pos, const void *_buf) {
-      boost::iostreams::basic_array_source<char> iabuf(static_cast<const char *>(_buf), chunk_size);
+      boost::iostreams::basic_array_source<char> iabuf(static_cast<const char *>(_buf) + pos, chunk_size);
       boost::iostreams::stream<boost::iostreams::basic_array_source<char>> source(iabuf);
       boost::archive::binary_iarchive ia(source, boost::archive::no_header | boost::archive::no_codecvt);
       ia >> (*(T *)object);
