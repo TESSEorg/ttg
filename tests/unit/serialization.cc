@@ -790,7 +790,8 @@ TEST_CASE("TTG Serialization", "[serialization]") {
   test_struct(intrusive::symmetric::c_v::NonPOD{23});  // Cereal
 #endif
 
-  // verify that turning off version and object tracking for Boost produces smaller archives
+  // verify that turning off version and object tracking for Boost produces same archive since the TTG boost archives
+  // already strip out all the extras
   {
     using tracked_t = intrusive::asymmetric::b_v::NonPOD;
     const ttg_data_descriptor* d_tracked = ttg::get_data_descriptor<tracked_t>();
@@ -803,7 +804,7 @@ TEST_CASE("TTG Serialization", "[serialization]") {
     CHECK_NOTHROW(d_tracked->payload_size(&obj_tracked));
     CHECK_NOTHROW(d_untracked->payload_size(&obj_untracked));
     // with tracking ON pack version + other metadata
-    CHECK(d_tracked->payload_size(&obj_tracked) >= sizeof(unsigned int) + d_untracked->payload_size(&obj_untracked));
+    CHECK(d_tracked->payload_size(&obj_tracked) == d_untracked->payload_size(&obj_untracked));
   }
 }
 
