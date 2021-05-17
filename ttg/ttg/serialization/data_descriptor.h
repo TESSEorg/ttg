@@ -122,8 +122,7 @@ namespace ttg {
 
 #if defined(TTG_SERIALIZATION_SUPPORTS_BOOST)
 
-#include <boost/iostreams/device/array.hpp>
-#include <boost/iostreams/stream.hpp>
+#include "ttg/serialization/backends/boost/archive.h"
 
 namespace ttg {
 
@@ -138,10 +137,9 @@ namespace ttg {
     static constexpr const bool serialize_size_is_const = false;
 
     static uint64_t payload_size(const void *object) {
-      ttg::detail::counting_streambuf sbuf;
-      boost::archive::binary_oarchive oa(sbuf, boost::archive::no_header | boost::archive::no_codecvt);
+      ttg::detail::boost_counting_oarchive oa;
       oa << (*(T *)object);
-      return sbuf.size();
+      return oa.size();
     }
 
     /// object --- obj to be serialized
@@ -149,9 +147,7 @@ namespace ttg {
     /// pos --- position in the input buffer to resume serialization
     /// buf[pos] --- place for output
     static uint64_t pack_payload(const void *object, uint64_t chunk_size, uint64_t pos, void *_buf) {
-      boost::iostreams::basic_array_sink<char> oabuf(static_cast<char *>(_buf) + pos, chunk_size);
-      boost::iostreams::stream<boost::iostreams::basic_array_sink<char>> sink(oabuf);
-      boost::archive::binary_oarchive oa(sink, boost::archive::no_header | boost::archive::no_codecvt);
+      ttg::detail::boost_buffer_oarchive oa(_buf, pos, chunk_size);
       oa << (*(T *)object);
       return pos + chunk_size;
     }
@@ -161,9 +157,7 @@ namespace ttg {
     /// pos --- position in the input buffer to resume deserialization
     /// object -- pointer to the object to fill up
     static void unpack_payload(void *object, uint64_t chunk_size, uint64_t pos, const void *_buf) {
-      boost::iostreams::basic_array_source<char> iabuf(static_cast<const char *>(_buf) + pos, chunk_size);
-      boost::iostreams::stream<boost::iostreams::basic_array_source<char>> source(iabuf);
-      boost::archive::binary_iarchive ia(source, boost::archive::no_header | boost::archive::no_codecvt);
+      ttg::detail::boost_buffer_iarchive ia(_buf, pos, chunk_size);
       ia >> (*(T *)object);
     }
   };
