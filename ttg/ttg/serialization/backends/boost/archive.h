@@ -145,7 +145,7 @@ namespace ttg::detail {
     // the & operator
     template <class T>
     Archive& operator&(const T& t) {
-      return *this >> t;
+      return *this << t;
     }
   };
 
