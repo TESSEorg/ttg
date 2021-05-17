@@ -138,7 +138,7 @@ namespace ttg::detail {
 
     template <class T>
     Archive& operator<<(const T& t) {
-      this->save(t);
+      this->save_override(t);
       return *this;
     }
 
@@ -210,7 +210,7 @@ namespace ttg::detail {
 
     template <class T>
     Archive& operator>>(T& t) {
-      this->load(t);
+      this->load_override(t);
       return *this;
     }
 
