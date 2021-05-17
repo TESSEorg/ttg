@@ -16,23 +16,23 @@
 
 using namespace std;
 
-// needed for madness::hashT and xterm_debug
-#include <madness/world/world.h>
-
 #include "ttg.h"
+
+#include "ttg/serialization.h"
+#include "ttg/serialization/std/pair.h"
 
 using namespace ttg;
 
 struct Key {
   // ((I, J), K) where (I, J) is the tile coordiante and K is the iteration number
   std::pair<std::pair<int, int>, int> execution_info;
-  madness::hashT hash_val;
+  std::size_t hash_val;
 
   Key() : execution_info(std::make_pair(std::make_pair(0, 0), 0)) { rehash(); }
   Key(const std::pair<std::pair<int, int>, int>& e) : execution_info(e) { rehash(); }
   Key(int e_f_f, int e_f_s, int e_s) : execution_info(std::make_pair(std::make_pair(e_f_f, e_f_s), e_s)) { rehash(); }
 
-  madness::hashT hash() const { return hash_val; }
+  std::size_t hash() const { return hash_val; }
   void rehash() {
     std::hash<int> int_hasher;
     hash_val = int_hasher(execution_info.first.first) * 2654435769 + int_hasher(execution_info.first.second) * 40503 +
@@ -45,10 +45,20 @@ struct Key {
   // Inequality test
   bool operator!=(const Key& b) const { return !((*this) == b); }
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
   template <typename Archive>
   void serialize(Archive& ar) {
     ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
   }
+#endif
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+  template <typename Archive>
+  void serialize(Archive& ar, const unsigned int) {
+    ar& execution_info;
+    if constexpr (ttg::detail::is_boost_input_archive_v<Archive>) rehash();
+  }
+#endif
 
   friend std::ostream& operator<<(std::ostream& out, Key const& k) {
     out << "Key((" << k.execution_info.first.first << "," << k.execution_info.first.second << "),"
@@ -79,11 +89,11 @@ std::ostream& operator<<(std::ostream& s, const Control& ctl) {
 
 struct Integer {
   int value;
-  madness::hashT hash_val;
+  std::size_t hash_val;
   Integer() : value(0) { rehash(); }
   Integer(int v) : value(v) { rehash(); }
 
-  madness::hashT hash() const { return hash_val; }
+  std::size_t hash() const { return hash_val; }
   void rehash() {
     std::hash<int> int_hasher;
     hash_val = int_hasher(value);
@@ -95,10 +105,21 @@ struct Integer {
   // Inequality test
   bool operator!=(const Integer& b) const { return !((*this) == b); }
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
   template <typename Archive>
   void serialize(Archive& ar) {
-    // ar& value;
+    ar& value;
+    if constexpr (madness::is_input_archive_v<Archive>) rehash();
   }
+#endif
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+  template <typename Archive>
+  void serialize(Archive& ar, const unsigned int version) {
+    ar& value;
+    if constexpr (ttg::detail::is_boost_input_archive_v<Archive>) rehash();
+  }
+#endif
 };
 
 std::ostream& operator<<(std::ostream& s, const Integer& intVal) {
@@ -546,10 +567,6 @@ int main(int argc, char** argv) {
 
   // world.taskq.add(world.rank(), hi);
   ttg_fence(ttg_default_execution_context());
-
-  for (int arg = 1; arg < argc; ++arg) {
-    if (strcmp(argv[arg], "-dx") == 0) madness::xterm_debug(argv[0], 0);
-  }
 
   ttg::OpBase::set_trace_all(false);
 

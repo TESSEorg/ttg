@@ -18,6 +18,8 @@
 
 namespace ttg::detail {
 
+  /*----- if_boost_{input,output,}_archive_v -----*/
+
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
   template <typename T>
   inline constexpr bool is_boost_archive_v = std::is_base_of_v<boost::archive::detail::basic_iarchive, T> ||
@@ -28,7 +30,7 @@ namespace ttg::detail {
   template <typename T>
   inline constexpr bool is_boost_output_archive_v = std::is_base_of_v<boost::archive::detail::basic_oarchive, T>;
 
-  //////// is_archive_v for boost archives
+  /*----- is_archive_v for boost archives -----*/
   template <typename T>
   inline constexpr bool is_archive_v<T, std::enable_if_t<is_boost_archive_v<T>>> = true;
   template <typename T>
@@ -45,7 +47,7 @@ namespace ttg::detail {
   inline constexpr bool is_boost_output_archive_v = false;
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
-  //////// is_boost_serializable
+  /*----- is_boost_serializable_v -----*/
 
   template <typename Archive, typename T, typename Enabler = void>
   inline static constexpr bool is_boost_serializable_v = false;

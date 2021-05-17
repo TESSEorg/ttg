@@ -18,9 +18,6 @@
 #include "FW-APSP/FloydRecursiveSerialKernel.h"  // contains the recursive but serial kernels
 // #include "FloydRecursiveParallelKernel.h" // contains the recursive and parallel kernels
 
-// needed for madness::hashT and xterm_debug
-#include <madness/world/world.h>
-
 #include "ttg.h"
 using namespace ttg;
 
@@ -40,30 +37,34 @@ struct Key {
 
   bool operator!=(const Key& b) const { return !((*this) == b); }
 
-  madness::hashT hash_val;
+  std::size_t hash_val;
 
   Key() : execution_info(std::make_pair(std::make_pair(0, 0), 0)) { rehash(); }
   Key(const std::pair<std::pair<int, int>, int>& e) : execution_info(e) { rehash(); }
   Key(int e_f_f, int e_f_s, int e_s) : execution_info(std::make_pair(std::make_pair(e_f_f, e_f_s), e_s)) { rehash(); }
 
-  madness::hashT hash() const { return hash_val; }
+  std::size_t hash() const { return hash_val; }
+
   void rehash() {
     std::hash<int> int_hasher;
     hash_val = int_hasher(execution_info.first.first) * 2654435769 + int_hasher(execution_info.first.second) * 40503 +
                int_hasher(execution_info.second);
   }
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
   template <typename Archive>
   void serialize(Archive& ar) {
     ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
   }
+#endif
 
-  // boost serialization
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
   template <typename Archive>
   void serialize(Archive& ar, const unsigned int) {
     ar& execution_info;
     if constexpr (ttg::detail::is_boost_input_archive_v<Archive>) rehash();
   }
+#endif
 
   friend std::ostream& operator<<(std::ostream& out, Key const& k) {
     out << "Key((" << k.execution_info.first.first << "," << k.execution_info.first.second << "),"
@@ -91,27 +92,6 @@ std::ostream& operator<<(std::ostream& s, const Control& ctl) {
   s << "Ctl";
   return s;
 }
-
-/* struct Integer {
-        int value;
-        madness::hashT hash_val;
-        Integer(): value(0) { rehash(); }
-        Integer(int v): value(v) { rehash(); }
-
-        madness::hashT hash() const { return hash_val; }
-        void rehash() {
-                std::hash<int> int_hasher;
-                hash_val = int_hasher(value);
-        }
-
-    template <typename Archive>
-    void serialize(Archive& ar) { ar & value; }
-};
-
-std::ostream& operator<<(std::ostream&s, const Integer& intVal) {
-    s << "Integer-wrapper -- value: " << intVal.value;
-    return s;
-} */
 
 class Initiator : public Op<int, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>,
                             Initiator> {
@@ -602,23 +582,8 @@ bool equals(double* matrix1, double* matrix2, int problem_size);
 void floyd_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
-  /*
-  initialize(argc, argv);
-  World world(SafeMPI::COMM_WORLD);
-
-  for (int arg=1; arg<argc; ++arg) {
-      if (strcmp(argv[arg],"-dx")==0)
-          xterm_debug(argv[0], 0);
-  }
-
-  OpBase::set_trace_all(false); */
-
   ttg::ttg_initialize(argc, argv);
   ttg_fence(ttg_default_execution_context());
-
-  for (int arg = 1; arg < argc; ++arg) {
-    if (strcmp(argv[arg], "-dx") == 0) madness::xterm_debug(argv[0], 0);
-  }
 
   ttg::OpBase::set_trace_all(false);
 
