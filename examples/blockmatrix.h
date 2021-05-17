@@ -5,8 +5,8 @@
 template <typename T>
 class BlockMatrix {
  private:
-  int _rows;
-  int _cols;
+  int _rows = 0;
+  int _cols = 0;
   std::shared_ptr<T> m_block;  // should become std::shared_ptr<T[]> but could not make older Apple clang to accept it
 
  public:
@@ -77,6 +77,7 @@ class BlockMatrix {
 
   // Return by value
   inline T& operator()(int row, int col) { return m_block.get()[row * _cols + col]; }
+  inline const T& operator()(int row, int col) const { return m_block.get()[row * _cols + col]; }
 
   void operator()(int row, int col, T val) { m_block.get()[row * _cols + col] = val; }
 
@@ -127,7 +128,7 @@ static_assert(madness::is_serializable_v<madness::archive::BufferOutputArchive, 
 #endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
 
 template <typename T>
-std::ostream& operator<<(std::ostream& s, BlockMatrix<T>& m) {
+std::ostream& operator<<(std::ostream& s, const BlockMatrix<T>& m) {
   for (int i = 0; i < m.rows(); i++) {
     for (int j = 0; j < m.cols(); j++) s << m(i, j) << " ";
     s << std::endl;
