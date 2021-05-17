@@ -11,7 +11,9 @@
 #include <boost/iostreams/stream.hpp>
 
 // explicitly instantiate for this type of binary stream
+#include <boost/archive/impl/basic_binary_iarchive.ipp>
 #include <boost/archive/impl/basic_binary_iprimitive.ipp>
+#include <boost/archive/impl/basic_binary_oarchive.ipp>
 #include <boost/archive/impl/basic_binary_oprimitive.ipp>
 
 namespace ttg::detail {
