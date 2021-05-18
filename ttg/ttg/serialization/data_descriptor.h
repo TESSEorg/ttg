@@ -139,7 +139,7 @@ namespace ttg {
     static uint64_t payload_size(const void *object) {
       ttg::detail::boost_counting_oarchive oa;
       oa << (*(T *)object);
-      return oa.size();
+      return oa.streambuf().size();
     }
 
     /// object --- obj to be serialized
@@ -147,7 +147,7 @@ namespace ttg {
     /// pos --- position in the input buffer to resume serialization
     /// buf[pos] --- place for output
     static uint64_t pack_payload(const void *object, uint64_t chunk_size, uint64_t pos, void *_buf) {
-      ttg::detail::boost_buffer_oarchive oa(_buf, pos, chunk_size);
+      auto oa = ttg::detail::make_boost_buffer_oarchive(_buf, chunk_size, pos);
       oa << (*(T *)object);
       return pos + chunk_size;
     }
@@ -157,7 +157,7 @@ namespace ttg {
     /// pos --- position in the input buffer to resume deserialization
     /// object -- pointer to the object to fill up
     static void unpack_payload(void *object, uint64_t chunk_size, uint64_t pos, const void *_buf) {
-      ttg::detail::boost_buffer_iarchive ia(_buf, pos, chunk_size);
+      auto ia = ttg::detail::make_boost_buffer_iarchive(_buf, chunk_size, pos);
       ia >> (*(T *)object);
     }
   };
