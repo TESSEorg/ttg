@@ -41,7 +41,7 @@ namespace ttg::detail {
     }
 
    private:
-    std::vector<std::pair<const char*, std::size_t>> iovec_ = {};
+    std::vector<std::pair<const void*, std::size_t>> iovec_ = {};
   };
 
   /// streambuf that reads vector of address-size pairs
@@ -49,20 +49,21 @@ namespace ttg::detail {
    public:
     using std::streambuf::streambuf;
 
-    iovec_istreambuf(const std::vector<std::pair<const char*, std::size_t>>& iovec) : iovec_(iovec) {}
+    iovec_istreambuf(const std::vector<std::pair<const void*, std::size_t>>& iovec) : iovec_(iovec) {}
 
    protected:
     std::streamsize xsgetn(char_type* s, std::streamsize max_n) override {
       const auto n = iovec_[current_item_].second;
       if (n > max_n)
         throw std::out_of_range("iovec_istreambuf::xsgetn(dest, max_n): actual size of data exceeds max_n");
-      std::copy(iovec_[current_item_].first, iovec_[current_item_].first + n, s);
+      const char* ptr = static_cast<const char*>(iovec_[current_item_].first);
+      std::copy(ptr, ptr + n, s);
       return n;
     }
 
    private:
     std::size_t current_item_ = 0;
-    const std::vector<std::pair<const char*, std::size_t>>& iovec_;
+    const std::vector<std::pair<const void*, std::size_t>>& iovec_;
   };
 
 }  // namespace ttg::detail

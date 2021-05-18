@@ -790,6 +790,7 @@ TEST_CASE("TTG Serialization", "[serialization]") {
   test_struct(intrusive::symmetric::c_v::NonPOD{23});  // Cereal
 #endif
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
   // verify that turning off version and object tracking for Boost produces same archive since the TTG boost archives
   // already strip out all the extras
   {
@@ -806,6 +807,28 @@ TEST_CASE("TTG Serialization", "[serialization]") {
     // with tracking ON pack version + other metadata
     CHECK(d_tracked->payload_size(&obj_tracked) == d_untracked->payload_size(&obj_untracked));
   }
+#endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+  // try iovec archives
+  {
+    ttg::detail::boost_iovec_oarchive oar;
+    std::tuple<intrusive::asymmetric::b_v::NonPOD, intrusive::asymmetric::b::NonPOD, intrusive::symmetric::bc_v::NonPOD,
+               freestanding::symmetric::bc_v::NonPOD>
+        t;
+    oar << t;
+    const auto& iovec = oar.streambuf().iovec();
+    CHECK(iovec.size() == 4);
+    CHECK(iovec[0].first == static_cast<const void*>(&(std::get<0>(t))));
+    CHECK(iovec[0].second == sizeof(std::get<0>(t)));
+    CHECK(iovec[1].first == static_cast<const void*>(&(std::get<1>(t))));
+    CHECK(iovec[1].second == sizeof(std::get<1>(t)));
+    CHECK(iovec[2].first == static_cast<const void*>(&(std::get<2>(t))));
+    CHECK(iovec[2].second == sizeof(std::get<2>(t)));
+    CHECK(iovec[3].first == static_cast<const void*>(&(std::get<3>(t))));
+    CHECK(iovec[3].second == sizeof(std::get<3>(t)));
+  }
+#endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 }
 
 #endif
