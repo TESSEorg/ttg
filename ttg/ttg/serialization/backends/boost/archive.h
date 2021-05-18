@@ -68,7 +68,7 @@ namespace ttg::detail {
     }
   }
 
-  /// optimized data-only output serializer
+  /// optimized data-only serializer
 
   /// skips metadata (class version, etc.)
   template <typename StreamOrStreambuf>
@@ -139,19 +139,42 @@ namespace ttg::detail {
     const auto& stream() const { return this->pbase(); }
   };
 
+  /// an archive that counts the size of serialized representation of an object
   using boost_counting_oarchive = boost_optimized_oarchive<counting_streambuf>;
+
+  /// an archive that constructs an IOVEC (= sequence of {pointer,size} pairs) representation of an object
   using boost_iovec_oarchive = boost_optimized_oarchive<iovec_ostreambuf>;
+
+  /// an archive that constructs serialized representation of an object in a memory buffer
   using boost_buffer_oarchive =
       boost_optimized_oarchive<boost::iostreams::stream<boost::iostreams::basic_array_sink<char>>>;
 
-  auto make_boost_buffer_oarchive(void* buf, std::size_t size, std::size_t buf_offset = 0) {
+  /// constructs a boost_buffer_oarchive object
+
+  /// @param[in] buf pointer to a memory buffer to which serialized representation will be written
+  /// @param[in] size the size of the buffer, in bytes
+  /// @param[in] buf_offset if non-zero, specifies the first byte of @p buf to which data will be written
+  /// @return a boost_buffer_oarchive object referring to @p buf
+  auto make_boost_buffer_oarchive(void* const buf, std::size_t size, std::size_t buf_offset = 0) {
+    assert(buf_offset <= size);
     using arrsink_t = boost::iostreams::basic_array_sink<char>;
-    return boost_buffer_oarchive(arrsink_t(static_cast<char*>(buf) + buf_offset, size));
+    return boost_buffer_oarchive(arrsink_t(static_cast<char*>(buf) + buf_offset, size - buf_offset));
   }
 
-  /// optimized data-only output serializer
+  /// constructs a boost_buffer_oarchive object
 
-  /// skips metadata (class version, etc.)
+  /// @tparam N array size
+  /// @param[in] buf a buffer to which serialized representation will be written
+  /// @param[in] buf_offset if non-zero, specifies the first byte of @p buf to which data will be written
+  /// @return a boost_buffer_oarchive object referring to @p buf
+  template <std::size_t N>
+  auto make_boost_buffer_oarchive(char (&buf)[N], std::size_t buf_offset = 0) {
+    assert(buf_offset <= N);
+    using arrsink_t = boost::iostreams::basic_array_sink<char>;
+    return boost_buffer_oarchive(arrsink_t(&(buf[buf_offset]), N - buf_offset));
+  }
+
+  /// optimized data-only deserializer for boost_optimized_oarchive
   template <typename StreamOrStreambuf>
   class boost_optimized_iarchive
       : private StreamOrStreambuf,
@@ -216,13 +239,36 @@ namespace ttg::detail {
     const auto& stream() const { return this->pbase(); }
   };
 
-  using boost_buffer_iarchive =
-      boost_optimized_iarchive<boost::iostreams::stream<boost::iostreams::basic_array_source<char>>>;
+  /// the deserializer for boost_iovec_oarchive
   using boost_iovec_iarchive = boost_optimized_iarchive<iovec_istreambuf>;
 
-  auto make_boost_buffer_iarchive(const void* buf, std::size_t size, std::size_t buf_offset = 0) {
+  /// the deserializer for boost_buffer_oarchive
+  using boost_buffer_iarchive =
+      boost_optimized_iarchive<boost::iostreams::stream<boost::iostreams::basic_array_source<char>>>;
+
+  /// constructs a boost_buffer_iarchive object
+
+  /// @param[in] buf pointer to a memory buffer from which serialized representation will be read
+  /// @param[in] size the size of the buffer, in bytes
+  /// @param[in] buf_offset if non-zero, specifies the first byte of @p buf from which data will be read
+  /// @return a boost_buffer_iarchive object referring to @p buf
+  auto make_boost_buffer_iarchive(const void* const buf, std::size_t size, std::size_t buf_offset = 0) {
+    assert(buf_offset <= size);
     using arrsrc_t = boost::iostreams::basic_array_source<char>;
-    return boost_buffer_iarchive(arrsrc_t(static_cast<const char*>(buf) + buf_offset, size));
+    return boost_buffer_iarchive(arrsrc_t(static_cast<const char*>(buf) + buf_offset, size - buf_offset));
+  }
+
+  /// constructs a boost_buffer_iarchive object
+
+  /// @tparam N array size
+  /// @param[in] buf a buffer from which serialized representation will be read
+  /// @param[in] buf_offset if non-zero, specifies the first byte of @p buf from which data will be read
+  /// @return a boost_buffer_iarchive object referring to @p buf
+  template <std::size_t N>
+  auto make_boost_buffer_iarchive(const char (&buf)[N], std::size_t buf_offset = 0) {
+    assert(buf_offset <= N);
+    using arrsrc_t = boost::iostreams::basic_array_source<char>;
+    return boost_buffer_iarchive(arrsrc_t(&(buf[buf_offset]), N - buf_offset));
   }
 
 }  // namespace ttg::detail
