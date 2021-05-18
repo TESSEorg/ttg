@@ -76,10 +76,12 @@ namespace ttg::detail {
       : private StreamOrStreambuf,
         public boost::archive::binary_oarchive_impl<boost_optimized_oarchive<StreamOrStreambuf>,
                                                     std::ostream::char_type, std::ostream::traits_type> {
+   public:
     using pbase_type = StreamOrStreambuf;
     using base_type = boost::archive::binary_oarchive_impl<boost_optimized_oarchive<StreamOrStreambuf>,
                                                            std::ostream::char_type, std::ostream::traits_type>;
 
+   private:
     friend class boost::archive::save_access;
     friend class boost::archive::detail::common_oarchive<StreamOrStreambuf>;
     friend base_type;
@@ -155,10 +157,12 @@ namespace ttg::detail {
       : private StreamOrStreambuf,
         public boost::archive::binary_iarchive_impl<boost_optimized_iarchive<StreamOrStreambuf>,
                                                     std::ostream::char_type, std::ostream::traits_type> {
+   public:
     using pbase_type = StreamOrStreambuf;
     using base_type = boost::archive::binary_iarchive_impl<boost_optimized_iarchive, std::ostream::char_type,
                                                            std::ostream::traits_type>;
 
+   private:
     friend class boost::archive::save_access;
     friend class boost::archive::detail::common_iarchive<boost_optimized_iarchive>;
     friend base_type;
@@ -223,15 +227,23 @@ namespace ttg::detail {
 
 }  // namespace ttg::detail
 
+// for some reason need to use array optimization for the base as well ... dispatch to optimized version in
+// array_wrapper.hpp:serializer(ar,version) for some reason uses Archive::base_type using apple clang 12.0.5.12050022
+#define BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE(x) \
+  BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION(x);                        \
+  BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION(x::base_type);
+
 BOOST_SERIALIZATION_REGISTER_ARCHIVE(ttg::detail::boost_counting_oarchive);
-BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION(ttg::detail::boost_counting_oarchive)
+BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE(ttg::detail::boost_counting_oarchive)
 BOOST_SERIALIZATION_REGISTER_ARCHIVE(ttg::detail::boost_iovec_oarchive);
-BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION(ttg::detail::boost_iovec_oarchive)
+BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE(ttg::detail::boost_iovec_oarchive);
 BOOST_SERIALIZATION_REGISTER_ARCHIVE(ttg::detail::boost_buffer_oarchive);
-BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION(ttg::detail::boost_buffer_oarchive)
+BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE(ttg::detail::boost_buffer_oarchive);
 BOOST_SERIALIZATION_REGISTER_ARCHIVE(ttg::detail::boost_iovec_iarchive);
-BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION(ttg::detail::boost_iovec_iarchive)
+BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE(ttg::detail::boost_iovec_iarchive);
 BOOST_SERIALIZATION_REGISTER_ARCHIVE(ttg::detail::boost_buffer_iarchive);
-BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION(ttg::detail::boost_buffer_iarchive)
+BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE(ttg::detail::boost_buffer_iarchive);
+
+#undef BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE
 
 #endif  // TTG_SERIALIZATION_BACKENDS_BOOST_ARCHIVE_H
