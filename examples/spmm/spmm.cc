@@ -16,6 +16,13 @@
 #endif
 #endif
 
+#include <sys/time.h>
+#include <unsupported/Eigen/SparseExtra>
+
+#include <boost/graph/directed_graph.hpp>
+#include <boost/graph/rmat_graph_generator.hpp>
+#include <boost/random/linear_congruential.hpp>
+
 #include "ttg.h"
 
 using namespace ttg;
@@ -479,8 +486,60 @@ std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
 
 #include "../ttg_matrix.h"
 
+char *getCmdOption(char **begin, char **end, const std::string &option) {
+  char **itr = std::find(begin, end, option);
+  if (itr != end && ++itr != end) return *itr;
+  return nullptr;
+}
+
+bool cmdOptionExists(char **begin, char **end, const std::string &option) {
+  return std::find(begin, end, option) != end;
+}
+
+int cmdOptionIndex(char **begin, char **end, const std::string &option) {
+  char **itr = std::find(begin, end, option);
+  if (itr != end) return itr - begin;
+  return -1;
+}
+
+static int parseOption(std::string &option, int default_value) {
+  size_t pos;
+  std::string token;
+  int N = default_value;
+  if (option.length() == 0) return N;
+  pos = option.find(":");
+  if (pos == std::string::npos) {
+    pos = option.length();
+  }
+  token = option.substr(0, pos);
+  N = std::stoi(token);
+  option.erase(0, pos + 1);
+  return N;
+}
+
+static double parseOption(std::string &option, double default_value) {
+  size_t pos;
+  std::string token;
+  double N = default_value;
+  if (option.length() == 0) return N;
+  pos = option.find(":");
+  if (pos == std::string::npos) {
+    pos = option.length();
+  }
+  token = option.substr(0, pos);
+  N = std::stod(token);
+  option.erase(0, pos + 1);
+  return N;
+}
+
 int main(int argc, char **argv) {
-  ttg_initialize(argc, argv, 4);
+  bool timing = false;
+
+  if (int dashdash = cmdOptionIndex(argv, argv + argc, "--") > -1) {
+    ttg_initialize(argc - dashdash, argv + dashdash, -1);
+  } else {
+    ttg_initialize(1, argv, -1);
+  }
 
   //  using mpqc::Debugger;
   //  auto debugger = std::make_shared<Debugger>();
@@ -495,51 +554,127 @@ int main(int argc, char **argv) {
     // ttg::trace_on();
     // OpBase::set_trace_all(true);
 
-    const int n = 2;
-    const int m = 3;
-    const int k = 4;
-    SpMatrix<> A(n, k), B(k, m), C(n, m);
+    SpMatrix<> A, B, C;
 
-    // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
-    if (ttg_default_execution_context().rank() == 0) {
+#if !defined(BLOCK_SPARSE_GEMM)
+    if (cmdOptionExists(argv, argv + argc, "-mm")) {
+      timing = true;
+      // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
+      if (ttg_default_execution_context().rank() == 0) {
+        char *filename = getCmdOption(argv, argv + argc, "-mm");
+        if (loadMarket(A, filename)) {
+          if (A.rows() != A.cols()) {
+            B = A.transpose();
+          } else {
+            B = A;
+          }
+          C.resize(A.rows(), B.cols());
+          std::cout << "##MatrixMarket file " << filename << " -- " << A.rows() << " x " << A.cols() << " -- "
+                    << A.nonZeros() << " nnz (density: " << (float)A.nonZeros() / (float)A.rows() / (float)A.cols()
+                    << ")" << std::endl;
+        } else {
+          std::cerr << "Failed to load " << filename << ", bailing out..." << std::endl;
+          ttg::ttg_abort();
+        }
+      }
+    } else if (cmdOptionExists(argv, argv + argc, "-rmat")) {
+      char *opt = getCmdOption(argv, argv + argc, "-rmat");
+      int N, E = -1;
+      double a = 0.25, b = 0.25, c = 0.25, d = 0.25;
+      if (nullptr == opt) {
+        std::cerr << "Usage: -rmat <#nodes>[:<#edges>[:<a>[:<b>:[<c>[:<d>]]]]]" << std::endl;
+        exit(1);
+      }
+      timing = true;
+      std::string token;
+      std::string option = std::string(opt);
+      N = parseOption(option, -1);
+      E = parseOption(option, (int)(0.01 * N * N));
+      a = parseOption(option, 0.25);
+      b = parseOption(option, 0.25);
+      c = parseOption(option, 0.25);
+      d = parseOption(option, 0.25);
+
+      std::cout << "#R-MAT: " << N << " nodes, " << E << " edges, a/b/c/d = " << a << "/" << b << "/" << c << "/" << d
+                << std::endl;
+
+      boost::minstd_rand gen;
+      boost::rmat_iterator<boost::minstd_rand, boost::directed_graph<>> rmat_it(gen, N, E, a, b, c, d);
+
+      A.resize(N, N);
       using triplet_t = Eigen::Triplet<blk_t>;
       std::vector<triplet_t> A_elements;
-#if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
-      auto A_blksize = {128, 256};
-      A_elements.emplace_back(0, 1, blk_t(btas::Range(A_blksize), 12.3));
-      A_elements.emplace_back(0, 2, blk_t(btas::Range(A_blksize), 10.7));
-      A_elements.emplace_back(0, 3, blk_t(btas::Range(A_blksize), -2.3));
-      A_elements.emplace_back(1, 0, blk_t(btas::Range(A_blksize), -0.3));
-      A_elements.emplace_back(1, 2, blk_t(btas::Range(A_blksize), 1.2));
-#else
-      A_elements.emplace_back(0, 1, 12.3);
-      A_elements.emplace_back(0, 2, 10.7);
-      A_elements.emplace_back(0, 3, -2.3);
-      A_elements.emplace_back(1, 0, -0.3);
-      A_elements.emplace_back(1, 2, 1.2);
-#endif
+      size_t nnz = 0;
+      for (int i = 0; i < N; i++) {
+        nnz++;
+        A_elements.emplace_back(i, i, 1.0);
+      }
+      for (int i = 0; i < E; i++) {
+        auto x = *rmat_it++;
+        if (x.first != x.second) {
+          A_elements.emplace_back(x.first, x.second, 1.0);
+          nnz++;
+        }
+      }
       A.setFromTriplets(A_elements.begin(), A_elements.end());
 
-      std::vector<triplet_t> B_elements;
+      B = A;
+      C.resize(N, N);
+
+      std::cout << "#R-MAT: " << E << " nonzero elements, density: " << (double)nnz / (double)N / (double)N
+                << std::endl;
+    } else
+#endif // !defined(BLOCK_SPARSE_GEMM)
+    {
+      const int n = 2;
+      const int m = 3;
+      const int k = 4;
+
+      std::cout << "#HardCoded A, B, C" << std::endl;
+      A.resize(n, k);
+      B.resize(k, m);
+      C.resize(n, m);
+      // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
+      if (ttg_default_execution_context().rank() == 0) {
+        using triplet_t = Eigen::Triplet<blk_t>;
+        std::vector<triplet_t> A_elements;
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
-      auto B_blksize = {256, 196};
-      B_elements.emplace_back(0, 0, blk_t(btas::Range(B_blksize), 12.3));
-      B_elements.emplace_back(1, 0, blk_t(btas::Range(B_blksize), 10.7));
-      B_elements.emplace_back(3, 0, blk_t(btas::Range(B_blksize), -2.3));
-      B_elements.emplace_back(1, 1, blk_t(btas::Range(B_blksize), -0.3));
-      B_elements.emplace_back(1, 2, blk_t(btas::Range(B_blksize), 1.2));
-      B_elements.emplace_back(2, 2, blk_t(btas::Range(B_blksize), 7.2));
-      B_elements.emplace_back(3, 2, blk_t(btas::Range(B_blksize), 0.2));
+        auto A_blksize = {128, 256};
+        A_elements.emplace_back(0, 1, blk_t(btas::Range(A_blksize), 12.3));
+        A_elements.emplace_back(0, 2, blk_t(btas::Range(A_blksize), 10.7));
+        A_elements.emplace_back(0, 3, blk_t(btas::Range(A_blksize), -2.3));
+        A_elements.emplace_back(1, 0, blk_t(btas::Range(A_blksize), -0.3));
+        A_elements.emplace_back(1, 2, blk_t(btas::Range(A_blksize), 1.2));
 #else
-      B_elements.emplace_back(0, 0, 12.3);
-      B_elements.emplace_back(1, 0, 10.7);
-      B_elements.emplace_back(3, 0, -2.3);
-      B_elements.emplace_back(1, 1, -0.3);
-      B_elements.emplace_back(1, 2, 1.2);
-      B_elements.emplace_back(2, 2, 7.2);
-      B_elements.emplace_back(3, 2, 0.2);
+        A_elements.emplace_back(0, 1, 12.3);
+        A_elements.emplace_back(0, 2, 10.7);
+        A_elements.emplace_back(0, 3, -2.3);
+        A_elements.emplace_back(1, 0, -0.3);
+        A_elements.emplace_back(1, 2, 1.2);
 #endif
-      B.setFromTriplets(B_elements.begin(), B_elements.end());
+        A.setFromTriplets(A_elements.begin(), A_elements.end());
+
+        std::vector<triplet_t> B_elements;
+#if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
+        auto B_blksize = {256, 196};
+        B_elements.emplace_back(0, 0, blk_t(btas::Range(B_blksize), 12.3));
+        B_elements.emplace_back(1, 0, blk_t(btas::Range(B_blksize), 10.7));
+        B_elements.emplace_back(3, 0, blk_t(btas::Range(B_blksize), -2.3));
+        B_elements.emplace_back(1, 1, blk_t(btas::Range(B_blksize), -0.3));
+        B_elements.emplace_back(1, 2, blk_t(btas::Range(B_blksize), 1.2));
+        B_elements.emplace_back(2, 2, blk_t(btas::Range(B_blksize), 7.2));
+        B_elements.emplace_back(3, 2, blk_t(btas::Range(B_blksize), 0.2));
+#else
+        B_elements.emplace_back(0, 0, 12.3);
+        B_elements.emplace_back(1, 0, 10.7);
+        B_elements.emplace_back(3, 0, -2.3);
+        B_elements.emplace_back(1, 1, -0.3);
+        B_elements.emplace_back(1, 2, 1.2);
+        B_elements.emplace_back(2, 2, 7.2);
+        B_elements.emplace_back(3, 2, 0.2);
+#endif
+        B.setFromTriplets(B_elements.begin(), B_elements.end());
+      }
     }
 
     // flow graph needs to exist on every node
@@ -561,11 +696,22 @@ int main(int argc, char **argv) {
     assert(connected);
     TTGUNUSED(connected);
 
-    // ready, go! need only 1 kick, so must be done by 1 thread only
-    if (ttg_default_execution_context().rank() == 0) control.start();
-
-    // ttg_execute(ttg_default_execution_context());
-    // ttg_fence(ttg_default_execution_context());
+    if (timing) {
+      struct timeval start, end, diff;
+      gettimeofday(&start, NULL);
+      // ready, go! need only 1 kick, so must be done by 1 thread only
+      if (ttg_default_execution_context().rank() == 0) control.start();
+      ttg_execute(ttg_default_execution_context());
+      ttg_fence(ttg_default_execution_context());
+      gettimeofday(&end, NULL);
+      timersub(&end, &start, &diff);
+      std::cout << "Time to completion: " << diff.tv_sec + (double)diff.tv_usec / 1e6 << "s" << std::endl;
+      ;
+    } else {
+      // ready, go! need only 1 kick, so must be done by 1 thread only
+      if (ttg_default_execution_context().rank() == 0) control.start();
+      ttg_execute(ttg_default_execution_context());
+    }
 
     ///////////////////////////////////////////////////////////////////////////
     // copy matrix using ttg::Matrix
