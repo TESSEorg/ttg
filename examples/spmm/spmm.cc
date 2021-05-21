@@ -706,11 +706,9 @@ int main(int argc, char **argv) {
       gettimeofday(&end, NULL);
       timersub(&end, &start, &diff);
       std::cout << "Time to completion: " << diff.tv_sec + (double)diff.tv_usec / 1e6 << "s" << std::endl;
-      ;
     } else {
       // ready, go! need only 1 kick, so must be done by 1 thread only
       if (ttg_default_execution_context().rank() == 0) control.start();
-      ttg_execute(ttg_default_execution_context());
     }
 
     ///////////////////////////////////////////////////////////////////////////
