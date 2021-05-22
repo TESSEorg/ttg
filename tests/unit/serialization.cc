@@ -433,6 +433,11 @@ static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<int>);
 static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<int>);
 static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<int>);
 static_assert(!ttg::detail::is_user_buffer_serializable_v<int>);
+static_assert(ttg::detail::is_madness_buffer_serializable_v<const int>);
+static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<const int>);
+static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<const int>);
+static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<const int>);
+static_assert(!ttg::detail::is_user_buffer_serializable_v<const int>);
 static_assert(ttg::detail::is_madness_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<int[4]>);
@@ -494,6 +499,19 @@ static_assert(
     !ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, intrusive::symmetric::bc_v::NonPOD>);
 static_assert(
     !ttg::detail::is_madness_serializable_v<madness::archive::BufferInputArchive, intrusive::symmetric::bc_v::NonPOD>);
+
+static_assert(
+    ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, nonintrusive::symmetric::m::NonPOD>);
+static_assert(ttg::detail::is_madness_user_buffer_serializable_v<nonintrusive::symmetric::m::NonPOD>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive,
+                                                     const nonintrusive::symmetric::m::NonPOD>);
+static_assert(ttg::detail::is_madness_user_buffer_serializable_v<const nonintrusive::symmetric::m::NonPOD>);
+static_assert(
+    ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, nonintrusive::asymmetric::m::NonPOD>);
+static_assert(ttg::detail::is_madness_user_buffer_serializable_v<nonintrusive::asymmetric::m::NonPOD>);
+static_assert(ttg::detail::is_madness_serializable_v<madness::archive::BufferOutputArchive,
+                                                     const nonintrusive::asymmetric::m::NonPOD>);
+static_assert(ttg::detail::is_madness_user_buffer_serializable_v<const nonintrusive::asymmetric::m::NonPOD>);
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
 static_assert(
