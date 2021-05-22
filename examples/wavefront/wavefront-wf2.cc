@@ -81,11 +81,11 @@ class BlockMatrix {
 
   template <typename Archive>
   void serialize(Archive& ar) {
-    std::abort();
+    ttg_abort();
   }
   template <typename Archive>
   void serialize(Archive& ar, const unsigned int) {
-    std::abort();
+    ttg_abort();
   }
 };
 
