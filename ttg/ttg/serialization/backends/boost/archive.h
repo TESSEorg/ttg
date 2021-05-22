@@ -280,7 +280,7 @@ namespace ttg::detail {
   BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION(x::base_type);
 
 BOOST_SERIALIZATION_REGISTER_ARCHIVE(ttg::detail::boost_counting_oarchive);
-BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE(ttg::detail::boost_counting_oarchive)
+BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE(ttg::detail::boost_counting_oarchive);
 BOOST_SERIALIZATION_REGISTER_ARCHIVE(ttg::detail::boost_iovec_oarchive);
 BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE(ttg::detail::boost_iovec_oarchive);
 BOOST_SERIALIZATION_REGISTER_ARCHIVE(ttg::detail::boost_buffer_oarchive);
