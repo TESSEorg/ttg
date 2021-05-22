@@ -460,7 +460,7 @@ namespace ttg_parsec {
 
     /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
     template <ttg::ExecutionSpace Space, typename... Args>
-    void op(Args &&... args) {
+    void op(Args &&...args) {
       derivedT *derived = static_cast<derivedT *>(this);
       if constexpr (Space == ttg::ExecutionSpace::Host)
         derived->op(std::forward<Args>(args)...);
@@ -526,9 +526,9 @@ namespace ttg_parsec {
    protected:
     template <typename T>
     uint64_t unpack(T &obj, void *_bytes, uint64_t pos) {
-      const ttg_data_descriptor *dObj = ttg::get_data_descriptor<T>();
+      const ttg_data_descriptor *dObj = ttg::get_data_descriptor<ttg::meta::remove_cvr_t<T>>();
       uint64_t payload_size;
-      if constexpr (!ttg::default_data_descriptor<T>::serialize_size_is_const) {
+      if constexpr (!ttg::default_data_descriptor<ttg::meta::remove_cvr_t<T>>::serialize_size_is_const) {
         const ttg_data_descriptor *dSiz = ttg::get_data_descriptor<uint64_t>();
         dSiz->unpack_payload(&payload_size, sizeof(uint64_t), pos, _bytes);
         pos += sizeof(uint64_t);
@@ -541,9 +541,9 @@ namespace ttg_parsec {
 
     template <typename T>
     uint64_t pack(T &obj, void *bytes, uint64_t pos) {
-      const ttg_data_descriptor *dObj = ttg::get_data_descriptor<T>();
+      const ttg_data_descriptor *dObj = ttg::get_data_descriptor<ttg::meta::remove_cvr_t<T>>();
       uint64_t payload_size = dObj->payload_size(&obj);
-      if constexpr (!ttg::default_data_descriptor<T>::serialize_size_is_const) {
+      if constexpr (!ttg::default_data_descriptor<ttg::meta::remove_cvr_t<T>>::serialize_size_is_const) {
         const ttg_data_descriptor *dSiz = ttg::get_data_descriptor<uint64_t>();
         dSiz->pack_payload(&payload_size, sizeof(uint64_t), pos, bytes);
         pos += sizeof(uint64_t);

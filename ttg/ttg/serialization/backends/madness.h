@@ -9,12 +9,41 @@
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
 #include <madness/world/archive.h>
+#include <madness/world/buffer_archive.h>
 #include <madness/world/type_traits.h>
 #endif
 
 namespace ttg::detail {
 
-  //////// is_madness_serializable
+  /*----- if_madness_{input,output,}_archive_v -----*/
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+  template <typename T>
+  inline constexpr bool is_madness_archive_v = madness::is_archive_v<T>;
+  template <typename T>
+  inline constexpr bool is_madness_input_archive_v = madness::is_input_archive_v<T>;
+
+  template <typename T>
+  inline constexpr bool is_madness_output_archive_v = madness::is_output_archive_v<T>;
+
+  /*----- is_archive_v for madness archives -----*/
+  template <typename T>
+  inline constexpr bool is_archive_v<T, std::enable_if_t<is_madness_archive_v<T>>> = true;
+  template <typename T>
+  inline constexpr bool is_input_archive_v<T, std::enable_if_t<is_madness_input_archive_v<T>>> = true;
+  template <typename T>
+  inline constexpr bool is_output_archive_v<T, std::enable_if_t<is_madness_output_archive_v<T>>> = true;
+
+#else   // TTG_SERIALIZATION_SUPPORTS_MADNESS
+  template <typename T>
+  inline constexpr bool is_madness_archive_v = false;
+  template <typename T>
+  inline constexpr bool is_madness_input_archive_v = false;
+  template <typename T>
+  inline constexpr bool is_madness_output_archive_v = false;
+#endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
+
+  /*----- is_madness_{input,output}_serializable_v -----*/
 
   template <typename Archive, typename T, class = void>
   struct is_madness_output_serializable : std::false_type {};

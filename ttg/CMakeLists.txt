@@ -75,34 +75,62 @@ install(FILES ${ttg-base-header}
 ########################
 ####### Serialization
 ########################
-set(ttg-serialization-headers
+set(ttg-serialization-source
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/data_descriptor.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/all.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/boost.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/boost.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/boost/archive.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/cereal.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/madness.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/cereal.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/madness.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/traits.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/allocator.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/array.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/list.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/pair.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/tuple.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/vector.h
    )
-add_library(ttg-serialization ${ttg-serialization-headers})
-target_include_directories(ttg-serialization PUBLIC
+add_library(ttg-serialization
+        ${ttg-serialization-source})
+if (TARGET MADworld)
+  target_link_libraries(ttg-serialization PUBLIC MADworld)
+  target_compile_definitions(ttg-serialization PUBLIC TTG_SERIALIZATION_SUPPORTS_MADNESS=1)
+  # make madness-only serialization target
+  add_library(ttg-serialization-madness
+          ${ttg-serialization-source})
+  target_link_libraries(ttg-serialization-madness PUBLIC MADworld)
+  target_compile_definitions(ttg-serialization-madness PUBLIC TTG_SERIALIZATION_SUPPORTS_MADNESS=1)
+endif(TARGET MADworld)
+if (TARGET Boost::serialization)
+  target_link_libraries(ttg-serialization PUBLIC Boost::serialization)
+  target_compile_definitions(ttg-serialization PUBLIC TTG_SERIALIZATION_SUPPORTS_BOOST=1)
+  # make boost-only serialization target
+  add_library(ttg-serialization-boost
+          ${ttg-serialization-source})
+  target_link_libraries(ttg-serialization-boost PUBLIC Boost::serialization)
+  target_compile_definitions(ttg-serialization-boost PUBLIC TTG_SERIALIZATION_SUPPORTS_BOOST=1)
+endif(TARGET Boost::serialization)
+if (TARGET cereal::cereal)
+  target_link_libraries(ttg-serialization PUBLIC cereal::cereal)
+  target_compile_definitions(ttg-serialization PUBLIC TTG_SERIALIZATION_SUPPORTS_CEREAL=1)
+  # make cereal-only serialization target
+  add_library(ttg-serialization-cereal
+          ${ttg-serialization-source})
+  target_link_libraries(ttg-serialization-cereal PUBLIC cereal::cereal)
+  target_compile_definitions(ttg-serialization-cereal PUBLIC TTG_SERIALIZATION_SUPPORTS_CEREAL=1)
+endif(TARGET cereal::cereal)
+
+foreach(target ttg-serialization;ttg-serialization-madness;ttg-serialization-boost;ttg-serialization-cereal)
+  if (TARGET ${target})
+    target_include_directories(${target} PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
         )
-if (TARGET MADworld)
-  target_link_libraries(ttg-serialization PUBLIC MADworld)  # serialization
-  target_compile_definitions(ttg-serialization PUBLIC TTG_SERIALIZATION_SUPPORTS_MADNESS=1)
-endif(TARGET MADworld)
-if (TARGET Boost::serialization)
-  target_link_libraries(ttg-serialization PUBLIC Boost::serialization)  # serialization
-  target_compile_definitions(ttg-serialization PUBLIC TTG_SERIALIZATION_SUPPORTS_BOOST=1)
-endif(TARGET Boost::serialization)
-if (TARGET cereal::cereal)
-  target_link_libraries(ttg-serialization PUBLIC cereal::cereal)  # serialization
-  target_compile_definitions(ttg-serialization PUBLIC TTG_SERIALIZATION_SUPPORTS_CEREAL=1)
-endif(TARGET cereal::cereal)
+  endif(TARGET ${target})
+endforeach()
 
 #########################
 ####### MADNESS-specific
@@ -124,6 +152,7 @@ if (TARGET MADworld)
   target_compile_options(ttg-mad INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
   target_link_libraries(ttg-mad INTERFACE MADworld)
   # ttg-mad can use MADNESS serialization only
+  target_link_libraries(ttg-mad INTERFACE ttg-serialization-madness)
 endif(TARGET MADworld)
 
 ########################
@@ -150,5 +179,9 @@ if (TARGET PaRSEC::parsec)
   endif(NOT TARGET MADworld)
   target_link_libraries(ttg-parsec INTERFACE PaRSEC::parsec)
   # parsec depends on TTG's serialization layer since it does not provide its own
-  target_link_libraries(ttg-parsec INTERFACE ttg-serialization)
+  if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET ttg-serialization-boost)
+    target_link_libraries(ttg-parsec INTERFACE ttg-serialization-boost)
+  else()
+    target_link_libraries(ttg-parsec INTERFACE ttg-serialization)
+  endif()
 endif(TARGET PaRSEC::parsec)

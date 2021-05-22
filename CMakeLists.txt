@@ -32,6 +32,11 @@ include(ExternalDependenciesVersions)
 include(LoadFetchContent)
 include(AddCustomTargetSubproject)
 
+########################################
+#### user-defined configuration options
+########################################
+option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" ON)
+
 ##########################
 #### prerequisites
 ##########################

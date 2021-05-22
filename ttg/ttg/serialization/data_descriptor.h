@@ -7,12 +7,9 @@
 #include <madness/world/buffer_archive.h>
 #endif
 
-#include "ttg/serialization/all.h"
-
-static_assert(ttg::detail::is_madness_output_serializable_v<madness::archive::BufferOutputArchive, std::vector<int>>);
-static_assert(ttg::detail::is_madness_input_serializable_v<madness::archive::BufferInputArchive, std::vector<int>>);
-
 #include "ttg/serialization/traits.h"
+
+#include "ttg/serialization/stream.h"
 
 #include <cstring>  // for std::memcpy
 
@@ -79,18 +76,16 @@ namespace ttg {
 
 }  // namespace ttg
 
-#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
-#include <type_traits>
-
-#include <madness/world/archive.h>
-#include <madness/world/buffer_archive.h>
+#if defined(TTG_SERIALIZATION_SUPPORTS_MADNESS)
 
 namespace ttg {
 
-  // The default implementation for non-POD data types that support MADNESS serialization
+  /// The default implementation for non-POD data types that are not directly copyable
+  /// and support MADNESS serialization
   template <typename T>
   struct default_data_descriptor<
-      T, std::enable_if_t<!std::is_trivially_copyable<T>::value || detail::is_madness_user_buffer_serializable_v<T>>> {
+      T, std::enable_if_t<(!std::is_trivially_copyable<T>::value && detail::is_madness_buffer_serializable_v<T>) ||
+                          detail::is_madness_user_buffer_serializable_v<T>>> {
     static constexpr const bool serialize_size_is_const = false;
 
     static uint64_t payload_size(const void *object) {
@@ -124,6 +119,92 @@ namespace ttg {
 }  // namespace ttg
 
 #endif  // has MADNESS serialization
+
+#if defined(TTG_SERIALIZATION_SUPPORTS_BOOST)
+
+#include "ttg/serialization/backends/boost/archive.h"
+
+namespace ttg {
+
+  /// The default implementation for non-POD data types that are not directly copyable,
+  /// do not support MADNESS serialization, and support Boost serialization
+  template <typename T>
+  struct default_data_descriptor<
+      T, std::enable_if_t<(!std::is_trivially_copyable<T>::value && !detail::is_madness_buffer_serializable_v<T> &&
+                           detail::is_boost_buffer_serializable_v<T>) ||
+                          (!detail::is_madness_user_buffer_serializable_v<T> &&
+                           detail::is_boost_user_buffer_serializable_v<T>)>> {
+    static constexpr const bool serialize_size_is_const = false;
+
+    static uint64_t payload_size(const void *object) {
+      ttg::detail::boost_counting_oarchive oa;
+      oa << (*(T *)object);
+      return oa.streambuf().size();
+    }
+
+    /// object --- obj to be serialized
+    /// chunk_size --- inputs max amount of data to output, and on output returns amount actually output
+    /// pos --- position in the input buffer to resume serialization
+    /// buf[pos] --- place for output
+    static uint64_t pack_payload(const void *object, uint64_t chunk_size, uint64_t pos, void *_buf) {
+      auto oa = ttg::detail::make_boost_buffer_oarchive(_buf, pos + chunk_size, pos);
+      oa << (*(T *)object);
+      return pos + chunk_size;
+    }
+
+    /// object --- obj to be deserialized
+    /// chunk_size --- amount of data for input
+    /// pos --- position in the input buffer to resume deserialization
+    /// object -- pointer to the object to fill up
+    static void unpack_payload(void *object, uint64_t chunk_size, uint64_t pos, const void *_buf) {
+      auto ia = ttg::detail::make_boost_buffer_iarchive(_buf, pos + chunk_size, pos);
+      ia >> (*(T *)object);
+    }
+  };
+
+}  // namespace ttg
+
+#endif  // has Boost serialization
+
+#if defined(TTG_SERIALIZATION_SUPPORTS_CEREAL)
+
+namespace ttg {
+
+  /// The default implementation for non-POD data types that are not directly copyable
+  /// do not support MADNESS or Boost serialization, and support Cereal serialization
+  template <typename T>
+  struct default_data_descriptor<
+      T, std::enable_if_t<(!std::is_trivially_copyable<T>::value && !detail::is_madness_buffer_serializable_v<T> &&
+                           !detail::is_boost_buffer_serializable_v<T> && detail::is_cereal_buffer_serializable_v<T>) ||
+                          (!detail::is_madness_user_buffer_serializable_v<T> &&
+                           !detail::is_boost_user_buffer_serializable_v<T> &&
+                           detail::is_cereal_user_buffer_serializable_v<T>)>> {
+    static constexpr const bool serialize_size_is_const = false;
+
+    static uint64_t payload_size(const void *object) {
+      ttg::detail::counting_streambuf sbuf;
+      std::ostream os(&sbuf);
+      cereal::BinaryOutputArchive oa(os);
+      oa << (*(T *)object);
+      return sbuf.size();
+    }
+
+    /// object --- obj to be serialized
+    /// chunk_size --- inputs max amount of data to output, and on output returns amount actually output
+    /// pos --- position in the input buffer to resume serialization
+    /// buf[pos] --- place for output
+    static uint64_t pack_payload(const void *object, uint64_t chunk_size, uint64_t pos, void *_buf) { abort(); }
+
+    /// object --- obj to be deserialized
+    /// chunk_size --- amount of data for input
+    /// pos --- position in the input buffer to resume deserialization
+    /// object -- pointer to the object to fill up
+    static void unpack_payload(void *object, uint64_t chunk_size, uint64_t pos, const void *_buf) { abort(); }
+  };
+
+}  // namespace ttg
+
+#endif  // has Cereal serialization
 
 namespace ttg {
 
