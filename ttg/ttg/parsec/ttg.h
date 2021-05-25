@@ -52,7 +52,7 @@
 #include <parsec/mca/device/device.h>
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
-//#include <parsec/parsec_comm_engine.h>
+#include <parsec/parsec_comm_engine.h>
 #include <cstdlib>
 #include <cstring>
 
@@ -212,7 +212,11 @@ namespace ttg_parsec {
       tpool->taskpool_type = PARSEC_TASKPOOL_TYPE_TTG;
       parsec_taskpool_reserve_id(tpool);
 
+#ifdef TTG_USE_USER_TERMDET
+      parsec_termdet_open_module(tpool, "user_trigger");
+#else // TTG_USE_USER_TERMDET
       parsec_termdet_open_dyn_module(tpool);
+#endif // TTG_USE_USER_TERMDET
       tpool->tdm.module->monitor_taskpool(tpool, parsec_taskpool_termination_detected);
       // In TTG, we use the pending actions to denote that the
       // taskpool is not ready, i.e. some local tasks could still
@@ -297,6 +301,12 @@ namespace ttg_parsec {
 
     int32_t sent_to_sched() const { return this->sent_to_sched_counter(); }
 
+    virtual void final_task() {
+#ifdef TTG_USE_USER_TERMDET
+      taskpool()->tdm.module->taskpool_set_nb_tasks(taskpool(), 0);
+#endif // TTG_USE_USER_TERMDET
+    }
+
    protected:
     virtual void fence_impl(void) override {
       int rank = this->rank();
@@ -349,7 +359,7 @@ namespace ttg_parsec {
       //      inputs
       //  // (0 = unbounded stream)
       parsec_hash_table_item_t op_ht_item;
-      parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces];
+      parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces] = { nullptr };
       void *object_ptr;
       void (*static_set_arg)(int, int);
       parsec_key_t key;

@@ -1,5 +1,8 @@
 #define TTG_USE_PARSEC 1
 
+// tell TTG/PARSEC that we know what we are doing (TM)
+#define TTG_USE_USER_TERMDET 1
+
 #include <ttg.h>
 //#include <madness.h>
 #include "../blockmatrix.h"
@@ -674,6 +677,11 @@ auto make_result(MatrixT<T>& A, const ttg::Edge<Key2, MatrixTile<T>>& result) {
       std::cout << "Writing back tile {" << I << ", " << J << "} " << std::endl;
       std::copy_n(tile.data(), tile.rows()*tile.cols(), A(I, J).data());
     }
+#ifdef TTG_USE_USER_TERMDET
+    if (I == A.cols()-1 && J == A.rows()-1) {
+      ttg::get_default_world().impl().final_task();
+    }
+#endif // TTG_USE_USER_TERMDET
   };
 
   return ttg::wrap(f, ttg::edges(result), ttg::edges(), "Final Output", {"result"}, {});
