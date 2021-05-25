@@ -4,9 +4,9 @@
 #include <cassert>
 #include <complex>
 #include <iostream>
-#include CBLAS_HEADER
+//#include CBLAS_HEADER
 
-#include "mkl.h" // !!!!!!!
+#include "/usr/include/mkl/mkl.h" // !!!!!!!
 
 namespace mra {
 
