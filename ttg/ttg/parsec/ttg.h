@@ -348,8 +348,8 @@ namespace ttg_parsec {
     typedef void (*parsec_static_op_t)(void *);  // static_op will be cast to this type
 
     typedef struct my_op_s {
-      parsec_task_t parsec_task;
-      int32_t in_data_count;
+      parsec_task_t parsec_task = {};
+      int32_t in_data_count = 0;
       // TODO need to augment PaRSEC backend's my_op_s by stream size info, etc.  ... in_data_count will need to be
       // replaced by something like this
       //  int counter;                            // Tracks the number of arguments set
@@ -358,13 +358,17 @@ namespace ttg_parsec {
       //      stream_size;                        // Expected number of values to receive, only used for streaming
       //      inputs
       //  // (0 = unbounded stream)
-      parsec_hash_table_item_t op_ht_item;
+      parsec_hash_table_item_t op_ht_item = {};
       parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces] = { nullptr };
-      void *object_ptr;
-      void (*static_set_arg)(int, int);
-      parsec_key_t key;
-      std::function<void(my_op_s*)> *deferred_release; // callback used to release the task from with the static context of complete_task_and_release
-      ttg::span<const bool> input_args_const; // whether the Op's input values are const
+      void *object_ptr = nullptr;
+      void (*static_set_arg)(int, int) = nullptr;
+      parsec_key_t key = 0;
+      void (*deferred_release)(void*, my_op_s*) = nullptr; // callback used to release the task from with the static context of complete_task_and_release
+      void *op_ptr = nullptr; // passed to deferred_release
+
+      my_op_s() {
+        PARSEC_OBJ_CONSTRUCT(&this->parsec_task, parsec_task_t);
+      }
     } my_op_t;
 
     inline parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *task) {
@@ -1088,21 +1092,19 @@ namespace ttg_parsec {
       parsec_key_t hk = reinterpret_cast<parsec_key_t>(&key);
       detail::my_op_t *task = NULL;
       auto &world_impl = world.impl();
-      if (NULL == (task = (detail::my_op_t *)parsec_hash_table_find(&tasks_table, hk))) {
+      parsec_hash_table_lock_bucket(&tasks_table, hk);
+      if (NULL == (task = (detail::my_op_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
         detail::my_op_t *newtask;
         parsec_execution_stream_s *es = world_impl.execution_stream();
         parsec_thread_mempool_t *mempool =
             &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-        newtask = (detail::my_op_t *)parsec_thread_mempool_allocate(mempool);
-        memset((void *)newtask, 0, sizeof(detail::my_op_t));
+        void *newtask_ptr = parsec_thread_mempool_allocate(mempool);
+        newtask = new (newtask_ptr) detail::my_op_t(); // placement new
         newtask->parsec_task.mempool_owner = mempool;
-        newtask->input_args_const = ttg::span<const bool>(&input_args_const[0], input_args_const.size());
 
-        PARSEC_OBJ_CONSTRUCT(&newtask->parsec_task, parsec_list_item_t);
         newtask->parsec_task.task_class = &this->self;
         newtask->parsec_task.taskpool = world_impl.taskpool();
         newtask->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
-        newtask->in_data_count = 0;
 
         newtask->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
             reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op<ttg::ExecutionSpace::Host>);
