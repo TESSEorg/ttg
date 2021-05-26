@@ -301,7 +301,7 @@ namespace ttg_parsec {
 
     int32_t sent_to_sched() const { return this->sent_to_sched_counter(); }
 
-    virtual void final_task() {
+    virtual void final_task() override {
 #ifdef TTG_USE_USER_TERMDET
       taskpool()->tdm.module->taskpool_set_nb_tasks(taskpool(), 0);
 #endif // TTG_USE_USER_TERMDET
@@ -622,7 +622,6 @@ namespace ttg_parsec {
      protected:
       //  static std::map<int, ParsecBaseOp*> function_id_to_instance;
       parsec_hash_table_t tasks_table;
-      std::atomic<uint64_t> tasks_table_size;
       parsec_task_class_t self;
     };
 
@@ -648,9 +647,6 @@ namespace ttg_parsec {
     template <typename T>
     using have_cuda_op_non_type_t = decltype(&T::have_cuda_op);
 
-    /* mark whether input values of the task are const */
-    static constexpr const std::array<bool, sizeof...(input_valueTs)> input_args_const = {std::is_const_v<input_valueTs>...};
-
     bool alive = true;
 
    public:
@@ -667,6 +663,7 @@ namespace ttg_parsec {
     }
 
     using input_terminals_type = std::tuple<ttg::In<keyT, input_valueTs>...>;
+    using input_args_type = std::tuple<input_valueTs...>;
     using input_edges_type = std::tuple<ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
     static_assert(ttg::meta::is_none_Void_v<input_valueTs...>, "ttg::Void is for internal use only, do not use it");
     // if have data inputs and (always last) control input, convert last input to Void to make logic easier
@@ -866,10 +863,6 @@ namespace ttg_parsec {
       copy->readers = 1;
       copy->delete_fn  = &detail::typed_delete_t<decay_valueT>::delete_type;
       dummy->parsec_task.data[0].data_in = copy;
-
-      /* set the data as const */
-      std::array<bool, 1> input_args_const = {true};
-      dummy->input_args_const = ttg::span<const bool>(&input_args_const[0], 1);
 
       /* save the current task and set the dummy task */
       auto parsec_ttg_caller_save = parsec_ttg_caller;
@@ -1119,7 +1112,7 @@ namespace ttg_parsec {
       /* whether the task needs to be deferred or not */
       bool needs_deferring = false;
 
-      constexpr const bool input_is_const = std::is_const_v<std::tuple_element_t<i, input_terminals_type>>;
+      constexpr const bool input_is_const = std::is_const_v<std::tuple_element_t<i, input_args_type>>;
 
       if constexpr (!valueT_is_Void) {
         if (NULL != task->parsec_task.data[i].data_in) {
@@ -1135,7 +1128,7 @@ namespace ttg_parsec {
 
         if (nullptr != copy) {
 
-          /* register_data_copy might provide us with a different copy if input_is_const != nullptr */
+          /* register_data_copy might provide us with a different copy if !input_is_const */
           copy = detail::register_data_copy<valueT>(copy, task, input_is_const);
           /* if we registered as a writer and were the first to register with this copy
           * we need to defer the release of this task to give other tasks a chance to
