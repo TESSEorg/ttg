@@ -1058,15 +1058,6 @@ namespace ttg_parsec {
       set_arg_local_impl<i>(ttg::Void{}, *valueptr);
     }
 
-    template <typename Key = keyT>
-    void release_op_task(detail::my_op_t *task) {
-      if constexpr (!ttg::meta::is_void_v<Key>) {
-        Key *key = (Key *)task->key;
-        delete (key);
-      }
-      parsec_mempool_free(&mempools, task);
-    }
-
     // Used to set the i'th argument
     template <std::size_t i, typename Key, typename Value>
     void set_arg_local_impl(const Key &key, Value&& value) {
@@ -1117,21 +1108,13 @@ namespace ttg_parsec {
           newtask->key = reinterpret_cast<parsec_key_t>(new_key);
         }
 
-        parsec_mfence();
-        parsec_hash_table_lock_bucket(&tasks_table, hk);
-        if (NULL != (task = (detail::my_op_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
-          parsec_hash_table_unlock_bucket(&tasks_table, hk);
-          release_op_task(newtask);
-        } else {
-          if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
-          newtask->op_ht_item.key = newtask->key;
-          world_impl.increment_created();
-          parsec_hash_table_nolock_insert(&tasks_table, &newtask->op_ht_item);
-          ++tasks_table_size;
-          parsec_hash_table_unlock_bucket(&tasks_table, hk);
-          task = newtask;
-        }
+        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
+        newtask->op_ht_item.key = newtask->key;
+        world_impl.increment_created();
+        parsec_hash_table_nolock_insert(&tasks_table, &newtask->op_ht_item);
+        task = newtask;
       }
+      parsec_hash_table_unlock_bucket(&tasks_table, hk);
 
       /* whether the task needs to be deferred or not */
       bool needs_deferring = false;
