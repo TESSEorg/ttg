@@ -471,10 +471,8 @@ namespace ttg_parsec {
           parsec_task_t* push_task = copy->push_task;
           if (parsec_atomic_cas_ptr(&copy->push_task, push_task, nullptr)) {
             detail::my_op_t *deferred_op = (detail::my_op_t *)copy->push_task;
-            std::function<void(my_op_s*)> *deferred_release = deferred_op->deferred_release;
             assert(deferred_op->deferred_release);
-            //std::cout << "Releasing deferred task" << std::endl;
-            (*deferred_op->deferred_release)(deferred_op);
+            deferred_op->deferred_release(deferred_op->op_ptr, deferred_op);
           }
         }
         PARSEC_OBJ_RELEASE(copy);
@@ -547,7 +545,7 @@ namespace ttg_parsec {
             }
           }
           assert(deferred_op->deferred_release);
-          (*deferred_op->deferred_release)(deferred_op);
+          deferred_op->deferred_release(deferred_op->op_ptr, deferred_op);
           copy_in->push_task = NULL;
           copy_in->readers = 1; // set the copy back to being read-only
           ++copy_in->readers;   // register as reader
@@ -1176,38 +1174,37 @@ namespace ttg_parsec {
         }
       }
 
-      auto release_fn = [this, key](detail::my_op_t *task) {
-        int32_t count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
-        assert(count <= self.dependencies_goal);
-        auto &world_impl = world.impl();
-
-        // std::cout << "task " << task << " has count " << count << " and dependency_goal " << self.dependencies_goal <<
-        // " and key " << task->key << " task_table has length " << tasks_table_size << std::endl;
-        if (count == self.dependencies_goal) {
-          /* reset the reader counters of all mutable copies to 1 */
-          for(int j = 0; j < task->parsec_task.task_class->nb_flows; j++) {
-            if (NULL != task->parsec_task.data[j].data_in &&
-                task->parsec_task.data[j].data_in->readers < 0) {
-              task->parsec_task.data[j].data_in->readers = 1;
-            }
-          }
-
-          world_impl.increment_sent_to_sched();
-          parsec_execution_stream_t *es = world_impl.execution_stream();
-          parsec_key_t hk = reinterpret_cast<parsec_key_t>(&key);
-          if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
-          parsec_hash_table_remove(&tasks_table, hk);
-          --tasks_table_size;
-          __parsec_schedule(es, &task->parsec_task, 0);
-        }
-      };
-
       if (needs_deferring) {
         if (nullptr == task->deferred_release) {
-          task->deferred_release = new std::function(release_fn);
+          task->deferred_release = &release_task;
+          task->op_ptr = this;
         }
       } else {
-        release_fn(task);
+        release_task(this, task);
+      }
+    }
+
+    static void release_task(void* op_ptr, detail::my_op_t *task) {
+      opT& op = *reinterpret_cast<opT*>(op_ptr);
+      int32_t count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
+      assert(count <= op.self.dependencies_goal);
+      auto &world_impl = op.world.impl();
+
+      if (count == op.self.dependencies_goal) {
+        /* reset the reader counters of all mutable copies to 1 */
+        for(int j = 0; j < task->parsec_task.task_class->nb_flows; j++) {
+          if (NULL != task->parsec_task.data[j].data_in &&
+              task->parsec_task.data[j].data_in->readers < 0) {
+            task->parsec_task.data[j].data_in->readers = 1;
+          }
+        }
+
+        world_impl.increment_sent_to_sched();
+        parsec_execution_stream_t *es = world_impl.execution_stream();
+        parsec_key_t hk = reinterpret_cast<parsec_key_t>(task->key);
+        if (op.tracing()) ttg::print(op.world.rank(), ":", op.get_name(), " : ", task->key, ": submitting task for op ");
+        parsec_hash_table_remove(&op.tasks_table, hk);
+        __parsec_schedule(es, &task->parsec_task, 0);
       }
     }
 
@@ -1891,8 +1888,8 @@ namespace ttg_parsec {
       }
       detail::my_op_t *op = (detail::my_op_t *)task;
       if (op->deferred_release) {
-        delete op->deferred_release;
         op->deferred_release = nullptr;
+        op->op_ptr = nullptr;
       }
       if constexpr (!ttg::meta::is_void_v<keyT>) {
         keyT *key = (keyT *)op->key;
