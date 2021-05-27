@@ -22,6 +22,9 @@
 #include "ttg.h"
 using namespace ttg;
 
+#include "ttg/serialization.h"
+#include "ttg/serialization/std/pair.h"
+
 #include <madness/world/world.h>
 
 struct Key {
@@ -46,10 +49,20 @@ struct Key {
   // Inequality test
   bool operator!=(const Key& b) const { return !((*this) == b); }
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
   template <typename Archive>
   void serialize(Archive& ar) {
     ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
   }
+#endif
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+  template <typename Archive>
+  void serialize(Archive& ar, const unsigned int) {
+    ar& execution_info;
+    if constexpr (ttg::detail::is_boost_input_archive_v<Archive>) rehash();
+  }
+#endif
 
   friend std::ostream& operator<<(std::ostream& out, Key const& k) {
     out << "Key((" << k.execution_info.first.first << "," << k.execution_info.first.second << "),"
@@ -96,10 +109,21 @@ struct Integer {
   // Inequality test
   bool operator!=(const Integer& b) const { return !((*this) == b); }
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
   template <typename Archive>
   void serialize(Archive& ar) {
-    // ar& value;
+    ar& value;
+    if constexpr (madness::is_input_archive_v<Archive>) rehash();
   }
+#endif
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+  template <typename Archive>
+  void serialize(Archive& ar, const unsigned int version) {
+    ar& value;
+    if constexpr (ttg::detail::is_boost_input_archive_v<Archive>) rehash();
+  }
+#endif
 };
 
 std::ostream& operator<<(std::ostream& s, const Integer& intVal) {
