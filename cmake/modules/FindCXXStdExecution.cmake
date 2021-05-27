@@ -63,6 +63,7 @@ endif()
 include(CMakePushCheckState)
 include(CheckIncludeFileCXX)
 include(CheckCXXSourceCompiles)
+include(FindPackageHandleStandardArgs)
 
 cmake_push_check_state()
 
@@ -71,7 +72,7 @@ set(CMAKE_REQUIRED_QUIET ${CXXStdExecution_FIND_QUIETLY})
 # All of our tests required C++17 or later
 set(CMAKE_CXX_STANDARD 17)
 
-set(_found FALSE)
+set(CXXStdExecution_FOUND FALSE)
 
 # We have execution header, but how do we use it? Do link checks
 string(CONFIGURE [[
@@ -89,7 +90,7 @@ string(CONFIGURE [[
 # Try to compile a simple filesystem program without any linker flags
 check_cxx_source_compiles("${code}" CXX_EXECUTION_NO_LINK_NEEDED)
 
-set(can_link ${CXX_EXECUTION_NO_LINK_NEEDED})
+set(CXXStdExecution_CAN_LINK ${CXX_EXECUTION_NO_LINK_NEEDED})
 
 if(NOT CXX_EXECUTION_NO_LINK_NEEDED)
   if (NOT TBB_FOUND)
@@ -105,14 +106,14 @@ if(NOT CXX_EXECUTION_NO_LINK_NEEDED)
     # Try to link a simple program with the ${TBB_LIBRARIES}
     set(CMAKE_REQUIRED_LIBRARIES ${prev_libraries} tbb)
     check_cxx_source_compiles("${code}" CXX_EXECUTION_TBB_NEEDED)
-    set(can_link ${CXX_EXECUTION_TBB_NEEDED})
+    set(CXXStdExecution_CAN_LINK ${CXX_EXECUTION_TBB_NEEDED})
   endif()
 endif()
 
-if(can_link)
+if(CXXStdExecution_CAN_LINK)
   add_library(std::execution INTERFACE IMPORTED)
   target_compile_features(std::execution INTERFACE cxx_std_17)
-  set(_found TRUE)
+  set(CXXStdExecution_FOUND TRUE)
 
   if(CXX_EXECUTION_NO_LINK_NEEDED)
     # Nothing to add...
@@ -123,6 +124,12 @@ endif()
 
 cmake_pop_check_state()
 
-if(NOT TARGET std::execution AND CXXStdFilesystem_FIND_REQUIRED)
+# handle the QUIETLY and REQUIRED arguments and set CXXStdExecution_FOUND to TRUE
+# if all listed variables are TRUE
+find_package_handle_standard_args(CXXStdExecution
+        FOUND_VAR CXXStdExecution_FOUND
+        REQUIRED_VARS CXXStdExecution_CAN_LINK)
+
+if(NOT TARGET std::execution AND CXXStdExecution_FIND_REQUIRED)
   message(FATAL_ERROR "Cannot compile and link programs that #include <execution>")
 endif()
