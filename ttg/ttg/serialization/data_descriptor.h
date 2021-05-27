@@ -42,7 +42,9 @@ namespace ttg {
   /// @tparam T a trivially-copyable type
   template <typename T>
   struct default_data_descriptor<
-      T, std::enable_if_t<std::is_trivially_copyable<T>::value && !detail::is_user_buffer_serializable_v<T>>> {
+      T, std::enable_if_t<std::is_trivially_copyable<T>::value
+                          && !detail::is_user_buffer_serializable_v<T>
+                          && !ttg::has_split_metadata<T>::value>> {
     static constexpr const bool serialize_size_is_const = true;
 
     /// @param[in] object pointer to the object to be serialized
@@ -74,6 +76,74 @@ namespace ttg {
     }
   };
 
+
+  /// default_data_descriptor for trivially-copyable types
+  /// @tparam T a trivially-copyable type
+  template <typename T>
+  struct default_data_descriptor<T, std::enable_if_t<ttg::has_split_metadata<T>::value>> {
+    static constexpr const bool serialize_size_is_const = true;
+
+    /// @param[in] object pointer to the object to be serialized
+    /// @return size of serialized @p object
+    static uint64_t payload_size(const void *object) {
+      SplitMetadataDescriptor<T> smd;
+      const T* t = reinterpret_cast<T*>(object);
+      auto metadata = smd.get_metadata(t);
+      size_t size = sizeof(metadata);
+      for (auto iovec : smd.get_data(t)) {
+        size += iovec.num_bytes;
+      }
+
+      return static_cast<uint64_t>(size);
+    }
+
+    /// @brief serializes object to a buffer
+
+    /// @param[in] object pointer to the object to be serialized
+    /// @param[in] size the size of @p object in bytes
+    /// @param[in] begin location in @p buf where the first byte of serialized data will be written
+    /// @param[in,out] buf the data buffer that will contain serialized data
+    /// @return location in @p buf after the last byte written
+    static uint64_t pack_payload(const void *object, uint64_t size, uint64_t begin, void *buf) {
+      SplitMetadataDescriptor<T> smd;
+      const T* t = reinterpret_cast<T*>(object);
+
+      unsigned char *char_buf = reinterpret_cast<unsigned char *>(buf);
+      auto metadata = smd.get_metadata(t);
+      std::memcpy(&char_buf[begin], metadata, sizeof(metadata));
+      size_t pos = sizeof(metadata);
+      for (auto iovec : smd.get_data(t)) {
+        std::memcpy(&char_buf[begin+pos], iovec.data, iovec.num_bytes);
+        pos += iovec.num_bytes;
+        assert(pos < size);
+      }
+      return begin + size;
+    }
+
+    /// @brief deserializes object from a buffer
+
+    /// @param[in,out] object pointer to the object to be deserialized
+    /// @param[in] size the size of @p object in bytes
+    /// @param[in] begin location in @p buf where the first byte of serialized data will be read
+    /// @param[in] buf the data buffer that contains serialized data
+    static void unpack_payload(void *object, uint64_t size, uint64_t begin, const void *buf) {
+      SplitMetadataDescriptor<T> smd;
+      T* t = reinterpret_cast<T*>(object);
+
+      using metadata_t = decltype(smd.get_metadata(t));
+      const unsigned char *char_buf = reinterpret_cast<const unsigned char *>(buf);
+      const metadata_t * metadata = reinterpret_cast<const metadata_t *>(char_buf + begin);
+      T t_created = smd.create_from_metadata();
+      size_t pos = sizeof(metadata);
+      *t = t_created;
+      for (auto iovec : smd.get_data(t)) {
+        std::memcpy(iovec.data, &char_buf[begin+pos], iovec.num_bytes);
+        pos += iovec.num_bytes;
+        assert(pos < size);
+      }
+    }
+  };
+
 }  // namespace ttg
 
 #if defined(TTG_SERIALIZATION_SUPPORTS_MADNESS)
@@ -85,7 +155,8 @@ namespace ttg {
   template <typename T>
   struct default_data_descriptor<
       T, std::enable_if_t<(!std::is_trivially_copyable<T>::value && detail::is_madness_buffer_serializable_v<T>) ||
-                          detail::is_madness_user_buffer_serializable_v<T>>> {
+                          detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, T> &&
+                          !ttg::has_split_metadata<T>::value>> {
     static constexpr const bool serialize_size_is_const = false;
 
     static uint64_t payload_size(const void *object) {

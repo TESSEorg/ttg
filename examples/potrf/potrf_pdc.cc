@@ -314,6 +314,39 @@ namespace ttg {
 } // namespace ttg
 
 
+
+namespace ttg {
+  namespace iovec_archive {
+    template <class Archive, typename T>
+    struct ArchiveStoreImpl<Archive, MatrixTile<T>> {
+      static inline void store(const Archive& ar, const MatrixTile<T>& tile) {
+        // store metadata
+        ar << tile.get_metadata();
+      }
+    };
+
+    template <class Archive, typename T>
+    struct ArchiveIovecImpl<Archive, MatrixTile<T>> {
+      static inline void iovec(const Archive& ar, MatrixTile<T>& tile) {
+        // iovec of the tile (either source or newly constructed)
+        ar << ttg::iovec(tile.get_data(), tile.size());
+      }
+    };
+
+    template <class Archive, typename T>
+    struct ArchiveLoadImpl<Archive, MatrixTile<T>> {
+      static inline void load(const Archive& ar, MatrixTile<T>& tile) {
+        typename MatrixTile<T>::metadata_t md;
+        // load metadata
+        ar >> md;
+        tile.set_metadata(md);
+      }
+    };
+  }
+}
+
+
+
 template<typename PaRSECMatrixT, typename ValueT>
 class PaRSECMatrixWrapper {
   PaRSECMatrixT* pm;
