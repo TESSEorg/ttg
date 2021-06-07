@@ -13,6 +13,8 @@
 
 #include <cstring>  // for std::memcpy
 
+#include "ttg/serialization/splitmd_data_descriptor.h"
+
 // This provides an efficent API for serializing/deserializing a data type.
 // An object of this type will need to be provided for each serializable type.
 // The default implementation, in serialization.h, works only for primitive/POD data types;
@@ -81,7 +83,7 @@ namespace ttg {
   /// @tparam T a trivially-copyable type
   template <typename T>
   struct default_data_descriptor<T, std::enable_if_t<ttg::has_split_metadata<T>::value>> {
-    static constexpr const bool serialize_size_is_const = true;
+    static constexpr const bool serialize_size_is_const = false;
 
     /// @param[in] object pointer to the object to be serialized
     /// @return size of serialized @p object

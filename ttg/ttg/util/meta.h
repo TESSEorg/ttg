@@ -387,6 +387,7 @@ template <typename Key, typename Value> using broadcast_callback_t = typename br
       using input_reducers_t = typename input_reducers<valueTs...>::type;
 
     }  // namespace detail
+  } // namespace meta
 }  // namespace ttg
 
 #endif  // CXXAPI_SERIALIZATION_H_H
