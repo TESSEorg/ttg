@@ -314,7 +314,7 @@ namespace ttg {
 } // namespace ttg
 
 
-
+#if 0
 namespace ttg {
   namespace iovec_archive {
     template <class Archive, typename T>
@@ -344,7 +344,7 @@ namespace ttg {
     };
   }
 }
-
+#endif // 0
 
 
 template<typename PaRSECMatrixT, typename ValueT>

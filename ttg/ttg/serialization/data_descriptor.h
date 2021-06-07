@@ -156,8 +156,8 @@ namespace ttg {
   /// and support MADNESS serialization
   template <typename T>
   struct default_data_descriptor<
-      T, std::enable_if_t<(!std::is_trivially_copyable<T>::value && detail::is_madness_buffer_serializable_v<T>) ||
-                          detail::is_madness_serializable_v<madness::archive::BufferOutputArchive, T> &&
+      T, std::enable_if_t<((!std::is_trivially_copyable<T>::value && detail::is_madness_buffer_serializable_v<T>) ||
+                          detail::is_madness_user_buffer_serializable_v<T>) &&
                           !ttg::has_split_metadata<T>::value>> {
     static constexpr const bool serialize_size_is_const = false;
 
