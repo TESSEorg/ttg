@@ -18,6 +18,7 @@
 #include <madness/world/world.h>
 
 #include <dplasma.h>
+#include <parsec/profiling.h>
 
 #define USE_DPLASMA
 
@@ -32,6 +33,17 @@ dplasma_dprint_tile( int m, int n,
 #define FMULS_POTRF(__n) ((double)(__n) * (((1. / 6.) * (double)(__n) + 0.5) * (double)(__n) + (1. / 3.)))
 #define FADDS_POTRF(__n) ((double)(__n) * (((1. / 6.) * (double)(__n)      ) * (double)(__n) - (1. / 6.)))
 #define FLOPS_DPOTRF(__n) (     FMULS_POTRF((__n)) +       FADDS_POTRF((__n)) )
+
+static thread_local parsec_profiling_stream_t *prof = nullptr;
+static int event_trsm_startkey, event_trsm_endkey;
+#define EVENT_B_INFO_CONVERTER "I{int};J{int}"
+
+static void init_prof()
+{
+  if (nullptr == prof) {
+    prof = parsec_profiling_stream_init(4096, "PaRSEC thread");
+  }
+}
 
 
 /* C++ type to PaRSEC's matrix_type mapping */
@@ -471,7 +483,8 @@ auto make_trsm(MatrixT<T>& A,
     std::cout << "TRSM BEFORE: mk" << std::endl;
     dplasma_dprint_tile(I, J, &A.parsec()->super, tile_mk.data());
 #endif // PRINT_TILES
-
+    init_prof();
+    parsec_profiling_trace_flags(prof, event_trsm_startkey, J, PROFILE_OBJECT_ID_NULL, &key, PARSEC_PROFILING_EVENT_HAS_INFO);
     blas::trsm(blas::Layout::ColMajor,
                blas::Side::Right,
                lapack::Uplo::Lower,
@@ -480,6 +493,7 @@ auto make_trsm(MatrixT<T>& A,
                tile_kk.rows(), m, 1.0,
                tile_kk.data(), m,
                tile_mk.data(), m);
+    parsec_profiling_trace_flags(prof, event_trsm_endkey, J, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
 #ifdef PRINT_TILES
     std::cout << "TRSM AFTER: kk" << std::endl;
@@ -751,6 +765,23 @@ int main(int argc, char **argv)
 
   auto world = ttg::ttg_default_execution_context();
 
+  parsec_profiling_init();
+
+  int rc = parsec_profiling_dbp_start( "potrf", "Cholesky Factorization" );
+  if( 0 != rc ) {
+      printf("Call to parsec_profiling_dbp_start failed with rc %d: %s\n", rc, parsec_profiling_strerror());
+  }
+
+  rc = parsec_profiling_add_dictionary_keyword("TRSM", "#0000FF",
+                                          sizeof(int)*2, EVENT_B_INFO_CONVERTER,
+                                          &event_trsm_startkey, &event_trsm_endkey);
+  if (0 != rc) {
+      printf("parsec_profiling_add_dictionary_keyword failed: %d\n", rc);
+      ttg::ttg_abort();
+  }
+  std::cout << "event_trsm_startkey " << event_trsm_startkey << ", event_trsm_endkey " << event_trsm_endkey << std::endl;
+  parsec_profiling_start();
+
   int n_rows = (N / NB) + (N % NB > 0);
   int n_cols = (M / NB) + (M % NB > 0);
 
@@ -918,6 +949,10 @@ int main(int argc, char **argv)
   /* cleanup allocated matrix before shutting down PaRSEC */
   parsec_data_free(dcA.mat); dcA.mat = NULL;
   parsec_tiled_matrix_dc_destroy( (parsec_tiled_matrix_dc_t*)&dcA);
+
+  /** Finalize profiling */
+  parsec_profiling_dbp_dump();
+  parsec_profiling_fini();
 
   ttg::ttg_finalize();
   return 0;
