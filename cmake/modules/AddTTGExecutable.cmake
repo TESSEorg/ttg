@@ -48,7 +48,7 @@ macro(add_ttg_executable)
 
     foreach(r ${ADD_TTG_EXECUTABLE_RUNTIMES})
 
-        set(_compile_definitions )
+        set(_compile_definitions "TTG_EXECUTABLE=1")
         if (r STREQUAL "mad")
             list(APPEND _compile_definitions "TTG_USE_MADNESS=1;WORLD_INSTANTIATE_STATIC_TEMPLATES=1")
         elseif(r STREQUAL "parsec")

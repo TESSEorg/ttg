@@ -6,11 +6,11 @@ add_ttg_executable(t9 t9/t9.cc)
 # sparse matmul
 if (TARGET eigen3)
     # MADworld used for MADNESS serialization
-    add_ttg_executable(spmm spmm/spmm.cc LINK_LIBRARIES eigen3 MADworld)
+    add_ttg_executable(spmm spmm/spmm.cc LINK_LIBRARIES eigen3)
     # block-sparse needs BTAS
     if (TARGET BTAS::BTAS)
         # MADworld used for MADNESS serialization
-        add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES eigen3 BTAS Boost::boost MADworld COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1)
+        add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES eigen3 BTAS Boost::boost COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1)
     endif (TARGET BTAS::BTAS)
 endif(TARGET eigen3)
 
@@ -25,18 +25,18 @@ if (TARGET MADworld)
     endif ()
 endif (TARGET MADworld)
 
-add_ttg_executable(wavefront-wf wavefront/wavefront-wf.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
-add_ttg_executable(wavefront-wf2 wavefront/wavefront-wf2.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
-add_ttg_executable(wavefront-df wavefront/wavefront-df.cc LINK_LIBRARIES MADworld)
+add_ttg_executable(wavefront-wf wavefront/wavefront-wf.cc SINGLERANKONLY)
+add_ttg_executable(wavefront-wf2 wavefront/wavefront-wf2.cc SINGLERANKONLY)
+add_ttg_executable(wavefront-df wavefront/wavefront-df.cc)
 add_ttg_executable(fw-apsp floyd-warshall/floyd_warshall.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
 if (OpenMP_CXX_FOUND AND TARGET std::execution)
-        add_ttg_executable(fw-apsp-df floyd-warshall/floyd_warshall_df.cc LINK_LIBRARIES OpenMP::OpenMP_CXX std::execution)
+        add_ttg_executable(fw-apsp-df floyd-warshall/floyd_warshall_df.cc LINK_LIBRARIES OpenMP::OpenMP_CXX std::execution MADworld)
 endif ()
-add_ttg_executable(ge ge/ge.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
+add_ttg_executable(ge ge/ge.cc SINGLERANKONLY)
 if (TARGET std::execution)
-        add_ttg_executable(ge-df ge/ge_df.cc LINK_LIBRARIES std::execution)
+        add_ttg_executable(ge-df ge/ge_df.cc LINK_LIBRARIES std::execution MADworld)
 endif (TARGET std::execution)
-add_ttg_executable(sw sw/sw.cc LINK_LIBRARIES MADworld)
+add_ttg_executable(sw sw/sw.cc)
 
 # RandomAccess HPCC Benchmark
 if (TARGET MADworld)

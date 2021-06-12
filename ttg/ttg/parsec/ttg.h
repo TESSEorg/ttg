@@ -23,12 +23,11 @@
 #include "ttg/util/hash.h"
 #include "ttg/util/meta.h"
 #include "ttg/util/print.h"
-#include "ttg/util/serialization.h"
 #include "ttg/util/trace.h"
 
-#include "ttg/parsec/fwd.h"
+#include "ttg/serialization/data_descriptor.h"
 
-#include <madness/world/archive.h>
+#include "ttg/parsec/fwd.h"
 
 #include <array>
 #include <cassert>
@@ -40,6 +39,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -141,6 +141,14 @@ namespace ttg_parsec {
       // and the fence() will decrease it back to 0.
       tpool->tdm.module->taskpool_set_nb_pa(tpool, 0);
       parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
+
+      // Termination detection in PaRSEC requires to synchronize the
+      // taskpool enabling, to avoid a race condition that would keep
+      // termination detection-related messages in a waiting queue
+      // forever
+      MPI_Barrier(comm());
+
+      parsec_taskpool_started = false;
     }
 
     /* Deleted copy ctor */
@@ -179,6 +187,7 @@ namespace ttg_parsec {
       tpool->tdm.module->taskpool_addto_nb_pa(tpool, 1);
       tpool->tdm.module->taskpool_ready(tpool);
       int ret = parsec_context_start(ctx);
+      parsec_taskpool_started = true;
       if (ret != 0) throw std::runtime_error("TTG: parsec_context_start failed");
     }
 
@@ -209,6 +218,13 @@ namespace ttg_parsec {
    protected:
     virtual void fence_impl(void) override {
       int rank = this->rank();
+      if (!parsec_taskpool_started) {
+        if (ttg::tracing()) {
+          ttg::print("ttg_parsec::(", rank, "): parsec taskpool has not been started, fence is a simple MPI_Barrier");
+        }
+        MPI_Barrier(ttg::get_default_world().impl().comm());
+        return;
+      }
       if (ttg::tracing()) {
         ttg::print("ttg_parsec::(", rank, "): parsec taskpool is ready for completion");
       }
@@ -228,6 +244,7 @@ namespace ttg_parsec {
     parsec_context_t *ctx = nullptr;
     parsec_execution_stream_t *es = nullptr;
     parsec_taskpool_t *tpool = nullptr;
+    bool parsec_taskpool_started = false;
 
     volatile int32_t &sent_to_sched_counter() const {
       static volatile int32_t sent_to_sched = 0;
@@ -331,21 +348,17 @@ namespace ttg_parsec {
   void ttg_broadcast(::ttg::World world, T &data, int source_rank) {
     int64_t BUFLEN;
     if (world.rank() == source_rank) {
-      madness::archive::BufferOutputArchive count;
-      count &data;
-      BUFLEN = count.size();
+      BUFLEN = ttg::default_data_descriptor<T>::payload_size(&data);
     }
     MPI_Bcast(&BUFLEN, 1, MPI_INT64_T, source_rank, world.impl().comm());
 
     unsigned char *buf = new unsigned char[BUFLEN];
     if (world.rank() == source_rank) {
-      madness::archive::BufferOutputArchive ar(buf, BUFLEN);
-      ar &data;
+      ttg::default_data_descriptor<T>::pack_payload(&data, BUFLEN, 0, buf);
     }
     MPI_Bcast(buf, BUFLEN, MPI_UNSIGNED_CHAR, source_rank, world.impl().comm());
     if (world.rank() != source_rank) {
-      madness::archive::BufferInputArchive ar(buf, BUFLEN);
-      ar &data;
+      ttg::default_data_descriptor<T>::unpack_payload(&data, BUFLEN, 0, buf);
     }
     delete[] buf;
   }
@@ -513,9 +526,9 @@ namespace ttg_parsec {
    protected:
     template <typename T>
     uint64_t unpack(T &obj, void *_bytes, uint64_t pos) {
-      const ttg_data_descriptor *dObj = ttg::get_data_descriptor<T>();
+      const ttg_data_descriptor *dObj = ttg::get_data_descriptor<ttg::meta::remove_cvr_t<T>>();
       uint64_t payload_size;
-      if constexpr (!ttg::default_data_descriptor<T>::serialize_size_is_const) {
+      if constexpr (!ttg::default_data_descriptor<ttg::meta::remove_cvr_t<T>>::serialize_size_is_const) {
         const ttg_data_descriptor *dSiz = ttg::get_data_descriptor<uint64_t>();
         dSiz->unpack_payload(&payload_size, sizeof(uint64_t), pos, _bytes);
         pos += sizeof(uint64_t);
@@ -528,9 +541,9 @@ namespace ttg_parsec {
 
     template <typename T>
     uint64_t pack(T &obj, void *bytes, uint64_t pos) {
-      const ttg_data_descriptor *dObj = ttg::get_data_descriptor<T>();
+      const ttg_data_descriptor *dObj = ttg::get_data_descriptor<ttg::meta::remove_cvr_t<T>>();
       uint64_t payload_size = dObj->payload_size(&obj);
-      if constexpr (!ttg::default_data_descriptor<T>::serialize_size_is_const) {
+      if constexpr (!ttg::default_data_descriptor<ttg::meta::remove_cvr_t<T>>::serialize_size_is_const) {
         const ttg_data_descriptor *dSiz = ttg::get_data_descriptor<uint64_t>();
         dSiz->pack_payload(&payload_size, sizeof(uint64_t), pos, bytes);
         pos += sizeof(uint64_t);
@@ -1054,7 +1067,8 @@ namespace ttg_parsec {
       } else {
         keyT kk = *(reinterpret_cast<keyT *>(k));
         using ttg::hash;
-        return hash<decltype(kk)>{}(kk);
+        uint64_t hv = hash<decltype(kk)>{}(kk);
+        return hv;
       }
     }
 
@@ -1064,8 +1078,10 @@ namespace ttg_parsec {
         return buffer;
       } else {
         keyT kk = *(reinterpret_cast<keyT *>(k));
-        // use streambuf here?
-        snprintf(buffer, buffer_size, "%lu", k);
+        std::stringstream iss;
+        iss << kk;
+        memset(buffer, 0, buffer_size);
+        iss.get(buffer, buffer_size);
         return buffer;
       }
     }
@@ -1292,6 +1308,13 @@ namespace ttg_parsec {
     /// keymap accessor
     /// @return the keymap
     const decltype(keymap) &get_keymap() const { return keymap; }
+
+    /// keymap setter
+    /// @return the keymap
+    template <typename Keymap>
+    void set_keymap(Keymap &&km) {
+      keymap = km;
+    }
 
     // Register the static_op function to associate it to instance_id
     void register_static_op_function(void) {

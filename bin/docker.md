@@ -5,7 +5,9 @@ These notes assume that Docker is installed on your machine and that you start a
 
 ## Create/build Docker Travis image
 1. Create a Docker image: `bin/docker-build.sh`
-2. Run a container using the newly created image: `docker run --privileged -i -t --rm ttg-dev:latest /sbin/my_init -- bash -l`
+2. Run a container using the newly created
+   image: `docker run --privileged -i -t --rm ttg-dev:latest /sbin/my_init -- bash -l`
+3. To run tests/examples: `cmake --build /home/tesse/ttg-build --target check`
 
 ## Notes
 - Important locations:
