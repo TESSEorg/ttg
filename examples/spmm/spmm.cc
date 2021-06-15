@@ -487,9 +487,10 @@ std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
 #include "../ttg_matrix.h"
 
 char *getCmdOption(char **begin, char **end, const std::string &option) {
+  static char *empty = "";
   char **itr = std::find(begin, end, option);
   if (itr != end && ++itr != end) return *itr;
-  return nullptr;
+  return empty;
 }
 
 bool cmdOptionExists(char **begin, char **end, const std::string &option) {
@@ -532,6 +533,246 @@ static double parseOption(std::string &option, double default_value) {
   return N;
 }
 
+#if !defined(BLOCK_SPARSE_GEMM)
+static void initSpMatrixMarket(const char *filename, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
+  std::vector<int> sizes;
+  // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
+  if (ttg_default_execution_context().rank() == 0) {
+    if (!loadMarket(A, filename)) {
+      std::cerr << "Failed to load " << filename << ", bailing out..." << std::endl;
+      ttg::ttg_abort();
+    }
+    std::cout << "##MatrixMarket file " << filename << " -- " << A.rows() << " x " << A.cols() << " -- " << A.nonZeros()
+              << " nnz (density: " << (float)A.nonZeros() / (float)A.rows() / (float)A.cols() << ")" << std::endl;
+    sizes[0] = A.rows();
+    sizes[1] = A.cols();
+  }
+  ttg_broadcast(ttg_default_execution_context(), sizes, 0);
+  if (ttg_default_execution_context().rank() == 0) {
+    A.resize(sizes[0], sizes[1]);
+  }
+  if (A.rows() != A.cols()) {
+    B = A.transpose();
+  } else {
+    B = A;
+  }
+  C.resize(A.rows(), B.cols());
+}
+
+static void initSpRmat(const char *opt, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
+  int N, E = -1;
+  double a = 0.25, b = 0.25, c = 0.25, d = 0.25;
+  size_t nnz = 0;
+
+  if (nullptr == opt) {
+    std::cerr << "Usage: -rmat <#nodes>[:<#edges>[:<a>[:<b>:[<c>[:<d>]]]]]" << std::endl;
+    exit(1);
+  }
+  std::string token;
+  std::string option = std::string(opt);
+  N = parseOption(option, -1);
+
+  A.resize(N, N);
+
+  if (ttg_default_execution_context().rank() == 0) {
+    E = parseOption(option, (int)(0.01 * N * N));
+    a = parseOption(option, 0.25);
+    b = parseOption(option, 0.25);
+    c = parseOption(option, 0.25);
+    d = parseOption(option, 0.25);
+
+    std::cout << "#R-MAT: " << N << " nodes, " << E << " edges, a/b/c/d = " << a << "/" << b << "/" << c << "/" << d
+              << std::endl;
+
+    boost::minstd_rand gen;
+    boost::rmat_iterator<boost::minstd_rand, boost::directed_graph<>> rmat_it(gen, N, E, a, b, c, d);
+
+    using triplet_t = Eigen::Triplet<blk_t>;
+    std::vector<triplet_t> A_elements;
+    for (int i = 0; i < N; i++) {
+      nnz++;
+      A_elements.emplace_back(i, i, 1.0);
+    }
+    for (int i = 0; i < E; i++) {
+      auto x = *rmat_it++;
+      if (x.first != x.second) {
+        A_elements.emplace_back(x.first, x.second, 1.0);
+        nnz++;
+      }
+    }
+    A.setFromTriplets(A_elements.begin(), A_elements.end());
+  }
+
+  B = A;
+  C.resize(N, N);
+
+  std::cout << "#R-MAT: " << E << " nonzero elements, density: " << (double)nnz / (double)N / (double)N << std::endl;
+}
+
+static void initSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
+  const int n = 2;
+  const int m = 3;
+  const int k = 4;
+
+  std::cout << "#HardCoded A, B, C" << std::endl;
+  A.resize(n, k);
+  B.resize(k, m);
+  C.resize(n, m);
+  // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
+  if (ttg_default_execution_context().rank() == 0) {
+    using triplet_t = Eigen::Triplet<blk_t>;
+    std::vector<triplet_t> A_elements;
+    A_elements.emplace_back(0, 1, 12.3);
+    A_elements.emplace_back(0, 2, 10.7);
+    A_elements.emplace_back(0, 3, -2.3);
+    A_elements.emplace_back(1, 0, -0.3);
+    A_elements.emplace_back(1, 2, 1.2);
+    A.setFromTriplets(A_elements.begin(), A_elements.end());
+
+    std::vector<triplet_t> B_elements;
+    B_elements.emplace_back(0, 0, 12.3);
+    B_elements.emplace_back(1, 0, 10.7);
+    B_elements.emplace_back(3, 0, -2.3);
+    B_elements.emplace_back(1, 1, -0.3);
+    B_elements.emplace_back(1, 2, 1.2);
+    B_elements.emplace_back(2, 2, 7.2);
+    B_elements.emplace_back(3, 2, 0.2);
+    B.setFromTriplets(B_elements.begin(), B_elements.end());
+  }
+}
+#else
+static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
+  const int n = 2;
+  const int m = 3;
+  const int k = 4;
+
+  std::cout << "#HardCoded A, B, C" << std::endl;
+  A.resize(n, k);
+  B.resize(k, m);
+  C.resize(n, m);
+  // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
+  if (ttg_default_execution_context().rank() == 0) {
+    using triplet_t = Eigen::Triplet<blk_t>;
+    std::vector<triplet_t> A_elements;
+#if defined(BTAS_IS_USABLE)
+    auto A_blksize = {128, 256};
+    A_elements.emplace_back(0, 1, blk_t(btas::Range(A_blksize), 12.3));
+    A_elements.emplace_back(0, 2, blk_t(btas::Range(A_blksize), 10.7));
+    A_elements.emplace_back(0, 3, blk_t(btas::Range(A_blksize), -2.3));
+    A_elements.emplace_back(1, 0, blk_t(btas::Range(A_blksize), -0.3));
+    A_elements.emplace_back(1, 2, blk_t(btas::Range(A_blksize), 1.2));
+#else
+    A_elements.emplace_back(0, 1, 12.3);
+    A_elements.emplace_back(0, 2, 10.7);
+    A_elements.emplace_back(0, 3, -2.3);
+    A_elements.emplace_back(1, 0, -0.3);
+    A_elements.emplace_back(1, 2, .2);
+#endif
+    A.setFromTriplets(A_elements.begin(), A_elements.end());
+
+    std::vector<triplet_t> B_elements;
+#if defined(BTAS_IS_USABLE)
+    auto B_blksize = {256, 196};
+    B_elements.emplace_back(0, 0, blk_t(btas::Range(B_blksize), 12.3));
+    B_elements.emplace_back(1, 0, blk_t(btas::Range(B_blksize), 10.7));
+    B_elements.emplace_back(3, 0, blk_t(btas::Range(B_blksize), -2.3));
+    B_elements.emplace_back(1, 1, blk_t(btas::Range(B_blksize), -0.3));
+    B_elements.emplace_back(1, 2, blk_t(btas::Range(B_blksize), 1.2));
+    B_elements.emplace_back(2, 2, blk_t(btas::Range(B_blksize), 7.2));
+    B_elements.emplace_back(3, 2, blk_t(btas::Range(B_blksize), 0.2));
+#else
+    B_elements.emplace_back(0, 0, 12.3);
+    B_elements.emplace_back(1, 0, 10.7);
+    B_elements.emplace_back(3, 0, -2.3);
+    B_elements.emplace_back(1, 1, -0.3);
+    B_elements.emplace_back(1, 2, 1.2);
+    B_elements.emplace_back(2, 2, 7.2);
+    B_elements.emplace_back(3, 2, 0.2);
+#endif
+    B.setFromTriplets(B_elements.begin(), B_elements.end());
+  }
+}
+
+#if defined(BTAS_IS_USABLE)
+static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B,
+                           SpMatrix<> &C) {
+  A.resize(M, K);
+  B.resize(K, N);
+  C.resize(M, N);
+
+  if (ttg_default_execution_context().rank() == 0) {
+    float density = 0.0;
+    int ts;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dist(minTs, maxTs);
+    std::vector<int> mTiles, nTiles, kTiles;
+    std::map<std::tuple<int, int>, bool> filling;
+    using triplet_t = Eigen::Triplet<blk_t>;
+    std::vector<triplet_t> A_elements;
+    std::vector<triplet_t> B_elements;
+
+    for (int m = 0; m < M; m += ts) {
+      ts = dist(gen);
+      if (ts > M - m) ts = M - m;
+      mTiles.push_back(ts);
+    }
+    for (int n = 0; n < N; n += ts) {
+      ts = dist(gen);
+      if (ts > N - n) ts = N - n;
+      nTiles.push_back(ts);
+    }
+    for (int k = 0; k < K; k += ts) {
+      ts = dist(gen);
+      if (ts > K - k) ts = K - k;
+      kTiles.push_back(ts);
+    }
+
+    std::uniform_int_distribution<> mDist(0, mTiles.size() - 1);
+    std::uniform_int_distribution<> nDist(0, nTiles.size() - 1);
+    std::uniform_int_distribution<> kDist(0, kTiles.size() - 1);
+
+    density = 0.0;
+    filling.clear();
+    while (density < avgDensity) {
+      int mt = mDist(gen);
+      int kt = kDist(gen);
+      int m = 0, k = 0;
+      if (filling.count({mt, kt}) > 0) continue;
+      filling[{mt, kt}] = true;
+      density += (float)(mTiles[mt] * kTiles[kt]) / (float)(M * K);
+      auto blksize = {mTiles[mt], kTiles[kt]};
+      for (int i = 0; i < mt; i++) m += mTiles[i];
+      for (int i = 0; i < kt; i++) k += kTiles[i];
+      A_elements.emplace_back(m, k, blk_t(btas::Range(blksize), (float)std::rand() / (float)RAND_MAX - 0.5));
+    }
+    A.setFromTriplets(A_elements.begin(), A_elements.end());
+    std::cout << "#RandomBlockSparse-matrixT: A = " << M << " x " << K << " minTs " << minTs << " maxTs " << maxTs
+              << " density " << density << std::endl;
+
+    density = 0.0;
+    filling.clear();
+    while (density < avgDensity) {
+      int nt = nDist(gen);
+      int kt = kDist(gen);
+      int n = 0, k = 0;
+      if (filling.count({kt, nt}) > 0) continue;
+      filling[{kt, nt}] = true;
+      density += (float)(kTiles[kt] * nTiles[nt]) / (float)(K * N);
+      auto blksize = {kTiles[kt], nTiles[nt]};
+      for (int i = 0; i < nt; i++) n += nTiles[i];
+      for (int i = 0; i < kt; i++) k += kTiles[i];
+      B_elements.emplace_back(k, n, blk_t(btas::Range(blksize), (float)std::rand() / (float)RAND_MAX - 0.5));
+    }
+    B.setFromTriplets(B_elements.begin(), B_elements.end());
+    std::cout << "#RandomBlockSparse-matrixT: B = " << K << " x " << N << " minTs " << minTs << " maxTs " << maxTs
+              << " density " << density << std::endl;
+  }
+}
+#endif
+
+#endif
+
 int main(int argc, char **argv) {
   bool timing = false;
 
@@ -558,124 +799,36 @@ int main(int argc, char **argv) {
 
 #if !defined(BLOCK_SPARSE_GEMM)
     if (cmdOptionExists(argv, argv + argc, "-mm")) {
+      char *filename = getCmdOption(argv, argv + argc, "-mm");
       timing = true;
-      // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
-      if (ttg_default_execution_context().rank() == 0) {
-        char *filename = getCmdOption(argv, argv + argc, "-mm");
-        if (loadMarket(A, filename)) {
-          if (A.rows() != A.cols()) {
-            B = A.transpose();
-          } else {
-            B = A;
-          }
-          C.resize(A.rows(), B.cols());
-          std::cout << "##MatrixMarket file " << filename << " -- " << A.rows() << " x " << A.cols() << " -- "
-                    << A.nonZeros() << " nnz (density: " << (float)A.nonZeros() / (float)A.rows() / (float)A.cols()
-                    << ")" << std::endl;
-        } else {
-          std::cerr << "Failed to load " << filename << ", bailing out..." << std::endl;
-          ttg::ttg_abort();
-        }
-      }
+      initSpMatrixMarket(filename, A, B, C);
     } else if (cmdOptionExists(argv, argv + argc, "-rmat")) {
       char *opt = getCmdOption(argv, argv + argc, "-rmat");
-      int N, E = -1;
-      double a = 0.25, b = 0.25, c = 0.25, d = 0.25;
-      if (nullptr == opt) {
-        std::cerr << "Usage: -rmat <#nodes>[:<#edges>[:<a>[:<b>:[<c>[:<d>]]]]]" << std::endl;
-        exit(1);
-      }
       timing = true;
-      std::string token;
-      std::string option = std::string(opt);
-      N = parseOption(option, -1);
-      E = parseOption(option, (int)(0.01 * N * N));
-      a = parseOption(option, 0.25);
-      b = parseOption(option, 0.25);
-      c = parseOption(option, 0.25);
-      d = parseOption(option, 0.25);
-
-      std::cout << "#R-MAT: " << N << " nodes, " << E << " edges, a/b/c/d = " << a << "/" << b << "/" << c << "/" << d
-                << std::endl;
-
-      boost::minstd_rand gen;
-      boost::rmat_iterator<boost::minstd_rand, boost::directed_graph<>> rmat_it(gen, N, E, a, b, c, d);
-
-      A.resize(N, N);
-      using triplet_t = Eigen::Triplet<blk_t>;
-      std::vector<triplet_t> A_elements;
-      size_t nnz = 0;
-      for (int i = 0; i < N; i++) {
-        nnz++;
-        A_elements.emplace_back(i, i, 1.0);
-      }
-      for (int i = 0; i < E; i++) {
-        auto x = *rmat_it++;
-        if (x.first != x.second) {
-          A_elements.emplace_back(x.first, x.second, 1.0);
-          nnz++;
-        }
-      }
-      A.setFromTriplets(A_elements.begin(), A_elements.end());
-
-      B = A;
-      C.resize(N, N);
-
-      std::cout << "#R-MAT: " << E << " nonzero elements, density: " << (double)nnz / (double)N / (double)N
-                << std::endl;
-    } else
-#endif // !defined(BLOCK_SPARSE_GEMM)
-    {
-      const int n = 2;
-      const int m = 3;
-      const int k = 4;
-
-      std::cout << "#HardCoded A, B, C" << std::endl;
-      A.resize(n, k);
-      B.resize(k, m);
-      C.resize(n, m);
-      // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
-      if (ttg_default_execution_context().rank() == 0) {
-        using triplet_t = Eigen::Triplet<blk_t>;
-        std::vector<triplet_t> A_elements;
-#if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
-        auto A_blksize = {128, 256};
-        A_elements.emplace_back(0, 1, blk_t(btas::Range(A_blksize), 12.3));
-        A_elements.emplace_back(0, 2, blk_t(btas::Range(A_blksize), 10.7));
-        A_elements.emplace_back(0, 3, blk_t(btas::Range(A_blksize), -2.3));
-        A_elements.emplace_back(1, 0, blk_t(btas::Range(A_blksize), -0.3));
-        A_elements.emplace_back(1, 2, blk_t(btas::Range(A_blksize), 1.2));
-#else
-        A_elements.emplace_back(0, 1, 12.3);
-        A_elements.emplace_back(0, 2, 10.7);
-        A_elements.emplace_back(0, 3, -2.3);
-        A_elements.emplace_back(1, 0, -0.3);
-        A_elements.emplace_back(1, 2, 1.2);
-#endif
-        A.setFromTriplets(A_elements.begin(), A_elements.end());
-
-        std::vector<triplet_t> B_elements;
-#if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
-        auto B_blksize = {256, 196};
-        B_elements.emplace_back(0, 0, blk_t(btas::Range(B_blksize), 12.3));
-        B_elements.emplace_back(1, 0, blk_t(btas::Range(B_blksize), 10.7));
-        B_elements.emplace_back(3, 0, blk_t(btas::Range(B_blksize), -2.3));
-        B_elements.emplace_back(1, 1, blk_t(btas::Range(B_blksize), -0.3));
-        B_elements.emplace_back(1, 2, blk_t(btas::Range(B_blksize), 1.2));
-        B_elements.emplace_back(2, 2, blk_t(btas::Range(B_blksize), 7.2));
-        B_elements.emplace_back(3, 2, blk_t(btas::Range(B_blksize), 0.2));
-#else
-        B_elements.emplace_back(0, 0, 12.3);
-        B_elements.emplace_back(1, 0, 10.7);
-        B_elements.emplace_back(3, 0, -2.3);
-        B_elements.emplace_back(1, 1, -0.3);
-        B_elements.emplace_back(1, 2, 1.2);
-        B_elements.emplace_back(2, 2, 7.2);
-        B_elements.emplace_back(3, 2, 0.2);
-#endif
-        B.setFromTriplets(B_elements.begin(), B_elements.end());
-      }
+      initSpRmat(opt, A, B, C);
+    } else {
+      initSpHardCoded(A, B, C);
     }
+#else
+    if (argc >= 1) {
+      std::string Mstr(getCmdOption(argv, argv + argc, "-M"));
+      int M = parseOption(Mstr, 1200);
+      std::string Nstr(getCmdOption(argv, argv + argc, "-N"));
+      int N = parseOption(Nstr, 1200);
+      std::string Kstr(getCmdOption(argv, argv + argc, "-K"));
+      int K = parseOption(Kstr, 1200);
+      std::string minTsStr(getCmdOption(argv, argv + argc, "-t"));
+      int minTs = parseOption(minTsStr, 32);
+      std::string maxTsStr(getCmdOption(argv, argv + argc, "-T"));
+      int maxTs = parseOption(maxTsStr, 256);
+      std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
+      double avg = parseOption(avgStr, 0.3);
+      timing = true;
+      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, C);
+    } else {
+      initBlSpHardCoded(A, B, C);
+    }
+#endif  // !defined(BLOCK_SPARSE_GEMM)
 
     // flow graph needs to exist on every node
     Edge<> ctl("control");
