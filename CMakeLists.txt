@@ -82,6 +82,8 @@ if (TARGET MADworld)
   message(STATUS "MADNESS_FOUND=1")
 endif(TARGET MADworld)
 
+include(FindDPLASMA)
+
 ##########################
 #### Components
 ##########################

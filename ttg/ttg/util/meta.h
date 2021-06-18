@@ -4,6 +4,8 @@
 #include <functional>
 #include <type_traits>
 
+#include "ttg/util/span.h"
+
 namespace ttg {
 
   class Void;
@@ -289,6 +291,30 @@ namespace ttg {
       template <typename Key, typename Value>
       using move_callback_t = typename move_callback<Key, Value>::type;
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// broadcast_callback_t<key,value> = std::function<void(const key&, value&&>, protected against void key or value
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+template<typename Key, typename Value, typename Enabler = void>
+struct broadcast_callback;
+template<typename Key, typename Value>
+struct broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
+using type = std::function<void(const ttg::span<const Key>&, const Value&)>;
+};
+template<typename Key, typename Value>
+struct broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
+using type = std::function<void(const ttg::span<const Key>&)>;
+};
+template<typename Key, typename Value>
+struct broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
+using type = std::function<void(const Value&)>;
+};
+template<typename Key, typename Value>
+struct broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
+using type = std::function<void()>;
+};
+template <typename Key, typename Value> using broadcast_callback_t = typename broadcast_callback<Key,Value>::type;
+
+
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       // setsize_callback_t<key> = std::function<void(const keyT &, std::size_t)> protected against void key
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -361,9 +387,7 @@ namespace ttg {
       using input_reducers_t = typename input_reducers<valueTs...>::type;
 
     }  // namespace detail
-
-  }  // namespace meta
-
+  } // namespace meta
 }  // namespace ttg
 
 #endif  // CXXAPI_SERIALIZATION_H_H

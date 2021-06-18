@@ -79,6 +79,7 @@ install(FILES ${ttg-base-header}
 set(ttg-serialization-source
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/splitmd_data_descriptor.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/data_descriptor.h
@@ -176,7 +177,8 @@ if (TARGET PaRSEC::parsec)
           ttg/parsec/fwd.h
           ttg/parsec/import.h
           ttg/parsec/ttg.h)
-  target_sources(ttg-parsec INTERFACE ${ttg-parsec_headers})
+  target_sources(ttg-parsec INTERFACE ${ttg-parsec_headers}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/parsec_ttg.cc)
   install(FILES ${ttg-parsec_headers}
           DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ttg/parsec/
           COMPONENT ttg-parsec)
