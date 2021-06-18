@@ -2001,11 +2001,23 @@ namespace ttg_parsec {
     // Destructor checks for unexecuted tasks
     ~Op() { release(); }
 
+    static void ht_iter_cb(void *item, void*cb_data) {
+      detail::my_op_t * task = (detail::my_op_t *)item;
+      opT* op = (opT*)cb_data;
+      if constexpr (!std::is_void_v<keyT>) {
+        std::cout << "Left over task "  << op->get_name() << " " << *(keyT*)task->key << std::endl;
+      } else {
+        std::cout << "Left over task "  << op->get_name() << " " << task->key << std::endl;
+      }
+    }
+
     virtual void release() override {
       if (!alive) {
         return;
       }
       alive = false;
+      /* print all outstanding tasks */
+      parsec_hash_table_for_all(&tasks_table, ht_iter_cb, this);
       parsec_hash_table_fini(&tasks_table);
       parsec_mempool_destruct(&mempools);
       // uintptr_t addr = (uintptr_t)self.incarnations;
