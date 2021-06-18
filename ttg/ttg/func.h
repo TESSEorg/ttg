@@ -152,21 +152,14 @@ namespace ttg {
   }
 
   namespace detail {
-
-#if 0
-    template <size_t i, typename ...RangesT, typename valueT, typename... output_terminalsT>
-    void broadcast(const std::tuple<RangesT...>& keylists, std::shared_ptr<valueT> &value_ptr, std::tuple<output_terminalsT...> &t) {
-      std::get<i>(t).broadcast(std::get<i>(keylists), value_ptr);
-    }
-#endif
-
-    template <size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT>
+    template <size_t KeyId, size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT>
     void broadcast(const std::tuple<RangesT...>& keylists, valueT&& value, std::tuple<output_terminalsT...> &t) {
-      if (std::get<i>(keylists).size() > 0) {
-        std::get<i>(t).broadcast(std::get<i>(keylists), value);
+      if (std::get<KeyId>(keylists).size() > 0) {
+        std::cout << "BROADCAST to " << i << " " << std::get<i>(t).get_name() << std::endl;
+        std::get<i>(t).broadcast(std::get<KeyId>(keylists), value);
       }
       if constexpr(sizeof...(I) > 0) {
-        detail::broadcast<I...>(keylists, value, t);
+        detail::broadcast<KeyId+1, I...>(keylists, value, t);
       }
     }
   } // namespace detail
@@ -179,16 +172,11 @@ namespace ttg {
 
   template <size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg::ttg_runtime>
   void broadcast(const std::tuple<RangesT...>& keylists, valueT &&value, std::tuple<output_terminalsT...> &t) {
+    static_assert(sizeof...(I)+1 == sizeof...(RangesT),
+                  "Number of selected output terminals must match the number of keylists!");
     detail::value_copy_handler<Runtime> copy_handler;
-    detail::broadcast<i, I...>(keylists, copy_handler(std::forward<valueT>(value)), t);
+    detail::broadcast<0, i, I...>(keylists, copy_handler(std::forward<valueT>(value)), t);
   }
-
-#if 0
-  template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT>
-  void broadcast(const rangeT &keylist, const valueT &value, std::tuple<output_terminalsT...> &t) {
-    std::get<i>(t).broadcast(keylist, value);
-  }
-#endif
 
   template <typename keyT, typename output_terminalT>
   void set_size(const keyT &key, const std::size_t size, output_terminalT &t) {
