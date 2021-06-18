@@ -3,6 +3,8 @@
 // tell TTG/PARSEC that we know what we are doing (TM)
 #define TTG_USE_USER_TERMDET 1
 
+#define USE_PARSEC_PROF_API 0
+
 #include <ttg.h>
 //#include <madness.h>
 #include "../blockmatrix.h"
@@ -36,14 +38,38 @@ dplasma_dprint_tile( int m, int n,
 
 static thread_local parsec_profiling_stream_t *prof = nullptr;
 static int event_trsm_startkey, event_trsm_endkey;
+static int event_syrk_startkey, event_syrk_endkey;
+static int event_potrf_startkey, event_potrf_endkey;
+static bool profiling_enabled = false;
 #define EVENT_B_INFO_CONVERTER "I{int};J{int}"
+#define EVENT_PO_INFO_CONVERTER "I{int}"
 
-static void init_prof()
+static void init_prof_thread()
 {
+#if USE_PARSEC_PROF_API
   if (nullptr == prof) {
     prof = parsec_profiling_stream_init(4096, "PaRSEC thread");
   }
+#endif // USE_PARSEC_PROF_API
 }
+
+/**
+ * Wrapper around parsec_profiling_trace_flags to enable/disable at will
+ */
+int potrf_parsec_profiling_trace_flags(parsec_profiling_stream_t* context, int key,
+                                       uint64_t event_id, uint32_t taskpool_id,
+                                       const void *info, uint16_t flags )
+{
+  int rc = 0;
+#if USE_PARSEC_PROF_API
+  if (profiling_enabled) {
+    init_prof_thread();
+    rc = parsec_profiling_trace_flags(context, key, event_id, taskpool_id, info, flags);
+  }
+#endif // USE_PARSEC_PROF_API
+  return rc;
+}
+
 
 
 /* C++ type to PaRSEC's matrix_type mapping */
@@ -436,12 +462,17 @@ auto make_potrf(MatrixT<T>& A,
     const int K = key.K;
 
     //std::cout << "POTF " << key << std::endl;
+    potrf_parsec_profiling_trace_flags(prof, event_potrf_startkey, K, PROFILE_OBJECT_ID_NULL,
+                                       &key, PARSEC_PROFILING_EVENT_HAS_INFO);
 
     lapack::potrf(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.rows());
+
+    potrf_parsec_profiling_trace_flags(prof, event_potrf_endkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     /* send the tile to outputs */
     std::vector<Key2> keylist;
     keylist.reserve(A.rows() - K);
+    /* TODO: reverse order of arrays */
     for (int m = K+1; m < A.rows(); ++m) {
       /* send tile to trsm */
       keylist.push_back(Key2(m, K));
@@ -483,8 +514,9 @@ auto make_trsm(MatrixT<T>& A,
     std::cout << "TRSM BEFORE: mk" << std::endl;
     dplasma_dprint_tile(I, J, &A.parsec()->super, tile_mk.data());
 #endif // PRINT_TILES
-    init_prof();
-    parsec_profiling_trace_flags(prof, event_trsm_startkey, J, PROFILE_OBJECT_ID_NULL, &key, PARSEC_PROFILING_EVENT_HAS_INFO);
+
+    potrf_parsec_profiling_trace_flags(prof, event_trsm_startkey, J, PROFILE_OBJECT_ID_NULL,
+                                       &key, PARSEC_PROFILING_EVENT_HAS_INFO);
     blas::trsm(blas::Layout::ColMajor,
                blas::Side::Right,
                lapack::Uplo::Lower,
@@ -493,7 +525,8 @@ auto make_trsm(MatrixT<T>& A,
                tile_kk.rows(), m, 1.0,
                tile_kk.data(), m,
                tile_mk.data(), m);
-    parsec_profiling_trace_flags(prof, event_trsm_endkey, J, PROFILE_OBJECT_ID_NULL, NULL, 0);
+
+    potrf_parsec_profiling_trace_flags(prof, event_trsm_endkey, J, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
 #ifdef PRINT_TILES
     std::cout << "TRSM AFTER: kk" << std::endl;
@@ -570,12 +603,17 @@ auto make_syrk(MatrixT<T>& A,
 
     //std::cout << "SYRK " << key << std::endl;
 
+    potrf_parsec_profiling_trace_flags(prof, event_syrk_startkey, I, PROFILE_OBJECT_ID_NULL,
+                                       &key, PARSEC_PROFILING_EVENT_HAS_INFO);
+
     blas::syrk(blas::Layout::ColMajor,
                lapack::Uplo::Lower,
                blas::Op::NoTrans,
                tile_mk.rows(), m, -1.0,
                tile_mk.data(), m, 1.0,
                tile_mm.data(), m);
+
+    potrf_parsec_profiling_trace_flags(prof, event_syrk_endkey, I, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
 #ifdef PRINT_TILES
     std::cout << "SYRK AFTER: mk" << std::endl;
@@ -744,6 +782,7 @@ int main(int argc, char **argv)
   int NB = 128;
   int check = 0;
   int nthreads = -1;
+  const char* prof_filename = nullptr;
 
   if (argc > 1) {
     N = M = atoi(argv[1]);
@@ -761,29 +800,36 @@ int main(int argc, char **argv)
     nthreads = atoi(argv[4]);
   }
 
+  if (argc > 5) {
+    prof_filename = argv[5];
+    profiling_enabled = true;
+  }
+
   ttg::ttg_initialize(argc, argv, nthreads);
 
   auto world = ttg::ttg_default_execution_context();
 
-  parsec_profiling_init();
+#if USE_PARSEC_PROF_API
+  if (nullptr != prof_filename) {
+    parsec_profiling_init();
 
-  int rc = parsec_profiling_dbp_start( "potrf", "Cholesky Factorization" );
-  if( 0 != rc ) {
-      printf("Call to parsec_profiling_dbp_start failed with rc %d: %s\n", rc, parsec_profiling_strerror());
+    parsec_profiling_dbp_start( "potrf", "Cholesky Factorization" );
+
+    parsec_profiling_add_dictionary_keyword("TRSM", "#0000FF",
+                                            sizeof(int)*2, EVENT_B_INFO_CONVERTER,
+                                            &event_trsm_startkey, &event_trsm_endkey);
+
+    parsec_profiling_add_dictionary_keyword("SYRK", "#00FF00",
+                                            sizeof(int)*2, EVENT_B_INFO_CONVERTER,
+                                            &event_syrk_startkey, &event_syrk_endkey);
+
+    parsec_profiling_add_dictionary_keyword("POTRF", "#FF0000",
+                                            sizeof(int)*1, EVENT_PO_INFO_CONVERTER,
+                                            &event_potrf_startkey, &event_potrf_endkey);
+    parsec_profiling_start();
+    profiling_enabled = true;
   }
-
-  rc = parsec_profiling_add_dictionary_keyword("TRSM", "#0000FF",
-                                          sizeof(int)*2, EVENT_B_INFO_CONVERTER,
-                                          &event_trsm_startkey, &event_trsm_endkey);
-  if (0 != rc) {
-      printf("parsec_profiling_add_dictionary_keyword failed: %d\n", rc);
-      ttg::ttg_abort();
-  }
-  std::cout << "event_trsm_startkey " << event_trsm_startkey << ", event_trsm_endkey " << event_trsm_endkey << std::endl;
-  parsec_profiling_start();
-
-  int n_rows = (N / NB) + (N % NB > 0);
-  int n_cols = (M / NB) + (M % NB > 0);
+#endif // USE_PARSEC_PROF_API
 
   int P = std::sqrt(world.size());
   int Q = (world.size() + P - 1)/P;
@@ -950,9 +996,13 @@ int main(int argc, char **argv)
   parsec_data_free(dcA.mat); dcA.mat = NULL;
   parsec_tiled_matrix_dc_destroy( (parsec_tiled_matrix_dc_t*)&dcA);
 
+#if USE_PARSEC_PROF_API
   /** Finalize profiling */
-  parsec_profiling_dbp_dump();
-  parsec_profiling_fini();
+  if (profiling_enabled) {
+    parsec_profiling_dbp_dump();
+    parsec_profiling_fini();
+  }
+#endif // USE_PARSEC_PROF_API
 
   ttg::ttg_finalize();
   return 0;
