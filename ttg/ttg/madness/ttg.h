@@ -114,6 +114,8 @@ namespace ttg_madness {
     ::madness::World &impl() { return m_impl; }
 
     const ::madness::World &impl() const { return m_impl; }
+
+    parsec_context_t* context() { return ::madness::ThreadPool::instance()->parsec; }
   };
 
   template <typename... RestOfArgs>

@@ -1,11 +1,15 @@
-#define TTG_USE_PARSEC 1
+//#define TTG_USE_PARSEC 1
 
+#ifdef TTG_USE_PARSEC
 // tell TTG/PARSEC that we know what we are doing (TM)
 #define TTG_USE_USER_TERMDET 1
+#endif // TTG_USE_PARSEC
 
 #define USE_PARSEC_PROF_API 0
 
 #include <ttg.h>
+#include <ttg/serialization.h>
+#include <ttg/serialization/splitmd_data_descriptor.h>
 //#include <madness.h>
 #include "../blockmatrix.h"
 
@@ -214,7 +218,7 @@ public:
 
 private:
   pointer_t _data;
-  int _rows, _cols;
+  int _rows = 0, _cols = 0;
 
   // (Re)allocate the tile memory
   void realloc() {
@@ -223,6 +227,10 @@ private:
   }
 
 public:
+
+  MatrixTile()
+  { }
+
 
   MatrixTile(int rows, int cols) : _rows(rows), _cols(cols)
   {
@@ -350,6 +358,34 @@ namespace ttg {
   };
 
 } // namespace ttg
+
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+namespace madness {
+  namespace archive {
+    template <class Archive, typename T>
+    struct ArchiveStoreImpl<Archive, MatrixTile<T>> {
+      static inline void store(const Archive& ar, const MatrixTile<T>& tile) {
+        ar << tile.rows() << tile.cols();
+        ar << wrap(tile.data(), tile.rows() * tile.cols());
+      }
+    };
+
+    template <class Archive, typename T>
+    struct ArchiveLoadImpl<Archive, MatrixTile<T>> {
+      static inline void load(const Archive& ar, MatrixTile<T>& tile) {
+        int rows, cols;
+        ar >> rows >> cols;
+        tile = MatrixTile<T>(rows, cols);
+        ar >> wrap(tile.data(), tile.rows() * tile.cols());  // MatrixTile<T>(bm.rows(), bm.cols());
+      }
+    };
+  }  // namespace archive
+}  // namespace madness
+
+static_assert(madness::is_serializable_v<madness::archive::BufferOutputArchive, MatrixTile<float>>);
+
+#endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
 
 
 #if 0
