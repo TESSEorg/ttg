@@ -30,9 +30,11 @@ add_ttg_executable(wavefront-wf2 wavefront/wavefront-wf2.cc SINGLERANKONLY)
 add_ttg_executable(wavefront-df wavefront/wavefront-df.cc)
 add_ttg_executable(fw-apsp floyd-warshall/floyd_warshall.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
 
+
 if(TARGET DPLASMA::dplasma)
-  add_executable(potrf-pdc-parsec potrf/potrf_pdc.cc)
-  target_link_libraries(potrf-pdc-parsec PRIVATE blaspp lapackpp DPLASMA::dplasma MADworld ttg-parsec)
+  add_ttg_executable(potrf potrf/potrf.cc LINK_LIBRARIES lapackpp DPLASMA::dplasma)
+#  add_executable(potrf-pdc-parsec potrf/potrf_pdc.cc)
+#  target_link_libraries(potrf-pdc-parsec PRIVATE blaspp lapackpp DPLASMA::dplasma MADworld ttg-parsec)
 endif(TARGET DPLASMA::dplasma)
 
 
