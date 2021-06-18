@@ -14,4 +14,4 @@ target_link_libraries(serialization "Catch2::Catch2;ttg-serialization")
 #endif(TARGET MADworld)
 
 
-catch_discover_tests(serialization)
+catch_discover_tests(serialization TEST_PREFIX "ttg/test/unit/")
