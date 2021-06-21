@@ -11,6 +11,7 @@
 #include <btas/btas.h>
 #include <btas/optimize/contract.h>
 #include <btas/serialization.h>
+#include <btas/util/mohndle.h>
 #else
 #warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
 #endif
@@ -23,7 +24,11 @@ using namespace ttg;
 #include "ttg/util/future.h"
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
+#if defined(TTG_USE_MADNESS)
 using blk_t = btas::Tensor<double>;
+#else
+using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
+#endif
 
 // declare btas::Tensor serializable by Boost
 #include "ttg/serialization/backends/boost.h"
@@ -479,15 +484,17 @@ std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
 
 #include "../ttg_matrix.h"
 
+#include "ttg/util/bug.h"
+
 int main(int argc, char **argv) {
   ttg_initialize(argc, argv, 4);
 
-  //  using mpqc::Debugger;
-  //  auto debugger = std::make_shared<Debugger>();
-  //  Debugger::set_default_debugger(debugger);
-  //  debugger->set_exec(argv[0]);
-  //  debugger->set_prefix(ttg_default_execution_context().rank());
-  //  debugger->set_cmd("lldb_xterm");
+  using mpqc::Debugger;
+  auto debugger = std::make_shared<Debugger>();
+  Debugger::set_default_debugger(debugger);
+  debugger->set_exec(argv[0]);
+  debugger->set_prefix(ttg_default_execution_context().rank());
+  debugger->set_cmd("lldb_xterm");
   //
   //  initialize_watchpoints();
 
