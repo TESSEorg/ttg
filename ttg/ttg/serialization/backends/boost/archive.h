@@ -28,7 +28,7 @@ namespace ttg::detail {
       boost::archive::detail::save_enum_type<Archive>::invoke(ar, t);
       return;
     } else {
-      std::add_pointer_t<const T> tptr;
+      std::conditional_t<boost::is_pointer<T>::value, T, std::add_pointer_t<const T>> tptr;
       if constexpr (boost::is_pointer<T>::value) {
         static_assert(!std::is_polymorphic_v<T>,
                       "oarchive_save_override does not support serialization of polymorphic types");
@@ -53,7 +53,7 @@ namespace ttg::detail {
       boost::archive::detail::load_enum_type<Archive>::invoke(ar, t);
       return;
     } else {
-      std::add_pointer_t<T> tptr;
+      std::conditional_t<boost::is_pointer<T>::value, T, std::add_pointer_t<T>> tptr;
       if constexpr (boost::is_pointer<T>::value) {
         static_assert(!std::is_polymorphic_v<T>,
                       "iarchive_load_override_optimized_dispatch does not support serialization of polymorphic types");

@@ -19,6 +19,8 @@ class POD {
   POD(int value) : value(value) {}
 
   int get() const { return value; }
+
+  bool operator==(const POD& other) const { return value == other.value; }
 };
 static_assert(std::is_trivially_copyable_v<POD>);
 
@@ -732,6 +734,33 @@ TEST_CASE("Boost Serialization", "[serialization]") {
   test(std::make_tuple(1, 2, 3));
   test(intrusive::symmetric::bc_v::NonPOD{17});
   test(freestanding::symmetric::bc_v::NonPOD{18});
+
+  // serialize pointers of various kinds
+  auto test_ptr = [&](const auto& t) {
+    using T = std::remove_reference_t<decltype(t)>;
+    const auto* t_ptr = new T(t);
+
+    constexpr std::size_t buffer_size = 4096;
+    char buffer[buffer_size];
+    boost::iostreams::basic_array_sink<char> oabuf(buffer, buffer_size);
+    boost::iostreams::stream<boost::iostreams::basic_array_sink<char>> sink(oabuf);
+    boost::archive::binary_oarchive oa(sink);
+    oa << t_ptr;
+
+    boost::iostreams::basic_array_source<char> iabuf(buffer, buffer_size);
+    boost::iostreams::stream<boost::iostreams::basic_array_source<char>> source(iabuf);
+    boost::archive::binary_iarchive ia(source);
+    std::remove_cv_t<std::remove_reference_t<decltype(t_ptr)>> t_ptr_copy;
+    ia >> t_ptr_copy;
+
+    CHECK(t_ptr != t_ptr_copy);
+    CHECK(*t_ptr == *t_ptr_copy);
+
+    delete t_ptr;
+  };
+  // test_ptr(POD(33));  // N.B. POD is not boost serializable
+  test_ptr(intrusive::symmetric::bc_v::NonPOD{17});
+  test_ptr(freestanding::symmetric::bc_v::NonPOD{18});
 }
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
