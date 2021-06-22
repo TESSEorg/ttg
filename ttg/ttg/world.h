@@ -37,6 +37,12 @@ namespace ttg {
         default_keymap(ttg::World& world) : ttg::detail::default_keymap_impl<keyT>(world.size()) {}
       };
 
+      template <typename keyT>
+      struct default_priomap : ttg::detail::default_priomap_impl<keyT> {
+       public:
+        default_priomap() = default;
+      };
+
       template<typename WorldImplT>
       std::list<WorldImplT*>&
       world_registry_accessor() {

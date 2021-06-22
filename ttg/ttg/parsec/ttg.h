@@ -700,6 +700,7 @@ namespace ttg_parsec {
 
     ttg::World world;
     ttg::meta::detail::keymap_t<keyT> keymap;
+    ttg::meta::detail::keymap_t<keyT> priomap;
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<input_valueTs...>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
@@ -1087,6 +1088,12 @@ namespace ttg_parsec {
         newtask->parsec_task.task_class = &this->self;
         newtask->parsec_task.taskpool = world_impl.taskpool();
         newtask->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
+        if constexpr (!keyT_is_Void) {
+          newtask->parsec_task.priority = priomap(key);
+        } else {
+          newtask->parsec_task.priority = priomap();
+        }
+        std::cout << "task has priority " << newtask->parsec_task.priority << std::endl;
 
         newtask->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
             reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op<ttg::ExecutionSpace::Host>);
@@ -1875,16 +1882,18 @@ namespace ttg_parsec {
     }
 
    public:
-    template <typename keymapT = ttg::detail::default_keymap<keyT>>
+    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+              typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       ttg::World world, keymapT &&keymap_ = keymapT())
+       ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
         : ttg::OpBase(name, numins, numouts)
         , set_arg_from_msg_fcts(make_set_args_fcts(std::make_index_sequence<numins>{}))
         , world(world)
         // if using default keymap, rebind to the given world
         , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
                      ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
-                     : decltype(keymap)(std::forward<keymapT>(keymap_))) {
+                     : decltype(keymap)(std::forward<keymapT>(keymap_)))
+        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))){
       // Cannot call these in base constructor since terminals not yet constructed
       if (innames.size() != std::tuple_size<input_terminals_type>::value)
         throw std::logic_error("ttg_parsec::OP: #input names != #input terminals");
@@ -1979,24 +1988,33 @@ namespace ttg_parsec {
       parsec_hash_table_init(&tasks_table, offsetof(detail::my_op_t, op_ht_item), 8, tasks_hash_fcts, NULL);
     }
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>>
+    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+              typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::get_default_world()))
-        : Op(name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap)) {}
+       keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
+        : Op(name, innames, outnames, ttg::get_default_world(),
+             std::forward<keymapT>(keymap),
+             std::forward<priomapT>(priomap)) {}
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>>
+    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+              typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ttg::World world,
-       keymapT &&keymap_ = keymapT())
-        : Op(name, innames, outnames, world, std::forward<keymapT>(keymap_)) {
+       keymapT &&keymap_ = keymapT(), priomapT &&priomap = priomapT())
+        : Op(name, innames, outnames, world,
+             std::forward<keymapT>(keymap_),
+             std::forward<priomapT>(priomap)) {
       connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numins>{}, inedges);
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
     }
-    template <typename keymapT = ttg::detail::default_keymap<keyT>>
+    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+              typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::get_default_world()))
-        : Op(inedges, outedges, name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap)) {}
+       keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
+        : Op(inedges, outedges, name, innames, outnames, ttg::get_default_world(),
+             std::forward<keymapT>(keymap),
+             std::forward<priomapT>(priomap)) {}
 
     // Destructor checks for unexecuted tasks
     ~Op() { release(); }
@@ -2095,10 +2113,19 @@ namespace ttg_parsec {
     const decltype(keymap) &get_keymap() const { return keymap; }
 
     /// keymap setter
-    /// @return the keymap
     template <typename Keymap>
     void set_keymap(Keymap &&km) {
       keymap = km;
+    }
+
+    /// priority map accessor
+    /// @return the priority map
+    const decltype(priomap) &get_priomap() const { return priomap; }
+
+    /// priomap setter
+    template <typename Priomap>
+    void set_priomap(Priomap &&pm) {
+      priomap = pm;
     }
 
     // Register the static_op function to associate it to instance_id
