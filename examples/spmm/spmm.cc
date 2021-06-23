@@ -33,7 +33,7 @@ using namespace ttg;
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 using blk_t = btas::Tensor<double>;
 
-#if 1
+#if defined(TTG_USE_PARSEC)
 namespace ttg {
   template <>
   struct SplitMetadataDescriptor<blk_t> {
@@ -62,7 +62,7 @@ namespace ttg {
     }
   };
 }  // namespace ttg
-#endif
+#endif /* TTG_USE_PARSEC */
 
 // declare btas::Tensor serializable by Boost
 #include "ttg/serialization/backends/boost.h"
