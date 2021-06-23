@@ -147,12 +147,13 @@ namespace ttg_parsec {
     inline ttg_data_copy_t *find_copy_in_task(parsec_task_t *task, const void *ptr) {
       ttg_data_copy_t *copy = nullptr;
       int j = -1;
-      if (task != nullptr || ptr != nullptr) {
-        while (++j < MAX_CALL_PARAM_COUNT) {
-          if (NULL != task->data[j].data_in && task->data[j].data_in->device_private == ptr) {
-            copy = reinterpret_cast<ttg_data_copy_t *>(task->data[j].data_in);
-            break;
-          }
+      if (task == nullptr || ptr == nullptr) {
+        return copy;
+      }
+      while (++j < MAX_CALL_PARAM_COUNT) {
+        if (NULL != task->data[j].data_in && task->data[j].data_in->device_private == ptr) {
+          copy = reinterpret_cast<ttg_data_copy_t *>(task->data[j].data_in);
+          break;
         }
       }
       return copy;
@@ -1415,6 +1416,15 @@ namespace ttg_parsec {
       } else {
         ttg_data_copy_t *copy;
         copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
+        if (nullptr == copy) {
+          // We need to create a copy for this data, as it does not exist yet.
+          using decay_valueT = std::decay_t<valueT>;
+          auto *val_copy = new decay_valueT(value);
+          copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
+          copy->device_private = val_copy;
+          copy->readers = 1;
+          copy->delete_fn = &detail::typed_delete_t<decay_valueT>::delete_type;
+        }
         copy = detail::register_data_copy<decvalueT>(copy, nullptr, true);
 
         ttg::SplitMetadataDescriptor<decvalueT> descr;
