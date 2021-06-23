@@ -481,16 +481,6 @@ auto make_potrf(MatrixT<T>& A,
                 ttg::Edge<Key2, MatrixTile<T>>& output_trsm,
                 ttg::Edge<Key2, MatrixTile<T>>& output_result)
 {
-#if 0
-  auto trsm_keygen = [=](const Key& key){
-    const int I = key.I;
-    const int J = key.J;
-    const int K = key.K;
-    for (int m = I+1; m < A.rows(); ++m) {
-      co_yield Key(m, J, K);
-    }
-  };
-#endif // 0
   auto f = [=](const Key1& key,
                MatrixTile<T>&& tile_kk,
                std::tuple<ttg::Out<Key2, MatrixTile<T>>,
@@ -576,7 +566,7 @@ auto make_trsm(MatrixT<T>& A,
     std::vector<Key3> keylist_row;
     keylist_row.reserve(I-J-1);
     std::vector<Key3> keylist_col;
-    keylist_row.reserve(A.rows()-I-1);
+    keylist_col.reserve(A.rows()-I-1);
 
     /* tile is done */
     //ttg::send<0>(key, std::move(tile_mk), out);
@@ -849,7 +839,7 @@ int main(int argc, char **argv)
   if (nullptr != prof_filename) {
     parsec_profiling_init();
 
-    parsec_profiling_dbp_start( "potrf", "Cholesky Factorization" );
+    parsec_profiling_dbp_start( prof_filename, "Cholesky Factorization" );
 
     parsec_profiling_add_dictionary_keyword("TRSM", "#0000FF",
                                             sizeof(int)*2, EVENT_B_INFO_CONVERTER,
