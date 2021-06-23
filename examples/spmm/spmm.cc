@@ -37,14 +37,28 @@ using blk_t = btas::Tensor<double>;
 namespace ttg {
   template <>
   struct SplitMetadataDescriptor<blk_t> {
+    // TODO: this is a quick and dirty approach.
+    //   - blk_t could have any number of dimensions, this code only works for 2 dim blocks
+    //   - we use Blk(0) to send a control flow in some tasks below, these blocks have only
+    //     1 dimension (of size 0), to code this, we set the second dimension to 0 in our
+    //     quick and dirty linearization, then have a case when we create the object
+    //   - when we create the objet with the metadata, we use a constructor that initializes
+    //     the data to 0, which is useless: the data could be left uninitialized
     auto get_metadata(const blk_t &b) {
-      std::pair<int, int> dim = std::make_pair<int, int>(b.extent(0), b.extent(1));
+      std::pair<int, int> dim;
+      std::get<0>(dim) = b.range().extent(0);
+      if (b.range().extent().size() == 2)
+        std::get<1>(dim) = b.range().extent(1);
+      else
+        std::get<1>(dim) = 0;
       return dim;
     }
     auto get_data(blk_t &b) { return std::array<iovec, 1>({b.size() * sizeof(double), b.data()}); }
     auto create_from_metadata(const std::pair<int, int> &meta) {
-      std::cout << "Creating a new tile with metadata " << std::get<0>(meta) << " x " << std::get<1>(meta) << std::endl;
-      return blk_t(btas::Range(std::get<0>(meta), std::get<1>(meta)), 0.0);
+      if (0 == std::get<1>(meta))
+        return blk_t(btas::Range(std::get<0>(meta)), 0.0);
+      else
+        return blk_t(btas::Range(std::get<0>(meta), std::get<1>(meta)), 0.0);
     }
   };
 }  // namespace ttg
