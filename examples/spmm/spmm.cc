@@ -27,10 +27,28 @@
 
 using namespace ttg;
 
+#include "ttg/serialization.h"
 #include "ttg/util/future.h"
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 using blk_t = btas::Tensor<double>;
+
+#if 1
+namespace ttg {
+  template <>
+  struct SplitMetadataDescriptor<blk_t> {
+    auto get_metadata(const blk_t &b) {
+      std::pair<int, int> dim = std::make_pair<int, int>(b.extent(0), b.extent(1));
+      return dim;
+    }
+    auto get_data(blk_t &b) { return std::array<iovec, 1>({b.size() * sizeof(double), b.data()}); }
+    auto create_from_metadata(const std::pair<int, int> &meta) {
+      std::cout << "Creating a new tile with metadata " << std::get<0>(meta) << " x " << std::get<1>(meta) << std::endl;
+      return blk_t(btas::Range(std::get<0>(meta), std::get<1>(meta)), 0.0);
+    }
+  };
+}  // namespace ttg
+#endif
 
 // declare btas::Tensor serializable by Boost
 #include "ttg/serialization/backends/boost.h"
