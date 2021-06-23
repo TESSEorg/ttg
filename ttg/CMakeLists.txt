@@ -93,6 +93,7 @@ set(ttg-serialization-source
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/list.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/pair.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/tuple.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/variant.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/vector.h
    )
 add_library(ttg-serialization
