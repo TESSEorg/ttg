@@ -57,6 +57,10 @@ namespace ttg::detail {
       if constexpr (boost::is_pointer<T>::value) {
         static_assert(!std::is_polymorphic_v<T>,
                       "iarchive_load_override_optimized_dispatch does not support serialization of polymorphic types");
+        using Value = std::remove_pointer_t<T>;
+        std::allocator<Value> alloc;  // instead use the allocator associated with the archive?
+        auto* buf = alloc.allocate(sizeof(Value));
+        t = new (buf) Value;
         tptr = t;
       } else
         tptr = &t;
