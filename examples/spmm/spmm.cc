@@ -33,9 +33,14 @@ using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::var
 // declare btas::Tensor serializable by Boost
 #include "ttg/serialization/backends/boost.h"
 namespace ttg::detail {
+  // BTAS defines all of its Boost serializers in boost::serialization namespace ... as explained in
+  // ttg/serialization/boost.h such functions are not detectable via SFINAE, so must explicitly define serialization
+  // traits here
   template <typename Archive>
   inline static constexpr bool is_boost_serializable_v<Archive, blk_t> = is_boost_archive_v<Archive>;
-}
+  template <typename Archive>
+  inline static constexpr bool is_boost_serializable_v<Archive, const blk_t> = is_boost_archive_v<Archive>;
+}  // namespace ttg::detail
 
 #else
 using blk_t = double;
