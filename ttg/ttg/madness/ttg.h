@@ -177,6 +177,7 @@ namespace ttg_madness {
    private:
     ttg::World world;
     ttg::meta::detail::keymap_t<keyT> keymap;
+    ttg::meta::detail::keymap_t<keyT> priomap;
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<input_valueTs...>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
@@ -891,16 +892,18 @@ namespace ttg_madness {
     }
 
    public:
-    template <typename keymapT = ttg::detail::default_keymap<keyT>>
+    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+              typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       ttg::World world, keymapT &&keymap_ = keymapT())
+       ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
         : ttg::OpBase(name, numins, numouts)
         , worldobjT(world.impl().impl())
         , world(world)
         // if using default keymap, rebind to the given world
         , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
                      ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
-                     : decltype(keymap)(std::forward<keymapT>(keymap_))) {
+                     : decltype(keymap)(std::forward<keymapT>(keymap_)))
+        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))) {
       // Cannot call these in base constructor since terminals not yet constructed
       if (innames.size() != std::tuple_size<input_terminals_type>::value) {
         ttg::print_error(world.rank(), ":", get_name(), "#input_names", innames.size(), "!= #input_terminals",
@@ -916,22 +919,26 @@ namespace ttg_madness {
       register_input_callbacks(std::make_index_sequence<numins>{});
     }
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>>
+    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+              typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::get_default_world()))
-        : Op(name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap)) {}
+       keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
+        : Op(name, innames, outnames, ttg::get_default_world(),
+             std::forward<keymapT>(keymap), std::forward<priomapT>(priomap)) {}
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>>
+    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+              typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ttg::World world,
-       keymapT &&keymap_ = keymapT())
+       keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
         : ttg::OpBase(name, numins, numouts)
         , worldobjT(ttg::get_default_world().impl().impl())
         , world(ttg::get_default_world())
         // if using default keymap, rebind to the given world
         , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
                      ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
-                     : decltype(keymap)(std::forward<keymapT>(keymap_))) {
+                     : decltype(keymap)(std::forward<keymapT>(keymap_)))
+        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))){
       // Cannot call in base constructor since terminals not yet constructed
       if (innames.size() != std::tuple_size<input_terminals_type>::value) {
         ttg::print_error(world.rank(), ":", get_name(), "#input_names", innames.size(), "!= #input_terminals",
@@ -950,11 +957,13 @@ namespace ttg_madness {
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
     }
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>>
+    template <typename keymapT = ttg::detail::default_keymap<keyT>,
+              typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::get_default_world()))
-        : Op(inedges, outedges, name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap)) {}
+       keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
+        : Op(inedges, outedges, name, innames, outnames, ttg::get_default_world(),
+             std::forward<keymapT>(keymap), std::forward<priomapT>(priomap)) {}
 
     // Destructor checks for unexecuted tasks
     virtual ~Op() {
@@ -991,6 +1000,15 @@ namespace ttg_madness {
     template <typename Keymap>
     void set_keymap(Keymap &&km) {
       keymap = km;
+    }
+
+    auto get_priomap(void) const {
+      return priomap;
+    }
+
+    template <typename Priomap>
+    void set_priomap(Priomap &&pm) {
+      priomap = pm;
     }
 
     /// implementation of OpBase::make_executable()

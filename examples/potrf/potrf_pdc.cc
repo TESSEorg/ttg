@@ -931,6 +931,18 @@ int main(int argc, char **argv)
   auto op_result = make_result(A, result);
   op_result->set_keymap(keymap2);
 
+
+  /* Priorities taken from DPLASMA */
+  auto nt = A.cols();
+  op_potrf->set_priomap([&](const Key1& key){ return ((nt - key.K) * (nt - key.K) * (nt - key.K)); });
+  op_trsm->set_priomap([&](const Key2& key) { return ((nt - key.I) * (nt - key.I) * (nt - key.I)
+                                                      + 3 * ((2 * nt) - key.J - key.I - 1) * (key.I - key.J)); });
+  op_syrk->set_priomap([&](const Key2& key) { return ((nt - key.I) * (nt - key.I) * (nt - key.I)
+                                                      + 3 * (key.I - key.J)); });
+  op_gemm->set_priomap([&](const Key3& key) { return ((nt - key.I) * (nt - key.I) * (nt - key.I)
+                                                      + 3 * ((2 * nt) - key.I - key.J - 3) * (key.I - key.J)
+                                                      + 6 * (key.I - key.K)); });
+
   auto connected = make_graph_executable(op_init.get());
   assert(connected);
   TTGUNUSED(connected);
