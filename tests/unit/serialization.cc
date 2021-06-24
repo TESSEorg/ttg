@@ -587,6 +587,13 @@ TEST_CASE("MADNESS Serialization", "[serialization]") {
   POD b[4] = {POD(1), POD(2), POD(3), POD(4)};
   test(b);
 
+#ifdef TTG_HAS_BTAS
+  {
+    tensor_t t(2, 3, 4);
+    test(t);
+  }
+#endif
+
   static_assert(!ttg::detail::is_madness_input_serializable_v<madness::archive::BufferInputArchive, NonPOD>);
   static_assert(!ttg::detail::is_madness_output_serializable_v<madness::archive::BufferOutputArchive, NonPOD>);
 

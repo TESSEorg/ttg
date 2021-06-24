@@ -24,11 +24,7 @@ using namespace ttg;
 #include "ttg/util/future.h"
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
-#if defined(TTG_USE_MADNESS)
-using blk_t = btas::Tensor<double>;
-#else
 using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
-#endif
 
 // declare btas::Tensor serializable by Boost
 #include "ttg/serialization/backends/boost.h"
