@@ -2123,6 +2123,7 @@ namespace ttg_parsec {
     const decltype(priomap) &get_priomap() const { return priomap; }
 
     /// priomap setter
+    /// @arg pm a function that maps a key to an integral priority value.
     template <typename Priomap>
     void set_priomap(Priomap &&pm) {
       priomap = pm;
