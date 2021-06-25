@@ -232,6 +232,8 @@ namespace ttg_madness {
     output_terminalsT output_terminals;
 
     struct OpArgs : ::madness::TaskInterface {
+     private:
+      using TaskInterface = ::madness::TaskInterface;
      public:
       int counter;  // Tracks the number of arguments finalized
       std::array<std::size_t, numins>
@@ -261,7 +263,9 @@ namespace ttg_madness {
                                     std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{});
       }
 
-      OpArgs() : counter(numins), nargs(), stream_size(), input_values() {
+      OpArgs(int prio = 0)
+      : TaskInterface(TaskAttributes(prio ? TaskAttributes::HIGHPRIORITY : 0)),
+        counter(numins), nargs(), stream_size(), input_values() {
         std::fill(nargs.begin(), nargs.end(), std::numeric_limits<std::size_t>::max());
       }
 
@@ -338,7 +342,7 @@ namespace ttg_madness {
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
 
         accessorT acc;
-        if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
+        if (cache.insert(acc, key)) acc->second = new OpArgs(this->priomap(key));  // It will be deleted by the task q
         OpArgs *args = acc->second;
 
         if (args->nargs[i] == 0) {
@@ -522,7 +526,7 @@ namespace ttg_madness {
         worldobjT::send(owner, &opT::set_arg<keyT>, key);
       } else {
         accessorT acc;
-        if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
+        if (cache.insert(acc, key)) acc->second = new OpArgs(this->priomap(key));  // It will be deleted by the task q
         OpArgs *args = acc->second;
 
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
@@ -631,7 +635,7 @@ namespace ttg_madness {
         }
 
         accessorT acc;
-        if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
+        if (cache.insert(acc, key)) acc->second = new OpArgs(this->priomap(key));  // It will be deleted by the task q
         OpArgs *args = acc->second;
 
         args->lock();
@@ -1006,6 +1010,9 @@ namespace ttg_madness {
       return priomap;
     }
 
+    /// Set the priority map, mapping a Key to an integral value.
+    /// Higher values indicate higher priority. The default priority is 0, higher
+    /// values are treated as high priority tasks in the MADNESS backend.
     template <typename Priomap>
     void set_priomap(Priomap &&pm) {
       priomap = pm;
