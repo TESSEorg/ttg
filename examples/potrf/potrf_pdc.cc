@@ -785,7 +785,7 @@ auto make_result(MatrixT<T>& A, const ttg::Edge<Key2, MatrixTile<T>>& result) {
     const int I = key.I;
     const int J = key.J;
     if (A(I, J).data() != tile.data()) {
-      std::cout << "Writing back tile {" << I << ", " << J << "} " << std::endl;
+      //std::cout << "Writing back tile {" << I << ", " << J << "} " << std::endl;
       std::copy_n(tile.data(), tile.rows()*tile.cols(), A(I, J).data());
     }
 #ifdef TTG_USE_USER_TERMDET

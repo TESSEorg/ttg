@@ -155,7 +155,6 @@ namespace ttg {
     template <size_t KeyId, size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT>
     void broadcast(const std::tuple<RangesT...>& keylists, valueT&& value, std::tuple<output_terminalsT...> &t) {
       if (std::get<KeyId>(keylists).size() > 0) {
-        std::cout << "BROADCAST to " << i << " " << std::get<i>(t).get_name() << std::endl;
         std::get<i>(t).broadcast(std::get<KeyId>(keylists), value);
       }
       if constexpr(sizeof...(I) > 0) {
