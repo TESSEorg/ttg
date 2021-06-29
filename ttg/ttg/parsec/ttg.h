@@ -1093,7 +1093,6 @@ namespace ttg_parsec {
         } else {
           newtask->parsec_task.priority = priomap();
         }
-        std::cout << "task has priority " << newtask->parsec_task.priority << std::endl;
 
         newtask->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
             reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op<ttg::ExecutionSpace::Host>);
