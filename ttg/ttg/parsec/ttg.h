@@ -1125,11 +1125,12 @@ namespace ttg_parsec {
         }
       }
 
+      parsec_key_t hk = 0;
       if constexpr (!keyT_is_Void) {
+        hk = reinterpret_cast<parsec_key_t>(&key);
         assert(keymap(key) == world.rank());
       }
 
-      auto hk = reinterpret_cast<parsec_key_t>(&key);
       detail::my_op_t *task = nullptr;
       auto &world_impl = world.impl();
       parsec_hash_table_lock_bucket(&tasks_table, hk);
@@ -2012,7 +2013,8 @@ namespace ttg_parsec {
     }
 
     static uint64_t key_hash(parsec_key_t k, void *user_data) {
-      if constexpr (std::is_same_v<keyT, void>) {
+      constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
+      if constexpr (keyT_is_Void || std::is_same_v<keyT, void>) {
         return 0;
       } else {
         keyT &kk = *(reinterpret_cast<keyT *>(k));
