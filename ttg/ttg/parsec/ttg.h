@@ -1292,8 +1292,11 @@ namespace ttg_parsec {
       std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id, i, 1);
       using decvalueT = std::decay_t<Value>;
       /* pack the key */
-      pos = pack(key, msg->bytes, pos);
-      msg->op_id.num_keys = 1;
+      msg->op_id.num_keys = 0;
+      if constexpr (!ttg::meta::is_void_v<Key>) {
+        pos = pack(key, msg->bytes, pos);
+        msg->op_id.num_keys = 1;
+      }
       if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
         // std::cout << "set_arg_from_msg unpacking from offset " << sizeof(keyT) << std::endl;
         pos = pack(value, msg->bytes, pos);
