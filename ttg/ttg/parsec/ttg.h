@@ -1164,15 +1164,17 @@ namespace ttg_parsec {
           } else {
             // TODO: Ask Ed -- Why do we need a copy of value here?
             valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
-            reinterpret_cast<std::decay_t<valueT> &>(copy->device_private) = std::move(
-                reducer(reinterpret_cast<std::decay_t<valueT> &&>(copy->device_private), std::move(value_copy)));
+            *reinterpret_cast<std::decay_t<valueT> *>(copy->device_private) =
+                std::move(reducer(reinterpret_cast<std::decay_t<valueT> &&>(
+                                      *reinterpret_cast<std::decay_t<valueT> *>(copy->device_private)),
+                                  std::move(value_copy)));
             task->stream_size[i]--;
-            release = (task->stream_size[i] == 0);
+            release = (task->stream_size[i] == 1);
           }
         } else {
           reducer();  // even if this was a control input, must execute the reducer for possible side effects
           task->stream_size[i]--;
-          release = (task->stream_size[i] == 0);
+          release = (task->stream_size[i] == 1);
         }
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
         if (release) release_task(this, task);
@@ -1817,7 +1819,7 @@ namespace ttg_parsec {
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
 
         // commit changes
-        task->stream_size[i] = 0;
+        task->stream_size[i] = 1;
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
 
         release_task(this, task);
@@ -1855,7 +1857,7 @@ namespace ttg_parsec {
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
 
         // commit changes
-        task->stream_size[i] = 0;
+        task->stream_size[i] = 1;
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
 
         release_task(this, task);
