@@ -163,7 +163,6 @@ namespace ttg_parsec {
       }
 
       if (MAX_PARAM_COUNT > j) {
-        PARSEC_OBJ_RETAIN(copy);
         task->data[j].data_in = copy;
         return true;
       }
@@ -897,6 +896,7 @@ namespace ttg_parsec {
 
       /* release the dummy task */
       complete_task_and_release(es, &dummy->parsec_task);
+      parsec_thread_mempool_free(mempool, &dummy->parsec_task);
     }
 
     // there are 6 types of set_arg:
@@ -2058,6 +2058,16 @@ namespace ttg_parsec {
       return PARSEC_HOOK_RETURN_DONE;
     }
 
+    static parsec_hook_return_t
+    release_task_to_mempool_update_nbtasks(parsec_execution_stream_t *es,
+                                           parsec_task_t *this_task)
+    {
+      ttg_parsec::detail::my_op_s *myop = (ttg_parsec::detail::my_op_s*)this_task;
+      myop->~my_op_s();
+      std::cout << "Returning task " << this_task << " to " << this_task->mempool_owner << std::endl;
+      return parsec_release_task_to_mempool_update_nbtasks(es, this_task);
+    }
+
    public:
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
@@ -2118,7 +2128,7 @@ namespace ttg_parsec {
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
       }
 
-      self.release_task = parsec_release_task_to_mempool_update_nbtasks;
+      self.release_task = &release_task_to_mempool_update_nbtasks;
       self.complete_execution = complete_task_and_release;
 
       for (i = 0; i < numins; i++) {
