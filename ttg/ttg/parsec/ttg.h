@@ -1219,6 +1219,7 @@ namespace ttg_parsec {
     }
 
     static void release_task(void *op_ptr, detail::my_op_t *task) {
+      constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       opT &op = *reinterpret_cast<opT *>(op_ptr);
       int32_t count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
       assert(count <= op.self.dependencies_goal);
@@ -1235,8 +1236,13 @@ namespace ttg_parsec {
         world_impl.increment_sent_to_sched();
         parsec_execution_stream_t *es = world_impl.execution_stream();
         parsec_key_t hk = reinterpret_cast<parsec_key_t>(task->key);
-        if (op.tracing())
-          ttg::print(op.world.rank(), ":", op.get_name(), " : ", task->key, ": submitting task for op ");
+        if (op.tracing()) {
+          if constexpr (!keyT_is_Void) {
+            ttg::print(op.world.rank(), ":", op.get_name(), " : ", task->key, ": submitting task for op ");
+          } else {
+            ttg::print(op.world.rank(), ":", op.get_name(), ": submitting task for op ");
+          }
+        }
         parsec_hash_table_remove(&op.tasks_table, hk);
         __parsec_schedule(es, &task->parsec_task, 0);
       }
