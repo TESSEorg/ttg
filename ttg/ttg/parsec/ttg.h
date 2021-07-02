@@ -327,6 +327,11 @@ namespace ttg_parsec {
       }
       parsec_context_wait(ctx);
 
+      // We need the synchronization between the end of the context and the restart of the taskpool
+      // until we use parsec_taskpool_wait and implement an epoch in the PaRSEC taskpool
+      // see Issue #118 (TTG)
+      MPI_Barrier(comm());
+
       // And we start again
       tpool->tdm.module->monitor_taskpool(tpool, parsec_taskpool_termination_detected);
       tpool->tdm.module->taskpool_set_nb_pa(tpool, 0);
