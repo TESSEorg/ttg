@@ -734,6 +734,9 @@ namespace ttg_parsec {
     };
 
    private:
+    /* the offset of the key placed after the task structure in the memory from mempool */
+    constexpr static const size_t task_key_offset = sizeof(detail::parsec_ttg_task_t)+numins*sizeof(detail::parsec_ttg_task_t::stream_size[0]);
+
     input_terminals_type input_terminals;
     output_terminalsT output_terminals;
     std::array<void (Op::*)(void *, std::size_t), numins> set_arg_from_msg_fcts;
@@ -1090,24 +1093,27 @@ namespace ttg_parsec {
       auto &world_impl = world.impl();
       detail::parsec_ttg_task_t *newtask;
       parsec_execution_stream_s *es = world_impl.execution_stream();
+      parsec_thread_mempool_t *mempool =
+          &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
+      char *taskobj = (char*)parsec_thread_mempool_allocate(mempool);
       int32_t priority;
       parsec_key_t parsec_key;
       if constexpr (!keyT_is_Void) {
         priority = priomap(key);
-        keyT *new_key = new keyT(key);
+        /* placement new the key */
+        keyT *new_key = new (taskobj+task_key_offset) keyT(key);
         parsec_key = reinterpret_cast<parsec_key_t>(new_key);
       } else {
         priority = priomap();
         parsec_key = 0;
       }
 
-      parsec_thread_mempool_t *mempool =
-          &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-      newtask = new (parsec_thread_mempool_allocate(mempool))detail::parsec_ttg_task_t(numins, mempool, &this->self,
-                                                                                       world_impl.taskpool(),
-                                                                                       this,
-                                                                                       parsec_key,
-                                                                                       priority);
+      /* placement-new the task */
+      newtask = new (taskobj)detail::parsec_ttg_task_t(numins, mempool, &this->self,
+                                                       world_impl.taskpool(),
+                                                       this,
+                                                       parsec_key,
+                                                       priority);
       newtask->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
           reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op<ttg::ExecutionSpace::Host>);
       if constexpr (derived_has_cuda_op())
@@ -1398,16 +1404,18 @@ namespace ttg_parsec {
       if (owner == world.rank()) {
         // create PaRSEC task
         // and give it to the scheduler
-        keyT *kp = new keyT(key);
         detail::parsec_ttg_task_t *task;
         parsec_execution_stream_s *es = world_impl.execution_stream();
         parsec_thread_mempool_t *mempool =
             &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-        task = new (parsec_thread_mempool_allocate(mempool))detail::parsec_ttg_task_t(numins, mempool, &this->self,
-                                                                                      world_impl.taskpool(),
-                                                                                      this,
-                                                                                      reinterpret_cast<parsec_key_t>(kp),
-                                                                                      priomap(key));
+        char *taskobj = (char*)parsec_thread_mempool_allocate(mempool);
+        keyT *kp = new (taskobj+task_key_offset) keyT(key);
+
+        task = new (taskobj)detail::parsec_ttg_task_t(numins, mempool, &this->self,
+                                                      world_impl.taskpool(),
+                                                      this,
+                                                      reinterpret_cast<parsec_key_t>(kp),
+                                                      priomap(key));
 
         task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
             reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op_noarg<ttg::ExecutionSpace::Host>);
@@ -2056,10 +2064,6 @@ namespace ttg_parsec {
         op->deferred_release = nullptr;
         op->op_ptr = nullptr;
       }
-      if constexpr (!ttg::meta::is_void_v<keyT>) {
-        keyT *key = (keyT *)op->key;
-        delete (key);
-      }
       return PARSEC_HOOK_RETURN_DONE;
     }
 
@@ -2164,9 +2168,14 @@ namespace ttg_parsec {
           mempools_index[std::pair<int, int>(i, j)] = k++;
         }
       }
+
+      size_t keysize = 0;
+      if constexpr (!std::is_same_v<void, keyT>) {
+        keysize = sizeof(keyT);
+      }
       parsec_mempool_construct(&mempools, PARSEC_OBJ_CLASS(parsec_task_t),
-                               /* account for the number of input terminals to handle input streams */
-                               sizeof(detail::parsec_ttg_task_t)+numins*sizeof(detail::parsec_ttg_task_t::stream_size[0]),
+                               /* account for the number of input terminals to handle input streams and key */
+                               sizeof(detail::parsec_ttg_task_t)+numins*sizeof(detail::parsec_ttg_task_t::stream_size[0])+keysize,
                                offsetof(parsec_task_t, mempool_owner), k);
 
       parsec_hash_table_init(&tasks_table, offsetof(detail::parsec_ttg_task_t, op_ht_item), 8, tasks_hash_fcts, NULL);
