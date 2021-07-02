@@ -739,7 +739,13 @@ namespace ttg_parsec {
 
     input_terminals_type input_terminals;
     output_terminalsT output_terminals;
-    std::array<void (Op::*)(void *, std::size_t), numins> set_arg_from_msg_fcts;
+
+    template <std::size_t... IS>
+    static constexpr auto make_set_args_fcts(std::index_sequence<IS...>) {
+      using resultT = decltype(set_arg_from_msg_fcts);
+      return resultT{{&Op::set_arg_from_msg<IS>...}};
+    }
+    constexpr static std::array<void (Op::*)(void *, std::size_t), numins> set_arg_from_msg_fcts = make_set_args_fcts(std::make_index_sequence<numins>{});
 
     ttg::World world;
     ttg::meta::detail::keymap_t<keyT> keymap;
@@ -752,11 +758,6 @@ namespace ttg_parsec {
     ttg::World get_world() const { return world; }
 
    private:
-    template <std::size_t... IS>
-    static auto make_set_args_fcts(std::index_sequence<IS...>) {
-      using resultT = decltype(set_arg_from_msg_fcts);
-      return resultT{{&Op::set_arg_from_msg<IS>...}};
-    }
 
     /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
     template <ttg::ExecutionSpace Space, typename... Args>
@@ -2073,7 +2074,6 @@ namespace ttg_parsec {
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
         : ttg::OpBase(name, numins, numouts)
-        , set_arg_from_msg_fcts(make_set_args_fcts(std::make_index_sequence<numins>{}))
         , world(world)
         // if using default keymap, rebind to the given world
         , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
