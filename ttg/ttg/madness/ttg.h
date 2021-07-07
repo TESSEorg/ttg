@@ -179,6 +179,7 @@ namespace ttg_madness {
     ttg::meta::detail::input_reducers_t<input_valueTs...>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
+    std::array<std::size_t, sizeof...(input_valueTs)> static_streamsize;
    public:
     ttg::World get_world() const { return world; }
 
@@ -352,13 +353,19 @@ namespace ttg_madness {
             // have a value already? if not, set, otherwise reduce
             if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
               this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
+
               // now have a value, reset nargs
+              // check if we have a stream size for the op, which has precedence over the global setting.
               if (args->stream_size[i] != 0) {
                 args->nargs[i] = args->stream_size[i];
+              } else if (static_streamsize[i] != 0) {
+                args->stream_size[i] = static_streamsize[i];
+                args->nargs[i] = static_streamsize[i];
               } else {
                 args->nargs[i] = 1;
               }
             } else {
+              //Why do we need to move the value here??
               valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
               this->get<i, std::decay_t<valueT> &>(args->input_values) =
                   std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->input_values), std::move(value_copy)));
@@ -462,6 +469,9 @@ namespace ttg_madness {
             // now have a value, reset nargs
             if (args->stream_size[i] != 0) {
               args->nargs[i] = args->stream_size[i];
+            } else if (static_streamsize[i] != 0) {
+                args->stream_size[i] = static_streamsize[i];
+                args->nargs[i] = static_streamsize[i];
             } else {
               args->nargs[i] = 1;
             }
@@ -605,6 +615,25 @@ namespace ttg_madness {
 
         args->unlock();
       }
+    }
+
+    template <std::size_t i>
+    void set_static_argstream_size(std::size_t size) {
+      assert(std::get<i>(input_reducers) && "Op::set_argstream_size called on nonstreaming input terminal");
+      assert(size > 0 && "Op::set_static_argstream_size(key,size) called with size=0");
+
+      if (tracing()) {
+        ttg::print(world.rank(), ":", get_name(), ": setting global stream size for terminal ", i);
+      }
+
+      //Check if stream is already bounded
+      if (static_streamsize[i] > 0) {
+        ttg::print_error(world.rank(), ":", get_name(), " : error stream is already bounded : ", i);
+        throw std::runtime_error("Op::set_static_argstream_size called for a bounded stream");
+      }
+
+     // commit changes
+      static_streamsize[i] = size;
     }
 
     /// sets stream size for input \c i
@@ -892,7 +921,8 @@ namespace ttg_madness {
     template <typename keymapT = ttg::detail::default_keymap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        ttg::World world, keymapT &&keymap_ = keymapT())
-        : ttg::OpBase(name, numins, numouts)
+      : ttg::OpBase(name, numins, numouts)
+        , static_streamsize()
         , worldobjT(world.impl().impl())
         , world(world)
         // if using default keymap, rebind to the given world
@@ -923,7 +953,8 @@ namespace ttg_madness {
     Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ttg::World world,
        keymapT &&keymap_ = keymapT())
-        : ttg::OpBase(name, numins, numouts)
+      : ttg::OpBase(name, numins, numouts)
+        , static_streamsize()
         , worldobjT(ttg::get_default_world().impl().impl())
         , world(ttg::get_default_world())
         // if using default keymap, rebind to the given world
