@@ -278,7 +278,7 @@ namespace ttg_parsec {
 
     virtual void destroy() override {
       if (is_valid()) {
-        if( parsec_taskpool_started ) {
+        if (parsec_taskpool_started) {
           // We are locally ready (i.e. we won't add new tasks)
           tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
           if (ttg::tracing()) {
@@ -383,25 +383,16 @@ namespace ttg_parsec {
       void *op_ptr = nullptr;  // passed to deferred_release
       int stream_size[];       // dynamically allocated in the memory pool
 
-
-      parsec_ttg_task_t(int num_inputs, parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
-      {
+      parsec_ttg_task_t(int num_inputs, parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class) {
         std::fill_n(stream_size, num_inputs, 0);
         PARSEC_OBJ_CONSTRUCT(&this->parsec_task, parsec_task_t);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
       }
 
-      parsec_ttg_task_t(
-        int num_inputs, parsec_thread_mempool_t *mempool,
-        parsec_task_class_t *task_class,
-        parsec_taskpool_t* taskpool,
-        void *object_ptr,
-        parsec_key_t key,
-        int32_t priority)
-      : object_ptr(object_ptr)
-      , key(key)
-      {
+      parsec_ttg_task_t(int num_inputs, parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
+                        parsec_taskpool_t *taskpool, void *object_ptr, parsec_key_t key, int32_t priority)
+          : object_ptr(object_ptr), key(key) {
         std::fill_n(stream_size, num_inputs, 0);
         PARSEC_OBJ_CONSTRUCT(&this->parsec_task, parsec_task_t);
         parsec_task.mempool_owner = mempool;
@@ -735,7 +726,8 @@ namespace ttg_parsec {
 
    private:
     /* the offset of the key placed after the task structure in the memory from mempool */
-    constexpr static const size_t task_key_offset = sizeof(detail::parsec_ttg_task_t)+numins*sizeof(detail::parsec_ttg_task_t::stream_size[0]);
+    constexpr static const size_t task_key_offset =
+        sizeof(detail::parsec_ttg_task_t) + numins * sizeof(detail::parsec_ttg_task_t::stream_size[0]);
 
     input_terminals_type input_terminals;
     output_terminalsT output_terminals;
@@ -743,9 +735,11 @@ namespace ttg_parsec {
     template <std::size_t... IS>
     static constexpr auto make_set_args_fcts(std::index_sequence<IS...>) {
       using resultT = decltype(set_arg_from_msg_fcts);
-      return resultT{{&Op::set_arg_from_msg<IS>...}};
+      return resultT{{&Op::set_arg_from_msg<IS>..., &Op::argstream_set_size_from_msg<IS>...,
+                      &Op::finalize_argstream_from_msg<IS>...}};
     }
-    constexpr static std::array<void (Op::*)(void *, std::size_t), numins> set_arg_from_msg_fcts = make_set_args_fcts(std::make_index_sequence<numins>{});
+    constexpr static std::array<void (Op::*)(void *, std::size_t), 3*numins> set_arg_from_msg_fcts =
+        make_set_args_fcts(std::make_index_sequence<numins>{});
 
     ttg::World world;
     ttg::meta::detail::keymap_t<keyT> keymap;
@@ -758,7 +752,6 @@ namespace ttg_parsec {
     ttg::World get_world() const { return world; }
 
    private:
-
     /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
     template <ttg::ExecutionSpace Space, typename... Args>
     void op(Args &&... args) {
@@ -772,7 +765,8 @@ namespace ttg_parsec {
     }
 
     template <std::size_t... IS>
-    static input_refs_tuple_type make_tuple_of_ref_from_array(detail::parsec_ttg_task_t *task, std::index_sequence<IS...>) {
+    static input_refs_tuple_type make_tuple_of_ref_from_array(detail::parsec_ttg_task_t *task,
+                                                              std::index_sequence<IS...>) {
       return input_refs_tuple_type{static_cast<typename std::tuple_element<IS, input_refs_tuple_type>::type>(
           *reinterpret_cast<std::remove_reference_t<typename std::tuple_element<IS, input_refs_tuple_type>::type> *>(
               task->parsec_task.data[IS].data_in->device_private))...};
@@ -891,7 +885,7 @@ namespace ttg_parsec {
       parsec_execution_stream_s *es = world.impl().execution_stream();
       parsec_thread_mempool_t *mempool =
           &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-      dummy = new (parsec_thread_mempool_allocate(mempool))detail::parsec_ttg_task_t(numins, mempool, &this->self);
+      dummy = new (parsec_thread_mempool_allocate(mempool)) detail::parsec_ttg_task_t(numins, mempool, &this->self);
 
       /* set the received value as the dummy's only data */
       using decay_valueT = std::decay_t<valueT>;
@@ -1058,6 +1052,48 @@ namespace ttg_parsec {
       }
     }
 
+    template <std::size_t i>
+    void finalize_argstream_from_msg(void *data, std::size_t size) {
+      using msg_t = detail::msg_t;
+      msg_t *msg = static_cast<msg_t *>(data);
+      if constexpr (!ttg::meta::is_void_v<keyT>) {
+        /* unpack the key */
+        uint64_t pos = 0;
+        auto rank = world.rank();
+        keyT key;
+        pos = unpack(key, msg->bytes, pos);
+        assert(keymap(key) == rank);
+        finalize_argstream<i>(key);
+      } else {
+        auto rank = world.rank();
+        assert(keymap() == rank);
+        finalize_argstream<i>();
+      }
+    }
+
+    template <std::size_t i>
+    void argstream_set_size_from_msg(void *data, std::size_t size) {
+      using msg_t = detail::msg_t;
+      auto msg = static_cast<msg_t *>(data);
+      uint64_t pos = 0;
+      if constexpr (!ttg::meta::is_void_v<keyT>) {
+        /* unpack the key */
+        auto rank = world.rank();
+        keyT key;
+        pos = unpack(key, msg->bytes, pos);
+        assert(keymap(key) == rank);
+        std::size_t argstream_size;
+        pos = unpack(size, msg->bytes, pos);
+        set_argstream_size<i>(key, argstream_size);
+      } else {
+        auto rank = world.rank();
+        assert(keymap() == rank);
+        std::size_t argstream_size;
+        pos = unpack(size, msg->bytes, pos);
+        set_argstream_size<i>(argstream_size);
+      }
+    }
+
     template <std::size_t i, typename Key, typename Value>
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void> set_arg_local(
         const Key &key, Value &&value) {
@@ -1096,13 +1132,13 @@ namespace ttg_parsec {
       parsec_execution_stream_s *es = world_impl.execution_stream();
       parsec_thread_mempool_t *mempool =
           &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-      char *taskobj = (char*)parsec_thread_mempool_allocate(mempool);
+      char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
       int32_t priority;
       parsec_key_t parsec_key;
       if constexpr (!keyT_is_Void) {
         priority = priomap(key);
         /* placement new the key */
-        keyT *new_key = new (taskobj+task_key_offset) keyT(key);
+        keyT *new_key = new (taskobj + task_key_offset) keyT(key);
         parsec_key = reinterpret_cast<parsec_key_t>(new_key);
       } else {
         priority = priomap();
@@ -1110,11 +1146,8 @@ namespace ttg_parsec {
       }
 
       /* placement-new the task */
-      newtask = new (taskobj)detail::parsec_ttg_task_t(numins, mempool, &this->self,
-                                                       world_impl.taskpool(),
-                                                       this,
-                                                       parsec_key,
-                                                       priority);
+      newtask = new (taskobj)
+          detail::parsec_ttg_task_t(numins, mempool, &this->self, world_impl.taskpool(), this, parsec_key, priority);
       newtask->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
           reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op<ttg::ExecutionSpace::Host>);
       if constexpr (derived_has_cuda_op())
@@ -1409,14 +1442,11 @@ namespace ttg_parsec {
         parsec_execution_stream_s *es = world_impl.execution_stream();
         parsec_thread_mempool_t *mempool =
             &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-        char *taskobj = (char*)parsec_thread_mempool_allocate(mempool);
-        keyT *kp = new (taskobj+task_key_offset) keyT(key);
+        char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
+        keyT *kp = new (taskobj + task_key_offset) keyT(key);
 
-        task = new (taskobj)detail::parsec_ttg_task_t(numins, mempool, &this->self,
-                                                      world_impl.taskpool(),
-                                                      this,
-                                                      reinterpret_cast<parsec_key_t>(kp),
-                                                      priomap(key));
+        task = new (taskobj) detail::parsec_ttg_task_t(numins, mempool, &this->self, world_impl.taskpool(), this,
+                                                       reinterpret_cast<parsec_key_t>(kp), priomap(key));
 
         task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
             reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op_noarg<ttg::ExecutionSpace::Host>);
@@ -1459,11 +1489,8 @@ namespace ttg_parsec {
         parsec_execution_stream_s *es = world_impl.execution_stream();
         parsec_thread_mempool_t *mempool =
             &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-        task = new (parsec_thread_mempool_allocate(mempool))detail::parsec_ttg_task_t(numins, mempool, &this->self,
-                                                                                      world_impl.taskpool(),
-                                                                                      this,
-                                                                                      0,
-                                                                                      priomap());
+        task = new (parsec_thread_mempool_allocate(mempool))
+            detail::parsec_ttg_task_t(numins, mempool, &this->self, world_impl.taskpool(), this, 0, priomap());
         task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
             reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op_noarg<ttg::ExecutionSpace::Host>);
         if constexpr (derived_has_cuda_op())
@@ -1738,9 +1765,20 @@ namespace ttg_parsec {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), ":", key, " : forwarding stream size for terminal ", i);
         }
-        // TODO: manage distributed case for streaming terminal
-        //    worldobjT::send(owner, &opT::template set_argstream_size<i, true>, size);
-        abort();
+        using msg_t = detail::msg_t;
+        auto &world_impl = world.impl();
+        uint64_t pos = 0;
+        std::unique_ptr<msg_t> msg =
+            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id, numins + i, 1);
+        /* pack the key */
+        pos = pack(key, msg->bytes, pos);
+        msg->op_id.num_keys = 1;
+        pos = pack(size, msg->bytes, pos);
+        parsec_taskpool_t *tp = world_impl.taskpool();
+        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
+        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
+        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
+                          sizeof(msg_header_t) + pos);
       } else {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), ":", key, " : setting stream size to ", size, " for terminal ", i);
@@ -1779,9 +1817,19 @@ namespace ttg_parsec {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : forwarding stream size for terminal ", i);
         }
-        // TODO: manage distributed case for streaming terminal
-        //    worldobjT::send(owner, &opT::template set_argstream_size<i, true>, size);
-        abort();
+        using msg_t = detail::msg_t;
+        auto &world_impl = world.impl();
+        uint64_t pos = 0;
+        std::unique_ptr<msg_t> msg =
+            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id, numins + i, 1);
+        /* pack the key */
+        msg->op_id.num_keys = 0;
+        pos = pack(size, msg->bytes, pos);
+        parsec_taskpool_t *tp = world_impl.taskpool();
+        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
+        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
+        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
+                          sizeof(msg_header_t) + pos);
       } else {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : setting stream size to ", size, " for terminal ", i);
@@ -1818,7 +1866,19 @@ namespace ttg_parsec {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
         }
-        abort();  // TODO: implement distributed streaming terminals
+        using msg_t = detail::msg_t;
+        auto &world_impl = world.impl();
+        uint64_t pos = 0;
+        std::unique_ptr<msg_t> msg =
+            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id, 2 * numins + i, 1);
+        /* pack the key */
+        pos = pack(key, msg->bytes, pos);
+        msg->op_id.num_keys = 1;
+        parsec_taskpool_t *tp = world_impl.taskpool();
+        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
+        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
+        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
+                          sizeof(msg_header_t) + pos);
       } else {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
@@ -1856,7 +1916,17 @@ namespace ttg_parsec {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), ": forwarding stream finalize for terminal ", i);
         }
-        abort();  // TODO: implement distributed streaming terminals
+        using msg_t = detail::msg_t;
+        auto &world_impl = world.impl();
+        uint64_t pos = 0;
+        std::unique_ptr<msg_t> msg =
+            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id, 2 * numins + i, 1);
+        msg->op_id.num_keys = 0;
+        parsec_taskpool_t *tp = world_impl.taskpool();
+        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
+        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
+        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
+                          sizeof(msg_header_t) + pos);
       } else {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), ": finalizing stream for terminal ", i);
@@ -2173,10 +2243,11 @@ namespace ttg_parsec {
       if constexpr (!std::is_same_v<void, keyT>) {
         keysize = sizeof(keyT);
       }
-      parsec_mempool_construct(&mempools, PARSEC_OBJ_CLASS(parsec_task_t),
-                               /* account for the number of input terminals to handle input streams and key */
-                               sizeof(detail::parsec_ttg_task_t)+numins*sizeof(detail::parsec_ttg_task_t::stream_size[0])+keysize,
-                               offsetof(parsec_task_t, mempool_owner), k);
+      parsec_mempool_construct(
+          &mempools, PARSEC_OBJ_CLASS(parsec_task_t),
+          /* account for the number of input terminals to handle input streams and key */
+          sizeof(detail::parsec_ttg_task_t) + numins * sizeof(detail::parsec_ttg_task_t::stream_size[0]) + keysize,
+          offsetof(parsec_task_t, mempool_owner), k);
 
       parsec_hash_table_init(&tasks_table, offsetof(detail::parsec_ttg_task_t, op_ht_item), 8, tasks_hash_fcts, NULL);
     }
