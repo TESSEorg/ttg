@@ -1,0 +1,4 @@
+<map id="ttg::detail::MemoryWatchpoint_x86_64::Pool::initialize_instance" name="ttg::detail::MemoryWatchpoint_x86_64::Pool::initialize_instance">
+<area shape="rect" id="node1" title=" " alt="" coords="224,5,444,61"/>
+<area shape="rect" id="node2" href="$namespacettg__madness.html#a1d0750abcb4d3cb112ff1755f38798f1" title="must be called from main thread before setting watchpoints" alt="" coords="5,13,176,54"/>
+</map>

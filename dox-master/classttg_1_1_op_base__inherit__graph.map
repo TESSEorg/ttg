@@ -1,0 +1,5 @@
+<map id="ttg::OpBase" name="ttg::OpBase">
+<area shape="rect" id="node1" title=" " alt="" coords="5,50,104,77"/>
+<area shape="rect" id="node2" href="$classttg_1_1_op_sink.html" title="A data sink for one input." alt="" coords="181,5,325,47"/>
+<area shape="rect" id="node3" href="$classttg__madness_1_1_op.html" title=" " alt="" coords="152,71,355,127"/>
+</map>

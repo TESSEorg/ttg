@@ -1,0 +1,5 @@
+var searchData=
+[
+  ['unpack_5fpayload_114',['unpack_payload',['../structttg_1_1default__data__descriptor_3_01_t_00_01std_1_1enable__if__t_3_01std_1_1is__trivially6d298664b57071b3644938702529b99f.html#af88c3e3e242b9792249560841a9f06f1',1,'ttg::default_data_descriptor&lt; T, std::enable_if_t&lt; std::is_trivially_copyable&lt; T &gt;::value &amp;&amp;!detail::is_user_buffer_serializable_v&lt; T &gt; &amp;&amp;!ttg::has_split_metadata&lt; T &gt;::value &gt; &gt;::unpack_payload()'],['../structttg_1_1default__data__descriptor_3_01_t_00_01std_1_1enable__if__t_3_01ttg_1_1has__split__m7b97af3698ab80a6204d3eb38af1e244.html#aaa05835dfe61d1b6720aec60c1bb6910',1,'ttg::default_data_descriptor&lt; T, std::enable_if_t&lt; ttg::has_split_metadata&lt; T &gt;::value &gt; &gt;::unpack_payload()']]],
+  ['update_115',['update',['../classttg_1_1detail_1_1_f_n_vhasher.html#adbf07ed352c7aecffa181e1a55f917cf',1,'ttg::detail::FNVhasher::update(std::byte byte) noexcept'],['../classttg_1_1detail_1_1_f_n_vhasher.html#a0e49d441a52fcdaebe8abeda54bab44e',1,'ttg::detail::FNVhasher::update(size_t n, const std::byte *bytes) noexcept']]]
+];
