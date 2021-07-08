@@ -206,6 +206,11 @@ namespace ttg_parsec {
       parsec_ce.tag_register(_PARSEC_TTG_TAG, &detail::static_unpack_msg, this, PARSEC_TTG_MAX_AM_SIZE);
       parsec_ce.tag_register(_PARSEC_TTG_RMA_TAG, &detail::get_remote_complete_cb, this, 128);
 
+      create_tpool();
+    }
+
+    void create_tpool() {
+      assert(nullptr == tpool);
       tpool = (parsec_taskpool_t *)calloc(1, sizeof(parsec_taskpool_t));
       tpool->taskpool_id = -1;
       tpool->update_nb_runtime_task = parsec_add_fetch_runtime_task;
@@ -276,11 +281,25 @@ namespace ttg_parsec {
       if (ret != 0) throw std::runtime_error("TTG: parsec_context_start failed");
     }
 
+    void destroy_tpool() {
+      parsec_taskpool_free(tpool);
+      tpool = nullptr;
+    }
+
     virtual void destroy() override {
       if (is_valid()) {
+        if( parsec_taskpool_started ) {
+          // We are locally ready (i.e. we won't add new tasks)
+          tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
+          if (ttg::tracing()) {
+            int rank = this->rank();
+            ttg::print("ttg_parsec(", rank, "): final waiting for completion");
+          }
+          parsec_context_wait(ctx);
+        }
         release_ops();
         ttg::detail::deregister_world(*this);
-        parsec_taskpool_free(tpool);
+        destroy_tpool();
         parsec_ce.tag_unregister(_PARSEC_TTG_TAG);
         parsec_ce.tag_unregister(_PARSEC_TTG_RMA_TAG);
         parsec_fini(&ctx);
@@ -314,7 +333,7 @@ namespace ttg_parsec {
         if (ttg::tracing()) {
           ttg::print("ttg_parsec::(", rank, "): parsec taskpool has not been started, fence is a simple MPI_Barrier");
         }
-        MPI_Barrier(ttg::get_default_world().impl().comm());
+        MPI_Barrier(comm());
         return;
       }
       if (ttg::tracing()) {
@@ -332,9 +351,9 @@ namespace ttg_parsec {
       // see Issue #118 (TTG)
       MPI_Barrier(comm());
 
-      // And we start again
-      tpool->tdm.module->monitor_taskpool(tpool, parsec_taskpool_termination_detected);
-      tpool->tdm.module->taskpool_set_nb_pa(tpool, 0);
+      destroy_tpool();
+      create_tpool();
+      execute();
     }
 
    private:
