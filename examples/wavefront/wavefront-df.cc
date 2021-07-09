@@ -11,6 +11,10 @@
 
 #include "ttg.h"
 
+#include "ttg/serialization.h"
+#include "ttg/serialization/std/pair.h"
+#include "ttg/serialization/std/vector.h"
+
 /* TODO: Get rid of using statement */
 using namespace ttg;
 

@@ -21,6 +21,10 @@
 #include "ttg.h"
 using namespace ttg;
 
+#include "ttg/serialization.h"
+#include "ttg/serialization/std/pair.h"
+
+
 #include "../blockmatrix.h"
 #include "ttg/util/bug.h"
 
@@ -59,10 +63,20 @@ struct Key {
                int_hasher(execution_info.second);
   }
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
   template <typename Archive>
   void serialize(Archive& ar) {
     ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
   }
+#endif
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+  template <typename Archive>
+  void serialize(Archive& ar, const unsigned int) {
+    ar& execution_info;
+    if constexpr (ttg::detail::is_boost_input_archive_v<Archive>) rehash();
+  }
+#endif
 
   friend std::ostream& operator<<(std::ostream& out, Key const& k) {
     out << "Key((" << k.execution_info.first.first << "," << k.execution_info.first.second << "),"

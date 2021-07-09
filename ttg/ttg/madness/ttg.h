@@ -1,27 +1,26 @@
 #ifndef MADNESS_TTG_H_INCLUDED
 #define MADNESS_TTG_H_INCLUDED
 
-
 /* set up env if this header was included directly */
 #if !defined(TTG_IMPL_NAME)
 #define TTG_USE_MADNESS 1
-#endif // !defined(TTG_IMPL_NAME)
+#endif  // !defined(TTG_IMPL_NAME)
 
 #include "ttg/impl_selector.h"
 
 /* include ttg header to make symbols available in case this header is included directly */
 #include "../../ttg.h"
+#include "ttg/base/keymap.h"
+#include "ttg/base/op.h"
+#include "ttg/func.h"
+#include "ttg/op.h"
+#include "ttg/runtimes.h"
 #include "ttg/util/bug.h"
 #include "ttg/util/hash.h"
-#include "ttg/util/meta.h"
-#include "ttg/world.h"
-#include "ttg/base/op.h"
-#include "ttg/base/keymap.h"
-#include "ttg/op.h"
-#include "ttg/util/void.h"
-#include "ttg/runtimes.h"
 #include "ttg/util/macro.h"
-#include "ttg/func.h"
+#include "ttg/util/meta.h"
+#include "ttg/util/void.h"
+#include "ttg/world.h"
 
 #include <array>
 #include <cassert>
@@ -114,6 +113,8 @@ namespace ttg_madness {
     ::madness::World &impl() { return m_impl; }
 
     const ::madness::World &impl() const { return m_impl; }
+
+    parsec_context_t *context() { return ::madness::ThreadPool::instance()->parsec; }
   };
 
   template <typename... RestOfArgs>
@@ -175,11 +176,13 @@ namespace ttg_madness {
    private:
     ttg::World world;
     ttg::meta::detail::keymap_t<keyT> keymap;
+    ttg::meta::detail::keymap_t<keyT> priomap;
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<input_valueTs...>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
     std::array<std::size_t, sizeof...(input_valueTs)> static_streamsize;
+
    public:
     ttg::World get_world() const { return world; }
 
@@ -230,6 +233,9 @@ namespace ttg_madness {
     output_terminalsT output_terminals;
 
     struct OpArgs : ::madness::TaskInterface {
+     private:
+      using TaskInterface = ::madness::TaskInterface;
+
      public:
       int counter;  // Tracks the number of arguments finalized
       std::array<std::size_t, numins>
@@ -259,7 +265,12 @@ namespace ttg_madness {
                                     std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{});
       }
 
-      OpArgs() : counter(numins), nargs(), stream_size(), input_values() {
+      OpArgs(int prio = 0)
+          : TaskInterface(TaskAttributes(prio ? TaskAttributes::HIGHPRIORITY : 0))
+          , counter(numins)
+          , nargs()
+          , stream_size()
+          , input_values() {
         std::fill(nargs.begin(), nargs.end(), std::numeric_limits<std::size_t>::max());
       }
 
@@ -336,7 +347,7 @@ namespace ttg_madness {
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
 
         accessorT acc;
-        if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
+        if (cache.insert(acc, key)) acc->second = new OpArgs(this->priomap(key));  // It will be deleted by the task q
         OpArgs *args = acc->second;
 
         if (args->nargs[i] == 0) {
@@ -365,7 +376,7 @@ namespace ttg_madness {
                 args->nargs[i] = 1;
               }
             } else {
-              //Why do we need to move the value here??
+              // Why do we need to move the value here??
               valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
               this->get<i, std::decay_t<valueT> &>(args->input_values) =
                   std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->input_values), std::move(value_copy)));
@@ -470,8 +481,8 @@ namespace ttg_madness {
             if (args->stream_size[i] != 0) {
               args->nargs[i] = args->stream_size[i];
             } else if (static_streamsize[i] != 0) {
-                args->stream_size[i] = static_streamsize[i];
-                args->nargs[i] = static_streamsize[i];
+              args->stream_size[i] = static_streamsize[i];
+              args->nargs[i] = static_streamsize[i];
             } else {
               args->nargs[i] = 1;
             }
@@ -529,7 +540,7 @@ namespace ttg_madness {
         worldobjT::send(owner, &opT::set_arg<keyT>, key);
       } else {
         accessorT acc;
-        if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
+        if (cache.insert(acc, key)) acc->second = new OpArgs(this->priomap(key));  // It will be deleted by the task q
         OpArgs *args = acc->second;
 
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
@@ -626,13 +637,13 @@ namespace ttg_madness {
         ttg::print(world.rank(), ":", get_name(), ": setting global stream size for terminal ", i);
       }
 
-      //Check if stream is already bounded
+      // Check if stream is already bounded
       if (static_streamsize[i] > 0) {
         ttg::print_error(world.rank(), ":", get_name(), " : error stream is already bounded : ", i);
         throw std::runtime_error("Op::set_static_argstream_size called for a bounded stream");
       }
 
-     // commit changes
+      // commit changes
       static_streamsize[i] = size;
     }
 
@@ -657,7 +668,7 @@ namespace ttg_madness {
         }
 
         accessorT acc;
-        if (cache.insert(acc, key)) acc->second = new OpArgs();  // It will be deleted by the task q
+        if (cache.insert(acc, key)) acc->second = new OpArgs(this->priomap(key));  // It will be deleted by the task q
         OpArgs *args = acc->second;
 
         args->lock();
@@ -825,7 +836,7 @@ namespace ttg_madness {
         };
         auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
         auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
-        input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, move_callback, {}, setsize_callback, finalize_callback);
       }
       //////////////////////////////////////////////////////////////////
       // case 4: void key, nonvoid value
@@ -836,7 +847,7 @@ namespace ttg_madness {
         auto send_callback = [this](const valueT &value) { set_arg<i, keyT, const valueT &>(value); };
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
         auto finalize_callback = [this]() { finalize_argstream<i>(); };
-        input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, move_callback, {}, setsize_callback, finalize_callback);
       }
       //////////////////////////////////////////////////////////////////
       // case 2: nonvoid key, void value, mixed inputs
@@ -846,7 +857,7 @@ namespace ttg_madness {
         auto send_callback = [this](const keyT &key) { set_arg<i, keyT, void>(key); };
         auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
         auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
-        input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
       }
       //////////////////////////////////////////////////////////////////
       // case 5: void key, void value, mixed inputs
@@ -856,7 +867,7 @@ namespace ttg_madness {
         auto send_callback = [this]() { set_arg<i, keyT, void>(); };
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
         auto finalize_callback = [this]() { finalize_argstream<i>(); };
-        input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
       }
       //////////////////////////////////////////////////////////////////
       // case 3: nonvoid key, void value, no inputs
@@ -866,7 +877,7 @@ namespace ttg_madness {
         auto send_callback = [this](const keyT &key) { set_arg<keyT>(key); };
         auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
         auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
-        input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
       }
       //////////////////////////////////////////////////////////////////
       // case 6: void key, void value, no inputs
@@ -876,7 +887,7 @@ namespace ttg_madness {
         auto send_callback = [this]() { set_arg<keyT>(); };
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
         auto finalize_callback = [this]() { finalize_argstream<i>(); };
-        input.set_callback(send_callback, send_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : set callbacks for terminal ", input.get_name(),
                      " assuming void {key,value} and no input");
@@ -918,17 +929,19 @@ namespace ttg_madness {
     }
 
    public:
-    template <typename keymapT = ttg::detail::default_keymap<keyT>>
+    template <typename keymapT = ttg::detail::default_keymap<keyT>,
+              typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       ttg::World world, keymapT &&keymap_ = keymapT())
-      : ttg::OpBase(name, numins, numouts)
+       ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
+        : ttg::OpBase(name, numins, numouts)
         , static_streamsize()
         , worldobjT(world.impl().impl())
         , world(world)
         // if using default keymap, rebind to the given world
         , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
                      ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
-                     : decltype(keymap)(std::forward<keymapT>(keymap_))) {
+                     : decltype(keymap)(std::forward<keymapT>(keymap_)))
+        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))) {
       // Cannot call these in base constructor since terminals not yet constructed
       if (innames.size() != std::tuple_size<input_terminals_type>::value) {
         ttg::print_error(world.rank(), ":", get_name(), "#input_names", innames.size(), "!= #input_terminals",
@@ -944,23 +957,27 @@ namespace ttg_madness {
       register_input_callbacks(std::make_index_sequence<numins>{});
     }
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>>
+    template <typename keymapT = ttg::detail::default_keymap<keyT>,
+              typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::get_default_world()))
-        : Op(name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap)) {}
+       keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
+        : Op(name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
+             std::forward<priomapT>(priomap)) {}
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>>
+    template <typename keymapT = ttg::detail::default_keymap<keyT>,
+              typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ttg::World world,
-       keymapT &&keymap_ = keymapT())
-      : ttg::OpBase(name, numins, numouts)
+       keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
+        : ttg::OpBase(name, numins, numouts)
         , static_streamsize()
         , worldobjT(ttg::get_default_world().impl().impl())
         , world(ttg::get_default_world())
         // if using default keymap, rebind to the given world
         , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
                      ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
-                     : decltype(keymap)(std::forward<keymapT>(keymap_))) {
+                     : decltype(keymap)(std::forward<keymapT>(keymap_)))
+        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))) {
       // Cannot call in base constructor since terminals not yet constructed
       if (innames.size() != std::tuple_size<input_terminals_type>::value) {
         ttg::print_error(world.rank(), ":", get_name(), "#input_names", innames.size(), "!= #input_terminals",
@@ -979,11 +996,13 @@ namespace ttg_madness {
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
     }
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>>
+    template <typename keymapT = ttg::detail::default_keymap<keyT>,
+              typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::get_default_world()))
-        : Op(inedges, outedges, name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap)) {}
+       keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
+        : Op(inedges, outedges, name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
+             std::forward<priomapT>(priomap)) {}
 
     // Destructor checks for unexecuted tasks
     virtual ~Op() {
@@ -1020,6 +1039,16 @@ namespace ttg_madness {
     template <typename Keymap>
     void set_keymap(Keymap &&km) {
       keymap = km;
+    }
+
+    auto get_priomap(void) const { return priomap; }
+
+    /// Set the priority map, mapping a Key to an integral value.
+    /// Higher values indicate higher priority. The default priority is 0, higher
+    /// values are treated as high priority tasks in the MADNESS backend.
+    template <typename Priomap>
+    void set_priomap(Priomap &&pm) {
+      priomap = pm;
     }
 
     /// implementation of OpBase::make_executable()
@@ -1098,8 +1127,6 @@ namespace ttg_madness {
       return keymap();
     }
   };
-
-  constexpr const ttg::Runtime ttg_runtime = ttg::Runtime::MADWorld;
 
 #include "ttg/wrap.h"
 

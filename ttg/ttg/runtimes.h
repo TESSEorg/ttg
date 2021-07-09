@@ -5,6 +5,9 @@
 #ifndef TTG_TRAITS_H
 #define TTG_TRAITS_H
 
+#include <cstddef>
+#include <cstdint>
+
 #include "ttg/execution.h"
 
 namespace ttg {
