@@ -2,6 +2,7 @@ include(AddTTGExecutable)
 
 add_ttg_executable(test test/test.cc)
 add_ttg_executable(t9 t9/t9.cc)
+add_ttg_executable(t9-streaming t9/t9_streaming.cc RUNTIMES "mad")
 
 # sparse matmul
 if (TARGET eigen3)
