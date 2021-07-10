@@ -428,23 +428,25 @@ auto make_result(Matrix<T>* r, const Edge<Key, BlockMatrix<T>>& result) {
 }
 
 int main(int argc, char** argv) {
-  if (argc != 4) {
-    std::cout << "Usage: ./wavefront-df-mad <matrix size> <block size> "
-              << "<verify 1/0>" << std::endl;
-    exit(-1);
-  }
+  int n_rows, n_cols, B;
+  int n_brows, n_bcols;
+  bool verify = false;
 
-  //sleep(20);
+  if (argc != 4) {
+    //std::cout << "Usage: ./wavefront-df-mad <matrix size> <block size> "
+    //          << "<verify 1/0>" << std::endl;
+    n_rows = n_cols = 128;
+    B = 16;
+    verify = true;
+  }
+  else {
+    n_rows = n_cols = atoi(argv[1]);  // 8192;
+    B = atoi(argv[2]);                // 128;
+    verify = atoi(argv[3]);
+  }
 
   // Initialize TTG
   ttg_initialize(argc, argv, -1);
-
-  int n_rows, n_cols, B;
-  int n_brows, n_bcols;
-
-  n_rows = n_cols = atoi(argv[1]);  // 8192;
-  B = atoi(argv[2]);                // 128;
-  bool verify = atoi(argv[3]);
 
   n_brows = (n_rows / B) + (n_rows % B > 0);
   n_bcols = (n_cols / B) + (n_cols % B > 0);
