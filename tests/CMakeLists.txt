@@ -1,6 +1,1 @@
-include(AddTTGExecutable)
-
-# serialization (needs MADNESS)
-if (TARGET MADworld)
-  add_ttg_executable(serialization serialization.cc RUNTIMES "mad" SINGLERANKONLY)
-endif(TARGET MADworld)
+add_subdirectory(unit)

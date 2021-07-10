@@ -229,7 +229,7 @@ namespace ttg {
   } while (0);
   };
 
-  void OpBase::make_executable() { executable = true; }
+  inline void OpBase::make_executable() { executable = true; }
 
 }  // namespace ttg
 

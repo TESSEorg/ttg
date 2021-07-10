@@ -4,6 +4,7 @@
 #include <functional>
 #include <type_traits>
 #include <any>
+#include "ttg/util/span.h"
 
 namespace ttg {
 
@@ -17,6 +18,9 @@ namespace ttg {
     template <class...>
     using void_t = void;
 #endif
+
+    template <typename T>
+    using remove_cvr_t = std::remove_cv_t<std::remove_reference_t<T>>;
 
     template <typename Tuple, std::size_t N, typename Enabler = void>
     struct drop_first_n;
@@ -140,6 +144,7 @@ namespace ttg {
     };
     template <typename T>
     using void_to_Void_t = typename void_to_Void<T>::type;
+    
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // is_empty_tuple
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -159,6 +164,64 @@ namespace ttg {
     static_assert(is_empty_tuple_v<std::tuple<>>, "ouch");
     static_assert(is_empty_tuple_v<std::tuple<Void>>, "ouch");
     static_assert(is_empty_tuple_v<std::tuple<Void, Void, Void>>, "ouch");
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // nonesuch struct from Library Fundamentals V2, source from https://en.cppreference.com/w/cpp/experimental/nonesuch
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    struct nonesuch {
+      ~nonesuch() = delete;
+      nonesuch(nonesuch const &) = delete;
+      void operator=(nonesuch const &) = delete;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // is_detected family from Library Fundamentals V2, source from
+    // https://en.cppreference.com/w/cpp/experimental/is_detected
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    namespace detail {
+
+      template <class Default, class Enabler, template <class...> class Op, class... Args>
+      struct detector {
+        using value_t = std::false_type;
+        using type = Default;
+      };
+
+      template <class Default, template <class...> class Op, class... Args>
+      struct detector<Default, void_t<Op<Args...>>, Op, Args...> {
+        using value_t = std::true_type;
+        using type = Op<Args...>;
+      };
+
+    }  // namespace detail
+
+    template <template <class...> class Op, class... Args>
+    using is_detected = typename detail::detector<nonesuch, void, Op, Args...>::value_t;
+
+    template <template <class...> class Op, class... Args>
+    using detected_t = typename detail::detector<nonesuch, void, Op, Args...>::type;
+
+    template <class Default, template <class...> class Op, class... Args>
+    using detected_or = detail::detector<Default, void, Op, Args...>;
+
+    template <template <class...> class Op, class... Args>
+    constexpr bool is_detected_v = is_detected<Op, Args...>::value;
+
+    template <class Default, template <class...> class Op, class... Args>
+    using detected_or_t = typename detected_or<Default, Op, Args...>::type;
+
+    template <class Expected, template <class...> class Op, class... Args>
+    using is_detected_exact = std::is_same<Expected, detected_t<Op, Args...>>;
+
+    template <class Expected, template <class...> class Op, class... Args>
+    constexpr bool is_detected_exact_v = is_detected_exact<Expected, Op, Args...>::value;
+
+    template <class To, template <class...> class Op, class... Args>
+    using is_detected_convertible = std::is_convertible<detected_t<Op, Args...>, To>;
+
+    template <class To, template <class...> class Op, class... Args>
+    constexpr bool is_detected_convertible_v = is_detected_convertible<To, Op, Args...>::value;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // type_printer useful to print types in metaprograms
@@ -227,6 +290,30 @@ namespace ttg {
       };
       template <typename Key, typename Value>
       using move_callback_t = typename move_callback<Key, Value>::type;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// broadcast_callback_t<key,value> = std::function<void(const key&, value&&>, protected against void key or value
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+template<typename Key, typename Value, typename Enabler = void>
+struct broadcast_callback;
+template<typename Key, typename Value>
+struct broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
+using type = std::function<void(const ttg::span<const Key>&, const Value&)>;
+};
+template<typename Key, typename Value>
+struct broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
+using type = std::function<void(const ttg::span<const Key>&)>;
+};
+template<typename Key, typename Value>
+struct broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
+using type = std::function<void(const Value&)>;
+};
+template<typename Key, typename Value>
+struct broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
+using type = std::function<void()>;
+};
+template <typename Key, typename Value> using broadcast_callback_t = typename broadcast_callback<Key,Value>::type;
+
 
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       // setsize_callback_t<key> = std::function<void(const keyT &, std::size_t)> protected against void key
@@ -338,9 +425,7 @@ namespace ttg {
       using mapper_function_t = typename mapper_function<Key>::type;
 
     }  // namespace detail
-
   }  // namespace meta
-
 }  // namespace ttg
 
 #endif  // CXXAPI_SERIALIZATION_H_H

@@ -32,6 +32,20 @@ include(ExternalDependenciesVersions)
 include(LoadFetchContent)
 include(AddCustomTargetSubproject)
 
+########################################
+#### user-defined configuration options
+########################################
+option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" ON)
+# See https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
+option (FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." TRUE)
+if (FORCE_COLORED_OUTPUT)
+    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+       add_compile_options (-fdiagnostics-color=always)
+    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+       add_compile_options (-fcolor-diagnostics)
+    endif ()
+endif (FORCE_COLORED_OUTPUT)
+
 ##########################
 #### prerequisites
 ##########################
@@ -45,6 +59,8 @@ if (EIGEN3_FOUND)
 endif (EIGEN3_FOUND)
 # Boost
 include(FindOrFetchBoost)
+# Cereal
+include(FindOrFetchCereal)
 # BTAS brings in linear algebra (BLAS++/LAPACK++)
 include(FindOrFetchBTAS)
 # OpenMP may also be used by some examples
@@ -66,6 +82,8 @@ if (TARGET MADworld)
   message(STATUS "MADNESS_FOUND=1")
 endif(TARGET MADworld)
 
+include(FindDPLASMA)
+
 ##########################
 #### Components
 ##########################
@@ -76,5 +94,3 @@ add_custom_target_subproject(ttg check USES_TERMINAL COMMAND ${CMAKE_CTEST_COMMA
 add_subdirectory(tests)
 add_subdirectory(examples)
 add_subdirectory(doc)
-
-
