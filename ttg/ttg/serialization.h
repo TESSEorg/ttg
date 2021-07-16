@@ -7,6 +7,6 @@
 
 #include "ttg/serialization/traits.h"
 
-#include "ttg/serialization/all.h"
+#include "ttg/serialization/backends.h"
 
 #endif  // TTG_SERIALIZATION_H

@@ -10,6 +10,7 @@
 #ifdef BTAS_IS_USABLE
 #include <btas/btas.h>
 #include <btas/optimize/contract.h>
+#include <btas/serialization.h>
 #else
 #warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
 #endif
@@ -23,10 +24,19 @@ using namespace ttg;
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 using blk_t = btas::Tensor<double>;
+
+// declare btas::Tensor serializable by Boost
+#include "ttg/serialization/backends/boost.h"
+namespace ttg::detail {
+  template <typename Archive>
+  inline static constexpr bool is_boost_serializable_v<Archive, blk_t> = is_boost_archive_v<Archive>;
+}
+
 #else
 using blk_t = double;
 #endif
-template <typename T = blk_t> using SpMatrix = Eigen::SparseMatrix<T>;
+template <typename T = blk_t>
+using SpMatrix = Eigen::SparseMatrix<T>;
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 
@@ -34,118 +44,7 @@ template <typename T = blk_t> using SpMatrix = Eigen::SparseMatrix<T>;
 
 #include <madness/world/archive.h>
 
-/////////////////////////////////////////////
-// additional ops are needed to make Eigen::SparseMatrix<btas::Tensor> possible
-namespace madness {
-  namespace archive {
-
-    template <class Archive, typename T, std::size_t N, typename A>
-    struct ArchiveLoadImpl<Archive, boost::container::small_vector<T, N, A>> {
-      static inline void load(const Archive& ar,
-                              boost::container::small_vector<T, N, A>& x) {
-        std::size_t n{};
-        ar& n;
-        x.resize(n);
-        for (auto& xi : x) ar& xi;
-      }
-    };
-
-    template <class Archive, typename T, std::size_t N, typename A>
-    struct ArchiveStoreImpl<Archive, boost::container::small_vector<T, N, A>> {
-      static inline void store(const Archive& ar,
-                               const boost::container::small_vector<T, N, A>& x) {
-        ar& x.size();
-        for (const auto& xi : x) ar& xi;
-      }
-    };
-
-    template <class Archive, typename T>
-    struct ArchiveLoadImpl<Archive, btas::varray<T>> {
-      static inline void load(const Archive& ar, btas::varray<T>& x) {
-        typename btas::varray<T>::size_type n{};
-        ar& n;
-        x.resize(n);
-        for (typename btas::varray<T>::value_type& xi : x) ar& xi;
-      }
-    };
-
-    template <class Archive, typename T>
-    struct ArchiveStoreImpl<Archive, btas::varray<T>> {
-      static inline void store(const Archive& ar, const btas::varray<T>& x) {
-        ar& x.size();
-        for (const typename btas::varray<T>::value_type& xi : x) ar& xi;
-      }
-    };
-
-    template <class Archive, blas::Layout _Order, typename _Index>
-    struct ArchiveLoadImpl<Archive, btas::BoxOrdinal<_Order, _Index>> {
-      static inline void load(const Archive& ar,
-                              btas::BoxOrdinal<_Order, _Index>& o) {
-        typename btas::BoxOrdinal<_Order, _Index>::stride_type stride{};
-        typename btas::BoxOrdinal<_Order, _Index>::value_type offset{};
-        bool cont{};
-        ar& stride& offset& cont;
-        o = btas::BoxOrdinal<_Order, _Index>(std::move(stride), std::move(offset),
-                                             std::move(cont));
-      }
-    };
-
-    template <class Archive, blas::Layout _Order, typename _Index>
-    struct ArchiveStoreImpl<Archive, btas::BoxOrdinal<_Order, _Index>> {
-      static inline void store(const Archive& ar,
-                               const btas::BoxOrdinal<_Order, _Index>& o) {
-        ar& o.stride() & o.offset() & o.contiguous();
-      }
-    };
-
-    template <class Archive, blas::Layout _Order, typename _Index,
-        typename _Ordinal>
-    struct ArchiveLoadImpl<Archive, btas::RangeNd<_Order, _Index, _Ordinal>> {
-      static inline void load(const Archive& ar,
-                              btas::RangeNd<_Order, _Index, _Ordinal>& r) {
-        typedef typename btas::BaseRangeNd<
-            btas::RangeNd<_Order, _Index, _Ordinal>>::index_type index_type;
-        index_type lobound{}, upbound{};
-        _Ordinal ordinal{};
-        ar& lobound& upbound& ordinal;
-        r = btas::RangeNd<_Order, _Index, _Ordinal>(
-            std::move(lobound), std::move(upbound), std::move(ordinal));
-      }
-    };
-
-    template <class Archive, blas::Layout _Order, typename _Index,
-        typename _Ordinal>
-    struct ArchiveStoreImpl<Archive, btas::RangeNd<_Order, _Index, _Ordinal>> {
-      static inline void store(const Archive& ar,
-                               const btas::RangeNd<_Order, _Index, _Ordinal>& r) {
-        ar& r.lobound() & r.upbound() & r.ordinal();
-      }
-    };
-
-    template <class Archive, typename _T, class _Range, class _Store>
-    struct ArchiveLoadImpl<Archive, btas::Tensor<_T, _Range, _Store>> {
-      static inline void load(const Archive& ar,
-                              btas::Tensor<_T, _Range, _Store>& t) {
-        _Range range{};
-        _Store store{};
-        ar& range& store;
-        t = btas::Tensor<_T, _Range, _Store>(std::move(range), std::move(store));
-      }
-    };
-
-    template <class Archive, typename _T, class _Range, class _Store>
-    struct ArchiveStoreImpl<Archive, btas::Tensor<_T, _Range, _Store>> {
-      static inline void store(const Archive& ar,
-                               const btas::Tensor<_T, _Range, _Store>& t) {
-        ar& t.range() & t.storage();
-      }
-    };
-  }  // namespace archive
-}  // namespace madness
-
-#else  // __has_include(<madness/world/archive.h>)
-#error "Did not find madness/world/archive.h , likely misconfigured or broken"
-#endif
+#endif  // __has_include(<madness/world/archive.h>)
 
 namespace btas {
   template <typename _T, class _Range, class _Store>
@@ -269,7 +168,7 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
 
   /// grab completion status as a future<void>
   /// \note cannot be called once this is executable
-  const std::shared_future<void>& status() const {
+  const std::shared_future<void> &status() const {
     assert(!this->is_executable());
     if (!completion_status_) {
       auto promise = std::make_shared<std::promise<void>>();
@@ -361,15 +260,14 @@ class SpMM {
   };  // class BcastA
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
-  class MultiplyAdd
-      : public Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, Blk, Blk, Blk> {
+  class MultiplyAdd : public Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, Blk, Blk, Blk> {
    public:
     using baseT = Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, Blk, Blk, Blk>;
 
-    MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk,
-                Edge<Key<2>, Blk> &c, const std::vector<std::vector<long>> &a_rowidx_to_colidx,
+    MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
+                const std::vector<std::vector<long>> &a_rowidx_to_colidx,
                 const std::vector<std::vector<long>> &b_colidx_to_rowidx)
-        : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM::Multiply", {"a_ijk", "b_ijk", "c_ijk"},
+        : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM::MultiplyAdd", {"a_ijk", "b_ijk", "c_ijk"},
                 {"c_ij", "c_ijk"})
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
@@ -411,17 +309,21 @@ class SpMM {
       bool have_next_k;
       std::tie(next_k, have_next_k) = compute_next_k(i, j, k);
       if (tracing()) {
-        ttg::print("Multiplying A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
+        ttg::print("C[", i, "][", j, "]  += A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
                    (have_next_k ? std::to_string(next_k) : "does not exist"));
       }
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow
       if (have_next_k) {
-        ::send<1>(Key<3>({i, j, next_k}),
-                  gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)), result);
+        ::send<1>(
+            Key<3>({i, j, next_k}),
+            gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
+            result);
       } else
-        ::send<0>(Key<2>({i, j}), gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
-                  result);
+        ::send<0>(
+            Key<2>({i, j}),
+            gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
+            result);
     }
 
    private:
@@ -578,17 +480,16 @@ std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
 #include "../ttg_matrix.h"
 
 int main(int argc, char **argv) {
-
   ttg_initialize(argc, argv, 4);
 
-//  using mpqc::Debugger;
-//  auto debugger = std::make_shared<Debugger>();
-//  Debugger::set_default_debugger(debugger);
-//  debugger->set_exec(argv[0]);
-//  debugger->set_prefix(ttg_default_execution_context().rank());
-//  debugger->set_cmd("lldb_xterm");
-//
-//  initialize_watchpoints();
+  //  using mpqc::Debugger;
+  //  auto debugger = std::make_shared<Debugger>();
+  //  Debugger::set_default_debugger(debugger);
+  //  debugger->set_exec(argv[0]);
+  //  debugger->set_prefix(ttg_default_execution_context().rank());
+  //  debugger->set_cmd("lldb_xterm");
+  //
+  //  initialize_watchpoints();
 
   {
     // ttg::trace_on();
@@ -663,21 +564,22 @@ int main(int argc, char **argv) {
     // ready, go! need only 1 kick, so must be done by 1 thread only
     if (ttg_default_execution_context().rank() == 0) control.start();
 
-    //ttg_execute(ttg_default_execution_context());
-    //ttg_fence(ttg_default_execution_context());
+    // ttg_execute(ttg_default_execution_context());
+    // ttg_fence(ttg_default_execution_context());
 
     ///////////////////////////////////////////////////////////////////////////
     // copy matrix using ttg::Matrix
     Matrix<blk_t> aflow;
     aflow << A;
-    SpMatrix<> Acopy(A.rows(), A.cols());  // resizing will be automatic in the future when shape computation is complete .. see Matrix::operator>>
+    SpMatrix<> Acopy(A.rows(), A.cols());  // resizing will be automatic in the future when shape computation is
+                                           // complete .. see Matrix::operator>>
     auto copy_status = aflow >> Acopy;
     assert(!has_value(copy_status));
     aflow.pushall();
     Control control2(ttg_ctl_edge(ttg_default_execution_context()));
     {
-      //std::cout << "matrix copy using ttg::Matrix" << std::endl;
-//      if (ttg_default_execution_context().rank() == 0) std::cout << Dot{}(&control2) << std::endl;
+      // std::cout << "matrix copy using ttg::Matrix" << std::endl;
+      //      if (ttg_default_execution_context().rank() == 0) std::cout << Dot{}(&control2) << std::endl;
 
       // ready to run!
       auto connected = make_graph_executable(&control2);
@@ -715,7 +617,7 @@ int main(int argc, char **argv) {
       std::tie(norm_2_square, norm_inf) = norms<blk_t>(Acopy - A);
       std::cout << "||Acopy - A||_2      = " << std::sqrt(norm_2_square) << std::endl;
       std::cout << "||Acopy - A||_\\infty = " << norm_inf << std::endl;
-      if(::ttg::tracing()) {
+      if (::ttg::tracing()) {
         std::cout << "Acopy (" << static_cast<void *>(&Acopy) << "):\n" << Acopy << std::endl;
         std::cout << "A (" << static_cast<void *>(&A) << "):\n" << A << std::endl;
       }
@@ -723,7 +625,6 @@ int main(int argc, char **argv) {
         ttg_abort();
       }
     }
-
   }
 
   ttg_finalize();

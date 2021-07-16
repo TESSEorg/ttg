@@ -105,6 +105,9 @@ namespace ttg {
         bool is_valid(void) const {
             return m_is_valid;
         }
+
+        virtual void final_task()
+        { }
       };
 
       /**
@@ -160,6 +163,9 @@ namespace ttg {
           {
               return static_cast<bool>(m_impl);
           }
+
+          virtual void final_task()
+          { }
 
           /* Get an unmanaged reference to the world implementation */
           WorldImplT& impl(void)

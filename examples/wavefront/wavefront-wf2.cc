@@ -10,6 +10,8 @@
 
 #include "ttg.h"
 
+#include "ttg/serialization/std/pair.h"
+
 using namespace ttg;
 
 /*!
@@ -75,13 +77,20 @@ class BlockMatrix {
   }
 
   T& operator()(int row, int col) { return m_block.get()[row * _cols + col]; }
+  const T& operator()(int row, int col) const { return m_block.get()[row * _cols + col]; }
 
   template <typename Archive>
-  void serialize(Archive& ar) {}
+  void serialize(Archive& ar) {
+    ttg_abort();
+  }
+  template <typename Archive>
+  void serialize(Archive& ar, const unsigned int) {
+    ttg_abort();
+  }
 };
 
 template <typename T>
-std::ostream& operator<<(std::ostream& s, BlockMatrix<T>& m) {
+std::ostream& operator<<(std::ostream& s, const BlockMatrix<T>& m) {
   for (int i = 0; i < m.rows(); i++) {
     for (int j = 0; j < m.cols(); j++) s << m(i, j) << " ";
     s << std::endl;
