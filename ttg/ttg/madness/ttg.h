@@ -189,7 +189,6 @@ namespace ttg_madness {
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
     std::array<std::size_t, sizeof...(input_valueTs)> static_streamsize;
-
    public:
     ttg::World get_world() const { return world; }
 
