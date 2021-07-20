@@ -370,14 +370,6 @@ namespace ttg_parsec {
     struct parsec_ttg_task_t {
       parsec_task_t parsec_task = {};
       int32_t in_data_count = 0;
-      // TODO need to augment PaRSEC backend's my_op_s by stream size info, etc.  ... in_data_count will need to be
-      // replaced by something like this
-      //  int counter;                            // Tracks the number of arguments set
-      //  std::array<std::size_t, numins> nargs;  // Tracks the number of expected values (0 = finalized)
-      //  std::array<std::size_t, numins>
-      //      stream_size;                        // Expected number of values to receive, only used for streaming
-      //      inputs
-      //  // (0 = unbounded stream)
       parsec_hash_table_item_t op_ht_item = {};
       parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces] =
           {nullptr};
@@ -387,10 +379,16 @@ namespace ttg_parsec {
       void (*deferred_release)(void *, parsec_ttg_task_t *) =
           nullptr;  // callback used to release the task from with the static context of complete_task_and_release
       void *op_ptr = nullptr;  // passed to deferred_release
-      int stream_size[];       // dynamically allocated in the memory pool
+
+      typedef struct {
+        std::size_t goal;
+        std::size_t size;
+      } size_goal_t;
+      size_goal_t stream[];
 
       parsec_ttg_task_t(int num_inputs, parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class) {
-        std::fill_n(stream_size, num_inputs, 0);
+        size_goal_t zero = {0, 0};
+        std::fill_n(stream, num_inputs, zero);
         PARSEC_OBJ_CONSTRUCT(&this->parsec_task, parsec_task_t);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
@@ -399,7 +397,8 @@ namespace ttg_parsec {
       parsec_ttg_task_t(int num_inputs, parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
                         parsec_taskpool_t *taskpool, void *object_ptr, parsec_key_t key, int32_t priority)
           : object_ptr(object_ptr), key(key) {
-        std::fill_n(stream_size, num_inputs, 0);
+        size_goal_t zero = {0, 0};
+        std::fill_n(stream, num_inputs, zero);
         PARSEC_OBJ_CONSTRUCT(&this->parsec_task, parsec_task_t);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
@@ -733,7 +732,7 @@ namespace ttg_parsec {
    private:
     /* the offset of the key placed after the task structure in the memory from mempool */
     constexpr static const size_t task_key_offset =
-        sizeof(detail::parsec_ttg_task_t) + numins * sizeof(detail::parsec_ttg_task_t::stream_size[0]);
+        sizeof(detail::parsec_ttg_task_t) + numins * sizeof(detail::parsec_ttg_task_t::stream[0]);
 
     input_terminals_type input_terminals;
     output_terminalsT output_terminals;
@@ -768,6 +767,7 @@ namespace ttg_parsec {
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<input_valueTs...>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
+    std::size_t static_stream_goal[numins];
 
    public:
     ttg::World get_world() const { return world; }
@@ -933,6 +933,7 @@ namespace ttg_parsec {
       parsec_thread_mempool_t *mempool =
           &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
       dummy = new (parsec_thread_mempool_allocate(mempool)) detail::parsec_ttg_task_t(numins, mempool, &this->self);
+      // TODO: do we need to copy static_stream_goal in dummy?
 
       /* set the received value as the dummy's only data */
       using decay_valueT = std::decay_t<valueT>;
@@ -1201,6 +1202,10 @@ namespace ttg_parsec {
         newtask->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)] =
             reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op<ttg::ExecutionSpace::CUDA>);
 
+      for(int i = 0; i < numins; i++) {
+        newtask->stream[i].goal = static_stream_goal[i];
+      }
+
       if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
       newtask->op_ht_item.key = newtask->key;
       world_impl.increment_created();
@@ -1268,13 +1273,13 @@ namespace ttg_parsec {
                 std::move(reducer(reinterpret_cast<std::decay_t<valueT> &&>(
                                       *reinterpret_cast<std::decay_t<valueT> *>(copy->device_private)),
                                   std::move(value_copy)));
-            task->stream_size[i]--;
-            release = (task->stream_size[i] == 1);
+            task->stream[i].size++;
+            release = (task->stream[i].size == task->stream[i].goal);
           }
         } else {
           reducer();  // even if this was a control input, must execute the reducer for possible side effects
-          task->stream_size[i]--;
-          release = (task->stream_size[i] == 1);
+          task->stream[i].size++;
+          release = (task->stream[i].size == task->stream[i].goal);
         }
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
         if (release) release_task(this, task);
@@ -1801,6 +1806,13 @@ namespace ttg_parsec {
     }
 
    public:
+    // sets the default stream size for input \c i
+    // \param size positive integer that specifies the default stream size
+    template <std::size_t i>
+    void set_static_argstream_size(std::size_t size) {
+      static_stream_goal[i] = size;
+    }
+
     /// sets stream size for input \c i
     /// \param size positive integer that specifies the stream size
     template <std::size_t i, typename Key>
@@ -1846,8 +1858,8 @@ namespace ttg_parsec {
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
 
         // commit changes
-        task->stream_size[i] += (int)size;
-        bool release = (task->stream_size[i] == 1);
+        task->stream[i].goal = size;
+        bool release = (task->stream[i].size == task->stream[i].goal);
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
 
         if (release) release_task(this, task);
@@ -1898,8 +1910,8 @@ namespace ttg_parsec {
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
 
         // commit changes
-        task->stream_size[i] += (int)size;
-        bool release = (task->stream_size[i] == 1);
+        task->stream[i].goal = size;
+        bool release = (task->stream[i].size == task->stream[i].goal);
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
 
         if (release) release_task(this, task);
@@ -1950,7 +1962,7 @@ namespace ttg_parsec {
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
 
         // commit changes
-        task->stream_size[i] = 1;
+        task->stream[i].size = 1;
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
 
         release_task(this, task);
@@ -1999,7 +2011,7 @@ namespace ttg_parsec {
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
 
         // commit changes
-        task->stream_size[i] = 1;
+        task->stream[i].size = 1;
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
 
         release_task(this, task);
@@ -2196,14 +2208,15 @@ namespace ttg_parsec {
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
+       ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT() )
         : ttg::OpBase(name, numins, numouts)
         , world(world)
         // if using default keymap, rebind to the given world
         , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
                      ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
                      : decltype(keymap)(std::forward<keymapT>(keymap_)))
-        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))) {
+        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_)))
+        , static_stream_goal() {
       // Cannot call these in base constructor since terminals not yet constructed
       if (innames.size() != std::tuple_size<input_terminals_type>::value)
         throw std::logic_error("ttg_parsec::OP: #input names != #input terminals");
@@ -2300,7 +2313,7 @@ namespace ttg_parsec {
       parsec_mempool_construct(
           &mempools, PARSEC_OBJ_CLASS(parsec_task_t),
           /* account for the number of input terminals to handle input streams and key */
-          sizeof(detail::parsec_ttg_task_t) + numins * sizeof(detail::parsec_ttg_task_t::stream_size[0]) + keysize,
+          sizeof(detail::parsec_ttg_task_t) + numins * sizeof(detail::parsec_ttg_task_t::stream[0]) + keysize,
           offsetof(parsec_task_t, mempool_owner), k);
 
       parsec_hash_table_init(&tasks_table, offsetof(detail::parsec_ttg_task_t, op_ht_item), 8, tasks_hash_fcts, NULL);
