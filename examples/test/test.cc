@@ -10,7 +10,6 @@ using namespace ttg;
 
 using keyT = uint64_t;
 
-
 #include "ttg.h"
 
 class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int> {
@@ -25,7 +24,7 @@ class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
 
   static constexpr const bool have_cuda_op = true;
 
-  void op(const keyT &key, const baseT::input_refs_tuple_type& t, baseT::output_terminals_type &out) {
+  void op(const keyT &key, const baseT::input_refs_tuple_type &t, baseT::output_terminals_type &out) {
     // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int
     auto &value = baseT::get<0>(t);
     ttg::print("A got value ", value);
@@ -36,7 +35,7 @@ class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
     }
   }
 
-  void op_cuda(const keyT &key, const baseT::input_refs_tuple_type& t, baseT::output_terminals_type &out) {
+  void op_cuda(const keyT &key, const baseT::input_refs_tuple_type &t, baseT::output_terminals_type &out) {
     // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int
     auto &value = baseT::get<0>(t);
     ttg::print("A got value ", value);
@@ -72,7 +71,7 @@ class Consumer : public Op<void, std::tuple<>, Consumer, const int> {
 
  public:
   Consumer(const std::string &name) : baseT(name, {"input"}, {}) {}
-  void op(const baseT::input_refs_tuple_type& t, baseT::output_terminals_type &out) {
+  void op(const baseT::input_refs_tuple_type &t, baseT::output_terminals_type &out) {
     ttg::print("consumed ", baseT::get<0>(t));
   }
 
@@ -104,8 +103,7 @@ class Everything {
     producer.make_executable();
     a.make_executable();
     consumer.make_executable();
-    if( ttg_default_execution_context().rank() == 0 )
-        producer.invoke();
+    if (ttg_default_execution_context().rank() == 0) producer.invoke();
   }
 };
 
@@ -171,7 +169,7 @@ class Everything3 {
     send<0>(0, int(0), out);
   }
 
-  static void a(const keyT &key, const std::tuple<const int&> &t, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, const std::tuple<const int &> &t, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
     const auto value = std::get<0>(t);
     if (value >= 100) {
       sendv<0>(value, out);
@@ -180,7 +178,7 @@ class Everything3 {
     }
   }
 
-  static void c(const std::tuple<const int&> &t, std::tuple<> &out) { ttg::print("consumed ", std::get<0>(t)); }
+  static void c(const std::tuple<const int &> &t, std::tuple<> &out) { ttg::print("consumed ", std::get<0>(t)); }
 
   // !!!! Edges must be constructed before classes that use them
   Edge<keyT, int> P2A, A2A;
@@ -242,8 +240,7 @@ class Everything4 {
       , A2C("A2C")
       , wp(wrap<void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
       , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
-      , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {}))
-  {}
+      , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
 
   void print() { print_ttg(wp.get()); }
 
@@ -257,7 +254,6 @@ class Everything4 {
   }
 };
 
-#ifndef PARSEC_TTG_H_INCLUDED  // TODO Teach PaRSEC streaming terminals
 class Everything5 {
   static void p(std::tuple<Out<keyT, int>> &out) {
     ttg::print("produced ", 0);
@@ -304,7 +300,6 @@ class Everything5 {
     if (wp->get_world().rank() == 0) wp->invoke();
   }
 };
-#endif  // !PaRSEC
 
 class EverythingComposite {
   std::unique_ptr<OpBase> P;
@@ -352,8 +347,7 @@ class EverythingComposite {
     Producer *p = dynamic_cast<Producer *>(P.get());
     P->make_executable();
     AC->make_executable();
-    if( ttg_default_execution_context().rank() == 0 )
-        p->invoke();
+    if (ttg_default_execution_context().rank() == 0) p->invoke();
   }  // Ugh!
 };
 
@@ -432,7 +426,6 @@ class BroadcastTest {
   }
 };
 
-#ifndef PARSEC_TTG_H_INCLUDED  // TODO Teach PaRSEC streaming terminals
 // Computes Fibonacci numbers up to some value
 class Fibonacci {
   // compute all numbers up to this value
@@ -445,12 +438,16 @@ class Fibonacci {
 
     const auto F_np2 = F_np1 + F_n;
     if (F_np2 < max()) {
-      // on 1 process the right order of sends can avoid the race iff reductions are inline (on-current-thread) and not async (nthread>1):
+      // on 1 process the right order of sends can avoid the race iff reductions are inline (on-current-thread) and not
+      // async (nthread>1):
       // - send<1> will call wc->set_arg which will eagerly reduce the argument
-      // - send<0> then will call wa->set_arg which will create task for key F_np2 ... that can potentially call finalize<1> in the other clause
-      // - reversing the order of sends will create a race between wc->set_arg->send<1> executing on this thread and wa->set_arg->finalize<1> executing in thread pool
+      // - send<0> then will call wa->set_arg which will create task for key F_np2 ... that can potentially call
+      // finalize<1> in the other clause
+      // - reversing the order of sends will create a race between wc->set_arg->send<1> executing on this thread and
+      // wa->set_arg->finalize<1> executing in thread pool
       // - there is no way to detect the "undesired" outcome of the race without keeping expired OpArgs from the cache
-      // there is no way currently to avoid race if there is more than 1 process ... need to add the number of messages that the reducing terminal will receive. The order of operations will still matter.
+      // there is no way currently to avoid race if there is more than 1 process ... need to add the number of messages
+      // that the reducing terminal will receive. The order of operations will still matter.
       send<1>(0, F_np2, outs);
       send<0>(F_np2, F_np1, outs);
     } else
@@ -485,7 +482,6 @@ class Fibonacci {
     if (wa->get_world().rank() == 0) wa->invoke(2, 1);
   }
 };
-#endif
 
 int try_main(int argc, char **argv) {
   ttg_initialize(argc, argv, 2);
@@ -541,7 +537,8 @@ int try_main(int argc, char **argv) {
     std::cout << q.dot() << std::endl;
     q.start();  // myusleep(100);
 
-#if 0  // can we make something like this happen? ... edges are named, but terminals are indexed, so components are "reusable"
+#if 0  // can we make something like this happen? ... edges are named, but terminals are indexed, so components are
+       // "reusable"
     {
       ttg.let([]() {
            std::cout << "produced 0" << std::endl;
@@ -570,7 +567,6 @@ int try_main(int argc, char **argv) {
     }
 #endif
 
-#ifndef PARSEC_TTG_H_INCLUDED  // TODO Teach PaRSEC streaming terminals
     if constexpr (runtime_traits<ttg_runtime>::supports_streaming_terminal) {
       // Everything5 = Everything4 with consumer summing all values from A using a stream reducer
       Everything5 q5;
@@ -579,7 +575,8 @@ int try_main(int argc, char **argv) {
 
       Fibonacci fi;
       std::cout << fi.dot() << std::endl << std::endl;
-      if (ttg_default_execution_context().size() == 1) fi.start();  // see Fibonacci::next() for why there is a race here when nproc>1 (works most of the time)
+      if (ttg_default_execution_context().size() == 1)
+        fi.start();  // see Fibonacci::next() for why there is a race here when nproc>1 (works most of the time)
 
       // must fence here to flush out all tasks associated with Everything5 and Fibonacci
       // TODO must fence in Op destructors to avoid compositional nightmares like this
@@ -589,9 +586,7 @@ int try_main(int argc, char **argv) {
       {
         const auto max = 1000;
         // Sum Fibonacci numbers up to max
-        auto fib = [&](const int &F_n_plus_1,
-                         const int &F_n,
-                         std::tuple<Out<int, int>, Out<Void, int>> &outs) {
+        auto fib = [&](const int &F_n_plus_1, const int &F_n, std::tuple<Out<int, int>, Out<Void, int>> &outs) {
           // if this is first call reduce F_n also
           if (F_n_plus_1 == 2 && F_n == 1) sendv<1>(F_n, outs);
 
@@ -629,17 +624,13 @@ int try_main(int argc, char **argv) {
 
         auto f = make_op(fib, edges(F2F), edges(F2F, F2P), "next");
         auto p = make_op(print, edges(F2P), edges(), "print");
-        p->set_input_reducer<0>([](int &&a, int &&b) {
-          return a + b;
-        });
+        p->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
         make_graph_executable(f.get());
-        if( ttg_default_execution_context().rank() == 0)
-          f->invoke(2, 1);
+        if (ttg_default_execution_context().rank() == 0) f->invoke(2, 1);
 
         ttg_fence(ttg_default_execution_context());
       }
     }
-#endif
 
     ReductionTest t;
     t.start();
@@ -665,4 +656,3 @@ int main(int argc, char **argv) {
     return 1;
   }
 }
-
