@@ -345,6 +345,7 @@ double R(const double x) { return (A(x) + B(x)) * C(x); }
 int main(int argc, char** argv) {
   ttg_initialize(argc, argv, -1);
   {
+    //ttg::OpBase::set_trace_all(true);
     ctlEdge ctl("start ctl");
     nodeEdge a("a"), b("b"), c("c"), abc("abc"), diffa("diffa"), errdiff("errdiff"), errabc("errabc"), a_plus_b("a+b"),
         a_plus_b_times_c("(a+b)*c"), deriva("deriva"), compa("compa"), recona("recona");

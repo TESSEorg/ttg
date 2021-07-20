@@ -1273,9 +1273,9 @@ namespace ttg_parsec {
                 std::move(reducer(reinterpret_cast<std::decay_t<valueT> &&>(
                                       *reinterpret_cast<std::decay_t<valueT> *>(copy->device_private)),
                                   std::move(value_copy)));
-            task->stream[i].size++;
-            release = (task->stream[i].size == task->stream[i].goal);
           }
+          task->stream[i].size++;
+          release = (task->stream[i].size == task->stream[i].goal);
         } else {
           reducer();  // even if this was a control input, must execute the reducer for possible side effects
           task->stream[i].size++;
