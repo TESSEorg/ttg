@@ -204,6 +204,7 @@ void do_compress(const Key<NDIM>& key,
             s(child_slices[i]) = ins[i]->coeffs;
             result.is_leaf[i] = ins[i]->is_leaf;
             sumsq += ins[i]->sum; // Accumulate sumsq from child difference coeffs
+            std::cout << sumsq << std::endl;
         }
         filter<T,K,NDIM>(s,d);  // Apply twoscale transformation
     }
