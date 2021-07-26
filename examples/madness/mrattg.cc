@@ -15,19 +15,19 @@ using namespace ttg;
 #include <functional>
 #include <type_traits>
 
-#include "mragl.h"
-#include "mrakey.h"
-#include "mramxm.h"
-#include "mramisc.h"
-#include "mratypes.h"
-#include "mradomain.h"
-#include "mratwoscale.h"
-#include "mrasimpletensor.h"
-#include "mrafunctiondata.h"
-#include "mrafunctionnode.h"
-#include "mrafunctionfunctor.h"
+#include "../mragl.h"
+#include "../mrakey.h"
+#include "../mramxm.h"
+#include "../mramisc.h"
+#include "../mratypes.h"
+#include "../mradomain.h"
+#include "../mratwoscale.h"
+#include "../mrasimpletensor.h"
+#include "../mrafunctiondata.h"
+#include "../mrafunctionnode.h"
+#include "../mrafunctionfunctor.h"
 
-#include "/usr/include/mkl/mkl.h" // assume for now but need to wrap
+//#include "mkl.h" // assume for now but need to wrap
 
 using namespace mra;
 
@@ -203,6 +203,7 @@ void do_compress(const Key<NDIM>& key,
             s(child_slices[i]) = ins[i]->coeffs;
             result.is_leaf[i] = ins[i]->is_leaf;
             sumsq += ins[i]->sum; // Accumulate sumsq from child difference coeffs
+            std::cout << sumsq << std::endl;
         }
         filter<T,K,NDIM>(s,d);  // Apply twoscale transformation
     }
