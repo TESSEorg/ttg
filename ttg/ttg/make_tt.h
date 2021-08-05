@@ -19,7 +19,10 @@ class CallableWrapTT : public TT<keyT, output_terminalsT,
   using input_edges_type = typename baseT::input_edges_type;
   using output_edges_type = typename baseT::output_edges_type;
 
-  std::function<boost::callable_traits::function_type_t<funcT>> func;
+  using noref_funcT = typename std::remove_reference_t<funcT>;
+  typename std::conditional<std::is_function<noref_funcT>::value,
+                              typename std::add_pointer<noref_funcT>::type,
+                              noref_funcT>::type func;
 
   template <typename Key, typename Tuple>
   void call_func(Key &&key, Tuple &&args, output_terminalsT &out) {
@@ -102,7 +105,11 @@ class CallableWrapTTArgs
   using input_edges_type = typename baseT::input_edges_type;
   using output_edges_type = typename baseT::output_edges_type;
 
-  std::function<boost::callable_traits::function_type_t<funcT>> func;
+  using noref_funcT = typename std::remove_reference_t<funcT>;
+  typename std::conditional<std::is_function<noref_funcT>::value,
+                              typename std::add_pointer<noref_funcT>::type,
+                              noref_funcT>::type func;
+  //std::remove_reference_t<funcT> func;
 
   template <typename Key, typename Tuple, std::size_t... S>
   void call_func(Key &&key, Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
