@@ -6,7 +6,8 @@
 #include <iostream>
 //#include CBLAS_HEADER
 
-#include "/usr/include/mkl/mkl.h" // !!!!!!!
+//#include "/usr/include/mkl/mkl.h" // !!!!!!!
+#include "mkl.h"
 
 namespace mra {
 
