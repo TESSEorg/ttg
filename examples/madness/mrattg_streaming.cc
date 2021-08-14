@@ -31,7 +31,6 @@ using namespace ttg;
 #include "../mrafunctionnode.h"
 #include "../mrafunctionfunctor.h"
 
-
 using namespace mra;
 
 /// Random process map
