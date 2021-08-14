@@ -1,6 +1,6 @@
 // TTG AND MADNESS RUNTIME STUFF
 
-#define WORLD_INSTANTIATE_STATIC_TEMPLATES
+//#define WORLD_INSTANTIATE_STATIC_TEMPLATES
 #include "ttg/madness/ttg.h"
 // using namespace madness; // don't want this to avoid collisions with new mad stuff
 using namespace ttg;

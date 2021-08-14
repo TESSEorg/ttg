@@ -29,7 +29,8 @@ using namespace ttg;
 #include "../mrafunctionnode.h"
 #include "../mrafunctionfunctor.h"
 
-#include "/usr/include/mkl/mkl.h" // assume for now but need to wrap
+//#include "/usr/include/mkl/mkl.h" // assume for now but need to wrap
+#include "mkl.h"
 
 using namespace mra;
 
