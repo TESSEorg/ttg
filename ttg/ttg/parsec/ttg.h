@@ -512,24 +512,24 @@ namespace ttg_parsec {
       }
     }
 
-    template<typename Value>
+    template<typename Value, bool Readonly>
     inline ttg_data_copy_t*
-    register_data_copy(ttg_data_copy_t *copy_in, detail::parsec_ttg_op_base_t* task, bool readonly)
+    register_data_copy(ttg_data_copy_t *copy_in, detail::parsec_ttg_op_base_t* task)
     {
       ttg_data_copy_t *copy_res = copy_in;
       bool replace = false;
       int32_t readers = -1;
-      if (readonly && copy_in->readers > 0) {
+      if (Readonly && copy_in->readers > 0) {
         /* simply increment the number of readers */
         readers = parsec_atomic_fetch_inc_int32(&copy_in->readers);
       }
       if (readers < 0) {
         /* someone is going to write into this copy -> we need to make a copy */
         copy_res = NULL;
-        if (readonly) {
+        if (Readonly) {
           replace = true;
         }
-      } else if (!readonly) {
+      } else if (!Readonly) {
         /* this task will mutate the data
          * check whether there are other readers already and potentially
          * defer the release of this task to give following readers a
@@ -1129,9 +1129,25 @@ namespace ttg_parsec {
       return newtask;
     }
 
-    // Used to set the i'th argument
+    // Used to set the i'th argument, queries the copy
+
     template <std::size_t i, typename Key, typename Value>
     void set_arg_local_impl(const Key &key, Value&& value) {
+
+      using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
+      constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
+      ttg_data_copy_t *copy = nullptr;
+      if constexpr (!valueT_is_Void) {
+        if (nullptr != parsec_ttg_caller) {
+          copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
+        }
+      }
+      set_arg_local_impl<i>(key, std::forward<Value>(value), copy);
+    }
+
+    // Used to set the i'th argument, queries the copy
+    template <std::size_t i, typename Key, typename Value>
+    void set_arg_local_impl(const Key &key, Value&& value, ttg_data_copy_t *copy) {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
       constexpr const bool keyT_is_Void   = ttg::meta::is_void_v<Key>;
@@ -1191,16 +1207,10 @@ namespace ttg_parsec {
           throw std::logic_error("bad set arg");
         }
 
-        ttg_data_copy_t *copy = nullptr;
-
-        if (nullptr != parsec_ttg_caller) {
-          copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
-        }
-
         if (nullptr != copy) {
 
           /* register_data_copy might provide us with a different copy if !input_is_const */
-          copy = detail::register_data_copy<valueT>(copy, task, input_is_const);
+          copy = detail::register_data_copy<valueT, input_is_const>(copy, task);
           /* if we registered as a writer and were the first to register with this copy
           * we need to defer the release of this task to give other tasks a chance to
           * make a copy of the original data */
@@ -1214,9 +1224,10 @@ namespace ttg_parsec {
           auto *val_copy = new decay_valueT(std::move(value));
           ttg_data_copy_t* copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
           copy->device_private = val_copy;
-          copy->readers = 1;
+          copy->readers = input_is_const ? 1 : INT32_MIN;
           copy->delete_fn  = &detail::typed_delete_t<decay_valueT>::delete_type;
           task->parsec_task.data[i].data_in = copy;
+          /* TODO: make this task the current task and reuse the copy in the broadcasts handling of local keys */
 
         }
       }
@@ -1322,7 +1333,7 @@ namespace ttg_parsec {
       } else {
         ttg_data_copy_t *copy;
         copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
-        copy = detail::register_data_copy<decvalueT>(copy, nullptr, true);
+        copy = detail::register_data_copy<decvalueT, true>(copy, nullptr);
 
         ttg::SplitMetadataDescriptor<decvalueT> descr;
         auto metadata = descr.get_metadata(value);
@@ -1532,14 +1543,22 @@ namespace ttg_parsec {
         /* handle local keys */
         /* TODO: get the lifetime managment of the object straight! */
         if (std::distance(local_begin, local_end) > 0) {
+          ttg_data_copy_t *copy = nullptr;
+          if (nullptr != parsec_ttg_caller) {
+            copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
+          }
           for (auto it = local_begin; it != local_end; ++it) {
-            set_arg_local<i, keyT, Value>(*it, value);
+            set_arg_local_impl<i>(*it, value, copy);
           }
         }
       } else {
         /* only local keys */
+        ttg_data_copy_t *copy = nullptr;
+        if (nullptr != parsec_ttg_caller) {
+          copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
+        }
         for (auto &key : keylist) {
-          set_arg_local<i, keyT, Value>(key, value);
+          set_arg_local_impl<i>(key, value, copy);
         }
       }
 
@@ -1672,7 +1691,7 @@ namespace ttg_parsec {
             /* create a function that will be invoked upon RMA completion at the target */
             std::shared_ptr<void> lreg_ptr_v = lreg_ptr;
             /* mark another reader on the copy */
-            copy = detail::register_data_copy<valueT>(copy, nullptr, true);
+            copy = detail::register_data_copy<valueT, true>(copy, nullptr);
             std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
               /* shared_ptr of value and registration captured by value so resetting
                * them here will eventually release the memory/registration */
@@ -1690,13 +1709,22 @@ namespace ttg_parsec {
                             sizeof(msg_header_t) + pos);
         }
         /* handle local keys */
+        copy = nullptr;
+        if (nullptr != parsec_ttg_caller) {
+          copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
+        }
         for (auto it = local_begin; it != local_end; ++it) {
           set_arg_local_impl<i>(*it, value);
         }
       } else {
         /* handle local keys */
+        ttg_data_copy_t *copy = nullptr;
+        if (nullptr != parsec_ttg_caller) {
+          copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
+        }
+        /* handle local keys */
         for (auto it = keylist.begin(); it != keylist.end(); ++it) {
-          set_arg_local_impl<i>(*it, value);
+          set_arg_local_impl<i>(*it, value, copy);
         }
       }
 
