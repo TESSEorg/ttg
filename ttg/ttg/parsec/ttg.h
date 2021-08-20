@@ -1479,12 +1479,13 @@ namespace ttg_parsec {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       auto world = ttg_default_execution_context();
       int rank = world.rank();
-
-      bool have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
-                                                      [&](const Key& key){
-                                                        return keymap(key) != rank;
-                                                      });
-
+      bool have_remote = false;
+      if (world.size() > 1) {
+        have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
+                                                    [&](const Key& key){
+                                                      return keymap(key) != rank;
+                                                    });
+      }
       if (have_remote) {
         std::vector<Key> keylist_sorted(keylist.begin(), keylist.end());
 
@@ -1573,11 +1574,13 @@ namespace ttg_parsec {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       auto world = ttg_default_execution_context();
       int rank = world.rank();
-      bool have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
-                                                      [&](const Key& key){
-                                                        return keymap(key) != rank;
-                                                      });
-
+      bool have_remote = false;
+      if (world.size() > 1) {
+        have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
+                                                    [&](const Key& key){
+                                                      return keymap(key) != rank;
+                                                    });
+      }
       if (have_remote) {
         using decvalueT = std::decay_t<Value>;
 
