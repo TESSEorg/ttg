@@ -1187,8 +1187,10 @@ namespace ttg_parsec {
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
             parsec_mempool_free(&mempools, newtask);
           }
-        } else if (task->in_data_count == numins-1) {
-          parsec_hash_table_nolock_remove(&tasks_table, hk);
+        } else {
+          if (task->in_data_count == numins-1) {
+            parsec_hash_table_nolock_remove(&tasks_table, hk);
+          }
           parsec_hash_table_unlock_bucket(&tasks_table, hk);
         }
 
@@ -1410,7 +1412,7 @@ namespace ttg_parsec {
         // and give it to the scheduler
         parsec_execution_stream_s *es = world_impl.execution_stream();
         detail::parsec_ttg_op_t<Key> *task = create_new_task(key);
-        task->parsec_task.data[0].data_in = static_cast<ttg_data_copy_t *>(NULL);
+        task->parsec_task.data[0].data_in = nullptr;
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
         world_impl.increment_created();
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
