@@ -195,6 +195,7 @@ namespace ttg_parsec {
     static constexpr const int _PARSEC_TTG_RMA_TAG = 11;  // This TAG should be 'allocated' at the PaRSEC level
 
     ttg::Edge<> m_ctl_edge;
+    int m_rank, m_size;
 
    public:
     static constexpr const int PARSEC_TTG_MAX_AM_SIZE = 1024 * 1024;
@@ -206,6 +207,8 @@ namespace ttg_parsec {
       parsec_ce.tag_register(_PARSEC_TTG_TAG, &detail::static_unpack_msg, this, PARSEC_TTG_MAX_AM_SIZE);
       parsec_ce.tag_register(_PARSEC_TTG_RMA_TAG, &detail::get_remote_complete_cb, this, 128);
 
+      MPI_Comm_size(comm(), &m_size);
+      MPI_Comm_rank(comm(), &m_rank);
       create_tpool();
     }
 
@@ -257,17 +260,12 @@ namespace ttg_parsec {
     constexpr int parsec_ttg_tag() const { return _PARSEC_TTG_TAG; }
     constexpr int parsec_ttg_rma_tag() const { return _PARSEC_TTG_RMA_TAG; }
 
-    virtual int size() const override {
-      int size;
-
-      MPI_Comm_size(comm(), &size);
-      return size;
+    virtual int size() const override final {
+      return m_size;
     }
 
-    virtual int rank() const override {
-      int rank;
-      MPI_Comm_rank(comm(), &rank);
-      return rank;
+    virtual int rank() const override final {
+      return m_rank;
     }
 
     MPI_Comm comm() const { return MPI_COMM_WORLD; }
