@@ -445,7 +445,7 @@ public:
         const T L = Domain<NDIM>::get_max_width();
         const T a = expnt*L*L;
         double n = std::log(a/(4*K*K*(N*log10+std::log(fac))))/(2*log2);
-        std::cout << expnt << " " << a << " " << n << std::endl;
+        //std::cout << expnt << " " << a << " " << n << std::endl;
         initlev = Level(n<2 ? 2.0 : std::ceil(n));
     }
 
@@ -684,18 +684,18 @@ void test2(size_t nfunc, T thresh = 1e-6) {
 
     ttg_execute(ttg_default_execution_context());
     ttg_fence(ttg_default_execution_context());
-    
-    if (ttg_default_execution_context().rank() == 0) {
-        end = std::chrono::high_resolution_clock::now();
-        std::cout << "TTG Execution Time (milliseconds) : "
-              << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
 
+    if (ttg_default_execution_context().rank() == 0) {
+      end = std::chrono::high_resolution_clock::now();
+      std::cout << "TTG Execution Time (milliseconds) : "
+                << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 
+                << std::endl; 
     }
 }
 
 int main(int argc, char** argv) {
     ttg_initialize(argc, argv, 2);
-    std::cout << "Hello from madttg\n";
+    //std::cout << "Hello from madttg\n";
 
     //vmlSetMode(VML_HA | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // default
     //vmlSetMode(VML_EP | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // err is 10x default
