@@ -369,7 +369,7 @@ namespace ttg_parsec {
     typedef void (*parsec_static_op_t)(void *);  // static_op will be cast to this type
 
     struct parsec_ttg_op_base_t {
-      parsec_task_t parsec_task;
+      parsec_task_t parsec_task = {0};
       // TODO need to augment PaRSEC backend's my_op_s by stream size info, etc.  ... in_data_count will need to be
       // replaced by something like this
       //  int counter;                            // Tracks the number of arguments set
@@ -378,7 +378,7 @@ namespace ttg_parsec {
       //      stream_size;                        // Expected number of values to receive, only used for streaming
       //      inputs
       //  // (0 = unbounded stream)
-      parsec_hash_table_item_t op_ht_item;
+      parsec_hash_table_item_t op_ht_item = {0};
       int32_t in_data_count = 0;
       parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces] = {nullptr};
       void *object_ptr = nullptr;
