@@ -388,7 +388,7 @@ namespace ttg_parsec {
 
       inline
       parsec_ttg_op_base_t() {
-        //PARSEC_OBJ_CONSTRUCT(&this->parsec_task, parsec_task_t);
+        PARSEC_OBJ_CONSTRUCT(&this->parsec_task, parsec_task_t);
       }
     };
 
