@@ -529,7 +529,7 @@ namespace ttg_parsec {
         if (Readonly) {
           replace = true;
         }
-      } else if (!Readonly) {
+      } else if constexpr (!Readonly) {
         /* this task will mutate the data
          * check whether there are other readers already and potentially
          * defer the release of this task to give following readers a
@@ -554,9 +554,7 @@ namespace ttg_parsec {
       }
       if (NULL != copy_res) {
         PARSEC_OBJ_RETAIN(copy_res);
-      }
-
-      if( NULL == copy_res ) {
+      } else {
         ttg_data_copy_t *new_copy;
         new_copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
         new_copy->device_private = (void *)(new Value(*static_cast<Value*>(copy_in->device_private)));
@@ -1183,15 +1181,17 @@ namespace ttg_parsec {
           parsec_hash_table_lock_bucket(&tasks_table, hk);
           if (NULL == (task = (detail::parsec_ttg_op_t<keyT> *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
             parsec_hash_table_nolock_insert(&tasks_table, &newtask->op_ht_item);
+            parsec_hash_table_unlock_bucket(&tasks_table, hk);
             task = newtask;
             world_impl.increment_created();
           } else {
+            parsec_hash_table_unlock_bucket(&tasks_table, hk);
             parsec_mempool_free(&mempools, newtask);
           }
         } else if (task->in_data_count == numins-1) {
           parsec_hash_table_nolock_remove(&tasks_table, hk);
+          parsec_hash_table_unlock_bucket(&tasks_table, hk);
         }
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
 
       } else {
         task = create_new_task(key);
