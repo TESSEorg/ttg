@@ -145,9 +145,8 @@ namespace ttg_parsec {
     ttg_data_copy_t*
     find_copy_in_task(parsec_task_t* task, const void *ptr) {
       ttg_data_copy_t* copy = nullptr;
-      int j = -1;
-      if (task != nullptr || ptr != nullptr) {
-        while(++j < MAX_CALL_PARAM_COUNT) {
+      if (task != nullptr && ptr != nullptr) {
+        for (int j = 0; j < MAX_CALL_PARAM_COUNT; ++j) {
           if (NULL != task->data[j].data_in &&
               task->data[j].data_in->device_private == ptr)
           {
