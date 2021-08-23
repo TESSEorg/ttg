@@ -2310,6 +2310,7 @@ namespace ttg_parsec {
       if constexpr (!std::is_same_v<void, keyT>) {
         keysize = sizeof(keyT);
       }
+
       parsec_mempool_construct(
           &mempools, PARSEC_OBJ_CLASS(parsec_task_t),
           /* account for the number of input terminals to handle input streams and key */
