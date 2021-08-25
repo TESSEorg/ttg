@@ -727,10 +727,11 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
 
 #if defined(BTAS_IS_USABLE)
 static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B,
-                           SpMatrix<> &C) {
+                           SpMatrix<> &C, double &gflops) {
   A.resize(M, K);
   B.resize(K, N);
   C.resize(M, N);
+  gflops = 0.0;
 
   if (ttg_default_execution_context().rank() == 0) {
     float density = 0.0;
@@ -739,7 +740,8 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dist(minTs, maxTs);
     std::vector<int> mTiles, nTiles, kTiles;
-    std::map<std::tuple<int, int>, bool> filling;
+    std::map<std::tuple<int, int>, bool> Afilling;
+    std::map<std::tuple<int, int>, bool> Bfilling;
     using triplet_t = Eigen::Triplet<blk_t>;
     std::vector<triplet_t> A_elements;
     std::vector<triplet_t> B_elements;
@@ -765,13 +767,13 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     std::uniform_int_distribution<> kDist(0, kTiles.size() - 1);
 
     density = 0.0;
-    filling.clear();
+    Afilling.clear();
     while (density < avgDensity) {
       int mt = mDist(gen);
       int kt = kDist(gen);
       int m = 0, k = 0;
-      if (filling.count({mt, kt}) > 0) continue;
-      filling[{mt, kt}] = true;
+      if (Afilling.count({mt, kt}) > 0) continue;
+      Afilling[{mt, kt}] = true;
       density += (float)(mTiles[mt] * kTiles[kt]) / (float)(M * K);
       auto blksize = {mTiles[mt], kTiles[kt]};
       for (int i = 0; i < mt; i++) m += mTiles[i];
@@ -783,13 +785,13 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
               << " density " << density << std::endl;
 
     density = 0.0;
-    filling.clear();
+    Bfilling.clear();
     while (density < avgDensity) {
       int nt = nDist(gen);
       int kt = kDist(gen);
       int n = 0, k = 0;
-      if (filling.count({kt, nt}) > 0) continue;
-      filling[{kt, nt}] = true;
+      if (Bfilling.count({kt, nt}) > 0) continue;
+      Bfilling[{kt, nt}] = true;
       density += (float)(kTiles[kt] * nTiles[nt]) / (float)(K * N);
       auto blksize = {kTiles[kt], nTiles[nt]};
       for (int i = 0; i < nt; i++) n += nTiles[i];
@@ -797,8 +799,18 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
       B_elements.emplace_back(k, n, blk_t(btas::Range(blksize), (float)std::rand() / (float)RAND_MAX - 0.5));
     }
     B.setFromTriplets(B_elements.begin(), B_elements.end());
+
+    for (int mt = 0; mt < mTiles.size(); mt++) {
+      for (int nt = 0; nt < nTiles.size(); nt++) {
+        for (int kt = 0; kt < kTiles.size(); kt++) {
+          if (!Afilling[{mt, kt}] || !Bfilling[{kt, nt}]) continue;
+          gflops += 2.0 * mTiles[mt] * nTiles[nt] * kTiles[kt] / 1e9;
+        }
+      }
+    }
+
     std::cout << "#RandomBlockSparse-matrixT: B = " << K << " x " << N << " minTs " << minTs << " maxTs " << maxTs
-              << " density " << density << std::endl;
+              << " density " << density * 100 << " %, work " << gflops << " GFlops" << std::endl;
   }
 }
 #endif
@@ -807,6 +819,7 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
 
 int main(int argc, char **argv) {
   bool timing = false;
+  double gflops = 0.0;
 
   if (int dashdash = cmdOptionIndex(argv, argv + argc, "--") > -1) {
     ttg_initialize(argc - dashdash, argv + dashdash, -1);
@@ -856,7 +869,7 @@ int main(int argc, char **argv) {
       std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
       double avg = parseOption(avgStr, 0.3);
       timing = true;
-      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, C);
+      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, C, gflops);
     } else {
       initBlSpHardCoded(A, B, C);
     }
@@ -874,7 +887,7 @@ int main(int argc, char **argv) {
     //  SpMM a_times_b(world, eA, eB, eC, A, B);
     SpMM<> a_times_b(eA, eB, eC, A, B);
 
-    std::cout << Dot{}(&a, &b) << std::endl;
+    if (!timing) std::cout << Dot{}(&a, &b) << std::endl;
 
     // ready to run!
     auto connected = make_graph_executable(&control);
@@ -890,68 +903,69 @@ int main(int argc, char **argv) {
       ttg_fence(ttg_default_execution_context());
       gettimeofday(&end, NULL);
       timersub(&end, &start, &diff);
-      std::cout << "Time to completion: " << diff.tv_sec + (double)diff.tv_usec / 1e6 << "s" << std::endl;
+      double tc = diff.tv_sec + (double)diff.tv_usec / 1e6;
+      std::cout << "Time to completion: " << tc << " s, performance " << gflops / tc << " GFlop/s" << std::endl;
     } else {
       // ready, go! need only 1 kick, so must be done by 1 thread only
       if (ttg_default_execution_context().rank() == 0) control.start();
-    }
 
-    ///////////////////////////////////////////////////////////////////////////
-    // copy matrix using ttg::Matrix
-    Matrix<blk_t> aflow;
-    aflow << A;
-    SpMatrix<> Acopy(A.rows(), A.cols());  // resizing will be automatic in the future when shape computation is
-                                           // complete .. see Matrix::operator>>
-    auto copy_status = aflow >> Acopy;
-    assert(!has_value(copy_status));
-    aflow.pushall();
-    Control control2(ttg_ctl_edge(ttg_default_execution_context()));
-    {
-      // std::cout << "matrix copy using ttg::Matrix" << std::endl;
-      //      if (ttg_default_execution_context().rank() == 0) std::cout << Dot{}(&control2) << std::endl;
+      ///////////////////////////////////////////////////////////////////////////
+      // copy matrix using ttg::Matrix
+      Matrix<blk_t> aflow;
+      aflow << A;
+      SpMatrix<> Acopy(A.rows(), A.cols());  // resizing will be automatic in the future when shape computation is
+                                             // complete .. see Matrix::operator>>
+      auto copy_status = aflow >> Acopy;
+      assert(!has_value(copy_status));
+      aflow.pushall();
+      Control control2(ttg_ctl_edge(ttg_default_execution_context()));
+      {
+        // std::cout << "matrix copy using ttg::Matrix" << std::endl;
+        //      if (ttg_default_execution_context().rank() == 0) std::cout << Dot{}(&control2) << std::endl;
 
-      // ready to run!
-      auto connected = make_graph_executable(&control2);
-      assert(connected);
-      TTGUNUSED(connected);
+        // ready to run!
+        auto connected = make_graph_executable(&control2);
+        assert(connected);
+        TTGUNUSED(connected);
 
-      // ready, go! need only 1 kick, so must be done by 1 thread only
-      if (ttg_default_execution_context().rank() == 0) control2.start();
-    }
-    //////////////////////////////////////////////////////////////////////////
-
-    ttg_execute(ttg_default_execution_context());
-    ttg_fence(ttg_default_execution_context());
-
-    // validate C=A*B against the reference output
-    assert(has_value(c_status));
-    if (ttg_default_execution_context().rank() == 0) {
-      SpMatrix<> Cref = A * B;
-
-      double norm_2_square, norm_inf;
-      std::tie(norm_2_square, norm_inf) = norms<blk_t>(Cref - C);
-      std::cout << "||Cref - C||_2      = " << std::sqrt(norm_2_square) << std::endl;
-      std::cout << "||Cref - C||_\\infty = " << norm_inf << std::endl;
-      if (norm_inf > 1e-9) {
-        std::cout << "Cref:\n" << Cref << std::endl;
-        std::cout << "C:\n" << C << std::endl;
-        ttg_abort();
+        // ready, go! need only 1 kick, so must be done by 1 thread only
+        if (ttg_default_execution_context().rank() == 0) control2.start();
       }
-    }
+      //////////////////////////////////////////////////////////////////////////
 
-    // validate Acopy=A against the reference output
-    assert(has_value(copy_status));
-    if (ttg_default_execution_context().rank() == 0) {
-      double norm_2_square, norm_inf;
-      std::tie(norm_2_square, norm_inf) = norms<blk_t>(Acopy - A);
-      std::cout << "||Acopy - A||_2      = " << std::sqrt(norm_2_square) << std::endl;
-      std::cout << "||Acopy - A||_\\infty = " << norm_inf << std::endl;
-      if (::ttg::tracing()) {
-        std::cout << "Acopy (" << static_cast<void *>(&Acopy) << "):\n" << Acopy << std::endl;
-        std::cout << "A (" << static_cast<void *>(&A) << "):\n" << A << std::endl;
+      ttg_execute(ttg_default_execution_context());
+      ttg_fence(ttg_default_execution_context());
+
+      // validate C=A*B against the reference output
+      assert(has_value(c_status));
+      if (ttg_default_execution_context().rank() == 0) {
+        SpMatrix<> Cref = A * B;
+
+        double norm_2_square, norm_inf;
+        std::tie(norm_2_square, norm_inf) = norms<blk_t>(Cref - C);
+        std::cout << "||Cref - C||_2      = " << std::sqrt(norm_2_square) << std::endl;
+        std::cout << "||Cref - C||_\\infty = " << norm_inf << std::endl;
+        if (norm_inf > 1e-9) {
+          std::cout << "Cref:\n" << Cref << std::endl;
+          std::cout << "C:\n" << C << std::endl;
+          ttg_abort();
+        }
       }
-      if (norm_inf != 0) {
-        ttg_abort();
+
+      // validate Acopy=A against the reference output
+      assert(has_value(copy_status));
+      if (ttg_default_execution_context().rank() == 0) {
+        double norm_2_square, norm_inf;
+        std::tie(norm_2_square, norm_inf) = norms<blk_t>(Acopy - A);
+        std::cout << "||Acopy - A||_2      = " << std::sqrt(norm_2_square) << std::endl;
+        std::cout << "||Acopy - A||_\\infty = " << norm_inf << std::endl;
+        if (::ttg::tracing()) {
+          std::cout << "Acopy (" << static_cast<void *>(&Acopy) << "):\n" << Acopy << std::endl;
+          std::cout << "A (" << static_cast<void *>(&A) << "):\n" << A << std::endl;
+        }
+        if (norm_inf != 0) {
+          ttg_abort();
+        }
       }
     }
   }
