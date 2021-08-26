@@ -312,6 +312,7 @@ class SpMM {
                 {"c_ij", "c_ijk"})
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
+      this->set_priomap([=](const Key<3>& key){ return this->prio(key); });
       auto &keymap = this->get_keymap();
 
       // for each i and j that belongs to this node
@@ -370,6 +371,21 @@ class SpMM {
    private:
     const std::vector<std::vector<long>> &a_rowidx_to_colidx_;
     const std::vector<std::vector<long>> &b_colidx_to_rowidx_;
+
+    /* Compute the length of the remaining sequence on that tile */
+    int32_t prio(const Key<3>& key) {
+      const auto i = key[0];
+      const auto j = key[1];
+      const auto k = key[2];
+      int32_t len = -1; // will be incremented at least once
+      long next_k = k;
+      bool have_next_k;
+      do {
+        std::tie(next_k, have_next_k) = compute_next_k(i, j, next_k);
+        ++len;
+      } while (have_next_k);
+      return len;
+    }
 
     // given {i,j} return first k such that A[i][k] and B[k][j] exist
     std::tuple<long, bool> compute_first_k(long i, long j) {
