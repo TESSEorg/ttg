@@ -736,6 +736,7 @@ namespace ttg_parsec {
    public:
     static constexpr int numins = sizeof...(input_valueTs);                    // number of input arguments
     static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs
+    static constexpr int numflows = std::max(numins, numouts);                 // max number of flows
 
     /// @return true if derivedT::have_cuda_op exists and is defined to true
     static constexpr bool derived_has_cuda_op() {
@@ -1289,26 +1290,31 @@ namespace ttg_parsec {
 
       task_t *task;
       auto &world_impl = world.impl();
-      parsec_hash_table_lock_bucket(&tasks_table, hk);
-      if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+      auto &reducer = std::get<i>(input_reducers);
+      bool release = false;
+      bool remove_from_hash = true;
+      /* If we have only one input and no reducer on that input we can skip the hash table */
+      if (numins > 1 || reducer) {
+        parsec_hash_table_lock_bucket(&tasks_table, hk);
+        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+          task = create_new_task(key);
+          world_impl.increment_created();
+          parsec_hash_table_nolock_insert(&tasks_table, &task->op_ht_item);
+        }
+        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+      } else {
         task = create_new_task(key);
         world_impl.increment_created();
-        parsec_hash_table_nolock_insert(&tasks_table, &task->op_ht_item);
+        remove_from_hash = false;
       }
-      parsec_hash_table_unlock_bucket(&tasks_table, hk);
-
-      /* whether the task needs to be deferred or not */
-      bool needs_deferring = false;
 
       constexpr const bool input_is_const = std::is_const_v<std::tuple_element_t<i, input_args_type>>;
       ttg_data_copy_t *copy = nullptr;
 
-      auto reducer = std::get<i>(input_reducers);
       if (reducer) {  // is this a streaming input? reduce the received value
         // N.B. Right now reductions are done eagerly, without spawning tasks
         //      this means we must lock
         parsec_hash_table_lock_bucket(&tasks_table, hk);
-        bool release = false;
 
         if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
           // have a value already? if not, set, otherwise reduce
@@ -1328,16 +1334,19 @@ namespace ttg_parsec {
                                       *reinterpret_cast<std::decay_t<valueT> *>(copy->device_private)),
                                   std::move(value_copy)));
           }
-          task->stream[i].size++;
-          release = (task->stream[i].size == task->stream[i].goal);
         } else {
           reducer();  // even if this was a control input, must execute the reducer for possible side effects
-          task->stream[i].size++;
-          release = (task->stream[i].size == task->stream[i].goal);
+        }
+        task->stream[i].size++;
+        release = (task->stream[i].size == task->stream[i].goal);
+        if (release) {
+          parsec_hash_table_nolock_remove(&tasks_table, hk);
+          remove_from_hash = false;
         }
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
-        if (release) release_task(this, task);
       } else {
+        /* whether the task needs to be deferred or not */
+        bool needs_deferring = false;
         if constexpr (!valueT_is_Void) {
           if (nullptr != task->parsec_task.data[i].data_in) {
             ttg::print_error(get_name(), " : ", key, ": error argument is already set : ", i);
@@ -1367,15 +1376,23 @@ namespace ttg_parsec {
         }
         if (needs_deferring) {
           if (nullptr == task->deferred_release) {
-            task->deferred_release = &release_task;
+            task->deferred_release = &release_task<true>;
             task->op_ptr = this;
           }
         } else {
-          release_task(this, task);
+          release = true;
+        }
+      }
+      if (release) {
+        if (remove_from_hash) {
+          release_task<true>(this, task);
+        } else {
+          release_task<false>(this, task);
         }
       }
     }
 
+    template<bool RemoveFromHash>
     static void release_task(void *op_ptr, detail::parsec_ttg_task_base_t *base_task) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       task_t *task = static_cast<task_t*>(base_task);
@@ -1384,9 +1401,9 @@ namespace ttg_parsec {
       assert(count <= op.self.dependencies_goal);
       auto &world_impl = op.world.impl();
 
-      if (count == op.self.dependencies_goal) {
+      if (count == numins) {
         /* reset the reader counters of all mutable copies to 1 */
-        for (int j = 0; j < task->parsec_task.task_class->nb_flows; j++) {
+        for (int j = 0; j < numflows; j++) {
           if (nullptr != task->parsec_task.data[j].data_in && task->parsec_task.data[j].data_in->readers < 0) {
             task->parsec_task.data[j].data_in->readers = 1;
           }
@@ -1402,7 +1419,7 @@ namespace ttg_parsec {
             ttg::print(op.world.rank(), ":", op.get_name(), ": submitting task for op ");
           }
         }
-        parsec_hash_table_remove(&op.tasks_table, hk);
+        if (RemoveFromHash) parsec_hash_table_remove(&op.tasks_table, hk);
         __parsec_schedule(es, &task->parsec_task, 0);
       }
     }
@@ -1911,7 +1928,8 @@ namespace ttg_parsec {
         parsec_hash_table_lock_bucket(&tasks_table, hk);
         if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
           task = create_new_task(key);
-          world_impl.increment_created();
+          world.impl().increment_created();
+          parsec_hash_table_nolock_insert(&tasks_table, &task->op_ht_item);
         }
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
@@ -1922,7 +1940,7 @@ namespace ttg_parsec {
         bool release = (task->stream[i].size == task->stream[i].goal);
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
 
-        if (release) release_task(this, task);
+        if (release) release_task<true>(this, task);
       }
     }
 
@@ -1964,6 +1982,8 @@ namespace ttg_parsec {
         parsec_hash_table_lock_bucket(&tasks_table, hk);
         if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
           task = create_new_task(ttg::Void{});
+          world.impl().increment_created();
+          parsec_hash_table_nolock_insert(&tasks_table, &task->op_ht_item);
         }
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
@@ -1974,7 +1994,7 @@ namespace ttg_parsec {
         bool release = (task->stream[i].size == task->stream[i].goal);
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
 
-        if (release) release_task(this, task);
+        if (release) release_task<true>(this, task);
       }
     }
 
@@ -2025,7 +2045,7 @@ namespace ttg_parsec {
         task->stream[i].size = 1;
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
 
-        release_task(this, task);
+        release_task<true>(this, task);
       }
     }
 
@@ -2074,7 +2094,7 @@ namespace ttg_parsec {
         task->stream[i].size = 1;
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
 
-        release_task(this, task);
+        release_task<true>(this, task);
       }
     }
 
@@ -2302,7 +2322,7 @@ namespace ttg_parsec {
       self.task_class_id = get_instance_id();
       self.nb_parameters = 0;
       self.nb_locals = 0;
-      self.nb_flows = std::max((int)numins, (int)numouts);
+      self.nb_flows = numflows;
 
       //    function_id_to_instance[self.task_class_id] = this;
 
@@ -2423,7 +2443,7 @@ namespace ttg_parsec {
       // uintptr_t addr = (uintptr_t)self.incarnations;
       // free((void *)addr);
       free((__parsec_chore_t *)self.incarnations);
-      for (int i = 0; i < self.nb_flows; i++) {
+      for (int i = 0; i < numflows; i++) {
         if (NULL != self.in[i]) {
           free(self.in[i]->name);
           delete self.in[i];
