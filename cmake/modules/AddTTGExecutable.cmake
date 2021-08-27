@@ -22,7 +22,7 @@ macro(add_ttg_executable)
 
     list(LENGTH ADD_TTG_EXECUTABLE_UNPARSED_ARGUMENTS _num_unparsed_args)
     if (${_num_unparsed_args} LESS 2)
-        message(FATAL_ERROR "wrong number of arguments to add_ttg_executable: must provide executable name and list of sourse files")
+        message(FATAL_ERROR "wrong number of arguments to add_ttg_executable: must provide executable name and list of source files")
     endif()
 
     list(POP_FRONT ADD_TTG_EXECUTABLE_UNPARSED_ARGUMENTS _executable)
