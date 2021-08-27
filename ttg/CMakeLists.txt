@@ -11,6 +11,7 @@ set(ttg-util-header
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/macro.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/meta.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/print.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/span.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/trace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/tree.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.h
@@ -32,6 +33,7 @@ set(ttg-impl-header
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/op.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/reduce.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/runtimes.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/terminal.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/traverse.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/world.h
@@ -76,19 +78,15 @@ install(FILES ${ttg-base-header}
 ########################
 ####### Serialization
 ########################
-set(ttg-serialization-source
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/splitmd_data_descriptor.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/data_descriptor.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/stream.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/traits.h
+set(ttg-serialization-backends-header
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/boost.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/boost/archive.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/cereal.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/madness.h
+   )
+set(ttg-serialization-backends-boost-header
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/boost/archive.h
+   )
+set(ttg-serialization-std-header
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/allocator.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/array.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/list.h
@@ -96,8 +94,36 @@ set(ttg-serialization-source
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/tuple.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/vector.h
    )
-add_library(ttg-serialization
-        ${ttg-serialization-source})
+set(ttg-serialization-header
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/splitmd_data_descriptor.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/data_descriptor.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/stream.h
+   )
+
+install(FILES ${ttg-serialization-header}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ttg/serialization
+        COMPONENT ttg)
+install(FILES ${ttg-serialization-backends-header}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ttg/serialization/backends
+        COMPONENT ttg)
+install(FILES ${ttg-serialization-backends-boost-header}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ttg/serialization/backends/boost
+        COMPONENT ttg)
+install(FILES ${ttg-serialization-std-header}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ttg/serialization/std
+        COMPONENT ttg)
+
+set(ttg-serialization-source
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/buffer_archive.cpp
+        ${ttg-impl-header}
+        ${ttg-serialization-header}
+        ${ttg-serialization-backends-header}
+        ${ttg-serialization-backends-booost-header}
+        ${ttg-serialization-std-header}
+   )
+add_library(ttg-serialization ${ttg-serialization-source})
 if (TARGET MADworld)
   target_link_libraries(ttg-serialization PUBLIC MADworld)
   target_compile_definitions(ttg-serialization PUBLIC TTG_SERIALIZATION_SUPPORTS_MADNESS=1)
@@ -174,6 +200,7 @@ if (TARGET PaRSEC::parsec)
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   )
   set(ttg-parsec_headers
+          ttg/parsec/ttg_data_copy.h
           ttg/parsec/fwd.h
           ttg/parsec/import.h
           ttg/parsec/ttg.h)
