@@ -68,6 +68,7 @@ int parsec_add_fetch_runtime_task(parsec_taskpool_t *tp, int tasks);
 
 namespace ttg_parsec {
   static __thread parsec_task_t *parsec_ttg_caller;
+  static __thread parsec_execution_stream_t *parsec_ttg_es;
 
   typedef void (*static_set_arg_fct_type)(void *, size_t, ttg::OpBase *);
   typedef std::pair<static_set_arg_fct_type, ttg::OpBase *> static_set_arg_fct_call_t;
@@ -309,7 +310,7 @@ namespace ttg_parsec {
     const ttg::Edge<> &ctl_edge() const { return m_ctl_edge; }
 
     auto *context() { return ctx; }
-    auto *execution_stream() { return es; }
+    auto *execution_stream() { return parsec_ttg_es == nullptr ? es : parsec_ttg_es; }
     auto *taskpool() { return tpool; }
 
     void increment_created() { taskpool()->tdm.module->taskpool_addto_nb_tasks(taskpool(), 1); }
@@ -453,16 +454,20 @@ namespace ttg_parsec {
     };
 
     inline parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+      parsec_execution_stream_t *safe_es = parsec_ttg_es;
+      parsec_ttg_es = es;
       parsec_ttg_task_base_t *me = (parsec_ttg_task_base_t *)parsec_task;
       me->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)](parsec_task);
-      (void)es;
+      parsec_ttg_es = safe_es;
       return PARSEC_HOOK_RETURN_DONE;
     }
 
     inline parsec_hook_return_t hook_cuda(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+      parsec_execution_stream_t *safe_es = parsec_ttg_es;
+      parsec_ttg_es = es;
       parsec_ttg_task_base_t *me = (parsec_ttg_task_base_t *)parsec_task;
       me->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)](parsec_task);
-      (void)es;
+      parsec_ttg_es = safe_es;
       return PARSEC_HOOK_RETURN_DONE;
     }
 
@@ -720,7 +725,6 @@ namespace ttg_parsec {
    private:
     using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
     parsec_mempool_t mempools;
-    std::map<std::pair<int, int>, int> mempools_index;
 
     // check for a non-type member named have_cuda_op
     template <typename T>
@@ -971,13 +975,22 @@ namespace ttg_parsec {
       }
     }
 
+    /** Returns the task memory pool owned by the calling thread */
+    inline
+    parsec_thread_mempool_t *get_task_mempool(void)
+    {
+      auto &world_impl = world.impl();
+      parsec_execution_stream_s *es = world_impl.execution_stream();
+      int index = (es->virtual_process->vp_id*es->virtual_process->nb_cores + es->th_id);
+      return &mempools.thread_mempools[index];
+    }
+
     template <size_t i, typename valueT>
     void set_arg_from_msg_keylist(ttg::span<keyT> &&keylist, valueT &&value) {
       /* create a dummy task that holds the copy, which can be reused by others */
       task_t *dummy;
       parsec_execution_stream_s *es = world.impl().execution_stream();
-      parsec_thread_mempool_t *mempool =
-          &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
+      parsec_thread_mempool_t *mempool = get_task_mempool();
       dummy = new (parsec_thread_mempool_allocate(mempool)) task_t(mempool, &this->self);
       // TODO: do we need to copy static_stream_goal in dummy?
 
@@ -1223,9 +1236,7 @@ namespace ttg_parsec {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       auto &world_impl = world.impl();
       task_t *newtask;
-      parsec_execution_stream_s *es = world_impl.execution_stream();
-      parsec_thread_mempool_t *mempool =
-          &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
+      parsec_thread_mempool_t *mempool = get_task_mempool();
       char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
       int32_t priority;
       if constexpr (!keyT_is_Void) {
@@ -1546,8 +1557,7 @@ namespace ttg_parsec {
         // and give it to the scheduler
         task_t *task;
         parsec_execution_stream_s *es = world_impl.execution_stream();
-        parsec_thread_mempool_t *mempool =
-            &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
+        parsec_thread_mempool_t *mempool = get_task_mempool();
         char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
 
         task = new (taskobj) task_t(key, mempool, &this->self, world_impl.taskpool(), this, priomap(key));
@@ -1591,8 +1601,7 @@ namespace ttg_parsec {
         task_t *task;
         auto &world_impl = world.impl();
         parsec_execution_stream_s *es = world_impl.execution_stream();
-        parsec_thread_mempool_t *mempool =
-            &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
+        parsec_thread_mempool_t *mempool = get_task_mempool();
         task = new (parsec_thread_mempool_allocate(mempool))
             task_t(mempool, &this->self, world_impl.taskpool(), this, priomap());
         task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
@@ -2241,6 +2250,8 @@ namespace ttg_parsec {
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
 
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *task) {
+      parsec_execution_stream_t *safe_es = parsec_ttg_es;
+      parsec_ttg_es = es;
       for (int i = 0; i < MAX_PARAM_COUNT; i++) {
         ttg_data_copy_t *copy = reinterpret_cast<ttg_data_copy_t *>(task->data[i].data_in);
         detail::release_data_copy(copy);
@@ -2251,6 +2262,7 @@ namespace ttg_parsec {
         op->deferred_release = nullptr;
         op->op_ptr = nullptr;
       }
+      parsec_ttg_es = safe_es;
       return PARSEC_HOOK_RETURN_DONE;
     }
 
@@ -2348,24 +2360,15 @@ namespace ttg_parsec {
       self.flags = 0;
       self.dependencies_goal = numins; /* (~(uint32_t)0) >> (32 - numins); */
 
-      int k = 0;
+      int nbthreads = 0;
       auto *context = world_impl.context();
       for (int i = 0; i < context->nb_vp; i++) {
-        for (int j = 0; j < context->virtual_processes[i]->nb_cores; j++) {
-          mempools_index[std::pair<int, int>(i, j)] = k++;
-        }
-      }
-
-      size_t keysize = 0;
-      if constexpr (!std::is_same_v<void, keyT>) {
-        keysize = sizeof(keyT);
+        nbthreads += context->virtual_processes[i]->nb_cores;
       }
 
       parsec_mempool_construct(
           &mempools, PARSEC_OBJ_CLASS(parsec_task_t),
-          /* account for the number of input terminals to handle input streams and key */
-          sizeof(task_t),
-          offsetof(parsec_task_t, mempool_owner), k);
+          sizeof(task_t), offsetof(parsec_task_t, mempool_owner), nbthreads);
 
       parsec_hash_table_init(&tasks_table, offsetof(detail::parsec_ttg_task_base_t, op_ht_item), 8, tasks_hash_fcts, NULL);
     }
