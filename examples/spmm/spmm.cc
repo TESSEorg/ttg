@@ -195,14 +195,16 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
       : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, [](auto key) { return 0; }), matrix_(matrix) {}
 
   void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
-    std::lock_guard<std::mutex> lock(mtx_);
+    mtx_.lock();
     if (ttg::tracing()) {
       auto &w = get_default_world();
       ttg::print(w.rank(), "/", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.impl.h Write_SpMatrix wrote {",
                  key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
                  " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
     }
-    matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
+    auto entry = matrix_.insert(key[0], key[1]);
+    mtx_.lock();
+    entry = baseT::template get<0>(elem);
   }
 
   /// grab completion status as a future<void>
@@ -299,9 +301,9 @@ class SpMM {
   };  // class BcastA
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
-  class MultiplyAdd : public Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, Blk, Blk, Blk> {
+  class MultiplyAdd : public Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, const Blk, const Blk, Blk> {
    public:
-    using baseT = Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, Blk, Blk, Blk>;
+    using baseT = Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, const Blk, const Blk, Blk>;
 
     MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
                 const std::vector<std::vector<long>> &a_rowidx_to_colidx,
@@ -310,6 +312,7 @@ class SpMM {
                 {"c_ij", "c_ijk"})
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
+      this->set_priomap([=](const Key<3>& key){ return this->prio(key); });
       auto &keymap = this->get_keymap();
 
       // for each i and j that belongs to this node
@@ -368,6 +371,21 @@ class SpMM {
    private:
     const std::vector<std::vector<long>> &a_rowidx_to_colidx_;
     const std::vector<std::vector<long>> &b_colidx_to_rowidx_;
+
+    /* Compute the length of the remaining sequence on that tile */
+    int32_t prio(const Key<3>& key) {
+      const auto i = key[0];
+      const auto j = key[1];
+      const auto k = key[2];
+      int32_t len = -1; // will be incremented at least once
+      long next_k = k;
+      bool have_next_k;
+      do {
+        std::tie(next_k, have_next_k) = compute_next_k(i, j, next_k);
+        ++len;
+      } while (have_next_k);
+      return len;
+    }
 
     // given {i,j} return first k such that A[i][k] and B[k][j] exist
     std::tuple<long, bool> compute_first_k(long i, long j) {
