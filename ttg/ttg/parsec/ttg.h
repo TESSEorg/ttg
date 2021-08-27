@@ -1911,6 +1911,7 @@ namespace ttg_parsec {
         parsec_hash_table_lock_bucket(&tasks_table, hk);
         if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
           task = create_new_task(key);
+          world_impl.increment_created();
         }
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
