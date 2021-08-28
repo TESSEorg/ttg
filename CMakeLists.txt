@@ -96,6 +96,7 @@ add_subdirectory(examples)
 add_subdirectory(doc)
 
 # Create the version file
+include(CMakePackageConfigHelpers)
 write_basic_package_version_file(ttg-config-version.cmake
         VERSION ${TTG_VERSION} COMPATIBILITY AnyNewerVersion)
 
