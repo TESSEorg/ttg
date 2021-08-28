@@ -1,0 +1,17 @@
+# - CMAKE Config file for the TTG package
+
+# Set package version
+set(TTG_VERSION "@TTG_VERSION@")
+set(TTG_EXT_VERSION "@TTG_EXT_VERSION@")
+
+@PACKAGE_INIT@
+
+# Include library IMPORT targets
+if(NOT TARGET ttg)
+  include("${CMAKE_CURRENT_LIST_DIR}/ttg-targets.cmake")
+  if(NOT TARGET ttg)
+    message(FATAL_ERROR "expected ttg among imported TTG targets")
+  endif()
+endif()
+
+set(TTG_FOUND TRUE)
