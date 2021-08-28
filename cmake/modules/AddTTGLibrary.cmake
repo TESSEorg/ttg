@@ -52,7 +52,6 @@ macro(add_ttg_library)
             )
     else (NOT _header_only)
         add_library(${_library} INTERFACE)
-        target_sources(${_library} INTERFACE "${_sources_list}")
 
         foreach(_dep ${ADD_TTG_LIBRARY_LINK_LIBRARIES})
             if(TARGET ${_dep})
