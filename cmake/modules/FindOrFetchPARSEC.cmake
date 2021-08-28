@@ -1,4 +1,6 @@
-find_package(PaRSEC CONFIG QUIET COMPONENTS parsec HINTS ${PaRSEC_ROOT_DIR})
+if (NOT TARGET PaRSEC::parsec)
+  find_package(PaRSEC CONFIG QUIET COMPONENTS parsec HINTS ${PaRSEC_ROOT_DIR})
+endif (NOT TARGET PaRSEC::parsec)
 
 if (NOT TARGET PaRSEC::parsec)
 
@@ -20,6 +22,9 @@ if (NOT TARGET PaRSEC::parsec)
           BINARY_DIR PARSEC_BINARY_DIR
           )
   set_property(DIRECTORY ${PARSEC_SOURCE_DIR} PROPERTY EXCLUDE_FROM_ALL TRUE)
+
+  # export parsec targets from the build tree for the same to be possible for madness targets
+  export(EXPORT parsec-targets FILE "${PROJECT_BINARY_DIR}/parsec-targets.cmake")
 
 endif(NOT TARGET PaRSEC::parsec)
 
