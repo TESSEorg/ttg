@@ -203,7 +203,7 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
                  " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
     }
     auto entry = matrix_.insert(key[0], key[1]);
-    mtx_.lock();
+    mtx_.unlock();
     entry = baseT::template get<0>(elem);
   }
 
@@ -301,7 +301,8 @@ class SpMM {
   };  // class BcastA
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
-  class MultiplyAdd : public Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, const Blk, const Blk, Blk> {
+  class MultiplyAdd
+      : public Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, const Blk, const Blk, Blk> {
    public:
     using baseT = Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, const Blk, const Blk, Blk>;
 
@@ -312,7 +313,7 @@ class SpMM {
                 {"c_ij", "c_ijk"})
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
-      this->set_priomap([=](const Key<3>& key){ return this->prio(key); });
+      this->set_priomap([=](const Key<3> &key) { return this->prio(key); });
       auto &keymap = this->get_keymap();
 
       // for each i and j that belongs to this node
@@ -373,11 +374,11 @@ class SpMM {
     const std::vector<std::vector<long>> &b_colidx_to_rowidx_;
 
     /* Compute the length of the remaining sequence on that tile */
-    int32_t prio(const Key<3>& key) {
+    int32_t prio(const Key<3> &key) {
       const auto i = key[0];
       const auto j = key[1];
       const auto k = key[2];
-      int32_t len = -1; // will be incremented at least once
+      int32_t len = -1;  // will be incremented at least once
       long next_k = k;
       bool have_next_k;
       do {
