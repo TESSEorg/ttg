@@ -32,6 +32,7 @@ jobs:
         -DCMAKE_PREFIX_PATH=/usr/local/opt/bison
         -DBUILD_SHARED_LIBS=OFF
         -DMPIEXEC_PREFLAGS='--bind-to;none;--allow-run-as-root'
+        -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install
 
     steps:
     - uses: actions/checkout@v2
@@ -100,6 +101,18 @@ jobs:
       # run: ctest -C $BUILD_TYPE
       run: cmake --build . --target check-ttg
 
+    - name: Install
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: cmake --build . --target install
+
+    - name: Test Install Tree
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: |
+        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/main -B test_install -DCMAKE_PREFIX_PATH=${{github.workspace}}/install
+        cmake --build test_install --target test
+
     - name: Build+Deploy Dox
       if: ${{ matrix.os == 'ubuntu-20.04' && matrix.build_type == 'Release' && github.ref == 'refs/heads/master' }}
       working-directory: ${{github.workspace}}/build
@@ -111,7 +124,7 @@ jobs:
         cmake --build . --target html
         git clone --depth=1 https://github.com/TESSEorg/ttg.git --branch gh-pages --single-branch ttg-docs-current
         git clone --depth=1 https://github.com/TESSEorg/ttg.git --branch gh-pages-template --single-branch ttg-docs-template
-        mkdir ttg-docs
+        cmake -E make_directory ttg-docs
         cp -rp ttg-docs-current/* ttg-docs
         rm -rf ttg-docs-current
         cp -p ttg-docs-template/* ttg-docs
