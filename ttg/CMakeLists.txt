@@ -13,6 +13,7 @@ set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/macro.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/meta.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/print.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/span.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/trace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/tree.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.h
@@ -34,6 +35,7 @@ set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/op.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/reduce.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/runtimes.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/terminal.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/traverse.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/world.h
@@ -149,7 +151,9 @@ if (TARGET PaRSEC::parsec)
   set(ttg-parsec-headers
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/fwd.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/import.h
-          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttg.h)
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttg.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttg_data_copy.h
+          )
   set(ttg-parsec-sources
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/parsec_ttg.cc
           ${ttg-parsec-headers})
