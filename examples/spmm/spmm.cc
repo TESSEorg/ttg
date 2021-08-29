@@ -198,9 +198,10 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
     mtx_.lock();
     if (ttg::tracing()) {
       auto &w = get_default_world();
-      ttg::print(w.rank(), "/", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.impl.h Write_SpMatrix wrote {",
-                 key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
-                 " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
+      ttg::print("rank =", w.rank(), "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
+                 "spmm.cc Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ",
+                 static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_), " for object @",
+                 static_cast<void *>(this));
     }
     auto &entry = matrix_.insert(key[0], key[1]);
     mtx_.unlock();
