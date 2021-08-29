@@ -111,7 +111,7 @@ jobs:
       shell: bash
       run: |
         cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/main -B test_install -DCMAKE_PREFIX_PATH=${{github.workspace}}/install
-        cmake --build test_install --target test
+        cmake --build test_install
 
     - name: Build+Deploy Dox
       if: ${{ matrix.os == 'ubuntu-20.04' && matrix.build_type == 'Release' && github.ref == 'refs/heads/master' }}
