@@ -195,7 +195,7 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
       : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, [](auto key) { return 0; }), matrix_(matrix) {}
 
   void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
-    mtx_.lock();
+    std::lock_guard<std::mutex> lock(mtx_);
     if (ttg::tracing()) {
       auto &w = get_default_world();
       ttg::print("rank =", w.rank(), "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
@@ -203,9 +203,7 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
                  static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_), " for object @",
                  static_cast<void *>(this));
     }
-    auto &entry = matrix_.insert(key[0], key[1]);
-    mtx_.unlock();
-    entry = baseT::template get<0>(elem);
+    matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
   }
 
   /// grab completion status as a future<void>
