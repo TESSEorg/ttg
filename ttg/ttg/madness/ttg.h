@@ -114,7 +114,9 @@ namespace ttg_madness {
 
     const ::madness::World &impl() const { return m_impl; }
 
+#ifdef ENABLE_PARSEC
     parsec_context_t *context() { return ::madness::ThreadPool::instance()->parsec; }
+#endif
   };
 
   template <typename... RestOfArgs>
