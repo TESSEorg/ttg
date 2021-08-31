@@ -31,6 +31,8 @@ using namespace ttg;
 #include "ttg/serialization.h"
 #include "ttg/util/future.h"
 
+#include "ttg/util/bug.h"
+
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
 
@@ -851,15 +853,7 @@ int main(int argc, char **argv) {
     ttg_initialize(1, argv, -1);
   }
 
-  //  using mpqc::Debugger;
-  //  auto debugger = std::make_shared<Debugger>();
-  //  Debugger::set_default_debugger(debugger);
-  //  debugger->set_exec(argv[0]);
-  //  debugger->set_prefix(ttg_default_execution_context().rank());
-  //  debugger->set_cmd("lldb_xterm");
-  //  debugger->debug("start");
-  //
-  //  initialize_watchpoints();
+  // ttg::launch_lldb(ttg_default_execution_context().rank(), argv[0]);
 
   {
     // ttg::trace_on();
