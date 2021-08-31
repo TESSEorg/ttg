@@ -77,11 +77,7 @@ namespace ttg_parsec {
   static std::multimap<uint64_t, static_set_arg_fct_arg_t> delayed_unpack_actions;
 
   struct msg_header_t {
-    typedef enum {
-      MSG_SET_ARG = 0,
-      MSG_SET_ARGSTREAM_SIZE = 1,
-      MSG_FINALIZE_ARGSTREAM_SIZE = 2
-    } fn_id_t;
+    typedef enum { MSG_SET_ARG = 0, MSG_SET_ARGSTREAM_SIZE = 1, MSG_FINALIZE_ARGSTREAM_SIZE = 2 } fn_id_t;
     uint32_t taskpool_id;
     uint64_t op_id;
     fn_id_t fn_id;
@@ -776,7 +772,7 @@ namespace ttg_parsec {
    private:
     /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
     template <ttg::ExecutionSpace Space, typename... Args>
-    void op(Args &&... args) {
+    void op(Args &&...args) {
       derivedT *derived = static_cast<derivedT *>(this);
       if constexpr (Space == ttg::ExecutionSpace::Host)
         derived->op(std::forward<Args>(args)...);
@@ -880,9 +876,8 @@ namespace ttg_parsec {
              "Trying to unpack as message that does not hold enough bytes to represent a single header");
       msg_header_t *hd = static_cast<msg_header_t *>(data);
       derivedT *obj = reinterpret_cast<derivedT *>(bop);
-      switch(hd->fn_id) {
-        case msg_header_t::MSG_SET_ARG:
-        {
+      switch (hd->fn_id) {
+        case msg_header_t::MSG_SET_ARG: {
           if (-1 != hd->param_id) {
             assert(hd->param_id >= 0);
             assert(hd->param_id < obj->set_arg_from_msg_fcts.size());
@@ -905,16 +900,14 @@ namespace ttg_parsec {
           }
           break;
         }
-        case msg_header_t::MSG_SET_ARGSTREAM_SIZE:
-        {
+        case msg_header_t::MSG_SET_ARGSTREAM_SIZE: {
           assert(hd->param_id >= 0);
           assert(hd->param_id < obj->set_argstream_size_from_msg_fcts.size());
           auto member = obj->set_argstream_size_from_msg_fcts[hd->param_id];
           (obj->*member)(data, size);
           break;
         }
-        case msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE:
-        {
+        case msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE: {
           assert(hd->param_id >= 0);
           assert(hd->param_id < obj->finalize_argstream_from_msg_fcts.size());
           auto member = obj->finalize_argstream_from_msg_fcts[hd->param_id];
@@ -1039,7 +1032,7 @@ namespace ttg_parsec {
             /* process payload iovecs */
             auto iovecs = descr.get_data(val);
             /* start the RMA transfers */
-            for (auto iov : iovecs) {
+            for (auto &&iov : iovecs) {
               ++nv;
               parsec_ce_mem_reg_handle_t rreg;
               int32_t rreg_size_i;
@@ -1203,7 +1196,7 @@ namespace ttg_parsec {
         newtask->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)] =
             reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op<ttg::ExecutionSpace::CUDA>);
 
-      for(int i = 0; i < numins; i++) {
+      for (int i = 0; i < numins; i++) {
         newtask->stream[i].goal = static_stream_goal[i];
       }
 
@@ -1438,9 +1431,9 @@ namespace ttg_parsec {
         std::memcpy(msg->bytes + pos, &rank, sizeof(rank));
         pos += sizeof(rank);
 
-        auto iovecs = descr.get_data(*static_cast<decvalueT *>(copy->device_private));
+        const auto iovecs = descr.get_data(*static_cast<decvalueT *>(copy->device_private));
 
-        int32_t num_iovs = std::distance(std::begin(iovecs), std::end(iovecs));
+        const int32_t num_iovs = std::distance(std::begin(iovecs), std::end(iovecs));
         std::memcpy(msg->bytes + pos, &num_iovs, sizeof(num_iovs));
         pos += sizeof(num_iovs);
 
@@ -1455,7 +1448,7 @@ namespace ttg_parsec {
          * register the generic iovecs and pack the registration handles
          * memory layout: [<lreg_size, lreg, release_cb_ptr>, ...]
          */
-        for (auto iov : iovecs) {
+        for (auto &&iov : iovecs) {
           parsec_ce_mem_reg_handle_t lreg;
           size_t lreg_size;
           /* TODO: only register once when we can broadcast the data! */
@@ -1524,8 +1517,8 @@ namespace ttg_parsec {
       } else {
         using msg_t = detail::msg_t;
         // We pass -1 to signal that we just need to call set_arg(key) on the other end
-        std::unique_ptr<msg_t> msg =
-            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id, msg_header_t::MSG_SET_ARG, -1, 1);
+        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                                             msg_header_t::MSG_SET_ARG, -1, 1);
 
         uint64_t pos = 0;
         pos = pack(key, msg->bytes, pos);
@@ -1840,9 +1833,8 @@ namespace ttg_parsec {
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
         uint64_t pos = 0;
-        std::unique_ptr<msg_t> msg =
-            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
-                                    msg_header_t::MSG_SET_ARGSTREAM_SIZE, i, 1);
+        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                                             msg_header_t::MSG_SET_ARGSTREAM_SIZE, i, 1);
         /* pack the key */
         pos = pack(key, msg->bytes, pos);
         msg->op_id.num_keys = 1;
@@ -1893,9 +1885,8 @@ namespace ttg_parsec {
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
         uint64_t pos = 0;
-        std::unique_ptr<msg_t> msg =
-            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
-                                    msg_header_t::MSG_SET_ARGSTREAM_SIZE, i, 1);
+        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                                             msg_header_t::MSG_SET_ARGSTREAM_SIZE, i, 1);
         /* pack the key */
         msg->op_id.num_keys = 0;
         pos = pack(size, msg->bytes, pos);
@@ -1943,9 +1934,8 @@ namespace ttg_parsec {
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
         uint64_t pos = 0;
-        std::unique_ptr<msg_t> msg =
-            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
-                                    msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE, i, 1);
+        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                                             msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE, i, 1);
         /* pack the key */
         pos = pack(key, msg->bytes, pos);
         msg->op_id.num_keys = 1;
@@ -1994,9 +1984,8 @@ namespace ttg_parsec {
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
         uint64_t pos = 0;
-        std::unique_ptr<msg_t> msg =
-            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
-                                    msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE, i, 1);
+        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                                             msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE, i, 1);
         msg->op_id.num_keys = 0;
         parsec_taskpool_t *tp = world_impl.taskpool();
         tp->tdm.module->outgoing_message_start(tp, owner, NULL);
@@ -2218,7 +2207,7 @@ namespace ttg_parsec {
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT() )
+       ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
         : ttg::OpBase(name, numins, numouts)
         , world(world)
         // if using default keymap, rebind to the given world
