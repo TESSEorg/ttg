@@ -12,4 +12,10 @@ if (TARGET BTAS::BTAS)
     target_compile_definitions(serialization PRIVATE TTG_HAS_BTAS=1)
 endif (TARGET BTAS::BTAS)
 
-catch_discover_tests(serialization)
+# TODO: convert into unit test
+#if (TARGET MADworld)
+#add_executable(splitmd_serialization splitmd_serialization.cc unit_main.cpp)
+#endif(TARGET MADworld)
+
+
+catch_discover_tests(serialization TEST_PREFIX "ttg/test/unit/")

@@ -426,6 +426,7 @@ namespace freestanding::symmetric::bc_v {
     NonPOD(const NonPOD& other) : value(other.value) {}
 
     // N.B. MUST provide ref for iovec serialization
+    int& get_value() { return value; }
     const int& get_value() const { return value; }
 
     bool operator==(const NonPOD& other) const { return value == other.value; }

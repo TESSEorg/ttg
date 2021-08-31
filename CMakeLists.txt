@@ -36,6 +36,15 @@ include(AddCustomTargetSubproject)
 #### user-defined configuration options
 ########################################
 option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" ON)
+# See https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
+option (FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." TRUE)
+if (FORCE_COLORED_OUTPUT)
+    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+       add_compile_options (-fdiagnostics-color=always)
+    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+       add_compile_options (-fcolor-diagnostics)
+    endif ()
+endif (FORCE_COLORED_OUTPUT)
 
 ##########################
 #### prerequisites
@@ -73,6 +82,8 @@ if (TARGET MADworld)
   message(STATUS "MADNESS_FOUND=1")
 endif(TARGET MADworld)
 
+include(FindDPLASMA)
+
 ##########################
 #### Components
 ##########################
@@ -83,3 +94,34 @@ add_custom_target_subproject(ttg check USES_TERMINAL COMMAND ${CMAKE_CTEST_COMMA
 add_subdirectory(tests)
 add_subdirectory(examples)
 add_subdirectory(doc)
+
+# Create the version file
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(ttg-config-version.cmake
+        VERSION ${TTG_VERSION} COMPATIBILITY AnyNewerVersion)
+
+# Create the targets file
+export(EXPORT ttg
+       FILE "${PROJECT_BINARY_DIR}/ttg-targets.cmake")
+
+# Create the configure file
+set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
+        CACHE PATH "TTG CMAKE install directory")
+message(STATUS "CMAKE_INSTALL_CMAKEDIR=${CMAKE_INSTALL_CMAKEDIR}")
+configure_package_config_file(cmake/ttg-config.cmake.in
+        "${PROJECT_BINARY_DIR}/ttg-config.cmake"
+        INSTALL_DESTINATION "${CMAKE_INSTALL_CMAKEDIR}"
+        PATH_VARS CMAKE_INSTALL_PREFIX CMAKE_INSTALL_BINDIR
+        CMAKE_INSTALL_INCLUDEDIR CMAKE_INSTALL_LIBDIR
+        CMAKE_INSTALL_DOCDIR CMAKE_INSTALL_CMAKEDIR)
+
+# Install config, version, and target files
+install(EXPORT ttg
+        FILE "ttg-targets.cmake"
+        DESTINATION "${CMAKE_INSTALL_CMAKEDIR}"
+        COMPONENT ttg-config)
+install(FILES
+        "${PROJECT_BINARY_DIR}/ttg-config.cmake"
+        "${PROJECT_BINARY_DIR}/ttg-config-version.cmake"
+        DESTINATION "${CMAKE_INSTALL_CMAKEDIR}"
+        COMPONENT ttg-config)

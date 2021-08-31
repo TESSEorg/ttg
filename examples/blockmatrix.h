@@ -1,4 +1,5 @@
 #include <ttg/serialization.h>
+#include <memory>
 #include <iostream>
 #include <unordered_map>
 
