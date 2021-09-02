@@ -1274,7 +1274,7 @@ namespace ttg_parsec {
 
     // Used to set the i'th argument
     template <std::size_t i, typename Key, typename Value>
-    void set_arg_local_impl(const Key &key, Value &&value) {
+    void set_arg_local_impl(const Key &key, Value &&value, parsec_list_t *task_list = nullptr) {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<Key>;
@@ -1373,24 +1373,28 @@ namespace ttg_parsec {
         }
         if (needs_deferring) {
           if (nullptr == task->deferred_release) {
-            task->deferred_release = &release_task<true>;
+            task->deferred_release = &release_task_to_scheduler<true>;
             task->op_ptr = this;
           }
-        } else {
-          release = true;
         }
+        release = !needs_deferring;
       }
       if (release) {
         if (remove_from_hash) {
-          release_task<true>(this, task);
+          release_task<true>(this, task, task_list);
         } else {
-          release_task<false>(this, task);
+          release_task<false>(this, task, task_list);
         }
       }
     }
 
     template<bool RemoveFromHash>
-    static void release_task(void *op_ptr, detail::parsec_ttg_task_base_t *base_task) {
+    static void release_task_to_scheduler(void *op_ptr, detail::parsec_ttg_task_base_t *base_task) {
+      release_task<RemoveFromHash>(op_ptr, base_task, nullptr);
+    }
+
+    template<bool RemoveFromHash>
+    static void release_task(void *op_ptr, detail::parsec_ttg_task_base_t *base_task, parsec_list_t *task_list = nullptr) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       task_t *task = static_cast<task_t*>(base_task);
       opT &op = *reinterpret_cast<opT *>(op_ptr);
@@ -1417,7 +1421,11 @@ namespace ttg_parsec {
           }
         }
         if (RemoveFromHash) parsec_hash_table_remove(&op.tasks_table, hk);
-        __parsec_schedule(es, &task->parsec_task, 0);
+        if (nullptr == task_list) {
+          __parsec_schedule(es, &task->parsec_task, 0);
+        } else {
+          parsec_list_prepend(task_list, &task->parsec_task.super);
+        }
       }
     }
 
@@ -1626,6 +1634,20 @@ namespace ttg_parsec {
       }
     }
 
+    template<int i, typename Iterator, typename Value>
+    void broadcast_arg_local(Iterator &&begin, Iterator &&end, const Value& value) {
+        parsec_list_t task_list;
+        PARSEC_OBJ_CONSTRUCT(&task_list, parsec_list_t);
+        for (auto it = begin; it != end; ++it) {
+          set_arg_local_impl<i>(*it, value, &task_list);
+        }
+        /* submit all ready tasks at once */
+        if (!parsec_list_nolock_is_empty(&task_list)) {
+          auto ring = (parsec_task_t*) parsec_list_unchain(&task_list);
+          __parsec_schedule(world.impl().execution_stream(), ring, 0);
+        }
+    }
+
     template <std::size_t i, typename Key, typename Value>
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>> &&
                          !ttg::has_split_metadata<std::decay_t<Value>>::value,
@@ -1690,17 +1712,10 @@ namespace ttg_parsec {
                             sizeof(msg_header_t) + pos);
         }
         /* handle local keys */
-        /* TODO: get the lifetime managment of the object straight! */
-        if (std::distance(local_begin, local_end) > 0) {
-          for (auto it = local_begin; it != local_end; ++it) {
-            set_arg_local<i, keyT, Value>(*it, value);
-          }
-        }
+        broadcast_arg_local<i>(local_begin, local_end, value);
       } else {
         /* only local keys */
-        for (auto &key : keylist) {
-          set_arg_local<i, keyT, Value>(key, value);
-        }
+        broadcast_arg_local<i>(keylist.begin(), keylist.end(), value);
       }
     }
 
@@ -1735,13 +1750,6 @@ namespace ttg_parsec {
         int32_t num_iovs = std::distance(std::begin(iovs), std::end(iovs));
         std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs;
         memregs.reserve(num_iovs);
-
-        /**
-         * NOTE: the high-level ttg::broadcast will create an object on the heap and pass us a
-         *       shared_ptr that we capture and release one the RMA in the AM is complete.
-         *       Thus, there is no need to track the task's copy here, that is only necessary for
-         *       local keys.
-         */
 
         /* register all iovs so the registration can be reused */
         for (auto iov : iovs) {
@@ -1846,14 +1854,10 @@ namespace ttg_parsec {
                             sizeof(msg_header_t) + pos);
         }
         /* handle local keys */
-        for (auto it = local_begin; it != local_end; ++it) {
-          set_arg_local_impl<i>(*it, value);
-        }
+        broadcast_arg_local<i>(local_begin, local_end, value);
       } else {
         /* handle local keys */
-        for (auto it = keylist.begin(); it != keylist.end(); ++it) {
-          set_arg_local_impl<i>(*it, value);
-        }
+        broadcast_arg_local<i>(keylist.begin(), keylist.end(), value);
       }
     }
 
