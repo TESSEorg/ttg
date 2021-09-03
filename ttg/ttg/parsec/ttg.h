@@ -67,15 +67,15 @@ int parsec_add_fetch_runtime_task(parsec_taskpool_t *tp, int tasks);
 }
 
 namespace ttg_parsec {
-  static __thread parsec_task_t *parsec_ttg_caller;
-  static __thread parsec_execution_stream_t *parsec_ttg_es;
+  inline thread_local parsec_task_t *parsec_ttg_caller;
+  inline thread_local parsec_execution_stream_t *parsec_ttg_es;
 
   typedef void (*static_set_arg_fct_type)(void *, size_t, ttg::OpBase *);
   typedef std::pair<static_set_arg_fct_type, ttg::OpBase *> static_set_arg_fct_call_t;
-  static std::map<uint64_t, static_set_arg_fct_call_t> static_id_to_op_map;
-  static std::mutex static_map_mutex;
+  inline std::map<uint64_t, static_set_arg_fct_call_t> static_id_to_op_map;
+  inline std::mutex static_map_mutex;
   typedef std::tuple<int, void *, size_t> static_set_arg_fct_arg_t;
-  static std::multimap<uint64_t, static_set_arg_fct_arg_t> delayed_unpack_actions;
+  inline std::multimap<uint64_t, static_set_arg_fct_arg_t> delayed_unpack_actions;
 
   struct msg_header_t {
     typedef enum {
