@@ -30,7 +30,7 @@ using namespace ttg;
 #include "../mrafunctionfunctor.h"
 
 //#include "/usr/include/mkl/mkl.h" // assume for now but need to wrap
-#include "mkl.h"
+//#include "mkl.h"
 
 using namespace mra;
 
@@ -403,7 +403,7 @@ public:
         const T L = Domain<NDIM>::get_max_width();
         const T a = expnt*L*L;
         double n = std::log(a/(4*K*K*(N*log10+std::log(fac))))/(2*log2);
-        std::cout << expnt << " " << a << " " << n << std::endl;
+        //std::cout << expnt << " " << a << " " << n << std::endl;
         initlev = Level(n<2 ? 2.0 : std::ceil(n));
     }
 
@@ -416,9 +416,12 @@ public:
     template <size_t N>
     void operator()(const SimpleTensor<T,NDIM,N>& x, std::array<T,N>& values) const {
         distancesq(origin, x, values);
-        vscale(N, -expnt, &values[0]);
-        vexp(N, &values[0], &values[0]);
-        vscale(N, fac, &values[0]);
+        //vscale(N, -expnt, &values[0]);
+        //vexp(N, &values[0], &values[0]);
+        //vscale(N, fac, &values[0]);
+	for (T& value : values) {
+          value = fac * std::exp(-expnt*value);
+        }
     }
 
     Level initial_level() const {
@@ -488,6 +491,8 @@ void test1() {
 
     //auto ff = &g<T,NDIM>;
     auto ff = Gaussian<T,NDIM>(T(30000.0), {T(0.0),T(0.0),T(0.0)});
+    
+    std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
 
     ctlEdge<NDIM> ctl("start");
     auto start = make_start(ctl);
@@ -538,26 +543,33 @@ void test1() {
     auto connected = make_graph_executable(start.get());
     assert(connected);
     if (ttg_default_execution_context().rank() == 0) {
-        std::cout << "Is everything connected? " << connected << std::endl;
-        std::cout << "==== begin dot ====\n";
-        std::cout << Dot()(start.get()) << std::endl;
-        std::cout << "====  end dot  ====\n";
-
+        //std::cout << "Is everything connected? " << connected << std::endl;
+        //std::cout << "==== begin dot ====\n";
+        //std::cout << Dot()(start.get()) << std::endl;
+        //std::cout << "====  end dot  ====\n";
+	beg = std::chrono::high_resolution_clock::now();
         // This kicks off the entire computation
         start->invoke(Key<NDIM>(0, {0}));
     }
 
     ttg_execute(ttg_default_execution_context());
     ttg_fence(ttg_default_execution_context());
+    
+    if (ttg_default_execution_context().rank() == 0) {
+        end = std::chrono::high_resolution_clock::now();
+        std::cout << "TTG Execution Time (milliseconds) : "
+              << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
+
+    }
 }
 
 int main(int argc, char** argv) {
     ttg_initialize(argc, argv, 2);
-    std::cout << "Hello from madttg\n";
+    //std::cout << "Hello from madttg\n";
 
     //vmlSetMode(VML_HA | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // default
     //vmlSetMode(VML_EP | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // err is 10x default
-    vmlSetMode(VML_HA | VML_FTZDAZ_ON | VML_ERRMODE_DEFAULT); // err is same as default little faster
+    //vmlSetMode(VML_HA | VML_FTZDAZ_ON | VML_ERRMODE_DEFAULT); // err is same as default little faster
     //vmlSetMode(VML_EP | VML_FTZDAZ_ON  | VML_ERRMODE_DEFAULT); // err is 10x default
 
     GLinitialize();

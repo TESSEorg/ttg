@@ -22,7 +22,7 @@ macro(add_ttg_executable)
 
     list(LENGTH ADD_TTG_EXECUTABLE_UNPARSED_ARGUMENTS _num_unparsed_args)
     if (${_num_unparsed_args} LESS 2)
-        message(FATAL_ERROR "wrong number of arguments to add_ttg_executable: must provide executable name and list of sourse files")
+        message(FATAL_ERROR "wrong number of arguments to add_ttg_executable: must provide executable name and list of source files")
     endif()
 
     list(POP_FRONT ADD_TTG_EXECUTABLE_UNPARSED_ARGUMENTS _executable)
@@ -68,7 +68,7 @@ macro(add_ttg_executable)
             list(APPEND _compile_features "${ADD_TTG_EXECUTABLE_COMPILE_FEATURES}")
         endif ()
 
-        add_executable(${_executable}-${r} ${_sources_list})
+        add_executable(${_executable}-${r} EXCLUDE_FROM_ALL "${_sources_list}")
         target_compile_definitions(${_executable}-${r} PRIVATE "${_compile_definitions}")
         target_link_libraries(${_executable}-${r} PRIVATE "${_link_libraries}")
         if (_compile_features)
