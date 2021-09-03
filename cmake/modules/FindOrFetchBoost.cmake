@@ -23,12 +23,16 @@ else (TARGET Boost::boost)
   # current boost-cmake/master does not install boost correctly, so warn that installed TTG will not be usable
   # boost-cmake/install_rules https://github.com/Orphis/boost-cmake/pull/45 is supposed to fix it but is inactive
   message(WARNING "Building Boost from source makes TTG unusable from the install location! Install Boost using package manager or manually and reconfigure/reinstall TTG to fix this")
-  export(EXPORT ttg
-          FILE "${PROJECT_BINARY_DIR}/boost-targets.cmake")
-  install(EXPORT ttg
-          FILE "boost-targets.cmake"
-          DESTINATION "${CMAKE_INSTALL_CMAKEDIR}"
-          COMPONENT boost-libs)
+
+  if (TARGET Boost::serialization AND TARGET Boost_serialization)
+    install(TARGETS Boost_serialization EXPORT boost)
+    export(EXPORT boost
+           FILE "${PROJECT_BINARY_DIR}/boost-targets.cmake")
+    install(EXPORT boost
+            FILE "boost-targets.cmake"
+            DESTINATION "${CMAKE_INSTALL_CMAKEDIR}"
+            COMPONENT boost-libs)
+  endif()
 
 endif(TARGET Boost::boost)
 
