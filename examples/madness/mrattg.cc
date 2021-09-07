@@ -490,7 +490,6 @@ void test1() {
 
     auto connected = make_graph_executable(start.get());
     assert(connected);
-    std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
 
     if (ttg_default_execution_context().rank() == 0) {
         //std::cout << "Is everything connected? " << connected << std::endl;
