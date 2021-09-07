@@ -263,6 +263,9 @@ class SpMM {
       const auto k = key[1];
       // broadcast a_ik to all existing {i,j,k}
       std::vector<Key<3>> ijk_keys;
+      if (k >= b_rowidx_to_colidx_.size()) {
+        return;
+      }
       for (auto &j : b_rowidx_to_colidx_[k]) {
         if (tracing()) ttg::print("Broadcasting A[", i, "][", k, "] to j=", j);
         ijk_keys.emplace_back(Key<3>({i, j, k}));
@@ -288,6 +291,9 @@ class SpMM {
       const auto j = key[1];
       // broadcast b_kj to *jk
       std::vector<Key<3>> ijk_keys;
+      if (k >= a_colidx_to_rowidx_.size()) {
+        return;
+      }
       for (auto &i : a_colidx_to_rowidx_[k]) {
         if (tracing()) ttg::print("Broadcasting B[", k, "][", j, "] to i=", i);
         ijk_keys.emplace_back(Key<3>({i, j, k}));
