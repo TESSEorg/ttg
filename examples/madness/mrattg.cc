@@ -487,6 +487,7 @@ void test1() {
 
     auto connected = make_graph_executable(start.get());
     assert(connected);
+    
     if (ttg_default_execution_context().rank() == 0) {
         //std::cout << "Is everything connected? " << connected << std::endl;
         //std::cout << "==== begin dot ====\n";

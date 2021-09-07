@@ -530,6 +530,7 @@ void test1() {
 
     //auto ff = &g<T,NDIM>;
     auto ff = Gaussian<T,NDIM>(T(30000.0), {T(0.0),T(0.0),T(0.0)});
+    
     ctlEdge<NDIM> ctl("start");
     auto start = make_start(ctl);
     std::vector<std::unique_ptr<ttg::OpBase>> ops;
