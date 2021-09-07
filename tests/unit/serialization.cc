@@ -730,6 +730,7 @@ TEST_CASE("Boost Serialization", "[serialization]") {
   POD b[4] = {POD(1), POD(2), POD(3), POD(4)};
   test(b);
   test(std::vector<int>{1, 2, 3});
+  test(std::vector<std::vector<int>>{{1, 2, 3}, {4, 5}, {6, 7, 8, 9}});
   test(std::make_tuple(1, 2, 3));
   test(intrusive::symmetric::bc_v::NonPOD{17});
   test(freestanding::symmetric::bc_v::NonPOD{18});
@@ -781,6 +782,7 @@ TEST_CASE("TTG Serialization", "[serialization]") {
   test(a);
   test(std::array{1, 2, 3, 4});
   test(std::vector<int>{1, 2, 3});
+  test(std::vector<std::vector<int>>{{1, 2}, {3, 4, 5}, {6, 7, 8, 9}});
 
   auto test_struct = [&test](const auto& t) {
     using T = ttg::meta::remove_cvr_t<decltype(t)>;
