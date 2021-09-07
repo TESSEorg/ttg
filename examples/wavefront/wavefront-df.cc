@@ -263,8 +263,8 @@ int main(int argc, char** argv) {
   int n_rows, n_cols, B;
   int n_brows, n_bcols;
 
-  n_rows = n_cols = 2048;
-  B = 64;
+  n_rows = n_cols = 16384;
+  B = 256;
   bool verify = true;
 
   n_brows = (n_rows / B) + (n_rows % B > 0);

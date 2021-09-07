@@ -31,7 +31,7 @@ using namespace ttg;
 #include "../mrafunctionfunctor.h"
 
 //#include "/usr/include/mkl/mkl.h" // assume for now but need to wrap
-#include "mkl.h"
+//#include "mkl.h"
 
 using namespace mra;
 
@@ -417,9 +417,12 @@ public:
     template <size_t N>
     void operator()(const SimpleTensor<T,NDIM,N>& x, std::array<T,N>& values) const {
         distancesq(origin, x, values);
-        vscale(N, -expnt, &values[0]);
-        vexp(N, &values[0], &values[0]);
-        vscale(N, fac, &values[0]);
+        //vscale(N, -expnt, &values[0]);
+        //vexp(N, &values[0], &values[0]);
+        //vscale(N, fac, &values[0]);
+	for (T& value : values) {
+          value = fac * std::exp(-expnt*value);
+        }
     }
 
     Level initial_level() const {
@@ -489,6 +492,8 @@ void test1() {
 
     //auto ff = &g<T,NDIM>;
     auto ff = Gaussian<T,NDIM>(T(30000.0), {T(0.0),T(0.0),T(0.0)});
+    
+    std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
 
     ctlEdge<NDIM> ctl("start");
     auto start = make_start(ctl);
@@ -544,20 +549,19 @@ void test1() {
         //std::cout << "==== begin dot ====\n";
         //std::cout << Dot()(start.get()) << std::endl;
         //std::cout << "====  end dot  ====\n";
-        
-        beg = std::chrono::high_resolution_clock::now();
+	beg = std::chrono::high_resolution_clock::now();
         // This kicks off the entire computation
         start->invoke(Key<NDIM>(0, {0}));
     }
 
     ttg_execute(ttg_default_execution_context());
     ttg_fence(ttg_default_execution_context());
-
+    
     if (ttg_default_execution_context().rank() == 0) {
-      end = std::chrono::high_resolution_clock::now();
-      std::cout << "TTG Execution Time (milliseconds) : "
-                << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 
-                << std::endl; 
+        end = std::chrono::high_resolution_clock::now();
+        std::cout << "TTG Execution Time (milliseconds) : "
+              << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
+
     }
 }
 
@@ -567,7 +571,7 @@ int main(int argc, char** argv) {
 
     //vmlSetMode(VML_HA | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // default
     //vmlSetMode(VML_EP | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // err is 10x default
-    vmlSetMode(VML_HA | VML_FTZDAZ_ON | VML_ERRMODE_DEFAULT); // err is same as default little faster
+    //vmlSetMode(VML_HA | VML_FTZDAZ_ON | VML_ERRMODE_DEFAULT); // err is same as default little faster
     //vmlSetMode(VML_EP | VML_FTZDAZ_ON  | VML_ERRMODE_DEFAULT); // err is 10x default
 
     GLinitialize();

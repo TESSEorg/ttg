@@ -2,6 +2,7 @@ include(AddTTGExecutable)
 
 add_ttg_executable(test test/test.cc)
 add_ttg_executable(t9 t9/t9.cc)
+add_ttg_executable(t9-streaming t9/t9_streaming.cc)
 
 # sparse matmul
 if (TARGET eigen3)
@@ -10,7 +11,7 @@ if (TARGET eigen3)
     # block-sparse needs BTAS
     if (TARGET BTAS::BTAS)
         # MADworld used for MADNESS serialization
-        add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES eigen3 BTAS Boost::boost COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1)
+        add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES eigen3 BTAS::BTAS Boost::boost COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1)
     endif (TARGET BTAS::BTAS)
 endif(TARGET eigen3)
 
@@ -18,9 +19,9 @@ if (TARGET MADworld)
   add_ttg_executable(madness-1d madness/madness-1d/madness-1d.cc RUNTIMES "mad")
   #add_ttg_executable(reciprocal-mad madness/reciprocal.cc RUNTIMES "mad")
   if (TARGET blaspp) #(CBLAS_FOUND AND MKL_FOUND)
-    add_ttg_executable(mrattg madness/mrattg.cc mragl.cc mratwoscale.cc mradomain.h mrafunctiondata.h mrafunctionfunctor.h mrafunctionnode.h mragl.h mrahash.h mrakey.h mramisc.h mramxm.h mrarange.h mrasimpletensor.h mratwoscale.h mratypes.h LINK_LIBRARIES ${BLAS_LIBRARIES} -fopenmp RUNTIMES "mad")
+    add_ttg_executable(mrattg madness/mrattg.cc mragl.cc mratwoscale.cc mradomain.h mrafunctiondata.h mrafunctionfunctor.h mrafunctionnode.h mragl.h mrahash.h mrakey.h mramisc.h mramxm.h mrarange.h mrasimpletensor.h mratwoscale.h mratypes.h LINK_LIBRARIES blaspp RUNTIMES "mad")
 
-    add_ttg_executable(mrattg-streaming madness/mrattg_streaming.cc mragl.cc mratwoscale.cc mradomain.h mrafunctiondata.h mrafunctionfunctor.h mrafunctionnode.h mragl.h mrahash.h mrakey.h mramisc.h mramxm.h mrarange.h mrasimpletensor.h mratwoscale.h mratypes.h LINK_LIBRARIES ${BLAS_LIBRARIES} -fopenmp RUNTIMES "mad")
+    add_ttg_executable(mrattg-streaming madness/mrattg_streaming.cc mragl.cc mratwoscale.cc mradomain.h mrafunctiondata.h mrafunctionfunctor.h mrafunctionnode.h mragl.h mrahash.h mrakey.h mramisc.h mramxm.h mrarange.h mrasimpletensor.h mratwoscale.h mratypes.h LINK_LIBRARIES blaspp RUNTIMES "mad")
 
   #target_link_libraries(mrattg-mad LINK_PUBLIC ttg-mad ${CBLAS_LIBRARIES} -lblas -lpthread -lm -ldl)
 

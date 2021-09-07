@@ -50,9 +50,9 @@
 #include <parsec/execution_stream.h>
 #include <parsec/interfaces/interface.h>
 #include <parsec/mca/device/device.h>
+#include <parsec/parsec_comm_engine.h>
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
-#include <parsec/parsec_comm_engine.h>
 #include <cstdlib>
 #include <cstring>
 
@@ -67,20 +67,27 @@ int parsec_add_fetch_runtime_task(parsec_taskpool_t *tp, int tasks);
 }
 
 namespace ttg_parsec {
-  static __thread parsec_task_t *parsec_ttg_caller;
+  inline thread_local parsec_task_t *parsec_ttg_caller;
+  inline thread_local parsec_execution_stream_t *parsec_ttg_es;
 
   typedef void (*static_set_arg_fct_type)(void *, size_t, ttg::OpBase *);
   typedef std::pair<static_set_arg_fct_type, ttg::OpBase *> static_set_arg_fct_call_t;
-  static std::map<uint64_t, static_set_arg_fct_call_t> static_id_to_op_map;
-  static std::mutex static_map_mutex;
+  inline std::map<uint64_t, static_set_arg_fct_call_t> static_id_to_op_map;
+  inline std::mutex static_map_mutex;
   typedef std::tuple<int, void *, size_t> static_set_arg_fct_arg_t;
-  static std::multimap<uint64_t, static_set_arg_fct_arg_t> delayed_unpack_actions;
+  inline std::multimap<uint64_t, static_set_arg_fct_arg_t> delayed_unpack_actions;
 
   struct msg_header_t {
+    typedef enum {
+      MSG_SET_ARG = 0,
+      MSG_SET_ARGSTREAM_SIZE = 1,
+      MSG_FINALIZE_ARGSTREAM_SIZE = 2
+    } fn_id_t;
     uint32_t taskpool_id;
     uint64_t op_id;
-    std::size_t param_id;
-    int         num_keys;
+    fn_id_t fn_id;
+    int32_t param_id;
+    int num_keys;
   };
 
   namespace detail {
@@ -107,9 +114,8 @@ namespace ttg_parsec {
         assert(data_cpy != 0);
         memcpy(data_cpy, data, size);
         if (ttg::tracing()) {
-          ttg::print("ttg_parsec(", ttg_default_execution_context().rank(),
-                     ") Delaying delivery of message (", src_rank, ", ", op_id, ", ", data_cpy,
-                     ", ", size, ")");
+          ttg::print("ttg_parsec(", ttg_default_execution_context().rank(), ") Delaying delivery of message (",
+                     src_rank, ", ", op_id, ", ", data_cpy, ", ", size, ")");
         }
         delayed_unpack_actions.insert(std::make_pair(op_id, std::make_tuple(src_rank, data_cpy, size)));
         static_map_mutex.unlock();
@@ -120,47 +126,41 @@ namespace ttg_parsec {
     static int get_remote_complete_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg, size_t msg_size,
                                       int src, void *cb_data);
 
-
     /* Helper function to properly delete a pointer, with the potential for
      * template speciailization */
-    template<typename T>
+    template <typename T>
     struct typed_delete_t {
       static void delete_type(void *ptr) {
-        T* typed_ptr = reinterpret_cast<T*>(ptr);
+        T *typed_ptr = reinterpret_cast<T *>(ptr);
         delete typed_ptr;
       }
     };
 
-    template<typename T>
+    template <typename T>
     struct typed_delete_t<std::shared_ptr<T>> {
       static void delete_type(void *ptr) {
-        std::shared_ptr<T>* typed_ptr = reinterpret_cast<std::shared_ptr<T>*>(ptr);
+        std::shared_ptr<T> *typed_ptr = reinterpret_cast<std::shared_ptr<T> *>(ptr);
         typed_ptr->reset();
         delete typed_ptr;
       }
     };
 
-
-    inline
-    ttg_data_copy_t*
-    find_copy_in_task(parsec_task_t* task, const void *ptr) {
-      ttg_data_copy_t* copy = nullptr;
+    inline ttg_data_copy_t *find_copy_in_task(parsec_task_t *task, const void *ptr) {
+      ttg_data_copy_t *copy = nullptr;
       int j = -1;
-      if (task != nullptr || ptr != nullptr) {
-        while(++j < MAX_CALL_PARAM_COUNT) {
-          if (NULL != task->data[j].data_in &&
-              task->data[j].data_in->device_private == ptr)
-          {
-            copy = reinterpret_cast<ttg_data_copy_t*>(task->data[j].data_in);
-            break;
-          }
+      if (task == nullptr || ptr == nullptr) {
+        return copy;
+      }
+      while (++j < MAX_CALL_PARAM_COUNT) {
+        if (NULL != task->data[j].data_in && task->data[j].data_in->device_private == ptr) {
+          copy = reinterpret_cast<ttg_data_copy_t *>(task->data[j].data_in);
+          break;
         }
       }
       return copy;
     }
 
-    inline
-    bool add_copy_to_task(ttg_data_copy_t* copy, parsec_task_t* task) {
+    inline bool add_copy_to_task(ttg_data_copy_t *copy, parsec_task_t *task) {
       if (task == nullptr || copy == nullptr) {
         return false;
       }
@@ -171,15 +171,13 @@ namespace ttg_parsec {
       }
 
       if (MAX_PARAM_COUNT > j) {
-        PARSEC_OBJ_RETAIN(copy);
         task->data[j].data_in = copy;
         return true;
       }
       return false;
     }
 
-    inline void remove_data_copy(ttg_data_copy_t* copy, parsec_task_t *task)
-    {
+    inline void remove_data_copy(ttg_data_copy_t *copy, parsec_task_t *task) {
       for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
         if (copy == task->data[i].data_in) {
           task->data[i].data_in = nullptr;
@@ -219,9 +217,9 @@ namespace ttg_parsec {
 
 #ifdef TTG_USE_USER_TERMDET
       parsec_termdet_open_module(tpool, "user_trigger");
-#else // TTG_USE_USER_TERMDET
+#else   // TTG_USE_USER_TERMDET
       parsec_termdet_open_dyn_module(tpool);
-#endif // TTG_USE_USER_TERMDET
+#endif  // TTG_USE_USER_TERMDET
       tpool->tdm.module->monitor_taskpool(tpool, parsec_taskpool_termination_detected);
       // In TTG, we use the pending actions to denote that the
       // taskpool is not ready, i.e. some local tasks could still
@@ -288,7 +286,7 @@ namespace ttg_parsec {
 
     virtual void destroy() override {
       if (is_valid()) {
-        if( parsec_taskpool_started ) {
+        if (parsec_taskpool_started) {
           // We are locally ready (i.e. we won't add new tasks)
           tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
           if (ttg::tracing()) {
@@ -312,7 +310,7 @@ namespace ttg_parsec {
     const ttg::Edge<> &ctl_edge() const { return m_ctl_edge; }
 
     auto *context() { return ctx; }
-    auto *execution_stream() { return es; }
+    auto *execution_stream() { return parsec_ttg_es == nullptr ? es : parsec_ttg_es; }
     auto *taskpool() { return tpool; }
 
     void increment_created() { taskpool()->tdm.module->taskpool_addto_nb_tasks(taskpool(), 1); }
@@ -323,7 +321,7 @@ namespace ttg_parsec {
     virtual void final_task() override {
 #ifdef TTG_USE_USER_TERMDET
       taskpool()->tdm.module->taskpool_set_nb_tasks(taskpool(), 0);
-#endif // TTG_USE_USER_TERMDET
+#endif  // TTG_USE_USER_TERMDET
     }
 
    protected:
@@ -371,40 +369,119 @@ namespace ttg_parsec {
   namespace detail {
     typedef void (*parsec_static_op_t)(void *);  // static_op will be cast to this type
 
-    typedef struct my_op_s {
+    struct parsec_ttg_task_base_t {
       parsec_task_t parsec_task = {};
       int32_t in_data_count = 0;
-      // TODO need to augment PaRSEC backend's my_op_s by stream size info, etc.  ... in_data_count will need to be
-      // replaced by something like this
-      //  int counter;                            // Tracks the number of arguments set
-      //  std::array<std::size_t, numins> nargs;  // Tracks the number of expected values (0 = finalized)
-      //  std::array<std::size_t, numins>
-      //      stream_size;                        // Expected number of values to receive, only used for streaming
-      //      inputs
-      //  // (0 = unbounded stream)
       parsec_hash_table_item_t op_ht_item = {};
-      parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces] = { nullptr };
+      parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces] =
+          {nullptr};
       void *object_ptr = nullptr;
       void (*static_set_arg)(int, int) = nullptr;
-      parsec_key_t key = 0;
-      void (*deferred_release)(void*, my_op_s*) = nullptr; // callback used to release the task from with the static context of complete_task_and_release
-      void *op_ptr = nullptr; // passed to deferred_release
+      void (*deferred_release)(void *, parsec_ttg_task_base_t *) =
+          nullptr;  // callback used to release the task from with the static context of complete_task_and_release
+      void *op_ptr = nullptr;  // passed to deferred_release
 
-      my_op_s() {
+      parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class) {
         PARSEC_OBJ_CONSTRUCT(&this->parsec_task, parsec_task_t);
+        parsec_task.mempool_owner = mempool;
+        parsec_task.task_class = task_class;
       }
-    } my_op_t;
 
-    inline parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *task) {
-      detail::my_op_t *me = (detail::my_op_t *)task;
-      me->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)](task);
-      (void)es;
+      parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
+                        parsec_taskpool_t *taskpool, void *object_ptr, int32_t priority)
+          : object_ptr(object_ptr) {
+        PARSEC_OBJ_CONSTRUCT(&this->parsec_task, parsec_task_t);
+        parsec_task.mempool_owner = mempool;
+        parsec_task.task_class = task_class;
+        parsec_task.status = PARSEC_TASK_STATUS_HOOK;
+        parsec_task.taskpool = taskpool;
+        parsec_task.data[0].data_in = nullptr;
+        parsec_task.priority = priority;
+      }
+    };
+
+
+    template<typename Key, size_t NumStreams, bool KeyIsVoid = ttg::meta::is_void_v<Key>>
+    struct parsec_ttg_task_t : public parsec_ttg_task_base_t {
+
+      Key key;
+      typedef struct {
+        std::size_t goal;
+        std::size_t size;
+      } size_goal_t;
+      size_goal_t stream[NumStreams] = {};
+
+      parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
+      : parsec_ttg_task_base_t(mempool, task_class)
+      {
+        op_ht_item.key = pkey();
+      }
+
+      parsec_ttg_task_t(Key key, parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
+                        parsec_taskpool_t *taskpool, void *object_ptr, int32_t priority)
+          : parsec_ttg_task_base_t(mempool, task_class, taskpool, object_ptr, priority), key(key)
+      {
+        op_ht_item.key = pkey();
+      }
+
+      parsec_key_t pkey() { return reinterpret_cast<parsec_key_t>(&key); }
+    };
+
+
+    template<typename Key, size_t NumStreams>
+    struct parsec_ttg_task_t<Key, NumStreams, true> : public parsec_ttg_task_base_t {
+
+      typedef struct {
+        std::size_t goal;
+        std::size_t size;
+      } size_goal_t;
+      size_goal_t stream[NumStreams] = {};
+
+      parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
+      : parsec_ttg_task_base_t(mempool, task_class)
+      {
+        op_ht_item.key = pkey();
+      }
+
+      parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
+                        parsec_taskpool_t *taskpool, void *object_ptr, int32_t priority)
+          : parsec_ttg_task_base_t(mempool, task_class, taskpool, object_ptr, priority)
+      {
+        op_ht_item.key = pkey();
+      }
+
+      parsec_key_t pkey() { return 0; }
+    };
+
+
+    template<typename Value>
+    inline
+    ttg_data_copy_t* create_new_datacopy(Value&& value)
+    {
+      using decay_value_t = std::decay_t<Value>;
+      ttg_data_copy_t *copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
+      copy->device_private = new decay_value_t(std::forward<Value>(value));
+      copy->readers = 1;
+      copy->delete_fn = &ttg_parsec::detail::typed_delete_t<decay_value_t>::delete_type;
+      return copy;
+    }
+
+
+    inline parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+      parsec_execution_stream_t *safe_es = parsec_ttg_es;
+      parsec_ttg_es = es;
+      parsec_ttg_task_base_t *me = (parsec_ttg_task_base_t *)parsec_task;
+      me->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)](parsec_task);
+      parsec_ttg_es = safe_es;
       return PARSEC_HOOK_RETURN_DONE;
     }
-    inline parsec_hook_return_t hook_cuda(struct parsec_execution_stream_s *es, parsec_task_t *task) {
-      detail::my_op_t *me = (detail::my_op_t *)task;
-      me->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)](task);
-      (void)es;
+
+    inline parsec_hook_return_t hook_cuda(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+      parsec_execution_stream_t *safe_es = parsec_ttg_es;
+      parsec_ttg_es = es;
+      parsec_ttg_task_base_t *me = (parsec_ttg_task_base_t *)parsec_task;
+      me->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)](parsec_task);
+      parsec_ttg_es = safe_es;
       return PARSEC_HOOK_RETURN_DONE;
     }
 
@@ -479,7 +556,7 @@ namespace ttg_parsec {
       return PARSEC_SUCCESS;
     }
 
-    inline void release_data_copy(ttg_data_copy_t* copy) {
+    inline void release_data_copy(ttg_data_copy_t *copy) {
       if (nullptr != copy) {
         if (nullptr != copy->device_private) {
           if (copy->readers > 0) {
@@ -492,9 +569,9 @@ namespace ttg_parsec {
         }
         if (NULL != copy->push_task) {
           /* Release the task if it was deferrred */
-          parsec_task_t* push_task = copy->push_task;
+          parsec_task_t *push_task = copy->push_task;
           if (parsec_atomic_cas_ptr(&copy->push_task, push_task, nullptr)) {
-            detail::my_op_t *deferred_op = (detail::my_op_t *)copy->push_task;
+            parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)copy->push_task;
             assert(deferred_op->deferred_release);
             deferred_op->deferred_release(deferred_op->op_ptr, deferred_op);
           }
@@ -503,10 +580,8 @@ namespace ttg_parsec {
       }
     }
 
-    template<typename Value>
-    inline ttg_data_copy_t*
-    register_data_copy(ttg_data_copy_t *copy_in, my_op_t* task, bool readonly)
-    {
+    template <typename Value>
+    inline ttg_data_copy_t *register_data_copy(ttg_data_copy_t *copy_in, parsec_ttg_task_base_t *task, bool readonly) {
       ttg_data_copy_t *copy_res = copy_in;
       bool replace = false;
       int32_t readers = -1;
@@ -532,9 +607,9 @@ namespace ttg_parsec {
          */
         if (parsec_atomic_cas_int32(&copy_in->readers, 1, INT32_MIN)) {
           /**
-            * no other readers, mark copy as mutable and defer the release
-            * of the task
-            */
+           * no other readers, mark copy as mutable and defer the release
+           * of the task
+           */
           assert(nullptr == copy_in->push_task);
           assert(nullptr != task);
           copy_in->push_task = &task->parsec_task;
@@ -547,19 +622,15 @@ namespace ttg_parsec {
         PARSEC_OBJ_RETAIN(copy_res);
       }
 
-      if( NULL == copy_res ) {
-        ttg_data_copy_t *new_copy;
-        new_copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
-        new_copy->device_private = (void *)(new Value(*static_cast<Value*>(copy_in->device_private)));
-        new_copy->readers = 1;
-        new_copy->delete_fn  = &detail::typed_delete_t<Value>::delete_type;
+      if (NULL == copy_res) {
+        ttg_data_copy_t *new_copy = detail::create_new_datacopy(*static_cast<Value *>(copy_in->device_private));
         if (replace) {
           /* TODO: Make sure there is no race condition with the release in release_data_copy,
            * in particular when it comes to setting the callback and replacing the data */
 
           /* replace the task that was deferred */
-          detail::my_op_t *deferred_op = (detail::my_op_t *)copy_in->push_task;
-          ttg_data_copy_t* deferred_replace_copy;
+          parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)copy_in->push_task;
+          ttg_data_copy_t *deferred_replace_copy;
           deferred_replace_copy = detail::find_copy_in_task(copy_in->push_task, copy_in->device_private);
           /* replace the copy in the deferred task */
           for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
@@ -571,9 +642,9 @@ namespace ttg_parsec {
           assert(deferred_op->deferred_release);
           deferred_op->deferred_release(deferred_op->op_ptr, deferred_op);
           copy_in->push_task = NULL;
-          copy_in->readers = 1; // set the copy back to being read-only
-          ++copy_in->readers;   // register as reader
-          copy_res = copy_in;   // return the copy we were passed
+          copy_in->readers = 1;  // set the copy back to being read-only
+          ++copy_in->readers;    // register as reader
+          copy_res = copy_in;    // return the copy we were passed
         } else {
           copy_res = new_copy;  // return the new copy
         }
@@ -654,9 +725,8 @@ namespace ttg_parsec {
       unsigned char bytes[WorldImpl::PARSEC_TTG_MAX_AM_SIZE - sizeof(msg_header_t)];
 
       msg_t() = default;
-      msg_t(uint64_t op_id, uint32_t taskpool_id, std::size_t param_id, int num_keys = 1)
-      : op_id{taskpool_id, op_id, param_id, num_keys}
-      { }
+      msg_t(uint64_t op_id, uint32_t taskpool_id, msg_header_t::fn_id_t fn_id, int32_t param_id, int num_keys = 1)
+          : op_id{taskpool_id, op_id, fn_id, param_id, num_keys} {}
     };
   }  // namespace detail
 
@@ -665,7 +735,6 @@ namespace ttg_parsec {
    private:
     using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
     parsec_mempool_t mempools;
-    std::map<std::pair<int, int>, int> mempools_index;
 
     // check for a non-type member named have_cuda_op
     template <typename T>
@@ -673,9 +742,11 @@ namespace ttg_parsec {
 
     bool alive = true;
 
+
    public:
     static constexpr int numins = sizeof...(input_valueTs);                    // number of input arguments
     static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs
+    static constexpr int numflows = std::max(numins, numouts);                 // max number of flows
 
     /// @return true if derivedT::have_cuda_op exists and is defined to true
     static constexpr bool derived_has_cuda_op() {
@@ -718,9 +789,38 @@ namespace ttg_parsec {
     };
 
    private:
+
+    using task_t = detail::parsec_ttg_task_t<keyT, numins>;
+
+    /* the offset of the key placed after the task structure in the memory from mempool */
+    constexpr static const size_t task_key_offset = sizeof(task_t);
+
     input_terminals_type input_terminals;
     output_terminalsT output_terminals;
-    std::array<void (Op::*)(void *, std::size_t), numins> set_arg_from_msg_fcts;
+
+    template <std::size_t... IS>
+    static constexpr auto make_set_args_fcts(std::index_sequence<IS...>) {
+      using resultT = decltype(set_arg_from_msg_fcts);
+      return resultT{{&Op::set_arg_from_msg<IS>...}};
+    }
+    constexpr static std::array<void (Op::*)(void *, std::size_t), numins> set_arg_from_msg_fcts =
+        make_set_args_fcts(std::make_index_sequence<numins>{});
+
+    template <std::size_t... IS>
+    static constexpr auto make_set_size_fcts(std::index_sequence<IS...>) {
+      using resultT = decltype(set_argstream_size_from_msg_fcts);
+      return resultT{{&Op::argstream_set_size_from_msg<IS>...}};
+    }
+    constexpr static std::array<void (Op::*)(void *, std::size_t), numins> set_argstream_size_from_msg_fcts =
+        make_set_size_fcts(std::make_index_sequence<numins>{});
+
+    template <std::size_t... IS>
+    static constexpr auto make_finalize_argstream_fcts(std::index_sequence<IS...>) {
+      using resultT = decltype(finalize_argstream_from_msg_fcts);
+      return resultT{{&Op::finalize_argstream_from_msg<IS>...}};
+    }
+    constexpr static std::array<void (Op::*)(void *, std::size_t), numins> finalize_argstream_from_msg_fcts =
+        make_finalize_argstream_fcts(std::make_index_sequence<numins>{});
 
     ttg::World world;
     ttg::meta::detail::keymap_t<keyT> keymap;
@@ -728,21 +828,15 @@ namespace ttg_parsec {
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<input_valueTs...>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
+    std::size_t static_stream_goal[numins];
 
    public:
     ttg::World get_world() const { return world; }
 
    private:
-
-    template <std::size_t... IS>
-    static auto make_set_args_fcts(std::index_sequence<IS...>) {
-      using resultT = decltype(set_arg_from_msg_fcts);
-      return resultT{{&Op::set_arg_from_msg<IS>...}};
-    }
-
     /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
     template <ttg::ExecutionSpace Space, typename... Args>
-    void op(Args &&...args) {
+    void op(Args &&... args) {
       derivedT *derived = static_cast<derivedT *>(this);
       if constexpr (Space == ttg::ExecutionSpace::Host)
         derived->op(std::forward<Args>(args)...);
@@ -753,31 +847,32 @@ namespace ttg_parsec {
     }
 
     template <std::size_t... IS>
-    static input_refs_tuple_type make_tuple_of_ref_from_array(detail::my_op_t *task, std::index_sequence<IS...>) {
+    static input_refs_tuple_type make_tuple_of_ref_from_array(task_t *task,
+                                                              std::index_sequence<IS...>) {
       return input_refs_tuple_type{static_cast<typename std::tuple_element<IS, input_refs_tuple_type>::type>(
           *reinterpret_cast<std::remove_reference_t<typename std::tuple_element<IS, input_refs_tuple_type>::type> *>(
               task->parsec_task.data[IS].data_in->device_private))...};
     }
 
     template <ttg::ExecutionSpace Space>
-    static void static_op(parsec_task_t *my_task) {
-      detail::my_op_t *task = (detail::my_op_t *)my_task;
+    static void static_op(parsec_task_t *parsec_task) {
+      task_t *task = (task_t *)parsec_task;
       opT *baseobj = (opT *)task->object_ptr;
       derivedT *obj = (derivedT *)task->object_ptr;
       assert(parsec_ttg_caller == NULL);
-      parsec_ttg_caller = my_task;
+      parsec_ttg_caller = parsec_task;
       if (obj->tracing()) {
         if constexpr (!ttg::meta::is_void_v<keyT>)
-          ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", *(keyT *)task->key, ": executing");
+          ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": executing");
         else
           ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : executing");
       }
 
       if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
         input_refs_tuple_type input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
-        baseobj->template op<Space>(*(keyT *)task->key, std::move(input), obj->output_terminals);
+        baseobj->template op<Space>(task->key, std::move(input), obj->output_terminals);
       } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-        baseobj->template op<Space>(*(keyT *)task->key, obj->output_terminals);
+        baseobj->template op<Space>(task->key, obj->output_terminals);
       } else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
         input_refs_tuple_type input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
         baseobj->template op<Space>(std::move(input), obj->output_terminals);
@@ -789,21 +884,21 @@ namespace ttg_parsec {
 
       if (obj->tracing()) {
         if constexpr (!ttg::meta::is_void_v<keyT>)
-          ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", *(keyT *)task->key, ": done executing");
+          ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": done executing");
         else
           ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
       }
     }
 
     template <ttg::ExecutionSpace Space>
-    static void static_op_noarg(parsec_task_t *my_task) {
-      detail::my_op_t *task = (detail::my_op_t *)my_task;
+    static void static_op_noarg(parsec_task_t *parsec_task) {
+      task_t *task = (task_t *)parsec_task;
       opT *baseobj = (opT *)task->object_ptr;
       derivedT *obj = (derivedT *)task->object_ptr;
       assert(parsec_ttg_caller == NULL);
-      parsec_ttg_caller = my_task;
+      parsec_ttg_caller = parsec_task;
       if constexpr (!ttg::meta::is_void_v<keyT>) {
-        baseobj->template op<Space>(*(keyT *)task->key, obj->output_terminals);
+        baseobj->template op<Space>(task->key, obj->output_terminals);
       } else if constexpr (ttg::meta::is_void_v<keyT>) {
         baseobj->template op<Space>(obj->output_terminals);
       } else
@@ -845,48 +940,74 @@ namespace ttg_parsec {
              "Trying to unpack as message that does not hold enough bytes to represent a single header");
       msg_header_t *hd = static_cast<msg_header_t *>(data);
       derivedT *obj = reinterpret_cast<derivedT *>(bop);
-      if (-1 != hd->param_id) {
-        auto member = obj->set_arg_from_msg_fcts[hd->param_id];
-        (obj->*member)(data, size);
-      } else {
-        if constexpr (ttg::meta::is_empty_tuple_v<input_refs_tuple_type>) {
-          if constexpr (ttg::meta::is_void_v<keyT>) {
-            obj->template set_arg<keyT>();
+      switch(hd->fn_id) {
+        case msg_header_t::MSG_SET_ARG:
+        {
+          if (-1 != hd->param_id) {
+            assert(hd->param_id >= 0);
+            assert(hd->param_id < obj->set_arg_from_msg_fcts.size());
+            auto member = obj->set_arg_from_msg_fcts[hd->param_id];
+            (obj->*member)(data, size);
           } else {
-            using msg_t = detail::msg_t;
-            msg_t *msg = static_cast<msg_t *>(data);
-            keyT key;
-            obj->unpack(key, static_cast<void *>(msg->bytes), 0);
-            obj->template set_arg<keyT>(key);
+            if constexpr (ttg::meta::is_empty_tuple_v<input_refs_tuple_type>) {
+              if constexpr (ttg::meta::is_void_v<keyT>) {
+                obj->template set_arg<keyT>();
+              } else {
+                using msg_t = detail::msg_t;
+                msg_t *msg = static_cast<msg_t *>(data);
+                keyT key;
+                obj->unpack(key, static_cast<void *>(msg->bytes), 0);
+                obj->template set_arg<keyT>(key);
+              }
+            } else {
+              abort();
+            }
           }
-        } else {
-          abort();
+          break;
         }
+        case msg_header_t::MSG_SET_ARGSTREAM_SIZE:
+        {
+          assert(hd->param_id >= 0);
+          assert(hd->param_id < obj->set_argstream_size_from_msg_fcts.size());
+          auto member = obj->set_argstream_size_from_msg_fcts[hd->param_id];
+          (obj->*member)(data, size);
+          break;
+        }
+        case msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE:
+        {
+          assert(hd->param_id >= 0);
+          assert(hd->param_id < obj->finalize_argstream_from_msg_fcts.size());
+          auto member = obj->finalize_argstream_from_msg_fcts[hd->param_id];
+          (obj->*member)(data, size);
+          break;
+        }
+        default:
+          abort();
       }
     }
 
-
-    template<size_t i, typename valueT>
-    void set_arg_from_msg_keylist(ttg::span<keyT>&& keylist, valueT&& value)
+    /** Returns the task memory pool owned by the calling thread */
+    inline
+    parsec_thread_mempool_t *get_task_mempool(void)
     {
+      auto &world_impl = world.impl();
+      parsec_execution_stream_s *es = world_impl.execution_stream();
+      int index = (es->virtual_process->vp_id*es->virtual_process->nb_cores + es->th_id);
+      return &mempools.thread_mempools[index];
+    }
+
+    template <size_t i, typename valueT>
+    void set_arg_from_msg_keylist(ttg::span<keyT> &&keylist, valueT &&value) {
       /* create a dummy task that holds the copy, which can be reused by others */
-      detail::my_op_t *dummy;
+      task_t *dummy;
       parsec_execution_stream_s *es = world.impl().execution_stream();
-      parsec_thread_mempool_t *mempool =
-          &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-      dummy = (detail::my_op_t *)parsec_thread_mempool_allocate(mempool);
-      memset((void *)dummy, 0, sizeof(detail::my_op_t));
-      dummy->parsec_task.mempool_owner = mempool;
-      PARSEC_OBJ_CONSTRUCT(&dummy->parsec_task, parsec_list_item_t);
-      dummy->parsec_task.task_class = &this->self;
+      parsec_thread_mempool_t *mempool = get_task_mempool();
+      dummy = new (parsec_thread_mempool_allocate(mempool)) task_t(mempool, &this->self);
+      // TODO: do we need to copy static_stream_goal in dummy?
 
       /* set the received value as the dummy's only data */
       using decay_valueT = std::decay_t<valueT>;
-      auto *val_copy = new decay_valueT(std::move(value));
-      ttg_data_copy_t* copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
-      copy->device_private = val_copy;
-      copy->readers = 1;
-      copy->delete_fn  = &detail::typed_delete_t<decay_valueT>::delete_type;
+      ttg_data_copy_t *copy = detail::create_new_datacopy(std::forward<valueT>(value));
       dummy->parsec_task.data[0].data_in = copy;
 
       /* save the current task and set the dummy task */
@@ -895,7 +1016,7 @@ namespace ttg_parsec {
 
       /* iterate over the keys and have them use the copy we made */
       for (auto key : keylist) {
-        set_arg<i, keyT, valueT>(key, *val_copy);
+        set_arg<i, keyT, valueT>(key, *reinterpret_cast<decay_valueT*>(copy->device_private));
       }
 
       /* restore the previous task */
@@ -903,6 +1024,7 @@ namespace ttg_parsec {
 
       /* release the dummy task */
       complete_task_and_release(es, &dummy->parsec_task);
+      parsec_thread_mempool_free(mempool, &dummy->parsec_task);
     }
 
     // there are 6 types of set_arg:
@@ -933,15 +1055,13 @@ namespace ttg_parsec {
           keylist.push_back(std::move(key));
         }
         // case 1
-        if constexpr (!ttg::meta::is_empty_tuple_v<input_refs_tuple_type> &&
-                      !std::is_void_v<valueT>) {
+        if constexpr (!ttg::meta::is_empty_tuple_v<input_refs_tuple_type> && !std::is_void_v<valueT>) {
           using decvalueT = std::decay_t<valueT>;
           if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
             decvalueT val;
             unpack(val, msg->bytes, pos);
 
-            set_arg_from_msg_keylist<i>(ttg::span<keyT>(&keylist[0], num_keys),
-                                        std::move(val));
+            set_arg_from_msg_keylist<i>(ttg::span<keyT>(&keylist[0], num_keys), std::move(val));
           } else {
             /* unpack the header and start the RMA transfers */
             ttg::SplitMetadataDescriptor<decvalueT> descr;
@@ -971,11 +1091,11 @@ namespace ttg_parsec {
             pos += sizeof(cbtag);
 
             /* create the value from the metadata */
-            auto activation = new detail::rma_delayed_activate(
-                std::move(keylist), descr.create_from_metadata(metadata), num_iovecs,
-                [this, num_keys](std::vector<keyT> &&keylist, valueT &&value) {
-                  set_arg_from_msg_keylist<i>(keylist, value);
-                });
+            auto activation =
+                new detail::rma_delayed_activate(std::move(keylist), descr.create_from_metadata(metadata), num_iovecs,
+                                                 [this, num_keys](std::vector<keyT> &&keylist, valueT &&value) {
+                                                   set_arg_from_msg_keylist<i>(keylist, value);
+                                                 });
             auto &val = activation->value();
 
             using ActivationT = std::decay_t<decltype(*activation)>;
@@ -992,8 +1112,8 @@ namespace ttg_parsec {
               pos += sizeof(rreg_size_i);
               rreg = static_cast<parsec_ce_mem_reg_handle_t>(msg->bytes + pos);
               pos += rreg_size_i;
-              //std::intptr_t *fn_ptr = reinterpret_cast<std::intptr_t *>(msg->bytes + pos);
-              //pos += sizeof(*fn_ptr);
+              // std::intptr_t *fn_ptr = reinterpret_cast<std::intptr_t *>(msg->bytes + pos);
+              // pos += sizeof(*fn_ptr);
               std::intptr_t fn_ptr;
               std::memcpy(&fn_ptr, msg->bytes + pos, sizeof(fn_ptr));
               pos += sizeof(fn_ptr);
@@ -1002,12 +1122,12 @@ namespace ttg_parsec {
               parsec_ce_mem_reg_handle_t lreg;
               size_t lreg_size;
               parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
-                                    iov.num_bytes, &lreg, &lreg_size);
+                                     iov.num_bytes, &lreg, &lreg_size);
               /* TODO: PaRSEC should treat the remote callback as a tag, not a function pointer! */
-              parsec_ce.get(
-                  &parsec_ce, lreg, 0, rreg, 0, iov.num_bytes, remote, &detail::get_complete_cb<ActivationT>, activation,
-                  /*world.impl().parsec_ttg_rma_tag()*/
-                  cbtag, &fn_ptr, sizeof(std::intptr_t));
+              parsec_ce.get(&parsec_ce, lreg, 0, rreg, 0, iov.num_bytes, remote, &detail::get_complete_cb<ActivationT>,
+                            activation,
+                            /*world.impl().parsec_ttg_rma_tag()*/
+                            cbtag, &fn_ptr, sizeof(std::intptr_t));
             }
 
             assert(num_iovecs == nv);
@@ -1015,13 +1135,13 @@ namespace ttg_parsec {
           }
           // case 2
         } else if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_refs_tuple_type> &&
-                            std::is_void_v<valueT>) {
+                             std::is_void_v<valueT>) {
           for (auto key : keylist) {
             set_arg<i, keyT, ttg::Void>(key, ttg::Void{});
           }
           // case 3
         } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_refs_tuple_type> &&
-                            std::is_void_v<valueT>) {
+                             std::is_void_v<valueT>) {
           for (auto key : keylist) {
             set_arg<keyT>(key);
           }
@@ -1043,6 +1163,48 @@ namespace ttg_parsec {
         set_arg<keyT>();
       } else {
         abort();
+      }
+    }
+
+    template <std::size_t i>
+    void finalize_argstream_from_msg(void *data, std::size_t size) {
+      using msg_t = detail::msg_t;
+      msg_t *msg = static_cast<msg_t *>(data);
+      if constexpr (!ttg::meta::is_void_v<keyT>) {
+        /* unpack the key */
+        uint64_t pos = 0;
+        auto rank = world.rank();
+        keyT key;
+        pos = unpack(key, msg->bytes, pos);
+        assert(keymap(key) == rank);
+        finalize_argstream<i>(key);
+      } else {
+        auto rank = world.rank();
+        assert(keymap() == rank);
+        finalize_argstream<i>();
+      }
+    }
+
+    template <std::size_t i>
+    void argstream_set_size_from_msg(void *data, std::size_t size) {
+      using msg_t = detail::msg_t;
+      auto msg = static_cast<msg_t *>(data);
+      uint64_t pos = 0;
+      if constexpr (!ttg::meta::is_void_v<keyT>) {
+        /* unpack the key */
+        auto rank = world.rank();
+        keyT key;
+        pos = unpack(key, msg->bytes, pos);
+        assert(keymap(key) == rank);
+        std::size_t argstream_size;
+        pos = unpack(argstream_size, msg->bytes, pos);
+        set_argstream_size<i>(key, argstream_size);
+      } else {
+        auto rank = world.rank();
+        assert(keymap() == rank);
+        std::size_t argstream_size;
+        pos = unpack(argstream_size, msg->bytes, pos);
+        set_argstream_size<i>(argstream_size);
       }
     }
 
@@ -1076,12 +1238,46 @@ namespace ttg_parsec {
       set_arg_local_impl<i>(ttg::Void{}, *valueptr);
     }
 
+    template <typename Key>
+    task_t *create_new_task(const Key &key) {
+      constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
+      auto &world_impl = world.impl();
+      task_t *newtask;
+      parsec_thread_mempool_t *mempool = get_task_mempool();
+      char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
+      int32_t priority;
+      if constexpr (!keyT_is_Void) {
+        priority = priomap(key);
+        /* placement-new the task */
+        newtask = new (taskobj)
+            task_t(key, mempool, &this->self, world_impl.taskpool(), this, priority);
+      } else {
+        priority = priomap();
+        /* placement-new the task */
+        newtask = new (taskobj)
+            task_t(mempool, &this->self, world_impl.taskpool(), this, priority);
+      }
+
+      newtask->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
+          reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op<ttg::ExecutionSpace::Host>);
+      if constexpr (derived_has_cuda_op())
+        newtask->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)] =
+            reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op<ttg::ExecutionSpace::CUDA>);
+
+      for(int i = 0; i < numins; i++) {
+        newtask->stream[i].goal = static_stream_goal[i];
+      }
+
+      if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
+      return newtask;
+    }
+
     // Used to set the i'th argument
     template <std::size_t i, typename Key, typename Value>
-    void set_arg_local_impl(const Key &key, Value&& value) {
+    void set_arg_local_impl(const Key &key, Value &&value, parsec_list_t *task_list = nullptr) {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
-      constexpr const bool keyT_is_Void   = ttg::meta::is_void_v<Key>;
+      constexpr const bool keyT_is_Void = ttg::meta::is_void_v<Key>;
 
       if (tracing()) {
         if constexpr (!valueT_is_Void) {
@@ -1092,125 +1288,144 @@ namespace ttg_parsec {
         }
       }
 
+      parsec_key_t hk = 0;
       if constexpr (!keyT_is_Void) {
+        hk = reinterpret_cast<parsec_key_t>(&key);
         assert(keymap(key) == world.rank());
       }
 
-      parsec_key_t hk = reinterpret_cast<parsec_key_t>(&key);
-      detail::my_op_t *task = NULL;
+      task_t *task;
       auto &world_impl = world.impl();
-      parsec_hash_table_lock_bucket(&tasks_table, hk);
-      if (NULL == (task = (detail::my_op_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
-        detail::my_op_t *newtask;
-        parsec_execution_stream_s *es = world_impl.execution_stream();
-        parsec_thread_mempool_t *mempool =
-            &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-        void *newtask_ptr = parsec_thread_mempool_allocate(mempool);
-        newtask = new (newtask_ptr) detail::my_op_t(); // placement new
-        newtask->parsec_task.mempool_owner = mempool;
-
-        newtask->parsec_task.task_class = &this->self;
-        newtask->parsec_task.taskpool = world_impl.taskpool();
-        newtask->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
-        if constexpr (!keyT_is_Void) {
-          newtask->parsec_task.priority = priomap(key);
-        } else {
-          newtask->parsec_task.priority = priomap();
+      auto &reducer = std::get<i>(input_reducers);
+      bool release = false;
+      bool remove_from_hash = true;
+      /* If we have only one input and no reducer on that input we can skip the hash table */
+      if (numins > 1 || reducer) {
+        parsec_hash_table_lock_bucket(&tasks_table, hk);
+        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+          task = create_new_task(key);
+          world_impl.increment_created();
+          parsec_hash_table_nolock_insert(&tasks_table, &task->op_ht_item);
         }
-
-        newtask->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
-            reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op<ttg::ExecutionSpace::Host>);
-        if constexpr (derived_has_cuda_op())
-          newtask->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)] =
-              reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op<ttg::ExecutionSpace::CUDA>);
-        newtask->object_ptr = static_cast<derivedT *>(this);
-        if constexpr (ttg::meta::is_void_v<keyT>) {
-          newtask->key = 0;
-        } else {
-          keyT *new_key = new keyT(key);
-          newtask->key = reinterpret_cast<parsec_key_t>(new_key);
-        }
-
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
-        newtask->op_ht_item.key = newtask->key;
+        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+      } else {
+        task = create_new_task(key);
         world_impl.increment_created();
-        parsec_hash_table_nolock_insert(&tasks_table, &newtask->op_ht_item);
-        task = newtask;
+        remove_from_hash = false;
       }
-      parsec_hash_table_unlock_bucket(&tasks_table, hk);
-
-      /* whether the task needs to be deferred or not */
-      bool needs_deferring = false;
 
       constexpr const bool input_is_const = std::is_const_v<std::tuple_element_t<i, input_args_type>>;
+      ttg_data_copy_t *copy = nullptr;
 
-      if constexpr (!valueT_is_Void) {
-        if (NULL != task->parsec_task.data[i].data_in) {
-          ttg::print_error(get_name(), " : ", key, ": error argument is already set : ", i);
-          throw std::logic_error("bad set arg");
-        }
+      if (reducer) {  // is this a streaming input? reduce the received value
+        // N.B. Right now reductions are done eagerly, without spawning tasks
+        //      this means we must lock
+        parsec_hash_table_lock_bucket(&tasks_table, hk);
 
-        ttg_data_copy_t *copy = nullptr;
-
-        if (nullptr != parsec_ttg_caller) {
-          copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
-        }
-
-        if (nullptr != copy) {
-
-          /* register_data_copy might provide us with a different copy if !input_is_const */
-          copy = detail::register_data_copy<valueT>(copy, task, input_is_const);
-          /* if we registered as a writer and were the first to register with this copy
-          * we need to defer the release of this task to give other tasks a chance to
-          * make a copy of the original data */
-          needs_deferring = (copy->readers < 0);
-
-          task->parsec_task.data[i].data_in = copy;
-
+        if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
+          // have a value already? if not, set, otherwise reduce
+          if (nullptr == (copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in))) {
+            using decay_valueT = std::decay_t<valueT>;
+            copy = detail::create_new_datacopy(std::forward<Value>(value));
+            task->parsec_task.data[i].data_in = copy;
+          } else {
+            // TODO: Ask Ed -- Why do we need a copy of value here?
+            valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
+            *reinterpret_cast<std::decay_t<valueT> *>(copy->device_private) =
+                std::move(reducer(reinterpret_cast<std::decay_t<valueT> &&>(
+                                      *reinterpret_cast<std::decay_t<valueT> *>(copy->device_private)),
+                                  std::move(value_copy)));
+          }
         } else {
-
-          using decay_valueT = std::decay_t<valueT>;
-          auto *val_copy = new decay_valueT(std::move(value));
-          ttg_data_copy_t* copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
-          copy->device_private = val_copy;
-          copy->readers = 1;
-          copy->delete_fn  = &detail::typed_delete_t<decay_valueT>::delete_type;
-          task->parsec_task.data[i].data_in = copy;
-
+          reducer();  // even if this was a control input, must execute the reducer for possible side effects
         }
-      }
-
-      if (needs_deferring) {
-        if (nullptr == task->deferred_release) {
-          task->deferred_release = &release_task;
-          task->op_ptr = this;
+        task->stream[i].size++;
+        release = (task->stream[i].size == task->stream[i].goal);
+        if (release) {
+          parsec_hash_table_nolock_remove(&tasks_table, hk);
+          remove_from_hash = false;
         }
+        parsec_hash_table_unlock_bucket(&tasks_table, hk);
       } else {
-        release_task(this, task);
+        /* whether the task needs to be deferred or not */
+        bool needs_deferring = false;
+        if constexpr (!valueT_is_Void) {
+          if (nullptr != task->parsec_task.data[i].data_in) {
+            ttg::print_error(get_name(), " : ", key, ": error argument is already set : ", i);
+            throw std::logic_error("bad set arg");
+          }
+
+          if (nullptr != parsec_ttg_caller) {
+            copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
+          }
+
+          if (nullptr != copy) {
+            /* register_data_copy might provide us with a different copy if !input_is_const */
+            copy = detail::register_data_copy<valueT>(copy, task, input_is_const);
+            /* if we registered as a writer and were the first to register with this copy
+             * we need to defer the release of this task to give other tasks a chance to
+             * make a copy of the original data */
+            needs_deferring = (copy->readers < 0);
+          } else {
+            copy = detail::create_new_datacopy(std::forward<Value>(value));
+          }
+          task->parsec_task.data[i].data_in = copy;
+        }
+        if (needs_deferring) {
+          if (nullptr == task->deferred_release) {
+            task->deferred_release = &release_task_to_scheduler<true>;
+            task->op_ptr = this;
+          }
+        }
+        release = !needs_deferring;
+      }
+      if (release) {
+        if (remove_from_hash) {
+          release_task<true>(this, task, task_list);
+        } else {
+          release_task<false>(this, task, task_list);
+        }
       }
     }
 
-    static void release_task(void* op_ptr, detail::my_op_t *task) {
-      opT& op = *reinterpret_cast<opT*>(op_ptr);
+    template<bool RemoveFromHash>
+    static void release_task_to_scheduler(void *op_ptr, detail::parsec_ttg_task_base_t *base_task) {
+      release_task<RemoveFromHash>(op_ptr, base_task, nullptr);
+    }
+
+    template<bool RemoveFromHash>
+    static void release_task(void *op_ptr, detail::parsec_ttg_task_base_t *base_task, parsec_list_t *task_list = nullptr) {
+      constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
+      task_t *task = static_cast<task_t*>(base_task);
+      opT &op = *reinterpret_cast<opT *>(op_ptr);
       int32_t count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
       assert(count <= op.self.dependencies_goal);
       auto &world_impl = op.world.impl();
 
-      if (count == op.self.dependencies_goal) {
+      if (count == numins) {
         /* reset the reader counters of all mutable copies to 1 */
-        for(int j = 0; j < task->parsec_task.task_class->nb_flows; j++) {
-          if (NULL != task->parsec_task.data[j].data_in &&
-              task->parsec_task.data[j].data_in->readers < 0) {
+        for (int j = 0; j < numflows; j++) {
+          if (nullptr != task->parsec_task.data[j].data_in && task->parsec_task.data[j].data_in->readers < 0) {
             task->parsec_task.data[j].data_in->readers = 1;
           }
         }
 
         world_impl.increment_sent_to_sched();
         parsec_execution_stream_t *es = world_impl.execution_stream();
-        parsec_key_t hk = reinterpret_cast<parsec_key_t>(task->key);
-        if (op.tracing()) ttg::print(op.world.rank(), ":", op.get_name(), " : ", task->key, ": submitting task for op ");
-        parsec_hash_table_remove(&op.tasks_table, hk);
-        __parsec_schedule(es, &task->parsec_task, 0);
+        parsec_key_t hk = task->pkey();
+        if (op.tracing()) {
+          if constexpr (!keyT_is_Void) {
+            ttg::print(op.world.rank(), ":", op.get_name(), " : ", task->key, ": submitting task for op ");
+          } else {
+            ttg::print(op.world.rank(), ":", op.get_name(), ": submitting task for op ");
+          }
+        }
+        if (RemoveFromHash) parsec_hash_table_remove(&op.tasks_table, hk);
+        if (nullptr == task_list) {
+          __parsec_schedule(es, &task->parsec_task, 0);
+        } else {
+          parsec_list_prepend(task_list, &task->parsec_task.super);
+        }
       }
     }
 
@@ -1262,17 +1477,25 @@ namespace ttg_parsec {
       using msg_t = detail::msg_t;
       auto &world_impl = world.impl();
       uint64_t pos = 0;
-      std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id, i, 1);
+      std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                                           msg_header_t::MSG_SET_ARG, i, 1);
       using decvalueT = std::decay_t<Value>;
       /* pack the key */
-      pos = pack(key, msg->bytes, pos);
-      msg->op_id.num_keys = 1;
+      msg->op_id.num_keys = 0;
+      if constexpr (!ttg::meta::is_void_v<Key>) {
+        pos = pack(key, msg->bytes, pos);
+        msg->op_id.num_keys = 1;
+      }
       if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
-        //std::cout << "set_arg_from_msg unpacking from offset " << sizeof(keyT) << std::endl;
+        // std::cout << "set_arg_from_msg unpacking from offset " << sizeof(keyT) << std::endl;
         pos = pack(value, msg->bytes, pos);
       } else {
         ttg_data_copy_t *copy;
         copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
+        if (nullptr == copy) {
+          // We need to create a copy for this data, as it does not exist yet.
+          copy = detail::create_new_datacopy(std::forward<Value>(value));
+        }
         copy = detail::register_data_copy<decvalueT>(copy, nullptr, true);
 
         ttg::SplitMetadataDescriptor<decvalueT> descr;
@@ -1286,7 +1509,7 @@ namespace ttg_parsec {
         std::memcpy(msg->bytes + pos, &rank, sizeof(rank));
         pos += sizeof(rank);
 
-        auto iovecs = descr.get_data(*static_cast<decvalueT*>(copy->device_private));
+        auto iovecs = descr.get_data(*static_cast<decvalueT *>(copy->device_private));
 
         int32_t num_iovs = std::distance(std::begin(iovecs), std::end(iovecs));
         std::memcpy(msg->bytes + pos, &num_iovs, sizeof(num_iovs));
@@ -1333,7 +1556,7 @@ namespace ttg_parsec {
       parsec_taskpool_t *tp = world_impl.taskpool();
       tp->tdm.module->outgoing_message_start(tp, owner, NULL);
       tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-      //std::cout << "Sending AM with " << msg->op_id.num_keys << " keys " << std::endl;
+      // std::cout << "Sending AM with " << msg->op_id.num_keys << " keys " << std::endl;
       parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
                         sizeof(msg_header_t) + pos);
     }
@@ -1349,28 +1572,18 @@ namespace ttg_parsec {
       if (owner == world.rank()) {
         // create PaRSEC task
         // and give it to the scheduler
-        detail::my_op_t *task;
+        task_t *task;
         parsec_execution_stream_s *es = world_impl.execution_stream();
-        parsec_thread_mempool_t *mempool =
-            &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-        task = (detail::my_op_t *)parsec_thread_mempool_allocate(mempool);
-        memset((void *)task, 0, sizeof(detail::my_op_t));
-        task->parsec_task.mempool_owner = mempool;
+        parsec_thread_mempool_t *mempool = get_task_mempool();
+        char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
 
-        PARSEC_OBJ_CONSTRUCT(task, parsec_list_item_t);
-        task->parsec_task.task_class = &this->self;
-        task->parsec_task.taskpool = world_impl.taskpool();
-        task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
+        task = new (taskobj) task_t(key, mempool, &this->self, world_impl.taskpool(), this, priomap(key));
 
         task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
             reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op_noarg<ttg::ExecutionSpace::Host>);
         if constexpr (derived_has_cuda_op())
           task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)] =
               reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op_noarg<ttg::ExecutionSpace::CUDA>);
-        task->object_ptr = static_cast<derivedT *>(this);
-        keyT *kp = new keyT(key);
-        task->key = reinterpret_cast<parsec_key_t>(kp);
-        task->parsec_task.data[0].data_in = static_cast<ttg_data_copy_t *>(NULL);
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
         world_impl.increment_created();
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
@@ -1379,7 +1592,8 @@ namespace ttg_parsec {
       } else {
         using msg_t = detail::msg_t;
         // We pass -1 to signal that we just need to call set_arg(key) on the other end
-        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id, -1, 1);
+        std::unique_ptr<msg_t> msg =
+            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id, msg_header_t::MSG_SET_ARG, -1, 1);
 
         uint64_t pos = 0;
         pos = pack(key, msg->bytes, pos);
@@ -1401,28 +1615,17 @@ namespace ttg_parsec {
       if (owner == ttg_default_execution_context().rank()) {
         // create PaRSEC task
         // and give it to the scheduler
-        detail::my_op_t *task;
+        task_t *task;
         auto &world_impl = world.impl();
         parsec_execution_stream_s *es = world_impl.execution_stream();
-        parsec_thread_mempool_t *mempool =
-            &mempools.thread_mempools[mempools_index[std::pair<int, int>(es->virtual_process->vp_id, es->th_id)]];
-        task = (detail::my_op_t *)parsec_thread_mempool_allocate(mempool);
-        memset((void *)task, 0, sizeof(detail::my_op_t));
-        task->parsec_task.mempool_owner = mempool;
-
-        PARSEC_OBJ_CONSTRUCT(task, parsec_list_item_t);
-        task->parsec_task.task_class = &this->self;
-        task->parsec_task.taskpool = world_impl.taskpool();
-        task->parsec_task.status = PARSEC_TASK_STATUS_HOOK;
-
+        parsec_thread_mempool_t *mempool = get_task_mempool();
+        task = new (parsec_thread_mempool_allocate(mempool))
+            task_t(mempool, &this->self, world_impl.taskpool(), this, priomap());
         task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
             reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op_noarg<ttg::ExecutionSpace::Host>);
         if constexpr (derived_has_cuda_op())
           task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)] =
               reinterpret_cast<detail::parsec_static_op_t>(&Op::static_op_noarg<ttg::ExecutionSpace::CUDA>);
-        task->object_ptr = static_cast<derivedT *>(this);
-        task->key = 0;
-        task->parsec_task.data[0].data_in = static_cast<ttg_data_copy_t *>(NULL);
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : creating task");
         world_impl.increment_created();
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
@@ -1431,51 +1634,60 @@ namespace ttg_parsec {
       }
     }
 
+    template<int i, typename Iterator, typename Value>
+    void broadcast_arg_local(Iterator &&begin, Iterator &&end, const Value& value) {
+        parsec_list_t task_list;
+        PARSEC_OBJ_CONSTRUCT(&task_list, parsec_list_t);
+        for (auto it = begin; it != end; ++it) {
+          set_arg_local_impl<i>(*it, value, &task_list);
+        }
+        /* submit all ready tasks at once */
+        if (!parsec_list_nolock_is_empty(&task_list)) {
+          auto ring = (parsec_task_t*) parsec_list_unchain(&task_list);
+          __parsec_schedule(world.impl().execution_stream(), ring, 0);
+        }
+    }
+
     template <std::size_t i, typename Key, typename Value>
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>> &&
                          !ttg::has_split_metadata<std::decay_t<Value>>::value,
                      void>
     broadcast_arg(const ttg::span<const Key> &keylist, const Value &value) {
-      using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       auto world = ttg_default_execution_context();
       int rank = world.rank();
 
       bool have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
-                                                      [&](const Key& key){
-                                                        return keymap(key) != rank;
-                                                      });
+                                                       [&](const Key &key) { return keymap(key) != rank; });
 
       if (have_remote) {
         std::vector<Key> keylist_sorted(keylist.begin(), keylist.end());
 
         /* Assuming there are no local keys, will be updated while processing remote keys */
         auto local_begin = keylist_sorted.end();
-        auto local_end   = keylist_sorted.end();
+        auto local_end = keylist_sorted.end();
 
         /* sort the input key list by owner and check whether there are remote keys */
-        std::sort(keylist_sorted.begin(), keylist_sorted.end(),
-                  [&](const Key& a, const Key& b) mutable {
-                    int rank_a = keymap(a);
-                    int rank_b = keymap(b);
-                    return rank_a < rank_b;
-                  });
+        std::sort(keylist_sorted.begin(), keylist_sorted.end(), [&](const Key &a, const Key &b) mutable {
+          int rank_a = keymap(a);
+          int rank_b = keymap(b);
+          return rank_a < rank_b;
+        });
 
         using msg_t = detail::msg_t;
         local_begin = keylist_sorted.end();
         auto &world_impl = world.impl();
-        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id, i);
+        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                                             msg_header_t::MSG_SET_ARG, i);
 
         parsec_taskpool_t *tp = world_impl.taskpool();
 
-
         for (auto it = keylist_sorted.begin(); it < keylist_sorted.end(); /* increment inline */) {
-
           auto owner = keymap(*it);
           if (owner == rank) {
             /* make sure we don't lose local keys */
             local_begin = it;
-            local_end = std::find_if_not(++it, keylist_sorted.end(),
-                                         [&](const Key& key){ return keymap(key) == rank; });
+            local_end =
+                std::find_if_not(++it, keylist_sorted.end(), [&](const Key &key) { return keymap(key) == rank; });
             it = local_end;
             continue;
           }
@@ -1498,66 +1710,46 @@ namespace ttg_parsec {
           tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
           parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
                             sizeof(msg_header_t) + pos);
-
         }
         /* handle local keys */
-        /* TODO: get the lifetime managment of the object straight! */
-        if (std::distance(local_begin, local_end) > 0) {
-          for (auto it = local_begin; it != local_end; ++it) {
-            set_arg_local<i, keyT, Value>(*it, value);
-          }
-        }
+        broadcast_arg_local<i>(local_begin, local_end, value);
       } else {
         /* only local keys */
-        for (auto &key : keylist) {
-          set_arg_local<i, keyT, Value>(key, value);
-        }
+        broadcast_arg_local<i>(keylist.begin(), keylist.end(), value);
       }
-
     }
 
     template <std::size_t i, typename Key, typename Value>
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>> &&
                          ttg::has_split_metadata<std::decay_t<Value>>::value,
                      void>
-    splitmd_broadcast_arg(const ttg::span<const Key> &keylist, const Value& value)
-    {
+    splitmd_broadcast_arg(const ttg::span<const Key> &keylist, const Value &value) {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       auto world = ttg_default_execution_context();
       int rank = world.rank();
       bool have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
-                                                      [&](const Key& key){
-                                                        return keymap(key) != rank;
-                                                      });
+                                                       [&](const Key &key) { return keymap(key) != rank; });
 
       if (have_remote) {
         using decvalueT = std::decay_t<Value>;
 
         /* sort the input key list by owner and check whether there are remote keys */
         std::vector<Key> keylist_sorted(keylist.begin(), keylist.end());
-        std::sort(keylist_sorted.begin(), keylist_sorted.end(),
-                  [&](const Key& a, const Key& b) mutable {
-                    int rank_a = keymap(a);
-                    int rank_b = keymap(b);
-                    return rank_a < rank_b;
-                  });
+        std::sort(keylist_sorted.begin(), keylist_sorted.end(), [&](const Key &a, const Key &b) mutable {
+          int rank_a = keymap(a);
+          int rank_b = keymap(b);
+          return rank_a < rank_b;
+        });
 
         /* Assuming there are no local keys, will be updated while iterating over the keys */
         auto local_begin = keylist_sorted.end();
-        auto local_end   = keylist_sorted.end();
+        auto local_end = keylist_sorted.end();
 
         ttg::SplitMetadataDescriptor<decvalueT> descr;
         auto iovs = descr.get_data(*const_cast<decvalueT *>(&value));
         int32_t num_iovs = std::distance(std::begin(iovs), std::end(iovs));
         std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs;
         memregs.reserve(num_iovs);
-
-        /**
-         * NOTE: the high-level ttg::broadcast will create an object on the heap and pass us a
-         *       shared_ptr that we capture and release one the RMA in the AM is complete.
-         *       Thus, there is no need to track the task's copy here, that is only necessary for
-         *       local keys.
-         */
 
         /* register all iovs so the registration can be reused */
         for (auto iov : iovs) {
@@ -1577,7 +1769,8 @@ namespace ttg_parsec {
 
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
-        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id, i);
+        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                                             msg_header_t::MSG_SET_ARG, i);
         auto metadata = descr.get_metadata(value);
         size_t metadata_size = sizeof(metadata);
 
@@ -1591,8 +1784,8 @@ namespace ttg_parsec {
           if (owner == rank) {
             local_begin = it;
             /* find first non-local key */
-            local_end = std::find_if_not(++it, keylist_sorted.end(),
-                                         [&](const Key& key){ return keymap(key) == rank; });
+            local_end =
+                std::find_if_not(++it, keylist_sorted.end(), [&](const Key &key) { return keymap(key) == rank; });
             it = local_end;
             continue;
           }
@@ -1620,8 +1813,8 @@ namespace ttg_parsec {
           pos += sizeof(num_iovs);
 
           /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
-          * raw function pointer instead of a preregistered AM tag, so play that game.
-          * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
+           * raw function pointer instead of a preregistered AM tag, so play that game.
+           * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
           parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
           std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
           pos += sizeof(cbtag);
@@ -1632,7 +1825,7 @@ namespace ttg_parsec {
            */
           int idx = 0;
           for (auto iov : iovs) {
-            //auto [lreg_size, lreg_ptr] = memregs[idx];
+            // auto [lreg_size, lreg_ptr] = memregs[idx];
             int32_t lreg_size;
             std::shared_ptr<void> lreg_ptr;
             std::tie(lreg_size, lreg_ptr) = memregs[idx];
@@ -1661,16 +1854,11 @@ namespace ttg_parsec {
                             sizeof(msg_header_t) + pos);
         }
         /* handle local keys */
-        for (auto it = local_begin; it != local_end; ++it) {
-          set_arg_local_impl<i>(*it, value);
-        }
+        broadcast_arg_local<i>(local_begin, local_end, value);
       } else {
         /* handle local keys */
-        for (auto it = keylist.begin(); it != keylist.end(); ++it) {
-          set_arg_local_impl<i>(*it, value);
-        }
+        broadcast_arg_local<i>(keylist.begin(), keylist.end(), value);
       }
-
     }
 
     // Used by invoke to set all arguments associated with a task
@@ -1690,6 +1878,13 @@ namespace ttg_parsec {
     }
 
    public:
+    // sets the default stream size for input \c i
+    // \param size positive integer that specifies the default stream size
+    template <std::size_t i>
+    void set_static_argstream_size(std::size_t size) {
+      static_stream_goal[i] = size;
+    }
+
     /// sets stream size for input \c i
     /// \param size positive integer that specifies the stream size
     template <std::size_t i, typename Key>
@@ -1700,7 +1895,49 @@ namespace ttg_parsec {
 
       // body
       const auto owner = keymap(key);
-      abort();  // TODO implement set_argstream_size
+      if (owner != world.rank()) {
+        if (tracing()) {
+          ttg::print(world.rank(), ":", get_name(), ":", key, " : forwarding stream size for terminal ", i);
+        }
+        using msg_t = detail::msg_t;
+        auto &world_impl = world.impl();
+        uint64_t pos = 0;
+        std::unique_ptr<msg_t> msg =
+            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                    msg_header_t::MSG_SET_ARGSTREAM_SIZE, i, 1);
+        /* pack the key */
+        pos = pack(key, msg->bytes, pos);
+        msg->op_id.num_keys = 1;
+        pos = pack(size, msg->bytes, pos);
+        parsec_taskpool_t *tp = world_impl.taskpool();
+        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
+        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
+        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
+                          sizeof(msg_header_t) + pos);
+      } else {
+        if (tracing()) {
+          ttg::print(world.rank(), ":", get_name(), ":", key, " : setting stream size to ", size, " for terminal ", i);
+        }
+
+        auto hk = reinterpret_cast<parsec_key_t>(&key);
+        task_t *task;
+        parsec_hash_table_lock_bucket(&tasks_table, hk);
+        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+          task = create_new_task(key);
+          world.impl().increment_created();
+          parsec_hash_table_nolock_insert(&tasks_table, &task->op_ht_item);
+        }
+
+        // TODO: Unfriendly implementation, cannot check if stream is already bounded
+        // TODO: Unfriendly implementation, cannot check if stream has been finalized already
+
+        // commit changes
+        task->stream[i].goal = size;
+        bool release = (task->stream[i].size == task->stream[i].goal);
+        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+
+        if (release) release_task<true>(this, task);
+      }
     }
 
     /// sets stream size for input \c i
@@ -1713,7 +1950,48 @@ namespace ttg_parsec {
 
       // body
       const auto owner = keymap();
-      abort();  // TODO implement set_argstream_size
+      if (owner != world.rank()) {
+        if (tracing()) {
+          ttg::print(world.rank(), ":", get_name(), " : forwarding stream size for terminal ", i);
+        }
+        using msg_t = detail::msg_t;
+        auto &world_impl = world.impl();
+        uint64_t pos = 0;
+        std::unique_ptr<msg_t> msg =
+            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                    msg_header_t::MSG_SET_ARGSTREAM_SIZE, i, 1);
+        /* pack the key */
+        msg->op_id.num_keys = 0;
+        pos = pack(size, msg->bytes, pos);
+        parsec_taskpool_t *tp = world_impl.taskpool();
+        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
+        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
+        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
+                          sizeof(msg_header_t) + pos);
+      } else {
+        if (tracing()) {
+          ttg::print(world.rank(), ":", get_name(), " : setting stream size to ", size, " for terminal ", i);
+        }
+
+        parsec_key_t hk = 0;
+        task_t *task;
+        parsec_hash_table_lock_bucket(&tasks_table, hk);
+        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+          task = create_new_task(ttg::Void{});
+          world.impl().increment_created();
+          parsec_hash_table_nolock_insert(&tasks_table, &task->op_ht_item);
+        }
+
+        // TODO: Unfriendly implementation, cannot check if stream is already bounded
+        // TODO: Unfriendly implementation, cannot check if stream has been finalized already
+
+        // commit changes
+        task->stream[i].goal = size;
+        bool release = (task->stream[i].size == task->stream[i].goal);
+        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+
+        if (release) release_task<true>(this, task);
+      }
     }
 
     /// finalizes stream for input \c i
@@ -1724,18 +2002,96 @@ namespace ttg_parsec {
 
       // body
       const auto owner = keymap(key);
-      abort();  // TODO implement set_argstream_size
+      if (owner != world.rank()) {
+        if (tracing()) {
+          ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
+        }
+        using msg_t = detail::msg_t;
+        auto &world_impl = world.impl();
+        uint64_t pos = 0;
+        std::unique_ptr<msg_t> msg =
+            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                    msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE, i, 1);
+        /* pack the key */
+        pos = pack(key, msg->bytes, pos);
+        msg->op_id.num_keys = 1;
+        parsec_taskpool_t *tp = world_impl.taskpool();
+        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
+        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
+        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
+                          sizeof(msg_header_t) + pos);
+      } else {
+        if (tracing()) {
+          ttg::print(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
+        }
+
+        auto hk = reinterpret_cast<parsec_key_t>(&key);
+        task_t *task = nullptr;
+        parsec_hash_table_lock_bucket(&tasks_table, hk);
+        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+          ttg::print_error(world.rank(), ":", get_name(), ":", key,
+                           " : error finalize called on stream that never received an input data: ", i);
+          throw std::runtime_error("Op::finalize called on stream that never received an input data");
+        }
+
+        // TODO: Unfriendly implementation, cannot check if stream is already bounded
+        // TODO: Unfriendly implementation, cannot check if stream has been finalized already
+
+        // commit changes
+        task->stream[i].size = 1;
+        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+
+        release_task<true>(this, task);
+      }
     }
 
     /// finalizes stream for input \c i
-    template <std::size_t i, typename Key>
-    std::enable_if_t<ttg::meta::is_void_v<Key>, void> finalize_argstream() {
+    template <std::size_t i, bool key_is_void = ttg::meta::is_void_v<keyT>>
+    std::enable_if_t<key_is_void, void> finalize_argstream() {
       // preconditions
       assert(std::get<i>(input_reducers) && "Op::finalize_argstream called on nonstreaming input terminal");
 
       // body
       const auto owner = keymap();
-      abort();  // TODO implement set_argstream_size
+      if (owner != world.rank()) {
+        if (tracing()) {
+          ttg::print(world.rank(), ":", get_name(), ": forwarding stream finalize for terminal ", i);
+        }
+        using msg_t = detail::msg_t;
+        auto &world_impl = world.impl();
+        uint64_t pos = 0;
+        std::unique_ptr<msg_t> msg =
+            std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                    msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE, i, 1);
+        msg->op_id.num_keys = 0;
+        parsec_taskpool_t *tp = world_impl.taskpool();
+        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
+        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
+        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
+                          sizeof(msg_header_t) + pos);
+      } else {
+        if (tracing()) {
+          ttg::print(world.rank(), ":", get_name(), ": finalizing stream for terminal ", i);
+        }
+
+        auto hk = static_cast<parsec_key_t>(0);
+        task_t *task = nullptr;
+        parsec_hash_table_lock_bucket(&tasks_table, hk);
+        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+          ttg::print_error(world.rank(), ":", get_name(),
+                           " : error finalize called on stream that never received an input data: ", i);
+          throw std::runtime_error("Op::finalize called on stream that never received an input data");
+        }
+
+        // TODO: Unfriendly implementation, cannot check if stream is already bounded
+        // TODO: Unfriendly implementation, cannot check if stream has been finalized already
+
+        // commit changes
+        task->stream[i].size = 1;
+        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+
+        release_task<true>(this, task);
+      }
     }
 
    private:
@@ -1757,7 +2113,9 @@ namespace ttg_parsec {
     template <typename terminalT, std::size_t i>
     void register_input_callback(terminalT &input) {
       using valueT = typename terminalT::value_type;
-      // case 1
+      //////////////////////////////////////////////////////////////////
+      // case 1: nonvoid key, nonvoid value
+      //////////////////////////////////////////////////////////////////
       if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_refs_tuple_type> &&
                     !std::is_void_v<valueT>) {
         auto move_callback = [this](const keyT &key, valueT &&value) {
@@ -1766,46 +2124,67 @@ namespace ttg_parsec {
         auto send_callback = [this](const keyT &key, const valueT &value) {
           set_arg<i, keyT, const valueT &>(key, value);
         };
-        auto broadcast_callback = [this](const ttg::span<const keyT> &keylist,
-                                         const valueT& value) {
+        auto broadcast_callback = [this](const ttg::span<const keyT> &keylist, const valueT &value) {
           if constexpr (ttg::has_split_metadata<std::decay_t<valueT>>::value) {
             splitmd_broadcast_arg<i, keyT, valueT>(keylist, value);
           } else {
             broadcast_arg<i, keyT, valueT>(keylist, value);
           }
         };
-        input.set_callback(send_callback, move_callback, broadcast_callback);
+        auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
+        auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
+        input.set_callback(send_callback, move_callback, broadcast_callback, setsize_callback, finalize_callback);
       }
-      // case 2
+      //////////////////////////////////////////////////////////////////
+      // case 2: nonvoid key, void value, mixed inputs
+      //////////////////////////////////////////////////////////////////
       else if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_refs_tuple_type> &&
                          std::is_void_v<valueT>) {
         auto send_callback = [this](const keyT &key) { set_arg<i, keyT, ttg::Void>(key, ttg::Void{}); };
-        input.set_callback(send_callback, send_callback);
+        auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
+        auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
+        input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
       }
-      // case 3
+      //////////////////////////////////////////////////////////////////
+      // case 3: nonvoid key, void value, no inputs
+      //////////////////////////////////////////////////////////////////
       else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_refs_tuple_type> &&
                          std::is_void_v<valueT>) {
         auto send_callback = [this](const keyT &key) { set_arg<keyT>(key); };
-        input.set_callback(send_callback, send_callback);
+        auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
+        auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
+        input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
       }
-      // case 4
+      //////////////////////////////////////////////////////////////////
+      // case 4: void key, nonvoid value
+      //////////////////////////////////////////////////////////////////
       else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_refs_tuple_type> &&
                          !std::is_void_v<valueT>) {
         auto move_callback = [this](valueT &&value) { set_arg<i, keyT, valueT>(std::forward<valueT>(value)); };
         auto send_callback = [this](const valueT &value) { set_arg<i, keyT, const valueT &>(value); };
-        input.set_callback(send_callback, move_callback);
+        auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
+        auto finalize_callback = [this]() { finalize_argstream<i>(); };
+        input.set_callback(send_callback, move_callback, {}, setsize_callback, finalize_callback);
       }
-      // case 5
+      //////////////////////////////////////////////////////////////////
+      // case 5: void key, void value, mixed inputs
+      //////////////////////////////////////////////////////////////////
       else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_refs_tuple_type> &&
                          std::is_void_v<valueT>) {
         auto send_callback = [this]() { set_arg<i, keyT, ttg::Void>(ttg::Void{}); };
-        input.set_callback(send_callback, send_callback);
+        auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
+        auto finalize_callback = [this]() { finalize_argstream<i>(); };
+        input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
       }
-      // case 6
+      //////////////////////////////////////////////////////////////////
+      // case 6: void key, void value, no inputs
+      //////////////////////////////////////////////////////////////////
       else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_refs_tuple_type> &&
                          std::is_void_v<valueT>) {
         auto send_callback = [this]() { set_arg<keyT>(); };
-        input.set_callback(send_callback, send_callback);
+        auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
+        auto finalize_callback = [this]() { finalize_argstream<i>(); };
+        input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
       } else
         abort();
     }
@@ -1860,7 +2239,8 @@ namespace ttg_parsec {
     }
 
     static uint64_t key_hash(parsec_key_t k, void *user_data) {
-      if constexpr (std::is_same_v<keyT, void>) {
+      constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
+      if constexpr (keyT_is_Void || std::is_same_v<keyT, void>) {
         return 0;
       } else {
         keyT &kk = *(reinterpret_cast<keyT *>(k));
@@ -1887,36 +2267,35 @@ namespace ttg_parsec {
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
 
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *task) {
+      parsec_execution_stream_t *safe_es = parsec_ttg_es;
+      parsec_ttg_es = es;
       for (int i = 0; i < MAX_PARAM_COUNT; i++) {
-        ttg_data_copy_t* copy = reinterpret_cast<ttg_data_copy_t*>(task->data[i].data_in);
+        ttg_data_copy_t *copy = reinterpret_cast<ttg_data_copy_t *>(task->data[i].data_in);
         detail::release_data_copy(copy);
         task->data[i].data_in = nullptr;
       }
-      detail::my_op_t *op = (detail::my_op_t *)task;
+      task_t *op = (task_t *)task;
       if (op->deferred_release) {
         op->deferred_release = nullptr;
         op->op_ptr = nullptr;
       }
-      if constexpr (!ttg::meta::is_void_v<keyT>) {
-        keyT *key = (keyT *)op->key;
-        delete (key);
-      }
+      parsec_ttg_es = safe_es;
       return PARSEC_HOOK_RETURN_DONE;
     }
 
    public:
-    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+    template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
+       ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT() )
         : ttg::OpBase(name, numins, numouts)
-        , set_arg_from_msg_fcts(make_set_args_fcts(std::make_index_sequence<numins>{}))
         , world(world)
         // if using default keymap, rebind to the given world
         , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
                      ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
                      : decltype(keymap)(std::forward<keymapT>(keymap_)))
-        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))){
+        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_)))
+        , static_stream_goal() {
       // Cannot call these in base constructor since terminals not yet constructed
       if (innames.size() != std::tuple_size<input_terminals_type>::value)
         throw std::logic_error("ttg_parsec::OP: #input names != #input terminals");
@@ -1939,7 +2318,7 @@ namespace ttg_parsec {
       self.task_class_id = get_instance_id();
       self.nb_parameters = 0;
       self.nb_locals = 0;
-      self.nb_flows = std::max((int)numins, (int)numouts);
+      self.nb_flows = numflows;
 
       //    function_id_to_instance[self.task_class_id] = this;
 
@@ -1964,7 +2343,7 @@ namespace ttg_parsec {
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
       }
 
-      self.release_task = parsec_release_task_to_mempool_update_nbtasks;
+      self.release_task = &parsec_release_task_to_mempool_update_nbtasks;
       self.complete_execution = complete_task_and_release;
 
       for (i = 0; i < numins; i++) {
@@ -1998,57 +2377,53 @@ namespace ttg_parsec {
       self.flags = 0;
       self.dependencies_goal = numins; /* (~(uint32_t)0) >> (32 - numins); */
 
-      int k = 0;
+      int nbthreads = 0;
       auto *context = world_impl.context();
       for (int i = 0; i < context->nb_vp; i++) {
-        for (int j = 0; j < context->virtual_processes[i]->nb_cores; j++) {
-          mempools_index[std::pair<int, int>(i, j)] = k++;
-        }
+        nbthreads += context->virtual_processes[i]->nb_cores;
       }
-      parsec_mempool_construct(&mempools, PARSEC_OBJ_CLASS(parsec_task_t), sizeof(detail::my_op_t),
-                               offsetof(parsec_task_t, mempool_owner), k);
 
-      parsec_hash_table_init(&tasks_table, offsetof(detail::my_op_t, op_ht_item), 8, tasks_hash_fcts, NULL);
+      parsec_mempool_construct(
+          &mempools, PARSEC_OBJ_CLASS(parsec_task_t),
+          sizeof(task_t), offsetof(parsec_task_t, mempool_owner), nbthreads);
+
+      parsec_hash_table_init(&tasks_table, offsetof(detail::parsec_ttg_task_base_t, op_ht_item), 8, tasks_hash_fcts, NULL);
     }
 
-    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+    template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
-        : Op(name, innames, outnames, ttg::get_default_world(),
-             std::forward<keymapT>(keymap),
+        : Op(name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
              std::forward<priomapT>(priomap)) {}
 
-    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+    template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ttg::World world,
        keymapT &&keymap_ = keymapT(), priomapT &&priomap = priomapT())
-        : Op(name, innames, outnames, world,
-             std::forward<keymapT>(keymap_),
-             std::forward<priomapT>(priomap)) {
+        : Op(name, innames, outnames, world, std::forward<keymapT>(keymap_), std::forward<priomapT>(priomap)) {
       connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numins>{}, inedges);
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
     }
-    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+    template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
-        : Op(inedges, outedges, name, innames, outnames, ttg::get_default_world(),
-             std::forward<keymapT>(keymap),
+        : Op(inedges, outedges, name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
              std::forward<priomapT>(priomap)) {}
 
     // Destructor checks for unexecuted tasks
     ~Op() { release(); }
 
-    static void ht_iter_cb(void *item, void*cb_data) {
-      detail::my_op_t * task = (detail::my_op_t *)item;
-      opT* op = (opT*)cb_data;
-      if constexpr (!std::is_void_v<keyT>) {
-        std::cout << "Left over task "  << op->get_name() << " " << *(keyT*)task->key << std::endl;
+    static void ht_iter_cb(void *item, void *cb_data) {
+      task_t *task = (task_t *)item;
+      opT *op = (opT *)cb_data;
+      if constexpr (!ttg::meta::is_void_v<keyT>) {
+        std::cout << "Left over task " << op->get_name() << " " << task->key << std::endl;
       } else {
-        std::cout << "Left over task "  << op->get_name() << " " << task->key << std::endl;
+        std::cout << "Left over task " << op->get_name() << std::endl;
       }
     }
 
@@ -2064,7 +2439,7 @@ namespace ttg_parsec {
       // uintptr_t addr = (uintptr_t)self.incarnations;
       // free((void *)addr);
       free((__parsec_chore_t *)self.incarnations);
-      for (int i = 0; i < self.nb_flows; i++) {
+      for (int i = 0; i < numflows; i++) {
         if (NULL != self.in[i]) {
           free(self.in[i]->name);
           delete self.in[i];
@@ -2207,14 +2582,12 @@ namespace ttg_parsec {
  * if the data is not being tracked yet or if the data is not const, i.e.,
  * the user may mutate the data after it was passed to send/broadcast.
  */
-template<>
+template <>
 struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
-
-private:
+ private:
   ttg_data_copy_t *copy_to_remove = nullptr;
 
-public:
-
+ public:
   ~value_copy_handler() {
     if (nullptr != copy_to_remove) {
       ttg_parsec::detail::remove_data_copy(copy_to_remove, parsec_ttg_caller);
@@ -2222,55 +2595,45 @@ public:
     }
   }
 
-  template<typename Value>
-  inline
-  Value&& operator()(Value&& value) {
-
+  template <typename Value>
+  inline Value &&operator()(Value &&value) {
     if (nullptr == parsec_ttg_caller) {
       ttg::print("ERROR: ttg_send or ttg_broadcast called outside of a task!\n");
     }
-    ttg_data_copy_t* copy;
+    ttg_data_copy_t *copy;
     copy = ttg_parsec::detail::find_copy_in_task(parsec_ttg_caller, &value);
-    Value* value_ptr = &value;
+    Value *value_ptr = &value;
     if (nullptr == copy) {
       /**
        * the value is not known, create a copy that we can track
        * depending on Value, this uses either the copy or move constructor
        */
-      copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
-      value_ptr = new Value(std::forward<Value>(value));
-      copy->device_private = value_ptr;
-      copy->readers = 1;
-      copy->delete_fn  = &ttg_parsec::detail::typed_delete_t<Value>::delete_type;
+      copy = ttg_parsec::detail::create_new_datacopy(std::forward<Value>(value));
       bool inserted = ttg_parsec::detail::add_copy_to_task(copy, parsec_ttg_caller);
       assert(inserted);
+      value_ptr = reinterpret_cast<Value*>(copy->device_private);
       copy_to_remove = copy;
     }
     return std::move(*value_ptr);
   }
 
-  template<typename Value>
-  inline
-  const Value& operator()(const Value& value) {
-
+  template <typename Value>
+  inline const Value &operator()(const Value &value) {
     if (nullptr == parsec_ttg_caller) {
       ttg::print("ERROR: ttg_send or ttg_broadcast called outside of a task!\n");
     }
-    ttg_data_copy_t* copy;
+    ttg_data_copy_t *copy;
     copy = ttg_parsec::detail::find_copy_in_task(parsec_ttg_caller, &value);
-    const Value* value_ptr = &value;
+    const Value *value_ptr = &value;
     if (nullptr == copy) {
       /**
        * the value is not known, create a copy that we can track
        * depending on Value, this uses either the copy or move constructor
        */
-      copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
-      value_ptr = new Value(value);
-      copy->device_private = const_cast<Value*>(value_ptr);
-      copy->readers = 1;
-      copy->delete_fn  = &ttg_parsec::detail::typed_delete_t<Value>::delete_type;
+      copy = ttg_parsec::detail::create_new_datacopy(value);
       bool inserted = ttg_parsec::detail::add_copy_to_task(copy, parsec_ttg_caller);
       assert(inserted);
+      value_ptr = reinterpret_cast<Value*>(copy->device_private);
       copy_to_remove = copy;
     }
     return *value_ptr;
@@ -2278,22 +2641,17 @@ public:
 
   /* we have to make a copy of non-const data as the user may modify it after
    * send/broadcast */
-  template<typename Value, typename Enabler = std::enable_if_t<!std::is_const_v<Value>>>
-  inline
-  Value& operator()(Value& value) {
-
+  template <typename Value, typename Enabler = std::enable_if_t<!std::is_const_v<Value>>>
+  inline Value &operator()(Value &value) {
     if (nullptr == parsec_ttg_caller) {
       ttg::print("ERROR: ttg_send or ttg_broadcast called outside of a task!\n");
     }
-    ttg_data_copy_t* copy;
     /* the value is not known, create a copy that we can track */
-    copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
-    Value* value_ptr = new Value(value);
-    copy->device_private = value_ptr;
-    copy->readers = 1;
-    copy->delete_fn  = &ttg_parsec::detail::typed_delete_t<Value>::delete_type;
+    ttg_data_copy_t *copy;
+    copy = ttg_parsec::detail::create_new_datacopy(value);
     bool inserted = ttg_parsec::detail::add_copy_to_task(copy, parsec_ttg_caller);
     assert(inserted);
+    Value* value_ptr = reinterpret_cast<Value*>(copy->device_private);
     copy_to_remove = copy;
     return *value_ptr;
   }

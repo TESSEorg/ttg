@@ -1,27 +1,26 @@
 #ifndef MADNESS_TTG_H_INCLUDED
 #define MADNESS_TTG_H_INCLUDED
 
-
 /* set up env if this header was included directly */
 #if !defined(TTG_IMPL_NAME)
 #define TTG_USE_MADNESS 1
-#endif // !defined(TTG_IMPL_NAME)
+#endif  // !defined(TTG_IMPL_NAME)
 
 #include "ttg/impl_selector.h"
 
 /* include ttg header to make symbols available in case this header is included directly */
 #include "../../ttg.h"
+#include "ttg/base/keymap.h"
+#include "ttg/base/op.h"
+#include "ttg/func.h"
+#include "ttg/op.h"
+#include "ttg/runtimes.h"
 #include "ttg/util/bug.h"
 #include "ttg/util/hash.h"
-#include "ttg/util/meta.h"
-#include "ttg/world.h"
-#include "ttg/base/op.h"
-#include "ttg/base/keymap.h"
-#include "ttg/op.h"
-#include "ttg/util/void.h"
-#include "ttg/runtimes.h"
 #include "ttg/util/macro.h"
-#include "ttg/func.h"
+#include "ttg/util/meta.h"
+#include "ttg/util/void.h"
+#include "ttg/world.h"
 
 #include <array>
 #include <cassert>
@@ -115,7 +114,9 @@ namespace ttg_madness {
 
     const ::madness::World &impl() const { return m_impl; }
 
-    parsec_context_t* context() { return ::madness::ThreadPool::instance()->parsec; }
+#ifdef ENABLE_PARSEC
+    parsec_context_t *context() { return ::madness::ThreadPool::instance()->parsec; }
+#endif
   };
 
   template <typename... RestOfArgs>
@@ -183,7 +184,6 @@ namespace ttg_madness {
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
     std::array<std::size_t, sizeof...(input_valueTs)> static_streamsize;
-    
    public:
     ttg::World get_world() const { return world; }
 
@@ -236,6 +236,7 @@ namespace ttg_madness {
     struct OpArgs : ::madness::TaskInterface {
      private:
       using TaskInterface = ::madness::TaskInterface;
+
      public:
       int counter;  // Tracks the number of arguments finalized
       std::array<std::size_t, numins>
@@ -266,8 +267,11 @@ namespace ttg_madness {
       }
 
       OpArgs(int prio = 0)
-      : TaskInterface(TaskAttributes(prio ? TaskAttributes::HIGHPRIORITY : 0)),
-        counter(numins), nargs(), stream_size(), input_values() {
+          : TaskInterface(TaskAttributes(prio ? TaskAttributes::HIGHPRIORITY : 0))
+          , counter(numins)
+          , nargs()
+          , stream_size()
+          , input_values() {
         std::fill(nargs.begin(), nargs.end(), std::numeric_limits<std::size_t>::max());
       }
 
@@ -361,7 +365,9 @@ namespace ttg_madness {
             // have a value already? if not, set, otherwise reduce
             if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
               this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
+
               // now have a value, reset nargs
+              // check if we have a stream size for the op, which has precedence over the global setting.
               if (args->stream_size[i] != 0) {
                 args->nargs[i] = args->stream_size[i];
               } else if (static_streamsize[i] != 0) {
@@ -371,6 +377,7 @@ namespace ttg_madness {
                 args->nargs[i] = 1;
               }
             } else {
+              // Why do we need to move the value here??
               valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
               this->get<i, std::decay_t<valueT> &>(args->input_values) =
                   std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->input_values), std::move(value_copy)));
@@ -475,8 +482,8 @@ namespace ttg_madness {
             if (args->stream_size[i] != 0) {
               args->nargs[i] = args->stream_size[i];
             } else if (static_streamsize[i] != 0) {
-                args->stream_size[i] = static_streamsize[i];
-                args->nargs[i] = static_streamsize[i];
+              args->stream_size[i] = static_streamsize[i];
+              args->nargs[i] = static_streamsize[i];
             } else {
               args->nargs[i] = 1;
             }
@@ -923,7 +930,7 @@ namespace ttg_madness {
     }
 
    public:
-    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+    template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
@@ -951,14 +958,14 @@ namespace ttg_madness {
       register_input_callbacks(std::make_index_sequence<numins>{});
     }
 
-    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+    template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
-        : Op(name, innames, outnames, ttg::get_default_world(),
-             std::forward<keymapT>(keymap), std::forward<priomapT>(priomap)) {}
+        : Op(name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
+             std::forward<priomapT>(priomap)) {}
 
-    template <typename keymapT  = ttg::detail::default_keymap<keyT>,
+    template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
     Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ttg::World world,
@@ -971,7 +978,7 @@ namespace ttg_madness {
         , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
                      ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
                      : decltype(keymap)(std::forward<keymapT>(keymap_)))
-        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))){
+        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))) {
       // Cannot call in base constructor since terminals not yet constructed
       if (innames.size() != std::tuple_size<input_terminals_type>::value) {
         ttg::print_error(world.rank(), ":", get_name(), "#input_names", innames.size(), "!= #input_terminals",
@@ -995,8 +1002,8 @@ namespace ttg_madness {
     Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
-        : Op(inedges, outedges, name, innames, outnames, ttg::get_default_world(),
-             std::forward<keymapT>(keymap), std::forward<priomapT>(priomap)) {}
+        : Op(inedges, outedges, name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
+             std::forward<priomapT>(priomap)) {}
 
     // Destructor checks for unexecuted tasks
     virtual ~Op() {
@@ -1035,9 +1042,7 @@ namespace ttg_madness {
       keymap = km;
     }
 
-    auto get_priomap(void) const {
-      return priomap;
-    }
+    auto get_priomap(void) const { return priomap; }
 
     /// Set the priority map, mapping a Key to an integral value.
     /// Higher values indicate higher priority. The default priority is 0, higher
