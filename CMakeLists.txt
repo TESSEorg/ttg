@@ -32,6 +32,10 @@ include(ExternalDependenciesVersions)
 include(LoadFetchContent)
 include(AddCustomTargetSubproject)
 
+# augment GNUInstallDirs's dirs with CMAKEDIR
+set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
+        CACHE PATH "TTG CMAKE install directory")
+
 ########################################
 #### user-defined configuration options
 ########################################
@@ -105,9 +109,6 @@ export(EXPORT ttg
        FILE "${PROJECT_BINARY_DIR}/ttg-targets.cmake")
 
 # Create the configure file
-set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
-        CACHE PATH "TTG CMAKE install directory")
-message(STATUS "CMAKE_INSTALL_CMAKEDIR=${CMAKE_INSTALL_CMAKEDIR}")
 configure_package_config_file(cmake/ttg-config.cmake.in
         "${PROJECT_BINARY_DIR}/ttg-config.cmake"
         INSTALL_DESTINATION "${CMAKE_INSTALL_CMAKEDIR}"
