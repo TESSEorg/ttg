@@ -276,6 +276,7 @@ class SpMM {
       const auto k = key[1];
       // broadcast a_ik to all existing {i,j,k}
       std::vector<Key<3>> ijk_keys;
+      if (k >= b_rowidx_to_colidx_.size()) return;
       for (auto &j : b_rowidx_to_colidx_[k]) {
         if (tracing()) ttg::print("Broadcasting A[", i, "][", k, "] to j=", j);
         ijk_keys.emplace_back(Key<3>({i, j, k}));
@@ -301,6 +302,7 @@ class SpMM {
       const auto j = key[1];
       // broadcast b_kj to *jk
       std::vector<Key<3>> ijk_keys;
+      if (k >= a_colidx_to_rowidx_.size()) return;
       for (auto &i : a_colidx_to_rowidx_[k]) {
         if (tracing()) ttg::print("Broadcasting B[", k, "][", j, "] to i=", i);
         ijk_keys.emplace_back(Key<3>({i, j, k}));
@@ -401,11 +403,13 @@ class SpMM {
 
     // given {i,j} return first k such that A[i][k] and B[k][j] exist
     std::tuple<long, bool> compute_first_k(long i, long j) {
-      auto a_iter_fence = a_rowidx_to_colidx_[i].end();
-      auto a_iter = a_rowidx_to_colidx_[i].begin();
+      const auto &a_k_range = a_rowidx_to_colidx_.at(i);
+      auto a_iter = a_k_range.begin();
+      auto a_iter_fence = a_k_range.end();
       if (a_iter == a_iter_fence) return std::make_tuple(-1, false);
-      auto b_iter_fence = b_colidx_to_rowidx_[j].end();
-      auto b_iter = b_colidx_to_rowidx_[j].begin();
+      const auto &b_k_range = b_colidx_to_rowidx_.at(j);
+      auto b_iter = b_k_range.begin();
+      auto b_iter_fence = b_k_range.end();
       if (b_iter == b_iter_fence) return std::make_tuple(-1, false);
 
       {
@@ -430,11 +434,13 @@ class SpMM {
     // given {i,j,k} such that A[i][k] and B[k][j] exist
     // return next k such that this condition holds
     std::tuple<long, bool> compute_next_k(long i, long j, long k) {
-      auto a_iter_fence = a_rowidx_to_colidx_[i].end();
-      auto a_iter = std::find(a_rowidx_to_colidx_[i].begin(), a_iter_fence, k);
+      const auto &a_k_range = a_rowidx_to_colidx_.at(i);
+      auto a_iter_fence = a_k_range.end();
+      auto a_iter = std::find(a_k_range.begin(), a_iter_fence, k);
       assert(a_iter != a_iter_fence);
-      auto b_iter_fence = b_colidx_to_rowidx_[j].end();
-      auto b_iter = std::find(b_colidx_to_rowidx_[j].begin(), b_iter_fence, k);
+      const auto &b_k_range = b_colidx_to_rowidx_.at(j);
+      auto b_iter_fence = b_k_range.end();
+      auto b_iter = std::find(b_k_range.begin(), b_iter_fence, k);
       assert(b_iter != b_iter_fence);
       while (a_iter != a_iter_fence && b_iter != b_iter_fence) {
         ++a_iter;
