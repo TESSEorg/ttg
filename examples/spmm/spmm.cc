@@ -131,30 +131,26 @@ struct colmajor_layout<_Scalar, Eigen::RowMajor, _StorageIndex> : public std::fa
 
 template <std::size_t Rank>
 struct Key : public std::array<long, Rank> {
-  static constexpr const long max_index_width = 21;
   static constexpr const long max_index = 1 << 21;
-  static constexpr const long max_index_square = max_index * max_index;
+  /*
+   * Randomly chosen prime number used to scramble the hash value.
+   * tile indexes in Eigen are the index of the first element in the matrix,
+   * so the keys are a multiple of the tile size. Without scrambling,
+   * the hash value is a multiple of the tile size, which may be a multiple of
+   * the number of processes...
+   */
+  static constexpr const long hash_prime = 1309313;
   Key() = default;
   template <typename Integer>
   Key(std::initializer_list<Integer> ilist) {
     std::copy(ilist.begin(), ilist.end(), this->begin());
     assert(valid());
   }
-  Key(std::size_t hash) {
-    static_assert(Rank == 2 || Rank == 3, "Key<Rank>::Key(hash) only implemented for Rank={2,3}");
-    if (Rank == 2) {
-      (*this)[0] = hash / max_index;
-      (*this)[1] = hash % max_index;
-    } else if (Rank == 3) {
-      (*this)[0] = hash / max_index_square;
-      (*this)[1] = (hash % max_index_square) / max_index;
-      (*this)[2] = hash % max_index;
-    }
-  }
+
   std::size_t hash() const {
     static_assert(Rank == 2 || Rank == 3, "Key<Rank>::hash only implemented for Rank={2,3}");
-    return Rank == 2 ? (*this)[0] * max_index + (*this)[1]
-                     : ((*this)[0] * max_index + (*this)[1]) * max_index + (*this)[2];
+    return Rank == 2 ? ((*this)[0] * max_index + (*this)[1]) % hash_prime
+                     : (((*this)[0] * max_index + (*this)[1]) * max_index + (*this)[2]) % hash_prime;
   }
 
  private:
