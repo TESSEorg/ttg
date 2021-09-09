@@ -1,5 +1,7 @@
 
+#ifndef WORLD_INSTANTIATE_STATIC_TEMPLATES
 #define WORLD_INSTANTIATE_STATIC_TEMPLATES
+#endif
 
 #include <iostream>
 #include <tuple>
@@ -8,8 +10,7 @@
 #include <stdlib.h>
 #include <utility>
 
-#define TTG_USE_MADNESS 1
-#include "ttg.h"
+#include "ttg/madness/ttg.h"
 
 #include "Vector.h"
 #include "Matrix.h"
