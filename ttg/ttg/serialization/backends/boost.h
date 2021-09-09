@@ -18,7 +18,7 @@
 
 namespace ttg::detail {
 
-  /*----- if_boost_{input,output,}_archive_v -----*/
+  /*----- is_boost_{input,output,}_archive_v -----*/
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
   template <typename T>
