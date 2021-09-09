@@ -1108,7 +1108,7 @@ namespace ttg_parsec {
             /* process payload iovecs */
             auto iovecs = descr.get_data(val);
             /* start the RMA transfers */
-            for (auto iov : iovecs) {
+            for (auto &&iov : iovecs) {
               ++nv;
               parsec_ce_mem_reg_handle_t rreg;
               int32_t rreg_size_i;
@@ -1531,7 +1531,7 @@ namespace ttg_parsec {
          * register the generic iovecs and pack the registration handles
          * memory layout: [<lreg_size, lreg, release_cb_ptr>, ...]
          */
-        for (auto iov : iovecs) {
+        for (auto &&iov : iovecs) {
           parsec_ce_mem_reg_handle_t lreg;
           size_t lreg_size;
           /* TODO: only register once when we can broadcast the data! */
@@ -1757,7 +1757,7 @@ namespace ttg_parsec {
         memregs.reserve(num_iovs);
 
         /* register all iovs so the registration can be reused */
-        for (auto iov : iovs) {
+        for (auto &&iov : iovs) {
           parsec_ce_mem_reg_handle_t lreg;
           size_t lreg_size;
           parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
@@ -1829,7 +1829,7 @@ namespace ttg_parsec {
            * memory layout: [<lreg_size, lreg, lreg_fn>, ...]
            */
           int idx = 0;
-          for (auto iov : iovs) {
+          for (auto &&iov : iovs) {
             // auto [lreg_size, lreg_ptr] = memregs[idx];
             int32_t lreg_size;
             std::shared_ptr<void> lreg_ptr;
