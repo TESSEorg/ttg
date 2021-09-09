@@ -751,7 +751,7 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
 
 #if defined(BTAS_IS_USABLE)
 static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B,
-                           SpMatrix<> &C, double &gflops) {
+                           SpMatrix<> &C, double &gflops, unsigned int seed) {
   A.resize(M, K);
   B.resize(K, N);
   C.resize(M, N);
@@ -760,8 +760,13 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
   if (ttg_default_execution_context().rank() == 0) {
     float density = 0.0;
     int ts;
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    if (seed == 0) {
+      std::random_device rd;
+      seed = rd();
+      std::cerr << "# Block Sparse Random seeded with " << seed << std::endl;
+    }
+    std::mt19937 gen(seed);
+
     std::uniform_int_distribution<> dist(minTs, maxTs);
     std::vector<int> mTiles, nTiles, kTiles;
     std::map<std::tuple<int, int>, bool> Afilling;
@@ -893,8 +898,10 @@ int main(int argc, char **argv) {
       int maxTs = parseOption(maxTsStr, 256);
       std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
       double avg = parseOption(avgStr, 0.3);
+      std::string seedStr(getCmdOption(argv, argv + argc, "-s"));
+      unsigned int seed = parseOption(seedStr, 0);
       timing = true;
-      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, C, gflops);
+      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, C, gflops, seed);
     } else {
       initBlSpHardCoded(A, B, C);
     }
