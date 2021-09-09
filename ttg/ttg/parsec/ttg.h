@@ -1088,55 +1088,61 @@ namespace ttg_parsec {
             std::memcpy(&num_iovecs, msg->bytes + pos, sizeof(num_iovecs));
             pos += sizeof(num_iovecs);
 
-            /* extract the callback tag */
-            parsec_ce_tag_t cbtag;
-            std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
-            pos += sizeof(cbtag);
+            /* nothing else to do if the object is empty */
+            if (0 == num_iovecs) {
+              set_arg_from_msg_keylist<i>(keylist, descr.create_from_metadata(metadata));
+            } else {
 
-            /* create the value from the metadata */
-            auto activation =
-                new detail::rma_delayed_activate(std::move(keylist), descr.create_from_metadata(metadata), num_iovecs,
-                                                 [this, num_keys](std::vector<keyT> &&keylist, valueT &&value) {
-                                                   set_arg_from_msg_keylist<i>(keylist, value);
-                                                   this->world.impl().decrement_inflight_msg();
-                                                 });
-            auto &val = activation->value();
+              /* extract the callback tag */
+              parsec_ce_tag_t cbtag;
+              std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
+              pos += sizeof(cbtag);
 
-            using ActivationT = std::decay_t<decltype(*activation)>;
+              /* create the value from the metadata */
+              auto activation =
+                  new detail::rma_delayed_activate(std::move(keylist), descr.create_from_metadata(metadata), num_iovecs,
+                                                  [this, num_keys](std::vector<keyT> &&keylist, valueT &&value) {
+                                                    set_arg_from_msg_keylist<i>(keylist, value);
+                                                    this->world.impl().decrement_inflight_msg();
+                                                  });
+              auto &val = activation->value();
 
-            int nv = 0;
-            /* process payload iovecs */
-            auto iovecs = descr.get_data(val);
-            /* start the RMA transfers */
-            for (auto &&iov : iovecs) {
-              ++nv;
-              parsec_ce_mem_reg_handle_t rreg;
-              int32_t rreg_size_i;
-              std::memcpy(&rreg_size_i, msg->bytes + pos, sizeof(rreg_size_i));
-              pos += sizeof(rreg_size_i);
-              rreg = static_cast<parsec_ce_mem_reg_handle_t>(msg->bytes + pos);
-              pos += rreg_size_i;
-              // std::intptr_t *fn_ptr = reinterpret_cast<std::intptr_t *>(msg->bytes + pos);
-              // pos += sizeof(*fn_ptr);
-              std::intptr_t fn_ptr;
-              std::memcpy(&fn_ptr, msg->bytes + pos, sizeof(fn_ptr));
-              pos += sizeof(fn_ptr);
+              using ActivationT = std::decay_t<decltype(*activation)>;
 
-              /* register the local memory */
-              parsec_ce_mem_reg_handle_t lreg;
-              size_t lreg_size;
-              parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
-                                     iov.num_bytes, &lreg, &lreg_size);
-              world.impl().increment_inflight_msg();
-              /* TODO: PaRSEC should treat the remote callback as a tag, not a function pointer! */
-              parsec_ce.get(&parsec_ce, lreg, 0, rreg, 0, iov.num_bytes, remote, &detail::get_complete_cb<ActivationT>,
-                            activation,
-                            /*world.impl().parsec_ttg_rma_tag()*/
-                            cbtag, &fn_ptr, sizeof(std::intptr_t));
+              int nv = 0;
+              /* process payload iovecs */
+              auto iovecs = descr.get_data(val);
+              /* start the RMA transfers */
+              for (auto &&iov : iovecs) {
+                ++nv;
+                parsec_ce_mem_reg_handle_t rreg;
+                int32_t rreg_size_i;
+                std::memcpy(&rreg_size_i, msg->bytes + pos, sizeof(rreg_size_i));
+                pos += sizeof(rreg_size_i);
+                rreg = static_cast<parsec_ce_mem_reg_handle_t>(msg->bytes + pos);
+                pos += rreg_size_i;
+                // std::intptr_t *fn_ptr = reinterpret_cast<std::intptr_t *>(msg->bytes + pos);
+                // pos += sizeof(*fn_ptr);
+                std::intptr_t fn_ptr;
+                std::memcpy(&fn_ptr, msg->bytes + pos, sizeof(fn_ptr));
+                pos += sizeof(fn_ptr);
+
+                /* register the local memory */
+                parsec_ce_mem_reg_handle_t lreg;
+                size_t lreg_size;
+                parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
+                                      iov.num_bytes, &lreg, &lreg_size);
+                world.impl().increment_inflight_msg();
+                /* TODO: PaRSEC should treat the remote callback as a tag, not a function pointer! */
+                parsec_ce.get(&parsec_ce, lreg, 0, rreg, 0, iov.num_bytes, remote, &detail::get_complete_cb<ActivationT>,
+                              activation,
+                              /*world.impl().parsec_ttg_rma_tag()*/
+                              cbtag, &fn_ptr, sizeof(std::intptr_t));
+              }
+
+              assert(num_iovecs == nv);
+              assert(size == (pos + sizeof(msg_header_t)));
             }
-
-            assert(num_iovecs == nv);
-            assert(size == (pos + sizeof(msg_header_t)));
           }
           // case 2
         } else if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_refs_tuple_type> &&
