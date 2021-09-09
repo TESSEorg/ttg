@@ -316,6 +316,9 @@ namespace ttg_parsec {
     void increment_created() { taskpool()->tdm.module->taskpool_addto_nb_tasks(taskpool(), 1); }
     void increment_sent_to_sched() { parsec_atomic_fetch_inc_int32(&sent_to_sched_counter()); }
 
+    void increment_inflight_msg() { taskpool()->tdm.module->taskpool_addto_nb_pa(taskpool(),  1); }
+    void decrement_inflight_msg() { taskpool()->tdm.module->taskpool_addto_nb_pa(taskpool(), -1); }
+
     int32_t sent_to_sched() const { return this->sent_to_sched_counter(); }
 
     virtual void final_task() override {
@@ -1095,6 +1098,7 @@ namespace ttg_parsec {
                 new detail::rma_delayed_activate(std::move(keylist), descr.create_from_metadata(metadata), num_iovecs,
                                                  [this, num_keys](std::vector<keyT> &&keylist, valueT &&value) {
                                                    set_arg_from_msg_keylist<i>(keylist, value);
+                                                   this->world.impl().decrement_inflight_msg();
                                                  });
             auto &val = activation->value();
 
@@ -1123,6 +1127,7 @@ namespace ttg_parsec {
               size_t lreg_size;
               parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
                                      iov.num_bytes, &lreg, &lreg_size);
+              world.impl().increment_inflight_msg();
               /* TODO: PaRSEC should treat the remote callback as a tag, not a function pointer! */
               parsec_ce.get(&parsec_ce, lreg, 0, rreg, 0, iov.num_bytes, remote, &detail::get_complete_cb<ActivationT>,
                             activation,
