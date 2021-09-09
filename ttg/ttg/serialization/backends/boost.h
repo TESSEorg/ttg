@@ -7,15 +7,18 @@
 
 #include <type_traits>
 
+#include <boost/type_traits/is_array.hpp>
+#include <boost/type_traits/remove_extent.hpp>
+
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/serialization/level.hpp>
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
-#include "ttg/serialization/traits.h"
-
 namespace ttg::detail {
+
+  /*----- is_boost_{input,output,}_archive_v -----*/
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
   template <typename T>
@@ -27,7 +30,7 @@ namespace ttg::detail {
   template <typename T>
   inline constexpr bool is_boost_output_archive_v = std::is_base_of_v<boost::archive::detail::basic_oarchive, T>;
 
-  //////// is_archive_v for boost archives
+  /*----- is_archive_v for boost archives -----*/
   template <typename T>
   inline constexpr bool is_archive_v<T, std::enable_if_t<is_boost_archive_v<T>>> = true;
   template <typename T>
@@ -35,9 +38,16 @@ namespace ttg::detail {
   template <typename T>
   inline constexpr bool is_output_archive_v<T, std::enable_if_t<is_boost_output_archive_v<T>>> = true;
 
+#else   // TTG_SERIALIZATION_SUPPORTS_BOOST
+  template <typename T>
+  inline constexpr bool is_boost_archive_v = false;
+  template <typename T>
+  inline constexpr bool is_boost_input_archive_v = false;
+  template <typename T>
+  inline constexpr bool is_boost_output_archive_v = false;
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
-  //////// is_boost_serializable
+  /*----- is_boost_serializable_v -----*/
 
   template <typename Archive, typename T, typename Enabler = void>
   inline static constexpr bool is_boost_serializable_v = false;
@@ -83,14 +93,36 @@ namespace ttg::detail {
                  ttg::detail::has_freestanding_boost_serialize_with_version_v<ttg::meta::remove_cvr_t<T>, Archive>) ||
                 ttg::detail::has_member_serialize_with_version_v<ttg::meta::remove_cvr_t<T>, Archive> ||
                 (ttg::detail::has_member_load_with_version_v<T, Archive> &&
-                 ttg::detail::has_member_store_with_version_v<T, Archive>))))>> = true;
+                 ttg::detail::has_member_save_with_version_v<T, Archive>))))>> = true;
 #endif  //  TTG_SERIALIZATION_SUPPORTS_BOOST
 
   template <typename Archive, typename T>
   struct is_boost_serializable : std::bool_constant<is_boost_serializable_v<Archive, T>> {};
 
   template <typename Archive, typename T, class = void>
-  struct is_boost_default_serializable : std::bool_constant<std::is_trivially_copyable_v<T>> {};
+  struct is_boost_default_serializable : std::false_type {};
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+  /// @sa is_boost_serializable_v
+  template <typename Archive, typename T>
+  struct is_boost_default_serializable<
+      Archive, T,
+      std::enable_if_t<
+          // Archive is a boost archive
+          is_boost_archive_v<Archive>
+          // T is not not_serializable
+          && !std::is_same_v<typename boost::serialization::implementation_level<T>::type,
+                             boost::mpl::int_<boost::serialization::level_type::not_serializable>>
+          // T is primitive or T is an array of serializables or else T has serialize methods
+          && (std::is_same_v<typename boost::serialization::implementation_level<T>::type,
+                             boost::mpl::int_<boost::serialization::level_type::primitive_type>> ||
+              is_boost_array_serializable_v<Archive, T> ||
+              (!std::is_same_v<typename boost::serialization::implementation_level<T>::type,
+                               boost::mpl::int_<boost::serialization::level_type::primitive_type>> &&
+               (ttg::detail::is_stlcontainer_boost_serializable_v<Archive, T> &&
+                ttg::detail::has_freestanding_boost_serialize_with_version_v<ttg::meta::remove_cvr_t<T>, Archive>)))>>
+      : std::true_type {};
+#endif  //  TTG_SERIALIZATION_SUPPORTS_BOOST
 
   template <typename Archive, typename T>
   inline static constexpr bool is_boost_default_serializable_v = is_boost_default_serializable<Archive, T>::value;

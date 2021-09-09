@@ -78,7 +78,7 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 ADD $build /home/travis/_build/$build
 END
 
-function clean_up {
+clean_up() {
   rm -f $setup $build Dockerfile
   exit
 }

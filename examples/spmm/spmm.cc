@@ -10,23 +10,85 @@
 #ifdef BTAS_IS_USABLE
 #include <btas/btas.h>
 #include <btas/optimize/contract.h>
+#include <btas/serialization.h>
+#include <btas/util/mohndle.h>
 #else
 #warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
 #endif
 #endif
 
+#include <sys/time.h>
+#include <unsupported/Eigen/SparseExtra>
+
+#include <boost/graph/directed_graph.hpp>
+#include <boost/graph/rmat_graph_generator.hpp>
+#include <boost/random/linear_congruential.hpp>
+
 #include "ttg.h"
 
 using namespace ttg;
 
+#include "ttg/serialization.h"
 #include "ttg/util/future.h"
 
+#include "ttg/util/bug.h"
+
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
-using blk_t = btas::Tensor<double>;
+using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
+
+#if defined(TTG_USE_PARSEC)
+namespace ttg {
+  template <>
+  struct SplitMetadataDescriptor<blk_t> {
+    // TODO: this is a quick and dirty approach.
+    //   - blk_t could have any number of dimensions, this code only works for 2 dim blocks
+    //   - we use Blk{} to send a control flow in some tasks below, these blocks have only
+    //     1 dimension (of size 0), to code this, we set the second dimension to 0 in our
+    //     quick and dirty linearization, then have a case when we create the object
+    //   - when we create the object with the metadata, we use a constructor that initializes
+    //     the data to 0, which is useless: the data could be left uninitialized
+    auto get_metadata(const blk_t &b) {
+      std::pair<int, int> dim{0, 0};
+      if (!b.empty()) {
+        assert(b.range().extent().size() == 2);
+        std::get<0>(dim) = b.range().extent(0);
+        std::get<1>(dim) = b.range().extent(1);
+      }
+      return dim;
+    }
+    auto get_data(blk_t &b) {
+      if (!b.empty())
+        return boost::container::small_vector<iovec, 1>(1, iovec{b.size() * sizeof(double), b.data()});
+      else
+        return boost::container::small_vector<iovec, 1>{};
+    }
+    auto create_from_metadata(const std::pair<int, int> &meta) {
+      if (meta != std::pair{0, 0})
+        return blk_t(btas::Range(std::get<0>(meta), std::get<1>(meta)), 0.0);
+      else
+        return blk_t{};
+    }
+  };
+}  // namespace ttg
+#endif /* TTG_USE_PARSEC */
+
+// declare btas::Tensor serializable by Boost
+#include "ttg/serialization/backends/boost.h"
+namespace ttg::detail {
+  // BTAS defines all of its Boost serializers in boost::serialization namespace ... as explained in
+  // ttg/serialization/boost.h such functions are not detectable via SFINAE, so must explicitly define serialization
+  // traits here
+  template <typename Archive>
+  inline static constexpr bool is_boost_serializable_v<Archive, blk_t> = is_boost_archive_v<Archive>;
+  template <typename Archive>
+  inline static constexpr bool is_boost_serializable_v<Archive, const blk_t> = is_boost_archive_v<Archive>;
+}  // namespace ttg::detail
+
 #else
 using blk_t = double;
 #endif
-template <typename T = blk_t> using SpMatrix = Eigen::SparseMatrix<T>;
+template <typename T = blk_t>
+using SpMatrix = Eigen::SparseMatrix<T>;
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 
@@ -34,118 +96,7 @@ template <typename T = blk_t> using SpMatrix = Eigen::SparseMatrix<T>;
 
 #include <madness/world/archive.h>
 
-/////////////////////////////////////////////
-// additional ops are needed to make Eigen::SparseMatrix<btas::Tensor> possible
-namespace madness {
-  namespace archive {
-
-    template <class Archive, typename T, std::size_t N, typename A>
-    struct ArchiveLoadImpl<Archive, boost::container::small_vector<T, N, A>> {
-      static inline void load(const Archive& ar,
-                              boost::container::small_vector<T, N, A>& x) {
-        std::size_t n{};
-        ar& n;
-        x.resize(n);
-        for (auto& xi : x) ar& xi;
-      }
-    };
-
-    template <class Archive, typename T, std::size_t N, typename A>
-    struct ArchiveStoreImpl<Archive, boost::container::small_vector<T, N, A>> {
-      static inline void store(const Archive& ar,
-                               const boost::container::small_vector<T, N, A>& x) {
-        ar& x.size();
-        for (const auto& xi : x) ar& xi;
-      }
-    };
-
-    template <class Archive, typename T>
-    struct ArchiveLoadImpl<Archive, btas::varray<T>> {
-      static inline void load(const Archive& ar, btas::varray<T>& x) {
-        typename btas::varray<T>::size_type n{};
-        ar& n;
-        x.resize(n);
-        for (typename btas::varray<T>::value_type& xi : x) ar& xi;
-      }
-    };
-
-    template <class Archive, typename T>
-    struct ArchiveStoreImpl<Archive, btas::varray<T>> {
-      static inline void store(const Archive& ar, const btas::varray<T>& x) {
-        ar& x.size();
-        for (const typename btas::varray<T>::value_type& xi : x) ar& xi;
-      }
-    };
-
-    template <class Archive, blas::Layout _Order, typename _Index>
-    struct ArchiveLoadImpl<Archive, btas::BoxOrdinal<_Order, _Index>> {
-      static inline void load(const Archive& ar,
-                              btas::BoxOrdinal<_Order, _Index>& o) {
-        typename btas::BoxOrdinal<_Order, _Index>::stride_type stride{};
-        typename btas::BoxOrdinal<_Order, _Index>::value_type offset{};
-        bool cont{};
-        ar& stride& offset& cont;
-        o = btas::BoxOrdinal<_Order, _Index>(std::move(stride), std::move(offset),
-                                             std::move(cont));
-      }
-    };
-
-    template <class Archive, blas::Layout _Order, typename _Index>
-    struct ArchiveStoreImpl<Archive, btas::BoxOrdinal<_Order, _Index>> {
-      static inline void store(const Archive& ar,
-                               const btas::BoxOrdinal<_Order, _Index>& o) {
-        ar& o.stride() & o.offset() & o.contiguous();
-      }
-    };
-
-    template <class Archive, blas::Layout _Order, typename _Index,
-        typename _Ordinal>
-    struct ArchiveLoadImpl<Archive, btas::RangeNd<_Order, _Index, _Ordinal>> {
-      static inline void load(const Archive& ar,
-                              btas::RangeNd<_Order, _Index, _Ordinal>& r) {
-        typedef typename btas::BaseRangeNd<
-            btas::RangeNd<_Order, _Index, _Ordinal>>::index_type index_type;
-        index_type lobound{}, upbound{};
-        _Ordinal ordinal{};
-        ar& lobound& upbound& ordinal;
-        r = btas::RangeNd<_Order, _Index, _Ordinal>(
-            std::move(lobound), std::move(upbound), std::move(ordinal));
-      }
-    };
-
-    template <class Archive, blas::Layout _Order, typename _Index,
-        typename _Ordinal>
-    struct ArchiveStoreImpl<Archive, btas::RangeNd<_Order, _Index, _Ordinal>> {
-      static inline void store(const Archive& ar,
-                               const btas::RangeNd<_Order, _Index, _Ordinal>& r) {
-        ar& r.lobound() & r.upbound() & r.ordinal();
-      }
-    };
-
-    template <class Archive, typename _T, class _Range, class _Store>
-    struct ArchiveLoadImpl<Archive, btas::Tensor<_T, _Range, _Store>> {
-      static inline void load(const Archive& ar,
-                              btas::Tensor<_T, _Range, _Store>& t) {
-        _Range range{};
-        _Store store{};
-        ar& range& store;
-        t = btas::Tensor<_T, _Range, _Store>(std::move(range), std::move(store));
-      }
-    };
-
-    template <class Archive, typename _T, class _Range, class _Store>
-    struct ArchiveStoreImpl<Archive, btas::Tensor<_T, _Range, _Store>> {
-      static inline void store(const Archive& ar,
-                               const btas::Tensor<_T, _Range, _Store>& t) {
-        ar& t.range() & t.storage();
-      }
-    };
-  }  // namespace archive
-}  // namespace madness
-
-#else  // __has_include(<madness/world/archive.h>)
-#error "Did not find madness/world/archive.h , likely misconfigured or broken"
-#endif
+#endif  // __has_include(<madness/world/archive.h>)
 
 namespace btas {
   template <typename _T, class _Range, class _Store>
@@ -260,16 +211,17 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
     std::lock_guard<std::mutex> lock(mtx_);
     if (ttg::tracing()) {
       auto &w = get_default_world();
-      ttg::print(w.rank(), "/", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.impl.h Write_SpMatrix wrote {",
-                 key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
-                 " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
+      ttg::print("rank =", w.rank(), "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
+                 "spmm.cc Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ",
+                 static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_), " for object @",
+                 static_cast<void *>(this));
     }
     matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
   }
 
   /// grab completion status as a future<void>
   /// \note cannot be called once this is executable
-  const std::shared_future<void>& status() const {
+  const std::shared_future<void> &status() const {
     assert(!this->is_executable());
     if (!completion_status_) {
       auto promise = std::make_shared<std::promise<void>>();
@@ -324,6 +276,7 @@ class SpMM {
       const auto k = key[1];
       // broadcast a_ik to all existing {i,j,k}
       std::vector<Key<3>> ijk_keys;
+      if (k >= b_rowidx_to_colidx_.size()) return;
       for (auto &j : b_rowidx_to_colidx_[k]) {
         if (tracing()) ttg::print("Broadcasting A[", i, "][", k, "] to j=", j);
         ijk_keys.emplace_back(Key<3>({i, j, k}));
@@ -349,6 +302,7 @@ class SpMM {
       const auto j = key[1];
       // broadcast b_kj to *jk
       std::vector<Key<3>> ijk_keys;
+      if (k >= a_colidx_to_rowidx_.size()) return;
       for (auto &i : a_colidx_to_rowidx_[k]) {
         if (tracing()) ttg::print("Broadcasting B[", k, "][", j, "] to i=", i);
         ijk_keys.emplace_back(Key<3>({i, j, k}));
@@ -362,17 +316,18 @@ class SpMM {
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
   class MultiplyAdd
-      : public Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, Blk, Blk, Blk> {
+      : public Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, const Blk, const Blk, Blk> {
    public:
-    using baseT = Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, Blk, Blk, Blk>;
+    using baseT = Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, const Blk, const Blk, Blk>;
 
-    MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk,
-                Edge<Key<2>, Blk> &c, const std::vector<std::vector<long>> &a_rowidx_to_colidx,
+    MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
+                const std::vector<std::vector<long>> &a_rowidx_to_colidx,
                 const std::vector<std::vector<long>> &b_colidx_to_rowidx)
-        : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM::Multiply", {"a_ijk", "b_ijk", "c_ijk"},
+        : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM::MultiplyAdd", {"a_ijk", "b_ijk", "c_ijk"},
                 {"c_ij", "c_ijk"})
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
+      this->set_priomap([=](const Key<3> &key) { return this->prio(key); });
       auto &keymap = this->get_keymap();
 
       // for each i and j that belongs to this node
@@ -391,8 +346,7 @@ class SpMM {
               std::tie(k, have_k) = compute_first_k(i, j);
               if (have_k) {
                 if (tracing()) ttg::print("Initializing C[", i, "][", j, "] to zero");
-                this->template in<2>()->send(Key<3>({i, j, k}), Blk(0));
-                // this->set_arg<2>(Key<3>({i,j,k}), Blk(0));
+                this->template in<2>()->send(Key<3>({i, j, k}), Blk{});
               } else {
                 if (tracing()) ttg::print("C[", i, "][", j, "] is empty");
               }
@@ -411,30 +365,51 @@ class SpMM {
       bool have_next_k;
       std::tie(next_k, have_next_k) = compute_next_k(i, j, k);
       if (tracing()) {
-        ttg::print("Multiplying A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
+        ttg::print("C[", i, "][", j, "]  += A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
                    (have_next_k ? std::to_string(next_k) : "does not exist"));
       }
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow
       if (have_next_k) {
-        ::send<1>(Key<3>({i, j, next_k}),
-                  gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)), result);
+        ::send<1>(
+            Key<3>({i, j, next_k}),
+            gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
+            result);
       } else
-        ::send<0>(Key<2>({i, j}), gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
-                  result);
+        ::send<0>(
+            Key<2>({i, j}),
+            gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
+            result);
     }
 
    private:
     const std::vector<std::vector<long>> &a_rowidx_to_colidx_;
     const std::vector<std::vector<long>> &b_colidx_to_rowidx_;
 
+    /* Compute the length of the remaining sequence on that tile */
+    int32_t prio(const Key<3> &key) {
+      const auto i = key[0];
+      const auto j = key[1];
+      const auto k = key[2];
+      int32_t len = -1;  // will be incremented at least once
+      long next_k = k;
+      bool have_next_k;
+      do {
+        std::tie(next_k, have_next_k) = compute_next_k(i, j, next_k);
+        ++len;
+      } while (have_next_k);
+      return len;
+    }
+
     // given {i,j} return first k such that A[i][k] and B[k][j] exist
     std::tuple<long, bool> compute_first_k(long i, long j) {
-      auto a_iter_fence = a_rowidx_to_colidx_[i].end();
-      auto a_iter = a_rowidx_to_colidx_[i].begin();
+      const auto &a_k_range = a_rowidx_to_colidx_.at(i);
+      auto a_iter = a_k_range.begin();
+      auto a_iter_fence = a_k_range.end();
       if (a_iter == a_iter_fence) return std::make_tuple(-1, false);
-      auto b_iter_fence = b_colidx_to_rowidx_[j].end();
-      auto b_iter = b_colidx_to_rowidx_[j].begin();
+      const auto &b_k_range = b_colidx_to_rowidx_.at(j);
+      auto b_iter = b_k_range.begin();
+      auto b_iter_fence = b_k_range.end();
       if (b_iter == b_iter_fence) return std::make_tuple(-1, false);
 
       {
@@ -459,11 +434,13 @@ class SpMM {
     // given {i,j,k} such that A[i][k] and B[k][j] exist
     // return next k such that this condition holds
     std::tuple<long, bool> compute_next_k(long i, long j, long k) {
-      auto a_iter_fence = a_rowidx_to_colidx_[i].end();
-      auto a_iter = std::find(a_rowidx_to_colidx_[i].begin(), a_iter_fence, k);
+      const auto &a_k_range = a_rowidx_to_colidx_.at(i);
+      auto a_iter_fence = a_k_range.end();
+      auto a_iter = std::find(a_k_range.begin(), a_iter_fence, k);
       assert(a_iter != a_iter_fence);
-      auto b_iter_fence = b_colidx_to_rowidx_[j].end();
-      auto b_iter = std::find(b_colidx_to_rowidx_[j].begin(), b_iter_fence, k);
+      const auto &b_k_range = b_colidx_to_rowidx_.at(j);
+      auto b_iter_fence = b_k_range.end();
+      auto b_iter = std::find(b_k_range.begin(), b_iter_fence, k);
       assert(b_iter != b_iter_fence);
       while (a_iter != a_iter_fence && b_iter != b_iter_fence) {
         ++a_iter;
@@ -577,69 +554,362 @@ std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
 
 #include "../ttg_matrix.h"
 
+char *getCmdOption(char **begin, char **end, const std::string &option) {
+  static char *empty = "";
+  char **itr = std::find(begin, end, option);
+  if (itr != end && ++itr != end) return *itr;
+  return empty;
+}
+
+bool cmdOptionExists(char **begin, char **end, const std::string &option) {
+  return std::find(begin, end, option) != end;
+}
+
+int cmdOptionIndex(char **begin, char **end, const std::string &option) {
+  char **itr = std::find(begin, end, option);
+  if (itr != end) return itr - begin;
+  return -1;
+}
+
+static int parseOption(std::string &option, int default_value) {
+  size_t pos;
+  std::string token;
+  int N = default_value;
+  if (option.length() == 0) return N;
+  pos = option.find(":");
+  if (pos == std::string::npos) {
+    pos = option.length();
+  }
+  token = option.substr(0, pos);
+  N = std::stoi(token);
+  option.erase(0, pos + 1);
+  return N;
+}
+
+static double parseOption(std::string &option, double default_value) {
+  size_t pos;
+  std::string token;
+  double N = default_value;
+  if (option.length() == 0) return N;
+  pos = option.find(":");
+  if (pos == std::string::npos) {
+    pos = option.length();
+  }
+  token = option.substr(0, pos);
+  N = std::stod(token);
+  option.erase(0, pos + 1);
+  return N;
+}
+
+#if !defined(BLOCK_SPARSE_GEMM)
+static void initSpMatrixMarket(const char *filename, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
+  std::vector<int> sizes;
+  // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
+  if (ttg_default_execution_context().rank() == 0) {
+    if (!loadMarket(A, filename)) {
+      std::cerr << "Failed to load " << filename << ", bailing out..." << std::endl;
+      ttg::ttg_abort();
+    }
+    std::cout << "##MatrixMarket file " << filename << " -- " << A.rows() << " x " << A.cols() << " -- " << A.nonZeros()
+              << " nnz (density: " << (float)A.nonZeros() / (float)A.rows() / (float)A.cols() << ")" << std::endl;
+    sizes[0] = A.rows();
+    sizes[1] = A.cols();
+  }
+  ttg_broadcast(ttg_default_execution_context(), sizes, 0);
+  if (ttg_default_execution_context().rank() == 0) {
+    A.resize(sizes[0], sizes[1]);
+  }
+  if (A.rows() != A.cols()) {
+    B = A.transpose();
+  } else {
+    B = A;
+  }
+  C.resize(A.rows(), B.cols());
+}
+
+static void initSpRmat(const char *opt, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
+  int N, E = -1;
+  double a = 0.25, b = 0.25, c = 0.25, d = 0.25;
+  size_t nnz = 0;
+
+  if (nullptr == opt) {
+    std::cerr << "Usage: -rmat <#nodes>[:<#edges>[:<a>[:<b>:[<c>[:<d>]]]]]" << std::endl;
+    exit(1);
+  }
+  std::string token;
+  std::string option = std::string(opt);
+  N = parseOption(option, -1);
+
+  A.resize(N, N);
+
+  if (ttg_default_execution_context().rank() == 0) {
+    E = parseOption(option, (int)(0.01 * N * N));
+    a = parseOption(option, 0.25);
+    b = parseOption(option, 0.25);
+    c = parseOption(option, 0.25);
+    d = parseOption(option, 0.25);
+
+    std::cout << "#R-MAT: " << N << " nodes, " << E << " edges, a/b/c/d = " << a << "/" << b << "/" << c << "/" << d
+              << std::endl;
+
+    boost::minstd_rand gen;
+    boost::rmat_iterator<boost::minstd_rand, boost::directed_graph<>> rmat_it(gen, N, E, a, b, c, d);
+
+    using triplet_t = Eigen::Triplet<blk_t>;
+    std::vector<triplet_t> A_elements;
+    for (int i = 0; i < N; i++) {
+      nnz++;
+      A_elements.emplace_back(i, i, 1.0);
+    }
+    for (int i = 0; i < E; i++) {
+      auto x = *rmat_it++;
+      if (x.first != x.second) {
+        A_elements.emplace_back(x.first, x.second, 1.0);
+        nnz++;
+      }
+    }
+    A.setFromTriplets(A_elements.begin(), A_elements.end());
+  }
+
+  B = A;
+  C.resize(N, N);
+
+  std::cout << "#R-MAT: " << E << " nonzero elements, density: " << (double)nnz / (double)N / (double)N << std::endl;
+}
+
+static void initSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
+  const int n = 2;
+  const int m = 3;
+  const int k = 4;
+
+  std::cout << "#HardCoded A, B, C" << std::endl;
+  A.resize(n, k);
+  B.resize(k, m);
+  C.resize(n, m);
+  // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
+  if (ttg_default_execution_context().rank() == 0) {
+    using triplet_t = Eigen::Triplet<blk_t>;
+    std::vector<triplet_t> A_elements;
+    A_elements.emplace_back(0, 1, 12.3);
+    A_elements.emplace_back(0, 2, 10.7);
+    A_elements.emplace_back(0, 3, -2.3);
+    A_elements.emplace_back(1, 0, -0.3);
+    A_elements.emplace_back(1, 2, 1.2);
+    A.setFromTriplets(A_elements.begin(), A_elements.end());
+
+    std::vector<triplet_t> B_elements;
+    B_elements.emplace_back(0, 0, 12.3);
+    B_elements.emplace_back(1, 0, 10.7);
+    B_elements.emplace_back(3, 0, -2.3);
+    B_elements.emplace_back(1, 1, -0.3);
+    B_elements.emplace_back(1, 2, 1.2);
+    B_elements.emplace_back(2, 2, 7.2);
+    B_elements.emplace_back(3, 2, 0.2);
+    B.setFromTriplets(B_elements.begin(), B_elements.end());
+  }
+}
+#else
+static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
+  const int n = 2;
+  const int m = 3;
+  const int k = 4;
+
+  std::cout << "#HardCoded A, B, C" << std::endl;
+  A.resize(n, k);
+  B.resize(k, m);
+  C.resize(n, m);
+  // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
+  if (ttg_default_execution_context().rank() == 0) {
+    using triplet_t = Eigen::Triplet<blk_t>;
+    std::vector<triplet_t> A_elements;
+#if defined(BTAS_IS_USABLE)
+    auto A_blksize = {128, 256};
+    A_elements.emplace_back(0, 1, blk_t(btas::Range(A_blksize), 12.3));
+    A_elements.emplace_back(0, 2, blk_t(btas::Range(A_blksize), 10.7));
+    A_elements.emplace_back(0, 3, blk_t(btas::Range(A_blksize), -2.3));
+    A_elements.emplace_back(1, 0, blk_t(btas::Range(A_blksize), -0.3));
+    A_elements.emplace_back(1, 2, blk_t(btas::Range(A_blksize), 1.2));
+#else
+    A_elements.emplace_back(0, 1, 12.3);
+    A_elements.emplace_back(0, 2, 10.7);
+    A_elements.emplace_back(0, 3, -2.3);
+    A_elements.emplace_back(1, 0, -0.3);
+    A_elements.emplace_back(1, 2, .2);
+#endif
+    A.setFromTriplets(A_elements.begin(), A_elements.end());
+
+    std::vector<triplet_t> B_elements;
+#if defined(BTAS_IS_USABLE)
+    auto B_blksize = {256, 196};
+    B_elements.emplace_back(0, 0, blk_t(btas::Range(B_blksize), 12.3));
+    B_elements.emplace_back(1, 0, blk_t(btas::Range(B_blksize), 10.7));
+    B_elements.emplace_back(3, 0, blk_t(btas::Range(B_blksize), -2.3));
+    B_elements.emplace_back(1, 1, blk_t(btas::Range(B_blksize), -0.3));
+    B_elements.emplace_back(1, 2, blk_t(btas::Range(B_blksize), 1.2));
+    B_elements.emplace_back(2, 2, blk_t(btas::Range(B_blksize), 7.2));
+    B_elements.emplace_back(3, 2, blk_t(btas::Range(B_blksize), 0.2));
+#else
+    B_elements.emplace_back(0, 0, 12.3);
+    B_elements.emplace_back(1, 0, 10.7);
+    B_elements.emplace_back(3, 0, -2.3);
+    B_elements.emplace_back(1, 1, -0.3);
+    B_elements.emplace_back(1, 2, 1.2);
+    B_elements.emplace_back(2, 2, 7.2);
+    B_elements.emplace_back(3, 2, 0.2);
+#endif
+    B.setFromTriplets(B_elements.begin(), B_elements.end());
+  }
+}
+
+#if defined(BTAS_IS_USABLE)
+static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B,
+                           SpMatrix<> &C, double &gflops, unsigned int seed) {
+  A.resize(M, K);
+  B.resize(K, N);
+  C.resize(M, N);
+  gflops = 0.0;
+
+  if (ttg_default_execution_context().rank() == 0) {
+    float density = 0.0;
+    int ts;
+    if (seed == 0) {
+      std::random_device rd;
+      seed = rd();
+      std::cerr << "# Block Sparse Random seeded with " << seed << std::endl;
+    }
+    std::mt19937 gen(seed);
+
+    std::uniform_int_distribution<> dist(minTs, maxTs);
+    std::vector<int> mTiles, nTiles, kTiles;
+    std::map<std::tuple<int, int>, bool> Afilling;
+    std::map<std::tuple<int, int>, bool> Bfilling;
+    using triplet_t = Eigen::Triplet<blk_t>;
+    std::vector<triplet_t> A_elements;
+    std::vector<triplet_t> B_elements;
+
+    for (int m = 0; m < M; m += ts) {
+      ts = dist(gen);
+      if (ts > M - m) ts = M - m;
+      mTiles.push_back(ts);
+    }
+    for (int n = 0; n < N; n += ts) {
+      ts = dist(gen);
+      if (ts > N - n) ts = N - n;
+      nTiles.push_back(ts);
+    }
+    for (int k = 0; k < K; k += ts) {
+      ts = dist(gen);
+      if (ts > K - k) ts = K - k;
+      kTiles.push_back(ts);
+    }
+
+    std::uniform_int_distribution<> mDist(0, mTiles.size() - 1);
+    std::uniform_int_distribution<> nDist(0, nTiles.size() - 1);
+    std::uniform_int_distribution<> kDist(0, kTiles.size() - 1);
+
+    density = 0.0;
+    Afilling.clear();
+    while (density < avgDensity) {
+      int mt = mDist(gen);
+      int kt = kDist(gen);
+      int m = 0, k = 0;
+      if (Afilling.count({mt, kt}) > 0) continue;
+      Afilling[{mt, kt}] = true;
+      density += (float)(mTiles[mt] * kTiles[kt]) / (float)(M * K);
+      auto blksize = {mTiles[mt], kTiles[kt]};
+      for (int i = 0; i < mt; i++) m += mTiles[i];
+      for (int i = 0; i < kt; i++) k += kTiles[i];
+      A_elements.emplace_back(m, k, blk_t(btas::Range(blksize), (float)std::rand() / (float)RAND_MAX - 0.5));
+    }
+    A.setFromTriplets(A_elements.begin(), A_elements.end());
+    std::cout << "#RandomBlockSparse-matrixT: A = " << M << " x " << K << " minTs " << minTs << " maxTs " << maxTs
+              << " density " << density << std::endl;
+
+    density = 0.0;
+    Bfilling.clear();
+    while (density < avgDensity) {
+      int nt = nDist(gen);
+      int kt = kDist(gen);
+      int n = 0, k = 0;
+      if (Bfilling.count({kt, nt}) > 0) continue;
+      Bfilling[{kt, nt}] = true;
+      density += (float)(kTiles[kt] * nTiles[nt]) / (float)(K * N);
+      auto blksize = {kTiles[kt], nTiles[nt]};
+      for (int i = 0; i < nt; i++) n += nTiles[i];
+      for (int i = 0; i < kt; i++) k += kTiles[i];
+      B_elements.emplace_back(k, n, blk_t(btas::Range(blksize), (float)std::rand() / (float)RAND_MAX - 0.5));
+    }
+    B.setFromTriplets(B_elements.begin(), B_elements.end());
+
+    for (int mt = 0; mt < mTiles.size(); mt++) {
+      for (int nt = 0; nt < nTiles.size(); nt++) {
+        for (int kt = 0; kt < kTiles.size(); kt++) {
+          if (!Afilling[{mt, kt}] || !Bfilling[{kt, nt}]) continue;
+          gflops += 2.0 * mTiles[mt] * nTiles[nt] * kTiles[kt] / 1e9;
+        }
+      }
+    }
+
+    std::cout << "#RandomBlockSparse-matrixT: B = " << K << " x " << N << " minTs " << minTs << " maxTs " << maxTs
+              << " density " << density * 100 << " %, work " << gflops << " GFlops" << std::endl;
+  }
+}
+#endif
+
+#endif
+
 int main(int argc, char **argv) {
+  bool timing = false;
+  double gflops = 0.0;
 
-  ttg_initialize(argc, argv, 4);
+  if (int dashdash = cmdOptionIndex(argv, argv + argc, "--") > -1) {
+    ttg_initialize(argc - dashdash, argv + dashdash, -1);
+  } else {
+    ttg_initialize(1, argv, -1);
+  }
 
-//  using mpqc::Debugger;
-//  auto debugger = std::make_shared<Debugger>();
-//  Debugger::set_default_debugger(debugger);
-//  debugger->set_exec(argv[0]);
-//  debugger->set_prefix(ttg_default_execution_context().rank());
-//  debugger->set_cmd("lldb_xterm");
-//
-//  initialize_watchpoints();
+  // ttg::launch_lldb(ttg_default_execution_context().rank(), argv[0]);
 
   {
     // ttg::trace_on();
     // OpBase::set_trace_all(true);
 
-    const int n = 2;
-    const int m = 3;
-    const int k = 4;
-    SpMatrix<> A(n, k), B(k, m), C(n, m);
+    SpMatrix<> A, B, C;
 
-    // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
-    if (ttg_default_execution_context().rank() == 0) {
-      using triplet_t = Eigen::Triplet<blk_t>;
-      std::vector<triplet_t> A_elements;
-#if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
-      auto A_blksize = {128, 256};
-      A_elements.emplace_back(0, 1, blk_t(btas::Range(A_blksize), 12.3));
-      A_elements.emplace_back(0, 2, blk_t(btas::Range(A_blksize), 10.7));
-      A_elements.emplace_back(0, 3, blk_t(btas::Range(A_blksize), -2.3));
-      A_elements.emplace_back(1, 0, blk_t(btas::Range(A_blksize), -0.3));
-      A_elements.emplace_back(1, 2, blk_t(btas::Range(A_blksize), 1.2));
-#else
-      A_elements.emplace_back(0, 1, 12.3);
-      A_elements.emplace_back(0, 2, 10.7);
-      A_elements.emplace_back(0, 3, -2.3);
-      A_elements.emplace_back(1, 0, -0.3);
-      A_elements.emplace_back(1, 2, 1.2);
-#endif
-      A.setFromTriplets(A_elements.begin(), A_elements.end());
-
-      std::vector<triplet_t> B_elements;
-#if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
-      auto B_blksize = {256, 196};
-      B_elements.emplace_back(0, 0, blk_t(btas::Range(B_blksize), 12.3));
-      B_elements.emplace_back(1, 0, blk_t(btas::Range(B_blksize), 10.7));
-      B_elements.emplace_back(3, 0, blk_t(btas::Range(B_blksize), -2.3));
-      B_elements.emplace_back(1, 1, blk_t(btas::Range(B_blksize), -0.3));
-      B_elements.emplace_back(1, 2, blk_t(btas::Range(B_blksize), 1.2));
-      B_elements.emplace_back(2, 2, blk_t(btas::Range(B_blksize), 7.2));
-      B_elements.emplace_back(3, 2, blk_t(btas::Range(B_blksize), 0.2));
-#else
-      B_elements.emplace_back(0, 0, 12.3);
-      B_elements.emplace_back(1, 0, 10.7);
-      B_elements.emplace_back(3, 0, -2.3);
-      B_elements.emplace_back(1, 1, -0.3);
-      B_elements.emplace_back(1, 2, 1.2);
-      B_elements.emplace_back(2, 2, 7.2);
-      B_elements.emplace_back(3, 2, 0.2);
-#endif
-      B.setFromTriplets(B_elements.begin(), B_elements.end());
+#if !defined(BLOCK_SPARSE_GEMM)
+    if (cmdOptionExists(argv, argv + argc, "-mm")) {
+      char *filename = getCmdOption(argv, argv + argc, "-mm");
+      timing = true;
+      initSpMatrixMarket(filename, A, B, C);
+    } else if (cmdOptionExists(argv, argv + argc, "-rmat")) {
+      char *opt = getCmdOption(argv, argv + argc, "-rmat");
+      timing = true;
+      initSpRmat(opt, A, B, C);
+    } else {
+      initSpHardCoded(A, B, C);
     }
+#else
+    if (argc >= 1) {
+      std::string Mstr(getCmdOption(argv, argv + argc, "-M"));
+      int M = parseOption(Mstr, 1200);
+      std::string Nstr(getCmdOption(argv, argv + argc, "-N"));
+      int N = parseOption(Nstr, 1200);
+      std::string Kstr(getCmdOption(argv, argv + argc, "-K"));
+      int K = parseOption(Kstr, 1200);
+      std::string minTsStr(getCmdOption(argv, argv + argc, "-t"));
+      int minTs = parseOption(minTsStr, 32);
+      std::string maxTsStr(getCmdOption(argv, argv + argc, "-T"));
+      int maxTs = parseOption(maxTsStr, 256);
+      std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
+      double avg = parseOption(avgStr, 0.3);
+      std::string seedStr(getCmdOption(argv, argv + argc, "-s"));
+      unsigned int seed = parseOption(seedStr, 0);
+      timing = true;
+      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, C, gflops, seed);
+    } else {
+      initBlSpHardCoded(A, B, C);
+    }
+#endif  // !defined(BLOCK_SPARSE_GEMM)
 
     // flow graph needs to exist on every node
     Edge<> ctl("control");
@@ -653,77 +923,87 @@ int main(int argc, char **argv) {
     //  SpMM a_times_b(world, eA, eB, eC, A, B);
     SpMM<> a_times_b(eA, eB, eC, A, B);
 
-    std::cout << Dot{}(&a, &b) << std::endl;
+    if (!timing) std::cout << Dot{}(&a, &b) << std::endl;
 
     // ready to run!
     auto connected = make_graph_executable(&control);
     assert(connected);
     TTGUNUSED(connected);
 
-    // ready, go! need only 1 kick, so must be done by 1 thread only
-    if (ttg_default_execution_context().rank() == 0) control.start();
-
-    //ttg_execute(ttg_default_execution_context());
-    //ttg_fence(ttg_default_execution_context());
-
-    ///////////////////////////////////////////////////////////////////////////
-    // copy matrix using ttg::Matrix
-    Matrix<blk_t> aflow;
-    aflow << A;
-    SpMatrix<> Acopy(A.rows(), A.cols());  // resizing will be automatic in the future when shape computation is complete .. see Matrix::operator>>
-    auto copy_status = aflow >> Acopy;
-    assert(!has_value(copy_status));
-    aflow.pushall();
-    Control control2(ttg_ctl_edge(ttg_default_execution_context()));
-    {
-      //std::cout << "matrix copy using ttg::Matrix" << std::endl;
-//      if (ttg_default_execution_context().rank() == 0) std::cout << Dot{}(&control2) << std::endl;
-
-      // ready to run!
-      auto connected = make_graph_executable(&control2);
-      assert(connected);
-      TTGUNUSED(connected);
-
+    if (timing) {
+      struct timeval start, end, diff;
+      gettimeofday(&start, NULL);
       // ready, go! need only 1 kick, so must be done by 1 thread only
-      if (ttg_default_execution_context().rank() == 0) control2.start();
-    }
-    //////////////////////////////////////////////////////////////////////////
+      if (ttg_default_execution_context().rank() == 0) control.start();
+      ttg_execute(ttg_default_execution_context());
+      ttg_fence(ttg_default_execution_context());
+      gettimeofday(&end, NULL);
+      timersub(&end, &start, &diff);
+      double tc = diff.tv_sec + (double)diff.tv_usec / 1e6;
+      std::cout << "Time to completion: " << tc << " s, performance " << gflops / tc << " GFlop/s" << std::endl;
+    } else {
+      // ready, go! need only 1 kick, so must be done by 1 thread only
+      if (ttg_default_execution_context().rank() == 0) control.start();
 
-    ttg_execute(ttg_default_execution_context());
-    ttg_fence(ttg_default_execution_context());
+      ///////////////////////////////////////////////////////////////////////////
+      // copy matrix using ttg::Matrix
+      Matrix<blk_t> aflow;
+      aflow << A;
+      SpMatrix<> Acopy(A.rows(), A.cols());  // resizing will be automatic in the future when shape computation is
+      // complete .. see Matrix::operator>>
+      auto copy_status = aflow >> Acopy;
+      assert(!has_value(copy_status));
+      aflow.pushall();
+      Control control2(ttg_ctl_edge(ttg_default_execution_context()));
+      {
+        // std::cout << "matrix copy using ttg::Matrix" << std::endl;
+        //      if (ttg_default_execution_context().rank() == 0) std::cout << Dot{}(&control2) << std::endl;
 
-    // validate C=A*B against the reference output
-    assert(has_value(c_status));
-    if (ttg_default_execution_context().rank() == 0) {
-      SpMatrix<> Cref = A * B;
+        // ready to run!
+        auto connected = make_graph_executable(&control2);
+        assert(connected);
+        TTGUNUSED(connected);
 
-      double norm_2_square, norm_inf;
-      std::tie(norm_2_square, norm_inf) = norms<blk_t>(Cref - C);
-      std::cout << "||Cref - C||_2      = " << std::sqrt(norm_2_square) << std::endl;
-      std::cout << "||Cref - C||_\\infty = " << norm_inf << std::endl;
-      if (norm_inf > 1e-9) {
-        std::cout << "Cref:\n" << Cref << std::endl;
-        std::cout << "C:\n" << C << std::endl;
-        ttg_abort();
+        // ready, go! need only 1 kick, so must be done by 1 thread only
+        if (ttg_default_execution_context().rank() == 0) control2.start();
       }
-    }
+      //////////////////////////////////////////////////////////////////////////
 
-    // validate Acopy=A against the reference output
-    assert(has_value(copy_status));
-    if (ttg_default_execution_context().rank() == 0) {
-      double norm_2_square, norm_inf;
-      std::tie(norm_2_square, norm_inf) = norms<blk_t>(Acopy - A);
-      std::cout << "||Acopy - A||_2      = " << std::sqrt(norm_2_square) << std::endl;
-      std::cout << "||Acopy - A||_\\infty = " << norm_inf << std::endl;
-      if(::ttg::tracing()) {
-        std::cout << "Acopy (" << static_cast<void *>(&Acopy) << "):\n" << Acopy << std::endl;
-        std::cout << "A (" << static_cast<void *>(&A) << "):\n" << A << std::endl;
-      }
-      if (norm_inf != 0) {
-        ttg_abort();
-      }
-    }
+      ttg_execute(ttg_default_execution_context());
+      ttg_fence(ttg_default_execution_context());
 
+      // validate C=A*B against the reference output
+      assert(has_value(c_status));
+      if (ttg_default_execution_context().rank() == 0) {
+        SpMatrix<> Cref = A * B;
+
+        double norm_2_square, norm_inf;
+        std::tie(norm_2_square, norm_inf) = norms<blk_t>(Cref - C);
+        std::cout << "||Cref - C||_2      = " << std::sqrt(norm_2_square) << std::endl;
+        std::cout << "||Cref - C||_\\infty = " << norm_inf << std::endl;
+        if (norm_inf > 1e-9) {
+          std::cout << "Cref:\n" << Cref << std::endl;
+          std::cout << "C:\n" << C << std::endl;
+          ttg_abort();
+        }
+      }
+
+      // validate Acopy=A against the reference output
+      //      assert(has_value(copy_status));
+      //      if (ttg_default_execution_context().rank() == 0) {
+      //        double norm_2_square, norm_inf;
+      //        std::tie(norm_2_square, norm_inf) = norms<blk_t>(Acopy - A);
+      //        std::cout << "||Acopy - A||_2      = " << std::sqrt(norm_2_square) << std::endl;
+      //        std::cout << "||Acopy - A||_\\infty = " << norm_inf << std::endl;
+      //        if (::ttg::tracing()) {
+      //          std::cout << "Acopy (" << static_cast<void *>(&Acopy) << "):\n" << Acopy << std::endl;
+      //          std::cout << "A (" << static_cast<void *>(&A) << "):\n" << A << std::endl;
+      //        }
+      //        if (norm_inf != 0) {
+      //          ttg_abort();
+      //        }
+      //      }
+    }
   }
 
   ttg_finalize();

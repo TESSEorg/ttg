@@ -1,7 +1,5 @@
-#include "../../ttg/util/version.h"
+#include "ttg/util/version.h"
 
 namespace ttg {
-  std::array<int,3> version() {
-    return {0,1,0};
-  }
-}
+  std::array<int, 3> version() { return {0, 1, 0}; }
+}  // namespace ttg

@@ -75,7 +75,7 @@ RUN echo "\e[92mDone! For info on how to use the image refer to $ABSDIRNAME/dock
 
 END
 
-function clean_up {
+clean_up() {
   rm -f $disable_aslr Dockerfile
   exit
 }
