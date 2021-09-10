@@ -286,7 +286,7 @@ namespace ttg {
                      " in ", static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_),
                      " for object @", static_cast<void *>(this));
         }
-        matrix_.insert(key[0], key[1]) = baseT::template get<0>(elem);
+        values_.emplace_back(key[0], key[1], baseT::template get<0>(elem));
         if (ttg::tracing())
           ttg::print("rank =", get_default_world().rank(),
                      "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
@@ -297,10 +297,15 @@ namespace ttg {
       /// \note cannot be called once this is executable
       const std::shared_future<void> &status() const {
         assert(!this->is_executable());
-        if (!completion_status_) {
+        if (!completion_status_) {  // if not done yet, register completion work with the world
           auto promise = std::make_shared<std::promise<void>>();
           completion_status_ = std::make_shared<std::shared_future<void>>(promise->get_future());
           ttg_register_status(this->get_world(), std::move(promise));
+          ttg_register_callback(this->get_world(), [this]() {
+            this->matrix_.setFromTriplets(this->values_.begin(), this->values_.end());
+          });
+        } else {  // if done already, commit the result
+          this->matrix_.setFromTriplets(this->values_.begin(), this->values_.end());
         }
         return *completion_status_.get();
       }
@@ -308,6 +313,7 @@ namespace ttg {
      private:
       std::mutex mtx_;
       SpMatrix<Blk> &matrix_;
+      std::vector<SpMatrixTriplet<Blk>> values_;
       mutable std::shared_ptr<std::shared_future<void>> completion_status_;
     };
 
