@@ -602,7 +602,8 @@ static double parseOption(std::string &option, double default_value) {
 }
 
 #if !defined(BLOCK_SPARSE_GEMM)
-static void initSpMatrixMarket(const char *filename, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
+static void initSpMatrixMarket(const char *filename, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &M, int &N,
+                               int &K) {
   std::vector<int> sizes;
   // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
   if (ttg_default_execution_context().rank() == 0) {
@@ -625,10 +626,13 @@ static void initSpMatrixMarket(const char *filename, SpMatrix<> &A, SpMatrix<> &
     B = A;
   }
   C.resize(A.rows(), B.cols());
+  M = A.rows();
+  N = C.cols();
+  K = A.cols();
 }
 
-static void initSpRmat(const char *opt, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
-  int N, E = -1;
+static void initSpRmat(const char *opt, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &M, int &N, int &K) {
+  int E = -1;
   double a = 0.25, b = 0.25, c = 0.25, d = 0.25;
   size_t nnz = 0;
 
@@ -639,6 +643,8 @@ static void initSpRmat(const char *opt, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<>
   std::string token;
   std::string option = std::string(opt);
   N = parseOption(option, -1);
+  K = N;
+  M = N;
 
   A.resize(N, N);
 
@@ -677,10 +683,10 @@ static void initSpRmat(const char *opt, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<>
   std::cout << "#R-MAT: " << E << " nonzero elements, density: " << (double)nnz / (double)N / (double)N << std::endl;
 }
 
-static void initSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
-  const int n = 2;
-  const int m = 3;
-  const int k = 4;
+static void initSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &m, int &n, int &k) {
+  n = 2;
+  m = 3;
+  k = 4;
 
   std::cout << "#HardCoded A, B, C" << std::endl;
   A.resize(n, k);
@@ -709,10 +715,10 @@ static void initSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
   }
 }
 #else
-static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
-  const int n = 2;
-  const int m = 3;
-  const int k = 4;
+static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &m, int &n, int &k) {
+  n = 2;
+  m = 3;
+  k = 4;
 
   std::cout << "#HardCoded A, B, C" << std::endl;
   A.resize(n, k);
@@ -765,8 +771,6 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
 static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B,
                            double &gflops, double &average_tile_size, double &Adensity, double &Bdensity,
                            unsigned int seed) {
-  A.resize(M, K);
-  B.resize(K, N);
   gflops = 0.0;
 
   if (ttg_default_execution_context().rank() == 0) {
@@ -802,6 +806,9 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
       kTiles.push_back(ts);
     }
 
+    A.resize((int)mTiles.size(), (int)kTiles.size());
+    B.resize((int)kTiles.size(), (int)nTiles.size());
+
     std::uniform_int_distribution<> mDist(0, (int)mTiles.size() - 1);
     std::uniform_int_distribution<> nDist(0, (int)nTiles.size() - 1);
     std::uniform_int_distribution<> kDist(0, (int)kTiles.size() - 1);
@@ -814,16 +821,13 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     while ((double)filling / (double)(M * K) < avgDensity) {
       int mt = mDist(gen);
       int kt = kDist(gen);
-      int m = 0, k = 0;
       if (Afilling.count({mt, kt}) > 0) continue;
       Afilling[{mt, kt}] = true;
       filling += mTiles[mt] * kTiles[kt];
       auto blksize = {mTiles[mt], kTiles[kt]};
-      for (int i = 0; i < mt; i++) m += mTiles[i];
-      for (int i = 0; i < kt; i++) k += kTiles[i];
       avg_nb += mTiles[mt] * kTiles[kt];
       avg_nb_nb++;
-      A_elements.emplace_back(m, k, blk_t(btas::Range(blksize), vDist(gen)));
+      A_elements.emplace_back(mt, kt, blk_t(btas::Range(blksize), vDist(gen)));
     }
     A.setFromTriplets(A_elements.begin(), A_elements.end());
     Adensity = (double)filling / (double)(M * K);
@@ -833,14 +837,11 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     while ((double)filling / (double)(K * N) < avgDensity) {
       int nt = nDist(gen);
       int kt = kDist(gen);
-      int n = 0, k = 0;
       if (Bfilling.count({kt, nt}) > 0) continue;
       Bfilling[{kt, nt}] = true;
       filling += kTiles[kt] * nTiles[nt];
       auto blksize = {kTiles[kt], nTiles[nt]};
-      for (int i = 0; i < nt; i++) n += nTiles[i];
-      for (int i = 0; i < kt; i++) k += kTiles[i];
-      B_elements.emplace_back(k, n, blk_t(btas::Range(blksize), vDist(gen)));
+      B_elements.emplace_back(kt, nt, blk_t(btas::Range(blksize), vDist(gen)));
       avg_nb += kTiles[kt] * nTiles[nt];
       avg_nb_nb++;
     }
@@ -864,14 +865,14 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
 #endif
 
 static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, std::string tiling_type, double gflops, double avg_nb,
-                              double Adensity, double Bdensity) {
-  int M = A.rows();
-  int N = B.cols();
-  int K = A.cols();
-  assert(K == B.rows());
+                              double Adensity, double Bdensity, int M, int N, int K) {
+  int MT = A.rows();
+  int NT = B.cols();
+  int KT = A.cols();
+  assert(KT == B.rows());
 
   SpMatrix<> C;
-  C.resize(M, N);
+  C.resize(MT, NT);
 
   // flow graph needs to exist on every node
   Edge<> ctl("control");
@@ -930,6 +931,7 @@ int main(int argc, char **argv) {
 
     SpMatrix<> A, B, C;
     std::string tiling_type;
+    int M = 0, N = 0, K = 0;
 
     double avg_nb = nan("undefined");
     double Adensity = nan("undefined");
@@ -940,24 +942,24 @@ int main(int argc, char **argv) {
       char *filename = getCmdOption(argv, argv + argc, "-mm");
       tiling_type = filename;
       timing = true;
-      initSpMatrixMarket(filename, A, B, C);
+      initSpMatrixMarket(filename, A, B, C, M, N, K);
     } else if (cmdOptionExists(argv, argv + argc, "-rmat")) {
       char *opt = getCmdOption(argv, argv + argc, "-rmat");
       tiling_type = "RandomSparseMatrix";
       timing = true;
-      initSpRmat(opt, A, B, C);
+      initSpRmat(opt, A, B, C, M, N, K);
     } else {
       tiling_type = "HardCodedSparseMatrix";
-      initSpHardCoded(A, B, C);
+      initSpHardCoded(A, B, C, M, N, K);
     }
 #else
     if (argc >= 1) {
       std::string Mstr(getCmdOption(argv, argv + argc, "-M"));
-      int M = parseOption(Mstr, 1200);
+      M = parseOption(Mstr, 1200);
       std::string Nstr(getCmdOption(argv, argv + argc, "-N"));
-      int N = parseOption(Nstr, 1200);
+      N = parseOption(Nstr, 1200);
       std::string Kstr(getCmdOption(argv, argv + argc, "-K"));
-      int K = parseOption(Kstr, 1200);
+      K = parseOption(Kstr, 1200);
       std::string minTsStr(getCmdOption(argv, argv + argc, "-t"));
       int minTs = parseOption(minTsStr, 32);
       std::string maxTsStr(getCmdOption(argv, argv + argc, "-T"));
@@ -971,7 +973,7 @@ int main(int argc, char **argv) {
       initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, gflops, avg_nb, Adensity, Bdensity, seed);
     } else {
       tiling_type = "HardCodedBlockSparseMatrix";
-      initBlSpHardCoded(A, B, C);
+      initBlSpHardCoded(A, B, C, M, N, K);
     }
 #endif  // !defined(BLOCK_SPARSE_GEMM)
 
@@ -982,7 +984,7 @@ int main(int argc, char **argv) {
       // Start up engine
       ttg_execute(ttg_default_execution_context());
       for (int nrun = 0; nrun < nb_runs; nrun++) {
-        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity);
+        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity, M, N, K);
       }
     } else {
       // flow graph needs to exist on every node
