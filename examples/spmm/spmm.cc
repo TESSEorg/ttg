@@ -914,10 +914,12 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, std::string tiling_t
 #else
   std::string rt("Unkown???");
 #endif
-  std::cout << "TTG-" << rt << " PxQxg=   " << 1 << " " << 1 << " 1 average_NB= " << avg_nb << " M= " << M
-            << " N= " << N << " K= " << K << " Tiling= " << tiling_type << " A_density= " << Adensity
-            << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc << " gflops/s= " << gflops / tc
-            << std::endl;
+  if (ttg_default_execution_context().rank() == 0) {
+    std::cout << "TTG-" << rt << " PxQxg=   " << 1 << " " << 1 << " 1 average_NB= " << avg_nb << " M= " << M
+              << " N= " << N << " K= " << K << " Tiling= " << tiling_type << " A_density= " << Adensity
+              << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
+              << " gflops/s= " << gflops / tc << std::endl;
+  }
 }
 
 int main(int argc, char **argv) {
