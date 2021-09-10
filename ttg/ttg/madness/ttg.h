@@ -148,6 +148,11 @@ namespace ttg_madness {
     world.impl().register_status(status_ptr);
   }
 
+  template <typename Callback>
+  inline void ttg_register_callback(ttg::World world, Callback &&callback) {
+    world.impl().register_callback(std::forward<Callback>(callback));
+  }
+
   inline ttg::Edge<> &ttg_ctl_edge(ttg::World world) { return world.impl().ctl_edge(); }
 
   template <typename T>
