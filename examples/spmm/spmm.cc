@@ -777,102 +777,103 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &
 #if defined(BTAS_IS_USABLE)
 static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B,
                            double &gflops, double &average_tile_size, double &Adensity, double &Bdensity,
-                           unsigned int seed) {
+                           unsigned int seed, int P, int Q) {
   gflops = 0.0;
 
-  if (ttg_default_execution_context().rank() == 0) {
-    int ts;
-    if (seed == 0) {
-      std::random_device rd;
-      seed = rd();
-      std::cerr << "# Block Sparse Random seeded with " << seed << std::endl;
-    }
-    std::mt19937 gen(seed);
+  assert(P * Q == ttg_default_execution_context().size());
+  int p = ttg_default_execution_context().rank() % P;
+  int q = (ttg_default_execution_context().rank() / P) % Q;
 
-    std::uniform_int_distribution<> dist(minTs, maxTs);
-    std::vector<int> mTiles, nTiles, kTiles;
-    std::map<std::tuple<int, int>, bool> Afilling;
-    std::map<std::tuple<int, int>, bool> Bfilling;
-    using triplet_t = Eigen::Triplet<blk_t>;
-    std::vector<triplet_t> A_elements;
-    std::vector<triplet_t> B_elements;
+  int ts;
+  std::mt19937 gen(seed);
 
-    for (int m = 0; m < M; m += ts) {
-      ts = dist(gen);
-      if (ts > M - m) ts = M - m;
-      mTiles.push_back(ts);
-    }
-    for (int n = 0; n < N; n += ts) {
-      ts = dist(gen);
-      if (ts > N - n) ts = N - n;
-      nTiles.push_back(ts);
-    }
-    for (int k = 0; k < K; k += ts) {
-      ts = dist(gen);
-      if (ts > K - k) ts = K - k;
-      kTiles.push_back(ts);
-    }
+  std::uniform_int_distribution<> dist(minTs, maxTs);
+  std::vector<int> mTiles, nTiles, kTiles;
+  std::map<std::tuple<int, int>, bool> Afilling;
+  std::map<std::tuple<int, int>, bool> Bfilling;
+  using triplet_t = Eigen::Triplet<blk_t>;
+  std::vector<triplet_t> A_elements;
+  std::vector<triplet_t> B_elements;
 
-    A.resize((int)mTiles.size(), (int)kTiles.size());
-    B.resize((int)kTiles.size(), (int)nTiles.size());
+  for (int m = 0; m < M; m += ts) {
+    ts = dist(gen);
+    if (ts > M - m) ts = M - m;
+    mTiles.push_back(ts);
+  }
+  for (int n = 0; n < N; n += ts) {
+    ts = dist(gen);
+    if (ts > N - n) ts = N - n;
+    nTiles.push_back(ts);
+  }
+  for (int k = 0; k < K; k += ts) {
+    ts = dist(gen);
+    if (ts > K - k) ts = K - k;
+    kTiles.push_back(ts);
+  }
 
-    std::uniform_int_distribution<> mDist(0, (int)mTiles.size() - 1);
-    std::uniform_int_distribution<> nDist(0, (int)nTiles.size() - 1);
-    std::uniform_int_distribution<> kDist(0, (int)kTiles.size() - 1);
-    std::uniform_real_distribution<> vDist(-1e3, 1e3);
+  A.resize((int)mTiles.size(), (int)kTiles.size());
+  B.resize((int)kTiles.size(), (int)nTiles.size());
 
-    size_t filling = 0;
-    size_t avg_nb = 0;
-    int avg_nb_nb = 0;
-    Afilling.clear();
-    while ((double)filling / (double)(M * K) < avgDensity) {
-      int mt = mDist(gen);
-      int kt = kDist(gen);
-      if (Afilling.count({mt, kt}) > 0) continue;
-      Afilling[{mt, kt}] = true;
-      filling += mTiles[mt] * kTiles[kt];
-      auto blksize = {mTiles[mt], kTiles[kt]};
-      avg_nb += mTiles[mt] * kTiles[kt];
-      avg_nb_nb++;
-      A_elements.emplace_back(mt, kt, blk_t(btas::Range(blksize), vDist(gen)));
-    }
-    A.setFromTriplets(A_elements.begin(), A_elements.end());
-    Adensity = (double)filling / (double)(M * K);
+  std::uniform_int_distribution<> mDist(0, (int)mTiles.size() - 1);
+  std::uniform_int_distribution<> nDist(0, (int)nTiles.size() - 1);
+  std::uniform_int_distribution<> kDist(0, (int)kTiles.size() - 1);
+  std::uniform_real_distribution<> vDist(-1e3, 1e3);
 
-    filling = 0;
-    Bfilling.clear();
-    while ((double)filling / (double)(K * N) < avgDensity) {
-      int nt = nDist(gen);
-      int kt = kDist(gen);
-      if (Bfilling.count({kt, nt}) > 0) continue;
-      Bfilling[{kt, nt}] = true;
-      filling += kTiles[kt] * nTiles[nt];
-      auto blksize = {kTiles[kt], nTiles[nt]};
-      B_elements.emplace_back(kt, nt, blk_t(btas::Range(blksize), vDist(gen)));
-      avg_nb += kTiles[kt] * nTiles[nt];
-      avg_nb_nb++;
-    }
-    B.setFromTriplets(B_elements.begin(), B_elements.end());
-    Bdensity = (double)filling / (double)(K * N);
+  size_t filling = 0;
+  size_t avg_nb = 0;
+  int avg_nb_nb = 0;
+  Afilling.clear();
+  while ((double)filling / (double)(M * K) < avgDensity) {
+    int mt = mDist(gen);
+    int kt = kDist(gen);
+    if (Afilling.count({mt, kt}) > 0) continue;
+    Afilling[{mt, kt}] = true;
+    filling += mTiles[mt] * kTiles[kt];
+    auto blksize = {mTiles[mt], kTiles[kt]};
+    avg_nb += mTiles[mt] * kTiles[kt];
+    avg_nb_nb++;
+    if ((mt % P) != p) continue;
+    if ((kt % Q) != q) continue;
+    A_elements.emplace_back(mt, kt, blk_t(btas::Range(blksize), vDist(gen)));
+  }
+  A.setFromTriplets(A_elements.begin(), A_elements.end());
+  Adensity = (double)filling / (double)(M * K);
 
-    for (int mt = 0; mt < mTiles.size(); mt++) {
-      for (int nt = 0; nt < nTiles.size(); nt++) {
-        for (int kt = 0; kt < kTiles.size(); kt++) {
-          if (!Afilling[{mt, kt}] || !Bfilling[{kt, nt}]) continue;
-          gflops += 2.0 * mTiles[mt] * nTiles[nt] * kTiles[kt] / 1e9;
-        }
+  filling = 0;
+  Bfilling.clear();
+  while ((double)filling / (double)(K * N) < avgDensity) {
+    int nt = nDist(gen);
+    int kt = kDist(gen);
+    if (Bfilling.count({kt, nt}) > 0) continue;
+    Bfilling[{kt, nt}] = true;
+    filling += kTiles[kt] * nTiles[nt];
+    avg_nb += kTiles[kt] * nTiles[nt];
+    avg_nb_nb++;
+    auto blksize = {kTiles[kt], nTiles[nt]};
+    if ((kt % P) != p) continue;
+    if ((nt % Q) != q) continue;
+    B_elements.emplace_back(kt, nt, blk_t(btas::Range(blksize), vDist(gen)));
+  }
+  B.setFromTriplets(B_elements.begin(), B_elements.end());
+  Bdensity = (double)filling / (double)(K * N);
+
+  for (int mt = 0; mt < mTiles.size(); mt++) {
+    for (int nt = 0; nt < nTiles.size(); nt++) {
+      for (int kt = 0; kt < kTiles.size(); kt++) {
+        if (!Afilling[{mt, kt}] || !Bfilling[{kt, nt}]) continue;
+        gflops += 2.0 * mTiles[mt] * nTiles[nt] * kTiles[kt] / 1e9;
       }
     }
-
-    average_tile_size = (double)avg_nb / avg_nb_nb;
   }
+
+  average_tile_size = (double)avg_nb / avg_nb_nb;
 }
 #endif
 
 #endif
 
 static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, std::string tiling_type, double gflops, double avg_nb,
-                              double Adensity, double Bdensity, int M, int N, int K) {
+                              double Adensity, double Bdensity, int M, int N, int K, int P, int Q) {
   int MT = A.rows();
   int NT = B.cols();
   int KT = A.cols();
@@ -915,7 +916,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, std::string tiling_t
   std::string rt("Unkown???");
 #endif
   if (ttg_default_execution_context().rank() == 0) {
-    std::cout << "TTG-" << rt << " PxQxg=   " << 1 << " " << 1 << " 1 average_NB= " << avg_nb << " M= " << M
+    std::cout << "TTG-" << rt << " PxQxg=   " << P << " " << Q << " 1 average_NB= " << avg_nb << " M= " << M
               << " N= " << N << " K= " << K << " Tiling= " << tiling_type << " A_density= " << Adensity
               << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
               << " gflops/s= " << gflops / tc << std::endl;
@@ -926,12 +927,30 @@ int main(int argc, char **argv) {
   bool timing = false;
   double gflops = 0.0;
 
+  int cores = -1;
+  std::string nbCoreStr(getCmdOption(argv, argv + argc, "-c"));
+  cores = parseOption(nbCoreStr, cores);
+
   if (int dashdash = cmdOptionIndex(argv, argv + argc, "--") > -1) {
-    ttg_initialize(argc - dashdash, argv + dashdash, -1);
+    ttg_initialize(argc - dashdash, argv + dashdash, cores);
   } else {
-    ttg_initialize(1, argv, -1);
+    ttg_initialize(1, argv, cores);
   }
 
+  int mpi_size = ttg_default_execution_context().size();
+  int mpi_rank = ttg_default_execution_context().rank();
+  int best_pq = mpi_size;
+  int P, Q;
+  for (int p = 1; p <= (int)sqrt(mpi_size); p++) {
+    if ((mpi_size % p) == 0) {
+      int q = mpi_size / p;
+      if (abs(p - q) < best_pq) {
+        best_pq = abs(p - q);
+        P = p;
+        Q = q;
+      }
+    }
+  }
   // ttg::launch_lldb(ttg_default_execution_context().rank(), argv[0]);
 
   {
@@ -945,6 +964,33 @@ int main(int argc, char **argv) {
     double avg_nb = nan("undefined");
     double Adensity = nan("undefined");
     double Bdensity = nan("undefined");
+
+    std::string PStr(getCmdOption(argv, argv + argc, "-P"));
+    P = parseOption(PStr, P);
+    std::string QStr(getCmdOption(argv, argv + argc, "-Q"));
+    Q = parseOption(QStr, Q);
+
+    if (P * Q != mpi_size) {
+      if ((mpi_size % P) == 0)
+        Q = mpi_size / P;
+      else if ((mpi_size % Q) == 0)
+        P = mpi_size / Q;
+      else {
+        if (0 == mpi_rank) {
+          std::cerr << P << "x" << Q << " is not a valid process grid -- bailing out" << std::endl;
+          MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+        }
+      }
+    }
+
+    std::string seedStr(getCmdOption(argv, argv + argc, "-s"));
+    unsigned int seed = parseOption(seedStr, 0);
+    if (seed == 0) {
+      std::random_device rd;
+      seed = rd();
+      if (0 == ttg_default_execution_context().rank()) std::cerr << "#Random seeded with " << seed << std::endl;
+    }
+    ttg_broadcast(ttg_default_execution_context(), seed, 0);
 
 #if !defined(BLOCK_SPARSE_GEMM)
     if (cmdOptionExists(argv, argv + argc, "-mm")) {
@@ -975,11 +1021,9 @@ int main(int argc, char **argv) {
       int maxTs = parseOption(maxTsStr, 256);
       std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
       double avg = parseOption(avgStr, 0.3);
-      std::string seedStr(getCmdOption(argv, argv + argc, "-s"));
-      unsigned int seed = parseOption(seedStr, 0);
       timing = true;
       tiling_type = "RandomIrregularTiling";
-      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, gflops, avg_nb, Adensity, Bdensity, seed);
+      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, gflops, avg_nb, Adensity, Bdensity, seed, P, Q);
     } else {
       tiling_type = "HardCodedBlockSparseMatrix";
       initBlSpHardCoded(A, B, C, M, N, K);
@@ -993,7 +1037,7 @@ int main(int argc, char **argv) {
       // Start up engine
       ttg_execute(ttg_default_execution_context());
       for (int nrun = 0; nrun < nb_runs; nrun++) {
-        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity, M, N, K);
+        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity, M, N, K, P, Q);
       }
     } else {
       // flow graph needs to exist on every node
