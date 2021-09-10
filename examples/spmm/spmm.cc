@@ -264,7 +264,7 @@ class SpMM {
     using baseT = Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, Blk>;
 
     BcastA(Edge<Key<2>, Blk> &a, Edge<Key<3>, Blk> &a_ijk, const std::vector<std::vector<long>> &b_rowidx_to_colidx)
-        : baseT(edges(a), edges(a_ijk), "SpMM::bcast_a", {"a_ik"}, {"a_ijk"})
+        : baseT(edges(a), edges(a_ijk), "SpMM::bcast_a", {"a_ik"}, {"a_ijk"}, [](const Key<2> &key){ return 0; })
         , b_rowidx_to_colidx_(b_rowidx_to_colidx) {}
 
     void op(const Key<2> &key, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, Blk>> &a_ijk) {
@@ -290,7 +290,7 @@ class SpMM {
     using baseT = Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, Blk>;
 
     BcastB(Edge<Key<2>, Blk> &b, Edge<Key<3>, Blk> &b_ijk, const std::vector<std::vector<long>> &a_colidx_to_rowidx)
-        : baseT(edges(b), edges(b_ijk), "SpMM::bcast_b", {"b_kj"}, {"b_ijk"})
+        : baseT(edges(b), edges(b_ijk), "SpMM::bcast_b", {"b_kj"}, {"b_ijk"}, [](const Key<2> &key){ return 0; })
         , a_colidx_to_rowidx_(a_colidx_to_rowidx) {}
 
     void op(const Key<2> &key, typename baseT::input_values_tuple_type &&b_kj, std::tuple<Out<Key<3>, Blk>> &b_ijk) {
@@ -320,7 +320,8 @@ class SpMM {
                 const std::vector<std::vector<long>> &a_rowidx_to_colidx,
                 const std::vector<std::vector<long>> &b_colidx_to_rowidx)
         : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM::MultiplyAdd", {"a_ijk", "b_ijk", "c_ijk"},
-                {"c_ij", "c_ijk"})
+                {"c_ij", "c_ijk"},
+                [=](const Key<3> &key){ return Key<2>({key[0], key[1]}).hash() % get_default_world().size(); })
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
       this->set_priomap([=](const Key<3> &key) { return this->prio(key); });
