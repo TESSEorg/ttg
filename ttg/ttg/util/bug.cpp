@@ -242,11 +242,11 @@ void Debugger::debug(const char *reason) {
       if (wait_for_debugger_) {
         std::string make_ready_message;
         if (cmd_.find(" gdb ") != std::string::npos || cmd_.find(" lldb ") != std::string::npos) {
-          make_ready_message = " configure debugging session (set breakpoints/watchpoints, etc.) then type 'c' to continue running";
+          make_ready_message =
+              " configure debugging session (set breakpoints/watchpoints, etc.) then type 'c' to continue running";
         }
 
-        std::cout << prefix_
-                  << ": waiting for the user ..." << make_ready_message << endl;
+        std::cout << prefix_ << ": waiting for the user ..." << make_ready_message << endl;
         while (!debugger_ready_)
           ;
       }
@@ -338,20 +338,22 @@ void Debugger::__traceback(const std::string &prefix, const char *reason) {
 
 /////////////////////////////////////////////////////////////////////////////
 
-namespace mpqc {
+namespace ttg {
+  void launch_debugger(int rank, const char *exec_name, const char *cmd) {
+    using mpqc::Debugger;
+    auto debugger = std::make_shared<Debugger>();
+    Debugger::set_default_debugger(debugger);
+    debugger->set_exec(exec_name);
+    debugger->set_prefix(rank);
+    debugger->set_cmd("lldb_xterm");
+    debugger->debug("start");
 
-  void launch_gdb_xterm() {
-    auto debugger = std::make_shared<mpqc::Debugger>();
-    debugger->debug("Starting gdb ...");
+    //  initialize_watchpoints();
   }
 
-  void launch_lldb_xterm() {
-    auto debugger = std::make_shared<mpqc::Debugger>();
-    debugger->set_cmd("xterm -title \"$(PREFIX)$(EXEC)\" -e lldb -p $(PID) &");
-    debugger->debug("Starting lldb ...");
-  }
-
-}  // namespace mpqc
+  void launch_lldb(int rank, const char *exec_name) { launch_debugger(rank, exec_name, "lldb_xterm"); }
+  void launch_gdb(int rank, const char *exec_name) { launch_debugger(rank, exec_name, "gdb_xterm"); }
+}  // namespace ttg
 
 /////////////////////////////////////////////////////////////////////////////
 // Local Variables:

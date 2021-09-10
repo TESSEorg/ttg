@@ -11,6 +11,7 @@
 #include <btas/btas.h>
 #include <btas/optimize/contract.h>
 #include <btas/serialization.h>
+#include <btas/util/mohndle.h>
 #else
 #warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
 #endif
@@ -30,8 +31,10 @@ using namespace ttg;
 #include "ttg/serialization.h"
 #include "ttg/util/future.h"
 
+#include "ttg/util/bug.h"
+
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
-using blk_t = btas::Tensor<double>;
+using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
 
 #if defined(TTG_USE_PARSEC)
 namespace ttg {
@@ -39,26 +42,31 @@ namespace ttg {
   struct SplitMetadataDescriptor<blk_t> {
     // TODO: this is a quick and dirty approach.
     //   - blk_t could have any number of dimensions, this code only works for 2 dim blocks
-    //   - we use Blk(0) to send a control flow in some tasks below, these blocks have only
+    //   - we use Blk{} to send a control flow in some tasks below, these blocks have only
     //     1 dimension (of size 0), to code this, we set the second dimension to 0 in our
     //     quick and dirty linearization, then have a case when we create the object
-    //   - when we create the objet with the metadata, we use a constructor that initializes
+    //   - when we create the object with the metadata, we use a constructor that initializes
     //     the data to 0, which is useless: the data could be left uninitialized
     auto get_metadata(const blk_t &b) {
-      std::pair<int, int> dim;
-      std::get<0>(dim) = b.range().extent(0);
-      if (b.range().extent().size() == 2)
+      std::pair<int, int> dim{0, 0};
+      if (!b.empty()) {
+        assert(b.range().extent().size() == 2);
+        std::get<0>(dim) = b.range().extent(0);
         std::get<1>(dim) = b.range().extent(1);
-      else
-        std::get<1>(dim) = 0;
+      }
       return dim;
     }
-    auto get_data(blk_t &b) { return std::array<iovec, 1>({b.size() * sizeof(double), b.data()}); }
-    auto create_from_metadata(const std::pair<int, int> &meta) {
-      if (0 == std::get<1>(meta))
-        return blk_t(btas::Range(std::get<0>(meta)), 0.0);
+    auto get_data(blk_t &b) {
+      if (!b.empty())
+        return boost::container::small_vector<iovec, 1>(1, iovec{b.size() * sizeof(double), b.data()});
       else
+        return boost::container::small_vector<iovec, 1>{};
+    }
+    auto create_from_metadata(const std::pair<int, int> &meta) {
+      if (meta != std::pair{0, 0})
         return blk_t(btas::Range(std::get<0>(meta), std::get<1>(meta)), 0.0);
+      else
+        return blk_t{};
     }
   };
 }  // namespace ttg
@@ -67,9 +75,14 @@ namespace ttg {
 // declare btas::Tensor serializable by Boost
 #include "ttg/serialization/backends/boost.h"
 namespace ttg::detail {
+  // BTAS defines all of its Boost serializers in boost::serialization namespace ... as explained in
+  // ttg/serialization/boost.h such functions are not detectable via SFINAE, so must explicitly define serialization
+  // traits here
   template <typename Archive>
   inline static constexpr bool is_boost_serializable_v<Archive, blk_t> = is_boost_archive_v<Archive>;
-}
+  template <typename Archive>
+  inline static constexpr bool is_boost_serializable_v<Archive, const blk_t> = is_boost_archive_v<Archive>;
+}  // namespace ttg::detail
 
 #else
 using blk_t = double;
@@ -333,8 +346,7 @@ class SpMM {
               std::tie(k, have_k) = compute_first_k(i, j);
               if (have_k) {
                 if (tracing()) ttg::print("Initializing C[", i, "][", j, "] to zero");
-                this->template in<2>()->send(Key<3>({i, j, k}), Blk(0));
-                // this->set_arg<2>(Key<3>({i,j,k}), Blk(0));
+                this->template in<2>()->send(Key<3>({i, j, k}), Blk{});
               } else {
                 if (tracing()) ttg::print("C[", i, "][", j, "] is empty");
               }
@@ -910,15 +922,7 @@ int main(int argc, char **argv) {
     ttg_initialize(1, argv, -1);
   }
 
-  //  using mpqc::Debugger;
-  //  auto debugger = std::make_shared<Debugger>();
-  //  Debugger::set_default_debugger(debugger);
-  //  debugger->set_exec(argv[0]);
-  //  debugger->set_prefix(ttg_default_execution_context().rank());
-  //  debugger->set_cmd("lldb_xterm");
-  //  debugger->debug("start");
-  //
-  //  initialize_watchpoints();
+  // ttg::launch_lldb(ttg_default_execution_context().rank(), argv[0]);
 
   {
     // ttg::trace_on();

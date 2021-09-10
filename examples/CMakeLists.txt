@@ -10,8 +10,8 @@ if (TARGET eigen3)
     add_ttg_executable(spmm spmm/spmm.cc LINK_LIBRARIES eigen3)
     # block-sparse needs BTAS
     if (TARGET BTAS::BTAS)
-        # MADworld used for MADNESS serialization
-        add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES eigen3 BTAS::BTAS Boost::boost COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1)
+        # since only need to use matrices, limit BTAS_TARGET_MAX_INDEX_RANK to 2
+        add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES eigen3 BTAS Boost::boost COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2)
     endif (TARGET BTAS::BTAS)
 endif(TARGET eigen3)
 

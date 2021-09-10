@@ -349,12 +349,15 @@ namespace mpqc {
     void resolve_cmd_alias();
   };
 
-  /// Use this to launch GNU debugger in xterm
-  void launch_gdb_xterm();
-  /// Use this to launch LLVM debugger in xterm
-  void launch_lldb_xterm();
-
 }  // namespace mpqc
+
+namespace ttg {
+  void launch_debugger(int rank, const char *exec_name, const char *cmd);
+
+  void launch_lldb(int rank = 0, const char *exec_name = "");
+  void launch_gdb(int rank = 0, const char *exec_name = "");
+
+}  // namespace ttg
 
 #endif  // MPQC4_SRC_MPQC_UTIL_MISC_BUG_H_
 

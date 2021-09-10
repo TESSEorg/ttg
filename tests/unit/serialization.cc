@@ -11,6 +11,23 @@
 #include <boost/iostreams/stream.hpp>
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
+#ifdef TTG_HAS_BTAS
+#include <btas/serialization.h>
+#include <btas/tensor.h>
+#include <btas/util/mohndle.h>
+using tensor_t =
+    btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
+namespace ttg::detail {
+  // BTAS defines all of its Boost serializers in boost::serialization namespace ... as explained in
+  // ttg/serialization/boost.h such functions are not detectable via SFINAE, so must explicitly define serialization
+  // traits here
+  template <typename Archive>
+  inline static constexpr bool is_boost_serializable_v<Archive, tensor_t> = is_boost_archive_v<Archive>;
+  template <typename Archive>
+  inline static constexpr bool is_boost_serializable_v<Archive, const tensor_t> = is_boost_archive_v<Archive>;
+}  // namespace ttg::detail
+#endif
+
 class POD {
   int value;
 
@@ -19,6 +36,8 @@ class POD {
   POD(int value) : value(value) {}
 
   int get() const { return value; }
+
+  bool operator==(const POD& other) const { return value == other.value; }
 };
 static_assert(std::is_trivially_copyable_v<POD>);
 
@@ -31,6 +50,8 @@ static_assert(!cereal::traits::is_output_serializable<std::array<POD, 3>, cereal
 #endif  // TTG_SERIALIZATION_SUPPORTS_CEREAL
 
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<POD>);
+static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, POD>);
+static_assert(ttg::detail::has_freestanding_boost_serialize_with_version_v<POD, boost::archive::binary_oarchive>);
 static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<POD>);
 static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<POD>);
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<std::array<POD, 3>>);
@@ -292,9 +313,9 @@ namespace intrusive::asymmetric::b {
 }  // namespace intrusive::asymmetric::b
 
 // turns off saving class info, including version
-BOOST_CLASS_IMPLEMENTATION(intrusive::asymmetric::b::NonPOD, boost::serialization::object_serializable)
+BOOST_CLASS_IMPLEMENTATION(::intrusive::asymmetric::b::NonPOD, boost::serialization::object_serializable)
 // turns off tracking
-BOOST_CLASS_TRACKING(intrusive::asymmetric::b::NonPOD, boost::serialization::track_never)
+BOOST_CLASS_TRACKING(::intrusive::asymmetric::b::NonPOD, boost::serialization::track_never)
 
 #if 0  // uncomment to debug internals of serialization dispatch in boost.ser (see oserializer.hpp)
 template <typename Archive, typename T>
@@ -352,7 +373,8 @@ namespace nonintrusive::symmetric::m {
     NonPOD(int value) : value(value) {}
     NonPOD(const NonPOD& other) : value(other.value) {}
 
-    int get() const { return value; }
+    // N.B. MUST provide ref for iovec serialization
+    const int& get() const { return value; }
   };
   static_assert(!std::is_trivially_copyable_v<NonPOD>);
 
@@ -375,7 +397,7 @@ namespace nonintrusive::asymmetric::m {
     NonPOD(int value) : value(value) {}
     NonPOD(const NonPOD& other) : value(other.value) {}
 
-    int get() const { return value; }
+    const int& get() const { return value; }
     int& get() { return value; }
   };
   static_assert(!std::is_trivially_copyable_v<NonPOD>);
@@ -403,6 +425,7 @@ namespace freestanding::symmetric::bc_v {
     NonPOD(int value) : value(value) {}
     NonPOD(const NonPOD& other) : value(other.value) {}
 
+    // N.B. MUST provide ref for iovec serialization
     int& get_value() { return value; }
     const int& get_value() const { return value; }
 
@@ -564,6 +587,13 @@ TEST_CASE("MADNESS Serialization", "[serialization]") {
   test(std::array{POD(55), POD(66), POD(77)});
   POD b[4] = {POD(1), POD(2), POD(3), POD(4)};
   test(b);
+
+#ifdef TTG_HAS_BTAS
+  {
+    tensor_t t(2, 3, 4);
+    test(t);
+  }
+#endif
 
   static_assert(!ttg::detail::is_madness_input_serializable_v<madness::archive::BufferInputArchive, NonPOD>);
   static_assert(!ttg::detail::is_madness_output_serializable_v<madness::archive::BufferOutputArchive, NonPOD>);
@@ -734,6 +764,40 @@ TEST_CASE("Boost Serialization", "[serialization]") {
   test(std::make_tuple(1, 2, 3));
   test(intrusive::symmetric::bc_v::NonPOD{17});
   test(freestanding::symmetric::bc_v::NonPOD{18});
+
+  // serialize pointers of various kinds
+  auto test_ptr = [&](const auto& t) {
+    using T = std::remove_reference_t<decltype(t)>;
+    const auto* t_ptr = new T(t);
+
+    constexpr std::size_t buffer_size = 4096;
+    char buffer[buffer_size];
+    boost::iostreams::basic_array_sink<char> oabuf(buffer, buffer_size);
+    boost::iostreams::stream<boost::iostreams::basic_array_sink<char>> sink(oabuf);
+    boost::archive::binary_oarchive oa(sink);
+    oa << t_ptr;
+
+    boost::iostreams::basic_array_source<char> iabuf(buffer, buffer_size);
+    boost::iostreams::stream<boost::iostreams::basic_array_source<char>> source(iabuf);
+    boost::archive::binary_iarchive ia(source);
+    std::remove_cv_t<std::remove_reference_t<decltype(t_ptr)>> t_ptr_copy;
+    ia >> t_ptr_copy;
+
+    CHECK(t_ptr != t_ptr_copy);
+    CHECK(*t_ptr == *t_ptr_copy);
+
+    delete t_ptr;
+  };
+  // test_ptr(POD(33));  // N.B. POD is not boost serializable
+  test_ptr(intrusive::symmetric::bc_v::NonPOD{17});
+  test_ptr(freestanding::symmetric::bc_v::NonPOD{18});
+
+#ifdef TTG_HAS_BTAS
+  {
+    tensor_t t(2, 3, 4);
+    test(t);
+  }
+#endif
 }
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
