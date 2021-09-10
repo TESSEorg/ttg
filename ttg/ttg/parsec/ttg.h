@@ -1018,7 +1018,7 @@ namespace ttg_parsec {
       parsec_ttg_caller = &dummy->parsec_task;
 
       /* iterate over the keys and have them use the copy we made */
-      for (auto key : keylist) {
+      for (auto&& key : keylist) {
         set_arg<i, keyT, valueT>(key, *reinterpret_cast<decay_valueT*>(copy->device_private));
       }
 
@@ -1147,13 +1147,13 @@ namespace ttg_parsec {
           // case 2
         } else if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_refs_tuple_type> &&
                              std::is_void_v<valueT>) {
-          for (auto key : keylist) {
+          for (auto&& key : keylist) {
             set_arg<i, keyT, ttg::Void>(key, ttg::Void{});
           }
           // case 3
         } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_refs_tuple_type> &&
                              std::is_void_v<valueT>) {
-          for (auto key : keylist) {
+          for (auto&& key : keylist) {
             set_arg<keyT>(key);
           }
         }
