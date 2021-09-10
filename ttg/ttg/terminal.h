@@ -111,7 +111,7 @@ namespace ttg {
       if (broadcast_callback) {
         broadcast_callback(ttg::span(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), value);
       } else {
-        for (auto key : keylist) send(key, value);
+        for (auto&& key : keylist) send(key, value);
       }
     }
 
@@ -123,7 +123,7 @@ namespace ttg {
         broadcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), v);
       } else {
         const Value& vref = value;
-        for (auto key : keylist) send(key, vref);
+        for (auto&& key : keylist) send(key, vref);
       }
     }
 
@@ -134,7 +134,7 @@ namespace ttg {
         broadcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), *value_ptr);
       } else {
         const Value& vref = *value_ptr;
-        for (auto key : keylist) send(key, vref);
+        for (auto&& key : keylist) send(key, vref);
       }
     }
 
