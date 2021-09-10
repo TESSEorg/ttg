@@ -543,7 +543,7 @@ std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
 #include "../ttg_matrix.h"
 
 char *getCmdOption(char **begin, char **end, const std::string &option) {
-  static char *empty = "";
+  static char *empty = (char *)"";
   char **itr = std::find(begin, end, option);
   if (itr != end && ++itr != end) return *itr;
   return empty;
@@ -751,14 +751,13 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C) {
 
 #if defined(BTAS_IS_USABLE)
 static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B,
-                           SpMatrix<> &C, double &gflops, unsigned int seed) {
+                           double &gflops, double &average_tile_size, double &Adensity, double &Bdensity,
+                           unsigned int seed) {
   A.resize(M, K);
   B.resize(K, N);
-  C.resize(M, N);
   gflops = 0.0;
 
   if (ttg_default_execution_context().rank() == 0) {
-    float density = 0.0;
     int ts;
     if (seed == 0) {
       std::random_device rd;
@@ -791,43 +790,50 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
       kTiles.push_back(ts);
     }
 
-    std::uniform_int_distribution<> mDist(0, mTiles.size() - 1);
-    std::uniform_int_distribution<> nDist(0, nTiles.size() - 1);
-    std::uniform_int_distribution<> kDist(0, kTiles.size() - 1);
+    std::uniform_int_distribution<> mDist(0, (int)mTiles.size() - 1);
+    std::uniform_int_distribution<> nDist(0, (int)nTiles.size() - 1);
+    std::uniform_int_distribution<> kDist(0, (int)kTiles.size() - 1);
+    std::uniform_real_distribution<> vDist(-1e3, 1e3);
 
-    density = 0.0;
+    size_t filling = 0;
+    size_t avg_nb = 0;
+    int avg_nb_nb = 0;
     Afilling.clear();
-    while (density < avgDensity) {
+    while ((double)filling / (double)(M * K) < avgDensity) {
       int mt = mDist(gen);
       int kt = kDist(gen);
       int m = 0, k = 0;
       if (Afilling.count({mt, kt}) > 0) continue;
       Afilling[{mt, kt}] = true;
-      density += (float)(mTiles[mt] * kTiles[kt]) / (float)(M * K);
+      filling += mTiles[mt] * kTiles[kt];
       auto blksize = {mTiles[mt], kTiles[kt]};
       for (int i = 0; i < mt; i++) m += mTiles[i];
       for (int i = 0; i < kt; i++) k += kTiles[i];
-      A_elements.emplace_back(m, k, blk_t(btas::Range(blksize), (float)std::rand() / (float)RAND_MAX - 0.5));
+      avg_nb += mTiles[mt] * kTiles[kt];
+      avg_nb_nb++;
+      A_elements.emplace_back(m, k, blk_t(btas::Range(blksize), vDist(gen)));
     }
     A.setFromTriplets(A_elements.begin(), A_elements.end());
-    std::cout << "#RandomBlockSparse-matrixT: A = " << M << " x " << K << " minTs " << minTs << " maxTs " << maxTs
-              << " density " << density << std::endl;
+    Adensity = (double)filling / (double)(M * K);
 
-    density = 0.0;
+    filling = 0;
     Bfilling.clear();
-    while (density < avgDensity) {
+    while ((double)filling / (double)(K * N) < avgDensity) {
       int nt = nDist(gen);
       int kt = kDist(gen);
       int n = 0, k = 0;
       if (Bfilling.count({kt, nt}) > 0) continue;
       Bfilling[{kt, nt}] = true;
-      density += (float)(kTiles[kt] * nTiles[nt]) / (float)(K * N);
+      filling += kTiles[kt] * nTiles[nt];
       auto blksize = {kTiles[kt], nTiles[nt]};
       for (int i = 0; i < nt; i++) n += nTiles[i];
       for (int i = 0; i < kt; i++) k += kTiles[i];
-      B_elements.emplace_back(k, n, blk_t(btas::Range(blksize), (float)std::rand() / (float)RAND_MAX - 0.5));
+      B_elements.emplace_back(k, n, blk_t(btas::Range(blksize), vDist(gen)));
+      avg_nb += kTiles[kt] * nTiles[nt];
+      avg_nb_nb++;
     }
     B.setFromTriplets(B_elements.begin(), B_elements.end());
+    Bdensity = (double)filling / (double)(K * N);
 
     for (int mt = 0; mt < mTiles.size(); mt++) {
       for (int nt = 0; nt < nTiles.size(); nt++) {
@@ -838,13 +844,61 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
       }
     }
 
-    std::cout << "#RandomBlockSparse-matrixT: B = " << K << " x " << N << " minTs " << minTs << " maxTs " << maxTs
-              << " density " << density * 100 << " %, work " << gflops << " GFlops" << std::endl;
+    average_tile_size = (double)avg_nb / avg_nb_nb;
   }
 }
 #endif
 
 #endif
+
+static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, std::string tiling_type, double gflops, double avg_nb,
+                              double Adensity, double Bdensity) {
+  int M = A.rows();
+  int N = B.cols();
+  int K = A.cols();
+  assert(K == B.rows());
+
+  SpMatrix<> C;
+  C.resize(M, N);
+
+  // flow graph needs to exist on every node
+  Edge<> ctl("control");
+  Control control(ctl);
+  Edge<Key<2>, blk_t> eA, eB, eC;
+  Read_SpMatrix<> a("A", A, ctl, eA);
+  Read_SpMatrix<> b("B", B, ctl, eB);
+  Write_SpMatrix<> c(C, eC);
+  auto c_status = c.status();
+  assert(!has_value(c_status));
+  //  SpMM a_times_b(world, eA, eB, eC, A, B);
+  SpMM<> a_times_b(eA, eB, eC, A, B);
+
+  auto connected = make_graph_executable(&control);
+  assert(connected);
+  TTGUNUSED(connected);
+
+  struct timeval start {
+    0
+  }, end{0}, diff{0};
+  gettimeofday(&start, nullptr);
+  // ready, go! need only 1 kick, so must be done by 1 thread only
+  if (ttg_default_execution_context().rank() == 0) control.start();
+  ttg_fence(ttg_default_execution_context());
+  gettimeofday(&end, nullptr);
+  timersub(&end, &start, &diff);
+  double tc = (double)diff.tv_sec + (double)diff.tv_usec / 1e6;
+#if defined(TTG_USE_MADNESS)
+  std::string rt("MAD");
+#elif defined(TTG_USE_PARSEC)
+  std::string rt("PARSEC");
+#else
+  std::string rt("Unkown???");
+#endif
+  std::cout << "TTG-" << rt << " PxQxg=   " << 1 << " " << 1 << " 1 average_NB= " << avg_nb << " M= " << M
+            << " N= " << N << " K= " << K << " Tiling= " << tiling_type << " A_density= " << Adensity
+            << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc << " gflops/s= " << gflops / tc
+            << std::endl;
+}
 
 int main(int argc, char **argv) {
   bool timing = false;
@@ -871,17 +925,25 @@ int main(int argc, char **argv) {
     // OpBase::set_trace_all(true);
 
     SpMatrix<> A, B, C;
+    std::string tiling_type;
+
+    double avg_nb = nan("undefined");
+    double Adensity = nan("undefined");
+    double Bdensity = nan("undefined");
 
 #if !defined(BLOCK_SPARSE_GEMM)
     if (cmdOptionExists(argv, argv + argc, "-mm")) {
       char *filename = getCmdOption(argv, argv + argc, "-mm");
+      tiling_type = filename;
       timing = true;
       initSpMatrixMarket(filename, A, B, C);
     } else if (cmdOptionExists(argv, argv + argc, "-rmat")) {
       char *opt = getCmdOption(argv, argv + argc, "-rmat");
+      tiling_type = "RandomSparseMatrix";
       timing = true;
       initSpRmat(opt, A, B, C);
     } else {
+      tiling_type = "HardCodedSparseMatrix";
       initSpHardCoded(A, B, C);
     }
 #else
@@ -901,43 +963,43 @@ int main(int argc, char **argv) {
       std::string seedStr(getCmdOption(argv, argv + argc, "-s"));
       unsigned int seed = parseOption(seedStr, 0);
       timing = true;
-      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, C, gflops, seed);
+      tiling_type = "RandomIrregularTiling";
+      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, gflops, avg_nb, Adensity, Bdensity, seed);
     } else {
+      tiling_type = "HardCodedBlockSparseMatrix";
       initBlSpHardCoded(A, B, C);
     }
 #endif  // !defined(BLOCK_SPARSE_GEMM)
 
-    // flow graph needs to exist on every node
-    Edge<> ctl("control");
-    Control control(ctl);
-    Edge<Key<2>, blk_t> eA, eB, eC;
-    Read_SpMatrix<> a("A", A, ctl, eA);
-    Read_SpMatrix<> b("B", B, ctl, eB);
-    Write_SpMatrix<> c(C, eC);
-    auto c_status = c.status();
-    assert(!has_value(c_status));
-    //  SpMM a_times_b(world, eA, eB, eC, A, B);
-    SpMM<> a_times_b(eA, eB, eC, A, B);
-
-    if (!timing) std::cout << Dot{}(&a, &b) << std::endl;
-
-    // ready to run!
-    auto connected = make_graph_executable(&control);
-    assert(connected);
-    TTGUNUSED(connected);
+    std::string nbrunStr(getCmdOption(argv, argv + argc, "-n"));
+    int nb_runs = parseOption(nbrunStr, 1);
 
     if (timing) {
-      struct timeval start, end, diff;
-      gettimeofday(&start, NULL);
-      // ready, go! need only 1 kick, so must be done by 1 thread only
-      if (ttg_default_execution_context().rank() == 0) control.start();
+      // Start up engine
       ttg_execute(ttg_default_execution_context());
-      ttg_fence(ttg_default_execution_context());
-      gettimeofday(&end, NULL);
-      timersub(&end, &start, &diff);
-      double tc = diff.tv_sec + (double)diff.tv_usec / 1e6;
-      std::cout << "Time to completion: " << tc << " s, performance " << gflops / tc << " GFlop/s" << std::endl;
+      for (int nrun = 0; nrun < nb_runs; nrun++) {
+        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity);
+      }
     } else {
+      // flow graph needs to exist on every node
+      Edge<> ctl("control");
+      Control control(ctl);
+      Edge<Key<2>, blk_t> eA, eB, eC;
+      Read_SpMatrix<> a("A", A, ctl, eA);
+      Read_SpMatrix<> b("B", B, ctl, eB);
+      Write_SpMatrix<> c(C, eC);
+      auto c_status = c.status();
+      assert(!has_value(c_status));
+      //  SpMM a_times_b(world, eA, eB, eC, A, B);
+      SpMM<> a_times_b(eA, eB, eC, A, B);
+
+      std::cout << Dot{}(&a, &b) << std::endl;
+
+      // ready to run!
+      auto connected = make_graph_executable(&control);
+      assert(connected);
+      TTGUNUSED(connected);
+
       // ready, go! need only 1 kick, so must be done by 1 thread only
       if (ttg_default_execution_context().rank() == 0) control.start();
 
