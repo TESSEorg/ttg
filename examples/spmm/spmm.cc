@@ -20,11 +20,12 @@
 #endif
 
 #include <sys/time.h>
-#include <unsupported/Eigen/SparseExtra>
-
-#include <boost/graph/directed_graph.hpp>
 #include <boost/graph/rmat_graph_generator.hpp>
+#if !defined(BLOCK_SPARSE_GEMM)
+#include <boost/graph/directed_graph.hpp>
 #include <boost/random/linear_congruential.hpp>
+#include <unsupported/Eigen/SparseExtra>
+#endif
 
 #include "ttg.h"
 
@@ -49,7 +50,7 @@ namespace ttg {
     //     quick and dirty linearization, then have a case when we create the object
     //   - when we create the object with the metadata, we use a constructor that initializes
     //     the data to 0, which is useless: the data could be left uninitialized
-    auto get_metadata(const blk_t &b) {
+    static auto get_metadata(const blk_t &b) {
       std::pair<int, int> dim{0, 0};
       if (!b.empty()) {
         assert(b.range().extent().size() == 2);
@@ -58,13 +59,13 @@ namespace ttg {
       }
       return dim;
     }
-    auto get_data(blk_t &b) {
+    static auto get_data(blk_t &b) {
       if (!b.empty())
         return boost::container::small_vector<iovec, 1>(1, iovec{b.size() * sizeof(double), b.data()});
       else
         return boost::container::small_vector<iovec, 1>{};
     }
-    auto create_from_metadata(const std::pair<int, int> &meta) {
+    static auto create_from_metadata(const std::pair<int, int> &meta) {
       if (meta != std::pair{0, 0})
         return blk_t(btas::Range(std::get<0>(meta), std::get<1>(meta)), 0.0);
       else
@@ -126,16 +127,15 @@ namespace btas {
 double gemm(double C, double A, double B) { return C + A * B; }
 /////////////////////////////////////////////
 
-template <typename _Scalar, int _Options, typename _StorageIndex>
-struct colmajor_layout;
-template <typename _Scalar, typename _StorageIndex>
-struct colmajor_layout<_Scalar, Eigen::ColMajor, _StorageIndex> : public std::true_type {};
-template <typename _Scalar, typename _StorageIndex>
-struct colmajor_layout<_Scalar, Eigen::RowMajor, _StorageIndex> : public std::false_type {};
+// template <typename _Scalar, int _Options, typename _StorageIndex>
+// struct colmajor_layout;
+// template <typename _Scalar, typename _StorageIndex>
+// struct colmajor_layout<_Scalar, Eigen::ColMajor, _StorageIndex> : public std::true_type {};
+// template <typename _Scalar, typename _StorageIndex>
+// struct colmajor_layout<_Scalar, Eigen::RowMajor, _StorageIndex> : public std::false_type {};
 
 template <std::size_t Rank>
 struct Key : public std::array<long, Rank> {
-  static constexpr const long max_index_width = 21;
   static constexpr const long max_index = 1 << 21;
   static constexpr const long max_index_square = max_index * max_index;
   Key() = default;
@@ -144,7 +144,7 @@ struct Key : public std::array<long, Rank> {
     std::copy(ilist.begin(), ilist.end(), this->begin());
     assert(valid());
   }
-  Key(std::size_t hash) {
+  explicit Key(std::size_t hash) {
     static_assert(Rank == 2 || Rank == 3, "Key<Rank>::Key(hash) only implemented for Rank={2,3}");
     if (Rank == 2) {
       (*this)[0] = hash / max_index;
@@ -155,7 +155,7 @@ struct Key : public std::array<long, Rank> {
       (*this)[2] = hash % max_index;
     }
   }
-  std::size_t hash() const {
+  [[nodiscard("PURE FUN")]] std::size_t hash() const {
     static_assert(Rank == 2 || Rank == 3, "Key<Rank>::hash only implemented for Rank={2,3}");
     return Rank == 2 ? (*this)[0] * max_index + (*this)[1]
                      : ((*this)[0] * max_index + (*this)[1]) * max_index + (*this)[2];
@@ -241,7 +241,7 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
     } else {  // if done already, commit the result
       this->matrix_.setFromTriplets(this->values_.begin(), this->values_.end());
     }
-    return *completion_status_.get();
+    return *completion_status_;
   }
 
  private:
@@ -276,6 +276,10 @@ class SpMM {
     bcast_b_ = std::make_unique<BcastB>(b, b_ijk_, a_colidx_to_rowidx_);
     multiplyadd_ =
         std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c, a_rowidx_to_colidx_, b_colidx_to_rowidx_, P, Q);
+
+    TTGUNUSED(bcast_a_);
+    TTGUNUSED(bcast_b_);
+    TTGUNUSED(multiplyadd_);
   }
 
   /// broadcast A[i][k] to all {i,j,k} such that B[j][k] exists
@@ -541,12 +545,13 @@ class Control : public Op<void, std::tuple<Out<Key<2>>>, Control> {
   int Q;
 
  public:
-  Control(Edge<Key<2>> &ctl) : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}), P(0), Q(0) {}
+  explicit Control(Edge<Key<2>> &ctl) : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}), P(0), Q(0) {}
 
-  void op(std::tuple<Out<Key<2>>> &out) {
+  void op(std::tuple<Out<Key<2>>> &out) const {
     for (int i = 0; i < P; i++) {
       for (int j = 0; j < Q; j++) {
         Key<2> k{i, j};
+        if (ttg::tracing()) ttg::print("Control: enable {", i, ", ", j, "}");
         ::sendk<0>(k, out);
       }
     }
@@ -557,17 +562,6 @@ class Control : public Op<void, std::tuple<Out<Key<2>>>, Control> {
     Q = _q;
     invoke();
   }
-};
-
-class ControlNoKey : public Op<void, std::tuple<Out<>>, ControlNoKey> {
-  using baseT = Op<void, std::tuple<Out<>>, ControlNoKey>;
-
- public:
-  ControlNoKey(Edge<> &ctl) : baseT(edges(), edges(ctl), "ControlNoKey", {}, {"ctl"}) {}
-
-  void op(std::tuple<Out<>> &out) { ::send<0>(out); }
-
-  void start() { invoke(); }
 };
 
 #ifdef BTAS_IS_USABLE
@@ -653,7 +647,7 @@ static long parseOption(std::string &option, long default_value) {
   return N;
 }
 
-static double parseOption(std::string &option, double default_value) {
+static double parseOption(std::string &option, double default_value = 0.25) {
   size_t pos;
   std::string token;
   double N = default_value;
@@ -680,8 +674,8 @@ static void initSpMatrixMarket(const char *filename, SpMatrix<> &A, SpMatrix<> &
     }
     std::cout << "##MatrixMarket file " << filename << " -- " << A.rows() << " x " << A.cols() << " -- " << A.nonZeros()
               << " nnz (density: " << (float)A.nonZeros() / (float)A.rows() / (float)A.cols() << ")" << std::endl;
-    sizes[0] = A.rows();
-    sizes[1] = A.cols();
+    sizes[0] = (int)A.rows();
+    sizes[1] = (int)A.cols();
   }
   ttg_broadcast(ttg_default_execution_context(), sizes, 0);
   if (ttg_default_execution_context().rank() == 0) {
@@ -693,13 +687,13 @@ static void initSpMatrixMarket(const char *filename, SpMatrix<> &A, SpMatrix<> &
     B = A;
   }
   C.resize(A.rows(), B.cols());
-  M = A.rows();
-  N = C.cols();
-  K = A.cols();
+  M = (int)A.rows();
+  N = (int)C.cols();
+  K = (int)A.cols();
 }
 
 static void initSpRmat(const char *opt, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &M, int &N, int &K) {
-  int E = -1;
+  int E;
   double a = 0.25, b = 0.25, c = 0.25, d = 0.25;
   size_t nnz = 0;
 
@@ -717,10 +711,10 @@ static void initSpRmat(const char *opt, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<>
 
   if (ttg_default_execution_context().rank() == 0) {
     E = parseOption(option, (int)(0.01 * N * N));
-    a = parseOption(option, 0.25);
-    b = parseOption(option, 0.25);
-    c = parseOption(option, 0.25);
-    d = parseOption(option, 0.25);
+    a = parseOption(option, a);
+    b = parseOption(option, b);
+    c = parseOption(option, c);
+    d = parseOption(option, d);
 
     std::cout << "#R-MAT: " << N << " nodes, " << E << " edges, a/b/c/d = " << a << "/" << b << "/" << c << "/" << d
               << std::endl;
@@ -782,9 +776,9 @@ static void initSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &m,
   }
 }
 #else
-static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, std::vector<int> &mTiles,
-                              std::vector<int> &nTiles, std::vector<int> &kTiles,
-                              std::map<std::tuple<int, int>, bool> &Afilling,
+static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, SpMatrix<> &Aref, SpMatrix<> &Bref,
+                              bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles,
+                              std::vector<int> &kTiles, std::map<std::tuple<int, int>, bool> &Afilling,
                               std::map<std::tuple<int, int>, bool> &Bfilling, int &m, int &n, int &k) {
   n = 2;
   m = 3;
@@ -854,11 +848,16 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, std::
     Bfilling[{3, 2}] = true;
     B.setFromTriplets(B_elements.begin(), B_elements.end());
   }
+  if (buildRefs) {
+    Aref = A;
+    Bref = B;
+  }
 }
 
 #if defined(BTAS_IS_USABLE)
 static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B,
-                           std::vector<int> &mTiles, std::vector<int> &nTiles, std::vector<int> &kTiles,
+                           SpMatrix<> &Aref, SpMatrix<> &Bref, bool buildRefs, std::vector<int> &mTiles,
+                           std::vector<int> &nTiles, std::vector<int> &kTiles,
                            std::map<std::tuple<int, int>, bool> &Afilling,
                            std::map<std::tuple<int, int>, bool> &Bfilling, double &gflops, double &average_tile_size,
                            double &Adensity, double &Bdensity, unsigned int seed, int P, int Q) {
@@ -869,6 +868,7 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
   int q = (ttg_default_execution_context().rank() / P) % Q;
 
   int rank = ttg_default_execution_context().rank();
+  TTGUNUSED(rank);
 
   int ts;
   std::mt19937 gen(seed);
@@ -878,6 +878,8 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
   using triplet_t = Eigen::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
   std::vector<triplet_t> B_elements;
+  std::vector<triplet_t> Aref_elements;
+  std::vector<triplet_t> Bref_elements;
 
   for (int m = 0; m < M; m += ts) {
     ts = dist(gen);
@@ -897,6 +899,10 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
 
   A.resize((int)mTiles.size(), (int)kTiles.size());
   B.resize((int)kTiles.size(), (int)nTiles.size());
+  if (buildRefs) {
+    Aref.resize((int)mTiles.size(), (int)kTiles.size());
+    Bref.resize((int)kTiles.size(), (int)nTiles.size());
+  }
 
   std::uniform_int_distribution<> mDist(0, (int)mTiles.size() - 1);
   std::uniform_int_distribution<> nDist(0, (int)nTiles.size() - 1);
@@ -916,12 +922,15 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     auto blksize = {mTiles[mt], kTiles[kt]};
     avg_nb += mTiles[mt] * kTiles[kt];
     avg_nb_nb++;
+    double value = vDist(genv);
+    if (p == 0 && q == 0 && buildRefs) Aref_elements.emplace_back(mt, kt, blk_t(btas::Range(blksize), value));
     if ((mt % P) != p) continue;
     if ((kt % Q) != q) continue;
-    A_elements.emplace_back(mt, kt, blk_t(btas::Range(blksize), vDist(genv)));
+    A_elements.emplace_back(mt, kt, blk_t(btas::Range(blksize), value));
   }
   A.setFromTriplets(A_elements.begin(), A_elements.end());
   Adensity = (double)filling / (double)(M * K);
+  Aref.setFromTriplets(Aref_elements.begin(), Aref_elements.end());
 
   filling = 0;
   Bfilling.clear();
@@ -934,12 +943,15 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     avg_nb += kTiles[kt] * nTiles[nt];
     avg_nb_nb++;
     auto blksize = {kTiles[kt], nTiles[nt]};
+    double value = vDist(genv);
+    if (p == 0 && q == 0 && buildRefs) Bref_elements.emplace_back(kt, nt, blk_t(btas::Range(blksize), value));
     if ((kt % P) != p) continue;
     if ((nt % Q) != q) continue;
-    B_elements.emplace_back(kt, nt, blk_t(btas::Range(blksize), vDist(genv)));
+    B_elements.emplace_back(kt, nt, blk_t(btas::Range(blksize), value));
   }
   B.setFromTriplets(B_elements.begin(), B_elements.end());
   Bdensity = (double)filling / (double)(K * N);
+  Bref.setFromTriplets(Bref_elements.begin(), Bref_elements.end());
 
   for (int mt = 0; mt < mTiles.size(); mt++) {
     for (int nt = 0; nt < nTiles.size(); nt++) {
@@ -957,8 +969,7 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
 #endif
 
 static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::string &tiling_type, double gflops,
-                              double avg_nb, double Adensity, double Bdensity, std::vector<int> &mTiles,
-                              std::vector<int> &nTiles, std::vector<int> &kTiles,
+                              double avg_nb, double Adensity, double Bdensity,
                               std::map<std::tuple<int, int>, bool> &Afilling,
                               std::map<std::tuple<int, int>, bool> &Bfilling, int M, int N, int K, int P, int Q) {
   int MT = (int)A.rows();
@@ -980,6 +991,9 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::string &t
   assert(!has_value(c_status));
   //  SpMM a_times_b(world, eA, eB, eC, A, B);
   SpMM<> a_times_b(eA, eB, eC, A, B, Afilling, Bfilling, P, Q);
+  TTGUNUSED(a);
+  TTGUNUSED(b);
+  TTGUNUSED(a_times_b);
 
   auto connected = make_graph_executable(&control);
   assert(connected);
@@ -1009,6 +1023,31 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::string &t
               << " gflops/s= " << gflops / tc << std::endl;
   }
 }
+
+#if !defined(BLOCK_SPARSE_GEMM)
+static void make_filling_from_eigen(const SpMatrix<> &mat, std::map<std::tuple<int, int>, bool> &filling) {
+  for (int k = 0; k < mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
+    for (typename SpMatrix<blk_t>::InnerIterator it(mat, k); it; ++it) {
+      const std::size_t row = it.row();
+      const std::size_t col = it.col();
+      filling[{row, col}] = true;
+    }
+  }
+}
+
+static double compute_gflops(int M, int N, int K, const std::map<std::tuple<int, int>, bool> &A,
+                             const std::map<std::tuple<int, int>, bool> &B) {
+  unsigned long flops = 0;
+  for (int i = 0; i < M; i++) {
+    for (int j = 0; j < N; j++) {
+      for (int k = 0; k < N; k++) {
+        if (A.count({i, k}) > 0 && B.count({k, j}) > 0) flops++;
+      }
+    }
+  }
+  return 2.0 * (double)flops / 1e9;
+}
+#endif
 
 int main(int argc, char **argv) {
   bool timing = false;
@@ -1054,7 +1093,7 @@ int main(int argc, char **argv) {
     // ttg::trace_on();
     // OpBase::set_trace_all(true);
 
-    SpMatrix<> A, B, C;
+    SpMatrix<> A, B, C, Aref, Bref;
     std::string tiling_type;
     int M = 0, N = 0, K = 0;
 
@@ -1089,9 +1128,11 @@ int main(int argc, char **argv) {
     }
     ttg_broadcast(ttg_default_execution_context(), seed, 0);
 
+#if defined(BLOCK_SPARSE_GEMM)
     std::vector<int> mTiles;
     std::vector<int> nTiles;
     std::vector<int> kTiles;
+#endif
     std::map<std::tuple<int, int>, bool> Afilling;
     std::map<std::tuple<int, int>, bool> Bfilling;
 
@@ -1110,6 +1151,15 @@ int main(int argc, char **argv) {
       tiling_type = "HardCodedSparseMatrix";
       initSpHardCoded(A, B, C, M, N, K);
     }
+    // We don't generate the sparse matrices in distributed, so Aref and Bref can
+    // just point to the same matrix, or be a local copy.
+    Aref = A;
+    Bref = B;
+    // We still need to build the metadata from the  matrices.
+    make_filling_from_eigen(A, Afilling);
+    make_filling_from_eigen(B, Bfilling);
+    // This is probably useless, but  just for the sake of completion:
+    gflops = compute_gflops(M, N, K, Afilling, Bfilling);
 #else
     if (argc >= 2) {
       std::string Mstr(getCmdOption(argv, argv + argc, "-M"));
@@ -1124,13 +1174,15 @@ int main(int argc, char **argv) {
       int maxTs = parseOption(maxTsStr, 256);
       std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
       double avg = parseOption(avgStr, 0.3);
-      timing = true;
+      std::string checkStr(getCmdOption(argv, argv + argc, "-x"));
+      int check = parseOption(checkStr, 0);
+      timing = (check == 0);
       tiling_type = "RandomIrregularTiling";
-      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, mTiles, nTiles, kTiles, Afilling, Bfilling, gflops, avg_nb,
-                     Adensity, Bdensity, seed, P, Q);
+      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, Aref, Bref, !timing, mTiles, nTiles, kTiles, Afilling, Bfilling,
+                     gflops, avg_nb, Adensity, Bdensity, seed, P, Q);
     } else {
       tiling_type = "HardCodedBlockSparseMatrix";
-      initBlSpHardCoded(A, B, C, mTiles, nTiles, kTiles, Afilling, Bfilling, M, N, K);
+      initBlSpHardCoded(A, B, C, Aref, Bref, true, mTiles, nTiles, kTiles, Afilling, Bfilling, M, N, K);
     }
 #endif  // !defined(BLOCK_SPARSE_GEMM)
 
@@ -1141,8 +1193,7 @@ int main(int argc, char **argv) {
       // Start up engine
       ttg_execute(ttg_default_execution_context());
       for (int nrun = 0; nrun < nb_runs; nrun++) {
-        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity, mTiles, nTiles, kTiles, Afilling,
-                          Bfilling, M, N, K, P, Q);
+        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity, Afilling, Bfilling, M, N, K, P, Q);
       }
     } else {
       // flow graph needs to exist on every node
@@ -1156,6 +1207,7 @@ int main(int argc, char **argv) {
       assert(!has_value(c_status));
       //  SpMM a_times_b(world, eA, eB, eC, A, B);
       SpMM<> a_times_b(eA, eB, eC, A, B, Afilling, Bfilling, P, Q);
+      TTGUNUSED(a_times_b);
 
       std::cout << Dot{}(&a, &b) << std::endl;
 
@@ -1167,37 +1219,13 @@ int main(int argc, char **argv) {
       // ready, go! need only 1 kick, so must be done by 1 thread only
       if (ttg_default_execution_context().rank() == 0) control.start(P, Q);
 
-      ///////////////////////////////////////////////////////////////////////////
-      // copy matrix using ttg::Matrix
-      Matrix<blk_t> aflow;
-      aflow << A;
-      SpMatrix<> Acopy(A.rows(), A.cols());  // resizing will be automatic in the future when shape computation is
-      // complete .. see Matrix::operator>>
-      auto copy_status = aflow >> Acopy;
-      assert(!has_value(copy_status));
-      aflow.pushall();
-      ControlNoKey control2(ttg_ctl_edge(ttg_default_execution_context()));
-      {
-        std::cout << "matrix copy using ttg::Matrix" << std::endl;
-        if (ttg_default_execution_context().rank() == 0) std::cout << Dot{}(&control2) << std::endl;
-
-        // ready to run!
-        auto connected2 = make_graph_executable(&control2);
-        assert(connected2);
-        TTGUNUSED(connected2);
-
-        // ready, go! need only 1 kick, so must be done by 1 thread only
-        if (ttg_default_execution_context().rank() == 0) control2.start();
-      }
-      //////////////////////////////////////////////////////////////////////////
-
       ttg_execute(ttg_default_execution_context());
       ttg_fence(ttg_default_execution_context());
 
       // validate C=A*B against the reference output
       assert(has_value(c_status));
       if (ttg_default_execution_context().rank() == 0) {
-        SpMatrix<> Cref = A * B;
+        SpMatrix<> Cref = Aref * Bref;
 
         double norm_2_square, norm_inf;
         std::tie(norm_2_square, norm_inf) = norms<blk_t>(Cref - C);
