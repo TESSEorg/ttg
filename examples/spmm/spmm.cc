@@ -1176,8 +1176,7 @@ int main(int argc, char **argv) {
       auto copy_status = aflow >> Acopy;
       assert(!has_value(copy_status));
       aflow.pushall();
-      Edge<> ctl2("control");
-      ControlNoKey control2(ctl2);
+      ControlNoKey control2(ttg_ctl_edge(ttg_default_execution_context()));
       {
         std::cout << "matrix copy using ttg::Matrix" << std::endl;
         if (ttg_default_execution_context().rank() == 0) std::cout << Dot{}(&control2) << std::endl;
