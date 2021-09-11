@@ -997,13 +997,15 @@ int main(int argc, char **argv) {
     ttg_initialize(1, argv, cores);
   }
 
-  using mpqc::Debugger;
-  auto debugger = std::make_shared<Debugger>();
-  Debugger::set_default_debugger(debugger);
-  debugger->set_exec(argv[0]);
-  debugger->set_prefix(ttg_default_execution_context().rank());
-  // debugger->set_cmd("lldb_xterm");
-  debugger->set_cmd("gdb_xterm");
+  if (false) {
+    using mpqc::Debugger;
+    auto debugger = std::make_shared<Debugger>();
+    Debugger::set_default_debugger(debugger);
+    debugger->set_exec(argv[0]);
+    debugger->set_prefix(ttg_default_execution_context().rank());
+    // debugger->set_cmd("lldb_xterm");
+    debugger->set_cmd("gdb_xterm");
+  }
 
   int mpi_size = ttg_default_execution_context().size();
   int mpi_rank = ttg_default_execution_context().rank();
