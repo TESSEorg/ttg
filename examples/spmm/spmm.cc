@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <iostream>
@@ -180,16 +181,21 @@ std::ostream &operator<<(std::ostream &os, const Key<Rank> &key) {
 
 // flow data from an existing SpMatrix on rank 0
 template <typename Blk = blk_t>
-class Read_SpMatrix : public Op<void, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void> {
+class Read_SpMatrix : public Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void> {
  public:
-  using baseT = Op<void, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void>;
+  using baseT = Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void>;
 
-  Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<> &ctl, Edge<Key<2>, Blk> &out)
+  Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>> &ctl, Edge<Key<2>, Blk> &out, const int P,
+                const int Q)
       : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
-              []() { return 0; })
+              [P, Q](const Key<2> &key) {
+                int r = key[0] * Q + key[1];
+                assert(r >= 0 && r < ttg_default_execution_context().size());
+                return r;
+              })
       , matrix_(matrix) {}
 
-  void op(std::tuple<Out<Key<2>, Blk>> &out) {
+  void op(const Key<2> &key, std::tuple<Out<Key<2>, Blk>> &out) {
     for (int k = 0; k < matrix_.outerSize(); ++k) {
       for (typename SpMatrix<Blk>::InnerIterator it(matrix_, k); it; ++it) {
         ::send<0>(Key<2>({it.row(), it.col()}), it.value(), out);
@@ -250,14 +256,15 @@ template <typename Blk = blk_t>
 class SpMM {
  public:
   SpMM(Edge<Key<2>, Blk> &a, Edge<Key<2>, Blk> &b, Edge<Key<2>, Blk> &c, const SpMatrix<Blk> &a_mat,
-       const SpMatrix<Blk> &b_mat)
+       const SpMatrix<Blk> &b_mat, std::map<std::tuple<int, int>, bool> &Afilling,
+       std::map<std::tuple<int, int>, bool> &Bfilling, const int P, const int Q)
       : a_ijk_()
       , b_ijk_()
       , c_ijk_()
-      , a_rowidx_to_colidx_(make_rowidx_to_colidx(a_mat))
-      , b_colidx_to_rowidx_(make_colidx_to_rowidx(b_mat))
-      , a_colidx_to_rowidx_(make_colidx_to_rowidx(a_mat))
-      , b_rowidx_to_colidx_(make_rowidx_to_colidx(b_mat)) {
+      , a_rowidx_to_colidx_(make_rowidx_to_colidx(Afilling))
+      , b_colidx_to_rowidx_(make_colidx_to_rowidx(Bfilling))
+      , a_colidx_to_rowidx_(make_colidx_to_rowidx(Afilling))
+      , b_rowidx_to_colidx_(make_rowidx_to_colidx(Bfilling)) {
     // data is on rank 0, broadcast metadata from there
     int root = 0;
     ttg_broadcast(ttg_default_execution_context(), a_rowidx_to_colidx_, root);
@@ -267,7 +274,8 @@ class SpMM {
 
     bcast_a_ = std::make_unique<BcastA>(a, a_ijk_, b_rowidx_to_colidx_);
     bcast_b_ = std::make_unique<BcastB>(b, b_ijk_, a_colidx_to_rowidx_);
-    multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c, a_rowidx_to_colidx_, b_colidx_to_rowidx_);
+    multiplyadd_ =
+        std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c, a_rowidx_to_colidx_, b_colidx_to_rowidx_, P, Q);
   }
 
   /// broadcast A[i][k] to all {i,j,k} such that B[j][k] exists
@@ -282,6 +290,7 @@ class SpMM {
     void op(const Key<2> &key, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, Blk>> &a_ijk) {
       const auto i = key[0];
       const auto k = key[1];
+      if (tracing()) ttg::print("BcastA(", i, ", ", k, ")");
       // broadcast a_ik to all existing {i,j,k}
       std::vector<Key<3>> ijk_keys;
       if (k >= b_rowidx_to_colidx_.size()) return;
@@ -310,6 +319,7 @@ class SpMM {
       const auto j = key[1];
       // broadcast b_kj to *jk
       std::vector<Key<3>> ijk_keys;
+      if (tracing()) ttg::print("BcastB(", k, ", ", j, ")");
       if (k >= a_colidx_to_rowidx_.size()) return;
       for (auto &i : a_colidx_to_rowidx_[k]) {
         if (tracing()) ttg::print("Broadcasting B[", k, "][", j, "] to i=", i);
@@ -330,9 +340,15 @@ class SpMM {
 
     MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
                 const std::vector<std::vector<long>> &a_rowidx_to_colidx,
-                const std::vector<std::vector<long>> &b_colidx_to_rowidx)
+                const std::vector<std::vector<long>> &b_colidx_to_rowidx, const int P, const int Q)
         : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM::MultiplyAdd", {"a_ijk", "b_ijk", "c_ijk"},
-                {"c_ij", "c_ijk"})
+                {"c_ij", "c_ijk"},
+                [P, Q](const Key<3> &key) {
+                  int i = key[0];
+                  int j = key[1];
+                  int r = (i % P) * Q + (j % Q);
+                  return r;
+                })
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
       this->set_priomap([=](const Key<3> &key) { return this->prio(key); });
@@ -486,44 +502,61 @@ class SpMM {
   std::unique_ptr<MultiplyAdd> multiplyadd_;
 
   // result[i][j] gives the j-th nonzero row for column i in matrix mat
-  std::vector<std::vector<long>> make_colidx_to_rowidx(const SpMatrix<Blk> &mat) {
+  std::vector<std::vector<long>> make_colidx_to_rowidx(const std::map<std::tuple<int, int>, bool> &filling) {
     std::vector<std::vector<long>> colidx_to_rowidx;
-    for (int k = 0; k < mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
-      for (typename SpMatrix<Blk>::InnerIterator it(mat, k); it; ++it) {
-        const std::size_t row = it.row();
-        const std::size_t col = it.col();
-        if (col >= colidx_to_rowidx.size()) colidx_to_rowidx.resize(col + 1);
-        // in either case (col- or row-major) row index increasing for the given col
-        colidx_to_rowidx[col].push_back(row);
-      }
+    for (auto it = filling.begin(); it != filling.end(); ++it) {
+      int row, col;
+      if (!it->second) continue;
+      std::tie(row, col) = it->first;
+      if (col >= colidx_to_rowidx.size()) colidx_to_rowidx.resize(col + 1);
+      colidx_to_rowidx[col].push_back(row);
+    }
+    // Sort each vector of row indices, as we pushed them in an arbitrary order
+    for (int i = 0; i < colidx_to_rowidx.size(); i++) {
+      std::sort(colidx_to_rowidx[i].begin(), colidx_to_rowidx[i].end());
     }
     return colidx_to_rowidx;
   }
   // result[i][j] gives the j-th nonzero column for row i in matrix mat
-  std::vector<std::vector<long>> make_rowidx_to_colidx(const SpMatrix<Blk> &mat) {
+  std::vector<std::vector<long>> make_rowidx_to_colidx(const std::map<std::tuple<int, int>, bool> &filling) {
     std::vector<std::vector<long>> rowidx_to_colidx;
-    for (int k = 0; k < mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
-      for (typename SpMatrix<Blk>::InnerIterator it(mat, k); it; ++it) {
-        const std::size_t row = it.row();
-        const std::size_t col = it.col();
-        if (row >= rowidx_to_colidx.size()) rowidx_to_colidx.resize(row + 1);
-        // in either case (col- or row-major) col index increasing for the given row
-        rowidx_to_colidx[row].push_back(col);
-      }
+    for (auto it = filling.begin(); it != filling.end(); ++it) {
+      int row, col;
+      if (!it->second) continue;
+      std::tie(row, col) = it->first;
+      if (row >= rowidx_to_colidx.size()) rowidx_to_colidx.resize(row + 1);
+      rowidx_to_colidx[row].push_back(col);
+    }
+    // Sort each vector of column indices, as we pushed them in an arbitrary order
+    for (int i = 0; i < rowidx_to_colidx.size(); i++) {
+      std::sort(rowidx_to_colidx[i].begin(), rowidx_to_colidx[i].end());
     }
     return rowidx_to_colidx;
   }
 };
 
-class Control : public Op<void, std::tuple<Out<>>, Control> {
-  using baseT = Op<void, std::tuple<Out<>>, Control>;
+class Control : public Op<void, std::tuple<Out<Key<2>>>, Control> {
+  using baseT = Op<void, std::tuple<Out<Key<2>>>, Control>;
+  int P;
+  int Q;
 
  public:
-  Control(Edge<> &ctl) : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}) {}
+  Control(Edge<Key<2>> &ctl) : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}), P(0), Q(0) {}
 
-  void op(std::tuple<Out<>> &out) { ::send<0>(out); }
+  void op(std::tuple<Out<Key<2>>> &out) {
+    for (int i = 0; i < P; i++) {
+      for (int j = 0; j < Q; j++) {
+        Key<2> k{i, j};
+        ::sendk<0>(k, out);
+      }
+    }
+  }
 
-  void start() { invoke(); }
+  void start(const int _p, const int _q) {
+    P = _p;
+    Q = _q;
+    invoke();
+  }
 };
 
 #ifdef BTAS_IS_USABLE
@@ -723,7 +756,10 @@ static void initSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &m,
   }
 }
 #else
-static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &m, int &n, int &k) {
+static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, std::vector<int> &mTiles,
+                              std::vector<int> &nTiles, std::vector<int> &kTiles,
+                              std::map<std::tuple<int, int>, bool> &Afilling,
+                              std::map<std::tuple<int, int>, bool> &Bfilling, int &m, int &n, int &k) {
   n = 2;
   m = 3;
   k = 4;
@@ -732,6 +768,13 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &
   A.resize(n, k);
   B.resize(k, m);
   C.resize(n, m);
+
+  for (int mt = 0; mt < m; mt++) mTiles[mt] = 128;
+  for (int nt = 0; nt < n; nt++) nTiles[nt] = 196;
+  for (int kt = 0; kt < k; kt++) kTiles[kt] = 256;
+  Afilling.clear();
+  Bfilling.clear();
+
   // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
   if (ttg_default_execution_context().rank() == 0) {
     using triplet_t = Eigen::Triplet<blk_t>;
@@ -750,6 +793,11 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &
     A_elements.emplace_back(1, 0, -0.3);
     A_elements.emplace_back(1, 2, .2);
 #endif
+    Afilling[{0, 1}] = true;
+    Afilling[{0, 2}] = true;
+    Afilling[{0, 3}] = true;
+    Afilling[{1, 0}] = true;
+    Afilling[{1, 2}] = true;
     A.setFromTriplets(A_elements.begin(), A_elements.end());
 
     std::vector<triplet_t> B_elements;
@@ -771,27 +819,36 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &
     B_elements.emplace_back(2, 2, 7.2);
     B_elements.emplace_back(3, 2, 0.2);
 #endif
+    Bfilling[{0, 0}] = true;
+    Bfilling[{1, 0}] = true;
+    Bfilling[{3, 0}] = true;
+    Bfilling[{1, 1}] = true;
+    Bfilling[{1, 2}] = true;
+    Bfilling[{2, 2}] = true;
+    Bfilling[{3, 2}] = true;
     B.setFromTriplets(B_elements.begin(), B_elements.end());
   }
 }
 
 #if defined(BTAS_IS_USABLE)
 static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B,
-                           double &gflops, double &average_tile_size, double &Adensity, double &Bdensity,
-                           unsigned int seed, int P, int Q) {
+                           std::vector<int> &mTiles, std::vector<int> &nTiles, std::vector<int> &kTiles,
+                           std::map<std::tuple<int, int>, bool> &Afilling,
+                           std::map<std::tuple<int, int>, bool> &Bfilling, double &gflops, double &average_tile_size,
+                           double &Adensity, double &Bdensity, unsigned int seed, int P, int Q) {
   gflops = 0.0;
 
   assert(P * Q == ttg_default_execution_context().size());
   int p = ttg_default_execution_context().rank() % P;
   int q = (ttg_default_execution_context().rank() / P) % Q;
 
+  int rank = ttg_default_execution_context().rank();
+
   int ts;
   std::mt19937 gen(seed);
+  std::mt19937 genv(seed + 1);
 
   std::uniform_int_distribution<> dist(minTs, maxTs);
-  std::vector<int> mTiles, nTiles, kTiles;
-  std::map<std::tuple<int, int>, bool> Afilling;
-  std::map<std::tuple<int, int>, bool> Bfilling;
   using triplet_t = Eigen::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
   std::vector<triplet_t> B_elements;
@@ -835,7 +892,7 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     avg_nb_nb++;
     if ((mt % P) != p) continue;
     if ((kt % Q) != q) continue;
-    A_elements.emplace_back(mt, kt, blk_t(btas::Range(blksize), vDist(gen)));
+    A_elements.emplace_back(mt, kt, blk_t(btas::Range(blksize), vDist(genv)));
   }
   A.setFromTriplets(A_elements.begin(), A_elements.end());
   Adensity = (double)filling / (double)(M * K);
@@ -853,7 +910,7 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     auto blksize = {kTiles[kt], nTiles[nt]};
     if ((kt % P) != p) continue;
     if ((nt % Q) != q) continue;
-    B_elements.emplace_back(kt, nt, blk_t(btas::Range(blksize), vDist(gen)));
+    B_elements.emplace_back(kt, nt, blk_t(btas::Range(blksize), vDist(genv)));
   }
   B.setFromTriplets(B_elements.begin(), B_elements.end());
   Bdensity = (double)filling / (double)(K * N);
@@ -874,7 +931,9 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
 #endif
 
 static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, std::string tiling_type, double gflops, double avg_nb,
-                              double Adensity, double Bdensity, int M, int N, int K, int P, int Q) {
+                              double Adensity, double Bdensity, std::vector<int> &mTiles, std::vector<int> &nTiles,
+                              std::vector<int> &kTiles, std::map<std::tuple<int, int>, bool> &Afilling,
+                              std::map<std::tuple<int, int>, bool> &Bfilling, int M, int N, int K, int P, int Q) {
   int MT = A.rows();
   int NT = B.cols();
   int KT = A.cols();
@@ -884,16 +943,16 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, std::string tiling_t
   C.resize(MT, NT);
 
   // flow graph needs to exist on every node
-  Edge<> ctl("control");
+  Edge<Key<2>> ctl("control");
   Control control(ctl);
   Edge<Key<2>, blk_t> eA, eB, eC;
-  Read_SpMatrix<> a("A", A, ctl, eA);
-  Read_SpMatrix<> b("B", B, ctl, eB);
+  Read_SpMatrix<> a("A", A, ctl, eA, P, Q);
+  Read_SpMatrix<> b("B", B, ctl, eB, P, Q);
   Write_SpMatrix<> c(C, eC);
   auto c_status = c.status();
   assert(!has_value(c_status));
   //  SpMM a_times_b(world, eA, eB, eC, A, B);
-  SpMM<> a_times_b(eA, eB, eC, A, B);
+  SpMM<> a_times_b(eA, eB, eC, A, B, Afilling, Bfilling, P, Q);
 
   auto connected = make_graph_executable(&control);
   assert(connected);
@@ -904,7 +963,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, std::string tiling_t
   }, end{0}, diff{0};
   gettimeofday(&start, nullptr);
   // ready, go! need only 1 kick, so must be done by 1 thread only
-  if (ttg_default_execution_context().rank() == 0) control.start();
+  if (ttg_default_execution_context().rank() == 0) control.start(P, Q);
   ttg_fence(ttg_default_execution_context());
   gettimeofday(&end, nullptr);
   timersub(&end, &start, &diff);
@@ -937,6 +996,14 @@ int main(int argc, char **argv) {
   } else {
     ttg_initialize(1, argv, cores);
   }
+
+  using mpqc::Debugger;
+  auto debugger = std::make_shared<Debugger>();
+  Debugger::set_default_debugger(debugger);
+  debugger->set_exec(argv[0]);
+  debugger->set_prefix(ttg_default_execution_context().rank());
+  // debugger->set_cmd("lldb_xterm");
+  debugger->set_cmd("gdb_xterm");
 
   int mpi_size = ttg_default_execution_context().size();
   int mpi_rank = ttg_default_execution_context().rank();
@@ -972,9 +1039,9 @@ int main(int argc, char **argv) {
     Q = parseOption(QStr, Q);
 
     if (P * Q != mpi_size) {
-      if ((mpi_size % P) == 0)
+      if (!cmdOptionExists(argv, argv + argc, "-Q") && (mpi_size % P) == 0)
         Q = mpi_size / P;
-      else if ((mpi_size % Q) == 0)
+      else if (!cmdOptionExists(argv, argv + argc, "-P") && (mpi_size % Q) == 0)
         P = mpi_size / Q;
       else {
         if (0 == mpi_rank) {
@@ -992,6 +1059,12 @@ int main(int argc, char **argv) {
       if (0 == ttg_default_execution_context().rank()) std::cerr << "#Random seeded with " << seed << std::endl;
     }
     ttg_broadcast(ttg_default_execution_context(), seed, 0);
+
+    std::vector<int> mTiles;
+    std::vector<int> nTiles;
+    std::vector<int> kTiles;
+    std::map<std::tuple<int, int>, bool> Afilling;
+    std::map<std::tuple<int, int>, bool> Bfilling;
 
 #if !defined(BLOCK_SPARSE_GEMM)
     if (cmdOptionExists(argv, argv + argc, "-mm")) {
@@ -1024,10 +1097,11 @@ int main(int argc, char **argv) {
       double avg = parseOption(avgStr, 0.3);
       timing = true;
       tiling_type = "RandomIrregularTiling";
-      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, gflops, avg_nb, Adensity, Bdensity, seed, P, Q);
+      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, mTiles, nTiles, kTiles, Afilling, Bfilling, gflops, avg_nb,
+                     Adensity, Bdensity, seed, P, Q);
     } else {
       tiling_type = "HardCodedBlockSparseMatrix";
-      initBlSpHardCoded(A, B, C, M, N, K);
+      initBlSpHardCoded(A, B, C, mTiles, nTiles, kTiles, Afilling, Bfilling, M, N, K);
     }
 #endif  // !defined(BLOCK_SPARSE_GEMM)
 
@@ -1038,20 +1112,21 @@ int main(int argc, char **argv) {
       // Start up engine
       ttg_execute(ttg_default_execution_context());
       for (int nrun = 0; nrun < nb_runs; nrun++) {
-        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity, M, N, K, P, Q);
+        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity, mTiles, nTiles, kTiles, Afilling,
+                          Bfilling, M, N, K, P, Q);
       }
     } else {
       // flow graph needs to exist on every node
-      Edge<> ctl("control");
+      Edge<Key<2>> ctl("control");
       Control control(ctl);
       Edge<Key<2>, blk_t> eA, eB, eC;
-      Read_SpMatrix<> a("A", A, ctl, eA);
-      Read_SpMatrix<> b("B", B, ctl, eB);
+      Read_SpMatrix<> a("A", A, ctl, eA, P, Q);
+      Read_SpMatrix<> b("B", B, ctl, eB, P, Q);
       Write_SpMatrix<> c(C, eC);
       auto c_status = c.status();
       assert(!has_value(c_status));
       //  SpMM a_times_b(world, eA, eB, eC, A, B);
-      SpMM<> a_times_b(eA, eB, eC, A, B);
+      SpMM<> a_times_b(eA, eB, eC, A, B, Afilling, Bfilling, P, Q);
 
       std::cout << Dot{}(&a, &b) << std::endl;
 
@@ -1061,7 +1136,7 @@ int main(int argc, char **argv) {
       TTGUNUSED(connected);
 
       // ready, go! need only 1 kick, so must be done by 1 thread only
-      if (ttg_default_execution_context().rank() == 0) control.start();
+      if (ttg_default_execution_context().rank() == 0) control.start(P, Q);
 
       ///////////////////////////////////////////////////////////////////////////
       // copy matrix using ttg::Matrix
@@ -1072,7 +1147,8 @@ int main(int argc, char **argv) {
       auto copy_status = aflow >> Acopy;
       assert(!has_value(copy_status));
       aflow.pushall();
-      Control control2(ttg_ctl_edge(ttg_default_execution_context()));
+      Edge<Key<2>> ctl2("control");
+      Control control2(ctl2);
       {
         // std::cout << "matrix copy using ttg::Matrix" << std::endl;
         //      if (ttg_default_execution_context().rank() == 0) std::cout << Dot{}(&control2) << std::endl;
@@ -1083,7 +1159,7 @@ int main(int argc, char **argv) {
         TTGUNUSED(connected);
 
         // ready, go! need only 1 kick, so must be done by 1 thread only
-        if (ttg_default_execution_context().rank() == 0) control2.start();
+        if (ttg_default_execution_context().rank() == 0) control2.start(P, Q);
       }
       //////////////////////////////////////////////////////////////////////////
 
