@@ -155,7 +155,7 @@ struct Key : public std::array<long, Rank> {
       (*this)[2] = hash % max_index;
     }
   }
-  [[nodiscard("PURE FUN")]] std::size_t hash() const {
+  std::size_t hash() const {
     static_assert(Rank == 2 || Rank == 3, "Key<Rank>::hash only implemented for Rank={2,3}");
     return Rank == 2 ? (*this)[0] * max_index + (*this)[1]
                      : ((*this)[0] * max_index + (*this)[1]) * max_index + (*this)[2];
