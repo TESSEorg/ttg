@@ -1228,7 +1228,7 @@ int main(int argc, char **argv) {
       SpMM<> a_times_b(eA, eB, eC, A, B, Afilling, Bfilling, keymap);
       TTGUNUSED(a_times_b);
 
-      std::cout << Dot{}(&a, &b) << std::endl;
+      if (get_default_world().rank() == 0) std::cout << Dot{}(&a, &b) << std::endl;
 
       // ready to run!
       auto connected = make_graph_executable(&control);
