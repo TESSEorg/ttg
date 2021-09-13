@@ -1209,6 +1209,7 @@ int main(int argc, char **argv) {
       }
     } else {
       // flow graph needs to exist on every node
+      auto keymap_write = [](const Key<2> &key) { return 0; };
       Edge<Key<2>> ctl("control");
       Control control(ctl);
       Edge<Key<2>, blk_t> eA, eB, eC;
@@ -1220,7 +1221,7 @@ int main(int argc, char **argv) {
                     };
       Read_SpMatrix<> a("A", A, ctl, eA, keymap);
       Read_SpMatrix<> b("B", B, ctl, eB, keymap);
-      Write_SpMatrix<> c(C, eC, keymap);
+      Write_SpMatrix<> c(C, eC, keymap_write);
       auto &c_status = c.status();
       assert(!has_value(c_status));
       //  SpMM a_times_b(world, eA, eB, eC, A, B);
