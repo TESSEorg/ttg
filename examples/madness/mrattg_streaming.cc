@@ -33,6 +33,18 @@ using namespace ttg;
 //#include "/usr/include/mkl/mkl.h" // assume for now but need to wrap
 //#include "mkl.h"
 
+#define USER_REGION_ENTER(name) if (tracing_enabled) parsec_profiling_ts_trace(event_##name##_startkey, 0, PROFILE_OBJECT_ID_NULL, NULL)
+#define USER_REGION_EXIT(name)  if (tracing_enabled) parsec_profiling_ts_trace(event_##name##_endkey, 0, PROFILE_OBJECT_ID_NULL, NULL)
+
+static bool tracing_enabled = false;
+static int event_project_startkey, event_project_endkey;
+static int event_docompress_startkey, event_docompress_endkey;
+static int event_sendleavesup_startkey, event_sendleavesup_endkey;
+static int event_recurup_startkey, event_recurup_endkey;
+static int event_reconstruct_startkey, event_reconstruct_endkey;
+static int event_send_startkey, event_send_endkey;
+static int event_unfilter_startkey, event_unfilter_endkey;
+
 using namespace mra;
 
 /// Random process map
@@ -114,7 +126,9 @@ auto make_project(functorT& f,
         auto& coeffs = node.coeffs; // Need to clean up OO design
 
         if (key.level() < initial_level(f)) {
+            USER_REGION_ENTER(send);
             for (auto child : children(key)) send<0>(child, Control(), out);
+            USER_REGION_EXIT(send);
             coeffs = T(1e7); // set to obviously bad value to detect incorrect use
             node.is_leaf = false;
         }
@@ -123,9 +137,13 @@ auto make_project(functorT& f,
             node.is_leaf = true;
         }
         else {
+            USER_REGION_ENTER(project);
             node.is_leaf = fcoeffs<functorT,T,K>(f, key, thresh, coeffs); // cannot deduce K
+            USER_REGION_EXIT(project);
             if (!node.is_leaf) {
+                USER_REGION_ENTER(send);
                 for (auto child : children(key)) send<0>(child,Control(),out); // should be broadcast ?
+                USER_REGION_EXIT(send);
             }
         }
         send<1>(key, node, out); // always produce a result
@@ -187,7 +205,9 @@ void send_leaves_up(const Key<NDIM>& key,
         } else {
           //auto outs = ::mra::subtuple_to_array_of_ptrs<0,Key<NDIM>::num_children>(out);
           //outs[key.childindex()]->send(key.parent(),node);
+          USER_REGION_ENTER(sendleavesup);
           send<0>(key.parent(), node, out);
+          USER_REGION_EXIT(sendleavesup);
         }
     }
 }
@@ -205,6 +225,7 @@ void do_compress(const Key<NDIM>& key,
                  std::tuple<rnodeOut<T,K,NDIM>, cnodeOut<T,K,NDIM>> &out) {
   //const typename ::detail::tree_types<T,K,NDIM>::compress_in_type& in,
   //typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
+    USER_REGION_ENTER(docompress);
     auto& child_slices = FunctionData<T,K,NDIM>::get_child_slices();
     FunctionCompressedNode<T,K,NDIM> result(key); // The eventual result
     auto& d = result.coeffs;
@@ -223,9 +244,11 @@ void do_compress(const Key<NDIM>& key,
         }
         filter<T,K,NDIM>(s,d);  // Apply twoscale transformation
     }
+    USER_REGION_EXIT(docompress);
 
     // Recur up
     if (key.level() > 0) {
+        USER_REGION_ENTER(recurup);
         FunctionReconstructedNode<T,K,NDIM> p(key);
         p.coeffs = d(child_slices[0]);
         d(child_slices[0]) = 0.0;
@@ -233,6 +256,7 @@ void do_compress(const Key<NDIM>& key,
         //auto outs = ::mra::subtuple_to_array_of_ptrs<0,Key<NDIM>::num_children>(out);
         //outs[key.childindex()]->send(key.parent(), p);
         send<0>(key.parent(), p, out);
+        USER_REGION_EXIT(recurup);
     }
     else {
         std::cout << "At root of compressed tree: total normsq is " << sumsq + d.sumabssq() << std::endl;
@@ -321,7 +345,9 @@ void do_reconstruct(const Key<NDIM>& key,
     if (key.level() != 0) node.coeffs(child_slices[0]) = from_parent;
 
     FixedTensor<T,2*K,NDIM> s;
+    USER_REGION_ENTER(unfilter);
     unfilter<T,K,NDIM>(node.coeffs, s);
+    USER_REGION_EXIT(unfilter);
 
     FunctionReconstructedNode<T,K,NDIM> r(key);
     r.coeffs = T(0.0);
@@ -329,6 +355,7 @@ void do_reconstruct(const Key<NDIM>& key,
     ::send<1>(key, r, out); // Send empty interior node to result tree
 
     KeyChildren<NDIM> children(key);
+    USER_REGION_ENTER(reconstruct);
     for (auto it=children.begin(); it!=children.end(); ++it) {
         const Key<NDIM> child= *it;
         r.key = child;
@@ -341,6 +368,7 @@ void do_reconstruct(const Key<NDIM>& key,
             ::send<0>(child, r.coeffs, out);
         }
     }
+    USER_REGION_EXIT(reconstruct);
 }
 
 template <typename T, size_t K, Dimension NDIM>
@@ -501,7 +529,7 @@ void test1() {
         rnodeEdge<T,K,NDIM> a("a"), c("c");
         cnodeEdge<T,K,NDIM> b("b");
 
-        auto p1 = make_project(ff, T(1e-6), ctl, a, "project A");
+        auto p1 = make_project(ff, T(1e-10), ctl, a, "project A");
         auto compress = make_compress<T,K,NDIM>(a, b);
 
         auto &reduce_leaves_op = std::get<1>(compress);
@@ -522,6 +550,21 @@ void test1() {
 
         auto recon = make_reconstruct<T,K,NDIM>(b,c);
 
+	int nproc = ttg_default_execution_context().size();
+        auto keymap = [nproc](const Key<NDIM>& key) { 
+          Level n = key.level();
+          if (n == 0) return 0;
+          madness::hashT hash;
+          if (n <= 3 || (n&0x1)) hash = key.hash();
+          else hash = key.parent().parent().hash();
+          return (int)(hash % nproc);
+        };
+
+	p1->set_keymap(keymap);
+	std::get<0>(compress)->set_keymap(keymap);
+	std::get<1>(compress)->set_keymap(keymap);
+        recon->set_keymap(keymap);
+
         // auto printer =   make_printer(a,"projected    ", false);
         // auto printer2 =  make_printer(b,"compressed   ", false);
         // auto printer3 =  make_printer(c,"reconstructed", false);
@@ -538,7 +581,37 @@ void test1() {
         ops.push_back(std::move(printer2));
         ops.push_back(std::move(printer3));
     }
-    
+
+    if (tracing_enabled) {
+      parsec_profiling_add_dictionary_keyword("PROJECT", "#0000FF",
+              0, "",
+              &event_project_startkey, &event_project_endkey);
+
+      parsec_profiling_add_dictionary_keyword("SENDLEAVESUP", "#0000FF",
+              0, "",
+              &event_sendleavesup_startkey, &event_sendleavesup_endkey);
+
+      parsec_profiling_add_dictionary_keyword("DOCOMPRESS", "#0000FF",
+              0, "",
+              &event_docompress_startkey, &event_docompress_endkey);
+
+      parsec_profiling_add_dictionary_keyword("RECURUP", "#0000FF",
+              0, "",
+              &event_recurup_startkey, &event_recurup_endkey);
+
+      parsec_profiling_add_dictionary_keyword("RECONSTRUCT", "#0000FF",
+              0, "",
+              &event_reconstruct_startkey, &event_reconstruct_endkey);
+
+      parsec_profiling_add_dictionary_keyword("SEND", "#0000FF",
+              0, "",
+              &event_send_startkey, &event_send_endkey);
+
+      parsec_profiling_add_dictionary_keyword("UNFILTER", "#0000FF",
+              0, "",
+              &event_unfilter_startkey, &event_unfilter_endkey);
+    }
+
     std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
     auto connected = make_graph_executable(start.get());
     assert(connected);    
@@ -564,6 +637,11 @@ void test1() {
 }
 
 int main(int argc, char** argv) {
+    if (argc == 2) {
+      tracing_enabled = std::atoi(argv[1]);
+    }
+    std::cout << "Tracing enabled : " << tracing_enabled << std::endl;
+
     ttg_initialize(argc, argv, 2);
     //std::cout << "Hello from madttg\n";
 
@@ -576,8 +654,8 @@ int main(int argc, char** argv) {
 
     {
         //test0<float,6,3>();
-        test1<float,6,3>();
-        //test1<double,6,3>();
+        //test1<float,6,3>();
+        test1<double,6,3>();
     }
 
     ttg_fence(get_default_world());
