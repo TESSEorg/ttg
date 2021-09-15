@@ -550,19 +550,19 @@ void test1() {
 
         auto recon = make_reconstruct<T,K,NDIM>(b,c);
 
-	int nproc = ttg_default_execution_context().size();
+	      int nproc = ttg_default_execution_context().size();
         auto keymap = [nproc](const Key<NDIM>& key) { 
           Level n = key.level();
           if (n == 0) return 0;
           madness::hashT hash;
           if (n <= 3 || (n&0x1)) hash = key.hash();
-          else hash = key.parent().parent().hash();
+          else hash = key.parent().hash();
           return (int)(hash % nproc);
         };
 
-	p1->set_keymap(keymap);
-	std::get<0>(compress)->set_keymap(keymap);
-	std::get<1>(compress)->set_keymap(keymap);
+	      p1->set_keymap(keymap);
+	      std::get<0>(compress)->set_keymap(keymap);
+	      std::get<1>(compress)->set_keymap(keymap);
         recon->set_keymap(keymap);
 
         // auto printer =   make_printer(a,"projected    ", false);
