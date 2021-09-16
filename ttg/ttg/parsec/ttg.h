@@ -99,7 +99,8 @@ namespace ttg_parsec {
     inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> copyhandler_probe("TTG::HANDLE COPY");
     inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> createtask_probe("TTG::CREATE TASK");
     inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> setarg_probe("TTG::SETARG_LOCAL");
-    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> sendam_probe("TTG::SEND AM");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> sendam_probe("TTG::SEND AM", sizeof(int),
+                                                                                          "msg_size{uint64_t}");
     inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> reducer_probe("TTG::REDUCE");
     inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> lock_probe("TTG::LOCK HASHTABLE");
     inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> find_probe("TTG::FIND HASHTABLE");
@@ -1076,7 +1077,8 @@ namespace ttg_parsec {
     void send_am(int target, void* msg, size_t size)
     {
       auto& world_impl = world.impl();
-      ttg::detail::region_probe_event ev(detail::sendam_probe);
+      uint64_t size64 = size;
+      ttg::detail::region_probe_event ev(detail::sendam_probe, size64);
       parsec_taskpool_t *tp = world_impl.taskpool();
       tp->tdm.module->outgoing_message_start(tp, target, NULL);
       tp->tdm.module->outgoing_message_pack(tp, target, NULL, NULL, 0);
