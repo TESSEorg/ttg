@@ -99,8 +99,11 @@ namespace ttg_parsec {
     inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> copyhandler_probe("TTG::HANDLE COPY");
     inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> createtask_probe("TTG::CREATE TASK");
     inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> setarg_probe("TTG::SETARG_LOCAL");
-    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> sendam_probe("TTG::SEND AM", sizeof(int),
-                                                                                          "msg_size{uint64_t}");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> setargmsg_probe("TTG::SETARG FROM MSG");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> sendam_probe("TTG::SEND AM", sizeof(int32_t),
+                                                                                          "msg_size{uint32_t}");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> get_probe("TTG::GET", sizeof(int64_t),
+                                                                                       "size{uint64_t}");
     inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> reducer_probe("TTG::REDUCE");
     inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> lock_probe("TTG::LOCK HASHTABLE");
     inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> find_probe("TTG::FIND HASHTABLE");
@@ -1077,13 +1080,14 @@ namespace ttg_parsec {
     void send_am(int target, void* msg, size_t size)
     {
       auto& world_impl = world.impl();
-      uint64_t size64 = size;
-      ttg::detail::region_probe_event ev(detail::sendam_probe, size64);
+      uint32_t size32 = size;
+      detail::sendam_probe.enter(size32);
       parsec_taskpool_t *tp = world_impl.taskpool();
       tp->tdm.module->outgoing_message_start(tp, target, NULL);
       tp->tdm.module->outgoing_message_pack(tp, target, NULL, NULL, 0);
       // std::cout << "Sending AM with " << msg->op_id.num_keys << " keys " << std::endl;
       parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), target, msg, size);
+      detail::sendam_probe.exit(0);
     }
 
 
@@ -1141,6 +1145,7 @@ namespace ttg_parsec {
     void set_arg_from_msg(void *data, std::size_t size) {
       using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
       using msg_t = detail::msg_t;
+      ttg::detail::region_probe_event ev(detail::setargmsg_probe);
       msg_t *msg = static_cast<msg_t *>(data);
       if constexpr (!ttg::meta::is_void_v<keyT>) {
         /* unpack the keys */
@@ -1232,10 +1237,12 @@ namespace ttg_parsec {
                                       iov.num_bytes, &lreg, &lreg_size);
                 world.impl().increment_inflight_msg();
                 /* TODO: PaRSEC should treat the remote callback as a tag, not a function pointer! */
+                detail::get_probe.enter(static_cast<uint64_t>(iov.num_bytes));
                 parsec_ce.get(&parsec_ce, lreg, 0, rreg, 0, iov.num_bytes, remote, &detail::get_complete_cb<ActivationT>,
                               activation,
                               /*world.impl().parsec_ttg_rma_tag()*/
                               cbtag, &fn_ptr, sizeof(std::intptr_t));
+                detail::get_probe.exit(static_cast<uint64_t>(0));
               }
 
               assert(num_iovecs == nv);
