@@ -179,8 +179,7 @@ std::ostream &operator<<(std::ostream &os, const Key<Rank> &key) {
   return os;
 }
 
-inline int tile2rank(int i, int j, int P, int Q)
-{
+inline int tile2rank(int i, int j, int P, int Q) {
   int p = (i % P);
   int q = (j % Q);
   int r = (q * P) + p;
@@ -193,9 +192,11 @@ class Read_SpMatrix : public Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMat
  public:
   using baseT = Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void>;
 
-  template<typename Keymap>
-  Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>> &ctl, Edge<Key<2>, Blk> &out, Keymap &&keymap)
-      : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"}, keymap)
+  template <typename Keymap>
+  Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>> &ctl, Edge<Key<2>, Blk> &out,
+                Keymap &&keymap)
+      : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
+              keymap)
       , matrix_(matrix) {}
 
   void op(const Key<2> &key, std::tuple<Out<Key<2>, Blk>> &out) {
@@ -216,8 +217,8 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
  public:
   using baseT = Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>;
 
-  template<typename Keymap>
-  Write_SpMatrix(SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &in, Keymap&& keymap)
+  template <typename Keymap>
+  Write_SpMatrix(SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &in, Keymap &&keymap)
       : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, keymap), matrix_(matrix) {}
 
   void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
@@ -256,12 +257,13 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
 };
 
 // sparse mm
-template <typename Keymap = std::function<int(const Key<2>&)>, typename Blk = blk_t>
+template <typename Keymap = std::function<int(const Key<2> &)>, typename Blk = blk_t>
 class SpMM {
  public:
   SpMM(Edge<Key<2>, Blk> &a, Edge<Key<2>, Blk> &b, Edge<Key<2>, Blk> &c, const SpMatrix<Blk> &a_mat,
        const SpMatrix<Blk> &b_mat, std::map<std::tuple<int, int>, bool> &Afilling,
-       std::map<std::tuple<int, int>, bool> &Bfilling, const Keymap& keymap)
+       std::map<std::tuple<int, int>, bool> &Bfilling, const std::vector<int> &mTiles, const std::vector<int> &nTiles,
+       const std::vector<int> &kTiles, const Keymap &keymap)
       : a_ijk_()
       , local_a_ijk_()
       , b_ijk_()
@@ -282,23 +284,25 @@ class SpMM {
     local_bcast_a_ = std::make_unique<LocalBcastA>(local_a_ijk_, a_ijk_, b_rowidx_to_colidx_, keymap);
     bcast_b_ = std::make_unique<BcastB>(b, local_b_ijk_, a_colidx_to_rowidx_, keymap);
     local_bcast_b_ = std::make_unique<LocalBcastB>(local_b_ijk_, b_ijk_, a_colidx_to_rowidx_, keymap);
-    multiplyadd_ =
-        std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c, a_rowidx_to_colidx_, b_colidx_to_rowidx_, keymap);
+    multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c, a_rowidx_to_colidx_, b_colidx_to_rowidx_,
+                                                 mTiles, nTiles, keymap);
 
     TTGUNUSED(bcast_a_);
     TTGUNUSED(bcast_b_);
     TTGUNUSED(multiplyadd_);
   }
 
-
   /// Locally broadcast A[i][k] to all {i,j,k} such that B[j][k] exists
   class LocalBcastA : public Op<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastA, Blk> {
    public:
     using baseT = Op<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastA, Blk>;
 
-    LocalBcastA(Edge<Key<3>, Blk> &a, Edge<Key<3>, Blk> &a_ijk, const std::vector<std::vector<long>> &b_rowidx_to_colidx, Keymap keymap)
-        : baseT(edges(a), edges(a_ijk), "SpMM::local_bcast_a", {"a_ik"}, {"a_ijk"}, [](const Key<3>& key){ return key[2]; })
-        , b_rowidx_to_colidx_(b_rowidx_to_colidx), keymap_(keymap) {}
+    LocalBcastA(Edge<Key<3>, Blk> &a, Edge<Key<3>, Blk> &a_ijk,
+                const std::vector<std::vector<long>> &b_rowidx_to_colidx, Keymap keymap)
+        : baseT(edges(a), edges(a_ijk), "SpMM::local_bcast_a", {"a_ik"}, {"a_ijk"},
+                [](const Key<3> &key) { return key[2]; })
+        , b_rowidx_to_colidx_(b_rowidx_to_colidx)
+        , keymap_(keymap) {}
 
     void op(const Key<3> &key, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, Blk>> &a_ijk) {
       const auto i = key[0];
@@ -323,13 +327,13 @@ class SpMM {
     Keymap keymap_;
   };  // class LocalBcastA
 
-
   /// broadcast A[i][k] to all procs where B[j][k]
   class BcastA : public Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, Blk> {
    public:
     using baseT = Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, Blk>;
 
-    BcastA(Edge<Key<2>, Blk> &a, Edge<Key<3>, Blk> &a_ikp, const std::vector<std::vector<long>> &b_rowidx_to_colidx, Keymap keymap)
+    BcastA(Edge<Key<2>, Blk> &a, Edge<Key<3>, Blk> &a_ikp, const std::vector<std::vector<long>> &b_rowidx_to_colidx,
+           Keymap keymap)
         : baseT(edges(a), edges(a_ikp), "SpMM::bcast_a", {"a_ik"}, {"a_ikp"}, keymap)
         , b_rowidx_to_colidx_(b_rowidx_to_colidx) {}
 
@@ -363,9 +367,12 @@ class SpMM {
    public:
     using baseT = Op<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastB, Blk>;
 
-    LocalBcastB(Edge<Key<3>, Blk> &b, Edge<Key<3>, Blk> &b_ijk, const std::vector<std::vector<long>> &a_colidx_to_rowidx, Keymap keymap)
-        : baseT(edges(b), edges(b_ijk), "SpMM::local_bcast_b", {"b_kj"}, {"b_ijk"}, [](const Key<3> &key){ return key[2]; })
-        , a_colidx_to_rowidx_(a_colidx_to_rowidx), keymap_(keymap) {}
+    LocalBcastB(Edge<Key<3>, Blk> &b, Edge<Key<3>, Blk> &b_ijk,
+                const std::vector<std::vector<long>> &a_colidx_to_rowidx, Keymap keymap)
+        : baseT(edges(b), edges(b_ijk), "SpMM::local_bcast_b", {"b_kj"}, {"b_ijk"},
+                [](const Key<3> &key) { return key[2]; })
+        , a_colidx_to_rowidx_(a_colidx_to_rowidx)
+        , keymap_(keymap) {}
 
     void op(const Key<3> &key, typename baseT::input_values_tuple_type &&b_kj, std::tuple<Out<Key<3>, Blk>> &b_ijk) {
       const auto k = key[0];
@@ -395,7 +402,8 @@ class SpMM {
    public:
     using baseT = Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, Blk>;
 
-    BcastB(Edge<Key<2>, Blk> &b, Edge<Key<3>, Blk> &b_kjp, const std::vector<std::vector<long>> &a_colidx_to_rowidx, Keymap keymap)
+    BcastB(Edge<Key<2>, Blk> &b, Edge<Key<3>, Blk> &b_kjp, const std::vector<std::vector<long>> &a_colidx_to_rowidx,
+           Keymap keymap)
         : baseT(edges(b), edges(b_kjp), "SpMM::bcast_b", {"b_kjp"}, {"b_ijk"}, keymap)
         , a_colidx_to_rowidx_(a_colidx_to_rowidx) {}
 
@@ -431,8 +439,8 @@ class SpMM {
 
     MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
                 const std::vector<std::vector<long>> &a_rowidx_to_colidx,
-                const std::vector<std::vector<long>> &b_colidx_to_rowidx,
-                Keymap keymap)
+                const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<int> &mTiles,
+                const std::vector<int> &nTiles, Keymap keymap)
         : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM::MultiplyAdd", {"a_ijk", "b_ijk", "c_ijk"},
                 {"c_ij", "c_ijk"},
                 [keymap](const Key<3> &key) {
@@ -459,7 +467,12 @@ class SpMM {
               std::tie(k, have_k) = compute_first_k(i, j);
               if (have_k) {
                 if (tracing()) ttg::print("Initializing C[", i, "][", j, "] to zero");
-                this->template in<2>()->send(Key<3>({i, j, k}), Blk{});
+#if BLOCK_SPARSE_GEMM
+                Blk zero(btas::Range(mTiles[i], nTiles[j]), 0.0);
+#else
+                Blk zero{0.0};
+#endif
+                this->template in<2>()->send(Key<3>({i, j, k}), zero);
               } else {
                 if (tracing()) ttg::print("C[", i, "][", j, "] is empty");
               }
@@ -890,11 +903,11 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, SpMat
     std::vector<triplet_t> A_elements;
 #if defined(BTAS_IS_USABLE)
     auto A_blksize = {128, 256};
-    A_elements.emplace_back(0, 1, blk_t(btas::Range(A_blksize), 12.3));
-    A_elements.emplace_back(0, 2, blk_t(btas::Range(A_blksize), 10.7));
-    A_elements.emplace_back(0, 3, blk_t(btas::Range(A_blksize), -2.3));
-    A_elements.emplace_back(1, 0, blk_t(btas::Range(A_blksize), -0.3));
-    A_elements.emplace_back(1, 2, blk_t(btas::Range(A_blksize), 1.2));
+    A_elements.emplace_back(0, 1, blk_t(btas::Range(128, 256), 12.3));
+    A_elements.emplace_back(0, 2, blk_t(btas::Range(128, 256), 10.7));
+    A_elements.emplace_back(0, 3, blk_t(btas::Range(128, 256), -2.3));
+    A_elements.emplace_back(1, 0, blk_t(btas::Range(128, 256), -0.3));
+    A_elements.emplace_back(1, 2, blk_t(btas::Range(128, 256), 1.2));
 #else
     A_elements.emplace_back(0, 1, 12.3);
     A_elements.emplace_back(0, 2, 10.7);
@@ -912,13 +925,13 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, SpMat
     std::vector<triplet_t> B_elements;
 #if defined(BTAS_IS_USABLE)
     auto B_blksize = {256, 196};
-    B_elements.emplace_back(0, 0, blk_t(btas::Range(B_blksize), 12.3));
-    B_elements.emplace_back(1, 0, blk_t(btas::Range(B_blksize), 10.7));
-    B_elements.emplace_back(3, 0, blk_t(btas::Range(B_blksize), -2.3));
-    B_elements.emplace_back(1, 1, blk_t(btas::Range(B_blksize), -0.3));
-    B_elements.emplace_back(1, 2, blk_t(btas::Range(B_blksize), 1.2));
-    B_elements.emplace_back(2, 2, blk_t(btas::Range(B_blksize), 7.2));
-    B_elements.emplace_back(3, 2, blk_t(btas::Range(B_blksize), 0.2));
+    B_elements.emplace_back(0, 0, blk_t(btas::Range(256, 196), 12.3));
+    B_elements.emplace_back(1, 0, blk_t(btas::Range(256, 196), 10.7));
+    B_elements.emplace_back(3, 0, blk_t(btas::Range(256, 196), -2.3));
+    B_elements.emplace_back(1, 1, blk_t(btas::Range(256, 196), -0.3));
+    B_elements.emplace_back(1, 2, blk_t(btas::Range(256, 196), 1.2));
+    B_elements.emplace_back(2, 2, blk_t(btas::Range(256, 196), 7.2));
+    B_elements.emplace_back(3, 2, blk_t(btas::Range(256, 196), 0.2));
 #else
     B_elements.emplace_back(0, 0, 12.3);
     B_elements.emplace_back(1, 0, 10.7);
@@ -1012,10 +1025,11 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     avg_nb += mTiles[mt] * kTiles[kt];
     avg_nb_nb++;
     double value = vDist(genv);
-    if (p == 0 && q == 0 && buildRefs) Aref_elements.emplace_back(mt, kt, blk_t(btas::Range(blksize), value));
+    if (p == 0 && q == 0 && buildRefs)
+      Aref_elements.emplace_back(mt, kt, blk_t(btas::Range(mTiles[mt], kTiles[kt]), value));
     if ((mt % P) != p) continue;
     if ((kt % Q) != q) continue;
-    A_elements.emplace_back(mt, kt, blk_t(btas::Range(blksize), value));
+    A_elements.emplace_back(mt, kt, blk_t(btas::Range(mTiles[mt], kTiles[kt]), value));
   }
   A.setFromTriplets(A_elements.begin(), A_elements.end());
   Adensity = (double)filling / (double)(M * K);
@@ -1033,10 +1047,11 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     avg_nb_nb++;
     auto blksize = {kTiles[kt], nTiles[nt]};
     double value = vDist(genv);
-    if (p == 0 && q == 0 && buildRefs) Bref_elements.emplace_back(kt, nt, blk_t(btas::Range(blksize), value));
+    if (p == 0 && q == 0 && buildRefs)
+      Bref_elements.emplace_back(kt, nt, blk_t(btas::Range(kTiles[kt], nTiles[nt]), value));
     if ((kt % P) != p) continue;
     if ((nt % Q) != q) continue;
-    B_elements.emplace_back(kt, nt, blk_t(btas::Range(blksize), value));
+    B_elements.emplace_back(kt, nt, blk_t(btas::Range(kTiles[kt], nTiles[nt]), value));
   }
   B.setFromTriplets(B_elements.begin(), B_elements.end());
   Bdensity = (double)filling / (double)(K * N);
@@ -1060,7 +1075,8 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
 static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::string &tiling_type, double gflops,
                               double avg_nb, double Adensity, double Bdensity,
                               std::map<std::tuple<int, int>, bool> &Afilling,
-                              std::map<std::tuple<int, int>, bool> &Bfilling, int M, int N, int K, int P, int Q) {
+                              std::map<std::tuple<int, int>, bool> &Bfilling, std::vector<int> &mTiles,
+                              std::vector<int> &nTiles, std::vector<int> &kTiles, int M, int N, int K, int P, int Q) {
   int MT = (int)A.rows();
   int NT = (int)B.cols();
   int KT = (int)A.cols();
@@ -1075,18 +1091,18 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::string &t
   Edge<Key<2>, blk_t> eA, eB, eC;
 
   auto keymap = [P, Q](const Key<2> &key) {
-                  int i = (int)key[0];
-                  int j = (int)key[1];
-                  int r = tile2rank(i, j, P, Q);
-                  return r;
-                };
+    int i = (int)key[0];
+    int j = (int)key[1];
+    int r = tile2rank(i, j, P, Q);
+    return r;
+  };
   Read_SpMatrix<> a("A", A, ctl, eA, keymap);
   Read_SpMatrix<> b("B", B, ctl, eB, keymap);
   Write_SpMatrix<> c(C, eC, keymap);
   auto &c_status = c.status();
   assert(!has_value(c_status));
   //  SpMM a_times_b(world, eA, eB, eC, A, B);
-  SpMM<> a_times_b(eA, eB, eC, A, B, Afilling, Bfilling, keymap);
+  SpMM<> a_times_b(eA, eB, eC, A, B, Afilling, Bfilling, mTiles, nTiles, kTiles, keymap);
   TTGUNUSED(a);
   TTGUNUSED(b);
   TTGUNUSED(a_times_b);
@@ -1276,6 +1292,7 @@ int main(int argc, char **argv) {
       tiling_type = "RandomIrregularTiling";
       initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, Aref, Bref, !timing, mTiles, nTiles, kTiles, Afilling, Bfilling,
                      gflops, avg_nb, Adensity, Bdensity, seed, P, Q);
+      C.resize(mTiles.size(), nTiles.size());
     } else {
       tiling_type = "HardCodedBlockSparseMatrix";
       initBlSpHardCoded(A, B, C, Aref, Bref, true, mTiles, nTiles, kTiles, Afilling, Bfilling, M, N, K);
@@ -1289,7 +1306,8 @@ int main(int argc, char **argv) {
       // Start up engine
       ttg_execute(ttg_default_execution_context());
       for (int nrun = 0; nrun < nb_runs; nrun++) {
-        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity, Afilling, Bfilling, M, N, K, P, Q);
+        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity, Afilling, Bfilling, mTiles, nTiles,
+                          kTiles, M, N, K, P, Q);
       }
     } else {
       // flow graph needs to exist on every node
@@ -1298,18 +1316,18 @@ int main(int argc, char **argv) {
       Control control(ctl);
       Edge<Key<2>, blk_t> eA, eB, eC;
       auto keymap = [P, Q](const Key<2> &key) {
-                      int i = (int)key[0];
-                      int j = (int)key[1];
-                      int r = tile2rank(i, j, P, Q);
-                      return r;
-                    };
+        int i = (int)key[0];
+        int j = (int)key[1];
+        int r = tile2rank(i, j, P, Q);
+        return r;
+      };
       Read_SpMatrix<> a("A", A, ctl, eA, keymap);
       Read_SpMatrix<> b("B", B, ctl, eB, keymap);
       Write_SpMatrix<> c(C, eC, keymap_write);
       auto &c_status = c.status();
       assert(!has_value(c_status));
       //  SpMM a_times_b(world, eA, eB, eC, A, B);
-      SpMM<> a_times_b(eA, eB, eC, A, B, Afilling, Bfilling, keymap);
+      SpMM<> a_times_b(eA, eB, eC, A, B, Afilling, Bfilling, mTiles, nTiles, kTiles, keymap);
       TTGUNUSED(a_times_b);
 
       if (get_default_world().rank() == 0) std::cout << Dot{}(&a, &b) << std::endl;
