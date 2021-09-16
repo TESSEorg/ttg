@@ -262,7 +262,8 @@ class SpMM {
  public:
   SpMM(Edge<Key<2>, Blk> &a, Edge<Key<2>, Blk> &b, Edge<Key<2>, Blk> &c, const SpMatrix<Blk> &a_mat,
        const SpMatrix<Blk> &b_mat, std::map<std::tuple<int, int>, bool> &Afilling,
-       std::map<std::tuple<int, int>, bool> &Bfilling, const Keymap &keymap)
+       std::map<std::tuple<int, int>, bool> &Bfilling, std::vector<int> &mTiles, std::vector<int> &nTiles,
+       std::vector<int> &kTiles, const Keymap &keymap)
       : a_ijk_()
       , local_a_ijk_()
       , b_ijk_()
@@ -304,7 +305,11 @@ class SpMM {
             std::tie(k, have_k) = compute_first_k(i, j);
             if (have_k) {
               if (tracing()) ttg::print("Initializing C[", i, "][", j, "] to zero");
-              Blk zero{};
+#if BLOCK_SPARSE_GEMM
+              Blk zero(btas::Range(mTiles[i], nTiles[j]), 0.0);
+#else
+              Blk zero{0.0};
+#endif
               add_->template in<0>()->send(Key<2>({i, j}), zero);
 
               long nb_k = 1;
@@ -484,7 +489,17 @@ class SpMM {
 
     static auto add(Blk &&a, Blk &&b) {
       if (ttg::tracing()) ttg::print("AddReducer:: reducing");
+#if 0
+      std::cout << "A in reduction:" << std::endl;
+      std::cout << a << std::endl;
+      std::cout << "B in reduction:" << std::endl;
+      std::cout << b << std::endl;
+#endif
       a += b;
+#if 0
+      std::cout << "A out of reduction:" << std::endl;
+      std::cout << a << std::endl;
+#endif
       return a;
     }
   };  // class AddReducer
@@ -514,9 +529,14 @@ class SpMM {
       if (tracing()) {
         ttg::print("C[", i, "][", j, "]  = A[", i, "][", k, "] by B[", k, "][", j, "]");
       }
-      Blk zero{};
-      ::send<0>(Key<2>({i, j}), gemm(std::move(zero), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
-                result);
+      auto A = baseT::template get<0>(_ijk);
+      auto B = baseT::template get<1>(_ijk);
+#if BLOCK_SPARSE_GEMM
+      Blk zero(btas::Range(A.range().extent(0), A.range().extent(1)), 0.0);
+#else
+      Blk zero{0.0};
+#endif
+      ::send<0>(Key<2>({i, j}), gemm(std::move(zero), A, B), result);
     }
 
    private:
@@ -948,11 +968,11 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, SpMat
     std::vector<triplet_t> A_elements;
 #if defined(BTAS_IS_USABLE)
     auto A_blksize = {128, 256};
-    A_elements.emplace_back(0, 1, blk_t(btas::Range(A_blksize), 12.3));
-    A_elements.emplace_back(0, 2, blk_t(btas::Range(A_blksize), 10.7));
-    A_elements.emplace_back(0, 3, blk_t(btas::Range(A_blksize), -2.3));
-    A_elements.emplace_back(1, 0, blk_t(btas::Range(A_blksize), -0.3));
-    A_elements.emplace_back(1, 2, blk_t(btas::Range(A_blksize), 1.2));
+    A_elements.emplace_back(0, 1, blk_t(btas::Range(128, 256), 12.3));
+    A_elements.emplace_back(0, 2, blk_t(btas::Range(128, 256), 10.7));
+    A_elements.emplace_back(0, 3, blk_t(btas::Range(128, 256), -2.3));
+    A_elements.emplace_back(1, 0, blk_t(btas::Range(128, 256), -0.3));
+    A_elements.emplace_back(1, 2, blk_t(btas::Range(128, 256), 1.2));
 #else
     A_elements.emplace_back(0, 1, 12.3);
     A_elements.emplace_back(0, 2, 10.7);
@@ -970,13 +990,13 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, SpMat
     std::vector<triplet_t> B_elements;
 #if defined(BTAS_IS_USABLE)
     auto B_blksize = {256, 196};
-    B_elements.emplace_back(0, 0, blk_t(btas::Range(B_blksize), 12.3));
-    B_elements.emplace_back(1, 0, blk_t(btas::Range(B_blksize), 10.7));
-    B_elements.emplace_back(3, 0, blk_t(btas::Range(B_blksize), -2.3));
-    B_elements.emplace_back(1, 1, blk_t(btas::Range(B_blksize), -0.3));
-    B_elements.emplace_back(1, 2, blk_t(btas::Range(B_blksize), 1.2));
-    B_elements.emplace_back(2, 2, blk_t(btas::Range(B_blksize), 7.2));
-    B_elements.emplace_back(3, 2, blk_t(btas::Range(B_blksize), 0.2));
+    B_elements.emplace_back(0, 0, blk_t(btas::Range(256, 196), 12.3));
+    B_elements.emplace_back(1, 0, blk_t(btas::Range(256, 196), 10.7));
+    B_elements.emplace_back(3, 0, blk_t(btas::Range(256, 196), -2.3));
+    B_elements.emplace_back(1, 1, blk_t(btas::Range(256, 196), -0.3));
+    B_elements.emplace_back(1, 2, blk_t(btas::Range(256, 196), 1.2));
+    B_elements.emplace_back(2, 2, blk_t(btas::Range(256, 196), 7.2));
+    B_elements.emplace_back(3, 2, blk_t(btas::Range(256, 196), 0.2));
 #else
     B_elements.emplace_back(0, 0, 12.3);
     B_elements.emplace_back(1, 0, 10.7);
@@ -1070,10 +1090,11 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     avg_nb += mTiles[mt] * kTiles[kt];
     avg_nb_nb++;
     double value = vDist(genv);
-    if (p == 0 && q == 0 && buildRefs) Aref_elements.emplace_back(mt, kt, blk_t(btas::Range(blksize), value));
+    if (p == 0 && q == 0 && buildRefs)
+      Aref_elements.emplace_back(mt, kt, blk_t(btas::Range(mTiles[mt], kTiles[kt]), value));
     if ((mt % P) != p) continue;
     if ((kt % Q) != q) continue;
-    A_elements.emplace_back(mt, kt, blk_t(btas::Range(blksize), value));
+    A_elements.emplace_back(mt, kt, blk_t(btas::Range(mTiles[mt], kTiles[kt]), value));
   }
   A.setFromTriplets(A_elements.begin(), A_elements.end());
   Adensity = (double)filling / (double)(M * K);
@@ -1091,10 +1112,11 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     avg_nb_nb++;
     auto blksize = {kTiles[kt], nTiles[nt]};
     double value = vDist(genv);
-    if (p == 0 && q == 0 && buildRefs) Bref_elements.emplace_back(kt, nt, blk_t(btas::Range(blksize), value));
+    if (p == 0 && q == 0 && buildRefs)
+      Bref_elements.emplace_back(kt, nt, blk_t(btas::Range(kTiles[kt], nTiles[nt]), value));
     if ((kt % P) != p) continue;
     if ((nt % Q) != q) continue;
-    B_elements.emplace_back(kt, nt, blk_t(btas::Range(blksize), value));
+    B_elements.emplace_back(kt, nt, blk_t(btas::Range(kTiles[kt], nTiles[nt]), value));
   }
   B.setFromTriplets(B_elements.begin(), B_elements.end());
   Bdensity = (double)filling / (double)(K * N);
@@ -1118,7 +1140,8 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
 static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::string &tiling_type, double gflops,
                               double avg_nb, double Adensity, double Bdensity,
                               std::map<std::tuple<int, int>, bool> &Afilling,
-                              std::map<std::tuple<int, int>, bool> &Bfilling, int M, int N, int K, int P, int Q) {
+                              std::map<std::tuple<int, int>, bool> &Bfilling, std::vector<int> &mTiles,
+                              std::vector<int> &nTiles, std::vector<int> &kTiles, int M, int N, int K, int P, int Q) {
   int MT = (int)A.rows();
   int NT = (int)B.cols();
   int KT = (int)A.cols();
@@ -1144,7 +1167,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::string &t
   auto &c_status = c.status();
   assert(!has_value(c_status));
   //  SpMM a_times_b(world, eA, eB, eC, A, B);
-  SpMM<> a_times_b(eA, eB, eC, A, B, Afilling, Bfilling, keymap);
+  SpMM<> a_times_b(eA, eB, eC, A, B, Afilling, Bfilling, mTiles, nTiles, kTiles, keymap);
   TTGUNUSED(a);
   TTGUNUSED(b);
   TTGUNUSED(a_times_b);
@@ -1334,6 +1357,7 @@ int main(int argc, char **argv) {
       tiling_type = "RandomIrregularTiling";
       initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, Aref, Bref, !timing, mTiles, nTiles, kTiles, Afilling, Bfilling,
                      gflops, avg_nb, Adensity, Bdensity, seed, P, Q);
+      C.resize(mTiles.size(), nTiles.size());
     } else {
       tiling_type = "HardCodedBlockSparseMatrix";
       initBlSpHardCoded(A, B, C, Aref, Bref, true, mTiles, nTiles, kTiles, Afilling, Bfilling, M, N, K);
@@ -1347,7 +1371,8 @@ int main(int argc, char **argv) {
       // Start up engine
       ttg_execute(ttg_default_execution_context());
       for (int nrun = 0; nrun < nb_runs; nrun++) {
-        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity, Afilling, Bfilling, M, N, K, P, Q);
+        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity, Afilling, Bfilling, mTiles, nTiles,
+                          kTiles, M, N, K, P, Q);
       }
     } else {
       // flow graph needs to exist on every node
@@ -1367,7 +1392,7 @@ int main(int argc, char **argv) {
       auto &c_status = c.status();
       assert(!has_value(c_status));
       //  SpMM a_times_b(world, eA, eB, eC, A, B);
-      SpMM<> a_times_b(eA, eB, eC, A, B, Afilling, Bfilling, keymap);
+      SpMM<> a_times_b(eA, eB, eC, A, B, Afilling, Bfilling, mTiles, nTiles, kTiles, keymap);
       TTGUNUSED(a_times_b);
 
       if (get_default_world().rank() == 0) std::cout << Dot{}(&a, &b) << std::endl;
