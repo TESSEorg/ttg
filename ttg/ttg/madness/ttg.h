@@ -21,6 +21,7 @@
 #include "ttg/util/meta.h"
 #include "ttg/util/void.h"
 #include "ttg/world.h"
+#include "ttg/util/region_probe.h"
 
 #include <array>
 #include <cassert>
@@ -126,6 +127,11 @@ namespace ttg_madness {
     std::shared_ptr<ttg::base::WorldImplBase> world_sptr{static_cast<ttg::base::WorldImplBase *>(world_ptr)};
     ttg::World world{std::move(world_sptr)};
     ttg::detail::set_default_world(std::move(world));
+
+    /* initialize probes */
+    ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL>::register_deferred_probes();
+    ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_TASKS>::register_deferred_probes();
+    ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_USER>::register_deferred_probes();
   }
   inline void ttg_finalize() {
     ttg::detail::set_default_world(ttg::World{});  // reset the default world

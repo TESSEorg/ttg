@@ -13,6 +13,7 @@ set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/macro.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/meta.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/print.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/region_probe.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/span.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/trace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/tree.h
