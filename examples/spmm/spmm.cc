@@ -532,7 +532,7 @@ class SpMM {
       auto A = baseT::template get<0>(_ijk);
       auto B = baseT::template get<1>(_ijk);
 #if BLOCK_SPARSE_GEMM
-      Blk zero(btas::Range(A.range().extent(0), A.range().extent(1)), 0.0);
+      Blk zero(btas::Range(A.range().extent(0), B.range().extent(1)), 0.0);
 #else
       Blk zero{0.0};
 #endif
