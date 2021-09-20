@@ -60,6 +60,8 @@
 
 #include "ttg/parsec/ttg_data_copy.h"
 
+#include "ttg/util/region_probe.h"
+
 /* PaRSEC function declarations */
 extern "C" {
 void parsec_taskpool_termination_detected(parsec_taskpool_t *tp);
@@ -91,6 +93,26 @@ namespace ttg_parsec {
   };
 
   namespace detail {
+
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> schedule_probe("TTG::PARSEC SCHEDULE");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> release_probe("TTG::CREATE TASK");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> copyhandler_probe("TTG::HANDLE COPY");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> createtask_probe("TTG::CREATE TASK");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> setarg_probe("TTG::SETARG_LOCAL");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> setargmsg_probe("TTG::SETARG FROM MSG");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> sendam_probe("TTG::SEND AM", sizeof(int32_t),
+                                                                                          "msg_size{uint32_t}");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> get_probe("TTG::GET", sizeof(int64_t),
+                                                                                       "size{uint64_t}");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> reducer_probe("TTG::REDUCE");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> lock_probe("TTG::LOCK HASHTABLE");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> find_probe("TTG::FIND HASHTABLE");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> insert_probe("TTG::INSERT HASHTABLE");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> remove_probe("TTG::REMOVE HASHTABLE");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> unlock_probe("TTG::UNLOCK HASHTABLE");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> splitmdbcast_probe("TTG::SPLITMD BCAST");
+    inline ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL> bcast_probe("TTG::BCAST");
+
 
     static int static_unpack_msg(parsec_comm_engine_t *ce, uint64_t tag, void *data, long unsigned int size,
                                  int src_rank, void *obj) {
@@ -313,7 +335,7 @@ namespace ttg_parsec {
     auto *execution_stream() { return parsec_ttg_es == nullptr ? es : parsec_ttg_es; }
     auto *taskpool() { return tpool; }
 
-    void increment_created() { taskpool()->tdm.module->taskpool_addto_nb_tasks(taskpool(), 1); }
+    void increment_created() { taskpool()->tdm.module->taskpool_addto_nb_tasks(taskpool(), 1);}
     void increment_sent_to_sched() { parsec_atomic_fetch_inc_int32(&sent_to_sched_counter()); }
 
     void increment_inflight_msg() { taskpool()->tdm.module->taskpool_addto_nb_pa(taskpool(),  1); }
@@ -665,6 +687,11 @@ namespace ttg_parsec {
     std::shared_ptr<ttg::base::WorldImplBase> world_sptr{static_cast<ttg::base::WorldImplBase *>(world_ptr)};
     ttg::World world{std::move(world_sptr)};
     ttg::detail::set_default_world(std::move(world));
+
+    /* initialize probes */
+    ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_INTERNAL>::register_deferred_probes();
+    ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_TASKS>::register_deferred_probes();
+    ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_USER>::register_deferred_probes();
   }
   inline void ttg_finalize() {
     ttg::detail::set_default_world(ttg::World{});  // reset the default world
@@ -800,6 +827,8 @@ namespace ttg_parsec {
 
     using task_t = detail::parsec_ttg_task_t<keyT, numins>;
 
+    ttg::detail::region_probe<ttg::detail::TTG_REGION_PROBE_TASKS> task_probe;
+
     /* the offset of the key placed after the task structure in the memory from mempool */
     constexpr static const size_t task_key_offset = sizeof(task_t);
 
@@ -866,6 +895,8 @@ namespace ttg_parsec {
     static void static_op(parsec_task_t *parsec_task) {
       task_t *task = (task_t *)parsec_task;
       opT *baseobj = (opT *)task->object_ptr;
+
+      baseobj->task_probe.enter();
       derivedT *obj = (derivedT *)task->object_ptr;
       assert(parsec_ttg_caller == NULL);
       parsec_ttg_caller = parsec_task;
@@ -896,6 +927,7 @@ namespace ttg_parsec {
         else
           ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
       }
+      baseobj->task_probe.exit();
     }
 
     template <ttg::ExecutionSpace Space>
@@ -994,6 +1026,71 @@ namespace ttg_parsec {
       }
     }
 
+    inline
+    void taskstable_lock_bucket(parsec_key_t hk)
+    {
+      ttg::detail::region_probe_event ev(detail::lock_probe);
+      parsec_hash_table_lock_bucket(&tasks_table, hk);
+    }
+
+    inline
+    void taskstable_unlock_bucket(parsec_key_t hk)
+    {
+      ttg::detail::region_probe_event ev(detail::unlock_probe);
+      parsec_hash_table_unlock_bucket(&tasks_table, hk);
+    }
+
+    inline
+    task_t* taskstable_nolock_find(parsec_key_t hk)
+    {
+      ttg::detail::region_probe_event ev(detail::find_probe);
+      return (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk);
+    }
+
+    inline
+    void taskstable_nolock_insert(task_t* task)
+    {
+      ttg::detail::region_probe_event ev(detail::insert_probe);
+      parsec_hash_table_nolock_insert(&tasks_table, &task->op_ht_item);
+    }
+
+    inline
+    void taskstable_nolock_remove(parsec_key_t hk)
+    {
+      ttg::detail::region_probe_event ev(detail::remove_probe);
+      parsec_hash_table_nolock_remove(&tasks_table, hk);
+    }
+
+    template<typename Key>
+    inline
+    task_t* taskstable_find_or_insert(Key &&key, parsec_key_t hk)
+    {
+      task_t *task;
+      taskstable_lock_bucket(hk);
+      if (nullptr == (task = taskstable_nolock_find(hk))) {
+        task = create_new_task(key);
+        world.impl().increment_created();
+        taskstable_nolock_insert(task);
+      }
+      taskstable_unlock_bucket(hk);
+      return task;
+    }
+
+    inline
+    void send_am(int target, void* msg, size_t size)
+    {
+      auto& world_impl = world.impl();
+      uint32_t size32 = size;
+      detail::sendam_probe.enter(size32);
+      parsec_taskpool_t *tp = world_impl.taskpool();
+      tp->tdm.module->outgoing_message_start(tp, target, NULL);
+      tp->tdm.module->outgoing_message_pack(tp, target, NULL, NULL, 0);
+      // std::cout << "Sending AM with " << msg->op_id.num_keys << " keys " << std::endl;
+      parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), target, msg, size);
+      detail::sendam_probe.exit(0);
+    }
+
+
     /** Returns the task memory pool owned by the calling thread */
     inline
     parsec_thread_mempool_t *get_task_mempool(void)
@@ -1048,6 +1145,7 @@ namespace ttg_parsec {
     void set_arg_from_msg(void *data, std::size_t size) {
       using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
       using msg_t = detail::msg_t;
+      ttg::detail::region_probe_event ev(detail::setargmsg_probe);
       msg_t *msg = static_cast<msg_t *>(data);
       if constexpr (!ttg::meta::is_void_v<keyT>) {
         /* unpack the keys */
@@ -1139,10 +1237,12 @@ namespace ttg_parsec {
                                       iov.num_bytes, &lreg, &lreg_size);
                 world.impl().increment_inflight_msg();
                 /* TODO: PaRSEC should treat the remote callback as a tag, not a function pointer! */
+                detail::get_probe.enter(static_cast<uint64_t>(iov.num_bytes));
                 parsec_ce.get(&parsec_ce, lreg, 0, rreg, 0, iov.num_bytes, remote, &detail::get_complete_cb<ActivationT>,
                               activation,
                               /*world.impl().parsec_ttg_rma_tag()*/
                               cbtag, &fn_ptr, sizeof(std::intptr_t));
+                detail::get_probe.exit(static_cast<uint64_t>(0));
               }
 
               assert(num_iovecs == nv);
@@ -1256,6 +1356,7 @@ namespace ttg_parsec {
 
     template <typename Key>
     task_t *create_new_task(const Key &key) {
+      ttg::detail::region_probe_event ev(detail::createtask_probe);
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       auto &world_impl = world.impl();
       task_t *newtask;
@@ -1285,6 +1386,7 @@ namespace ttg_parsec {
       }
 
       if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
+
       return newtask;
     }
 
@@ -1294,6 +1396,8 @@ namespace ttg_parsec {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<Key>;
+
+      ttg::detail::region_probe_event ev(detail::setarg_probe);
 
       if (tracing()) {
         if constexpr (!valueT_is_Void) {
@@ -1317,13 +1421,7 @@ namespace ttg_parsec {
       bool remove_from_hash = true;
       /* If we have only one input and no reducer on that input we can skip the hash table */
       if (numins > 1 || reducer) {
-        parsec_hash_table_lock_bucket(&tasks_table, hk);
-        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
-          task = create_new_task(key);
-          world_impl.increment_created();
-          parsec_hash_table_nolock_insert(&tasks_table, &task->op_ht_item);
-        }
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        task = taskstable_find_or_insert(key, hk);
       } else {
         task = create_new_task(key);
         world_impl.increment_created();
@@ -1336,12 +1434,12 @@ namespace ttg_parsec {
       if (reducer) {  // is this a streaming input? reduce the received value
         // N.B. Right now reductions are done eagerly, without spawning tasks
         //      this means we must lock
-        parsec_hash_table_lock_bucket(&tasks_table, hk);
+        taskstable_lock_bucket(hk);
 
+        detail::reducer_probe.enter();
         if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
           // have a value already? if not, set, otherwise reduce
           if (nullptr == (copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in))) {
-            using decay_valueT = std::decay_t<valueT>;
             copy = detail::create_new_datacopy(std::forward<Value>(value));
             task->parsec_task.data[i].data_in = copy;
           } else {
@@ -1355,17 +1453,19 @@ namespace ttg_parsec {
         } else {
           reducer();  // even if this was a control input, must execute the reducer for possible side effects
         }
+        detail::reducer_probe.exit();
         task->stream[i].size++;
         release = (task->stream[i].size == task->stream[i].goal);
         if (release) {
-          parsec_hash_table_nolock_remove(&tasks_table, hk);
+          taskstable_nolock_remove(hk);
           remove_from_hash = false;
         }
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        taskstable_unlock_bucket(hk);
       } else {
         /* whether the task needs to be deferred or not */
         bool needs_deferring = false;
         if constexpr (!valueT_is_Void) {
+          detail::copyhandler_probe.enter();
           if (nullptr != task->parsec_task.data[i].data_in) {
             ttg::print_error(get_name(), " : ", key, ": error argument is already set : ", i);
             throw std::logic_error("bad set arg");
@@ -1386,6 +1486,7 @@ namespace ttg_parsec {
             copy = detail::create_new_datacopy(std::forward<Value>(value));
           }
           task->parsec_task.data[i].data_in = copy;
+          detail::copyhandler_probe.exit();
         }
         if (needs_deferring) {
           if (nullptr == task->deferred_release) {
@@ -1414,6 +1515,7 @@ namespace ttg_parsec {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       task_t *task = static_cast<task_t*>(base_task);
       opT &op = *reinterpret_cast<opT *>(op_ptr);
+      ttg::detail::region_probe_event ev(detail::release_probe);
       int32_t count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
       assert(count <= op.self.dependencies_goal);
       auto &world_impl = op.world.impl();
@@ -1438,6 +1540,7 @@ namespace ttg_parsec {
         }
         if (RemoveFromHash) parsec_hash_table_remove(&op.tasks_table, hk);
         if (nullptr == task_list) {
+          ttg::detail::region_probe_event ev(detail::schedule_probe);
           __parsec_schedule(es, &task->parsec_task, 0);
         } else {
           parsec_list_prepend(task_list, &task->parsec_task.super);
@@ -1569,12 +1672,7 @@ namespace ttg_parsec {
           pos += sizeof(fn_ptr);
         }
       }
-      parsec_taskpool_t *tp = world_impl.taskpool();
-      tp->tdm.module->outgoing_message_start(tp, owner, NULL);
-      tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-      // std::cout << "Sending AM with " << msg->op_id.num_keys << " keys " << std::endl;
-      parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-                        sizeof(msg_header_t) + pos);
+      send_am(owner, static_cast<void *>(msg.get()), sizeof(msg_header_t) + pos);
     }
 
     // case 3
@@ -1604,7 +1702,9 @@ namespace ttg_parsec {
         world_impl.increment_created();
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
         world_impl.increment_sent_to_sched();
+        detail::schedule_probe.enter();
         __parsec_schedule(es, &task->parsec_task, 0);
+        detail::schedule_probe.exit();
       } else {
         using msg_t = detail::msg_t;
         // We pass -1 to signal that we just need to call set_arg(key) on the other end
@@ -1613,11 +1713,7 @@ namespace ttg_parsec {
 
         uint64_t pos = 0;
         pos = pack(key, msg->bytes, pos);
-        parsec_taskpool_t *tp = world_impl.taskpool();
-        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
-        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-                          sizeof(msg_header_t) + pos);
+        send_am(owner, static_cast<void *>(msg.get()), sizeof(msg_header_t) + pos);
       }
     }
 
@@ -1646,7 +1742,9 @@ namespace ttg_parsec {
         world_impl.increment_created();
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
         world_impl.increment_sent_to_sched();
+        detail::schedule_probe.enter();
         __parsec_schedule(es, &task->parsec_task, 0);
+        detail::schedule_probe.exit();
       }
     }
 
@@ -1660,6 +1758,7 @@ namespace ttg_parsec {
         /* submit all ready tasks at once */
         if (!parsec_list_nolock_is_empty(&task_list)) {
           auto ring = (parsec_task_t*) parsec_list_unchain(&task_list);
+          ttg::detail::region_probe_event ev(detail::schedule_probe);
           __parsec_schedule(world.impl().execution_stream(), ring, 0);
         }
     }
@@ -1671,6 +1770,8 @@ namespace ttg_parsec {
     broadcast_arg(const ttg::span<const Key> &keylist, const Value &value) {
       auto world = ttg_default_execution_context();
       int rank = world.rank();
+
+      detail::bcast_probe.enter();
 
       bool have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
                                                        [&](const Key &key) { return keymap(key) != rank; });
@@ -1722,10 +1823,7 @@ namespace ttg_parsec {
           pos = pack(value, msg->bytes, pos);
 
           /* Send the message */
-          tp->tdm.module->outgoing_message_start(tp, owner, NULL);
-          tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-          parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-                            sizeof(msg_header_t) + pos);
+          send_am(owner, static_cast<void *>(msg.get()), sizeof(msg_header_t) + pos);
         }
         /* handle local keys */
         broadcast_arg_local<i>(local_begin, local_end, value);
@@ -1733,6 +1831,7 @@ namespace ttg_parsec {
         /* only local keys */
         broadcast_arg_local<i>(keylist.begin(), keylist.end(), value);
       }
+      detail::bcast_probe.exit();
     }
 
     template <std::size_t i, typename Key, typename Value>
@@ -1743,6 +1842,7 @@ namespace ttg_parsec {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       auto world = ttg_default_execution_context();
       int rank = world.rank();
+      detail::splitmdbcast_probe.enter();
       bool have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
                                                        [&](const Key &key) { return keymap(key) != rank; });
 
@@ -1864,10 +1964,7 @@ namespace ttg_parsec {
             pos += sizeof(fn_ptr);
             ++idx;
           }
-          tp->tdm.module->outgoing_message_start(tp, owner, NULL);
-          tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-          parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-                            sizeof(msg_header_t) + pos);
+          send_am(owner, static_cast<void *>(msg.get()), sizeof(msg_header_t) + pos);
         }
         /* handle local keys */
         broadcast_arg_local<i>(local_begin, local_end, value);
@@ -1875,6 +1972,7 @@ namespace ttg_parsec {
         /* handle local keys */
         broadcast_arg_local<i>(keylist.begin(), keylist.end(), value);
       }
+      detail::splitmdbcast_probe.exit();
     }
 
     // Used by invoke to set all arguments associated with a task
@@ -1925,11 +2023,7 @@ namespace ttg_parsec {
         pos = pack(key, msg->bytes, pos);
         msg->op_id.num_keys = 1;
         pos = pack(size, msg->bytes, pos);
-        parsec_taskpool_t *tp = world_impl.taskpool();
-        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
-        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-                          sizeof(msg_header_t) + pos);
+        send_am(owner, static_cast<void *>(msg.get()), sizeof(msg_header_t) + pos);
       } else {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), ":", key, " : setting stream size to ", size, " for terminal ", i);
@@ -1937,22 +2031,23 @@ namespace ttg_parsec {
 
         auto hk = reinterpret_cast<parsec_key_t>(&key);
         task_t *task;
-        parsec_hash_table_lock_bucket(&tasks_table, hk);
-        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+        taskstable_lock_bucket(hk);
+        if (nullptr == (task = taskstable_nolock_find(hk))) {
           task = create_new_task(key);
           world.impl().increment_created();
-          parsec_hash_table_nolock_insert(&tasks_table, &task->op_ht_item);
+          taskstable_nolock_insert(task);
         }
-
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
 
         // commit changes
         task->stream[i].goal = size;
         bool release = (task->stream[i].size == task->stream[i].goal);
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        taskstable_unlock_bucket(hk);
 
-        if (release) release_task<true>(this, task);
+        if (release) {
+          release_task<true>(this, task);
+        }
       }
     }
 
@@ -1979,11 +2074,7 @@ namespace ttg_parsec {
         /* pack the key */
         msg->op_id.num_keys = 0;
         pos = pack(size, msg->bytes, pos);
-        parsec_taskpool_t *tp = world_impl.taskpool();
-        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
-        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-                          sizeof(msg_header_t) + pos);
+        send_am(owner, static_cast<void *>(msg.get()), sizeof(msg_header_t) + pos);
       } else {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : setting stream size to ", size, " for terminal ", i);
@@ -1991,22 +2082,24 @@ namespace ttg_parsec {
 
         parsec_key_t hk = 0;
         task_t *task;
-        parsec_hash_table_lock_bucket(&tasks_table, hk);
-        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+        taskstable_lock_bucket(hk);
+        detail::find_probe.enter();
+        if (nullptr == (task = taskstable_nolock_find(hk))) {
           task = create_new_task(ttg::Void{});
           world.impl().increment_created();
-          parsec_hash_table_nolock_insert(&tasks_table, &task->op_ht_item);
+          taskstable_nolock_insert(task);
         }
-
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
 
         // commit changes
         task->stream[i].goal = size;
         bool release = (task->stream[i].size == task->stream[i].goal);
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        taskstable_unlock_bucket(hk);
 
-        if (release) release_task<true>(this, task);
+        if (release) {
+          release_task<true>(this, task);
+        }
       }
     }
 
@@ -2031,11 +2124,7 @@ namespace ttg_parsec {
         /* pack the key */
         pos = pack(key, msg->bytes, pos);
         msg->op_id.num_keys = 1;
-        parsec_taskpool_t *tp = world_impl.taskpool();
-        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
-        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-                          sizeof(msg_header_t) + pos);
+        send_am(owner, static_cast<void *>(msg.get()), sizeof(msg_header_t) + pos);
       } else {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
@@ -2043,8 +2132,9 @@ namespace ttg_parsec {
 
         auto hk = reinterpret_cast<parsec_key_t>(&key);
         task_t *task = nullptr;
-        parsec_hash_table_lock_bucket(&tasks_table, hk);
-        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+        taskstable_lock_bucket(hk);
+        if (nullptr == (task = taskstable_nolock_find(hk))) {
+          taskstable_unlock_bucket(hk);
           ttg::print_error(world.rank(), ":", get_name(), ":", key,
                            " : error finalize called on stream that never received an input data: ", i);
           throw std::runtime_error("Op::finalize called on stream that never received an input data");
@@ -2055,7 +2145,7 @@ namespace ttg_parsec {
 
         // commit changes
         task->stream[i].size = 1;
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        taskstable_unlock_bucket(hk);
 
         release_task<true>(this, task);
       }
@@ -2080,20 +2170,17 @@ namespace ttg_parsec {
             std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
                                     msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE, i, 1);
         msg->op_id.num_keys = 0;
-        parsec_taskpool_t *tp = world_impl.taskpool();
-        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
-        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-                          sizeof(msg_header_t) + pos);
+        send_am(owner, static_cast<void *>(msg.get()), sizeof(msg_header_t) + pos);
       } else {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), ": finalizing stream for terminal ", i);
         }
 
         auto hk = static_cast<parsec_key_t>(0);
-        task_t *task = nullptr;
-        parsec_hash_table_lock_bucket(&tasks_table, hk);
-        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+        task_t *task;
+        taskstable_lock_bucket(hk);
+        if (nullptr == (task = taskstable_nolock_find(hk))) {
+          taskstable_unlock_bucket(hk);
           ttg::print_error(world.rank(), ":", get_name(),
                            " : error finalize called on stream that never received an input data: ", i);
           throw std::runtime_error("Op::finalize called on stream that never received an input data");
@@ -2104,7 +2191,7 @@ namespace ttg_parsec {
 
         // commit changes
         task->stream[i].size = 1;
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        taskstable_unlock_bucket(hk);
 
         release_task<true>(this, task);
       }
@@ -2311,7 +2398,8 @@ namespace ttg_parsec {
                      ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
                      : decltype(keymap)(std::forward<keymapT>(keymap_)))
         , priomap(decltype(keymap)(std::forward<priomapT>(priomap_)))
-        , static_stream_goal() {
+        , static_stream_goal()
+        , task_probe(name){
       // Cannot call these in base constructor since terminals not yet constructed
       if (innames.size() != std::tuple_size<input_terminals_type>::value)
         throw std::logic_error("ttg_parsec::OP: #input names != #input terminals");
