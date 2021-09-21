@@ -4,6 +4,7 @@
 #include <iostream>
 #include <random>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <Eigen/SparseCore>
@@ -12,7 +13,6 @@
 #ifdef BTAS_IS_USABLE
 #include <btas/btas.h>
 #include <btas/optimize/contract.h>
-#include <btas/serialization.h>
 #include <btas/util/mohndle.h>
 #else
 #warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
@@ -31,7 +31,6 @@
 
 using namespace ttg;
 
-#include "ttg/serialization.h"
 #include "ttg/util/future.h"
 
 #include "ttg/util/bug.h"
@@ -104,20 +103,20 @@ using SpMatrixTriplet = Eigen::Triplet<T>;  // {row,col,value}
 #endif  // __has_include(<madness/world/archive.h>)
 
 namespace btas {
-  template <typename _T, class _Range, class _Store>
-  inline btas::Tensor<_T, _Range, _Store> operator*(const btas::Tensor<_T, _Range, _Store> &A,
-                                                    const btas::Tensor<_T, _Range, _Store> &B) {
-    btas::Tensor<_T, _Range, _Store> C;
+  template <typename T_, class Range_, class Store_>
+  inline btas::Tensor<T_, Range_, Store_> operator*(const btas::Tensor<T_, Range_, Store_> &A,
+                                                    const btas::Tensor<T_, Range_, Store_> &B) {
+    btas::Tensor<T_, Range_, Store_> C;
     btas::contract(1.0, A, {1, 2}, B, {2, 3}, 0.0, C, {1, 3});
     return C;
   }
 
-  template <typename _T, class _Range, class _Store>
-  btas::Tensor<_T, _Range, _Store> gemm(btas::Tensor<_T, _Range, _Store> &&C, const btas::Tensor<_T, _Range, _Store> &A,
-                                        const btas::Tensor<_T, _Range, _Store> &B) {
+  template <typename T_, class Range_, class Store_>
+  btas::Tensor<T_, Range_, Store_> gemm(btas::Tensor<T_, Range_, Store_> &&C, const btas::Tensor<T_, Range_, Store_> &A,
+                                        const btas::Tensor<T_, Range_, Store_> &B) {
     using array = btas::DEFAULT::index<int>;
     if (C.empty()) {
-      C = btas::Tensor<_T, _Range, _Store>(btas::Range(A.range().extent(0), B.range().extent(1)), 0.0);
+      C = btas::Tensor<T_, Range_, Store_>(btas::Range(A.range().extent(0), B.range().extent(1)), 0.0);
     }
     btas::contract_222(1.0, A, array{1, 2}, B, array{2, 3}, 1.0, C, array{1, 3}, false, false);
     return std::move(C);
@@ -187,22 +186,23 @@ inline int tile2rank(int i, int j, int P, int Q) {
 }
 
 // flow data from an existing SpMatrix on rank 0
-template <typename Blk = blk_t>
+template <typename Blk = blk_t, typename Keymap = std::function<int(const Key<2> &)>>
 class Read_SpMatrix : public Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void> {
  public:
   using baseT = Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void>;
 
-  template <typename Keymap>
   Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>> &ctl, Edge<Key<2>, Blk> &out,
-                Keymap &&keymap)
+                Keymap &keymap)
       : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
               keymap)
       , matrix_(matrix) {}
 
   void op(const Key<2> &key, std::tuple<Out<Key<2>, Blk>> &out) {
+    auto rank = ttg_default_execution_context().rank();
     for (int k = 0; k < matrix_.outerSize(); ++k) {
       for (typename SpMatrix<Blk>::InnerIterator it(matrix_, k); it; ++it) {
-        ::send<0>(Key<2>({it.row(), it.col()}), it.value(), out);
+        if (rank == this->get_keymap()(Key<2>({it.row(), it.col()})))
+          ::send<0>(Key<2>({it.row(), it.col()}), it.value(), out);
       }
     }
   }
@@ -264,169 +264,50 @@ class SpMM {
        const SpMatrix<Blk> &b_mat, std::map<std::tuple<int, int>, bool> &Afilling,
        std::map<std::tuple<int, int>, bool> &Bfilling, const std::vector<int> &mTiles, const std::vector<int> &nTiles,
        const std::vector<int> &kTiles, const Keymap &keymap)
-      : a_ijk_()
-      , b_ijk_()
-      , c_ijk_()
-      , a_rowidx_to_colidx_(make_rowidx_to_colidx(Afilling))
-      , b_colidx_to_rowidx_(make_colidx_to_rowidx(Bfilling))
-      , a_colidx_to_rowidx_(make_colidx_to_rowidx(Afilling))
-      , b_rowidx_to_colidx_(make_rowidx_to_colidx(Bfilling)) {
-    // data is on rank 0, broadcast metadata from there
-    int root = 0;
-    ttg_broadcast(ttg_default_execution_context(), a_rowidx_to_colidx_, root);
-    ttg_broadcast(ttg_default_execution_context(), b_rowidx_to_colidx_, root);
-    ttg_broadcast(ttg_default_execution_context(), a_colidx_to_rowidx_, root);
-    ttg_broadcast(ttg_default_execution_context(), b_colidx_to_rowidx_, root);
+      : a_ijk_(), b_ijk_(), c_ijk_(), plan_(nullptr) {
+    plan_ = std::make_shared<Plan>(make_rowidx_to_colidx(Afilling), make_colidx_to_rowidx(Afilling),
+                                   make_rowidx_to_colidx(Bfilling), make_colidx_to_rowidx(Bfilling), mTiles, nTiles,
+                                   kTiles, Afilling, Bfilling, keymap);
 
-    bcast_a_ = std::make_unique<BcastA>(a, a_ijk_, b_rowidx_to_colidx_, keymap);
-    bcast_b_ = std::make_unique<BcastB>(b, b_ijk_, a_colidx_to_rowidx_, keymap);
-    multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c, a_rowidx_to_colidx_, b_colidx_to_rowidx_,
-                                                 mTiles, nTiles, keymap);
+    bcast_a_ = std::make_unique<BcastA>(a, a_ijk_, plan_, keymap);
+    bcast_b_ = std::make_unique<BcastB>(b, b_ijk_, plan_, keymap);
+    multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c, plan_, keymap);
 
     TTGUNUSED(bcast_a_);
     TTGUNUSED(bcast_b_);
     TTGUNUSED(multiplyadd_);
   }
 
-  /// broadcast A[i][k] to all procs where B[j][k]
-  class BcastA : public Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, Blk> {
+  /// Plan: group all GEMMs in blocks of efficient size
+  class Plan {
    public:
-    using baseT = Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, Blk>;
+    const std::vector<std::vector<long>> a_rowidx_to_colidx_;
+    const std::vector<std::vector<long>> a_colidx_to_rowidx_;
+    const std::vector<std::vector<long>> b_rowidx_to_colidx_;
+    const std::vector<std::vector<long>> b_colidx_to_rowidx_;
+    const std::vector<int> &mTiles_;
+    const std::vector<int> &nTiles_;
+    const std::vector<int> &kTiles_;
+    const std::map<std::tuple<int, int>, bool> &Afilling_;
+    const std::map<std::tuple<int, int>, bool> &Bfilling_;
 
-    BcastA(Edge<Key<2>, Blk> &a, Edge<Key<3>, Blk> &a_ijk, const std::vector<std::vector<long>> &b_rowidx_to_colidx,
-           Keymap keymap)
-        : baseT(edges(a), edges(a_ijk), "SpMM::bcast_a", {"a_ik"}, {"a_ijk"}, keymap)
-        , b_rowidx_to_colidx_(b_rowidx_to_colidx) {}
-
-    void op(const Key<2> &key, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, Blk>> &a_ijk) {
-      const auto i = key[0];
-      const auto k = key[1];
-      if (tracing()) ttg::print("BcastA(", i, ", ", k, ")");
-      // broadcast a_ik to all existing {i,j,k}
-      std::vector<Key<3>> ijk_keys;
-      if (k >= b_rowidx_to_colidx_.size()) return;
-      auto world = get_default_world();
-      for (auto &j : b_rowidx_to_colidx_[k]) {
-        if (tracing()) ttg::print("Broadcasting A[", i, "][", k, "] to GEMM(", i, ", ", j, ", ", k, ")");
-        ijk_keys.emplace_back(Key<3>({i, j, k}));
-      }
-      ::broadcast<0>(ijk_keys, baseT::template get<0>(a_ik), a_ijk);
-    }
-
-   private:
-    const std::vector<std::vector<long>> &b_rowidx_to_colidx_;
-  };  // class BcastA
-
-  /// broadcast B[k][j] to all {i,j,k} such that A[i][k] exists
-  class BcastB : public Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, Blk> {
-   public:
-    using baseT = Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, Blk>;
-
-    BcastB(Edge<Key<2>, Blk> &b, Edge<Key<3>, Blk> &b_ijk, const std::vector<std::vector<long>> &a_colidx_to_rowidx,
-           Keymap keymap)
-        : baseT(edges(b), edges(b_ijk), "SpMM::bcast_b", {"b_kj"}, {"b_ijk"}, keymap)
-        , a_colidx_to_rowidx_(a_colidx_to_rowidx) {}
-
-    void op(const Key<2> &key, typename baseT::input_values_tuple_type &&b_kj, std::tuple<Out<Key<3>, Blk>> &b_ijk) {
-      const auto k = key[0];
-      const auto j = key[1];
-      std::vector<Key<3>> ijk_keys;
-      if (tracing()) ttg::print("BcastB(", k, ", ", j, ")");
-      if (k >= a_colidx_to_rowidx_.size()) return;
-      for (auto &i : a_colidx_to_rowidx_[k]) {
-        if (tracing()) ttg::print("Broadcasting B[", k, "][", j, "] to GEMM(", i, ", ", j, ", ", k, ")");
-        ijk_keys.emplace_back(Key<3>({i, j, k}));
-      }
-      ::broadcast<0>(ijk_keys, baseT::template get<0>(b_kj), b_ijk);
-    }
-
-   private:
-    const std::vector<std::vector<long>> &a_colidx_to_rowidx_;
-  };  // class BcastA
-
-  /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
-  class MultiplyAdd
-      : public Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, const Blk, const Blk, Blk> {
-   public:
-    using baseT = Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, const Blk, const Blk, Blk>;
-
-    MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
-                const std::vector<std::vector<long>> &a_rowidx_to_colidx,
-                const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<int> &mTiles,
-                const std::vector<int> &nTiles, Keymap keymap)
-        : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM::MultiplyAdd", {"a_ijk", "b_ijk", "c_ijk"},
-                {"c_ij", "c_ijk"},
-                [keymap](const Key<3> &key) {
-                  auto key2 = Key<2>({key[0], key[1]});
-                  return keymap(key2);
-                })
-        , a_rowidx_to_colidx_(a_rowidx_to_colidx)
-        , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
-      this->set_priomap([=](const Key<3> &key) { return this->prio(key); });
-
-      // for each i and j that belongs to this node
-      // determine first k that contributes, initialize input {i,j,first_k} flow to 0
-      for (auto i = 0ul; i != a_rowidx_to_colidx_.size(); ++i) {
-        if (a_rowidx_to_colidx_[i].empty()) continue;
-        for (auto j = 0ul; j != b_colidx_to_rowidx_.size(); ++j) {
-          if (b_colidx_to_rowidx_[j].empty()) continue;
-
-          // assuming here {i,j,k} for all k map to same node
-          auto owner = keymap(Key<2>({i, j}));
-          if (owner == ttg_default_execution_context().rank()) {
-            if (true) {
-              decltype(i) k;
-              bool have_k;
-              std::tie(k, have_k) = compute_first_k(i, j);
-              if (have_k) {
-                if (tracing()) ttg::print("Initializing C[", i, "][", j, "] to zero");
-#if BLOCK_SPARSE_GEMM
-                Blk zero(btas::Range(mTiles[i], nTiles[j]), 0.0);
-#else
-                Blk zero{0.0};
-#endif
-                this->template in<2>()->send(Key<3>({i, j, k}), zero);
-              } else {
-                if (tracing()) ttg::print("C[", i, "][", j, "] is empty");
-              }
-            }
-          }
-        }
-      }
-    }
-
-    void op(const Key<3> &key, typename baseT::input_values_tuple_type &&_ijk,
-            std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>> &result) {
-      const auto i = key[0];
-      const auto j = key[1];
-      const auto k = key[2];
-      long next_k;
-      bool have_next_k;
-      std::tie(next_k, have_next_k) = compute_next_k(i, j, k);
-      if (tracing()) {
-        ttg::print("C[", i, "][", j, "]  += A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
-                   (have_next_k ? std::to_string(next_k) : "does not exist"));
-      }
-      // compute the contrib, pass the running total to the next flow, if needed
-      // otherwise write to the result flow
-      if (have_next_k) {
-        ::send<1>(
-            Key<3>({i, j, next_k}),
-            gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
-            result);
-      } else
-        ::send<0>(
-            Key<2>({i, j}),
-            gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
-            result);
-    }
-
-   private:
-    const std::vector<std::vector<long>> &a_rowidx_to_colidx_;
-    const std::vector<std::vector<long>> &b_colidx_to_rowidx_;
+    Plan(std::vector<std::vector<long>> a_rowidx_to_colidx, std::vector<std::vector<long>> a_colidx_to_rowidx,
+         std::vector<std::vector<long>> b_rowidx_to_colidx, std::vector<std::vector<long>> b_colidx_to_rowidx,
+         const std::vector<int> &mTiles, const std::vector<int> &nTiles, const std::vector<int> &kTiles,
+         const std::map<std::tuple<int, int>, bool> &Afilling, const std::map<std::tuple<int, int>, bool> &Bfilling,
+         const Keymap keymap)
+        : a_rowidx_to_colidx_(std::move(a_rowidx_to_colidx))
+        , a_colidx_to_rowidx_(std::move(a_colidx_to_rowidx))
+        , b_rowidx_to_colidx_(std::move(b_rowidx_to_colidx))
+        , b_colidx_to_rowidx_(std::move(b_colidx_to_rowidx))
+        , mTiles_(mTiles)
+        , nTiles_(nTiles)
+        , kTiles_(kTiles)
+        , Afilling_(Afilling)
+        , Bfilling_(Bfilling) {}
 
     /* Compute the length of the remaining sequence on that tile */
-    int32_t prio(const Key<3> &key) {
+    int32_t prio(const Key<3> &key) const {
       const auto i = key[0];
       const auto j = key[1];
       const auto k = key[2];
@@ -447,7 +328,7 @@ class SpMM {
     }
 
     // given {i,j} return first k such that A[i][k] and B[k][j] exist
-    std::tuple<long, bool> compute_first_k(long i, long j) {
+    std::tuple<long, bool> compute_first_k(long i, long j) const {
       const auto &a_k_range = a_rowidx_to_colidx_.at(i);
       auto a_iter = a_k_range.begin();
       auto a_iter_fence = a_k_range.end();
@@ -478,7 +359,7 @@ class SpMM {
 
     // given {i,j,k} such that A[i][k] and B[k][j] exist
     // return next k such that this condition holds
-    std::tuple<long, bool> compute_next_k(long i, long j, long k) {
+    std::tuple<long, bool> compute_next_k(long i, long j, long k) const {
       const auto &a_k_range = a_rowidx_to_colidx_.at(i);
       auto a_iter_fence = a_k_range.end();
       auto a_iter = std::find(a_k_range.begin(), a_iter_fence, k);
@@ -510,17 +391,156 @@ class SpMM {
     }
   };
 
+  /// broadcast A[i][k] to all procs where B[j][k]
+  class BcastA : public Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, Blk> {
+   public:
+    using baseT = Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, Blk>;
+
+    BcastA(Edge<Key<2>, Blk> &a, Edge<Key<3>, Blk> &a_ijk, std::shared_ptr<const Plan> plan, Keymap keymap)
+        : baseT(edges(a), edges(a_ijk), "SpMM::bcast_a", {"a_ik"}, {"a_ijk"}, keymap), plan_(std::move(plan)) {}
+
+    void op(const Key<2> &key, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, Blk>> &a_ijk) {
+      const auto i = key[0];
+      const auto k = key[1];
+      if (tracing()) ttg::print("BcastA(", i, ", ", k, ")");
+      // broadcast a_ik to all existing {i,j,k}
+      std::vector<Key<3>> ijk_keys;
+      if (k >= plan_->b_rowidx_to_colidx_.size()) return;
+      auto world = get_default_world();
+      for (auto &j : plan_->b_rowidx_to_colidx_[k]) {
+        if (tracing())
+          ttg::print("Rank ", ttg_default_execution_context().rank(), " Broadcasting A[", i, "][", k,
+                     "]"
+                     " to GEMM(",
+                     i, ", ", j, ", ", k, ")");
+        ijk_keys.emplace_back(Key<3>({i, j, k}));
+      }
+      ::broadcast<0>(ijk_keys, baseT::template get<0>(a_ik), a_ijk);
+    }
+
+   private:
+    std::shared_ptr<const Plan> plan_;
+  };  // class BcastA
+
+  /// broadcast B[k][j] to all {i,j,k} such that A[i][k] exists
+  class BcastB : public Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, Blk> {
+   public:
+    using baseT = Op<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, Blk>;
+
+    BcastB(Edge<Key<2>, Blk> &b, Edge<Key<3>, Blk> &b_ijk, std::shared_ptr<const Plan> plan, Keymap keymap)
+        : baseT(edges(b), edges(b_ijk), "SpMM::bcast_b", {"b_kj"}, {"b_ijk"}, keymap), plan_(std::move(plan)) {}
+
+    void op(const Key<2> &key, typename baseT::input_values_tuple_type &&b_kj, std::tuple<Out<Key<3>, Blk>> &b_ijk) {
+      const auto k = key[0];
+      const auto j = key[1];
+      std::vector<Key<3>> ijk_keys;
+      if (tracing()) ttg::print("BcastB(", k, ", ", j, ")");
+      if (k >= plan_->a_colidx_to_rowidx_.size()) return;
+      for (auto &i : plan_->a_colidx_to_rowidx_[k]) {
+        if (tracing())
+          ttg::print("Rank ", ttg_default_execution_context().rank(), " : Broadcasting B[", k, "][", j,
+                     "] "
+                     "to GEMM(",
+                     i, ", ", j, ", ", k, ")");
+        ijk_keys.emplace_back(Key<3>({i, j, k}));
+      }
+      ::broadcast<0>(ijk_keys, baseT::template get<0>(b_kj), b_ijk);
+    }
+
+   private:
+    std::shared_ptr<const Plan> plan_;
+  };  // class BcastA
+
+  /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
+  class MultiplyAdd
+      : public Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, const Blk, const Blk, Blk> {
+   public:
+    using baseT = Op<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, const Blk, const Blk, Blk>;
+
+    MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
+                std::shared_ptr<const Plan> plan, Keymap keymap)
+        : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM::MultiplyAdd", {"a_ijk", "b_ijk", "c_ijk"},
+                {"c_ij", "c_ijk"},
+                [keymap](const Key<3> &key) {
+                  auto key2 = Key<2>({key[0], key[1]});
+                  return keymap(key2);
+                })
+        , plan_(std::move(plan)) {
+      this->set_priomap([=](const Key<3> &key) { return plan_->prio(key); });
+
+      // for each i and j that belongs to this node
+      // determine first k that contributes, initialize input {i,j,first_k} flow to 0
+      for (auto i = 0ul; i != plan_->a_rowidx_to_colidx_.size(); ++i) {
+        if (plan_->a_rowidx_to_colidx_[i].empty()) continue;
+        for (auto j = 0ul; j != plan_->b_colidx_to_rowidx_.size(); ++j) {
+          if (plan_->b_colidx_to_rowidx_[j].empty()) continue;
+
+          // assuming here {i,j,k} for all k map to same node
+          auto owner = keymap(Key<2>({i, j}));
+          if (owner == ttg_default_execution_context().rank()) {
+            if (true) {
+              decltype(i) k;
+              bool have_k;
+              std::tie(k, have_k) = plan_->compute_first_k(i, j);
+              if (have_k) {
+                if (tracing()) ttg::print("Initializing C[", i, "][", j, "] to zero");
+#if BLOCK_SPARSE_GEMM
+                Blk zero(btas::Range(plan_->mTiles_[i], plan_->nTiles_[j]), 0.0);
+#else
+                Blk zero{0.0};
+#endif
+                this->template in<2>()->send(Key<3>({i, j, k}), zero);
+              } else {
+                if (tracing() && plan_->a_rowidx_to_colidx_.size() * plan_->b_colidx_to_rowidx_.size() < 400)
+                  ttg::print("C[", i, "][", j, "] is empty");
+              }
+            }
+          }
+        }
+      }
+    }
+
+    void op(const Key<3> &key, typename baseT::input_values_tuple_type &&_ijk,
+            std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>> &result) {
+      const auto i = key[0];
+      const auto j = key[1];
+      const auto k = key[2];
+      long next_k;
+      bool have_next_k;
+      std::tie(next_k, have_next_k) = plan_->compute_next_k(i, j, k);
+      if (tracing()) {
+        ttg::print("Rank ", ttg_default_execution_context().rank(),
+                   " :"
+                   " C[",
+                   i, "][", j, "]  += A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
+                   (have_next_k ? std::to_string(next_k) : "does not exist"));
+      }
+      // compute the contrib, pass the running total to the next flow, if needed
+      // otherwise write to the result flow
+      if (have_next_k) {
+        ::send<1>(
+            Key<3>({i, j, next_k}),
+            gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
+            result);
+      } else
+        ::send<0>(
+            Key<2>({i, j}),
+            gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
+            result);
+    }
+
+   private:
+    std::shared_ptr<const Plan> plan_;
+  };
+
  private:
   Edge<Key<3>, Blk> a_ijk_;
   Edge<Key<3>, Blk> b_ijk_;
   Edge<Key<3>, Blk> c_ijk_;
-  std::vector<std::vector<long>> a_rowidx_to_colidx_;
-  std::vector<std::vector<long>> b_colidx_to_rowidx_;
-  std::vector<std::vector<long>> a_colidx_to_rowidx_;
-  std::vector<std::vector<long>> b_rowidx_to_colidx_;
   std::unique_ptr<BcastA> bcast_a_;
   std::unique_ptr<BcastB> bcast_b_;
   std::unique_ptr<MultiplyAdd> multiplyadd_;
+  std::shared_ptr<Plan> plan_;
 
   // result[i][j] gives the j-th nonzero row for column i in matrix mat
   std::vector<std::vector<long>> make_colidx_to_rowidx(const std::map<std::tuple<int, int>, bool> &filling) {
@@ -547,7 +567,12 @@ class SpMM {
       std::tie(row, col) = it.first;
       if (row >= rowidx_to_colidx.size()) rowidx_to_colidx.resize(row + 1);
       rowidx_to_colidx[row].push_back(col);
+      if (ttg::tracing())
+        ttg::print("make_rowidx_to_colidx: Rank ", ttg_default_execution_context().rank(), " adds (", row, ", ", col,
+                   ")");
     }
+    if (ttg::tracing())
+      ttg::print("make_rowidx_to_colidx: Rank ", ttg_default_execution_context().rank(), " sorts each row");
     // Sort each vector of column indices, as we pushed them in an arbitrary order
     for (auto &row : rowidx_to_colidx) {
       std::sort(row.begin(), row.end());
@@ -582,10 +607,10 @@ class Control : public Op<void, std::tuple<Out<Key<2>>>, Control> {
 };
 
 #ifdef BTAS_IS_USABLE
-template <typename _T, class _Range, class _Store>
-std::tuple<_T, _T> norms(const btas::Tensor<_T, _Range, _Store> &t) {
-  _T norm_2_square = 0.0;
-  _T norm_inf = 0.0;
+template <typename T_, class Range_, class Store_>
+std::tuple<T_, T_> norms(const btas::Tensor<T_, Range_, Store_> &t) {
+  T_ norm_2_square = 0.0;
+  T_ norm_inf = 0.0;
   for (auto k : t) {
     norm_2_square += k * k;
     norm_inf = std::max(norm_inf, std::abs(k));
@@ -614,8 +639,6 @@ std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
   }
   return std::make_tuple(norm_2_square, norm_inf);
 }
-
-#include "../ttg_matrix.h"
 
 char *getCmdOption(char **begin, char **end, const std::string &option) {
   static char *empty = (char *)"";
@@ -680,23 +703,17 @@ static double parseOption(std::string &option, double default_value = 0.25) {
 }
 
 #if !defined(BLOCK_SPARSE_GEMM)
-static void initSpMatrixMarket(const char *filename, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &M, int &N,
-                               int &K) {
+static void initSpMatrixMarket(const std::function<int(const Key<2> &)> &keymap, const char *filename, SpMatrix<> &A,
+                               SpMatrix<> &B, SpMatrix<> &C, int &M, int &N, int &K) {
   std::vector<int> sizes;
-  // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
-  if (ttg_default_execution_context().rank() == 0) {
-    if (!loadMarket(A, filename)) {
-      std::cerr << "Failed to load " << filename << ", bailing out..." << std::endl;
-      ttg::ttg_abort();
-    }
+  // We load the entire matrix on each rank, but we only use the local part for the GEMM
+  if (!loadMarket(A, filename)) {
+    std::cerr << "Failed to load " << filename << ", bailing out..." << std::endl;
+    ttg::ttg_abort();
+  }
+  if (0 == ttg_default_execution_context().rank()) {
     std::cout << "##MatrixMarket file " << filename << " -- " << A.rows() << " x " << A.cols() << " -- " << A.nonZeros()
               << " nnz (density: " << (float)A.nonZeros() / (float)A.rows() / (float)A.cols() << ")" << std::endl;
-    sizes[0] = (int)A.rows();
-    sizes[1] = (int)A.cols();
-  }
-  ttg_broadcast(ttg_default_execution_context(), sizes, 0);
-  if (ttg_default_execution_context().rank() == 0) {
-    A.resize(sizes[0], sizes[1]);
   }
   if (A.rows() != A.cols()) {
     B = A.transpose();
@@ -709,7 +726,8 @@ static void initSpMatrixMarket(const char *filename, SpMatrix<> &A, SpMatrix<> &
   K = (int)A.cols();
 }
 
-static void initSpRmat(const char *opt, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &M, int &N, int &K) {
+static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const char *opt, SpMatrix<> &A, SpMatrix<> &B,
+                       SpMatrix<> &C, int &M, int &N, int &K, unsigned long seed) {
   int E;
   double a = 0.25, b = 0.25, c = 0.25, d = 0.25;
   size_t nnz = 0;
@@ -724,78 +742,83 @@ static void initSpRmat(const char *opt, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<>
   K = N;
   M = N;
 
+  // We build the entire sparse matrix on each rank, but use only the local part
+  // on a given rank, according to keymap
   A.resize(N, N);
 
-  if (ttg_default_execution_context().rank() == 0) {
-    E = parseOption(option, (int)(0.01 * N * N));
-    a = parseOption(option, a);
-    b = parseOption(option, b);
-    c = parseOption(option, c);
-    d = parseOption(option, d);
+  E = parseOption(option, (int)(0.01 * N * N));
+  a = parseOption(option, a);
+  b = parseOption(option, b);
+  c = parseOption(option, c);
+  d = parseOption(option, d);
 
+  if (ttg_default_execution_context().rank() == 0) {
     std::cout << "#R-MAT: " << N << " nodes, " << E << " edges, a/b/c/d = " << a << "/" << b << "/" << c << "/" << d
               << std::endl;
-
-    boost::minstd_rand gen;
-    boost::rmat_iterator<boost::minstd_rand, boost::directed_graph<>> rmat_it(gen, N, E, a, b, c, d);
-
-    using triplet_t = Eigen::Triplet<blk_t>;
-    std::vector<triplet_t> A_elements;
-    for (int i = 0; i < N; i++) {
-      nnz++;
-      A_elements.emplace_back(i, i, 1.0);
-    }
-    for (int i = 0; i < E; i++) {
-      auto x = *rmat_it++;
-      if (x.first != x.second) {
-        A_elements.emplace_back(x.first, x.second, 1.0);
-        nnz++;
-      }
-    }
-    A.setFromTriplets(A_elements.begin(), A_elements.end());
   }
+
+  boost::minstd_rand gen(seed);
+  boost::rmat_iterator<boost::minstd_rand, boost::directed_graph<>> rmat_it(gen, N, E, a, b, c, d);
+
+  using triplet_t = Eigen::Triplet<blk_t>;
+  std::vector<triplet_t> A_elements;
+  for (int i = 0; i < N; i++) {
+    nnz++;
+    A_elements.emplace_back(i, i, 1.0);
+  }
+  for (int i = 0; i < E; i++) {
+    auto x = *rmat_it++;
+    if (x.first != x.second) {
+      A_elements.emplace_back(x.first, x.second, 1.0);
+      nnz++;
+    }
+  }
+  A.setFromTriplets(A_elements.begin(), A_elements.end());
 
   B = A;
   C.resize(N, N);
 
-  std::cout << "#R-MAT: " << E << " nonzero elements, density: " << (double)nnz / (double)N / (double)N << std::endl;
+  if (ttg_default_execution_context().rank() == 0) {
+    std::cout << "#R-MAT: " << E << " nonzero elements, density: " << (double)nnz / (double)N / (double)N << std::endl;
+  }
 }
 
-static void initSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, int &m, int &n, int &k) {
-  n = 2;
-  m = 3;
+static void initSpHardCoded(const std::function<int(const Key<2> &)> &keymap, SpMatrix<> &A, SpMatrix<> &B,
+                            SpMatrix<> &C, int &m, int &n, int &k) {
+  m = 2;
+  n = 3;
   k = 4;
 
   std::cout << "#HardCoded A, B, C" << std::endl;
-  A.resize(n, k);
-  B.resize(k, m);
-  C.resize(n, m);
-  // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
-  if (ttg_default_execution_context().rank() == 0) {
-    using triplet_t = Eigen::Triplet<blk_t>;
-    std::vector<triplet_t> A_elements;
-    A_elements.emplace_back(0, 1, 12.3);
-    A_elements.emplace_back(0, 2, 10.7);
-    A_elements.emplace_back(0, 3, -2.3);
-    A_elements.emplace_back(1, 0, -0.3);
-    A_elements.emplace_back(1, 2, 1.2);
-    A.setFromTriplets(A_elements.begin(), A_elements.end());
+  A.resize(m, k);
+  B.resize(k, n);
+  C.resize(m, n);
+  // We initialize the same matrices on all the ranks, but we will use only the local part
+  // following the keymap
+  using triplet_t = Eigen::Triplet<blk_t>;
+  std::vector<triplet_t> A_elements;
+  A_elements.emplace_back(0, 1, 12.3);
+  A_elements.emplace_back(0, 2, 10.7);
+  A_elements.emplace_back(0, 3, -2.3);
+  A_elements.emplace_back(1, 0, -0.3);
+  A_elements.emplace_back(1, 2, 1.2);
+  A.setFromTriplets(A_elements.begin(), A_elements.end());
 
-    std::vector<triplet_t> B_elements;
-    B_elements.emplace_back(0, 0, 12.3);
-    B_elements.emplace_back(1, 0, 10.7);
-    B_elements.emplace_back(3, 0, -2.3);
-    B_elements.emplace_back(1, 1, -0.3);
-    B_elements.emplace_back(1, 2, 1.2);
-    B_elements.emplace_back(2, 2, 7.2);
-    B_elements.emplace_back(3, 2, 0.2);
-    B.setFromTriplets(B_elements.begin(), B_elements.end());
-  }
+  std::vector<triplet_t> B_elements;
+  B_elements.emplace_back(0, 0, 12.3);
+  B_elements.emplace_back(1, 0, 10.7);
+  B_elements.emplace_back(3, 0, -2.3);
+  B_elements.emplace_back(1, 1, -0.3);
+  B_elements.emplace_back(1, 2, 1.2);
+  B_elements.emplace_back(2, 2, 7.2);
+  B_elements.emplace_back(3, 2, 0.2);
+  B.setFromTriplets(B_elements.begin(), B_elements.end());
 }
 #else
-static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, SpMatrix<> &Aref, SpMatrix<> &Bref,
-                              bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles,
-                              std::vector<int> &kTiles, std::map<std::tuple<int, int>, bool> &Afilling,
+static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, SpMatrix<> &A, SpMatrix<> &B,
+                              SpMatrix<> &C, SpMatrix<> &Aref, SpMatrix<> &Bref, bool buildRefs,
+                              std::vector<int> &mTiles, std::vector<int> &nTiles, std::vector<int> &kTiles,
+                              std::map<std::tuple<int, int>, bool> &Afilling,
                               std::map<std::tuple<int, int>, bool> &Bfilling, int &m, int &n, int &k) {
   m = 2;
   n = 3;
@@ -805,84 +828,158 @@ static void initBlSpHardCoded(SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &C, SpMat
   A.resize(m, k);
   B.resize(k, n);
   C.resize(m, n);
+  if (buildRefs) {
+    Aref.resize(m, k);
+    Bref.resize(k, n);
+  }
 
   for (int mt = 0; mt < m; mt++) mTiles.push_back(128);
   for (int nt = 0; nt < n; nt++) nTiles.push_back(196);
   for (int kt = 0; kt < k; kt++) kTiles.push_back(256);
   Afilling.clear();
   Bfilling.clear();
+  int rank = ttg_default_execution_context().rank();
 
   // rank 0 only: initialize inputs (these will become shapes when switch to blocks)
-  if (ttg_default_execution_context().rank() == 0) {
-    using triplet_t = Eigen::Triplet<blk_t>;
-    std::vector<triplet_t> A_elements;
+  using triplet_t = Eigen::Triplet<blk_t>;
+  std::vector<triplet_t> A_elements;
+  std::vector<triplet_t> Aref_elements;
 #if defined(BTAS_IS_USABLE)
-    auto A_blksize = {128, 256};
+  auto A_blksize = {128, 256};
+  if (keymap({0, 1}) == rank) {
     A_elements.emplace_back(0, 1, blk_t(btas::Range(128, 256), 12.3));
-    A_elements.emplace_back(0, 2, blk_t(btas::Range(128, 256), 10.7));
-    A_elements.emplace_back(0, 3, blk_t(btas::Range(128, 256), -2.3));
-    A_elements.emplace_back(1, 0, blk_t(btas::Range(128, 256), -0.3));
-    A_elements.emplace_back(1, 2, blk_t(btas::Range(128, 256), 1.2));
-#else
-    A_elements.emplace_back(0, 1, 12.3);
-    A_elements.emplace_back(0, 2, 10.7);
-    A_elements.emplace_back(0, 3, -2.3);
-    A_elements.emplace_back(1, 0, -0.3);
-    A_elements.emplace_back(1, 2, .2);
-#endif
-    Afilling[{0, 1}] = true;
-    Afilling[{0, 2}] = true;
-    Afilling[{0, 3}] = true;
-    Afilling[{1, 0}] = true;
-    Afilling[{1, 2}] = true;
-    A.setFromTriplets(A_elements.begin(), A_elements.end());
-
-    std::vector<triplet_t> B_elements;
-#if defined(BTAS_IS_USABLE)
-    auto B_blksize = {256, 196};
-    B_elements.emplace_back(0, 0, blk_t(btas::Range(256, 196), 12.3));
-    B_elements.emplace_back(1, 0, blk_t(btas::Range(256, 196), 10.7));
-    B_elements.emplace_back(3, 0, blk_t(btas::Range(256, 196), -2.3));
-    B_elements.emplace_back(1, 1, blk_t(btas::Range(256, 196), -0.3));
-    B_elements.emplace_back(1, 2, blk_t(btas::Range(256, 196), 1.2));
-    B_elements.emplace_back(2, 2, blk_t(btas::Range(256, 196), 7.2));
-    B_elements.emplace_back(3, 2, blk_t(btas::Range(256, 196), 0.2));
-#else
-    B_elements.emplace_back(0, 0, 12.3);
-    B_elements.emplace_back(1, 0, 10.7);
-    B_elements.emplace_back(3, 0, -2.3);
-    B_elements.emplace_back(1, 1, -0.3);
-    B_elements.emplace_back(1, 2, 1.2);
-    B_elements.emplace_back(2, 2, 7.2);
-    B_elements.emplace_back(3, 2, 0.2);
-#endif
-    Bfilling[{0, 0}] = true;
-    Bfilling[{1, 0}] = true;
-    Bfilling[{3, 0}] = true;
-    Bfilling[{1, 1}] = true;
-    Bfilling[{1, 2}] = true;
-    Bfilling[{2, 2}] = true;
-    Bfilling[{3, 2}] = true;
-    B.setFromTriplets(B_elements.begin(), B_elements.end());
   }
-  if (buildRefs) {
-    Aref = A;
-    Bref = B;
+  if (keymap({0, 2}) == rank) {
+    A_elements.emplace_back(0, 2, blk_t(btas::Range(128, 256), 10.7));
+  }
+  if (keymap({0, 3}) == rank) {
+    A_elements.emplace_back(0, 3, blk_t(btas::Range(128, 256), -2.3));
+  }
+  if (keymap({1, 0}) == rank) {
+    A_elements.emplace_back(1, 0, blk_t(btas::Range(128, 256), -0.3));
+  }
+  if (keymap({1, 2}) == rank) {
+    A_elements.emplace_back(1, 2, blk_t(btas::Range(128, 256), 1.2));
+  }
+  if (buildRefs && rank == 0) {
+    Aref_elements.emplace_back(0, 1, blk_t(btas::Range(128, 256), 12.3));
+    Aref_elements.emplace_back(0, 2, blk_t(btas::Range(128, 256), 10.7));
+    Aref_elements.emplace_back(0, 3, blk_t(btas::Range(128, 256), -2.3));
+    Aref_elements.emplace_back(1, 0, blk_t(btas::Range(128, 256), -0.3));
+    Aref_elements.emplace_back(1, 2, blk_t(btas::Range(128, 256), 1.2));
+  }
+#else
+  if ((buildRefs && rank == 0) || keymap({0, 1}) == rank) {
+    A_elements.emplace_back(0, 1, 12.3);
+  }
+  if ((buildRefs && rank == 0) || keymap({0, 2}) == rank) {
+    A_elements.emplace_back(0, 2, 10.7);
+  }
+  if ((buildRefs && rank == 0) || keymap({0, 3}) == rank) {
+    A_elements.emplace_back(0, 3, -2.3);
+  }
+  if ((buildRefs && rank == 0) || keymap({1, 0}) == rank) {
+    A_elements.emplace_back(1, 0, -0.3);
+  }
+  if ((buildRefs && rank == 0) || keymap({1, 2}) == rank) {
+    A_elements.emplace_back(1, 2, .2);
+  }
+  if (buildRefs && rank == 0) {
+    Aref_elements.emplace_back(0, 1, 12.3);
+    Aref_elements.emplace_back(0, 2, 10.7);
+    Aref_elements.emplace_back(0, 3, -2.3);
+    Aref_elements.emplace_back(1, 0, -0.3);
+    Aref_elements.emplace_back(1, 2, .2);
+  }
+#endif
+  Afilling[{0, 1}] = true;
+  Afilling[{0, 2}] = true;
+  Afilling[{0, 3}] = true;
+  Afilling[{1, 0}] = true;
+  Afilling[{1, 2}] = true;
+  A.setFromTriplets(A_elements.begin(), A_elements.end());
+  if (buildRefs && 0 == rank) {
+    Aref.setFromTriplets(Aref_elements.begin(), Aref_elements.end());
+  }
+
+  std::vector<triplet_t> B_elements;
+  std::vector<triplet_t> Bref_elements;
+#if defined(BTAS_IS_USABLE)
+  auto B_blksize = {256, 196};
+  if (keymap({0, 0}) == rank) {
+    B_elements.emplace_back(0, 0, blk_t(btas::Range(256, 196), 12.3));
+  }
+  if (keymap({1, 0}) == rank) {
+    B_elements.emplace_back(1, 0, blk_t(btas::Range(256, 196), 10.7));
+  }
+  if (keymap({3, 0}) == rank) {
+    B_elements.emplace_back(3, 0, blk_t(btas::Range(256, 196), -2.3));
+  }
+  if (keymap({1, 1}) == rank) {
+    B_elements.emplace_back(1, 1, blk_t(btas::Range(256, 196), -0.3));
+  }
+  if (keymap({1, 2}) == rank) {
+    B_elements.emplace_back(1, 2, blk_t(btas::Range(256, 196), 1.2));
+  }
+  if (keymap({2, 2}) == rank) {
+    B_elements.emplace_back(2, 2, blk_t(btas::Range(256, 196), 7.2));
+  }
+  if (keymap({3, 2}) == rank) {
+    B_elements.emplace_back(3, 2, blk_t(btas::Range(256, 196), 0.2));
+  }
+  if (buildRefs && rank == 0) {
+    Bref_elements.emplace_back(0, 0, blk_t(btas::Range(256, 196), 12.3));
+    Bref_elements.emplace_back(1, 0, blk_t(btas::Range(256, 196), 10.7));
+    Bref_elements.emplace_back(3, 0, blk_t(btas::Range(256, 196), -2.3));
+    Bref_elements.emplace_back(1, 1, blk_t(btas::Range(256, 196), -0.3));
+    Bref_elements.emplace_back(1, 2, blk_t(btas::Range(256, 196), 1.2));
+    Bref_elements.emplace_back(2, 2, blk_t(btas::Range(256, 196), 7.2));
+    Bref_elements.emplace_back(3, 2, blk_t(btas::Range(256, 196), 0.2));
+  }
+#else
+  if (keymap({0, 0}) == rank) {
+    B_elements.emplace_back(0, 0, 12.3);
+  }
+  if (keymap({1, 0}) == rank) {
+    B_elements.emplace_back(1, 0, 10.7);
+  }
+  if (keymap({3, 0}) == rank) {
+    B_elements.emplace_back(3, 0, -2.3);
+  }
+  if (keymap({1, 1}) == rank) {
+    B_elements.emplace_back(1, 1, -0.3);
+  }
+  if (keymap({1, 2}) == rank) {
+    B_elements.emplace_back(1, 2, 1.2);
+  }
+  if (keymap({2, 2}) == rank) {
+    B_elements.emplace_back(2, 2, 7.2);
+  }
+  if (keymap({3, 2}) == rank) {
+    B_elements.emplace_back(3, 2, 0.2);
+  }
+#endif
+  Bfilling[{0, 0}] = true;
+  Bfilling[{1, 0}] = true;
+  Bfilling[{3, 0}] = true;
+  Bfilling[{1, 1}] = true;
+  Bfilling[{1, 2}] = true;
+  Bfilling[{2, 2}] = true;
+  Bfilling[{3, 2}] = true;
+  B.setFromTriplets(B_elements.begin(), B_elements.end());
+  if (buildRefs && 0 == rank) {
+    Bref.setFromTriplets(Bref_elements.begin(), Bref_elements.end());
   }
 }
 
 #if defined(BTAS_IS_USABLE)
-static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B,
-                           SpMatrix<> &Aref, SpMatrix<> &Bref, bool buildRefs, std::vector<int> &mTiles,
-                           std::vector<int> &nTiles, std::vector<int> &kTiles,
+static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, int M, int N, int K, int minTs, int maxTs,
+                           double avgDensity, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &Aref, SpMatrix<> &Bref,
+                           bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles, std::vector<int> &kTiles,
                            std::map<std::tuple<int, int>, bool> &Afilling,
                            std::map<std::tuple<int, int>, bool> &Bfilling, double &gflops, double &average_tile_size,
                            double &Adensity, double &Bdensity, unsigned int seed, int P, int Q) {
   gflops = 0.0;
-
-  assert(P * Q == ttg_default_execution_context().size());
-  int p = ttg_default_execution_context().rank() % P;
-  int q = (ttg_default_execution_context().rank() / P) % Q;
 
   int rank = ttg_default_execution_context().rank();
   TTGUNUSED(rank);
@@ -924,7 +1021,7 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
   std::uniform_int_distribution<> mDist(0, (int)mTiles.size() - 1);
   std::uniform_int_distribution<> nDist(0, (int)nTiles.size() - 1);
   std::uniform_int_distribution<> kDist(0, (int)kTiles.size() - 1);
-  std::uniform_real_distribution<> vDist(-1e3, 1e3);
+  std::uniform_real_distribution<> vDist(-1.0, 1.0);
 
   size_t filling = 0;
   size_t avg_nb = 0;
@@ -940,15 +1037,13 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     avg_nb += mTiles[mt] * kTiles[kt];
     avg_nb_nb++;
     double value = vDist(genv);
-    if (p == 0 && q == 0 && buildRefs)
-      Aref_elements.emplace_back(mt, kt, blk_t(btas::Range(mTiles[mt], kTiles[kt]), value));
-    if ((mt % P) != p) continue;
-    if ((kt % Q) != q) continue;
+    if (0 == rank && buildRefs) Aref_elements.emplace_back(mt, kt, blk_t(btas::Range(mTiles[mt], kTiles[kt]), value));
+    if (rank != keymap({mt, kt})) continue;
     A_elements.emplace_back(mt, kt, blk_t(btas::Range(mTiles[mt], kTiles[kt]), value));
   }
   A.setFromTriplets(A_elements.begin(), A_elements.end());
   Adensity = (double)filling / (double)(M * K);
-  Aref.setFromTriplets(Aref_elements.begin(), Aref_elements.end());
+  if (0 == rank && buildRefs) Aref.setFromTriplets(Aref_elements.begin(), Aref_elements.end());
 
   filling = 0;
   Bfilling.clear();
@@ -962,15 +1057,13 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
     avg_nb_nb++;
     auto blksize = {kTiles[kt], nTiles[nt]};
     double value = vDist(genv);
-    if (p == 0 && q == 0 && buildRefs)
-      Bref_elements.emplace_back(kt, nt, blk_t(btas::Range(kTiles[kt], nTiles[nt]), value));
-    if ((kt % P) != p) continue;
-    if ((nt % Q) != q) continue;
+    if (0 == rank && buildRefs) Bref_elements.emplace_back(kt, nt, blk_t(btas::Range(kTiles[kt], nTiles[nt]), value));
+    if (rank != keymap({kt, nt})) continue;
     B_elements.emplace_back(kt, nt, blk_t(btas::Range(kTiles[kt], nTiles[nt]), value));
   }
   B.setFromTriplets(B_elements.begin(), B_elements.end());
   Bdensity = (double)filling / (double)(K * N);
-  Bref.setFromTriplets(Bref_elements.begin(), Bref_elements.end());
+  if (0 == rank && buildRefs) Bref.setFromTriplets(Bref_elements.begin(), Bref_elements.end());
 
   for (int mt = 0; mt < mTiles.size(); mt++) {
     for (int nt = 0; nt < nTiles.size(); nt++) {
@@ -987,9 +1080,9 @@ static void initBlSpRandom(int M, int N, int K, int minTs, int maxTs, double avg
 
 #endif
 
-static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::string &tiling_type, double gflops,
-                              double avg_nb, double Adensity, double Bdensity,
-                              std::map<std::tuple<int, int>, bool> &Afilling,
+static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<int(const Key<2> &)> &keymap,
+                              const std::string &tiling_type, double gflops, double avg_nb, double Adensity,
+                              double Bdensity, std::map<std::tuple<int, int>, bool> &Afilling,
                               std::map<std::tuple<int, int>, bool> &Bfilling, std::vector<int> &mTiles,
                               std::vector<int> &nTiles, std::vector<int> &kTiles, int M, int N, int K, int P, int Q) {
   int MT = (int)A.rows();
@@ -1005,14 +1098,8 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::string &t
   Control control(ctl);
   Edge<Key<2>, blk_t> eA, eB, eC;
 
-  auto keymap = [P, Q](const Key<2> &key) {
-    int i = (int)key[0];
-    int j = (int)key[1];
-    int r = tile2rank(i, j, P, Q);
-    return r;
-  };
-  Read_SpMatrix<> a("A", A, ctl, eA, keymap);
-  Read_SpMatrix<> b("B", B, ctl, eB, keymap);
+  Read_SpMatrix a("A", A, ctl, eA, keymap);
+  Read_SpMatrix b("B", B, ctl, eB, keymap);
   Write_SpMatrix<> c(C, eC, keymap);
   auto &c_status = c.status();
   assert(!has_value(c_status));
@@ -1067,7 +1154,7 @@ static double compute_gflops(int M, int N, int K, const std::map<std::tuple<int,
   unsigned long flops = 0;
   for (int i = 0; i < M; i++) {
     for (int j = 0; j < N; j++) {
-      for (int k = 0; k < N; k++) {
+      for (int k = 0; k < K; k++) {
         if (A.count({i, k}) > 0 && B.count({k, j}) > 0) flops++;
       }
     }
@@ -1091,7 +1178,7 @@ int main(int argc, char **argv) {
   }
 
   std::string debugStr(getCmdOption(argv, argv + argc, "-d"));
-  unsigned int debug = (unsigned int)parseOption(debugStr, 0);
+  auto debug = (unsigned int)parseOption(debugStr, 0);
 
   if (debug & (1 << 1)) {
     using mpqc::Debugger;
@@ -1151,6 +1238,13 @@ int main(int argc, char **argv) {
       }
     }
 
+    const auto &keymap = [P, Q](const Key<2> &key) {
+      int i = (int)key[0];
+      int j = (int)key[1];
+      int r = tile2rank(i, j, P, Q);
+      return r;
+    };
+
     std::string seedStr(getCmdOption(argv, argv + argc, "-s"));
     unsigned int seed = parseOption(seedStr, 0);
     if (seed == 0) {
@@ -1160,28 +1254,30 @@ int main(int argc, char **argv) {
     }
     ttg_broadcast(ttg_default_execution_context(), seed, 0);
 
-#if defined(BLOCK_SPARSE_GEMM)
     std::vector<int> mTiles;
     std::vector<int> nTiles;
     std::vector<int> kTiles;
-#endif
     std::map<std::tuple<int, int>, bool> Afilling;
     std::map<std::tuple<int, int>, bool> Bfilling;
+
+    std::string checkStr(getCmdOption(argv, argv + argc, "-x"));
+    int check = parseOption(checkStr, 0);
 
 #if !defined(BLOCK_SPARSE_GEMM)
     if (cmdOptionExists(argv, argv + argc, "-mm")) {
       char *filename = getCmdOption(argv, argv + argc, "-mm");
       tiling_type = filename;
-      timing = true;
-      initSpMatrixMarket(filename, A, B, C, M, N, K);
+      timing = (check == 0);
+      initSpMatrixMarket(keymap, filename, A, B, C, M, N, K);
     } else if (cmdOptionExists(argv, argv + argc, "-rmat")) {
       char *opt = getCmdOption(argv, argv + argc, "-rmat");
       tiling_type = "RandomSparseMatrix";
-      timing = true;
-      initSpRmat(opt, A, B, C, M, N, K);
+      timing = (check == 0);
+      initSpRmat(keymap, opt, A, B, C, M, N, K, seed);
     } else {
       tiling_type = "HardCodedSparseMatrix";
-      initSpHardCoded(A, B, C, M, N, K);
+      initSpHardCoded(keymap, A, B, C, M, N, K);
+      timing = false;
     }
     // We don't generate the sparse matrices in distributed, so Aref and Bref can
     // just point to the same matrix, or be a local copy.
@@ -1191,7 +1287,10 @@ int main(int argc, char **argv) {
     make_filling_from_eigen(A, Afilling);
     make_filling_from_eigen(B, Bfilling);
     // This is probably useless, but  just for the sake of completion:
-    gflops = compute_gflops(M, N, K, Afilling, Bfilling);
+    // gflops = compute_gflops(M, N, K, Afilling, Bfilling);
+    for (int mt = 0; mt < M; mt++) mTiles.emplace_back(1);
+    for (int nt = 0; nt < N; nt++) nTiles.emplace_back(1);
+    for (int kt = 0; kt < K; kt++) kTiles.emplace_back(1);
 #else
     if (argc >= 2) {
       std::string Mstr(getCmdOption(argv, argv + argc, "-M"));
@@ -1206,16 +1305,14 @@ int main(int argc, char **argv) {
       int maxTs = parseOption(maxTsStr, 256);
       std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
       double avg = parseOption(avgStr, 0.3);
-      std::string checkStr(getCmdOption(argv, argv + argc, "-x"));
-      int check = parseOption(checkStr, 0);
       timing = (check == 0);
       tiling_type = "RandomIrregularTiling";
-      initBlSpRandom(M, N, K, minTs, maxTs, avg, A, B, Aref, Bref, !timing, mTiles, nTiles, kTiles, Afilling, Bfilling,
-                     gflops, avg_nb, Adensity, Bdensity, seed, P, Q);
-      C.resize(mTiles.size(), nTiles.size());
+      initBlSpRandom(keymap, M, N, K, minTs, maxTs, avg, A, B, Aref, Bref, check, mTiles, nTiles, kTiles, Afilling,
+                     Bfilling, gflops, avg_nb, Adensity, Bdensity, seed, P, Q);
+      C.resize((long)mTiles.size(), (long)nTiles.size());
     } else {
       tiling_type = "HardCodedBlockSparseMatrix";
-      initBlSpHardCoded(A, B, C, Aref, Bref, true, mTiles, nTiles, kTiles, Afilling, Bfilling, M, N, K);
+      initBlSpHardCoded(keymap, A, B, C, Aref, Bref, true, mTiles, nTiles, kTiles, Afilling, Bfilling, M, N, K);
     }
 #endif  // !defined(BLOCK_SPARSE_GEMM)
 
@@ -1226,8 +1323,8 @@ int main(int argc, char **argv) {
       // Start up engine
       ttg_execute(ttg_default_execution_context());
       for (int nrun = 0; nrun < nb_runs; nrun++) {
-        timed_measurement(A, B, tiling_type, gflops, avg_nb, Adensity, Bdensity, Afilling, Bfilling, mTiles, nTiles,
-                          kTiles, M, N, K, P, Q);
+        timed_measurement(A, B, keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity, Afilling, Bfilling, mTiles,
+                          nTiles, kTiles, M, N, K, P, Q);
       }
     } else {
       // flow graph needs to exist on every node
@@ -1235,14 +1332,8 @@ int main(int argc, char **argv) {
       Edge<Key<2>> ctl("control");
       Control control(ctl);
       Edge<Key<2>, blk_t> eA, eB, eC;
-      auto keymap = [P, Q](const Key<2> &key) {
-        int i = (int)key[0];
-        int j = (int)key[1];
-        int r = tile2rank(i, j, P, Q);
-        return r;
-      };
-      Read_SpMatrix<> a("A", A, ctl, eA, keymap);
-      Read_SpMatrix<> b("B", B, ctl, eB, keymap);
+      Read_SpMatrix a("A", A, ctl, eA, keymap);
+      Read_SpMatrix b("B", B, ctl, eB, keymap);
       Write_SpMatrix<> c(C, eC, keymap_write);
       auto &c_status = c.status();
       assert(!has_value(c_status));
