@@ -186,32 +186,6 @@ inline int tile2rank(int i, int j, int P, int Q) {
   return r;
 }
 
-// flow data from an existing SpMatrix on rank 0
-template <typename Blk = blk_t, typename Keymap = std::function<int(const Key<2> &)>>
-class Read_SpMatrix : public Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void> {
- public:
-  using baseT = Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void>;
-
-  Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>> &ctl, Edge<Key<2>, Blk> &out,
-                Keymap &keymap)
-      : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
-              keymap)
-      , matrix_(matrix) {}
-
-  void op(const Key<2> &key, std::tuple<Out<Key<2>, Blk>> &out) {
-    auto rank = ttg_default_execution_context().rank();
-    for (int k = 0; k < matrix_.outerSize(); ++k) {
-      for (typename SpMatrix<Blk>::InnerIterator it(matrix_, k); it; ++it) {
-        if (rank == this->get_keymap()(Key<2>({it.row(), it.col()})))
-          ::send<0>(Key<2>({it.row(), it.col()}), it.value(), out);
-      }
-    }
-  }
-
- private:
-  const SpMatrix<Blk> &matrix_;
-};
-
 // flow (move?) data into an existing SpMatrix on rank 0
 template <typename Blk = blk_t>
 class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk> {
@@ -261,19 +235,21 @@ class Write_SpMatrix : public Op<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
 template <typename Keymap = std::function<int(const Key<2> &)>, typename Blk = blk_t>
 class SpMM {
  public:
-  SpMM(Edge<Key<2>, Blk> &a, Edge<Key<2>, Blk> &b, Edge<Key<2>, Blk> &c, const SpMatrix<Blk> &a_mat,
-       const SpMatrix<Blk> &b_mat, const std::vector<std::vector<long>> &a_rowidx_to_colidx,
+  SpMM(Edge<Key<2>> &start_ctl, Edge<Key<2>, Blk> &c_flow, const SpMatrix<Blk> &a_mat, const SpMatrix<Blk> &b_mat,
+       const std::vector<std::vector<long>> &a_rowidx_to_colidx,
        const std::vector<std::vector<long>> &a_colidx_to_rowidx,
        const std::vector<std::vector<long>> &b_rowidx_to_colidx,
        const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<int> &mTiles,
        const std::vector<int> &nTiles, const std::vector<int> &kTiles, const Keymap &keymap)
-      : a_ijk_(), b_ijk_(), c_ijk_(), plan_(nullptr) {
+      : a_flow_(), b_flow_(), a_ijk_(), b_ijk_(), c_ijk_(), plan_(nullptr) {
     plan_ = std::make_shared<Plan>(a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
                                    mTiles, nTiles, kTiles);
 
-    bcast_a_ = std::make_unique<BcastA>(a, a_ijk_, plan_, keymap);
-    bcast_b_ = std::make_unique<BcastB>(b, b_ijk_, plan_, keymap);
-    multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c, plan_, keymap);
+    read_a_ = std::make_unique<Read_SpMatrix>("A", a_mat, start_ctl, a_flow_, plan_, keymap);
+    read_b_ = std::make_unique<Read_SpMatrix>("B", b_mat, start_ctl, b_flow_, plan_, keymap);
+    bcast_a_ = std::make_unique<BcastA>(a_flow_, a_ijk_, plan_, keymap);
+    bcast_b_ = std::make_unique<BcastB>(b_flow_, b_ijk_, plan_, keymap);
+    multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c_flow, plan_, keymap);
 
     TTGUNUSED(bcast_a_);
     TTGUNUSED(bcast_b_);
@@ -387,6 +363,33 @@ class SpMM {
       }
       abort();  // unreachable
     }
+  };
+
+  // flow data from an existing SpMatrix on rank 0
+  class Read_SpMatrix : public Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix, void> {
+   public:
+    using baseT = Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix, void>;
+
+    Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>> &ctl, Edge<Key<2>, Blk> &out,
+                  std::shared_ptr<const Plan> plan, const Keymap &keymap)
+        : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"},
+                {std::string(label) + "ij"}, keymap)
+        , matrix_(matrix)
+        , plan_(plan) {}
+
+    void op(const Key<2> &key, std::tuple<Out<Key<2>, Blk>> &out) {
+      auto rank = ttg_default_execution_context().rank();
+      for (int k = 0; k < matrix_.outerSize(); ++k) {
+        for (typename SpMatrix<Blk>::InnerIterator it(matrix_, k); it; ++it) {
+          if (rank == this->get_keymap()(Key<2>({it.row(), it.col()})))
+            ::send<0>(Key<2>({it.row(), it.col()}), it.value(), out);
+        }
+      }
+    }
+
+   private:
+    const SpMatrix<Blk> &matrix_;
+    std::shared_ptr<const Plan> plan_;
   };
 
   /// broadcast A[i][k] to all procs where B[j][k]
@@ -531,13 +534,20 @@ class SpMM {
     std::shared_ptr<const Plan> plan_;
   };
 
+  Read_SpMatrix *get_reada() { return read_a_.get(); }
+  Read_SpMatrix *get_readb() { return read_b_.get(); }
+
  private:
   Edge<Key<3>, Blk> a_ijk_;
   Edge<Key<3>, Blk> b_ijk_;
   Edge<Key<3>, Blk> c_ijk_;
+  Edge<Key<2>, Blk> a_flow_;
+  Edge<Key<2>, Blk> b_flow_;
   std::unique_ptr<BcastA> bcast_a_;
   std::unique_ptr<BcastB> bcast_b_;
   std::unique_ptr<MultiplyAdd> multiplyadd_;
+  std::unique_ptr<Read_SpMatrix> read_a_;
+  std::unique_ptr<Read_SpMatrix> read_b_;
   std::shared_ptr<Plan> plan_;
 };
 
@@ -1102,18 +1112,13 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   // flow graph needs to exist on every node
   Edge<Key<2>> ctl("control");
   Control control(ctl);
-  Edge<Key<2>, blk_t> eA, eB, eC;
+  Edge<Key<2>, blk_t> eC;
 
-  Read_SpMatrix a("A", A, ctl, eA, keymap);
-  Read_SpMatrix b("B", B, ctl, eB, keymap);
   Write_SpMatrix<> c(C, eC, keymap);
   auto &c_status = c.status();
   assert(!has_value(c_status));
-  //  SpMM a_times_b(world, eA, eB, eC, A, B);
-  SpMM<> a_times_b(eA, eB, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
+  SpMM<> a_times_b(ctl, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
                    mTiles, nTiles, kTiles, keymap);
-  TTGUNUSED(a);
-  TTGUNUSED(b);
   TTGUNUSED(a_times_b);
 
   auto connected = make_graph_executable(&control);
@@ -1373,18 +1378,16 @@ int main(int argc, char **argv) {
       auto keymap_write = [](const Key<2> &key) { return 0; };
       Edge<Key<2>> ctl("control");
       Control control(ctl);
-      Edge<Key<2>, blk_t> eA, eB, eC;
-      Read_SpMatrix a("A", A, ctl, eA, keymap);
-      Read_SpMatrix b("B", B, ctl, eB, keymap);
+      Edge<Key<2>, blk_t> eC;
       Write_SpMatrix<> c(C, eC, keymap_write);
       auto &c_status = c.status();
       assert(!has_value(c_status));
       //  SpMM a_times_b(world, eA, eB, eC, A, B);
-      SpMM<> a_times_b(eA, eB, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
+      SpMM<> a_times_b(ctl, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
                        mTiles, nTiles, kTiles, keymap);
-      TTGUNUSED(a_times_b);
 
-      if (get_default_world().rank() == 0) std::cout << Dot{}(&a, &b) << std::endl;
+      if (get_default_world().rank() == 0)
+        std::cout << Dot{}(a_times_b.get_reada(), a_times_b.get_readb()) << std::endl;
 
       // ready to run!
       auto connected = make_graph_executable(&control);
