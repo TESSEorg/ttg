@@ -239,8 +239,8 @@ class SpMM {
        const std::vector<std::vector<long>> &a_rowidx_to_colidx,
        const std::vector<std::vector<long>> &a_colidx_to_rowidx,
        const std::vector<std::vector<long>> &b_rowidx_to_colidx,
-       const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<int> &mTiles,
-       const std::vector<int> &nTiles, const std::vector<int> &kTiles, const Keymap &keymap)
+       const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<long> &mTiles,
+       const std::vector<long> &nTiles, const std::vector<long> &kTiles, const Keymap &keymap)
       : a_flow_(), b_flow_(), a_ijk_(), b_ijk_(), c_ijk_(), plan_(nullptr) {
     plan_ = std::make_shared<Plan>(a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
                                    mTiles, nTiles, kTiles);
@@ -263,15 +263,15 @@ class SpMM {
     const std::vector<std::vector<long>> &a_colidx_to_rowidx_;
     const std::vector<std::vector<long>> &b_rowidx_to_colidx_;
     const std::vector<std::vector<long>> &b_colidx_to_rowidx_;
-    const std::vector<int> &mTiles_;
-    const std::vector<int> &nTiles_;
-    const std::vector<int> &kTiles_;
+    const std::vector<long> &mTiles_;
+    const std::vector<long> &nTiles_;
+    const std::vector<long> &kTiles_;
 
     Plan(const std::vector<std::vector<long>> &a_rowidx_to_colidx,
          const std::vector<std::vector<long>> &a_colidx_to_rowidx,
          const std::vector<std::vector<long>> &b_rowidx_to_colidx,
-         const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<int> &mTiles,
-         const std::vector<int> &nTiles, const std::vector<int> &kTiles)
+         const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<long> &mTiles,
+         const std::vector<long> &nTiles, const std::vector<long> &kTiles)
         : a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , a_colidx_to_rowidx_(a_colidx_to_rowidx)
         , b_rowidx_to_colidx_(b_rowidx_to_colidx)
@@ -675,7 +675,7 @@ static double parseOption(std::string &option, double default_value = 0.25) {
 #if !defined(BLOCK_SPARSE_GEMM)
 static void initSpMatrixMarket(const std::function<int(const Key<2> &)> &keymap, const char *filename, SpMatrix<> &A,
                                SpMatrix<> &B, SpMatrix<> &C, int &M, int &N, int &K) {
-  std::vector<int> sizes;
+  std::vector<long> sizes;
   // We load the entire matrix on each rank, but we only use the local part for the GEMM
   if (!loadMarket(A, filename)) {
     std::cerr << "Failed to load " << filename << ", bailing out..." << std::endl;
@@ -787,7 +787,7 @@ static void initSpHardCoded(const std::function<int(const Key<2> &)> &keymap, Sp
 #else
 static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, SpMatrix<> &A, SpMatrix<> &B,
                               SpMatrix<> &C, SpMatrix<> &Aref, SpMatrix<> &Bref, bool buildRefs,
-                              std::vector<int> &mTiles, std::vector<int> &nTiles, std::vector<int> &kTiles,
+                              std::vector<long> &mTiles, std::vector<long> &nTiles, std::vector<long> &kTiles,
                               std::vector<std::vector<long>> &a_rowidx_to_colidx,
                               std::vector<std::vector<long>> &a_colidx_to_rowidx,
                               std::vector<std::vector<long>> &b_rowidx_to_colidx,
@@ -961,10 +961,10 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
 }
 
 #if defined(BTAS_IS_USABLE)
-static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, size_t M, size_t N, size_t K, int minTs,
+static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, long M, long N, long K, int minTs,
                            int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &Aref,
-                           SpMatrix<> &Bref, bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles,
-                           std::vector<int> &kTiles, std::vector<std::vector<long>> &a_rowidx_to_colidx,
+                           SpMatrix<> &Bref, bool buildRefs, std::vector<long> &mTiles, std::vector<long> &nTiles,
+                           std::vector<long> &kTiles, std::vector<std::vector<long>> &a_rowidx_to_colidx,
                            std::vector<std::vector<long>> &a_colidx_to_rowidx,
                            std::vector<std::vector<long>> &b_rowidx_to_colidx,
                            std::vector<std::vector<long>> &b_colidx_to_rowidx, double &average_tile_size,
@@ -972,7 +972,7 @@ static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, siz
   int rank = ttg_default_execution_context().rank();
   TTGUNUSED(rank);
 
-  int ts;
+  long ts;
   std::mt19937 gen(seed);
   std::mt19937 genv(seed + 1);
 
@@ -983,32 +983,32 @@ static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, siz
   std::vector<triplet_t> Aref_elements;
   std::vector<triplet_t> Bref_elements;
 
-  for (int m = 0; m < M; m += ts) {
+  for (long m = 0; m < M; m += ts) {
     ts = dist(gen);
     if (ts > M - m) ts = M - m;
     mTiles.push_back(ts);
   }
-  for (int n = 0; n < N; n += ts) {
+  for (long n = 0; n < N; n += ts) {
     ts = dist(gen);
     if (ts > N - n) ts = N - n;
     nTiles.push_back(ts);
   }
-  for (int k = 0; k < K; k += ts) {
+  for (long k = 0; k < K; k += ts) {
     ts = dist(gen);
     if (ts > K - k) ts = K - k;
     kTiles.push_back(ts);
   }
 
-  A.resize(mTiles.size(), kTiles.size());
-  B.resize(kTiles.size(), nTiles.size());
+  A.resize((long)mTiles.size(), (long)kTiles.size());
+  B.resize((long)kTiles.size(), (long)nTiles.size());
   if (buildRefs) {
-    Aref.resize(mTiles.size(), kTiles.size());
-    Bref.resize(kTiles.size(), nTiles.size());
+    Aref.resize((long)mTiles.size(), (long)kTiles.size());
+    Bref.resize((long)kTiles.size(), (long)nTiles.size());
   }
 
-  std::uniform_int_distribution<> mDist(0, mTiles.size() - 1);
-  std::uniform_int_distribution<> nDist(0, nTiles.size() - 1);
-  std::uniform_int_distribution<> kDist(0, kTiles.size() - 1);
+  std::uniform_int_distribution<> mDist(0, (int)mTiles.size() - 1);
+  std::uniform_int_distribution<> nDist(0, (int)nTiles.size() - 1);
+  std::uniform_int_distribution<> kDist(0, (int)kTiles.size() - 1);
   std::uniform_real_distribution<> vDist(-1.0, 1.0);
 
   size_t filling = 0;
@@ -1099,8 +1099,8 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
                               double Bdensity, const std::vector<std::vector<long>> &a_rowidx_to_colidx,
                               const std::vector<std::vector<long>> &a_colidx_to_rowidx,
                               const std::vector<std::vector<long>> &b_rowidx_to_colidx,
-                              const std::vector<std::vector<long>> &b_colidx_to_rowidx, std::vector<int> &mTiles,
-                              std::vector<int> &nTiles, std::vector<int> &kTiles, int M, int N, int K, int P, int Q) {
+                              const std::vector<std::vector<long>> &b_colidx_to_rowidx, std::vector<long> &mTiles,
+                              std::vector<long> &nTiles, std::vector<long> &kTiles, int M, int N, int K, int P, int Q) {
   int MT = (int)A.rows();
   int NT = (int)B.cols();
   int KT = (int)A.cols();
@@ -1184,8 +1184,8 @@ static void make_colidx_to_rowidx_from_eigen(const SpMatrix<> &mat, std::vector<
 #endif
 
 static double compute_gflops(const std::vector<std::vector<long>> &a_r2c, const std::vector<std::vector<long>> &b_r2c,
-                             const std::vector<int> &mTiles, const std::vector<int> &nTiles,
-                             const std::vector<int> &kTiles) {
+                             const std::vector<long> &mTiles, const std::vector<long> &nTiles,
+                             const std::vector<long> &kTiles) {
   unsigned long flops = 0;
   for (auto i = 0; i < a_r2c.size(); i++) {
     for (auto kk = 0; kk < a_r2c[i].size(); kk++) {
@@ -1291,9 +1291,9 @@ int main(int argc, char **argv) {
     }
     ttg_broadcast(ttg_default_execution_context(), seed, 0);
 
-    std::vector<int> mTiles;
-    std::vector<int> nTiles;
-    std::vector<int> kTiles;
+    std::vector<long> mTiles;
+    std::vector<long> nTiles;
+    std::vector<long> kTiles;
     std::vector<std::vector<long>> a_rowidx_to_colidx;
     std::vector<std::vector<long>> a_colidx_to_rowidx;
     std::vector<std::vector<long>> b_rowidx_to_colidx;
@@ -1352,7 +1352,7 @@ int main(int argc, char **argv) {
       initBlSpRandom(keymap, M, N, K, minTs, maxTs, avg, A, B, Aref, Bref, check, mTiles, nTiles, kTiles,
                      a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, avg_nb, Adensity,
                      Bdensity, seed, P, Q);
-      C.resize(mTiles.size(), nTiles.size());
+      C.resize((long)mTiles.size(), (long)nTiles.size());
     } else {
       tiling_type = "HardCodedBlockSparseMatrix";
       initBlSpHardCoded(keymap, A, B, C, Aref, Bref, true, mTiles, nTiles, kTiles, a_rowidx_to_colidx,
