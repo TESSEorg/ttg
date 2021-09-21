@@ -961,7 +961,7 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
 }
 
 #if defined(BTAS_IS_USABLE)
-static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, int M, int N, int K, int minTs, int maxTs,
+static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, size_t M, size_t N, size_t K, int minTs, int maxTs,
                            double avgDensity, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &Aref, SpMatrix<> &Bref,
                            bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles, std::vector<int> &kTiles,
                            std::vector<std::vector<long>> &a_rowidx_to_colidx,
@@ -999,16 +999,16 @@ static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, int
     kTiles.push_back(ts);
   }
 
-  A.resize((int)mTiles.size(), (int)kTiles.size());
-  B.resize((int)kTiles.size(), (int)nTiles.size());
+  A.resize(mTiles.size(), kTiles.size());
+  B.resize(kTiles.size(), nTiles.size());
   if (buildRefs) {
-    Aref.resize((int)mTiles.size(), (int)kTiles.size());
-    Bref.resize((int)kTiles.size(), (int)nTiles.size());
+    Aref.resize(mTiles.size(), kTiles.size());
+    Bref.resize(kTiles.size(), nTiles.size());
   }
 
-  std::uniform_int_distribution<> mDist(0, (int)mTiles.size() - 1);
-  std::uniform_int_distribution<> nDist(0, (int)nTiles.size() - 1);
-  std::uniform_int_distribution<> kDist(0, (int)kTiles.size() - 1);
+  std::uniform_int_distribution<> mDist(0, mTiles.size() - 1);
+  std::uniform_int_distribution<> nDist(0, nTiles.size() - 1);
+  std::uniform_int_distribution<> kDist(0, kTiles.size() - 1);
   std::uniform_real_distribution<> vDist(-1.0, 1.0);
 
   size_t filling = 0;
@@ -1352,7 +1352,7 @@ int main(int argc, char **argv) {
       initBlSpRandom(keymap, M, N, K, minTs, maxTs, avg, A, B, Aref, Bref, check, mTiles, nTiles, kTiles,
                      a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, avg_nb, Adensity,
                      Bdensity, seed, P, Q);
-      C.resize((long)mTiles.size(), (long)nTiles.size());
+      C.resize(mTiles.size(), nTiles.size());
     } else {
       tiling_type = "HardCodedBlockSparseMatrix";
       initBlSpHardCoded(keymap, A, B, C, Aref, Bref, true, mTiles, nTiles, kTiles, a_rowidx_to_colidx,
