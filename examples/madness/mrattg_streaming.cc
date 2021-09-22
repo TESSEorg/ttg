@@ -100,6 +100,7 @@ public:
             hash = key.hash();
         }
         else {
+          std::cout << "level: " << key.level() << " target_lev: " << target_level << std::endl;
             hash = key.parent(key.level() - target_level).hash();
         }
         return hash%nproc;
@@ -801,7 +802,7 @@ int main(int argc, char** argv) {
         //test0<float,6,3>();
         //test1<float,6,3>();
         //test2<float,6,3>(20);
-        test2<double,10,3>(20, 1e-8);
+        test2<double,10,3>(1, 1e-8);
         //test1<double,6,3>();
     }
 
