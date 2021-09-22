@@ -100,7 +100,6 @@ public:
             hash = key.hash();
         }
         else {
-          std::cout << "level: " << key.level() << " target_lev: " << target_level << std::endl;
             hash = key.parent(key.level() - target_level).hash();
         }
         return hash%nproc;
