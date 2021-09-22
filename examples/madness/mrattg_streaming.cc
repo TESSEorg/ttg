@@ -93,7 +93,7 @@ public:
                 p >>= NDIM;
                 this->target_level++;
             }
-        }            
+        }
     }
 
     /// Find the owner of a given key
@@ -103,7 +103,7 @@ public:
             hash = key.hash();
         }
         else {
-            hash = key.parent(target_level - key.level()).hash();
+            hash = key.parent(key.level() - target_level).hash();
         }
         return hash%nproc;
     }
