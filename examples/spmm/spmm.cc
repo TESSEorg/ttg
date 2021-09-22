@@ -247,11 +247,11 @@ class SpMM {
        const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<long> &mTiles,
        const std::vector<long> &nTiles, const std::vector<long> &kTiles, const Keymap &keymap, const long P,
        const long Q)
-      : a_flow_(), b_flow_(), a_ijk_(), b_ijk_(), c_ijk_(), plan_(nullptr) {
+      : a_flow_(), b_flow_(), a_ctl_(), b_ctl_(), c2c_ctl_(), a_ijk_(), b_ijk_(), c_ijk_(), plan_(nullptr) {
     plan_ = std::make_shared<Plan>(a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
                                    mTiles, nTiles, kTiles, keymap, P, Q);
 
-    coordinator_ = std::make_unique<Coordinator>(progress_ctl, a_ctl_, b_ctl_, plan_, keymap);
+    coordinator_ = std::make_unique<Coordinator>(progress_ctl, a_ctl_, b_ctl_, c2c_ctl_, plan_, keymap);
     read_a_ = std::make_unique<Read_SpMatrix>("A", a_mat, a_ctl_, a_flow_, plan_, keymap);
     read_b_ = std::make_unique<Read_SpMatrix>("B", b_mat, b_ctl_, b_flow_, plan_, keymap);
     bcast_a_ = std::make_unique<BcastA>(a_flow_, a_ijk_, plan_, keymap);
@@ -315,6 +315,27 @@ class SpMM {
         , steps_() {
       /* Stupid strategy: split the thing in 8 blocks */
       auto rank = ttg_default_execution_context().rank();
+      long kt = 0, mt = 0, nt = 0;
+      for (long m = 0; m < a_rowidx_to_colidx.size(); m++) {
+        for (long n = 0; n < a_rowidx_to_colidx[m].size(); n++) {
+          if (a_rowidx_to_colidx[m][n] + 1 > kt) kt = a_rowidx_to_colidx[m][n] + 1;
+        }
+      }
+      for (long n = 0; n < a_colidx_to_rowidx.size(); n++) {
+        for (long m = 0; m < a_colidx_to_rowidx[n].size(); m++) {
+          if (a_colidx_to_rowidx[n][m] + 1 > mt) mt = a_colidx_to_rowidx[n][m] + 1;
+        }
+      }
+      for (long m = 0; m < b_rowidx_to_colidx.size(); m++) {
+        for (long n = 0; n < b_rowidx_to_colidx[m].size(); n++) {
+          if (b_rowidx_to_colidx[m][n] + 1 > nt) nt = b_rowidx_to_colidx[m][n] + 1;
+        }
+      }
+      for (long n = 0; n < b_colidx_to_rowidx.size(); n++) {
+        for (long m = 0; m < b_colidx_to_rowidx[n].size(); m++) {
+          if (b_colidx_to_rowidx[n][m] + 1 > kt) kt = b_colidx_to_rowidx[n][m] + 1;
+        }
+      }
       for (long mm = 0; mm < 2; mm++) {
         for (long nn = 0; nn < 2; nn++) {
           for (long kk = 0; kk < 2; kk++) {
@@ -322,14 +343,18 @@ class SpMM {
             long nb_local_gemms = 0;
             bcastset_t a_sent;
             bcastset_t b_sent;
-            long mt = a_rowidx_to_colidx.size();
             for (long m = mm * mt / 2; m < (mm + 1) * mt / 2; m++) {
-              if (a_rowidx_to_colidx[m].empty()) continue;
-              long kt = a_rowidx_to_colidx[m].size();
+              if (m >= a_rowidx_to_colidx.size() || a_rowidx_to_colidx[m].empty()) continue;
               for (long k = kk * kt / 2; k < (kk + 1) * kt / 2; k++) {
-                if (k > b_rowidx_to_colidx[k].size() || b_rowidx_to_colidx[k].empty()) continue;
-                long nt = b_rowidx_to_colidx[k].size();
+                if (k >= b_rowidx_to_colidx.size() || b_rowidx_to_colidx[k].empty()) continue;
+                if (std::find(a_rowidx_to_colidx[m].begin(), a_rowidx_to_colidx[m].end(), k) ==
+                    a_rowidx_to_colidx[m].end())
+                  continue;
                 for (long n = nn * nt / 2; n < (nn + 1) * nt / 2; n++) {
+                  if (n >= b_rowidx_to_colidx.size() || b_colidx_to_rowidx[n].empty()) continue;
+                  if (std::find(b_colidx_to_rowidx[n].begin(), b_colidx_to_rowidx[n].end(), k) ==
+                      b_colidx_to_rowidx[n].end())
+                    continue;
                   if (keymap_(Key<2>({m, n})) == rank) nb_local_gemms++;
                   gemms.insert({m, n, k});
                   if (a_sent.find({m, k}) == a_sent.end()) {
@@ -499,39 +524,51 @@ class SpMM {
   };
 
   /// Central coordinator: ensures that all progress according to the plan
-  class Coordinator : public Op<Key<3>, std::tuple<Out<Key<3>, Control>, Out<Key<3>, Control>>, Coordinator, Control> {
+  class Coordinator : public Op<Key<3>, std::tuple<Out<Key<3>, Control>, Out<Key<3>, Control>, Out<Key<3>, Control>>,
+                                Coordinator, Control> {
    public:
-    using baseT = Op<Key<3>, std::tuple<Out<Key<3>, Control>, Out<Key<3>, Control>>, Coordinator, Control>;
+    using baseT =
+        Op<Key<3>, std::tuple<Out<Key<3>, Control>, Out<Key<3>, Control>, Out<Key<3>, Control>>, Coordinator, Control>;
 
     Coordinator(Edge<Key<3>, Control> progress_ctl, Edge<Key<3>, Control> &a_ctl, Edge<Key<3>, Control> &b_ctl,
-                std::shared_ptr<const Plan> plan, const Keymap &keymap)
-        : baseT(edges(progress_ctl), edges(a_ctl, b_ctl), std::string("SpMM::Coordinator"), {"progress_ctl"},
-                {"a_ctl", "b_ctl"},
+                Edge<Key<3>, Control> &c2c_ctl, std::shared_ptr<const Plan> plan, const Keymap &keymap)
+        : baseT(edges(fuse(progress_ctl, c2c_ctl)), edges(a_ctl, b_ctl, c2c_ctl), std::string("SpMM::Coordinator"),
+                {"progress_ctl"}, {"a_ctl", "b_ctl", "c2c_ctl"},
                 [keymap](const Key<3> &key) {
                   Key<2> k{key[0], key[1]};
                   return keymap(k);
                 })
         , plan_(plan) {
       baseT::template set_input_reducer<0>([](Control &&a, const Control &&b) { return a; });
-      for (long p = 0; p < plan_->p(); p++)
-        for (long q = 0; q < plan_->q(); q++)
+      for (long p = 0; p < plan_->p(); p++) {
+        for (long q = 0; q < plan_->q(); q++) {
           if (keymap(Key<2>({p, q})) == ttg_default_execution_context().rank())
             baseT::template set_argstream_size<0>(Key<3>{p, q, 0l}, 1);
+        }
+      }
     }
 
     void op(const Key<3> &key, typename baseT::input_values_tuple_type &&input,
-            std::tuple<Out<Key<3>, Control>, Out<Key<3>, Control>> &out) {
+            std::tuple<Out<Key<3>, Control>, Out<Key<3>, Control>, Out<Key<3>, Control>> &out) {
       auto p = key[0];
       auto q = key[1];
       auto s = key[2];
       if (s + 1 < plan_->nb_steps(p, q)) {
-        auto nb = plan_->nb_local_gemms(s + 1);
-        if (tracing())
-          ttg::print("Coordinator(", p, ", ", q, ", ", s,
-                     "): setting the number of local "
-                     "GEMMS to trigger step ",
-                     s + 1, " to ", nb);
-        baseT::template set_argstream_size<0>(Key<3>({p, q, s + 1}), nb);
+        auto nb = plan_->nb_local_gemms(s);
+        if (nb > 0) {  // We set the number of reductions before triggering the first GEMM (through trigger of bcasts)
+          if (tracing())
+            ttg::print("Coordinator(", p, ", ", q, ", ", s,
+                       "): setting the number of local "
+                       "GEMMS to trigger step ",
+                       s + 1, " to ", nb);
+          baseT::template set_argstream_size<0>(Key<3>({p, q, s + 1}), nb);
+        } else {
+          if (tracing())
+            ttg::print("Coordinator(", p, ", ", q, ", ", s, "): there are 0 local GEMMS in step ", s,
+                       "; triggering next coordinator step");
+          baseT::template set_argstream_size<0>(Key<3>({p, q, s + 1}), 1);
+          ::send<2>(Key<3>({p, q, s + 1}), Control{}, out);
+        }
       }
       if (tracing())
         ttg::print("On rank ", ttg_default_execution_context().rank(), "Coordinator(", p, ", ", q, ", ", s,
@@ -806,6 +843,7 @@ class SpMM {
   Edge<Key<3>, Blk> b_flow_;
   Edge<Key<3>, Control> a_ctl_;
   Edge<Key<3>, Control> b_ctl_;
+  Edge<Key<3>, Control> c2c_ctl_;
   std::unique_ptr<Coordinator> coordinator_;
   std::unique_ptr<BcastA> bcast_a_;
   std::unique_ptr<BcastB> bcast_b_;
