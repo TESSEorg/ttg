@@ -514,7 +514,7 @@ class SpMM {
       return res;
     }
 
-    gemmset_t gemms(long s) const { return std::get<0>(steps_[s]); }
+    const gemmset_t &gemms(long s) const { return std::get<0>(steps_[s]); }
 
     long nb_local_gemms(long s) const { return std::get<1>(steps_[s]); }
 
