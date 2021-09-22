@@ -345,7 +345,7 @@ namespace ttg {
     Debugger::set_default_debugger(debugger);
     debugger->set_exec(exec_name);
     debugger->set_prefix(rank);
-    debugger->set_cmd("lldb_xterm");
+    debugger->set_cmd(cmd);
     debugger->debug("start");
 
     //  initialize_watchpoints();
