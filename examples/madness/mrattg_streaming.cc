@@ -77,6 +77,47 @@ struct KeyProcMap {
 //     }
 // };
 
+/// A pmap that spatially decomposes the domain and by default slightly overdcomposes to attempt to load balance
+template <Dimension NDIM>
+class PartitionPmap {
+private:
+    const int nproc;
+    Level target_level;
+public:
+    PartitionPmap()
+        : nproc(1)
+        , target_level(3)
+    {};
+
+    // Default is to try to optimize the target_level, but you can specify any value > 0
+    PartitionPmap(size_t nproc, const Level target_level=0)
+        : nproc(nproc)
+    {
+        if (target_level > 0) {
+            this->target_level = target_level;
+        }
+        else {
+            this->target_level = 1;
+            int p = nproc-1;
+            while (p) {
+                p >>= NDIM;
+                this->target_level++;
+            }
+        }
+    }
+
+    /// Find the owner of a given key
+    HashValue operator()(const Key<NDIM>& key) const {
+        HashValue hash;
+        if (key.level() <= target_level) {
+            hash = key.hash();
+        }
+        else {
+            hash = key.parent(key.level() - target_level).hash();
+        }
+        return hash%nproc;
+    }
+};
 
 /// An empty class used for pure control flows
 struct Control {};
@@ -636,6 +677,128 @@ void test1() {
     }
 }
 
+template <typename T, size_t K, Dimension NDIM>
+void test2(size_t nfunc, T thresh = 1e-6) {
+    FunctionData<T,K,NDIM>::initialize();
+    PartitionPmap<NDIM> pmap =  PartitionPmap<NDIM>(ttg_default_execution_context().size());
+    Domain<NDIM>::set_cube(-6.0,6.0);
+
+    srand48(5551212); // for reproducible results
+    for (auto i : range(10000)) drand48(); // warmup generator
+
+    ctlEdge<NDIM> ctl("start");
+    auto start = make_start(ctl);
+    std::vector<std::unique_ptr<ttg::OpBase>> ops;
+    for (auto i : range(nfunc)) {
+        T expnt = 30000.0;
+        Coordinate<T,NDIM> r;
+        for (size_t d=0; d<NDIM; d++) {
+            r[d] = T(-6.0) + T(12.0)*drand48();
+        }
+        auto ff = Gaussian<T,NDIM>(expnt, r);
+
+        TTGUNUSED(i);
+        rnodeEdge<T,K,NDIM> a("a"), c("c");
+        cnodeEdge<T,K,NDIM> b("b");
+
+        auto p1 = make_project(ff, T(thresh), ctl, a, "project A");
+        p1->set_keymap(pmap);
+
+        auto compress = make_compress<T,K,NDIM>(a, b);
+        std::get<0>(compress)->set_keymap(pmap);
+        std::get<1>(compress)->set_keymap(pmap);
+        std::get<2>(compress)->set_keymap(pmap);
+
+        auto &reduce_leaves_op = std::get<1>(compress);
+        reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNode<T,K,NDIM> &&node,
+                                                           FunctionReconstructedNode<T,K,NDIM> &&another)
+                                                        {
+                                                          //Update self values into the array.
+                                                          node.neighbor_coeffs[node.key.childindex()] = node.coeffs;
+                                                          node.is_neighbor_leaf[node.key.childindex()] = node.is_leaf;
+                                                          node.neighbor_sum[node.key.childindex()] = node.sum;
+                                                          node.neighbor_coeffs[another.key.childindex()] = another.coeffs;
+                                                          node.is_neighbor_leaf[another.key.childindex()] = another.is_leaf;
+                                                          node.neighbor_sum[another.key.childindex()] = another.sum;
+                                                          //std::cout << "Neighbor_sum[" << another.key.childindex() << "] : " << node.neighbor_sum <<std::endl;
+                                                          return node;
+                                                        });
+        reduce_leaves_op->template set_static_argstream_size<0>(1 << NDIM);
+
+        auto recon = make_reconstruct<T,K,NDIM>(b,c);
+        recon->set_keymap(pmap);
+
+        //auto printer =   make_printer(a,"projected    ", true);
+        // auto printer2 =  make_printer(b,"compressed   ", false);
+        // auto printer3 =  make_printer(c,"reconstructed", false);
+        auto printer =   make_sink(a);
+        auto printer2 =  make_sink(b);
+        auto printer3 =  make_sink(c);
+
+        ops.push_back(std::move(p1));
+        ops.push_back(std::move(std::get<0>(compress)));
+        ops.push_back(std::move(std::get<1>(compress)));
+        ops.push_back(std::move(std::get<2>(compress)));
+        ops.push_back(std::move(recon));
+        ops.push_back(std::move(printer));
+        ops.push_back(std::move(printer2));
+        ops.push_back(std::move(printer3));
+    }
+
+    if (tracing_enabled) {
+      parsec_profiling_add_dictionary_keyword("PROJECT", "#0000FF",
+              0, "",
+              &event_project_startkey, &event_project_endkey);
+
+      parsec_profiling_add_dictionary_keyword("SENDLEAVESUP", "#0000FF",
+              0, "",
+              &event_sendleavesup_startkey, &event_sendleavesup_endkey);
+
+      parsec_profiling_add_dictionary_keyword("DOCOMPRESS", "#0000FF",
+              0, "",
+              &event_docompress_startkey, &event_docompress_endkey);
+
+      parsec_profiling_add_dictionary_keyword("RECURUP", "#0000FF",
+              0, "",
+              &event_recurup_startkey, &event_recurup_endkey);
+
+      parsec_profiling_add_dictionary_keyword("RECONSTRUCT", "#0000FF",
+              0, "",
+              &event_reconstruct_startkey, &event_reconstruct_endkey);
+
+      parsec_profiling_add_dictionary_keyword("SEND", "#0000FF",
+              0, "",
+              &event_send_startkey, &event_send_endkey);
+
+      parsec_profiling_add_dictionary_keyword("UNFILTER", "#0000FF",
+              0, "",
+              &event_unfilter_startkey, &event_unfilter_endkey);
+    }
+
+    std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
+    auto connected = make_graph_executable(start.get());
+    assert(connected);
+    if (ttg_default_execution_context().rank() == 0) {
+        //std::cout << "Is everything connected? " << connected << std::endl;
+        //std::cout << "==== begin dot ====\n";
+        //std::cout << Dot()(start.get()) << std::endl;
+        //std::cout << "====  end dot  ====\n";
+	beg = std::chrono::high_resolution_clock::now();
+        // This kicks off the entire computation
+        start->invoke(Key<NDIM>(0, {0}));
+    }
+
+    ttg_execute(ttg_default_execution_context());
+    ttg_fence(ttg_default_execution_context());
+
+    if (ttg_default_execution_context().rank() == 0) {
+        end = std::chrono::high_resolution_clock::now();
+        std::cout << "TTG Execution Time (milliseconds) : "
+              << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
+
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc == 2) {
       tracing_enabled = std::atoi(argv[1]);
@@ -655,7 +818,8 @@ int main(int argc, char** argv) {
     {
         //test0<float,6,3>();
         //test1<float,6,3>();
-        test1<double,6,3>();
+        //test1<double,6,3>();
+	test2<double,10,3>(1, 1e-8);
     }
 
     ttg_fence(get_default_world());
