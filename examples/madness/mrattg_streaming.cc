@@ -628,8 +628,13 @@ void test2(size_t nfunc, T thresh = 1e-6) {
         rnodeEdge<T,K,NDIM> a("a"), c("c");
         cnodeEdge<T,K,NDIM> b("b");
 
-        auto p1 = make_project(ff, T(thresh), ctl, a, "project A"); //p1->set_keymap(pmap);
-        auto compress = make_compress<T,K,NDIM>(a, b); //std::get<0>(compress)->set_keymap(pmap);std::get<1>(compress)->set_keymap(pmap);
+        auto p1 = make_project(ff, T(thresh), ctl, a, "project A");
+        p1->set_keymap(pmap);
+
+        auto compress = make_compress<T,K,NDIM>(a, b);
+        std::get<0>(compress)->set_keymap(pmap);
+        std::get<1>(compress)->set_keymap(pmap);
+        std::get<2>(compress)->set_keymap(pmap);
 
         auto &reduce_leaves_op = std::get<1>(compress);
         reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNode<T,K,NDIM> &&node,
@@ -647,7 +652,8 @@ void test2(size_t nfunc, T thresh = 1e-6) {
                                                         });
         reduce_leaves_op->template set_static_argstream_size<0>(1 << NDIM);
 
-        auto recon = make_reconstruct<T,K,NDIM>(b,c);// recon->set_keymap(pmap);
+        auto recon = make_reconstruct<T,K,NDIM>(b,c);
+        recon->set_keymap(pmap);
 
         //auto printer =   make_printer(a,"projected    ", true);
         // auto printer2 =  make_printer(b,"compressed   ", false);
@@ -705,7 +711,7 @@ int main(int argc, char** argv) {
         //test0<float,6,3>();
         //test1<float,6,3>();
         //test2<float,6,3>(20);
-        test2<double,10,3>(1, 1e-8);
+        test2<double,10,3>(20, 1e-8);
         //test1<double,6,3>();
     }
 
