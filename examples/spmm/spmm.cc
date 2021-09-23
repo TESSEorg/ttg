@@ -36,6 +36,8 @@ using namespace ttg;
 
 #include "ttg/util/bug.h"
 
+#include "active-set-strategy.h"
+
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
 
@@ -278,22 +280,11 @@ class SpMM {
     const long Q_;
 
    private:
-    struct triplet_hash : public std::unary_function<std::tuple<long, long, long>, std::size_t> {
-      std::size_t operator()(const std::tuple<long, long, long> &k) const {
-        return static_cast<size_t>(std::get<0>(k)) | (static_cast<size_t>(std::get<1>(k)) << 21) |
-               (static_cast<size_t>(std::get<2>(k) << 42));
-      }
-    };
-    using gemmset_t = std::unordered_set<std::tuple<long, long, long>, triplet_hash>;
+    using gemmset_t = std::set<std::tuple<long, long, long>>;
+    using bcastset_t = std::set<std::tuple<long, long>>;
+    using step_t = std::vector<std::tuple<gemmset_t, long, bcastset_t, bcastset_t>>;
 
-    struct couple_hash : public std::unary_function<std::tuple<long, long>, std::size_t> {
-      std::size_t operator()(const std::tuple<long, long> &k) const {
-        return static_cast<size_t>(std::get<0>(k)) | (static_cast<size_t>(std::get<1>(k)) << 32);
-      }
-    };
-    using bcastset_t = std::unordered_set<std::tuple<long, long>, couple_hash>;
-
-    std::vector<std::tuple<gemmset_t, long, bcastset_t, bcastset_t>> steps_;
+    const step_t steps_;
 
    public:
     Plan(const std::vector<std::vector<long>> &a_rowidx_to_colidx,
@@ -312,48 +303,152 @@ class SpMM {
         , keymap_(keymap)
         , P_(P)
         , Q_(Q)
-        , steps_() {
-      /* Stupid strategy: split the thing in 8 blocks */
+        , steps_(active_set_strategy(8 * 1024 * 1024)) {}
+
+    step_t active_set_strategy(size_t memory) const {
+      ActiveSetStrategy st(a_rowidx_to_colidx_, a_colidx_to_rowidx_, b_rowidx_to_colidx_, b_colidx_to_rowidx_, mTiles_,
+                           nTiles_, kTiles_, memory);
+
+      /* First, we sample a couple of places to find what 'cube' dimension is ok for this memory size */
+      // Sometimes, it's worth not splitting at all, so check the corner 0,0 first
+      long cube_dim, delta, cube_max, sample_min, sample_max, sample_avg, nb_sample;
+      size_t cube_size, size_min, size_max, size_avg;
+      std::tie(cube_dim, cube_size) = st.best_cube_dim_and_size(0, 0, 0);
+      nb_sample = 1;
+      if (cube_dim != st.mt && cube_dim != st.nt && cube_dim != st.kt) {
+        // OK... the best cube dim to fit in (0, 0, 0) is not to fill up an entire dimension...
+        // Check a couple of times: in the middle of the search space, and in corners.
+        sample_min = cube_dim;
+        sample_max = cube_dim;
+        sample_avg = cube_dim;
+        size_min = cube_size;
+        size_max = cube_size;
+        size_avg = cube_size;
+        for (int m = 0; m < 2; m++) {
+          for (int n = 0; n < 2; n++) {
+            for (int k = 0; k < 2; k++) {
+              if (m != 0 || n != 0 || k != 0) {
+                long sample;
+                size_t size;
+                if (m * (st.mt - cube_dim) / 3 < 0 || n * (st.nt - cube_dim) / 3 < 0 || k * (st.kt - cube_dim) / 3 < 0)
+                  continue;
+                std::tie(sample, size) = st.best_cube_dim_and_size(
+                    m * (st.mt - cube_dim) / 3, n * (st.nt - cube_dim) / 3, k * (st.kt - cube_dim) / 3);
+                if (sample < sample_min) {
+                  sample_min = sample;
+                  size_min = size;
+                }
+                if (sample > sample_max) {
+                  sample_max = sample;
+                  size_max = size;
+                }
+                sample_avg += sample;
+                size_avg += size;
+                nb_sample++;
+              }
+            }
+          }
+        }
+      }
+      if (nb_sample > 1) {
+        if (tracing() && ttg_default_execution_context().rank() == 0) {
+          ttg::print("SpMM::Plan -- Sample (min/avg/max/initial): ", sample_min, "(", size_min, ") / ",
+                     ((double)sample_avg / (double)nb_sample), "(", ((double)size_avg / (double)nb_sample), ") / ",
+                     sample_max, "(", size_max, ") / ", cube_dim, "(", cube_size, ")");
+        }
+        cube_dim = (long)((double)sample_avg / (double)nb_sample);
+
+        delta = sample_max / 2;
+        if (delta < 10) delta = 10;
+        cube_max = sample_max;
+      } else {
+        if (tracing() && ttg_default_execution_context().rank() == 0) {
+          ttg::print("SpMM::Plan -- Cube is filling up the domain: ", cube_dim, "(", cube_size, ")");
+        }
+        delta = cube_dim / 2;
+        if (delta < 10) delta = 10;
+        cube_max = cube_dim;
+      }
+
+      auto excess_fct = [st](const long d) {
+        return (st.mt % d) * (st.nt % d) + (st.mt % d) * (st.kt % d) + (st.kt % d) * (st.nt % d);
+      };
+      long excess = excess_fct(cube_dim);
+      for (long d = 1; d < delta; d++) {
+        long candidate = cube_dim + d;
+        if (candidate <= 1) continue;
+        if (candidate > cube_max) continue;
+        long tmp = excess_fct(candidate);
+        if (0 == tmp) {
+          excess = tmp;
+          cube_dim = candidate;
+          break;
+        }
+        if (tmp > excess) {
+          excess = tmp;
+          cube_dim = candidate;
+        }
+        candidate = cube_dim - d;
+        if (candidate <= 1) continue;
+        tmp = excess_fct(candidate);
+        if (0 == tmp) {
+          excess = tmp;
+          cube_dim = candidate;
+          break;
+        }
+        if (tmp > excess) {
+          excess = tmp;
+          cube_dim = candidate;
+        }
+        if (tracing() && ttg_default_execution_context().rank() == 0) {
+          ttg::print("SpMM::Plan -- candidate cube_dim is ", cube_dim, " (mt/nt/kt=", st.mt, "/", st.nt, "/", st.kt,
+                     ") producing an excess of ", excess, "/", 3 * cube_dim * cube_dim, " = ",
+                     (double)excess / (double)(3 * cube_dim * cube_dim));
+        }
+      }
+      if (tracing() && ttg_default_execution_context().rank() == 0) {
+        ttg::print("SpMM::Plan -- selected cube_dim is ", cube_dim, " (mt/nt/kt=", st.mt, "/", st.nt, "/", st.kt,
+                   ") producing an excess of ", excess, "/", 3 * cube_dim * cube_dim, " = ",
+                   (double)excess / (double)(3 * cube_dim * cube_dim));
+      }
+
+      return regular_cube_strategy(cube_dim);
+    }
+
+    step_t regular_cube_strategy(long cube_dim) const {
+      step_t steps;
       auto rank = ttg_default_execution_context().rank();
-      long kt = 0, mt = 0, nt = 0;
-      for (long m = 0; m < a_rowidx_to_colidx.size(); m++) {
-        for (long n = 0; n < a_rowidx_to_colidx[m].size(); n++) {
-          if (a_rowidx_to_colidx[m][n] + 1 > kt) kt = a_rowidx_to_colidx[m][n] + 1;
-        }
-      }
-      for (long n = 0; n < a_colidx_to_rowidx.size(); n++) {
-        for (long m = 0; m < a_colidx_to_rowidx[n].size(); m++) {
-          if (a_colidx_to_rowidx[n][m] + 1 > mt) mt = a_colidx_to_rowidx[n][m] + 1;
-        }
-      }
-      for (long m = 0; m < b_rowidx_to_colidx.size(); m++) {
-        for (long n = 0; n < b_rowidx_to_colidx[m].size(); n++) {
-          if (b_rowidx_to_colidx[m][n] + 1 > nt) nt = b_rowidx_to_colidx[m][n] + 1;
-        }
-      }
-      for (long n = 0; n < b_colidx_to_rowidx.size(); n++) {
-        for (long m = 0; m < b_colidx_to_rowidx[n].size(); m++) {
-          if (b_colidx_to_rowidx[n][m] + 1 > kt) kt = b_colidx_to_rowidx[n][m] + 1;
-        }
-      }
-      for (long mm = 0; mm < 2; mm++) {
-        for (long nn = 0; nn < 2; nn++) {
-          for (long kk = 0; kk < 2; kk++) {
+      long mt;
+      long nt;
+      long kt;
+      mt = a_rowidx_to_colidx_.size();
+      nt = b_colidx_to_rowidx_.size();
+      kt = a_colidx_to_rowidx_.size();
+      long tmp = b_rowidx_to_colidx_.size();
+      if (tmp > kt) kt = tmp;
+
+      long mns = ((mt % cube_dim) == 0) ? mt / cube_dim : (mt + mt - 1) / cube_dim;
+      long nns = ((nt % cube_dim) == 0) ? nt / cube_dim : (nt + nt - 1) / cube_dim;
+      long kns = ((kt % cube_dim) == 0) ? kt / cube_dim : (kt + kt - 1) / cube_dim;
+
+      for (long mm = 0; mm < mns; mm++) {
+        for (long nn = 0; nn < nns; nn++) {
+          for (long kk = 0; kk < kns; kk++) {
             gemmset_t gemms;
             long nb_local_gemms = 0;
             bcastset_t a_sent;
             bcastset_t b_sent;
-            for (long m = mm * mt / 2; m < (mm + 1) * mt / 2; m++) {
-              if (m >= a_rowidx_to_colidx.size() || a_rowidx_to_colidx[m].empty()) continue;
-              for (long k = kk * kt / 2; k < (kk + 1) * kt / 2; k++) {
-                if (k >= b_rowidx_to_colidx.size() || b_rowidx_to_colidx[k].empty()) continue;
-                if (std::find(a_rowidx_to_colidx[m].begin(), a_rowidx_to_colidx[m].end(), k) ==
-                    a_rowidx_to_colidx[m].end())
+            for (long m = mm * cube_dim; m < (mm + 1) * cube_dim && m < mt; m++) {
+              if (m >= a_rowidx_to_colidx_.size() || a_rowidx_to_colidx_[m].empty()) continue;
+              for (long k = kk * cube_dim; k < (kk + 1) * cube_dim && k < kt; k++) {
+                if (k >= b_rowidx_to_colidx_.size() || b_rowidx_to_colidx_[k].empty()) continue;
+                if (std::find(a_rowidx_to_colidx_[m].begin(), a_rowidx_to_colidx_[m].end(), k) ==
+                    a_rowidx_to_colidx_[m].end())
                   continue;
-                for (long n = nn * nt / 2; n < (nn + 1) * nt / 2; n++) {
-                  if (n >= b_rowidx_to_colidx.size() || b_colidx_to_rowidx[n].empty()) continue;
-                  if (std::find(b_colidx_to_rowidx[n].begin(), b_colidx_to_rowidx[n].end(), k) ==
-                      b_colidx_to_rowidx[n].end())
+                for (long n = nn * cube_dim; n < (nn + 1) * cube_dim && n < nt; n++) {
+                  if (n >= b_rowidx_to_colidx_.size() || b_colidx_to_rowidx_[n].empty()) continue;
+                  if (std::find(b_colidx_to_rowidx_[n].begin(), b_colidx_to_rowidx_[n].end(), k) ==
+                      b_colidx_to_rowidx_[n].end())
                     continue;
                   if (keymap_(Key<2>({m, n})) == rank) nb_local_gemms++;
                   gemms.insert({m, n, k});
@@ -369,7 +464,7 @@ class SpMM {
             if (tracing()) {
               if (gemms.size() < 20) {
                 std::ostringstream dbg;
-                dbg << "On rank " << ttg_default_execution_context().rank() << ", Step " << steps_.size() << " is ";
+                dbg << "On rank " << ttg_default_execution_context().rank() << ", Step " << steps.size() << " is ";
                 for (auto it : gemms) {
                   dbg << "(" << std::get<0>(it) << "," << std::get<1>(it) << "," << std::get<2>(it) << ") ";
                 }
@@ -379,10 +474,11 @@ class SpMM {
                            ", plan is not displayed because it is too large");
               }
             }
-            steps_.emplace_back(std::make_tuple(gemms, nb_local_gemms, a_sent, b_sent));
+            steps.emplace_back(std::make_tuple(gemms, nb_local_gemms, a_sent, b_sent));
           }
         }
       }
+      return steps;
     }
 
     /* Compute the length of the remaining sequence on that tile */
@@ -1493,7 +1589,7 @@ static double compute_gflops(const std::vector<std::vector<long>> &a_r2c, const 
   for (auto i = 0; i < a_r2c.size(); i++) {
     for (auto kk = 0; kk < a_r2c[i].size(); kk++) {
       auto k = a_r2c[i][kk];
-      if (k > b_r2c.size()) continue;
+      if (k >= b_r2c.size()) continue;
       for (auto jj = 0; jj < b_r2c[k].size(); jj++) {
         auto j = b_r2c[k][jj];
         flops += mTiles[i] * nTiles[j] * kTiles[k];
