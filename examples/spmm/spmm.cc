@@ -248,10 +248,10 @@ class SpMM {
        const std::vector<std::vector<long>> &b_rowidx_to_colidx,
        const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<long> &mTiles,
        const std::vector<long> &nTiles, const std::vector<long> &kTiles, const Keymap &keymap, const long P,
-       const long Q)
+       const long Q, size_t memory, const long lookahead)
       : a_flow_(), b_flow_(), a_ctl_(), b_ctl_(), c2c_ctl_(), a_ijk_(), b_ijk_(), c_ijk_(), plan_(nullptr) {
     plan_ = std::make_shared<Plan>(a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
-                                   mTiles, nTiles, kTiles, keymap, P, Q);
+                                   mTiles, nTiles, kTiles, keymap, P, Q, memory, lookahead);
 
     coordinator_ = std::make_unique<Coordinator>(progress_ctl, a_ctl_, b_ctl_, c2c_ctl_, plan_, keymap);
     read_a_ = std::make_unique<Read_SpMatrix>("A", a_mat, a_ctl_, a_flow_, plan_, keymap);
@@ -263,6 +263,11 @@ class SpMM {
     TTGUNUSED(bcast_a_);
     TTGUNUSED(bcast_b_);
     TTGUNUSED(multiplyadd_);
+  }
+
+  long initbound() const {
+    if (plan_->nb_steps() < plan_->lookahead_) return plan_->nb_steps();
+    return plan_->lookahead_;
   }
 
   /// Plan: group all GEMMs in blocks of efficient size
@@ -278,6 +283,7 @@ class SpMM {
     const Keymap keymap_;
     const long P_;
     const long Q_;
+    const long lookahead_;
 
    private:
     using gemmset_t = std::set<std::tuple<long, long, long>>;
@@ -292,7 +298,7 @@ class SpMM {
          const std::vector<std::vector<long>> &b_rowidx_to_colidx,
          const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<long> &mTiles,
          const std::vector<long> &nTiles, const std::vector<long> &kTiles, const Keymap &keymap, const long P,
-         const long Q)
+         const long Q, const size_t memory, const long lookahead)
         : a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , a_colidx_to_rowidx_(a_colidx_to_rowidx)
         , b_rowidx_to_colidx_(b_rowidx_to_colidx)
@@ -303,7 +309,8 @@ class SpMM {
         , keymap_(keymap)
         , P_(P)
         , Q_(Q)
-        , steps_(active_set_strategy(8 * 1024 * 1024)) {}
+        , lookahead_(lookahead + 1)  // users generally understand that a lookahead of 0 still progresses
+        , steps_(active_set_strategy(memory)) {}
 
     step_t active_set_strategy(size_t memory) const {
       ActiveSetStrategy st(a_rowidx_to_colidx_, a_colidx_to_rowidx_, b_rowidx_to_colidx_, b_colidx_to_rowidx_, mTiles_,
@@ -427,9 +434,12 @@ class SpMM {
       long tmp = b_rowidx_to_colidx_.size();
       if (tmp > kt) kt = tmp;
 
-      long mns = ((mt % cube_dim) == 0) ? mt / cube_dim : (mt + mt - 1) / cube_dim;
-      long nns = ((nt % cube_dim) == 0) ? nt / cube_dim : (nt + nt - 1) / cube_dim;
-      long kns = ((kt % cube_dim) == 0) ? kt / cube_dim : (kt + kt - 1) / cube_dim;
+      long mns = (mt + cube_dim - 1) / cube_dim;
+      long nns = (nt + cube_dim - 1) / cube_dim;
+      long kns = (kt + cube_dim - 1) / cube_dim;
+      if (tracing())
+        ttg::print("On rank ", ttg_default_execution_context().rank(), " Planning with a cube_dim of ", cube_dim,
+                   " over a problem of ", mt, "x", nt, "x", kt, " gives a plan of ", mns, "x", nns, "x", kns);
 
       for (long mm = 0; mm < mns; mm++) {
         for (long nn = 0; nn < nns; nn++) {
@@ -446,7 +456,7 @@ class SpMM {
                     a_rowidx_to_colidx_[m].end())
                   continue;
                 for (long n = nn * cube_dim; n < (nn + 1) * cube_dim && n < nt; n++) {
-                  if (n >= b_rowidx_to_colidx_.size() || b_colidx_to_rowidx_[n].empty()) continue;
+                  if (n >= b_colidx_to_rowidx_.size() || b_colidx_to_rowidx_[n].empty()) continue;
                   if (std::find(b_colidx_to_rowidx_[n].begin(), b_colidx_to_rowidx_[n].end(), k) ==
                       b_colidx_to_rowidx_[n].end())
                     continue;
@@ -462,7 +472,7 @@ class SpMM {
               }
             }
             if (tracing()) {
-              if (gemms.size() < 20) {
+              if (gemms.size() < 30) {
                 std::ostringstream dbg;
                 dbg << "On rank " << ttg_default_execution_context().rank() << ", Step " << steps.size() << " is ";
                 for (auto it : gemms) {
@@ -565,7 +575,7 @@ class SpMM {
       abort();  // unreachable
     }
 
-    long nb_steps(long p, long q) const { return steps_.size(); }
+    long nb_steps() const { return steps_.size(); }
 
     std::tuple<long, long, long> gemm_coordinates(long i, long j, long k) const {
       long p = i % this->p();
@@ -638,8 +648,16 @@ class SpMM {
       baseT::template set_input_reducer<0>([](Control &&a, const Control &&b) { return a; });
       for (long p = 0; p < plan_->p(); p++) {
         for (long q = 0; q < plan_->q(); q++) {
-          if (keymap(Key<2>({p, q})) == ttg_default_execution_context().rank())
-            baseT::template set_argstream_size<0>(Key<3>{p, q, 0l}, 1);
+          if (keymap(Key<2>({p, q})) == ttg_default_execution_context().rank()) {
+            for (long l = 0; l < plan_->lookahead_ && l < plan_->nb_steps(); l++) {
+              if (tracing())
+                ttg::print("On rank ", ttg_default_execution_context().rank(),
+                           " : at bootstrap, setting the number of"
+                           " local GEMMS to trigger step ",
+                           l, " to 1");
+              baseT::template set_argstream_size<0>(Key<3>{p, q, l}, 1);
+            }
+          }
         }
       }
     }
@@ -649,28 +667,24 @@ class SpMM {
       auto p = key[0];
       auto q = key[1];
       auto s = key[2];
-      if (s + 1 < plan_->nb_steps(p, q)) {
+      if (s + plan_->lookahead_ < plan_->nb_steps()) {
         auto nb = plan_->nb_local_gemms(s);
         if (nb > 0) {  // We set the number of reductions before triggering the first GEMM (through trigger of bcasts)
           if (tracing())
-            ttg::print("Coordinator(", p, ", ", q, ", ", s,
-                       "): setting the number of local "
-                       "GEMMS to trigger step ",
-                       s + 1, " to ", nb);
-          baseT::template set_argstream_size<0>(Key<3>({p, q, s + 1}), nb);
+            ttg::print("Coordinator(", p, ", ", q, ", ", s, "): setting the number of local GEMMS to trigger step ",
+                       s + plan_->lookahead_, " to ", nb);
+          baseT::template set_argstream_size<0>(Key<3>({p, q, s + plan_->lookahead_}), nb);
         } else {
           if (tracing())
             ttg::print("Coordinator(", p, ", ", q, ", ", s, "): there are 0 local GEMMS in step ", s,
-                       "; triggering next coordinator step");
-          baseT::template set_argstream_size<0>(Key<3>({p, q, s + 1}), 1);
-          ::send<2>(Key<3>({p, q, s + 1}), Control{}, out);
+                       " ; triggering next coordinator step ", s + plan_->lookahead_);
+          baseT::template set_argstream_size<0>(Key<3>({p, q, s + plan_->lookahead_}), 1);
+          ::send<2>(Key<3>({p, q, s + plan_->lookahead_}), Control{}, out);
         }
       }
       if (tracing())
         ttg::print("On rank ", ttg_default_execution_context().rank(), "Coordinator(", p, ", ", q, ", ", s,
-                   "): Sending control to broadcast "
-                   "A and B for step ",
-                   s);
+                   "): Sending control to broadcast A and B for step ", s);
       ::send<0>(Key<3>({p, q, s}), Control{}, out);
       ::send<1>(Key<3>({p, q, s}), Control{}, out);
     }
@@ -753,28 +767,22 @@ class SpMM {
         std::tie(ii, jj, kk) = ijk;
         if (ii != i) {
           if (tracing())
-            ttg::print("Rank ", ttg_default_execution_context().rank(), " NOT Broadcasting A[", i, "][", k,
-                       "]"
-                       " to GEMM(",
-                       i, ", ", jj, ", ", k, ") -- ii == ", ii, " != ", i, " == i");
+            ttg::print("Rank ", ttg_default_execution_context().rank(), " during step ", s, " NOT Broadcasting A[", i,
+                       "][", k, "] to GEMM(", i, ", ", jj, ", ", k, ") -- ii == ", ii, " != ", i, " == i");
           continue;
         }
         if (kk != k) {
           if (tracing())
-            ttg::print("Rank ", ttg_default_execution_context().rank(), " NOT Broadcasting A[", i, "][", k,
-                       "]"
-                       " to GEMM(",
-                       ii, ", ", jj, ", ", kk, ") -- kk == ", kk, " != ", k, " == k");
+            ttg::print("Rank ", ttg_default_execution_context().rank(), "during step ", s, " NOT Broadcasting A[", i,
+                       "][", k, "] to GEMM(", ii, ", ", jj, ", ", kk, ") -- kk == ", kk, " != ", k, " == k");
           continue;
         }
         assert(k < plan_->b_rowidx_to_colidx_.size());
         assert(std::find(plan_->b_rowidx_to_colidx_[k].begin(), plan_->b_rowidx_to_colidx_[k].end(), jj) !=
                plan_->b_rowidx_to_colidx_[k].end());
         if (tracing())
-          ttg::print("Rank ", ttg_default_execution_context().rank(), " Broadcasting A[", i, "][", k,
-                     "]"
-                     " to GEMM(",
-                     ii, ", ", jj, ", ", kk, ")");
+          ttg::print("Rank ", ttg_default_execution_context().rank(), " during step ", s, " Broadcasting A[", i, "][",
+                     k, "] to GEMM(", ii, ", ", jj, ", ", kk, ")");
         ijk_keys.emplace_back(Key<3>({ii, jj, kk}));
       }
       ::broadcast<0>(ijk_keys, baseT::template get<0>(a_ik), a_ijk);
@@ -873,7 +881,8 @@ class SpMM {
               bool have_k;
               std::tie(k, have_k) = plan_->compute_first_k(i, j);
               if (have_k) {
-                if (tracing()) ttg::print("On rank ", owner, " Initializing C[", i, "][", j, "] to zero");
+                if (tracing())
+                  ttg::print("On rank ", owner, " Initializing C[", i, "][", j, "] to zero (first k ", k, ")");
 #if BLOCK_SPARSE_GEMM
                 Blk zero(btas::Range(plan_->mTiles_[i], plan_->nTiles_[j]), 0.0);
 #else
@@ -895,14 +904,14 @@ class SpMM {
       const auto i = key[0];
       const auto j = key[1];
       const auto k = key[2];
+      long p, q, s;
+      std::tie(p, q, s) = plan_->gemm_coordinates(i, j, k);
       long next_k;
       bool have_next_k;
       std::tie(next_k, have_next_k) = plan_->compute_next_k(i, j, k);
       if (tracing()) {
-        ttg::print("Rank ", ttg_default_execution_context().rank(),
-                   " :"
-                   " C[",
-                   i, "][", j, "]  += A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
+        ttg::print("Rank ", ttg_default_execution_context().rank(), " step ", s, " : C[", i, "][", j, "]  += A[", i,
+                   "][", k, "] by B[", k, "][", j, "],  next_k? ",
                    (have_next_k ? std::to_string(next_k) : "does not exist"));
       }
       // compute the contrib, pass the running total to the next flow, if needed
@@ -912,15 +921,18 @@ class SpMM {
             Key<3>({i, j, next_k}),
             gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
             result);
-      } else
+      } else {
         ::send<0>(
             Key<2>({i, j}),
             gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
             result);
-      long p, q, s;
-      std::tie(p, q, s) = plan_->gemm_coordinates(i, j, k);
-      if (s + 1 < plan_->nb_steps(p, q)) {
-        ::send<2>(Key<3>({p, q, s + 1}), Control{}, result);
+      }
+      if (s + plan_->lookahead_ < plan_->nb_steps()) {
+        if (tracing()) {
+          ttg::print("Rank ", ttg_default_execution_context().rank(), " step ", s, " Notifying coordinator of step ",
+                     s + plan_->lookahead_, " that GEMM(", i, ", ", j, ", ", k, ") completed");
+        }
+        ::send<2>(Key<3>({p, q, s + plan_->lookahead_}), Control{}, result);
       }
     }
 
@@ -951,26 +963,30 @@ class SpMM {
 
 class StartupControl : public Op<void, std::tuple<Out<Key<3>, Control>>, StartupControl> {
   using baseT = Op<void, std::tuple<Out<Key<3>, Control>>, StartupControl>;
-  int P;
-  int Q;
+  long P;
+  long Q;
+  long initbound;
 
  public:
   explicit StartupControl(Edge<Key<3>, Control> &ctl)
-      : baseT(edges(), edges(ctl), "StartupControl", {}, {"ctl"}), P(0), Q(0) {}
+      : baseT(edges(), edges(ctl), "StartupControl", {}, {"ctl"}), P(0), Q(0), initbound(0) {}
 
   void op(std::tuple<Out<Key<3>, Control>> &out) const {
-    for (int i = 0; i < P; i++) {
-      for (int j = 0; j < Q; j++) {
-        Key<3> k{i, j, 0};
-        if (ttg::tracing()) ttg::print("StartupControl: enable {", i, ", ", j, ", 0}");
-        ::send<0>(k, Control{}, out);
+    for (long i = 0; i < P; i++) {
+      for (long j = 0; j < Q; j++) {
+        for (long l = 0; l < initbound; l++) {
+          Key<3> k{i, j, l};
+          if (ttg::tracing()) ttg::print("StartupControl: enable {", i, ", ", j, ", 0}");
+          ::send<0>(k, Control{}, out);
+        }
       }
     }
   }
 
-  void start(const int _p, const int _q) {
+  void start(const long _p, const long _q, const long _b) {
     P = _p;
     Q = _q;
+    initbound = _b;
     invoke();
   }
 };
@@ -1052,6 +1068,21 @@ static long parseOption(std::string &option, long default_value) {
   }
   token = option.substr(0, pos);
   N = std::stol(token);
+  option.erase(0, pos + 1);
+  return N;
+}
+
+static size_t parseOption(std::string &option, size_t default_value) {
+  size_t pos;
+  std::string token;
+  size_t N = default_value;
+  if (option.length() == 0) return N;
+  pos = option.find(':');
+  if (pos == std::string::npos) {
+    pos = option.length();
+  }
+  token = option.substr(0, pos);
+  N = std::stoul(token);
   option.erase(0, pos + 1);
   return N;
 }
@@ -1499,7 +1530,8 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
                               const std::vector<std::vector<long>> &a_colidx_to_rowidx,
                               const std::vector<std::vector<long>> &b_rowidx_to_colidx,
                               const std::vector<std::vector<long>> &b_colidx_to_rowidx, std::vector<long> &mTiles,
-                              std::vector<long> &nTiles, std::vector<long> &kTiles, int M, int N, int K, int P, int Q) {
+                              std::vector<long> &nTiles, std::vector<long> &kTiles, int M, int N, int K, int P, int Q,
+                              size_t memory, long lookahead) {
   int MT = (int)A.rows();
   int NT = (int)B.cols();
   int KT = (int)A.cols();
@@ -1517,7 +1549,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   auto &c_status = c.status();
   assert(!has_value(c_status));
   SpMM<> a_times_b(ctl, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
-                   mTiles, nTiles, kTiles, keymap, P, Q);
+                   mTiles, nTiles, kTiles, keymap, P, Q, memory, lookahead);
   TTGUNUSED(a_times_b);
 
   auto connected = make_graph_executable(&control);
@@ -1529,7 +1561,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   }, end{0}, diff{0};
   gettimeofday(&start, nullptr);
   // ready, go! need only 1 kick, so must be done by 1 thread only
-  if (ttg_default_execution_context().rank() == 0) control.start(P, Q);
+  if (ttg_default_execution_context().rank() == 0) control.start(P, Q, a_times_b.initbound());
   ttg_fence(ttg_default_execution_context());
   gettimeofday(&end, nullptr);
   timersub(&end, &start, &diff);
@@ -1675,6 +1707,14 @@ int main(int argc, char **argv) {
       }
     }
 
+    size_t memory = 64 * 1024 * 1024;
+    long lookahead = 1;
+
+    std::string LookaheadStr(getCmdOption(argv, argv + argc, "-l"));
+    lookahead = parseOption(LookaheadStr, lookahead);
+    std::string MemoryStr(getCmdOption(argv, argv + argc, "-mem"));
+    memory = parseOption(MemoryStr, memory);
+
     const auto &keymap = [P, Q](const Key<2> &key) {
       int i = (int)key[0];
       int j = (int)key[1];
@@ -1683,7 +1723,7 @@ int main(int argc, char **argv) {
     };
 
     std::string seedStr(getCmdOption(argv, argv + argc, "-s"));
-    unsigned int seed = parseOption(seedStr, 0);
+    unsigned long seed = parseOption(seedStr, 0l);
     if (seed == 0) {
       std::random_device rd;
       seed = rd();
@@ -1771,7 +1811,7 @@ int main(int argc, char **argv) {
       for (int nrun = 0; nrun < nb_runs; nrun++) {
         timed_measurement(A, B, keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
                           a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles, nTiles, kTiles, M, N, K,
-                          P, Q);
+                          P, Q, memory, lookahead);
       }
     } else {
       // flow graph needs to exist on every node
@@ -1784,7 +1824,7 @@ int main(int argc, char **argv) {
       assert(!has_value(c_status));
       //  SpMM a_times_b(world, eA, eB, eC, A, B);
       SpMM<> a_times_b(ctl, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
-                       mTiles, nTiles, kTiles, keymap, P, Q);
+                       mTiles, nTiles, kTiles, keymap, P, Q, memory, lookahead);
 
       if (get_default_world().rank() == 0)
         std::cout << Dot{}(a_times_b.get_reada(), a_times_b.get_readb()) << std::endl;
@@ -1795,7 +1835,7 @@ int main(int argc, char **argv) {
       TTGUNUSED(connected);
 
       // ready, go! need only 1 kick, so must be done by 1 thread only
-      if (ttg_default_execution_context().rank() == 0) control.start(P, Q);
+      if (ttg_default_execution_context().rank() == 0) control.start(P, Q, a_times_b.initbound());
 
       ttg_execute(ttg_default_execution_context());
       ttg_fence(ttg_default_execution_context());
