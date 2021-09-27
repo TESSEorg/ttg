@@ -248,10 +248,10 @@ class SpMM {
        const std::vector<std::vector<long>> &b_rowidx_to_colidx,
        const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<long> &mTiles,
        const std::vector<long> &nTiles, const std::vector<long> &kTiles, const Keymap &keymap, const long P,
-       const long Q, size_t memory, const long lookahead)
+       const long Q, size_t memory, const long forced_split, const long lookahead)
       : a_flow_(), b_flow_(), a_ctl_(), b_ctl_(), c2c_ctl_(), a_ijk_(), b_ijk_(), c_ijk_(), plan_(nullptr) {
     plan_ = std::make_shared<Plan>(a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
-                                   mTiles, nTiles, kTiles, keymap, P, Q, memory, lookahead);
+                                   mTiles, nTiles, kTiles, keymap, P, Q, memory, forced_split, lookahead);
 
     coordinator_ = std::make_unique<Coordinator>(progress_ctl, a_ctl_, b_ctl_, c2c_ctl_, plan_, keymap);
     read_a_ = std::make_unique<Read_SpMatrix>("A", a_mat, a_ctl_, a_flow_, plan_, keymap);
@@ -298,7 +298,7 @@ class SpMM {
          const std::vector<std::vector<long>> &b_rowidx_to_colidx,
          const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<long> &mTiles,
          const std::vector<long> &nTiles, const std::vector<long> &kTiles, const Keymap &keymap, const long P,
-         const long Q, const size_t memory, const long lookahead)
+         const long Q, const size_t memory, const long forced_split, const long lookahead)
         : a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , a_colidx_to_rowidx_(a_colidx_to_rowidx)
         , b_rowidx_to_colidx_(b_rowidx_to_colidx)
@@ -310,7 +310,12 @@ class SpMM {
         , P_(P)
         , Q_(Q)
         , lookahead_(lookahead + 1)  // users generally understand that a lookahead of 0 still progresses
-        , steps_(active_set_strategy(memory)) {}
+        , steps_(strategy_selector(memory, forced_split)) {}
+
+    step_t strategy_selector(size_t memory, long forced_split) const {
+      if (0 == forced_split) return active_set_strategy(memory);
+      return regular_cube_strategy(forced_split);
+    }
 
     step_t active_set_strategy(size_t memory) const {
       ActiveSetStrategy st(a_rowidx_to_colidx_, a_colidx_to_rowidx_, b_rowidx_to_colidx_, b_colidx_to_rowidx_, mTiles_,
@@ -1531,7 +1536,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
                               const std::vector<std::vector<long>> &b_rowidx_to_colidx,
                               const std::vector<std::vector<long>> &b_colidx_to_rowidx, std::vector<long> &mTiles,
                               std::vector<long> &nTiles, std::vector<long> &kTiles, int M, int N, int K, int P, int Q,
-                              size_t memory, long lookahead) {
+                              size_t memory, const long forced_split, long lookahead) {
   int MT = (int)A.rows();
   int NT = (int)B.cols();
   int KT = (int)A.cols();
@@ -1549,7 +1554,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   auto &c_status = c.status();
   assert(!has_value(c_status));
   SpMM<> a_times_b(ctl, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
-                   mTiles, nTiles, kTiles, keymap, P, Q, memory, lookahead);
+                   mTiles, nTiles, kTiles, keymap, P, Q, memory, forced_split, lookahead);
   TTGUNUSED(a_times_b);
 
   auto connected = make_graph_executable(&control);
@@ -1709,11 +1714,14 @@ int main(int argc, char **argv) {
 
     size_t memory = 64 * 1024 * 1024;
     long lookahead = 1;
+    long forced_split = 0;
 
     std::string LookaheadStr(getCmdOption(argv, argv + argc, "-l"));
     lookahead = parseOption(LookaheadStr, lookahead);
     std::string MemoryStr(getCmdOption(argv, argv + argc, "-mem"));
     memory = parseOption(MemoryStr, memory);
+    std::string ForcedSplitStr(getCmdOption(argv, argv + argc, "-dim"));
+    forced_split = parseOption(ForcedSplitStr, forced_split);
 
     const auto &keymap = [P, Q](const Key<2> &key) {
       int i = (int)key[0];
@@ -1811,7 +1819,7 @@ int main(int argc, char **argv) {
       for (int nrun = 0; nrun < nb_runs; nrun++) {
         timed_measurement(A, B, keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
                           a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles, nTiles, kTiles, M, N, K,
-                          P, Q, memory, lookahead);
+                          P, Q, memory, forced_split, lookahead);
       }
     } else {
       // flow graph needs to exist on every node
@@ -1824,7 +1832,7 @@ int main(int argc, char **argv) {
       assert(!has_value(c_status));
       //  SpMM a_times_b(world, eA, eB, eC, A, B);
       SpMM<> a_times_b(ctl, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
-                       mTiles, nTiles, kTiles, keymap, P, Q, memory, lookahead);
+                       mTiles, nTiles, kTiles, keymap, P, Q, memory, forced_split, lookahead);
 
       if (get_default_world().rank() == 0)
         std::cout << Dot{}(a_times_b.get_reada(), a_times_b.get_readb()) << std::endl;
