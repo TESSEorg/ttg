@@ -600,7 +600,7 @@ class SpMM {
       const Blk &value() { return v_; }
     };
 
-    std::vector<GemmCoordinate> bcast_in_step(long p, long q, long s, bool is_a, const SpMatrix<Blk> &matrix) const {
+    std::vector<GemmCoordinate> bcast_in_step(long s, bool is_a, const SpMatrix<Blk> &matrix) const {
       std::vector<GemmCoordinate> res;
       const bcastset_t *bset;
       if (is_a) {
@@ -715,11 +715,11 @@ class SpMM {
       auto p = key[0];
       auto q = key[1];
       auto step = key[2];
-      for (auto x : plan_->bcast_in_step(p, q, step, is_a_, matrix_)) {
+      for (auto x : plan_->bcast_in_step(step, is_a_, matrix_)) {
         if (rank == this->get_keymap()(Key<3>({x.row(), x.col(), step}))) {
           if (tracing())
             ttg::print("On rank ", rank, " Read_SpMatrix", (is_a_ ? "(A)" : "(B)"), " (", p, ", ", q, ",", step,
-                       "): ", "send block to Bcast (", x.row(), ", ", x.col(), ", ", step, ")");
+                       "): send block to Bcast (", x.row(), ", ", x.col(), ", ", step, ")");
           ::send<0>(Key<3>({x.row(), x.col(), step}), x.value(), out);
         }
       }
