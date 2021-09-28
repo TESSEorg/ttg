@@ -9,16 +9,16 @@
 #include <vector>
 
 #include <Eigen/SparseCore>
-#if __has_include(<btas/features.h>)
+#ifdef BLOCK_SPARSE_GEMM
 #include <btas/features.h>
 #ifdef BTAS_IS_USABLE
 #include <btas/btas.h>
 #include <btas/optimize/contract.h>
 #include <btas/util/mohndle.h>
-#else
-#warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
-#endif
-#endif
+#else  // defined(BTAS_IS_USABLE)
+#error "btas/features.h does not define BTAS_IS_USABLE ... broken BTAS?"
+#endif  // defined(BTAS_IS_USABLE)
+#endif  // defined(BLOCK_SPARSE_GEMM)
 
 #include <sys/time.h>
 #include <boost/graph/rmat_graph_generator.hpp>
@@ -26,6 +26,10 @@
 #include <boost/graph/directed_graph.hpp>
 #include <boost/random/linear_congruential.hpp>
 #include <unsupported/Eigen/SparseExtra>
+#endif
+
+#ifdef BSPMM_HAS_LIBINT
+#include <libint2.hpp>
 #endif
 
 #include "ttg.h"
@@ -36,7 +40,7 @@ using namespace ttg;
 
 #include "ttg/util/bug.h"
 
-#if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
+#if defined(BLOCK_SPARSE_GEMM)
 using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
 
 #if defined(TTG_USE_PARSEC)
@@ -95,7 +99,7 @@ using SpMatrix = Eigen::SparseMatrix<T>;
 template <typename T = blk_t>
 using SpMatrixTriplet = Eigen::Triplet<T>;  // {row,col,value}
 
-#if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
+#ifdef BLOCK_SPARSE_GEMM
 
 #if __has_include(<madness/world/archive.h>)
 
@@ -123,7 +127,7 @@ namespace btas {
     return std::move(C);
   }
 }  // namespace btas
-#endif  // BTAS_IS_USABLE
+#endif  // defined(BLOCK_SPARSE_GEMM)
 double gemm(double C, double A, double B) { return C + A * B; }
 /////////////////////////////////////////////
 
@@ -633,7 +637,7 @@ class Control : public Op<void, std::tuple<Out<Key<2>>>, Control> {
   }
 };
 
-#ifdef BTAS_IS_USABLE
+#ifdef BLOCK_SPARSE_GEMM
 template <typename T_, class Range_, class Store_>
 std::tuple<T_, T_> norms(const btas::Tensor<T_, Range_, Store_> &t) {
   T_ norm_2_square = 0.0;
@@ -644,7 +648,7 @@ std::tuple<T_, T_> norms(const btas::Tensor<T_, Range_, Store_> &t) {
   }
   return std::make_tuple(norm_2_square, norm_inf);
 }
-#endif
+#endif  // defined(BLOCK_SPARSE_GEMM)
 
 std::tuple<double, double> norms(double t) { return std::make_tuple(t * t, std::abs(t)); }
 
@@ -729,7 +733,7 @@ static double parseOption(std::string &option, double default_value = 0.25) {
   return N;
 }
 
-#if !defined(BLOCK_SPARSE_GEMM)
+#ifndef BLOCK_SPARSE_GEMM
 static void initSpMatrixMarket(const std::function<int(const Key<2> &)> &keymap, const char *filename, SpMatrix<> &A,
                                SpMatrix<> &B, SpMatrix<> &C, int &M, int &N, int &K) {
   std::vector<int> sizes;
@@ -841,7 +845,7 @@ static void initSpHardCoded(const std::function<int(const Key<2> &)> &keymap, Sp
   B_elements.emplace_back(3, 2, 0.2);
   B.setFromTriplets(B_elements.begin(), B_elements.end());
 }
-#else
+#else   // !defined(BLOCK_SPARSE_GEMM)
 static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, SpMatrix<> &A, SpMatrix<> &B,
                               SpMatrix<> &C, SpMatrix<> &Aref, SpMatrix<> &Bref, bool buildRefs,
                               std::vector<int> &mTiles, std::vector<int> &nTiles, std::vector<int> &kTiles,
@@ -871,53 +875,23 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
   using triplet_t = Eigen::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
   std::vector<triplet_t> Aref_elements;
-#if defined(BTAS_IS_USABLE)
-  if (keymap({0, 1}) == rank) {
-    A_elements.emplace_back(0, 1, blk_t(btas::Range(128, 256), 12.3));
-  }
-  if (keymap({0, 2}) == rank) {
-    A_elements.emplace_back(0, 2, blk_t(btas::Range(128, 256), 10.7));
-  }
-  if (keymap({0, 3}) == rank) {
-    A_elements.emplace_back(0, 3, blk_t(btas::Range(128, 256), -2.3));
-  }
-  if (keymap({1, 0}) == rank) {
-    A_elements.emplace_back(1, 0, blk_t(btas::Range(128, 256), -0.3));
-  }
-  if (keymap({1, 2}) == rank) {
-    A_elements.emplace_back(1, 2, blk_t(btas::Range(128, 256), 1.2));
-  }
-  if (buildRefs && rank == 0) {
-    Aref_elements.emplace_back(0, 1, blk_t(btas::Range(128, 256), 12.3));
-    Aref_elements.emplace_back(0, 2, blk_t(btas::Range(128, 256), 10.7));
-    Aref_elements.emplace_back(0, 3, blk_t(btas::Range(128, 256), -2.3));
-    Aref_elements.emplace_back(1, 0, blk_t(btas::Range(128, 256), -0.3));
-    Aref_elements.emplace_back(1, 2, blk_t(btas::Range(128, 256), 1.2));
-  }
-#else
-  if ((buildRefs && rank == 0) || keymap({0, 1}) == rank) {
-    A_elements.emplace_back(0, 1, 12.3);
-  }
-  if ((buildRefs && rank == 0) || keymap({0, 2}) == rank) {
-    A_elements.emplace_back(0, 2, 10.7);
-  }
-  if ((buildRefs && rank == 0) || keymap({0, 3}) == rank) {
-    A_elements.emplace_back(0, 3, -2.3);
-  }
-  if ((buildRefs && rank == 0) || keymap({1, 0}) == rank) {
-    A_elements.emplace_back(1, 0, -0.3);
-  }
-  if ((buildRefs && rank == 0) || keymap({1, 2}) == rank) {
-    A_elements.emplace_back(1, 2, .2);
-  }
-  if (buildRefs && rank == 0) {
-    Aref_elements.emplace_back(0, 1, 12.3);
-    Aref_elements.emplace_back(0, 2, 10.7);
-    Aref_elements.emplace_back(0, 3, -2.3);
-    Aref_elements.emplace_back(1, 0, -0.3);
-    Aref_elements.emplace_back(1, 2, .2);
-  }
-#endif
+
+  auto emplace_A_element = [&A_elements, &Aref_elements, &keymap, rank, buildRefs](std::initializer_list<int> ij,
+                                                                                   const auto &value) {
+    if (keymap(ij) == rank) {
+      A_elements.emplace_back(*(ij.begin()), *(ij.begin() + 1), blk_t(btas::Range(128, 256), value));
+      if (buildRefs && rank == 0) {
+        Aref_elements.emplace_back(*(ij.begin()), *(ij.begin() + 1), blk_t(btas::Range(128, 256), value));
+      }
+    }
+  };
+
+  emplace_A_element({0, 1}, 12.3);
+  emplace_A_element({0, 2}, 10.7);
+  emplace_A_element({0, 3}, -2.3);
+  emplace_A_element({1, 0}, -0.3);
+  emplace_A_element({1, 2}, 1.2);
+
   a_rowidx_to_colidx.resize(2);
   a_rowidx_to_colidx[0].emplace_back(1);  // A[0][1]
   a_rowidx_to_colidx[0].emplace_back(2);  // A[0][2]
@@ -939,7 +913,6 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
 
   std::vector<triplet_t> B_elements;
   std::vector<triplet_t> Bref_elements;
-#if defined(BTAS_IS_USABLE)
   if (keymap({0, 0}) == rank) {
     B_elements.emplace_back(0, 0, blk_t(btas::Range(256, 196), 12.3));
   }
@@ -970,29 +943,6 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
     Bref_elements.emplace_back(2, 2, blk_t(btas::Range(256, 196), 7.2));
     Bref_elements.emplace_back(3, 2, blk_t(btas::Range(256, 196), 0.2));
   }
-#else
-  if (keymap({0, 0}) == rank) {
-    B_elements.emplace_back(0, 0, 12.3);
-  }
-  if (keymap({1, 0}) == rank) {
-    B_elements.emplace_back(1, 0, 10.7);
-  }
-  if (keymap({3, 0}) == rank) {
-    B_elements.emplace_back(3, 0, -2.3);
-  }
-  if (keymap({1, 1}) == rank) {
-    B_elements.emplace_back(1, 1, -0.3);
-  }
-  if (keymap({1, 2}) == rank) {
-    B_elements.emplace_back(1, 2, 1.2);
-  }
-  if (keymap({2, 2}) == rank) {
-    B_elements.emplace_back(2, 2, 7.2);
-  }
-  if (keymap({3, 2}) == rank) {
-    B_elements.emplace_back(3, 2, 0.2);
-  }
-#endif
   b_rowidx_to_colidx.resize(4);
   b_rowidx_to_colidx[0].emplace_back(0);  // B[0][0]
   b_rowidx_to_colidx[1].emplace_back(0);  // B[1][0]
@@ -1017,11 +967,10 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
   }
 }
 
-#if defined(BTAS_IS_USABLE)
-static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, size_t M, size_t N, size_t K, int minTs, int maxTs,
-                           double avgDensity, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &Aref, SpMatrix<> &Bref,
-                           bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles, std::vector<int> &kTiles,
-                           std::vector<std::vector<long>> &a_rowidx_to_colidx,
+static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, size_t M, size_t N, size_t K, int minTs,
+                           int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &Aref,
+                           SpMatrix<> &Bref, bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles,
+                           std::vector<int> &kTiles, std::vector<std::vector<long>> &a_rowidx_to_colidx,
                            std::vector<std::vector<long>> &a_colidx_to_rowidx,
                            std::vector<std::vector<long>> &b_rowidx_to_colidx,
                            std::vector<std::vector<long>> &b_colidx_to_rowidx, double &average_tile_size,
@@ -1145,9 +1094,7 @@ static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, siz
 
   average_tile_size = (double)avg_nb / avg_nb_nb;
 }
-#endif
-
-#endif
+#endif  // !defined(BLOCK_SPARSE_GEMM)
 
 static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<int(const Key<2> &)> &keymap,
                               const std::string &tiling_type, double gflops, double avg_nb, double Adensity,
@@ -1210,7 +1157,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   }
 }
 
-#if !defined(BLOCK_SPARSE_GEMM)
+#ifndef BLOCK_SPARSE_GEMM
 static void make_rowidx_to_colidx_from_eigen(const SpMatrix<> &mat, std::vector<std::vector<long>> &r2c) {
   for (int k = 0; k < mat.outerSize(); ++k) {  // cols, if col-major, rows otherwise
     for (typename SpMatrix<blk_t>::InnerIterator it(mat, k); it; ++it) {
@@ -1241,7 +1188,7 @@ static void make_colidx_to_rowidx_from_eigen(const SpMatrix<> &mat, std::vector<
     }
   }
 }
-#endif
+#endif  // !defined(BLOCK_SPARSE_GEMM)
 
 static double compute_gflops(const std::vector<std::vector<long>> &a_r2c, const std::vector<std::vector<long>> &b_r2c,
                              const std::vector<int> &mTiles, const std::vector<int> &nTiles,
@@ -1363,7 +1310,7 @@ int main(int argc, char **argv) {
     int check = parseOption(checkStr, !(argc >= 2));
     timing = (check == 0);
 
-#if !defined(BLOCK_SPARSE_GEMM)
+#ifndef BLOCK_SPARSE_GEMM
     if (cmdOptionExists(argv, argv + argc, "-mm")) {
       char *filename = getCmdOption(argv, argv + argc, "-mm");
       tiling_type = filename;
@@ -1393,7 +1340,7 @@ int main(int argc, char **argv) {
     for (int mt = 0; mt < M; mt++) mTiles.emplace_back(1);
     for (int nt = 0; nt < N; nt++) nTiles.emplace_back(1);
     for (int kt = 0; kt < K; kt++) kTiles.emplace_back(1);
-#else
+#else   // !defined(BLOCK_SPARSE_GEMM)
     if (argc >= 2) {
       std::string Mstr(getCmdOption(argv, argv + argc, "-M"));
       M = parseOption(Mstr, 1200);
