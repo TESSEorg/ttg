@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <utility>
 
-#define TTG_USE_MADNESS 1
 #include "ttg.h"
 
 #include "Vector.h"
