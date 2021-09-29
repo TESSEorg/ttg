@@ -270,6 +270,10 @@ class SpMM {
     return plan_->lookahead_;
   }
 
+  long nbphases() const { return plan_->nb_steps(); }
+
+  std::pair<double, double> gemmsperrankperphase() const { return plan_->gemmsperrankperphase(); }
+
   /// Plan: group all GEMMs in blocks of efficient size
   class Plan {
    public:
@@ -632,6 +636,31 @@ class SpMM {
     long p() const { return P_; }
 
     long q() const { return Q_; }
+
+    std::pair<double, double> gemmsperrankperphase() const {
+      double mean = 0.0, M2 = 0.0, delta, delta2;
+      long count = 0;
+      for (long phase = 0; phase < nb_steps(); phase++) {
+        const gemmset_t &gemms_in_phase = gemms(phase);
+        for (long rank = 0; rank < p() * q(); rank++) {
+          long nbgemm_in_phase_for_rank = 0;
+          for (auto g : gemms_in_phase) {
+            if (keymap_(Key<2>({std::get<0>(g), std::get<1>(g)})) == rank) nbgemm_in_phase_for_rank++;
+          }
+          double x = (double)nbgemm_in_phase_for_rank;
+          count++;
+          delta = x - mean;
+          mean += delta / count;
+          delta2 = x - mean;
+          M2 += delta * delta2;
+        }
+      }
+      if (count > 0) {
+        return std::make_pair(mean, sqrt(M2 / count));
+      } else {
+        return std::make_pair(mean, nan("undefined"));
+      }
+    }
   };
 
   /// Central coordinator: ensures that all progress according to the plan
@@ -1579,10 +1608,15 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   std::string rt("Unkown???");
 #endif
   if (ttg_default_execution_context().rank() == 0) {
+    double avg, stdev;
+    std::tie(avg, stdev) = a_times_b.gemmsperrankperphase();
+
     std::cout << "TTG-" << rt << " PxQxg=   " << P << " " << Q << " 1 average_NB= " << avg_nb << " M= " << M
               << " N= " << N << " K= " << K << " Tiling= " << tiling_type << " A_density= " << Adensity
               << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
-              << " gflops/s= " << gflops / tc << std::endl;
+              << " gflops/s= " << gflops / tc << " nb_phases= " << a_times_b.nbphases() << " lookahead= " << lookahead
+              << " average_nb_gemm_per_rank_per_phase= " << avg << " stdev_nb_gemm_per_rank_per_phase= " << stdev
+              << std::endl;
   }
 }
 
