@@ -30,6 +30,9 @@ using namespace ttg;
 #include "../mrafunctionnode.h"
 #include "../mrafunctionfunctor.h"
 
+// needed for madness::hashT
+#include <madness/world/world.h>
+
 //#include "/usr/include/mkl/mkl.h" // assume for now but need to wrap
 //#include "mkl.h"
 
