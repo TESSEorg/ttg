@@ -269,7 +269,7 @@ class FuncA : public Op<Key,
       , recursive_fan_out(recursive_fan_out)
       , base_size(base_size) {}
 
-  void op(const Key& key, const std::tuple<BlockMatrix<T>>&& t, typename baseT::output_terminals_type& out) {
+  void op(const Key& key, const std::tuple<BlockMatrix<T>>& t, typename baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
@@ -283,6 +283,7 @@ class FuncA : public Op<Key,
     }
 
     // Making u_ready/v_ready for all the B/C function calls in the CURRENT iteration
+    std::tuple<std::array<Key, 1>, std::vector<Key>, std::vector<Key>> bcast_keys;
     for (int l = 0; l < blocking_factor; ++l) {
       if (l != K) {
         /*if (K == 0) {
@@ -293,31 +294,41 @@ class FuncA : public Op<Key,
         }*/
         // B calls
         // cout << "Send " << I << " " << l << " " << K << endl;
-        ::send<4>(Key(std::make_pair(std::make_pair(I, l), K)), m_ij, out);
+        //::send<4>(Key(std::make_pair(std::make_pair(I, l), K)), m_ij, out);
+        std::get<1>(bcast_keys).emplace_back(I, l, K);
+
         // C calls
         // cout << "Send " << l << " " << J << " " << K << endl;
-        ::send<5>(Key(std::make_pair(std::make_pair(l, J), K)), m_ij, out);
+        //::send<5>(Key(std::make_pair(std::make_pair(l, J), K)), m_ij, out);
+        std::get<2>(bcast_keys).emplace_back(l, J, K);
       }
     }
 
     // making x_ready for the computation on the SAME block in the NEXT iteration
     if (K < (blocking_factor - 1)) {   // if there is a NEXT iteration
+      std::get<0>(bcast_keys)[0] = {I, J, K+1};
       if (I == K + 1 && J == K + 1) {  // in the next iteration, we have A function call
                                        // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        //::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::broadcast<0, 4, 5>(bcast_keys, std::move(m_ij), out);
       } else if (I == K + 1) {  // in the next iteration, we have B function call
                                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<1>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        //::send<1>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::broadcast<1, 4, 5>(bcast_keys, std::move(m_ij), out);
       } else if (J == K + 1) {  // in the next iteration, we have C function call
                                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<2>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        //::send<2>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::broadcast<2, 4, 5>(bcast_keys, std::move(m_ij), out);
       } else {  // in the next iteration, we have D function call
                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        //::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::broadcast<3, 4, 5>(bcast_keys, std::move(m_ij), out);
       }
     } else {
+      std::get<0>(bcast_keys)[0] = {I, J, K};
       // cout << "A[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
-      ::send<6>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
+      //::send<6>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
+      ::broadcast<6, 4, 5>(bcast_keys, std::move(m_ij), out);
     }
   }
 };
@@ -326,11 +337,11 @@ template <typename T>
 class FuncB : public Op<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                        FuncB<T>, BlockMatrix<T>, BlockMatrix<T>> {
+                        FuncB<T>, BlockMatrix<T>, const BlockMatrix<T>> {
   using baseT = Op<Key,
                    std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                               Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                   FuncB, BlockMatrix<T>, BlockMatrix<T>>;
+                   FuncB, BlockMatrix<T>, const BlockMatrix<T>>;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -360,7 +371,7 @@ class FuncB : public Op<Key,
       , recursive_fan_out(recursive_fan_out)
       , base_size(base_size) {}
 
-  void op(const Key& key, const std::tuple<BlockMatrix<T>, BlockMatrix<T>>&& t,
+  void op(const Key& key, const std::tuple<BlockMatrix<T>, const BlockMatrix<T>>& t,
           typename baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
@@ -375,33 +386,42 @@ class FuncB : public Op<Key,
     }
 
     // Making v_ready for all the D function calls in the CURRENT iteration
+    std::tuple<std::array<Key, 1>, std::vector<Key>> bcast_keys;
     for (int i = 0; i < blocking_factor; ++i) {
       if (i != I) {
         // if (K == 0)
         //::send<3>(Key(std::make_pair(std::make_pair(i, J), K)), (*adjacency_matrix_ttg)(i,J), out);
         // cout << "Send " << i << " " << J << " " << K << endl;
-        ::send<4>(Key(std::make_pair(std::make_pair(i, J), K)), m_ij, out);
+        //::send<4>(Key(std::make_pair(std::make_pair(i, J), K)), m_ij, out);
+        std::get<1>(bcast_keys).emplace_back(i, J, K);
       }
     }
 
     // making x_ready for the computation on the SAME block in the NEXT iteration
     if (K < (blocking_factor - 1)) {   // if there is a NEXT iteration
+      std::get<0>(bcast_keys)[0] = {I, J, K+1};
       if (I == K + 1 && J == K + 1) {  // in the next iteration, we have A function call
                                        // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        //::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::broadcast<0, 4>(bcast_keys, std::move(m_ij), out);
       } else if (I == K + 1) {  // in the next iteration, we have B function call
                                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<1>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        //::send<1>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::broadcast<1, 4>(bcast_keys, std::move(m_ij), out);
       } else if (J == K + 1) {  // in the next iteration, we have C function call
                                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<2>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        //::send<2>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::broadcast<2, 4>(bcast_keys, std::move(m_ij), out);
       } else {  // in the next iteration, we have D function call
                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        //::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::broadcast<3, 4>(bcast_keys, std::move(m_ij), out);
       }
     } else {
+      std::get<0>(bcast_keys)[0] = {I, J, K};
       // cout << "B[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
-      ::send<5>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
+      //::send<5>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
+      ::broadcast<5, 4>(bcast_keys, std::move(m_ij), out);
     }
   }
 };
@@ -410,11 +430,11 @@ template <typename T>
 class FuncC : public Op<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                        FuncC<T>, BlockMatrix<T>, BlockMatrix<T>> {
+                        FuncC<T>, BlockMatrix<T>, const BlockMatrix<T>> {
   using baseT = Op<Key,
                    std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                               Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                   FuncC, BlockMatrix<T>, BlockMatrix<T>>;
+                   FuncC, BlockMatrix<T>, const BlockMatrix<T>>;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -444,7 +464,7 @@ class FuncC : public Op<Key,
       , recursive_fan_out(recursive_fan_out)
       , base_size(base_size) {}
 
-  void op(const Key& key, const std::tuple<BlockMatrix<T>, BlockMatrix<T>>&& t,
+  void op(const Key& key, const std::tuple<BlockMatrix<T>, BlockMatrix<T>>& t,
           typename baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
@@ -459,32 +479,41 @@ class FuncC : public Op<Key,
     }
 
     // Making u_ready for all the D function calls in the CURRENT iteration
+    std::tuple<std::array<Key, 1>, std::vector<Key>> bcast_keys;
     for (int j = 0; j < blocking_factor; ++j) {
       if (j != J) {
         //::send<4>(Key(std::make_pair(std::make_pair(I, j), K)), (*adjacency_matrix_ttg)(I,j), out);
         // cout << "Send " << I << " " << j << " " << K << endl;
-        ::send<4>(Key(std::make_pair(std::make_pair(I, j), K)), m_ij, out);
+        //::send<4>(Key(std::make_pair(std::make_pair(I, j), K)), m_ij, out);
+        std::get<1>(bcast_keys).emplace_back(I, j, K);
       }
     }
 
     // making x_ready for the computation on the SAME block in the NEXT iteration
     if (K < (blocking_factor - 1)) {   // if there is a NEXT iteration
+      std::get<0>(bcast_keys)[0] = {I, J, K+1};
       if (I == K + 1 && J == K + 1) {  // in the next iteration, we have A function call
                                        // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        //::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::broadcast<0, 4>(bcast_keys, std::move(m_ij), out);
       } else if (I == K + 1) {  // in the next iteration, we have B function call
                                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<1>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        //::send<1>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::broadcast<1, 4>(bcast_keys, std::move(m_ij), out);
       } else if (J == K + 1) {  // in the next iteration, we have C function call
                                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<2>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        //::send<2>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::broadcast<2, 4>(bcast_keys, std::move(m_ij), out);
       } else {  // in the next iteration, we have D function call
                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        //::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::broadcast<3, 4>(bcast_keys, std::move(m_ij), out);
       }
     } else {
       // cout << "C[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
-      ::send<5>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
+      //::send<5>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
+      std::get<0>(bcast_keys)[0] = {I, J, K};
+      ::broadcast<5, 4>(bcast_keys, std::move(m_ij), out);
     }
   }
 };
@@ -493,11 +522,11 @@ template <typename T>
 class FuncD : public Op<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                        FuncD<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>> {
+                        FuncD<T>, BlockMatrix<T>, const BlockMatrix<T>, const BlockMatrix<T>> {
   using baseT = Op<Key,
                    std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                               Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                   FuncD, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>>;
+                   FuncD, BlockMatrix<T>, const BlockMatrix<T>, const BlockMatrix<T>>;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -527,7 +556,7 @@ class FuncD : public Op<Key,
       , recursive_fan_out(recursive_fan_out)
       , base_size(base_size) {}
 
-  void op(const Key& key, const std::tuple<BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>>&& t,
+  void op(const Key& key, const std::tuple<BlockMatrix<T>, const BlockMatrix<T>, const BlockMatrix<T>>& t,
           typename baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
@@ -545,20 +574,20 @@ class FuncD : public Op<Key,
     if (K < (blocking_factor - 1)) {   // if there is a NEXT iteration
       if (I == K + 1 && J == K + 1) {  // in the next iteration, we have A function call
                                        // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), std::move(m_ij), out);
       } else if (I == K + 1) {  // in the next iteration, we have B function call
                                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<1>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::send<1>(Key(std::make_pair(std::make_pair(I, J), K + 1)), std::move(m_ij), out);
       } else if (J == K + 1) {  // in the next iteration, we have C function call
                                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<2>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::send<2>(Key(std::make_pair(std::make_pair(I, J), K + 1)), std::move(m_ij), out);
       } else {  // in the next iteration, we have D function call
                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
+        ::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), std::move(m_ij), out);
       }
     } else {
       // cout << "D[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
-      ::send<4>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
+      ::send<4>(Key(std::make_pair(std::make_pair(I, J), K)), std::move(m_ij), out);
     }
   }
 };
