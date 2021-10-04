@@ -1,8 +1,8 @@
 #ifndef TTG_UTIL_DOT_H
 #define TTG_UTIL_DOT_H
 
-#include <string>
 #include <sstream>
+#include <string>
 
 #include "ttg/base/terminal.h"
 #include "ttg/traverse.h"
@@ -35,20 +35,19 @@ namespace ttg {
     // In case a type is a (long) template, use "HighestLevelName<...>" instead of the full template
     std::string summarize_type(const std::string &str) {
       std::cerr << "Length of " << str << " is " << str.length() << std::endl;
-      if(0 == summarize_threshold || str.length() < summarize_threshold) return str;
+      if (0 == summarize_threshold || str.length() < summarize_threshold) return str;
       auto s = str.find_first_of('<');
-      if( std::string::npos == s ) {
+      if (std::string::npos == s) {
         return str;
       }
       auto e = str.find_last_of('>');
-      if( std::string::npos == e ) {
+      if (std::string::npos == e) {
         return str;
       }
-      std::string ret = str.substr(0, s+1);
+      std::string ret = str.substr(0, s + 1);
       ret.append("...");
-      ret.append(str.substr(e, str.length()-e));
-      if(ret.length() < str.length())
-        return ret;
+      ret.append(str.substr(e, str.length() - e));
+      if (ret.length() < str.length()) return ret;
       return str;
     }
 
@@ -63,9 +62,10 @@ namespace ttg {
         if (in) {
           if (count != in->get_index()) throw "ttg::Dot: lost count of ins";
           buf << " <in" << count << ">"
-              << " " << escape("<" + summarize_type(in->get_key_type_str()) + "," +
-                               summarize_type(in->get_value_type_str()) + ">") << " "
-              << escape(in->get_name());
+              << " "
+              << escape("<" + summarize_type(in->get_key_type_str()) + "," + summarize_type(in->get_value_type_str()) +
+                        ">")
+              << " " << escape(in->get_name());
         } else {
           buf << " <in" << count << ">"
               << " unknown ";
@@ -84,9 +84,10 @@ namespace ttg {
         if (out) {
           if (count != out->get_index()) throw "ttg::Dot: lost count of outs";
           buf << " <out" << count << ">"
-              << " " << escape("<" + summarize_type(out->get_key_type_str()) + "," +
-                               summarize_type(out->get_value_type_str()) + ">") << " "
-              << out->get_name();
+              << " "
+              << escape("<" + summarize_type(out->get_key_type_str()) + "," +
+                        summarize_type(out->get_value_type_str()) + ">")
+              << " " << out->get_name();
         } else {
           buf << " <out" << count << ">"
               << " unknown ";
@@ -128,7 +129,7 @@ namespace ttg {
       buf << "digraph G {\n";
       buf << "        ranksep=1.5;\n";
       bool t = true;
-      t &= (traverse(std::forward<OpBasePtrs>(ops)) && ... );
+      t &= (traverse(std::forward<OpBasePtrs>(ops)) && ...);
       buf << "}\n";
 
       reset();
@@ -142,5 +143,5 @@ namespace ttg {
     Dot(size_t threshold) : buf(), summarize_threshold(threshold) {}
     Dot() : buf(), summarize_threshold(16) {}
   };
-} // namespace ttg
-#endif // TTG_UTIL_DOT_H
+}  // namespace ttg
+#endif  // TTG_UTIL_DOT_H
