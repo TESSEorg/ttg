@@ -13,6 +13,8 @@
 #include "mrafunctiondata.h"
 #include "mrafunctionfunctor.h"
 
+#include "ttg/serialization/splitmd_data_descriptor.h"
+
 namespace mra {
 
 
@@ -208,5 +210,31 @@ namespace mra {
     }
 
 }
-    
+
+namespace ttg {
+  template<typename T, size_t K, mra::Dimension NDIM>
+  struct SplitMetadataDescriptor<typename mra::FunctionReconstructedNode<T, K, NDIM>>
+  {
+
+    using frn_t = typename mra::FunctionReconstructedNode<T, K, NDIM>;
+
+    auto get_metadata(const frn_t& t)
+    {
+      //std::cout << "Using SMP interface for FunctionReconstructedNode" << std::endl;
+      return 0; // no metadata required, everything is compile-time constant
+    }
+
+    auto get_data(frn_t& t)
+    {
+      return std::array<iovec, 1>({sizeof(frn_t), &t});
+    }
+
+    auto create_from_metadata(const int meta)
+    {
+      return frn_t();
+    }
+  };
+} // namespace ttg
+
+
 #endif

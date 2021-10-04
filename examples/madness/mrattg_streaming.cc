@@ -30,6 +30,9 @@ using namespace ttg;
 #include "../mrafunctionnode.h"
 #include "../mrafunctionfunctor.h"
 
+// needed for madness::hashT
+#include <madness/world/world.h>
+
 //#include "/usr/include/mkl/mkl.h" // assume for now but need to wrap
 //#include "mkl.h"
 
@@ -162,13 +165,17 @@ auto make_project(functorT& f,
                   rnodeEdge<T,K,NDIM>& result,
                   const std::string& name = "project") {
 
-    auto F = [f, thresh](const Key<NDIM>& key, Control&& junk, std::tuple<ctlOut<NDIM>, rnodeOut<T,K,NDIM>>& out) {
+    auto F = [f, thresh](const Key<NDIM>& key, const Control& junk, std::tuple<ctlOut<NDIM>, rnodeOut<T,K,NDIM>>& out) {
         FunctionReconstructedNode<T,K,NDIM> node(key); // Our eventual result
         auto& coeffs = node.coeffs; // Need to clean up OO design
 
         if (key.level() < initial_level(f)) {
             USER_REGION_ENTER(send);
-            for (auto child : children(key)) send<0>(child, Control(), out);
+            std::vector<Key<NDIM>> bcast_keys;
+            /* TODO: children() returns an iteratable object but broadcast() expects a contiguous memory range.
+                     We need to fix broadcast to support any ranges */
+            for (auto child : children(key)) bcast_keys.push_back(child);
+            ::broadcast<0>(bcast_keys, Control(), out);
             USER_REGION_EXIT(send);
             coeffs = T(1e7); // set to obviously bad value to detect incorrect use
             node.is_leaf = false;
@@ -183,11 +190,13 @@ auto make_project(functorT& f,
             USER_REGION_EXIT(project);
             if (!node.is_leaf) {
                 USER_REGION_ENTER(send);
-                for (auto child : children(key)) send<0>(child,Control(),out); // should be broadcast ?
+                std::vector<Key<NDIM>> bcast_keys;
+                for (auto child : children(key)) bcast_keys.push_back(child);
+                ::broadcast<0>(bcast_keys, Control(), out);
                 USER_REGION_EXIT(send);
             }
         }
-        send<1>(key, node, out); // always produce a result
+        send<1>(key, std::move(node), out); // always produce a result
     };
     ctlEdge<NDIM> refine("refine");
     return wrap(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
@@ -228,11 +237,10 @@ namespace detail {
 // Stream leaf nodes up the tree as a prelude to compressing
 template <typename T, size_t K, Dimension NDIM>
 void send_leaves_up(const Key<NDIM>& key,
-                    FunctionReconstructedNode<T,K,NDIM>& inputs,//Why do we need a tuple here?
+                    const FunctionReconstructedNode<T,K,NDIM>& node,
                     std::tuple<rnodeOut<T,K,NDIM>, cnodeOut<T,K,NDIM>>& out) {
   //typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
   //Removed const from here!!
-  FunctionReconstructedNode<T,K,NDIM>& node = inputs; //std::get<0>(inputs);
     node.sum = 0.0;   //
     if (!node.has_children()) { // We are only interested in the leaves
         if (key.level() == 0) {  // Tree is just one node
@@ -254,7 +262,7 @@ void send_leaves_up(const Key<NDIM>& key,
 }
 
 template <typename T, size_t K, Dimension NDIM>
-void reduce_leaves(const Key<NDIM>& key, FunctionReconstructedNode<T,K,NDIM>& node, std::tuple<rnodeOut<T,K,NDIM>>& out) {
+void reduce_leaves(const Key<NDIM>& key, const FunctionReconstructedNode<T,K,NDIM>& node, std::tuple<rnodeOut<T,K,NDIM>>& out) {
   //std::cout << "Reduce_leaves " << node.key.childindex() << " " << node.neighbor_sum[node.key.childindex()] << std::endl;
   std::get<0>(out).send(key, node);
 }
@@ -262,7 +270,7 @@ void reduce_leaves(const Key<NDIM>& key, FunctionReconstructedNode<T,K,NDIM>& no
 // With data streaming up the tree run compression
 template <typename T, size_t K, Dimension NDIM>
 void do_compress(const Key<NDIM>& key,
-                 FunctionReconstructedNode<T,K,NDIM> &in,
+                 const FunctionReconstructedNode<T,K,NDIM> &in,
                  std::tuple<rnodeOut<T,K,NDIM>, cnodeOut<T,K,NDIM>> &out) {
   //const typename ::detail::tree_types<T,K,NDIM>::compress_in_type& in,
   //typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
@@ -296,7 +304,7 @@ void do_compress(const Key<NDIM>& key,
         p.sum = d.sumabssq() + sumsq; // Accumulate sumsq of difference coeffs from this node and children
         //auto outs = ::mra::subtuple_to_array_of_ptrs<0,Key<NDIM>::num_children>(out);
         //outs[key.childindex()]->send(key.parent(), p);
-        send<0>(key.parent(), p, out);
+        send<0>(key.parent(), std::move(p), out);
         USER_REGION_EXIT(recurup);
     }
     else {
@@ -305,7 +313,7 @@ void do_compress(const Key<NDIM>& key,
 
     // Send result to output tree
     //send<Key<NDIM>::num_children>(key,result,out);
-    send<1>(key, result, out);
+    send<1>(key, std::move(result), out);
 }
 
 
@@ -390,10 +398,13 @@ void do_reconstruct(const Key<NDIM>& key,
     unfilter<T,K,NDIM>(node.coeffs, s);
     USER_REGION_EXIT(unfilter);
 
+    std::array<std::vector<Key<NDIM>>, 2> bcast_keys;
+
     FunctionReconstructedNode<T,K,NDIM> r(key);
     r.coeffs = T(0.0);
     r.is_leaf = false;
-    ::send<1>(key, r, out); // Send empty interior node to result tree
+    //::send<1>(key, r, out); // Send empty interior node to result tree
+    bcast_keys[1].push_back(key);
 
     KeyChildren<NDIM> children(key);
     USER_REGION_ENTER(reconstruct);
@@ -403,12 +414,16 @@ void do_reconstruct(const Key<NDIM>& key,
         r.coeffs = s(child_slices[it.index()]);
         r.is_leaf = node.is_leaf[it.index()];
         if (r.is_leaf) {
-            ::send<1>(child, r, out);
+            //::send<1>(child, r, out);
+            bcast_keys[1].push_back(child);
         }
         else {
-            ::send<0>(child, r.coeffs, out);
+            //::send<0>(child, r.coeffs, out);
+            bcast_keys[0].push_back(child);
         }
     }
+    ::broadcast<0>(bcast_keys[0], r.coeffs, out);
+    ::broadcast<1>(bcast_keys[1], std::move(r), out);
     USER_REGION_EXIT(reconstruct);
 }
 
