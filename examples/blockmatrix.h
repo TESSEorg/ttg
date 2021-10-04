@@ -3,6 +3,8 @@
 #include <iostream>
 #include <unordered_map>
 
+#include <ttg/serialization/splitmd_data_descriptor.h>
+
 template <typename T>
 class BlockMatrix {
  private:
@@ -136,6 +138,33 @@ std::ostream& operator<<(std::ostream& s, const BlockMatrix<T>& m) {
   }
   return s;
 }
+
+
+namespace ttg {
+
+  template<typename T>
+  struct SplitMetadataDescriptor<BlockMatrix<T>>
+  {
+
+    using metadata_t = std::pair<int, int>;
+
+    metadata_t get_metadata(const BlockMatrix<T>& t)
+    {
+      return std::make_pair(t.rows(), t.cols());
+    }
+
+    auto get_data(BlockMatrix<T>& t)
+    {
+      return std::array<iovec, 1>({t.size()*sizeof(T), t.get()});
+    }
+
+    auto create_from_metadata(const metadata_t& meta)
+    {
+      return BlockMatrix<T>(meta.first, meta.second);
+    }
+  };
+
+} // namespace ttg
 
 // https://stackoverflow.com/questions/32685540/why-cant-i-compile-an-unordered-map-with-a-pair-as-key
 // We need this since pair cannot be hashed by unordered_map.
