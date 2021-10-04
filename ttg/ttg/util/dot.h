@@ -11,6 +11,7 @@ namespace ttg {
   /// Prints the graph to a std::string in the format understood by GraphViz's dot program
   class Dot : private detail::Traverse {
     std::stringstream buf;
+    size_t summarize_threshold;
 
     // Insert backslash before characters that dot is interpreting
     std::string escape(const std::string &in) {
@@ -31,6 +32,26 @@ namespace ttg {
       return s.str();
     }
 
+    // In case a type is a (long) template, use "HighestLevelName<...>" instead of the full template
+    std::string summarize_type(const std::string &str) {
+      std::cerr << "Length of " << str << " is " << str.length() << std::endl;
+      if(0 == summarize_threshold || str.length() < summarize_threshold) return str;
+      auto s = str.find_first_of('<');
+      if( std::string::npos == s ) {
+        return str;
+      }
+      auto e = str.find_last_of('>');
+      if( std::string::npos == e ) {
+        return str;
+      }
+      std::string ret = str.substr(0, s+1);
+      ret.append("...");
+      ret.append(str.substr(e, str.length()-e));
+      if(ret.length() < str.length())
+        return ret;
+      return str;
+    }
+
     void opfunc(OpBase *op) {
       std::string opnm = nodename(op);
 
@@ -42,7 +63,8 @@ namespace ttg {
         if (in) {
           if (count != in->get_index()) throw "ttg::Dot: lost count of ins";
           buf << " <in" << count << ">"
-              << " " << escape("<" + in->get_key_type_str() + "," + in->get_value_type_str() + ">") << " "
+              << " " << escape("<" + summarize_type(in->get_key_type_str()) + "," +
+                               summarize_type(in->get_value_type_str()) + ">") << " "
               << escape(in->get_name());
         } else {
           buf << " <in" << count << ">"
@@ -62,7 +84,8 @@ namespace ttg {
         if (out) {
           if (count != out->get_index()) throw "ttg::Dot: lost count of outs";
           buf << " <out" << count << ">"
-              << " " << escape("<" + out->get_key_type_str() + "," + out->get_value_type_str() + ">") << " "
+              << " " << escape("<" + summarize_type(out->get_key_type_str()) + "," +
+                               summarize_type(out->get_value_type_str()) + ">") << " "
               << out->get_name();
         } else {
           buf << " <out" << count << ">"
@@ -115,6 +138,9 @@ namespace ttg {
 
       return result;
     }
+
+    Dot(size_t threshold) : buf(), summarize_threshold(threshold) {}
+    Dot() : buf(), summarize_threshold(16) {}
   };
 } // namespace ttg
 #endif // TTG_UTIL_DOT_H
