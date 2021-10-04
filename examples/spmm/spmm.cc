@@ -673,7 +673,7 @@ class SpMM {
     Coordinator(Edge<Key<3>, Control> progress_ctl, Edge<Key<3>, Control> &a_ctl, Edge<Key<3>, Control> &b_ctl,
                 Edge<Key<3>, Control> &c2c_ctl, std::shared_ptr<const Plan> plan, const Keymap &keymap)
         : baseT(edges(fuse(progress_ctl, c2c_ctl)), edges(a_ctl, b_ctl, c2c_ctl), std::string("SpMM::Coordinator"),
-                {"progress_ctl"}, {"a_ctl", "b_ctl", "c2c_ctl"},
+                {"ctl_pqs"}, {"a_ctl_pqs", "b_ctl_pqs", "ctl_pqs"},
                 [keymap](const Key<3> &key) {
                   Key<2> k{key[0], key[1]};
                   return keymap(k);
@@ -734,8 +734,8 @@ class SpMM {
 
     Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<3>, Control> &ctl, Edge<Key<3>, Blk> &out,
                   std::shared_ptr<const Plan> plan, const Keymap &keymap)
-        : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"},
-                {std::string(label) + "pqs"},
+        : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl_pqs"},
+                {std::string(label) + "_mns"},
                 [keymap](const Key<3> &key) {
                   Key<2> k{key[0], key[1]};
                   return keymap(k);
@@ -892,7 +892,7 @@ class SpMM {
     MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
                 Edge<Key<3>, Control> &progress_ctl, std::shared_ptr<const Plan> plan, Keymap keymap)
         : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk, progress_ctl), "SpMM::MultiplyAdd",
-                {"a_ijk", "b_ijk", "c_ijk"}, {"c_ij", "c_ijk", "progress_ctl"},
+                {"a_ijk", "b_ijk", "c_ijk"}, {"c_ij", "c_ijk", "ctl_pqs"},
                 [keymap](const Key<3> &key) {
                   auto key2 = Key<2>({key[0], key[1]});
                   return keymap(key2);
@@ -1003,7 +1003,7 @@ class StartupControl : public Op<void, std::tuple<Out<Key<3>, Control>>, Startup
 
  public:
   explicit StartupControl(Edge<Key<3>, Control> &ctl)
-      : baseT(edges(), edges(ctl), "StartupControl", {}, {"ctl"}), P(0), Q(0), initbound(0) {}
+      : baseT(edges(), edges(ctl), "StartupControl", {}, {"ctl_pqs"}), P(0), Q(0), initbound(0) {}
 
   void op(std::tuple<Out<Key<3>, Control>> &out) const {
     for (long i = 0; i < P; i++) {
