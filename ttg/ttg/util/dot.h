@@ -34,7 +34,6 @@ namespace ttg {
 
     // In case a type is a (long) template, use "HighestLevelName<...>" instead of the full template
     std::string summarize_type(const std::string &str) {
-      std::cerr << "Length of " << str << " is " << str.length() << std::endl;
       if (0 == summarize_threshold || str.length() < summarize_threshold) return str;
       auto s = str.find_first_of('<');
       if (std::string::npos == s) {
