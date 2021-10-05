@@ -31,6 +31,9 @@ using namespace ttg;
 #include "../mrafunctionnode.h"
 #include "../mrafunctionfunctor.h"
 
+// needed for madness::hashT
+#include <madness/world/world.h>
+
 //#include "/usr/include/mkl/mkl.h" // assume for now but need to wrap
 //#include "mkl.h"
 
@@ -66,6 +69,47 @@ struct KeyProcMap {
 //     }
 // };
 
+/// A pmap that spatially decomposes the domain and by default slightly overdcomposes to attempt to load balance
+template <Dimension NDIM>
+class PartitionPmap {
+private:
+    const int nproc;
+    Level target_level;
+public:
+    PartitionPmap()
+        : nproc(1)
+        , target_level(3)
+    {};
+
+    // Default is to try to optimize the target_level, but you can specify any value > 0
+    PartitionPmap(size_t nproc, const Level target_level=0)
+        : nproc(nproc)
+    {
+        if (target_level > 0) {
+            this->target_level = target_level;
+        }
+        else {
+            this->target_level = 1;
+            int p = nproc-1;
+            while (p) {
+                p >>= NDIM;
+                this->target_level++;
+            }
+        }
+    }
+
+    /// Find the owner of a given key
+    HashValue operator()(const Key<NDIM>& key) const {
+        HashValue hash;
+        if (key.level() <= target_level) {
+            hash = key.hash();
+        }
+        else {
+            hash = key.parent(key.level() - target_level).hash();
+        }
+        return hash%nproc;
+    }
+};
 
 /// A pmap that spatially decomposes the domain and by default slightly overdcomposes to attempt to load balance
 template <Dimension NDIM>
@@ -153,12 +197,18 @@ auto make_project(functorT& f,
                   rnodeEdge<T,K,NDIM>& result,
                   const std::string& name = "project") {
 
-    auto F = [f, thresh](const Key<NDIM>& key, Control&& junk, std::tuple<ctlOut<NDIM>, rnodeOut<T,K,NDIM>>& out) {
+    auto F = [f, thresh](const Key<NDIM>& key, const Control& junk, std::tuple<ctlOut<NDIM>, rnodeOut<T,K,NDIM>>& out) {
         FunctionReconstructedNode<T,K,NDIM> node(key); // Our eventual result
         auto& coeffs = node.coeffs; // Need to clean up OO design
 
         if (key.level() < initial_level(f)) {
-            for (auto child : children(key)) send<0>(child, Control(), out);
+            USER_REGION_ENTER(send);
+            std::vector<Key<NDIM>> bcast_keys;
+            /* TODO: children() returns an iteratable object but broadcast() expects a contiguous memory range.
+                     We need to fix broadcast to support any ranges */
+            for (auto child : children(key)) bcast_keys.push_back(child);
+            ::broadcast<0>(bcast_keys, Control(), out);
+            USER_REGION_EXIT(send);
             coeffs = T(1e7); // set to obviously bad value to detect incorrect use
             node.is_leaf = false;
         }
@@ -169,10 +219,14 @@ auto make_project(functorT& f,
         else {
             node.is_leaf = fcoeffs<functorT,T,K>(f, key, thresh, coeffs); // cannot deduce K
             if (!node.is_leaf) {
-                for (auto child : children(key)) send<0>(child,Control(),out); // should be broadcast ?
+                USER_REGION_ENTER(send);
+                std::vector<Key<NDIM>> bcast_keys;
+                for (auto child : children(key)) bcast_keys.push_back(child);
+                ::broadcast<0>(bcast_keys, Control(), out);
+                USER_REGION_EXIT(send);
             }
         }
-        send<1>(key, node, out); // always produce a result
+        send<1>(key, std::move(node), out); // always produce a result
     };
     ctlEdge<NDIM> refine("refine");
     return wrap(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
@@ -213,11 +267,10 @@ namespace detail {
 // Stream leaf nodes up the tree as a prelude to compressing
 template <typename T, size_t K, Dimension NDIM>
 void send_leaves_up(const Key<NDIM>& key,
-                    FunctionReconstructedNode<T,K,NDIM>& inputs,//Why do we need a tuple here?
+                    const FunctionReconstructedNode<T,K,NDIM>& node,
                     std::tuple<rnodeOut<T,K,NDIM>, cnodeOut<T,K,NDIM>>& out) {
   //typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
   //Removed const from here!!
-  FunctionReconstructedNode<T,K,NDIM>& node = inputs; //std::get<0>(inputs);
     node.sum = 0.0;   //
     if (!node.has_children()) { // We are only interested in the leaves
         if (key.level() == 0) {  // Tree is just one node
@@ -237,7 +290,7 @@ void send_leaves_up(const Key<NDIM>& key,
 }
 
 template <typename T, size_t K, Dimension NDIM>
-void reduce_leaves(const Key<NDIM>& key, FunctionReconstructedNode<T,K,NDIM>& node, std::tuple<rnodeOut<T,K,NDIM>>& out) {
+void reduce_leaves(const Key<NDIM>& key, const FunctionReconstructedNode<T,K,NDIM>& node, std::tuple<rnodeOut<T,K,NDIM>>& out) {
   //std::cout << "Reduce_leaves " << node.key.childindex() << " " << node.neighbor_sum[node.key.childindex()] << std::endl;
   std::get<0>(out).send(key, node);
 }
@@ -245,7 +298,7 @@ void reduce_leaves(const Key<NDIM>& key, FunctionReconstructedNode<T,K,NDIM>& no
 // With data streaming up the tree run compression
 template <typename T, size_t K, Dimension NDIM>
 void do_compress(const Key<NDIM>& key,
-                 FunctionReconstructedNode<T,K,NDIM> &in,
+                 const FunctionReconstructedNode<T,K,NDIM> &in,
                  std::tuple<rnodeOut<T,K,NDIM>, cnodeOut<T,K,NDIM>> &out) {
   //const typename ::detail::tree_types<T,K,NDIM>::compress_in_type& in,
   //typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
@@ -276,7 +329,8 @@ void do_compress(const Key<NDIM>& key,
         p.sum = d.sumabssq() + sumsq; // Accumulate sumsq of difference coeffs from this node and children
         //auto outs = ::mra::subtuple_to_array_of_ptrs<0,Key<NDIM>::num_children>(out);
         //outs[key.childindex()]->send(key.parent(), p);
-        send<0>(key.parent(), p, out);
+        send<0>(key.parent(), std::move(p), out);
+        USER_REGION_EXIT(recurup);
     }
     else {
         std::cout << "At root of compressed tree: total normsq is " << sumsq + d.sumabssq() << std::endl;
@@ -284,7 +338,7 @@ void do_compress(const Key<NDIM>& key,
 
     // Send result to output tree
     //send<Key<NDIM>::num_children>(key,result,out);
-    send<1>(key, result, out);
+    send<1>(key, std::move(result), out);
 }
 
 
@@ -367,10 +421,13 @@ void do_reconstruct(const Key<NDIM>& key,
     FixedTensor<T,2*K,NDIM> s;
     unfilter<T,K,NDIM>(node.coeffs, s);
 
+    std::array<std::vector<Key<NDIM>>, 2> bcast_keys;
+
     FunctionReconstructedNode<T,K,NDIM> r(key);
     r.coeffs = T(0.0);
     r.is_leaf = false;
-    ::send<1>(key, r, out); // Send empty interior node to result tree
+    //::send<1>(key, r, out); // Send empty interior node to result tree
+    bcast_keys[1].push_back(key);
 
     KeyChildren<NDIM> children(key);
     for (auto it=children.begin(); it!=children.end(); ++it) {
@@ -379,12 +436,17 @@ void do_reconstruct(const Key<NDIM>& key,
         r.coeffs = s(child_slices[it.index()]);
         r.is_leaf = node.is_leaf[it.index()];
         if (r.is_leaf) {
-            ::send<1>(child, r, out);
+            //::send<1>(child, r, out);
+            bcast_keys[1].push_back(child);
         }
         else {
-            ::send<0>(child, r.coeffs, out);
+            //::send<0>(child, r.coeffs, out);
+            bcast_keys[0].push_back(child);
         }
     }
+    ::broadcast<0>(bcast_keys[0], r.coeffs, out);
+    ::broadcast<1>(bcast_keys[1], std::move(r), out);
+    USER_REGION_EXIT(reconstruct);
 }
 
 template <typename T, size_t K, Dimension NDIM>
@@ -699,6 +761,128 @@ void test2(size_t nfunc, T thresh = 1e-6) {
     }
 }
 
+template <typename T, size_t K, Dimension NDIM>
+void test2(size_t nfunc, T thresh = 1e-6) {
+    FunctionData<T,K,NDIM>::initialize();
+    PartitionPmap<NDIM> pmap =  PartitionPmap<NDIM>(ttg_default_execution_context().size());
+    Domain<NDIM>::set_cube(-6.0,6.0);
+
+    srand48(5551212); // for reproducible results
+    for (auto i : range(10000)) drand48(); // warmup generator
+
+    ctlEdge<NDIM> ctl("start");
+    auto start = make_start(ctl);
+    std::vector<std::unique_ptr<ttg::OpBase>> ops;
+    for (auto i : range(nfunc)) {
+        T expnt = 30000.0;
+        Coordinate<T,NDIM> r;
+        for (size_t d=0; d<NDIM; d++) {
+            r[d] = T(-6.0) + T(12.0)*drand48();
+        }
+        auto ff = Gaussian<T,NDIM>(expnt, r);
+
+        TTGUNUSED(i);
+        rnodeEdge<T,K,NDIM> a("a"), c("c");
+        cnodeEdge<T,K,NDIM> b("b");
+
+        auto p1 = make_project(ff, T(thresh), ctl, a, "project A");
+        p1->set_keymap(pmap);
+
+        auto compress = make_compress<T,K,NDIM>(a, b);
+        std::get<0>(compress)->set_keymap(pmap);
+        std::get<1>(compress)->set_keymap(pmap);
+        std::get<2>(compress)->set_keymap(pmap);
+
+        auto &reduce_leaves_op = std::get<1>(compress);
+        reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNode<T,K,NDIM> &&node,
+                                                           FunctionReconstructedNode<T,K,NDIM> &&another)
+                                                        {
+                                                          //Update self values into the array.
+                                                          node.neighbor_coeffs[node.key.childindex()] = node.coeffs;
+                                                          node.is_neighbor_leaf[node.key.childindex()] = node.is_leaf;
+                                                          node.neighbor_sum[node.key.childindex()] = node.sum;
+                                                          node.neighbor_coeffs[another.key.childindex()] = another.coeffs;
+                                                          node.is_neighbor_leaf[another.key.childindex()] = another.is_leaf;
+                                                          node.neighbor_sum[another.key.childindex()] = another.sum;
+                                                          //std::cout << "Neighbor_sum[" << another.key.childindex() << "] : " << node.neighbor_sum <<std::endl;
+                                                          return node;
+                                                        });
+        reduce_leaves_op->template set_static_argstream_size<0>(1 << NDIM);
+
+        auto recon = make_reconstruct<T,K,NDIM>(b,c);
+        recon->set_keymap(pmap);
+
+        //auto printer =   make_printer(a,"projected    ", true);
+        // auto printer2 =  make_printer(b,"compressed   ", false);
+        // auto printer3 =  make_printer(c,"reconstructed", false);
+        auto printer =   make_sink(a);
+        auto printer2 =  make_sink(b);
+        auto printer3 =  make_sink(c);
+
+        ops.push_back(std::move(p1));
+        ops.push_back(std::move(std::get<0>(compress)));
+        ops.push_back(std::move(std::get<1>(compress)));
+        ops.push_back(std::move(std::get<2>(compress)));
+        ops.push_back(std::move(recon));
+        ops.push_back(std::move(printer));
+        ops.push_back(std::move(printer2));
+        ops.push_back(std::move(printer3));
+    }
+
+    if (tracing_enabled) {
+      parsec_profiling_add_dictionary_keyword("PROJECT", "#0000FF",
+              0, "",
+              &event_project_startkey, &event_project_endkey);
+
+      parsec_profiling_add_dictionary_keyword("SENDLEAVESUP", "#0000FF",
+              0, "",
+              &event_sendleavesup_startkey, &event_sendleavesup_endkey);
+
+      parsec_profiling_add_dictionary_keyword("DOCOMPRESS", "#0000FF",
+              0, "",
+              &event_docompress_startkey, &event_docompress_endkey);
+
+      parsec_profiling_add_dictionary_keyword("RECURUP", "#0000FF",
+              0, "",
+              &event_recurup_startkey, &event_recurup_endkey);
+
+      parsec_profiling_add_dictionary_keyword("RECONSTRUCT", "#0000FF",
+              0, "",
+              &event_reconstruct_startkey, &event_reconstruct_endkey);
+
+      parsec_profiling_add_dictionary_keyword("SEND", "#0000FF",
+              0, "",
+              &event_send_startkey, &event_send_endkey);
+
+      parsec_profiling_add_dictionary_keyword("UNFILTER", "#0000FF",
+              0, "",
+              &event_unfilter_startkey, &event_unfilter_endkey);
+    }
+
+    std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
+    auto connected = make_graph_executable(start.get());
+    assert(connected);
+    if (ttg_default_execution_context().rank() == 0) {
+        //std::cout << "Is everything connected? " << connected << std::endl;
+        //std::cout << "==== begin dot ====\n";
+        //std::cout << Dot()(start.get()) << std::endl;
+        //std::cout << "====  end dot  ====\n";
+	beg = std::chrono::high_resolution_clock::now();
+        // This kicks off the entire computation
+        start->invoke(Key<NDIM>(0, {0}));
+    }
+
+    ttg_execute(ttg_default_execution_context());
+    ttg_fence(ttg_default_execution_context());
+
+    if (ttg_default_execution_context().rank() == 0) {
+        end = std::chrono::high_resolution_clock::now();
+        std::cout << "TTG Execution Time (milliseconds) : "
+              << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
+
+    }
+}
+
 int main(int argc, char** argv) {
     ttg_initialize(argc, argv, 2);
     //std::cout << "Hello from madttg\n";
@@ -713,9 +897,8 @@ int main(int argc, char** argv) {
     {
         //test0<float,6,3>();
         //test1<float,6,3>();
-        //test2<float,6,3>(20);
-        test2<double,10,3>(1, 1e-8);
         //test1<double,6,3>();
+	test2<double,10,3>(1, 1e-8);
     }
 
     ttg_fence(get_default_world());
