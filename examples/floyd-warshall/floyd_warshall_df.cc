@@ -681,8 +681,7 @@ class FloydWarshall {
 void parse_arguments(int argc, char** argv, int& problem_size, int& blocking_factor, string& kernel_type,
                      int& recursive_fan_out, int& base_size, bool& verify_results);
 // Initializes the adjacency matrices
-void init_square_matrix(int problem_size, int blocking_factor, bool verify_results, double* adjacency_matrix_serial,
-                        Matrix<double>* m);
+void init_square_matrix(int problem_size, int blocking_factor, double* adjacency_matrix_serial);
 // Print the matrix
 void print_square_matrix(int problem_size, int blocking_factor, bool verify_results, double* adjacency_matrix_serial);
 // Checking the equality of two double values
@@ -748,8 +747,11 @@ int main(int argc, char** argv) {
     adjacency_matrix_serial = (double*)malloc(sizeof(double) * problem_size * problem_size);
   }
 
-  init_square_matrix(problem_size, blocking_factor, verify_results, adjacency_matrix_serial, m);
-
+  //double start = madness::wall_time();
+  m->fill();
+  if (verify_results)
+    init_square_matrix(problem_size, blocking_factor, adjacency_matrix_serial);
+  //std::cout << "Init took: " << madness::wall_time() - start << std::endl;
   // Run in every process to be able to verify? Is there another way?
   // Calling the iterative fw-apsp
   if (verify_results) {
@@ -829,27 +831,32 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
   return true;
 }
 
-void init_square_matrix(int problem_size, int blocking_factor, bool verify_results, double* adjacency_matrix_serial,
-                        Matrix<double>* m) {
+void init_square_matrix(int problem_size, int blocking_factor, double* adjacency_matrix_serial) {
   // srand(123);  // srand(time(nullptr));
   int block_size = problem_size / blocking_factor;
-  for (int i = 0; i < problem_size; ++i) {
-    int row = i * problem_size;
-    int blockX = i / block_size;
-    int x = i % block_size;
-    for (int j = 0; j < problem_size; ++j) {
-      int blockY = j / block_size;
-      int y = j % block_size;
-      if (i != j) {
-        double value = i * blocking_factor + j;  // rand() % 100 + 1;
-        ((*m)(blockX, blockY))(x, y, value);
-        if (verify_results) {
-          adjacency_matrix_serial[row + j] = value;
-        }
-      } else {
-        ((*m)(blockX, blockY))(x, y, 0.0);
-        if (verify_results) {
-          adjacency_matrix_serial[row + j] = 0.0;
+  int n_brows = (problem_size / block_size) + (problem_size % block_size > 0);
+  for (int nr = 0; nr < n_brows; nr++) {
+    for (int nc = 0; nc < n_brows; nc++) {
+      for (int i = 0; i < block_size; ++i) {
+        int row = (i + nr * block_size) * problem_size;
+        //int blockX = i / block_size;
+        //int x = i % block_size;
+        for (int j = 0; j < block_size; ++j) {
+          //int blockY = j / block_size;
+          //int y = j % block_size;
+          /*if (i != j) {
+            double value = i * blocking_factor + j;  // rand() % 100 + 1;
+            ((*m)(blockX, blockY))(x, y, value);
+            if (verify_results) {
+              adjacency_matrix_serial[row + j] = value;
+            }
+          } else {
+            ((*m)(blockX, blockY))(x, y, 0.0);
+            if (verify_results) {
+              adjacency_matrix_serial[row + j] = 0.0;
+            }
+          }*/
+          adjacency_matrix_serial[row + j + nc * block_size] = i * block_size + j;
         }
       }
     }
