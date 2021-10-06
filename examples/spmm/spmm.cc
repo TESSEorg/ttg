@@ -302,7 +302,7 @@ class SpMM {
     };
 
     using gemmset_t = std::set<std::tuple<long, long, long>>;
-    using step_vector_t = std::vector<std::tuple<gemmset_t, long>>;
+    using step_vector_t = std::vector<std::tuple<gemmset_t, long, gemmset_t>>;
     using step_per_tile_t = std::unordered_map<std::tuple<long, long, long>, std::set<long>, long_tuple_hash>;
     using bcastset_t = std::set<std::tuple<long, long>>;
     using comm_plan_t = std::vector<std::vector<bcastset_t>>;
@@ -485,6 +485,7 @@ class SpMM {
         for (long nn = 0; nn < nns; nn++) {
           for (long kk = 0; kk < kns; kk++) {
             gemmset_t gemms;
+            gemmset_t local_gemms;
             long nb_local_gemms = 0;
             for (long m = mm * cube_dim; m < (mm + 1) * cube_dim && m < mt; m++) {
               if (m >= a_rowidx_to_colidx_.size() || a_rowidx_to_colidx_[m].empty()) continue;
@@ -499,7 +500,10 @@ class SpMM {
                       b_colidx_to_rowidx_[n].end())
                     continue;
                   auto r = keymap_(Key<2>({m, n}));
-                  if (r == rank) nb_local_gemms++;
+                  if (r == rank) {
+                    local_gemms.insert({m, n, k});
+                    nb_local_gemms++;
+                  }
                   gemms.insert({m, n, k});
                   auto it = steps_per_tile_A.find(std::make_tuple(r, m, k));
                   if (it == steps_per_tile_A.end()) {
@@ -539,7 +543,7 @@ class SpMM {
                 }
               }
             }
-            steps.emplace_back(std::make_tuple(gemms, nb_local_gemms));
+            steps.emplace_back(std::make_tuple(gemms, nb_local_gemms, local_gemms));
           }
         }
       }
@@ -756,6 +760,7 @@ class SpMM {
     };
 
     const gemmset_t &gemms(long s) const { return std::get<0>(std::get<0>(steps_)[s]); }
+    const gemmset_t &local_gemms(long s) const { return std::get<2>(std::get<0>(steps_)[s]); }
 
     long nb_local_gemms(long s) const { return std::get<1>(std::get<0>(steps_)[s]); }
 
@@ -924,10 +929,9 @@ class SpMM {
 
       std::unordered_set<std::tuple<int, int>, tuple_hash> seen_a;
       std::unordered_set<std::tuple<int, int>, tuple_hash> seen_b;
-      for (auto x : plan_->gemms(s)) {
+      for (auto x : plan_->local_gemms(s)) {
         long gi, gj, gk;
         std::tie(gi, gj, gk) = x;
-        if (keymap_(Key<2>{gi, gj}) != r) continue;
         if (seen_a.find(std::make_tuple(gi, gk)) == seen_a.end()) {
           if (tracing())
             ttg::print("On rank", r, "Coordinator(", r, ", ", s, "): Sending control to LBCastA(", r, ",", gi, ",", gk,
@@ -1158,11 +1162,10 @@ class SpMM {
       if (tracing()) ttg::print("On rank", rank, "LBcastA(", r, ",", i, ",", k, ",", s, ")");
       // broadcast A[i][k] to all local GEMMs in step s, then pass the data to the next step
       std::vector<Key<3>> ijk_keys;
-      for (auto x : plan_->gemms(s)) {
+      for (const auto& x : plan_->local_gemms(s)) {
         long gi, gj, gk;
         std::tie(gi, gj, gk) = x;
         if (gi != i || gk != k) continue;
-        if (keymap_(Key<2>{gi, gj}) != r) continue;
         ijk_keys.emplace_back(Key<3>{gi, gj, gk});
         if (tracing())
           ttg::print("On rank", rank, "Giving A[", gi, ",", gk, "]", "to GEMM(", gi, ",", gj, ",", gk, ") during step",
@@ -1288,11 +1291,10 @@ class SpMM {
       if (tracing()) ttg::print("On rank", r, "LBcastB(", r, ",", k, ",", j, ",", s, ")");
       // broadcast B[k][j] to all local GEMMs in step s, then pass the data to the next step
       std::vector<Key<3>> ijk_keys;
-      for (auto x : plan_->gemms(s)) {
+      for (const auto& x : plan_->local_gemms(s)) {
         long gi, gj, gk;
         std::tie(gi, gj, gk) = x;
         if (gj != j || gk != k) continue;
-        if (keymap_(Key<2>{gi, gj}) != r) continue;
         ijk_keys.emplace_back(Key<3>{gi, gj, gk});
         if (tracing())
           ttg::print("On rank", rank, "Giving B[", gk, ",", gj, "]", "to GEMM(", gi, ",", gj, ",", gk, ") during step",
