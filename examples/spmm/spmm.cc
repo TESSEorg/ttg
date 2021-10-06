@@ -183,11 +183,13 @@ std::ostream &operator<<(std::ostream &os, const Key<Rank> &key) {
   return os;
 }
 
+// block-cyclic map of tile index {i,j} onto the (2d) PxQ grid
+// return process rank, obtained as col-major map of the process grid coordinate
 inline int tile2rank(int i, int j, int P, int Q) {
   int p = (i % P);
   int q = (j % Q);
-  int r = (q * P) + p;
-  return r;
+  int pq = (q * P) + p;
+  return pq;
 }
 
 // flow data from an existing SpMatrix on rank 0
@@ -876,8 +878,14 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
   std::vector<triplet_t> A_elements;
   std::vector<triplet_t> Aref_elements;
 
-  auto emplace_A_element = [&A_elements, &Aref_elements, &keymap, rank, buildRefs](std::initializer_list<int> ij,
-                                                                                   const auto &value) {
+  auto emplace_A_element = [&A_elements, &Aref_elements, &keymap, rank, buildRefs, &a_rowidx_to_colidx,
+                            &a_colidx_to_rowidx](std::initializer_list<int> ij, const auto &value) {
+    auto i = *(ij.begin());
+    auto j = *(ij.begin() + 1);
+    if (i >= a_rowidx_to_colidx.size()) a_rowidx_to_colidx.resize(i + 1);
+    a_rowidx_to_colidx[i].emplace_back(j);
+    if (j >= a_colidx_to_rowidx.size()) a_colidx_to_rowidx.resize(j + 1);
+    a_colidx_to_rowidx[j].emplace_back(i);
     if (keymap(ij) == rank) {
       A_elements.emplace_back(*(ij.begin()), *(ij.begin() + 1), blk_t(btas::Range(128, 256), value));
       if (buildRefs && rank == 0) {
@@ -892,20 +900,6 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
   emplace_A_element({1, 0}, -0.3);
   emplace_A_element({1, 2}, 1.2);
 
-  a_rowidx_to_colidx.resize(2);
-  a_rowidx_to_colidx[0].emplace_back(1);  // A[0][1]
-  a_rowidx_to_colidx[0].emplace_back(2);  // A[0][2]
-  a_rowidx_to_colidx[0].emplace_back(3);  // A[0][3]
-  a_rowidx_to_colidx[1].emplace_back(0);  // A[1][0]
-  a_rowidx_to_colidx[1].emplace_back(2);  // A[1][2]
-
-  a_colidx_to_rowidx.resize(4);
-  a_colidx_to_rowidx[0].emplace_back(1);  // A[1][0]
-  a_colidx_to_rowidx[1].emplace_back(0);  // A[0][1]
-  a_colidx_to_rowidx[2].emplace_back(0);  // A[0][2]
-  a_colidx_to_rowidx[2].emplace_back(1);  // A[1][2]
-  a_colidx_to_rowidx[3].emplace_back(0);  // A[0][3]
-
   A.setFromTriplets(A_elements.begin(), A_elements.end());
   if (buildRefs && 0 == rank) {
     Aref.setFromTriplets(Aref_elements.begin(), Aref_elements.end());
@@ -913,53 +907,28 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
 
   std::vector<triplet_t> B_elements;
   std::vector<triplet_t> Bref_elements;
-  if (keymap({0, 0}) == rank) {
-    B_elements.emplace_back(0, 0, blk_t(btas::Range(256, 196), 12.3));
-  }
-  if (keymap({1, 0}) == rank) {
-    B_elements.emplace_back(1, 0, blk_t(btas::Range(256, 196), 10.7));
-  }
-  if (keymap({3, 0}) == rank) {
-    B_elements.emplace_back(3, 0, blk_t(btas::Range(256, 196), -2.3));
-  }
-  if (keymap({1, 1}) == rank) {
-    B_elements.emplace_back(1, 1, blk_t(btas::Range(256, 196), -0.3));
-  }
-  if (keymap({1, 2}) == rank) {
-    B_elements.emplace_back(1, 2, blk_t(btas::Range(256, 196), 1.2));
-  }
-  if (keymap({2, 2}) == rank) {
-    B_elements.emplace_back(2, 2, blk_t(btas::Range(256, 196), 7.2));
-  }
-  if (keymap({3, 2}) == rank) {
-    B_elements.emplace_back(3, 2, blk_t(btas::Range(256, 196), 0.2));
-  }
-  if (buildRefs && rank == 0) {
-    Bref_elements.emplace_back(0, 0, blk_t(btas::Range(256, 196), 12.3));
-    Bref_elements.emplace_back(1, 0, blk_t(btas::Range(256, 196), 10.7));
-    Bref_elements.emplace_back(3, 0, blk_t(btas::Range(256, 196), -2.3));
-    Bref_elements.emplace_back(1, 1, blk_t(btas::Range(256, 196), -0.3));
-    Bref_elements.emplace_back(1, 2, blk_t(btas::Range(256, 196), 1.2));
-    Bref_elements.emplace_back(2, 2, blk_t(btas::Range(256, 196), 7.2));
-    Bref_elements.emplace_back(3, 2, blk_t(btas::Range(256, 196), 0.2));
-  }
-  b_rowidx_to_colidx.resize(4);
-  b_rowidx_to_colidx[0].emplace_back(0);  // B[0][0]
-  b_rowidx_to_colidx[1].emplace_back(0);  // B[1][0]
-  b_rowidx_to_colidx[1].emplace_back(1);  // B[1][1]
-  b_rowidx_to_colidx[1].emplace_back(2);  // B[1][2]
-  b_rowidx_to_colidx[2].emplace_back(2);  // B[2][2]
-  b_rowidx_to_colidx[3].emplace_back(0);  // B[3][0]
-  b_rowidx_to_colidx[3].emplace_back(2);  // B[3][2]
-
-  b_colidx_to_rowidx.resize(3);
-  b_colidx_to_rowidx[0].emplace_back(0);  // B[0][0]
-  b_colidx_to_rowidx[0].emplace_back(1);  // B[1][0]
-  b_colidx_to_rowidx[0].emplace_back(3);  // B[3][0]
-  b_colidx_to_rowidx[1].emplace_back(1);  // B[1][1]
-  b_colidx_to_rowidx[2].emplace_back(1);  // B[1][2]
-  b_colidx_to_rowidx[2].emplace_back(2);  // B[2][2]
-  b_colidx_to_rowidx[2].emplace_back(3);  // A[3][2]
+  auto emplace_B_element = [&B_elements, &Bref_elements, &keymap, rank, buildRefs, &b_rowidx_to_colidx,
+                            &b_colidx_to_rowidx](std::initializer_list<int> ij, const auto &value) {
+    auto i = *(ij.begin());
+    auto j = *(ij.begin() + 1);
+    if (i >= b_rowidx_to_colidx.size()) b_rowidx_to_colidx.resize(i + 1);
+    b_rowidx_to_colidx[i].emplace_back(j);
+    if (j >= b_colidx_to_rowidx.size()) b_colidx_to_rowidx.resize(j + 1);
+    b_colidx_to_rowidx[j].emplace_back(i);
+    if (keymap(ij) == rank) {
+      B_elements.emplace_back(*(ij.begin()), *(ij.begin() + 1), blk_t(btas::Range(128, 256), value));
+      if (buildRefs && rank == 0) {
+        Bref_elements.emplace_back(*(ij.begin()), *(ij.begin() + 1), blk_t(btas::Range(128, 256), value));
+      }
+    }
+  };
+  emplace_B_element({0, 0}, 12.3);
+  emplace_B_element({1, 0}, 10.7);
+  emplace_B_element({3, 0}, -2.3);
+  emplace_B_element({1, 1}, -0.3);
+  emplace_B_element({1, 2}, 1.2);
+  emplace_B_element({2, 2}, 7.2);
+  emplace_B_element({3, 2}, 0.2);
 
   B.setFromTriplets(B_elements.begin(), B_elements.end());
   if (buildRefs && 0 == rank) {
@@ -973,7 +942,7 @@ static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, siz
                            std::vector<int> &kTiles, std::vector<std::vector<long>> &a_rowidx_to_colidx,
                            std::vector<std::vector<long>> &a_colidx_to_rowidx,
                            std::vector<std::vector<long>> &b_rowidx_to_colidx,
-                           std::vector<std::vector<long>> &b_colidx_to_rowidx, double &average_tile_size,
+                           std::vector<std::vector<long>> &b_colidx_to_rowidx, double &average_tile_volume,
                            double &Adensity, double &Bdensity, unsigned int seed) {
   int rank = ttg_default_execution_context().rank();
 
@@ -1092,7 +1061,7 @@ static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, siz
   if (0 == rank && buildRefs) Bref.setFromTriplets(Bref_elements.begin(), Bref_elements.end());
   fills.clear();
 
-  average_tile_size = (double)avg_nb / avg_nb_nb;
+  average_tile_volume = (double)avg_nb / avg_nb_nb;
 }
 #endif  // !defined(BLOCK_SPARSE_GEMM)
 
@@ -1282,11 +1251,12 @@ int main(int argc, char **argv) {
       }
     }
 
-    const auto &keymap = [P, Q](const Key<2> &key) {
+    // block-cyclic map
+    auto bc_keymap = [P, Q](const Key<2> &key) {
       int i = (int)key[0];
       int j = (int)key[1];
-      int r = tile2rank(i, j, P, Q);
-      return r;
+      int pq = tile2rank(i, j, P, Q);
+      return pq;
     };
 
     std::string seedStr(getCmdOption(argv, argv + argc, "-s"));
@@ -1314,14 +1284,14 @@ int main(int argc, char **argv) {
     if (cmdOptionExists(argv, argv + argc, "-mm")) {
       char *filename = getCmdOption(argv, argv + argc, "-mm");
       tiling_type = filename;
-      initSpMatrixMarket(keymap, filename, A, B, C, M, N, K);
+      initSpMatrixMarket(bc_keymap, filename, A, B, C, M, N, K);
     } else if (cmdOptionExists(argv, argv + argc, "-rmat")) {
       char *opt = getCmdOption(argv, argv + argc, "-rmat");
       tiling_type = "RandomSparseMatrix";
-      initSpRmat(keymap, opt, A, B, C, M, N, K, seed);
+      initSpRmat(bc_keymap, opt, A, B, C, M, N, K, seed);
     } else {
       tiling_type = "HardCodedSparseMatrix";
-      initSpHardCoded(keymap, A, B, C, M, N, K);
+      initSpHardCoded(bc_keymap, A, B, C, M, N, K);
     }
 
     if (check) {
@@ -1356,13 +1326,13 @@ int main(int argc, char **argv) {
       double avg = parseOption(avgStr, 0.3);
       timing = (check == 0);
       tiling_type = "RandomIrregularTiling";
-      initBlSpRandom(keymap, M, N, K, minTs, maxTs, avg, A, B, Aref, Bref, check, mTiles, nTiles, kTiles,
+      initBlSpRandom(bc_keymap, M, N, K, minTs, maxTs, avg, A, B, Aref, Bref, check, mTiles, nTiles, kTiles,
                      a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, avg_nb, Adensity,
                      Bdensity, seed);
       C.resize(mTiles.size(), nTiles.size());
     } else {
       tiling_type = "HardCodedBlockSparseMatrix";
-      initBlSpHardCoded(keymap, A, B, C, Aref, Bref, true, mTiles, nTiles, kTiles, a_rowidx_to_colidx,
+      initBlSpHardCoded(bc_keymap, A, B, C, Aref, Bref, true, mTiles, nTiles, kTiles, a_rowidx_to_colidx,
                         a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, M, N, K);
     }
 #endif  // !defined(BLOCK_SPARSE_GEMM)
@@ -1376,24 +1346,24 @@ int main(int argc, char **argv) {
       // Start up engine
       ttg_execute(ttg_default_execution_context());
       for (int nrun = 0; nrun < nb_runs; nrun++) {
-        timed_measurement(A, B, keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
+        timed_measurement(A, B, bc_keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
                           a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles, nTiles, kTiles, M, N, K,
                           P, Q);
       }
     } else {
       // flow graph needs to exist on every node
-      auto keymap_write = [](const Key<2> &key) { return 0; };
+      auto rank0_keymap = [](const Key<2> &key) { return 0; };
       Edge<Key<2>> ctl("control");
       Control control(ctl);
       Edge<Key<2>, blk_t> eA, eB, eC;
-      Read_SpMatrix a("A", A, ctl, eA, keymap);
-      Read_SpMatrix b("B", B, ctl, eB, keymap);
-      Write_SpMatrix<> c(C, eC, keymap_write);
+      Read_SpMatrix a("A", A, ctl, eA, bc_keymap);
+      Read_SpMatrix b("B", B, ctl, eB, bc_keymap);
+      Write_SpMatrix<> c(C, eC, rank0_keymap);
       auto &c_status = c.status();
       assert(!has_value(c_status));
       //  SpMM a_times_b(world, eA, eB, eC, A, B);
       SpMM<> a_times_b(eA, eB, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
-                       mTiles, nTiles, kTiles, keymap);
+                       mTiles, nTiles, kTiles, bc_keymap);
       TTGUNUSED(a_times_b);
 
       if (get_default_world().rank() == 0) std::cout << Dot{}(&a, &b) << std::endl;
