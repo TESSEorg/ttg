@@ -892,7 +892,7 @@ class SpMM {
                 {"ctl_rs"}, {"a_ctl_riks", "b_ctl_rkjs", "ctl_rs"}, [](const Key<2> &key) { return (int)key[0]; })
         , plan_(plan)
         , keymap_(keymap) {
-      baseT::template set_input_reducer<0>([](Control &&a, const Control &&b) { return a; });
+      baseT::template set_input_reducer<0>([](Control &&a, Control &&b) { return a; });
       auto r = ttg_default_execution_context().rank();
       for (long l = 0; l < plan_->lookahead_ && l < plan_->nb_steps(); l++) {
         if (tracing())
@@ -955,9 +955,9 @@ class SpMM {
   };
 
   // flow data from an existing SpMatrix
-  class Read_SpMatrix : public Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix, const Control> {
+  class Read_SpMatrix : public Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix, Control> {
    public:
-    using baseT = Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix, const Control>;
+    using baseT = Op<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix, Control>;
 
     Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>, Control> &progress_ctl,
                   Edge<Key<2>, Blk> &out, std::shared_ptr<const Plan> plan, const Keymap &keymap)
@@ -967,7 +967,7 @@ class SpMM {
         , plan_(plan)
         , is_a_(is_label_a(label))
         , keymap_(keymap) {
-      baseT::template set_input_reducer<0>([](Control &&a, const Control &&b) { return a; });
+      baseT::template set_input_reducer<0>([](Control &&a, Control &&b) { return a; });
       auto r = ttg_default_execution_context().rank();
       if (tracing())
         ttg::print("On rank ", r, ": at bootstrap, setting the number of local bcast on ", is_a_ ? "A" : "B",
