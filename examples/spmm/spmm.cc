@@ -229,7 +229,7 @@ class SpMM {
        const std::vector<std::vector<long>> &b_rowidx_to_colidx,
        const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<long> &mTiles,
        const std::vector<long> &nTiles, const std::vector<long> &kTiles, const Keymap &keymap, const long P,
-       const long Q, size_t memory, const long forced_split, const long lookahead)
+       const long Q, size_t memory, const long forced_split, const long lookahead, const long comm_threshold)
       : a_ik_()
       , b_kj_()
       , a_rik_()
@@ -245,8 +245,9 @@ class SpMM {
       , a_comm_ctl_()
       , b_comm_ctl_()
       , plan_(nullptr) {
-    plan_ = std::make_shared<Plan>(a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
-                                   mTiles, nTiles, kTiles, keymap, P, Q, memory, forced_split, lookahead);
+    plan_ =
+        std::make_shared<Plan>(a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles,
+                               nTiles, kTiles, keymap, P, Q, memory, forced_split, lookahead, comm_threshold);
 
     coordinator_ = std::make_unique<Coordinator>(progress_ctl, ctl_riks_, ctl_rkjs_, c2c_ctl_, plan_, keymap);
 
@@ -315,7 +316,7 @@ class SpMM {
          const std::vector<std::vector<long>> &b_rowidx_to_colidx,
          const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<long> &mTiles,
          const std::vector<long> &nTiles, const std::vector<long> &kTiles, const Keymap &keymap, const long P,
-         const long Q, const size_t memory, const long forced_split, const long lookahead)
+         const long Q, const size_t memory, const long forced_split, const long lookahead, const long threshold)
         : a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , a_colidx_to_rowidx_(a_colidx_to_rowidx)
         , b_rowidx_to_colidx_(b_rowidx_to_colidx)
@@ -809,6 +810,8 @@ class SpMM {
       } else {
         bset = &(std::get<4>(steps_)[rank][comm_step]);
       }
+
+      if (nullptr == *bset) return res;
 
       for (auto it : *bset) {
         long r;
@@ -1993,7 +1996,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
                               const std::vector<std::vector<long>> &b_rowidx_to_colidx,
                               const std::vector<std::vector<long>> &b_colidx_to_rowidx, std::vector<long> &mTiles,
                               std::vector<long> &nTiles, std::vector<long> &kTiles, int M, int N, int K, int P, int Q,
-                              size_t memory, const long forced_split, long lookahead) {
+                              size_t memory, const long forced_split, long lookahead, long comm_threshold) {
   int MT = (int)A.rows();
   int NT = (int)B.cols();
   int KT = (int)A.cols();
@@ -2011,10 +2014,10 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   auto &c_status = c.status();
   assert(!has_value(c_status));
   SpMM<> a_times_b(ctl, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
-                   mTiles, nTiles, kTiles, keymap, P, Q, memory, forced_split, lookahead);
+                   mTiles, nTiles, kTiles, keymap, P, Q, memory, forced_split, lookahead, comm_threshold);
   TTGUNUSED(a_times_b);
 
-  auto connected = make_graph_executable(&control);
+  auto connected = make_graph_executable(&control, a_times_b.get_reada(), a_times_b.get_readb());
   assert(connected);
   TTGUNUSED(connected);
 
@@ -2177,6 +2180,7 @@ int main(int argc, char **argv) {
     size_t memory = 64 * 1024 * 1024;
     long lookahead = 1;
     long forced_split = 0;
+    long comm_threshold = 8;
 
     std::string LookaheadStr(getCmdOption(argv, argv + argc, "-l"));
     lookahead = parseOption(LookaheadStr, lookahead);
@@ -2184,6 +2188,8 @@ int main(int argc, char **argv) {
     memory = parseOption(MemoryStr, memory);
     std::string ForcedSplitStr(getCmdOption(argv, argv + argc, "-dim"));
     forced_split = parseOption(ForcedSplitStr, forced_split);
+    std::string CommThresholdStr(getCmdOption(argv, argv + argc, "-com"));
+    comm_threshold = parseOption(CommThresholdStr, comm_threshold);
 
     const auto &keymap = [P, Q](const Key<2> &key) {
       int i = (int)key[0];
@@ -2281,7 +2287,7 @@ int main(int argc, char **argv) {
       for (int nrun = 0; nrun < nb_runs; nrun++) {
         timed_measurement(A, B, keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
                           a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles, nTiles, kTiles, M, N, K,
-                          P, Q, memory, forced_split, lookahead);
+                          P, Q, memory, forced_split, lookahead, comm_threshold);
       }
     } else {
       // flow graph needs to exist on every node
@@ -2294,13 +2300,13 @@ int main(int argc, char **argv) {
       assert(!has_value(c_status));
       //  SpMM a_times_b(world, eA, eB, eC, A, B);
       SpMM<> a_times_b(ctl, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
-                       mTiles, nTiles, kTiles, keymap, P, Q, memory, forced_split, lookahead);
+                       mTiles, nTiles, kTiles, keymap, P, Q, memory, forced_split, lookahead, comm_threshold);
 
       if (get_default_world().rank() == 0)
         std::cout << Dot{}(a_times_b.get_reada(), a_times_b.get_readb()) << std::endl;
 
       // ready to run!
-      auto connected = make_graph_executable(&control);
+      auto connected = make_graph_executable(&control, a_times_b.get_reada(), a_times_b.get_readb());
       assert(connected);
       TTGUNUSED(connected);
 
