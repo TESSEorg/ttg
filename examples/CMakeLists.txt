@@ -11,7 +11,13 @@ if (TARGET eigen3)
     # block-sparse needs BTAS
     if (TARGET BTAS::BTAS)
         # since only need to use matrices, limit BTAS_TARGET_MAX_INDEX_RANK to 2
-        add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES eigen3 BTAS Boost::boost COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2)
+        set(_bspmm_libs eigen3 BTAS Boost::boost)
+        set(_bspmm_defs BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2)
+        if (TARGET Libint2::cxx)
+            list(APPEND _bspmm_libs Libint2::cxx)
+            list(APPEND _bspmm_defs BSPMM_HAS_LIBINT=1)
+        endif(TARGET Libint2::cxx)
+        add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES ${_bspmm_libs} COMPILE_DEFINITIONS ${_bspmm_defs})
     endif (TARGET BTAS::BTAS)
 endif(TARGET eigen3)
 

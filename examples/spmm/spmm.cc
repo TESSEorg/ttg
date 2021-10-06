@@ -30,6 +30,7 @@
 
 #ifdef BSPMM_HAS_LIBINT
 #include <libint2.hpp>
+#include <thread>
 #endif
 
 #include "ttg.h"
@@ -847,7 +848,7 @@ static void initSpHardCoded(const std::function<int(const Key<2> &)> &keymap, Sp
   B_elements.emplace_back(3, 2, 0.2);
   B.setFromTriplets(B_elements.begin(), B_elements.end());
 }
-#else   // !defined(BLOCK_SPARSE_GEMM)
+#else  // !defined(BLOCK_SPARSE_GEMM)
 static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, SpMatrix<> &A, SpMatrix<> &B,
                               SpMatrix<> &C, SpMatrix<> &Aref, SpMatrix<> &Bref, bool buildRefs,
                               std::vector<int> &mTiles, std::vector<int> &nTiles, std::vector<int> &kTiles,
@@ -1063,7 +1064,240 @@ static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, siz
 
   average_tile_volume = (double)avg_nb / avg_nb_nb;
 }
-#endif  // !defined(BLOCK_SPARSE_GEMM)
+
+#ifdef BSPMM_HAS_LIBINT
+static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_op_params,
+                            const std::vector<libint2::Atom> atoms, const std::string &basis_set_name,
+                            double tile_perelem_2norm_threshold, const std::function<int(const Key<2> &)> &keymap,
+                            int maxTs, int nthreads, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &Aref, SpMatrix<> &Bref,
+                            bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles,
+                            std::vector<int> &kTiles, std::vector<std::vector<long>> &a_rowidx_to_colidx,
+                            std::vector<std::vector<long>> &a_colidx_to_rowidx,
+                            std::vector<std::vector<long>> &b_rowidx_to_colidx,
+                            std::vector<std::vector<long>> &b_colidx_to_rowidx, double &average_tile_volume,
+                            double &Adensity, double &Bdensity) {
+  libint2::initialize();
+  int rank = ttg_default_execution_context().rank();
+
+  std::mutex mtx;  // will serialize access to non-concurrent data
+
+  /// fires off nthreads instances of lambda in parallel, using use C++ threads
+  auto parallel_do = [&nthreads, &mtx](auto &lambda) {
+    std::vector<std::thread> threads;
+    for (int thread_id = 0; thread_id != nthreads; ++thread_id) {
+      if (thread_id != nthreads - 1)
+        threads.push_back(std::thread(lambda, thread_id, &mtx));
+      else
+        lambda(thread_id, &mtx);
+    }  // threads_id
+    for (int thread_id = 0; thread_id < nthreads - 1; ++thread_id) threads[thread_id].join();
+  };
+
+  auto invert = [](const long dim2, const std::vector<size_t> &map12) {
+    std::vector<long> map21(dim2, -1);
+    for (size_t i1 = 0; i1 != map12.size(); ++i1) {
+      const auto i2 = map12[i1];
+      map21.at(i2) = i1;
+    }
+    return map21;
+  };
+
+  libint2::BasisSet bs(basis_set_name, atoms, /* throw_if_no_match = */ true);
+  auto atom2shell = bs.atom2shell(atoms);
+  auto shell2bf = bs.shell2bf();
+  auto bf2shell = invert(bs.nbf(), shell2bf);
+
+  // compute basis tilings by chopping into groups of atoms that are small enough
+  std::vector<int> bsTiles;
+  {
+    const int natoms = atoms.size();
+    int tile_size = 0;
+    for (int a = 0; a != natoms; ++a) {
+      auto &a_shells = atom2shell.at(a);
+      const auto nbf_a = std::accumulate(a_shells.begin(), a_shells.end(), 0,
+                                         [&bs](auto nbf, const auto &sh_idx) { return nbf + bs.at(sh_idx).size(); });
+      if (tile_size + nbf_a <= maxTs) {
+        tile_size += nbf_a;
+      } else {
+        if (tile_size == 0)  // 1 atom exceed max tile size, make the 1-atom tile
+          bsTiles.emplace_back(nbf_a);
+        else {
+          bsTiles.emplace_back(tile_size);
+          tile_size = nbf_a;
+        }
+        if (tile_size > maxTs) {
+          bsTiles.emplace_back(tile_size);
+          tile_size = 0;
+        }
+      }
+    }
+    if (tile_size > 0)  // last time
+      bsTiles.emplace_back(tile_size);
+  }
+  mTiles = bsTiles;
+  nTiles = bsTiles;
+  kTiles = bsTiles;
+
+  // fill the matrix, only insert tiles with norm greater than the threshold
+  auto fill_matrix = [&](const auto &tiles) {
+    SpMatrix<> M, Mref;
+
+    const auto ntiles = tiles.size();
+
+    M.resize(ntiles, ntiles);
+    if (buildRefs && rank == 0) {
+      Mref.resize(tiles.size(), tiles.size());
+    }
+
+    // this data will be computed concurrently
+    using triplet_t = Eigen::Triplet<blk_t>;
+    std::vector<triplet_t> elements;
+    std::vector<triplet_t> ref_elements;
+    double total_tile_volume = 0.;
+    std::vector<std::vector<long>> rowidx_to_colidx(ntiles), colidx_to_rowidx(ntiles);
+
+    auto fill_matrix_impl = [&](int thread_id, std::mutex *mtx) {
+      libint2::Engine engine(libint2_op, bs.max_nprim(), bs.max_l(), 0, std::numeric_limits<double>::epsilon(),
+                             libint2_op_params, libint2::BraKet::xs_xs);
+
+      const auto ntiles = tiles.size();
+      const auto nshell = bs.size();
+      const auto nbf = bs.nbf();
+      long row_bf_offset = 0;
+      for (auto row_tile_idx = 0; row_tile_idx != tiles.size(); ++row_tile_idx) {
+        const auto row_bf_fence = row_bf_offset + tiles[row_tile_idx];
+        const auto row_sh_offset = bf2shell.at(row_bf_offset);
+        assert(row_sh_offset != 1);
+        const auto row_sh_fence = (row_bf_fence != nbf) ? bf2shell.at(row_bf_fence) : nshell;
+        assert(row_sh_fence != 1);
+
+        long col_bf_offset =
+            row_bf_offset;  // N.B. compute only upper triangle (incl diag) since the matrix is symmetric
+        for (auto col_tile_idx = row_tile_idx; col_tile_idx != tiles.size(); ++col_tile_idx) {
+          const auto col_bf_fence = col_bf_offset + tiles[col_tile_idx];
+
+          // skip this tile if does not belong to this rank
+          const auto my_tile = (rank == keymap({row_tile_idx, col_tile_idx}) || (buildRefs && rank == 0)) &&
+                               ((row_tile_idx * ntiles + col_tile_idx) % nthreads == thread_id);
+          if (my_tile) {
+            const auto col_sh_offset = bf2shell.at(col_bf_offset);
+            assert(col_sh_offset != 1);
+            const auto col_sh_fence = (col_bf_fence != nbf) ? bf2shell.at(col_bf_fence) : nshell;
+            assert(col_sh_fence != 1);
+
+            blk_t tile(btas::Range({row_bf_offset, col_bf_offset}, {row_bf_fence, col_bf_fence}), 0.);
+
+            for (auto row_sh_idx = row_sh_offset; row_sh_idx != row_sh_fence; ++row_sh_idx) {
+              const auto &row_sh = bs.at(row_sh_idx);
+              const auto row_sh_bf_offset = shell2bf.at(row_sh_idx);
+              for (auto col_sh_idx = col_sh_offset; col_sh_idx != col_sh_fence; ++col_sh_idx) {
+                const auto &col_sh = bs.at(col_sh_idx);
+                const auto col_sh_bf_offset = shell2bf.at(col_sh_idx);
+
+                engine.compute(row_sh, col_sh);
+
+                // copy to the tile
+                {
+                  const auto *shellset = engine.results()[0];
+                  for (auto bf0 = 0, bf01 = 0; bf0 != row_sh.size(); ++bf0)
+                    for (auto bf1 = 0; bf1 != col_sh.size(); ++bf1, ++bf01)
+                      tile(row_sh_bf_offset + bf0, col_sh_bf_offset + bf1) = shellset[bf01];
+                }
+              }
+            }
+
+            const auto tile_volume = tile.range().volume();
+            const auto tile_perelem_2norm = std::sqrt(btas::dot(tile, tile)) / tile_volume;
+
+            if (tile_perelem_2norm >= tile_perelem_2norm_threshold) {
+              {
+                std::scoped_lock<std::mutex> lock(*mtx);
+                elements.emplace_back(row_tile_idx, col_tile_idx, tile);
+                if (buildRefs && rank == 0) {
+                  ref_elements.emplace_back(row_tile_idx, col_tile_idx, tile);
+                }
+                rowidx_to_colidx.at(row_tile_idx).emplace_back(col_tile_idx);
+                colidx_to_rowidx.at(col_tile_idx).emplace_back(row_tile_idx);
+                total_tile_volume += tile.range().volume();
+              }
+              // put transposed tile to the lower triangle
+              if (row_tile_idx != col_tile_idx) {
+                blk_t tile_tr;
+                btas::permute(tile, {1, 0}, tile_tr);
+                std::scoped_lock<std::mutex> lock(*mtx);
+                elements.emplace_back(col_tile_idx, row_tile_idx, tile_tr);
+                if (buildRefs && rank == 0) {
+                  ref_elements.emplace_back(col_tile_idx, row_tile_idx, tile_tr);
+                }
+                rowidx_to_colidx.at(col_tile_idx).emplace_back(row_tile_idx);
+                colidx_to_rowidx.at(row_tile_idx).emplace_back(col_tile_idx);
+                total_tile_volume += tile_tr.range().volume();
+              }
+            }
+          }  // !my_tile
+
+          col_bf_offset = col_bf_fence;
+        }
+        row_bf_offset = row_bf_fence;
+      }
+    };
+
+    parallel_do(fill_matrix_impl);
+
+    long nnz_tiles = elements.size();  // # of nonzero tiles, currently on this rank only
+
+    // allreduce metadata: rowidx_to_colidx, colidx_to_rowidx, total_tile_volume, nnz_tiles
+    ttg_sum(ttg_default_execution_context(), nnz_tiles);
+    ttg_sum(ttg_default_execution_context(), total_tile_volume);
+    auto allreduce_vevveclong = [&](std::vector<std::vector<long>> &vvl) {
+      std::vector<std::vector<long>> vvl_result(vvl.size());
+      for (long source_rank = 0; source_rank != ttg_default_execution_context().size(); ++source_rank) {
+        for (auto rowidx = 0; rowidx != ntiles; ++rowidx) {
+          long sz = vvl.at(rowidx).size();
+          MPI_Bcast(&sz, 1, MPI_LONG, source_rank, ttg_default_execution_context().impl().comm());
+          if (rank == source_rank) {
+            MPI_Bcast(vvl[rowidx].data(), sz, MPI_LONG, source_rank, ttg_default_execution_context().impl().comm());
+            vvl_result.at(rowidx).insert(vvl_result[rowidx].end(), vvl[rowidx].begin(), vvl[rowidx].end());
+          } else {
+            std::vector<long> colidxs(sz);
+            MPI_Bcast(colidxs.data(), sz, MPI_LONG, source_rank, ttg_default_execution_context().impl().comm());
+            vvl_result.at(rowidx).insert(vvl_result[rowidx].end(), colidxs.begin(), colidxs.end());
+          }
+        }
+      }
+      vvl = std::move(vvl_result);
+    };
+    allreduce_vevveclong(rowidx_to_colidx);
+    allreduce_vevveclong(colidx_to_rowidx);
+
+    for (auto &row : rowidx_to_colidx) {
+      std::sort(row.begin(), row.end());
+    }
+    for (auto &col : colidx_to_rowidx) {
+      std::sort(col.begin(), col.end());
+    }
+
+    const auto nbf = bs.nbf();
+    const double density = total_tile_volume / (nbf * nbf);
+    const auto avg_tile_volume = total_tile_volume / elements.size();
+    M.setFromTriplets(elements.begin(), elements.end());
+    if (buildRefs && rank == 0) Mref.setFromTriplets(ref_elements.begin(), ref_elements.end());
+
+    return std::make_tuple(M, Mref, rowidx_to_colidx, colidx_to_rowidx, avg_tile_volume, density);
+  };
+
+  std::tie(A, Aref, a_rowidx_to_colidx, a_colidx_to_rowidx, average_tile_volume, Adensity) = fill_matrix(bsTiles);
+  B = A;
+  Bref = Aref;
+  b_rowidx_to_colidx = a_rowidx_to_colidx;
+  b_colidx_to_rowidx = a_colidx_to_rowidx;
+  Bdensity = Adensity;
+
+  libint2::finalize();
+}
+#endif  // defined(BSPMM_HAS_LIBINT)
+
+#endif  // defined(BLOCK_SPARSE_GEMM)
 
 static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<int(const Key<2> &)> &keymap,
                               const std::string &tiling_type, double gflops, double avg_nb, double Adensity,
@@ -1190,6 +1424,8 @@ int main(int argc, char **argv) {
     ttg_initialize(1, argv, cores);
   }
 
+  // launch_lldb(ttg_default_execution_context().rank(), argv[0]);
+
   std::string debugStr(getCmdOption(argv, argv + argc, "-d"));
   auto debug = (unsigned int)parseOption(debugStr, 0);
 
@@ -1199,8 +1435,8 @@ int main(int argc, char **argv) {
     Debugger::set_default_debugger(debugger);
     debugger->set_exec(argv[0]);
     debugger->set_prefix(ttg_default_execution_context().rank());
-    // debugger->set_cmd("lldb_xterm");
-    debugger->set_cmd("gdb_xterm");
+    debugger->set_cmd("lldb_xterm");
+    // debugger->set_cmd("gdb_xterm");
   }
 
   int mpi_size = ttg_default_execution_context().size();
@@ -1227,7 +1463,7 @@ int main(int argc, char **argv) {
 
     SpMatrix<> A, B, C, Aref, Bref;
     std::string tiling_type;
-    int M = 0, N = 0, K = 0;
+    int M = -1, N = -1, K = -1;
 
     double avg_nb = nan("undefined");
     double Adensity = nan("undefined");
@@ -1310,8 +1546,9 @@ int main(int argc, char **argv) {
     for (int mt = 0; mt < M; mt++) mTiles.emplace_back(1);
     for (int nt = 0; nt < N; nt++) nTiles.emplace_back(1);
     for (int kt = 0; kt < K; kt++) kTiles.emplace_back(1);
-#else   // !defined(BLOCK_SPARSE_GEMM)
+#else  // !defined(BLOCK_SPARSE_GEMM)
     if (argc >= 2) {
+#ifndef BSPMM_HAS_LIBINT
       std::string Mstr(getCmdOption(argv, argv + argc, "-M"));
       M = parseOption(Mstr, 1200);
       std::string Nstr(getCmdOption(argv, argv + argc, "-N"));
@@ -1329,6 +1566,24 @@ int main(int argc, char **argv) {
       initBlSpRandom(bc_keymap, M, N, K, minTs, maxTs, avg, A, B, Aref, Bref, check, mTiles, nTiles, kTiles,
                      a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, avg_nb, Adensity,
                      Bdensity, seed);
+#else
+      std::string xyz_filename(getCmdOption(argv, argv + argc, "-y"));
+      if (xyz_filename.empty()) throw std::runtime_error("missing -y argument to the libint2-based bspmm example");
+      std::ifstream xyz_file(xyz_filename);
+      auto atoms = libint2::read_dotxyz(xyz_file);
+      std::string basis_name(getCmdOption(argv, argv + argc, "-b"));
+      if (basis_name.empty()) basis_name = "cc-pvdz";
+      std::string op_param_str(getCmdOption(argv, argv + argc, "-p"));
+      auto op_param = parseOption(op_param_str, 1.);
+      std::string maxTsStr(getCmdOption(argv, argv + argc, "-T"));
+      int maxTs = parseOption(maxTsStr, 256);
+      std::string eps_param_str(getCmdOption(argv, argv + argc, "-e"));
+      double tile_perelem_2norm_threshold = parseOption(eps_param_str, 1e-5);
+      initBlSpLibint2(libint2::Operator::yukawa, libint2::any{op_param}, atoms, basis_name,
+                      tile_perelem_2norm_threshold, bc_keymap, maxTs, cores, A, B, Aref, Bref, check, mTiles, nTiles,
+                      kTiles, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, avg_nb,
+                      Adensity, Bdensity);
+#endif
       C.resize(mTiles.size(), nTiles.size());
     } else {
       tiling_type = "HardCodedBlockSparseMatrix";
@@ -1336,6 +1591,10 @@ int main(int argc, char **argv) {
                         a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, M, N, K);
     }
 #endif  // !defined(BLOCK_SPARSE_GEMM)
+
+    if (M == -1) M = std::accumulate(mTiles.begin(), mTiles.end(), 0);
+    if (N == -1) N = std::accumulate(nTiles.begin(), nTiles.end(), 0);
+    if (K == -1) K = std::accumulate(kTiles.begin(), kTiles.end(), 0);
 
     gflops = compute_gflops(a_rowidx_to_colidx, b_rowidx_to_colidx, mTiles, nTiles, kTiles);
 
