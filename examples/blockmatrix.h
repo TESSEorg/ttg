@@ -193,12 +193,21 @@ class Matrix {
  public:
   Matrix() = default;
   Matrix(int nb_row, int nb_col, int b_rows, int b_cols)
+      : Matrix(nb_row, nb_col, b_rows, b_cols, [](int i, int j){ return true; }) {
+
+  }
+
+  template<typename Predicate>
+  Matrix(int nb_row, int nb_col, int b_rows, int b_cols, Predicate&& p)
       : nb_row(nb_row), nb_col(nb_col), b_rows(b_rows), b_cols(b_cols) {
     for (int i = 0; i < nb_row; i++)
       for (int j = 0; j < nb_col; j++) {
-        m[std::make_pair(i, j)] = BlockMatrix<T>(b_rows, b_cols);
+        if (p(i, j)) {
+          m[std::make_pair(i, j)] = BlockMatrix<T>(b_rows, b_cols);
+        }
       }
   }
+
 
   ~Matrix() {}
 
@@ -212,7 +221,12 @@ class Matrix {
 
   void fill() {
     for (int i = 0; i < nb_row; i++)
-      for (int j = 0; j < nb_col; j++) m[std::make_pair(i, j)].fill();
+      for (int j = 0; j < nb_col; j++) {
+        auto it = m.find(std::make_pair(i, j));
+        if (it != m.end()) {
+          it->second.fill();
+        }
+      }
   }
 
   bool operator==(const Matrix& matrix) const { return (matrix.m == m); }

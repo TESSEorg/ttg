@@ -118,10 +118,18 @@ class Initiator : public Op<int,
 
  public:
   Initiator(Matrix<T>* adjacency_matrix_ttg, const std::string& name)
-      : baseT(name, {}, {"outA", "outB", "outC", "outD"}), adjacency_matrix_ttg(adjacency_matrix_ttg) {}
+      : baseT(name, {}, {"outA", "outB", "outC", "outD"}), adjacency_matrix_ttg(adjacency_matrix_ttg) {
+        /* Initiator should run on all ranks */
+        auto rank = ttg_default_execution_context().rank();
+        this->set_keymap([=](int i){ return rank; });
+      }
   Initiator(Matrix<T>* adjacency_matrix_ttg, const typename baseT::output_edges_type& outedges, const std::string& name)
       : baseT(edges(), outedges, name, {}, {"outA", "outB", "outC", "outD"})
-      , adjacency_matrix_ttg(adjacency_matrix_ttg) {}
+      , adjacency_matrix_ttg(adjacency_matrix_ttg) {
+        /* Initiator should run on all ranks */
+        auto rank = ttg_default_execution_context().rank();
+        this->set_keymap([=](int i){ return rank; });
+      }
 
   ~Initiator() {}
 
@@ -606,8 +614,9 @@ class FloydWarshall {
   int blocking_factor;
 
  public:
+  template<typename Keymap>
   FloydWarshall(Matrix<T>* adjacency_matrix_ttg, Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor,
-                const std::string& kernel_type, int recursive_fan_out, int base_size, T* adjacency_matrix_serial,
+                const std::string& kernel_type, int recursive_fan_out, int base_size, T* adjacency_matrix_serial, Keymap&& keymap,
                 bool verify_results = false)
       : initiator(adjacency_matrix_ttg, "initiator")
       , funcA(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcA")
@@ -618,6 +627,11 @@ class FloydWarshall {
                   "finalizer", adjacency_matrix_serial, verify_results)
       , world(ttg::get_default_world())
       , blocking_factor(blocking_factor) {
+    funcA.set_keymap(keymap);
+    funcB.set_keymap(keymap);
+    funcC.set_keymap(keymap);
+    funcD.set_keymap(keymap);
+    finalizer.set_keymap(keymap);
     initiator.template out<0>()->connect(funcA.template in<0>());
     initiator.template out<1>()->connect(funcB.template in<0>());
     initiator.template out<2>()->connect(funcC.template in<0>());
@@ -658,7 +672,7 @@ class FloydWarshall {
   void print() {}  //{Print()(&producer);}
   std::string dot() { return Dot()(&initiator); }
   void start() {
-    if (world.rank() == 0) initiator.invoke(blocking_factor);
+    initiator.invoke(blocking_factor);
     ttg_execute(world);
   }
   void fence() { ttg_fence(world); }
@@ -740,8 +754,19 @@ int main(int argc, char** argv) {
   int n_brows = (problem_size / block_size) + (problem_size % block_size > 0);
   int n_bcols = n_brows;
 
-  Matrix<double>* m = new Matrix<double>(n_brows, n_bcols, block_size, block_size);
-  Matrix<double>* r = new Matrix<double>(n_brows, n_bcols, block_size, block_size);
+  int rank = world.rank();
+  int P  = std::sqrt(world.size());
+  int Q  = world.size() / P;
+  auto keymap = [=](const Key &key) {
+    int I = key.execution_info.first.first;
+    int J = key.execution_info.first.second;
+    return ((I%P) + (J%Q)*P);
+  };
+
+  auto predicate = [=](int i, int j){ return keymap(Key{i, j, 0}) == rank; };
+
+  Matrix<double>* m = new Matrix<double>(n_brows, n_bcols, block_size, block_size, predicate);
+  Matrix<double>* r = new Matrix<double>(n_brows, n_bcols, block_size, block_size, predicate);
 
   if (verify_results) {
     adjacency_matrix_serial = (double*)malloc(sizeof(double) * problem_size * problem_size);
@@ -766,7 +791,7 @@ int main(int argc, char** argv) {
   std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
   // Calling the blocked implementation of FW-APSP algorithm on ttg runtime
   FloydWarshall fw_apsp(m, r, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
-                        adjacency_matrix_serial, verify_results);
+                        adjacency_matrix_serial, keymap, verify_results);
   // std::cout << fw_apsp.dot() << std::endl;
   fw_apsp.start();
   fw_apsp.fence();
