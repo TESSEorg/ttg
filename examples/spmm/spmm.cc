@@ -806,12 +806,14 @@ class SpMM {
       std::vector<GemmCoordinate> res;
       const bcastset_t *bset;
       if (is_a) {
-        bset = &(std::get<3>(steps_)[rank][comm_step]);
+        const auto &comm_plan = std::get<3>(steps_)[rank];
+        if (comm_step >= comm_plan.size()) return res;
+        bset = &(comm_plan[comm_step]);
       } else {
-        bset = &(std::get<4>(steps_)[rank][comm_step]);
+        const auto &comm_plan = std::get<4>(steps_)[rank];
+        if (comm_step >= comm_plan.size()) return res;
+        bset = &(comm_plan[comm_step]);
       }
-
-      if (nullptr == *bset) return res;
 
       for (auto it : *bset) {
         long r;
@@ -1017,7 +1019,14 @@ class SpMM {
           ttg::print("On Rank", ttg_default_execution_context().rank(), ": Read_SpMatrix", is_a_ ? "A(" : "B(", rank,
                      ",", comm_step, ") sets the number of LBCast for step", comm_step + 1, "to", nb_seen);
         }
-        baseT::template set_argstream_size<0>(Key<2>{(long)rank, comm_step + 1}, nb_seen);
+        if (0 == nb_seen) {
+          ttg::print("On Rank", ttg_default_execution_context().rank(), ": Read_SpMatrix", is_a_ ? "A(" : "B(", rank,
+                     ",", comm_step, ") -- there are no local communications for this step");
+          baseT::template set_argstream_size<0>(Key<2>{(long)rank, comm_step + 1}, 1);
+          this->template in<0>()->send(Key<2>({(long)rank, comm_step + 1}), Control{});
+        } else {
+          baseT::template set_argstream_size<0>(Key<2>{(long)rank, comm_step + 1}, nb_seen);
+        }
       } else if (tracing()) {
         ttg::print("On Rank", ttg_default_execution_context().rank(), ": Read_SpMatrix", is_a_ ? "A(" : "B(", rank, ",",
                    comm_step, ") this is the last comm step, not setting any reduce values for the next");
