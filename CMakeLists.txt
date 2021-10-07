@@ -71,6 +71,11 @@ include(FindOrFetchBTAS)
 find_package(OpenMP COMPONENTS CXX)
 # std::execution may also be used by some examples
 find_package(CXXStdExecution)
+# bspmm can use libint2 to provide real data
+option(TTG_LIBINT "Whether to build the Libint2 gaussian integrals library" OFF)
+if (TTG_LIBINT)
+    include(FindOrFetchLibint2)
+endif(TTG_LIBINT)
 
 ##########################
 #### prerequisite runtimes
