@@ -701,6 +701,11 @@ void test2(size_t nfunc, T thresh = 1e-6) {
 
 int main(int argc, char** argv) {
     ttg_initialize(argc, argv, 2);
+    int num_fn = 1;
+    if (argc > 1) {
+      num_fn = std::atoi(argv[1]);
+    }
+
     //std::cout << "Hello from madttg\n";
 
     //vmlSetMode(VML_HA | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // default
@@ -714,7 +719,7 @@ int main(int argc, char** argv) {
         //test0<float,6,3>();
         //test1<float,6,3>();
         //test2<float,6,3>(20);
-        test2<double,10,3>(1, 1e-8);
+        test2<double,10,3>(num_fn, 1e-8);
         //test1<double,6,3>();
     }
 
