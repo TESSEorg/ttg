@@ -63,6 +63,25 @@ struct KeyProcMap {
 //     }
 // };
 
+template <Dimension NDIM>
+class LevelPmapX {
+ private:
+     const int nproc;
+ public:
+    LevelPmapX() : nproc(0) {};
+
+    LevelPmapX(size_t nproc) : nproc(nproc) {}
+
+    /// Find the owner of a given key
+    HashValue operator()(const Key<3>& key) const {
+      Level n = key.level();
+      if (n == 0) return 0;
+        madness::hashT hash;
+        if (n <= 3 || (n&0x1)) hash = key.hash();
+        else hash = key.parent().hash();
+        return hash%nproc;
+    }
+ };
 
 /// A pmap that spatially decomposes the domain and by default slightly overdcomposes to attempt to load balance
 template <Dimension NDIM>
@@ -697,8 +716,9 @@ void test2(size_t nfunc, T thresh = 1e-6) {
 template <typename T, size_t K, Dimension NDIM>
 void test2(size_t nfunc, T thresh = 1e-6) {
     FunctionData<T,K,NDIM>::initialize();
-    PartitionPmap<NDIM> pmap =  PartitionPmap<NDIM>(ttg_default_execution_context().size());
+    //PartitionPmap<NDIM> pmap =  PartitionPmap<NDIM>(ttg_default_execution_context().size());
     Domain<NDIM>::set_cube(-6.0,6.0);
+    LevelPmapX<NDIM> pmap = LevelPmapX<NDIM>(ttg_default_execution_context().size());
 
     srand48(5551212); // for reproducible results
     for (auto i : range(10000)) drand48(); // warmup generator
@@ -780,8 +800,8 @@ void test2(size_t nfunc, T thresh = 1e-6) {
     
     if (ttg_default_execution_context().rank() == 0) {
         end = std::chrono::high_resolution_clock::now();
-        std::cout << "TTG Execution Time (milliseconds) : "
-              << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
+        std::cout << "TTG Execution Time (seconds) : "
+              << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000000.0 << std::endl;
 
     }
 }
