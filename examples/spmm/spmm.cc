@@ -256,18 +256,17 @@ class SpMM {
         std::make_shared<Plan>(a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles,
                                nTiles, kTiles, keymap, P, Q, memory, forced_split, lookahead, comm_threshold);
 
-    coordinator_ = std::make_unique<Coordinator>(progress_ctl, ctl_riks_, ctl_rkjs_, c2c_ctl_, plan_, keymap);
-
-    read_a_ = std::make_unique<Read_SpMatrix>("A", a_mat, a_comm_ctl_, a_ik_, plan_, keymap);
-    bcast_a_ = std::make_unique<BcastA>(a_ik_, a_rik_, plan_, keymap);
-    lstore_a_ = std::make_unique<LStoreA>(a_rik_, a_riks_, a_comm_ctl_, plan_, keymap);
     lbcast_a_ = std::make_unique<LBcastA>(a_riks_, ctl_riks_, a_ijk_, plan_, keymap);
+    lstore_a_ = std::make_unique<LStoreA>(a_rik_, a_riks_, a_comm_ctl_, plan_, keymap);
+    bcast_a_ = std::make_unique<BcastA>(a_ik_, a_rik_, plan_, keymap);
+    read_a_ = std::make_unique<Read_SpMatrix>("A", a_mat, a_comm_ctl_, a_ik_, plan_, keymap);
 
-    read_b_ = std::make_unique<Read_SpMatrix>("B", b_mat, b_comm_ctl_, b_kj_, plan_, keymap);
-    bcast_b_ = std::make_unique<BcastB>(b_kj_, b_rkj_, plan_, keymap);
-    lstore_b_ = std::make_unique<LStoreB>(b_rkj_, b_rkjs_, b_comm_ctl_, plan_, keymap);
     lbcast_b_ = std::make_unique<LBcastB>(b_rkjs_, ctl_rkjs_, b_ijk_, plan_, keymap);
+    lstore_b_ = std::make_unique<LStoreB>(b_rkj_, b_rkjs_, b_comm_ctl_, plan_, keymap);
+    bcast_b_ = std::make_unique<BcastB>(b_kj_, b_rkj_, plan_, keymap);
+    read_b_ = std::make_unique<Read_SpMatrix>("B", b_mat, b_comm_ctl_, b_kj_, plan_, keymap);
 
+    coordinator_ = std::make_unique<Coordinator>(progress_ctl, ctl_riks_, ctl_rkjs_, c2c_ctl_, plan_, keymap);
     multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c_flow, progress_ctl, plan_, keymap);
 
     TTGUNUSED(bcast_a_);
