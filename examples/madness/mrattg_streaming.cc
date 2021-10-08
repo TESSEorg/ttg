@@ -809,7 +809,7 @@ void test2(size_t nfunc, T thresh = 1e-6) {
 }
 
 int main(int argc, char** argv) {
-    ttg_initialize(argc, argv, 2);
+    ttg_initialize(argc, argv, -1);
     int num_fn = 1;
     if (argc > 1) {
       num_fn = std::atoi(argv[1]);
