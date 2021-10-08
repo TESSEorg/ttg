@@ -2109,9 +2109,8 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
         const auto row_sh_fence = (row_bf_fence != nbf) ? bf2shell.at(row_bf_fence) : nshell;
         assert(row_sh_fence != 1);
 
-        long col_bf_offset =
-            row_bf_offset;  // N.B. compute only upper triangle (incl diag) since the matrix is symmetric
-        for (auto col_tile_idx = row_tile_idx; col_tile_idx != tiles.size(); ++col_tile_idx) {
+        long col_bf_offset = 0;
+        for (auto col_tile_idx = 0; col_tile_idx != tiles.size(); ++col_tile_idx) {
           const auto col_bf_fence = col_bf_offset + tiles[col_tile_idx];
 
           // skip this tile if does not belong to this rank
@@ -2157,19 +2156,6 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
                 rowidx_to_colidx.at(row_tile_idx).emplace_back(col_tile_idx);
                 colidx_to_rowidx.at(col_tile_idx).emplace_back(row_tile_idx);
                 total_tile_volume += tile.range().volume();
-              }
-              // put transposed tile to the lower triangle
-              if (row_tile_idx != col_tile_idx) {
-                blk_t tile_tr;
-                btas::permute(tile, {1, 0}, tile_tr);
-                std::scoped_lock<std::mutex> lock(*mtx);
-                elements.emplace_back(col_tile_idx, row_tile_idx, tile_tr);
-                if (buildRefs && rank == 0) {
-                  ref_elements.emplace_back(col_tile_idx, row_tile_idx, tile_tr);
-                }
-                rowidx_to_colidx.at(col_tile_idx).emplace_back(row_tile_idx);
-                colidx_to_rowidx.at(row_tile_idx).emplace_back(col_tile_idx);
-                total_tile_volume += tile_tr.range().volume();
               }
             }
           }  // !my_tile
