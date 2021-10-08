@@ -2146,7 +2146,7 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
             }
 
             const auto tile_volume = tile.range().volume();
-            const auto tile_perelem_2norm = std::sqrt(btas::dot(tile, tile)) / tile_volume;
+            const auto tile_perelem_2norm = std::sqrt(btas::dot(tile, tile)) / static_cast<double>(tile_volume);
 
             if (tile_perelem_2norm >= tile_perelem_2norm_threshold) {
               {
