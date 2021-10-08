@@ -2008,8 +2008,8 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
                             const std::vector<libint2::Atom> atoms, const std::string &basis_set_name,
                             double tile_perelem_2norm_threshold, const std::function<int(const Key<2> &)> &keymap,
                             int maxTs, int nthreads, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &Aref, SpMatrix<> &Bref,
-                            bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles,
-                            std::vector<int> &kTiles, std::vector<std::vector<long>> &a_rowidx_to_colidx,
+                            bool buildRefs, std::vector<long> &mTiles, std::vector<long> &nTiles,
+                            std::vector<long> &kTiles, std::vector<std::vector<long>> &a_rowidx_to_colidx,
                             std::vector<std::vector<long>> &a_colidx_to_rowidx,
                             std::vector<std::vector<long>> &b_rowidx_to_colidx,
                             std::vector<std::vector<long>> &b_colidx_to_rowidx, double &average_tile_volume,
@@ -2046,7 +2046,7 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
   auto bf2shell = invert(bs.nbf(), shell2bf);
 
   // compute basis tilings by chopping into groups of atoms that are small enough
-  std::vector<int> bsTiles;
+  std::vector<long> bsTiles;
   {
     const int natoms = atoms.size();
     int tile_size = 0;
@@ -2084,7 +2084,7 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
 
     M.resize(ntiles, ntiles);
     if (buildRefs && rank == 0) {
-      Mref.resize(tiles.size(), tiles.size());
+      Mref.resize(ntiles, ntiles);
     }
 
     // this data will be computed concurrently
@@ -2191,7 +2191,7 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
       std::vector<std::vector<long>> vvl_result(vvl.size());
       for (long source_rank = 0; source_rank != ttg_default_execution_context().size(); ++source_rank) {
         for (auto rowidx = 0; rowidx != ntiles; ++rowidx) {
-          long sz = vvl.at(rowidx).size();
+          long sz = static_cast<long>(vvl.at(rowidx).size());
           MPI_Bcast(&sz, 1, MPI_LONG, source_rank, ttg_default_execution_context().impl().comm());
           if (rank == source_rank) {
             MPI_Bcast(vvl[rowidx].data(), sz, MPI_LONG, source_rank, ttg_default_execution_context().impl().comm());
