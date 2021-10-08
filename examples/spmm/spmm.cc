@@ -1825,7 +1825,7 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
     Bref_elements.emplace_back(2, 2, blk_t(btas::Range(256, 196), 7.2));
     Bref_elements.emplace_back(3, 2, blk_t(btas::Range(256, 196), 0.2));
   }
-#else /* BTAS_IS_USABLE */
+#else  /* BTAS_IS_USABLE */
   if (keymap({0, 0}) == rank) {
     B_elements.emplace_back(0, 0, 12.3);
   }
@@ -2235,9 +2235,9 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
 }
 #endif  // defined(BSPMM_HAS_LIBINT)
 
-#endif // defined(BTAS_IS_USABLE)
+#endif  // defined(BTAS_IS_USABLE)
 
-#endif // defined(BLOCK_SPARSE_GEMM)
+#endif  // defined(BLOCK_SPARSE_GEMM)
 
 static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<int(const Key<2> &)> &keymap,
                               const std::string &tiling_type, double gflops, double avg_nb, double Adensity,
