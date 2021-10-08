@@ -2032,12 +2032,12 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   assert(connected);
   TTGUNUSED(connected);
 
+  MPI_Barrier(MPI_COMM_WORLD);
   struct timeval start {
     0
   }, end{0}, diff{0};
   gettimeofday(&start, nullptr);
   // ready, go! need only 1 kick, so must be done by 1 thread only
-  MPI_Barrier(MPI_COMM_WORLD);
   if (ttg_default_execution_context().rank() == 0) control.start(a_times_b.initbound());
   ttg_fence(ttg_default_execution_context());
   gettimeofday(&end, nullptr);
