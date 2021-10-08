@@ -2392,7 +2392,7 @@ int main(int argc, char **argv) {
     }
 
     SpMatrix<> A, B, C, Aref, Bref;
-    std::string tiling_type;
+    std::stringstream tiling_type;
     int M = -1, N = -1, K = -1;
 
     double avg_nb = nan("undefined");
@@ -2463,14 +2463,14 @@ int main(int argc, char **argv) {
 #ifndef BLOCK_SPARSE_GEMM
     if (cmdOptionExists(argv, argv + argc, "-mm")) {
       char *filename = getCmdOption(argv, argv + argc, "-mm");
-      tiling_type = filename;
+      tiling_type << filename;
       initSpMatrixMarket(bc_keymap, filename, A, B, C, M, N, K);
     } else if (cmdOptionExists(argv, argv + argc, "-rmat")) {
       char *opt = getCmdOption(argv, argv + argc, "-rmat");
-      tiling_type = "RandomSparseMatrix";
+      tiling_type << "RandomSparseMatrix";
       initSpRmat(bc_keymap, opt, A, B, C, M, N, K, seed);
     } else {
-      tiling_type = "HardCodedSparseMatrix";
+      tiling_type << "HardCodedSparseMatrix";
       initSpHardCoded(bc_keymap, A, B, C, M, N, K);
     }
 
@@ -2506,7 +2506,7 @@ int main(int argc, char **argv) {
       std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
       double avg = parseOption(avgStr, 0.3);
       timing = (check == 0);
-      tiling_type = "RandomIrregularTiling";
+      tiling_type << "RandomIrregularTiling";
       initBlSpRandom(bc_keymap, M, N, K, minTs, maxTs, avg, A, B, Aref, Bref, check, mTiles, nTiles, kTiles,
                      a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, avg_nb, Adensity,
                      Bdensity, seed, P, Q);
@@ -2524,14 +2524,21 @@ int main(int argc, char **argv) {
       int maxTs = parseOption(maxTsStr, 256);
       std::string eps_param_str(getCmdOption(argv, argv + argc, "-e"));
       double tile_perelem_2norm_threshold = parseOption(eps_param_str, 1e-5);
+      std::cerr << "#Generating matrices with Libint2 on " << xyz_filename << " and " << cores << " cores" << std::endl;
+      auto start = std::chrono::high_resolution_clock::now();
       initBlSpLibint2(libint2::Operator::yukawa, libint2::any{op_param}, atoms, basis_name,
-                      tile_perelem_2norm_threshold, bc_keymap, maxTs, cores, A, B, Aref, Bref, check, mTiles, nTiles,
-                      kTiles, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, avg_nb,
-                      Adensity, Bdensity);
+                      tile_perelem_2norm_threshold, bc_keymap, maxTs, cores == -1 ? 1 : cores, A, B,
+                      Aref, Bref, check, mTiles, nTiles,kTiles, a_rowidx_to_colidx,
+                      a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, avg_nb,Adensity,
+                      Bdensity);
+      auto end = std::chrono::high_resolution_clock::now();
+      auto duration = duration_cast<std::chrono::seconds>(end-start);
+      std::cerr << "#Generation done (" << duration.count() << "s)" << std::endl;
+      tiling_type << xyz_filename << "_" << basis_name << "_" << tile_perelem_2norm_threshold << "_" << op_param;
 #endif
-      C.resize(mTiles.size(), nTiles.size());
+      C.resize(A.rows(), B.cols());
     } else {
-      tiling_type = "HardCodedBlockSparseMatrix";
+      tiling_type << "HardCodedBlockSparseMatrix";
       initBlSpHardCoded(bc_keymap, A, B, C, Aref, Bref, true, mTiles, nTiles, kTiles, a_rowidx_to_colidx,
                         a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, M, N, K);
     }
@@ -2550,7 +2557,7 @@ int main(int argc, char **argv) {
       // Start up engine
       ttg_execute(ttg_default_execution_context());
       for (int nrun = 0; nrun < nb_runs; nrun++) {
-        timed_measurement(A, B, bc_keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
+        timed_measurement(A, B, bc_keymap, tiling_type.str(), gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
                           a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles, nTiles, kTiles, M, N, K,
                           P, Q, memory, forced_split, lookahead, comm_threshold);
       }
@@ -2584,6 +2591,8 @@ int main(int argc, char **argv) {
       // validate C=A*B against the reference output
       assert(has_value(c_status));
       if (ttg_default_execution_context().rank() == 0) {
+        std::cout << "Product done, computing locally with Eigen to check" << std::endl;
+
         SpMatrix<> Cref = Aref * Bref;
 
         double norm_2_square, norm_inf;
@@ -2591,8 +2600,10 @@ int main(int argc, char **argv) {
         std::cout << "||Cref - C||_2      = " << std::sqrt(norm_2_square) << std::endl;
         std::cout << "||Cref - C||_\\infty = " << norm_inf << std::endl;
         if (norm_inf > 1e-9) {
-          std::cout << "Cref:\n" << Cref << std::endl;
-          std::cout << "C:\n" << C << std::endl;
+          if(Cref.nonZeros() < 100) {
+            std::cout << "Cref:\n" << Cref << std::endl;
+            std::cout << "C:\n" << C << std::endl;
+          }
           ttg_abort();
         }
       }
