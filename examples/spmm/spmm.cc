@@ -2113,9 +2113,11 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
         for (auto col_tile_idx = 0; col_tile_idx != tiles.size(); ++col_tile_idx) {
           const auto col_bf_fence = col_bf_offset + tiles[col_tile_idx];
 
-          // skip this tile if does not belong to this rank
+          // skip this tile if it does not belong to this rank
           const auto my_tile = (rank == keymap({row_tile_idx, col_tile_idx}) || (buildRefs && rank == 0)) &&
                                ((row_tile_idx * ntiles + col_tile_idx) % nthreads == thread_id);
+          const auto really_my_tile = (rank == keymap({row_tile_idx, col_tile_idx})) &&
+                                      ((row_tile_idx * ntiles + col_tile_idx) % nthreads == thread_id);
           if (my_tile) {
             const auto col_sh_offset = bf2shell.at(col_bf_offset);
             assert(col_sh_offset != 1);
@@ -2149,13 +2151,15 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
             if (tile_perelem_2norm >= tile_perelem_2norm_threshold) {
               {
                 std::scoped_lock<std::mutex> lock(*mtx);
-                elements.emplace_back(row_tile_idx, col_tile_idx, tile);
                 if (buildRefs && rank == 0) {
                   ref_elements.emplace_back(row_tile_idx, col_tile_idx, tile);
                 }
-                rowidx_to_colidx.at(row_tile_idx).emplace_back(col_tile_idx);
-                colidx_to_rowidx.at(col_tile_idx).emplace_back(row_tile_idx);
-                total_tile_volume += tile.range().volume();
+                if (really_my_tile) {
+                  elements.emplace_back(row_tile_idx, col_tile_idx, tile);
+                  rowidx_to_colidx.at(row_tile_idx).emplace_back(col_tile_idx);
+                  colidx_to_rowidx.at(col_tile_idx).emplace_back(row_tile_idx);
+                  total_tile_volume += tile.range().volume();
+                }
               }
             }
           }  // !my_tile
