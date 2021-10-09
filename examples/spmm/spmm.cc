@@ -711,11 +711,11 @@ class SpMM {
     std::tuple<long, bool> compute_next_k(long i, long j, long k) const {
       const auto &a_k_range = a_rowidx_to_colidx_.at(i);
       auto a_iter_fence = a_k_range.end();
-      auto a_iter = std::find(a_k_range.begin(), a_iter_fence, k);
+      auto a_iter = std::lower_bound(a_k_range.begin(), a_iter_fence, k);
       assert(a_iter != a_iter_fence);
       const auto &b_k_range = b_colidx_to_rowidx_.at(j);
       auto b_iter_fence = b_k_range.end();
-      auto b_iter = std::find(b_k_range.begin(), b_iter_fence, k);
+      auto b_iter = std::lower_bound(b_k_range.begin(), b_iter_fence, k);
       assert(b_iter != b_iter_fence);
       while (a_iter != a_iter_fence && b_iter != b_iter_fence) {
         ++a_iter;
@@ -2107,9 +2107,9 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
       for (auto row_tile_idx = 0; row_tile_idx != tiles.size(); ++row_tile_idx) {
         const auto row_bf_fence = row_bf_offset + tiles[row_tile_idx];
         const auto row_sh_offset = bf2shell.at(row_bf_offset);
-        assert(row_sh_offset != 1);
+        assert(row_sh_offset != -1);
         const auto row_sh_fence = (row_bf_fence != nbf) ? bf2shell.at(row_bf_fence) : nshell;
-        assert(row_sh_fence != 1);
+        assert(row_sh_fence != -1);
 
         long col_bf_offset = 0;
         for (auto col_tile_idx = 0; col_tile_idx != tiles.size(); ++col_tile_idx) {
@@ -2122,9 +2122,9 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
                                       ((row_tile_idx * ntiles + col_tile_idx) % nthreads == thread_id);
           if (my_tile) {
             const auto col_sh_offset = bf2shell.at(col_bf_offset);
-            assert(col_sh_offset != 1);
+            assert(col_sh_offset != -1);
             const auto col_sh_fence = (col_bf_fence != nbf) ? bf2shell.at(col_bf_fence) : nshell;
-            assert(col_sh_fence != 1);
+            assert(col_sh_fence != -1);
 
             blk_t tile(btas::Range({row_bf_offset, col_bf_offset}, {row_bf_fence, col_bf_fence}), 0.);
 
