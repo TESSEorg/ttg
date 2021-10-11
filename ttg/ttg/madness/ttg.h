@@ -91,6 +91,8 @@ namespace ttg_madness {
 
     virtual int rank(void) const override { return m_impl.rank(); }
 
+    MPI_Comm comm() const { return m_impl.mpi.Get_mpi_comm(); }
+
     virtual void fence_impl(void) override { m_impl.gop.fence(); }
 
     ttg::Edge<> &ctl_edge() { return m_ctl_edge; }
