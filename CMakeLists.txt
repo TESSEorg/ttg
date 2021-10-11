@@ -51,8 +51,36 @@ if (FORCE_COLORED_OUTPUT)
 endif (FORCE_COLORED_OUTPUT)
 
 ##########################
-#### prerequisites
+#### discover runtimes
 ##########################
+# PaRSEC
+include(FindOrFetchPARSEC)
+if (TARGET PaRSEC::parsec)
+    message(STATUS "PARSEC_FOUND=1")
+endif(TARGET PaRSEC::parsec)
+# MADNESS
+include(FindOrFetchMADNESS)
+if (TARGET MADworld)
+    message(STATUS "MADNESS_FOUND=1")
+endif(TARGET MADworld)
+
+##########################
+#### other prerequisites
+##########################
+# Boost
+include(FindOrFetchBoost)
+# Cereal
+include(FindOrFetchCereal)
+
+##########################
+#### prerequisites for examples
+##########################
+# bspmm can use TiledArray for benchmarking
+# n.b. load TiledArray first since it provides Eigen, Boost, and BTAS
+option(TTG_TILEDARRAY "Whether to build the TiledArray tensor framework (MADNESS runtime only)" OFF)
+if (TARGET MADworld AND TTG_TILEDARRAY)
+    include(FindOrFetchTiledArray)
+endif(TARGET MADworld AND TTG_TILEDARRAY)
 # sparse tensor algorithms need Eigen
 find_package(Eigen3)
 message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
@@ -61,10 +89,6 @@ if (EIGEN3_FOUND)
   set_property(TARGET eigen3 PROPERTY
           INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
 endif (EIGEN3_FOUND)
-# Boost
-include(FindOrFetchBoost)
-# Cereal
-include(FindOrFetchCereal)
 # BTAS brings in linear algebra (BLAS++/LAPACK++)
 include(FindOrFetchBTAS)
 # OpenMP may also be used by some examples
@@ -76,21 +100,7 @@ option(TTG_LIBINT "Whether to build the Libint2 gaussian integrals library" OFF)
 if (TTG_LIBINT)
     include(FindOrFetchLibint2)
 endif(TTG_LIBINT)
-
-##########################
-#### prerequisite runtimes
-##########################
-# PaRSEC
-include(FindOrFetchPARSEC)
-if (TARGET PaRSEC::parsec)
-  message(STATUS "PARSEC_FOUND=1")
-endif(TARGET PaRSEC::parsec)
-# MADNESS
-include(FindOrFetchMADNESS)
-if (TARGET MADworld)
-  message(STATUS "MADNESS_FOUND=1")
-endif(TARGET MADworld)
-
+# for benchmarking potrf
 include(FindDPLASMA)
 
 ##########################

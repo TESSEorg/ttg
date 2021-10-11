@@ -33,6 +33,13 @@
 #include <thread>
 #endif
 
+// TA is only usable if MADNESS backend is used
+#if defined(BSPMM_HAS_TILEDARRAY) && defined(TTG_USE_MADNESS)
+# define BSPMM_BUILD_TA_TEST
+# include <tiledarray.h>
+# include <TiledArray/pmap/user_pmap.h>
+#endif
+
 #include "ttg.h"
 
 using namespace ttg;
@@ -44,7 +51,15 @@ using namespace ttg;
 #include "active-set-strategy.h"
 
 #if defined(BLOCK_SPARSE_GEMM)
-using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
+// shallow-copy storage
+using storage_type = btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>;
+// deep-copy storage
+//using storage_type = btas::varray<double>;
+# ifndef BSPMM_BUILD_TA_TEST  // TA overloads btas's impl of btas::dot with its own, but must use TA::Range
+using blk_t = btas::Tensor<double, btas::DEFAULT::range, storage_type>;
+# else
+using blk_t = btas::Tensor<double, TA::Range, storage_type>;
+# endif
 
 #if defined(TTG_USE_PARSEC)
 namespace ttg {
@@ -126,7 +141,7 @@ namespace btas {
     if (C.empty()) {
       C = btas::Tensor<T_, Range_, Store_>(btas::Range(A.range().extent(0), B.range().extent(1)), 0.0);
     }
-    btas::contract_222(1.0, A, array{1, 2}, B, array{2, 3}, 1.0, C, array{1, 3}, false, false);
+    btas::contract(1.0, A, {1, 2}, B, {2, 3}, 1.0, C, {1, 3});
     return std::move(C);
   }
 }  // namespace btas
@@ -2231,7 +2246,7 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
 
 #endif  // defined(BLOCK_SPARSE_GEMM)
 
-static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<int(const Key<2> &)> &keymap,
+static SpMatrix<> timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<int(const Key<2> &)> &keymap,
                               const std::string &tiling_type, double gflops, double avg_nb, double Adensity,
                               double Bdensity, const std::vector<std::vector<long>> &a_rowidx_to_colidx,
                               const std::vector<std::vector<long>> &a_colidx_to_rowidx,
@@ -2292,6 +2307,8 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
               << " average_nb_gemm_per_rank_per_phase= " << avg << " stdev_nb_gemm_per_rank_per_phase= " << stdev
               << std::endl;
   }
+
+  return C;
 }
 
 #if !defined(BLOCK_SPARSE_GEMM)
@@ -2535,8 +2552,8 @@ int main(int argc, char **argv) {
                       a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, avg_nb,Adensity,
                       Bdensity);
       auto end = std::chrono::high_resolution_clock::now();
-      auto duration = duration_cast<std::chrono::seconds>(end-start);
-      std::cerr << "#Generation done (" << duration.count() << "s)" << std::endl;
+      auto duration = duration_cast<std::chrono::microseconds>(end-start);
+      std::cerr << "#Generation done (" << duration.count()/1000000. << "s)" << std::endl;
       tiling_type << xyz_filename << "_" << basis_name << "_" << tile_perelem_2norm_threshold << "_" << op_param;
 #endif
       C.resize(A.rows(), B.cols());
@@ -2557,13 +2574,101 @@ int main(int argc, char **argv) {
     int nb_runs = parseOption(nbrunStr, 1);
 
     if (timing) {
+      SpMatrix<> C;  // store the result in case need to use it
+
       // Start up engine
       ttg_execute(ttg_default_execution_context());
       for (int nrun = 0; nrun < nb_runs; nrun++) {
-        timed_measurement(A, B, bc_keymap, tiling_type.str(), gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
+        C = timed_measurement(A, B, bc_keymap, tiling_type.str(), gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
                           a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles, nTiles, kTiles, M, N, K,
                           P, Q, memory, forced_split, lookahead, comm_threshold);
       }
+
+#ifdef BSPMM_BUILD_TA_TEST
+      {
+        // prelims
+        auto MT = mTiles.size();
+        auto NT = nTiles.size();
+        auto KT = kTiles.size();
+        auto& mad_world = ttg_default_execution_context().impl().impl();
+
+        // make tranges
+        auto make_trange1 = [](const auto& tile_sizes) {
+          std::vector<int64_t> hashes; hashes.reserve(tile_sizes.size()+1);
+          hashes.push_back(0);
+          for(auto& tile_size: tile_sizes) { hashes.push_back(hashes.back() + tile_size); }
+          return TiledArray::TiledRange1(hashes.begin(), hashes.end());
+        };
+        auto mtr1 = make_trange1(mTiles);
+        auto ntr1 = make_trange1(nTiles);
+        auto ktr1 = make_trange1(kTiles);
+        TA::TiledRange A_trange({mtr1, ktr1});
+        TA::TiledRange B_trange({ktr1, ntr1});
+        TA::TiledRange C_trange({mtr1, ntr1});
+
+        // make shapes
+        auto make_shape = [&mad_world](const SpMatrix<>& mat, const auto& trange) {
+          TA::Tensor<float> norms(TA::Range(mat.rows(), mat.cols()), 0.);
+          for (int k=0; k<mat.outerSize(); ++k) {
+            for (SpMatrix<>::InnerIterator it(mat, k); it; ++it) {
+              auto r = it.row();  // row index
+              auto c = it.col();  // col index (here it is equal to k)
+              const auto& v = it.value();
+              norms(r, c) = std::sqrt(btas::dot(v, v));
+            }
+          }
+          return TA::SparseShape<float>(mad_world, norms, trange);
+        };
+        auto A_shape = make_shape(A, A_trange);
+        auto B_shape = make_shape(B, B_trange);
+        auto C_shape = make_shape(C, C_trange);
+
+        // make pmaps
+        auto A_pmap = std::make_shared<TA::detail::UserPmap>(mad_world, MT*KT, [&](size_t mk) -> size_t { auto [m, k] = std::div((long)mk, (long)KT); return tile2rank(m, k, P, Q); } );
+        auto B_pmap = std::make_shared<TA::detail::UserPmap>(mad_world, KT*NT, [&](size_t kn) -> size_t { auto [k, n] = std::div((long)kn, (long)NT); return tile2rank(k, n, P, Q); } );
+        auto C_pmap = std::make_shared<TA::detail::UserPmap>(mad_world, MT*NT, [&](size_t mn) -> size_t { auto [m, n] = std::div((long)mn, (long)NT); return tile2rank(m, n, P, Q); } );
+
+        // make distarrays
+        auto make_ta = [&mad_world](const SpMatrix<>& mat, const auto& trange, const auto& shape, const auto& pmap) {
+          TA::TSpArrayD mat_ta(mad_world, trange, shape, pmap);
+          for (int k=0; k<mat.outerSize(); ++k) {
+            for (SpMatrix<>::InnerIterator it(mat, k); it; ++it) {
+              auto r = it.row();  // row index
+              auto c = it.col();  // col index (here it is equal to k)
+              assert(mat_ta.is_local({r, c}) && !mat_ta.is_zero({r, c}));
+              mat_ta.set({r, c}, TA::Tensor<double>(it.value()));
+            }
+          }
+          return mat_ta;
+        };
+        auto A_ta = make_ta(A, A_trange, A_shape, A_pmap);
+        auto B_ta = make_ta(B, B_trange, B_shape, B_pmap);
+
+        for (int nrun = 0; nrun < nb_runs; nrun++) {
+          auto start = std::chrono::high_resolution_clock::now();
+          TA::TSpArrayD C_ta;
+          C_ta("m,n") = (A_ta("m,k") * B_ta("k,n")).set_shape(C_shape);
+          C_ta.world().gop.fence();
+          auto end = std::chrono::high_resolution_clock::now();
+          auto duration = duration_cast<std::chrono::microseconds>(end-start);
+          std::cout << "Time to compute C=A*B in TiledArray = " << duration.count()/1000000. << std::endl;
+          auto print = [](const auto& label, const SpMatrix<>& mat) {
+            for (int k=0; k<mat.outerSize(); ++k) {
+              for (SpMatrix<>::InnerIterator it(mat, k); it; ++it) {
+                auto r = it.row();  // row index
+                auto c = it.col();  // col index (here it is equal to k)
+                std::cout << label << ": {" << r << "," << c << "}: " << it.value() << std::endl;
+              }
+            }
+          };
+//          print("A", A);
+//          print("C", C);
+//          std::cout << "A_ta = " << A_ta << std::endl;
+//          std::cout << "C_ta = " << C_ta << std::endl;
+        }
+      }
+#endif
+
     } else {
       // flow graph needs to exist on every node
       auto keymap_write = [](const Key<2> &key) { return 0; };
