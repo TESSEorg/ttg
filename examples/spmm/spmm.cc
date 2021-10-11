@@ -2061,6 +2061,7 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
   auto atom2shell = bs.atom2shell(atoms);
   auto shell2bf = bs.shell2bf();
   auto bf2shell = invert(bs.nbf(), shell2bf);
+  std::cout << "basis set size = " << bs.nbf() << std::endl;
 
   // compute basis tilings by chopping into groups of atoms that are small enough
   std::vector<long> bsTiles;

@@ -5,7 +5,10 @@ if (TARGET Libint2::libint2_cxx)
 else(TARGET Libint2::libint2_cxx)
 
   if (NOT DEFINED LIBINT2_URL)
-    set(LIBINT2_URL https://github.com/evaleev/libint/releases/download/v2.7.0/libint-2.7.0-test-mpqc4.tgz)
+    #set(LIBINT2_URL https://github.com/evaleev/libint/releases/download/v2.7.1/libint-2.7.1.tgz)
+    # custom 2c2b-only, lmax=5 library for TTG
+    # gdrive link: https://drive.google.com/file/d/19SW7afuVCCnSDOFUACz3ihXDVEfPtT97/view?usp=sharing
+    set(LIBINT2_URL https://drive.google.com/uc?export=download&id=19SW7afuVCCnSDOFUACz3ihXDVEfPtT97)
   endif(NOT DEFINED LIBINT2_URL)
   message(STATUS "Will obtain Libint2 from ${LIBINT2_URL}")
   set(URL_SPEC URL "${LIBINT2_URL}")
