@@ -2025,7 +2025,7 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
                             const std::vector<libint2::Atom> atoms, const std::string &basis_set_name,
                             double tile_perelem_2norm_threshold, const std::function<int(const Key<2> &)> &keymap,
                             int maxTs, int nthreads, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &Aref, SpMatrix<> &Bref,
-                            bool buildRefs, std::vector<long> &mTiles, std::vector<long> &nTiles,
+                            bool buildRefs, std::string saveShapeId, std::vector<long> &mTiles, std::vector<long> &nTiles,
                             std::vector<long> &kTiles, std::vector<std::vector<long>> &a_rowidx_to_colidx,
                             std::vector<std::vector<long>> &a_colidx_to_rowidx,
                             std::vector<std::vector<long>> &b_rowidx_to_colidx,
@@ -2093,6 +2093,16 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
   mTiles = bsTiles;
   nTiles = bsTiles;
   kTiles = bsTiles;
+  std::cout << "{max,avg} tile size = {" << *std::max_element(bsTiles.begin(), bsTiles.end()) << "," <<(double)bs.nbf()/mTiles.size() << "}" << std::endl;
+
+  std::ofstream A_shp_os;
+  bool first_tile = true;
+  const auto saveShape = !saveShapeId.empty();
+  if (saveShape) {
+    A_shp_os.open("bspmm.A.id="+saveShapeId+".bs=" + basis_set_name + ".T=" + std::to_string(maxTs) +
+                  ".eps=" + std::to_string(tile_perelem_2norm_threshold) + ".nb", std::ios_base::out | std::ios_base::trunc);
+    A_shp_os << "SparseArray[{" << std::endl;
+  }
 
   // fill the matrix, only insert tiles with norm greater than the threshold
   auto fill_matrix = [&](const auto &tiles) {
@@ -2171,6 +2181,11 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
                 std::scoped_lock<std::mutex> lock(*mtx);
                 if (buildRefs && rank == 0) {
                   ref_elements.emplace_back(row_tile_idx, col_tile_idx, tile);
+                  if (saveShape) {
+                    A_shp_os << (first_tile ? "" : ", ") << "{" << row_tile_idx + 1 << "," << col_tile_idx + 1
+                              << "} -> " << std::fixed << tile_perelem_2norm << std::endl;
+                    first_tile = false;
+                  }
                 }
                 if (really_my_tile) {
                   elements.emplace_back(row_tile_idx, col_tile_idx, tile);
@@ -2189,6 +2204,8 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
     };
 
     parallel_do(fill_matrix_impl);
+    if (saveShape)
+      A_shp_os << "}]" << std::endl;
 
     long nnz_tiles = elements.size();  // # of nonzero tiles, currently on this rank only
 
@@ -2478,8 +2495,10 @@ int main(int argc, char **argv) {
     std::vector<std::vector<long>> b_colidx_to_rowidx;
 
     std::string checkStr(getCmdOption(argv, argv + argc, "-x"));
-    int check = parseOption(checkStr, !(argc >= 2));
+    const int check = parseOption(checkStr, !(argc >= 2));
     timing = (check == 0);
+
+    std::string saveShapeId = check ? getCmdOption(argv, argv + argc, "-sv") : "";
 
 #ifndef BLOCK_SPARSE_GEMM
     if (cmdOptionExists(argv, argv + argc, "-mm")) {
@@ -2541,6 +2560,7 @@ int main(int argc, char **argv) {
       if (basis_name.empty()) basis_name = "cc-pvdz";
       std::string op_param_str(getCmdOption(argv, argv + argc, "-p"));
       auto op_param = parseOption(op_param_str, 1.);
+      if (!saveShapeId.empty()) saveShapeId = saveShapeId + ".p=" + std::to_string(op_param);
       std::string maxTsStr(getCmdOption(argv, argv + argc, "-T"));
       int maxTs = parseOption(maxTsStr, 256);
       std::string eps_param_str(getCmdOption(argv, argv + argc, "-e"));
@@ -2549,7 +2569,7 @@ int main(int argc, char **argv) {
       auto start = std::chrono::high_resolution_clock::now();
       initBlSpLibint2(libint2::Operator::yukawa, libint2::any{op_param}, atoms, basis_name,
                       tile_perelem_2norm_threshold, bc_keymap, maxTs, cores == -1 ? 1 : cores, A, B,
-                      Aref, Bref, check, mTiles, nTiles,kTiles, a_rowidx_to_colidx,
+                      Aref, Bref, check, saveShapeId, mTiles, nTiles,kTiles, a_rowidx_to_colidx,
                       a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, avg_nb,Adensity,
                       Bdensity);
       auto end = std::chrono::high_resolution_clock::now();
