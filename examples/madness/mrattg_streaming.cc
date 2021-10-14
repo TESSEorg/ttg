@@ -160,8 +160,8 @@ struct FunctionReconstructedNodeWrap {
     /* FunctionReconstructedNodes are passed immutably through the tree so we can share them */
     FunctionReconstructedNodeWrap& operator=(const FunctionReconstructedNodeWrap& other) {
       m_node = other.m_node;
-      std::cout << "FunctionReconstructedNodeWrap copy" << std::endl;
-      return *m_node;
+      //std::cout << "FunctionReconstructedNodeWrap copy" << std::endl;
+      return *this;
     }
 
 
@@ -184,6 +184,31 @@ namespace madness::archive {
   };
 }  // namespace madness::archive
 
+
+namespace ttg {
+  template<typename T, size_t K, Dimension NDIM>
+  struct SplitMetadataDescriptor<FunctionReconstructedNodeWrap<T, K, NDIM>>
+  {
+
+    using frn_t = FunctionReconstructedNodeWrap<T, K, NDIM>;
+
+    auto get_metadata(const frn_t& t)
+    {
+      //std::cout << "Using SMP interface for FunctionReconstructedNode" << std::endl;
+      return 0; // no metadata required, everything is compile-time constant
+    }
+
+    auto get_data(frn_t& t)
+    {
+      return std::array<iovec, 1>({sizeof(typename frn_t::node_t), &t.get()});
+    }
+
+    auto create_from_metadata(const int meta)
+    {
+      return frn_t();
+    }
+  };
+} // namespace ttg
 
 template <typename T, size_t K, Dimension NDIM>
 struct FunctionCompressedNodeWrap {
@@ -213,7 +238,7 @@ struct FunctionCompressedNodeWrap {
     /* FunctionCompressedNodes are passed immutably through the tree so we can share them */
     FunctionCompressedNodeWrap& operator=(const FunctionCompressedNodeWrap& other) {
       m_node = other.m_node;
-      return *m_node;
+      return *this;
     }
 
 
@@ -235,6 +260,31 @@ namespace madness::archive {
     static inline void serialize(const Archive& ar, FunctionCompressedNodeWrap<T, K, NDIM>& obj) { ar& obj.get(); };
   };
 }  // namespace madness::archive
+
+namespace ttg {
+  template<typename T, size_t K, Dimension NDIM>
+  struct SplitMetadataDescriptor<FunctionCompressedNodeWrap<T, K, NDIM>>
+  {
+
+    using fcn_t = FunctionCompressedNodeWrap<T, K, NDIM>;
+
+    auto get_metadata(const fcn_t& t)
+    {
+      //std::cout << "Using SMP interface for FunctionReconstructedNode" << std::endl;
+      return 0; // no metadata required, everything is compile-time constant
+    }
+
+    auto get_data(fcn_t& t)
+    {
+      return std::array<iovec, 1>({sizeof(typename fcn_t::node_t), &t.get()});
+    }
+
+    auto create_from_metadata(const int meta)
+    {
+      return fcn_t();
+    }
+  };
+} // namespace ttg
 
 
 /// An empty class used for pure control flows
