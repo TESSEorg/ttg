@@ -32,6 +32,8 @@ using namespace ttg;
 #include "../mrafunctionfunctor.h"
 
 #include <madness/world/world.h>
+//Required for split md interface
+#include <ttg/serialization/splitmd_data_descriptor.h>
 
 using namespace mra;
 
