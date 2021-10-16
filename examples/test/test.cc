@@ -622,8 +622,8 @@ int try_main(int argc, char **argv) {
         Edge<int, int> F2F;
         Edge<Void, int> F2P;
 
-        auto f = make_op(fib, edges(F2F), edges(F2F, F2P), "next");
-        auto p = make_op(print, edges(F2P), edges(), "print");
+        auto f = make_tt(fib, edges(F2F), edges(F2F, F2P), "next");
+        auto p = make_tt(print, edges(F2P), edges(), "print");
         p->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
         make_graph_executable(f.get());
         if (ttg_default_execution_context().rank() == 0) f->invoke(2, 1);

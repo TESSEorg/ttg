@@ -183,7 +183,7 @@ struct WrapOpArgsUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<input_va
 // case 1 (keyT != void): void op(const input_keyT&, std::tuple<input_valuesT&...>&&, std::tuple<output_terminalsT...>&)
 // case 2 (keyT == void): void op(std::tuple<input_valuesT&...>&&, std::tuple<output_terminalsT...>&)
 template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
-auto wrapt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>...> &inedges,
+auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>...> &inedges,
            const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
            const std::vector<std::string> &innames =
                std::vector<std::string>(std::tuple_size<std::tuple<ttg::Edge<keyT, input_valuesT>...>>::value, "input"),
@@ -196,7 +196,7 @@ auto wrapt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>...> &in
   using func_args_t = boost::callable_traits::args_t<funcT>;
   constexpr const auto num_args = std::tuple_size<func_args_t>::value;
   constexpr const auto void_key = ttg::meta::is_void_v<keyT>;
-  static_assert(num_args == (void_key ? 2 : 3), "ttg::wrapt(func, ...): func must take 3 arguments (or 2, if keyT=void)");
+  static_assert(num_args == (void_key ? 2 : 3), "ttg::make_tt_tpl(func, ...): func must take 3 arguments (or 2, if keyT=void)");
   // 2. input_args_t = {input_valuesT&&...}
   using input_args_t = std::decay_t<typename std::tuple_element<void_key ? 0 : 1, func_args_t>::type>;
   using decayed_input_args_t = ttg::meta::decayed_tuple_t<input_args_t>;
@@ -205,13 +205,13 @@ auto wrapt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>...> &in
   // TODO determine the generic signature of func
   if constexpr (!void_key) {
     static_assert(std::is_same_v<typename std::tuple_element<0, func_args_t>::type, const keyT &>,
-                  "ttg::wrapt(func, inedges, outedges): first argument of func must be const keyT& (unless keyT = void)");
+                  "ttg::make_tt_tpl(func, inedges, outedges): first argument of func must be const keyT& (unless keyT = void)");
   }
   static_assert(std::is_same_v<decayed_input_args_t, std::tuple<input_valuesT...>>,
-                "ttg::wrapt(func, inedges, outedges): inedges value types do not match argument types of func");
+                "ttg::make_tt_tpl(func, inedges, outedges): inedges value types do not match argument types of func");
   static_assert(
       std::is_same_v<typename std::tuple_element<num_args - 1, func_args_t>::type, output_terminals_type &>,
-      "ttg::wrapt(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
+      "ttg::make_tt_tpl(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
 
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
@@ -221,7 +221,7 @@ auto wrapt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>...> &in
 // case 1 (keyT != void): void op(const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)
 // case 2 (keyT == void): void op(input_valuesT&&..., std::tuple<output_terminalsT...>&)
 template <typename keyT, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
-auto wrap(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
+auto wrap_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
           const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
           const std::vector<std::string> &innames = std::vector<std::string>(
               std::tuple_size<std::tuple<ttg::Edge<keyT, input_edge_valuesT>...>>::value, "input"),
@@ -246,13 +246,13 @@ auto wrap(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...>
   // TODO determine the generic signature of func
   if constexpr (!void_key) {
     static_assert(std::is_same_v<typename std::tuple_element<0, func_args_t>::type, const keyT &>,
-                  "ttg::wrap(func, inedges, outedges): first argument of func must be const keyT& (unless keyT = void)");
+                  "ttg::make_tt(func, inedges, outedges): first argument of func must be const keyT& (unless keyT = void)");
   }
   static_assert(std::is_same_v<decayed_input_args_t, std::tuple<input_edge_valuesT...>>,
-                "ttg::wrap(func, inedges, outedges): inedges value types do not match argument types of func");
+                "ttg::make_tt(func, inedges, outedges): inedges value types do not match argument types of func");
   static_assert(
       std::is_same_v<typename std::tuple_element<num_args - 1, func_args_t>::type, output_terminals_type &>,
-      "ttg::wrap(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
+      "ttg::make_tt(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
 
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
@@ -265,6 +265,7 @@ inline auto aliasname(Args&&... args) \
     return funcname(std::forward<Args>(args)...); \
 }
 
-TTG_UTIL_ALIAS_TEMPLATE_FUNCTION(make_op, wrap);
+TTG_UTIL_ALIAS_TEMPLATE_FUNCTION(wrap, make_tt);
+TTG_UTIL_ALIAS_TEMPLATE_FUNCTION(wrapt, make_tt_tpl);
 
 #endif  // CXXAPI_WRAP_H
