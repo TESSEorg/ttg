@@ -4,11 +4,11 @@
 #include <tuple>
 #include <memory>
 
-#include "ttg/op.h"
-#include "ttg/traverse.h"
-#include "ttg/terminal.h"
 #include "ttg/edge.h"
 #include "ttg/impl_selector.h"
+#include "ttg/terminal.h"
+#include "ttg/traverse.h"
+#include "ttg/tt.h"
 
 namespace ttg {
 

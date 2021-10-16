@@ -4,8 +4,8 @@
 #include <iostream>
 #include <set>
 
+#include "ttg/tt.h"
 #include "ttg/util/meta.h"
-#include "ttg/op.h"
 
 namespace ttg {
 
@@ -76,7 +76,7 @@ namespace ttg {
                 std::cout << "ttg::Traverse: got a null successor!\n";
                 status = false;
               } else {
-                status = status && traverse(successor->get_op());
+                status = status && traverse(successor->get_tt());
               }
             }
           }

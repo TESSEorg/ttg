@@ -80,7 +80,7 @@ namespace ttg {
         if (out) {
           for (auto successor : out->get_connections()) {
             if (successor) {
-              buf << opnm << ":out" << out->get_index() << ":s -> " << nodename(successor->get_op()) << ":in"
+              buf << opnm << ":out" << out->get_index() << ":s -> " << nodename(successor->get_tt()) << ":in"
                   << successor->get_index() << ":n;\n";
             }
           }

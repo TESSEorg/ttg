@@ -12,14 +12,14 @@
 #include "../../ttg.h"
 
 #include "ttg/base/keymap.h"
-#include "ttg/base/op.h"
+#include "ttg/base/tt.h"
 #include "ttg/base/world.h"
 #include "ttg/edge.h"
 #include "ttg/execution.h"
 #include "ttg/func.h"
-#include "ttg/op.h"
 #include "ttg/runtimes.h"
 #include "ttg/terminal.h"
+#include "ttg/tt.h"
 #include "ttg/util/hash.h"
 #include "ttg/util/meta.h"
 #include "ttg/util/print.h"
@@ -2519,7 +2519,7 @@ namespace ttg_parsec {
 
     void make_executable() override {
       register_static_op_function();
-      OpBase::make_executable();
+      ttg::OpBase::make_executable();
     }
 
     /// keymap accessor
@@ -2589,7 +2589,7 @@ namespace ttg_parsec {
     }
   };
 
-#include "ttg/wrap.h"
+#include "ttg/make_tt.h"
 
 }  // namespace ttg_parsec
 

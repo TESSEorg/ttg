@@ -11,10 +11,10 @@
 /* include ttg header to make symbols available in case this header is included directly */
 #include "../../ttg.h"
 #include "ttg/base/keymap.h"
-#include "ttg/base/op.h"
+#include "ttg/base/tt.h"
 #include "ttg/func.h"
-#include "ttg/op.h"
 #include "ttg/runtimes.h"
+#include "ttg/tt.h"
 #include "ttg/util/bug.h"
 #include "ttg/util/hash.h"
 #include "ttg/util/macro.h"
@@ -166,16 +166,16 @@ namespace ttg_madness {
     world.impl().impl().gop.broadcast_serializable(data, source_rank);
   }
 
-  /// CRTP base for MADNESS-based Op classes
+  /// CRTP base for MADNESS-based TT classes
   /// \tparam keyT a Key type
   /// \tparam output_terminalsT
   /// \tparam derivedT
   /// \tparam input_valueTs pack of *value* types (no references; pointers are OK) encoding the types of input values
-  ///         flowing into this Op; a const type indicates nonmutating (read-only) use, nonconst type
+  ///         flowing into this TT; a const type indicates nonmutating (read-only) use, nonconst type
   ///         indicates mutating use (e.g. the corresponding input can be used as scratch, moved-from, etc.)
   template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
-  class Op : public ttg::OpBase,
-             public ::madness::WorldObject<Op<keyT, output_terminalsT, derivedT, input_valueTs...>> {
+  class TT : public ttg::TTBase,
+             public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs...>> {
    public:
     /// preconditions
     static_assert((!std::is_reference_v<input_valueTs> && ...), "input_valueTs cannot contain reference types");
@@ -194,14 +194,14 @@ namespace ttg_madness {
     ttg::World get_world() const { return world; }
 
    protected:
-    using opT = Op<keyT, output_terminalsT, derivedT, input_valueTs...>;
-    using worldobjT = ::madness::WorldObject<opT>;
+    using ttT = TT<keyT, output_terminalsT, derivedT, input_valueTs...>;
+    using worldobjT = ::madness::WorldObject<ttT>;
 
     static constexpr int numins = sizeof...(input_valueTs);                    // number of input arguments
     static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or
     // results
 
-    // This to support op fusion
+    // This to support tt fusion
     inline static __thread struct {
       uint64_t key_hash = 0;  // hash of current key
       size_t call_depth = 0;  // how deep calls are nested
@@ -239,7 +239,7 @@ namespace ttg_madness {
     input_terminals_type input_terminals;
     output_terminalsT output_terminals;
 
-    struct OpArgs : ::madness::TaskInterface {
+    struct TTArgs : ::madness::TaskInterface {
      private:
       using TaskInterface = ::madness::TaskInterface;
 
@@ -272,7 +272,7 @@ namespace ttg_madness {
                                     std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{});
       }
 
-      OpArgs(int prio = 0)
+      TTArgs(int prio = 0)
           : TaskInterface(TaskAttributes(prio ? TaskAttributes::HIGHPRIORITY : 0))
           , counter(numins)
           , nargs()
@@ -285,8 +285,8 @@ namespace ttg_madness {
         // ttg::print("starting task");
 
         using ttg::hash;
-        opT::threaddata.key_hash = hash<decltype(key)>{}(key);
-        opT::threaddata.call_depth++;
+        ttT::threaddata.key_hash = hash<decltype(key)>{}(key);
+        ttT::threaddata.call_depth++;
 
         if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
           derived->op(key, this->make_input_refs(),
@@ -301,12 +301,12 @@ namespace ttg_madness {
         } else
           abort();
 
-        opT::threaddata.call_depth--;
+        ttT::threaddata.call_depth--;
 
         // ttg::print("finishing task",opT::threaddata.call_depth);
       }
 
-      virtual ~OpArgs() {}  // Will be deleted via TaskInterface*
+      virtual ~TTArgs() {}  // Will be deleted via TaskInterface*
 
      private:
       ::madness::Spinlock lock_;  // synchronizes access to data
@@ -316,7 +316,7 @@ namespace ttg_madness {
     };
 
     using hashable_keyT = std::conditional_t<ttg::meta::is_void_v<keyT>, int, keyT>;
-    using cacheT = ::madness::ConcurrentHashMap<hashable_keyT, OpArgs *, ttg::hash<hashable_keyT>>;
+    using cacheT = ::madness::ConcurrentHashMap<hashable_keyT, TTArgs *, ttg::hash<hashable_keyT>>;
     using accessorT = typename cacheT::accessor;
     cacheT cache;
 
@@ -336,7 +336,7 @@ namespace ttg_madness {
                                                                                                        Value &&value) {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;  // Should be T or const T
       static_assert(std::is_same_v<std::decay_t<Value>, std::decay_t<valueT>>,
-                    "Op::set_arg(key,value) given value of type incompatible with Op");
+                    "TT::set_arg(key,value) given value of type incompatible with TT");
 
       const auto owner = keymap(key);
       if (owner != world.rank()) {
@@ -349,17 +349,17 @@ namespace ttg_madness {
         // move arguments) and locally
         //      here we know that this will be a remove execution, so we prepare to take rvalues;
         //      send_am will need to separate local and remote paths to deal with this
-        worldobjT::send(owner, &opT::template set_arg<i, Key, const std::remove_reference_t<Value> &>, key, value);
+        worldobjT::send(owner, &ttT::template set_arg<i, Key, const std::remove_reference_t<Value> &>, key, value);
       } else {
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
 
         accessorT acc;
-        if (cache.insert(acc, key)) acc->second = new OpArgs(this->priomap(key));  // It will be deleted by the task q
-        OpArgs *args = acc->second;
+        if (cache.insert(acc, key)) acc->second = new TTArgs(this->priomap(key));  // It will be deleted by the task q
+        TTArgs *args = acc->second;
 
         if (args->nargs[i] == 0) {
           ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error argument is already finalized : ", i);
-          throw std::runtime_error("Op::set_arg called for a finalized stream");
+          throw std::runtime_error("TT::set_arg called for a finalized stream");
         }
 
         auto reducer = std::get<i>(input_reducers);
@@ -419,7 +419,7 @@ namespace ttg_madness {
           if (curhash == threaddata.key_hash && threaddata.call_depth < 6) {  // Needs to be externally configurable
 
             // ttg::print("directly invoking:", get_name(), key, curhash, threaddata.key_hash, threaddata.call_depth);
-            opT::threaddata.call_depth++;
+            ttT::threaddata.call_depth++;
             if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
               static_cast<derivedT *>(this)->op(key, args->make_input_refs(), output_terminals);  // Runs immediately
             } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
@@ -430,7 +430,7 @@ namespace ttg_madness {
               static_cast<derivedT *>(this)->op(output_terminals);  // Runs immediately
             } else
               abort();
-            opT::threaddata.call_depth--;
+            ttT::threaddata.call_depth--;
 
           } else {
             // ttg::print("enqueuing task", get_name(), key, curhash, threaddata.key_hash, threaddata.call_depth);
@@ -453,24 +453,24 @@ namespace ttg_madness {
     std::enable_if_t<ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void> set_arg(Value &&value) {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;  // Should be T or const T
       static_assert(std::is_same<std::decay_t<Value>, std::decay_t<valueT>>::value,
-                    "Op::set_arg(key,value) given value of type incompatible with Op");
+                    "TT::set_arg(key,value) given value of type incompatible with TT");
 
       const int owner = keymap();
 
       if (owner != world.rank()) {
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : forwarding setting argument : ", i);
         // CAVEAT see comment above in set_arg re:
-        worldobjT::send(owner, &opT::template set_arg<i, keyT, const std::remove_reference_t<Value> &>, value);
+        worldobjT::send(owner, &ttT::template set_arg<i, keyT, const std::remove_reference_t<Value> &>, value);
       } else {
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : received value for argument : ", i);
 
         accessorT acc;
-        if (cache.insert(acc, 0)) acc->second = new OpArgs();  // It will be deleted by the task q
-        OpArgs *args = acc->second;
+        if (cache.insert(acc, 0)) acc->second = new TTArgs();  // It will be deleted by the task q
+        TTArgs *args = acc->second;
 
         if (args->nargs[i] == 0) {
           ttg::print_error(world.rank(), ":", get_name(), " : error argument is already finalized : ", i);
-          throw std::runtime_error("Op::set_arg called for a finalized stream");
+          throw std::runtime_error("TT::set_arg called for a finalized stream");
         }
 
         auto reducer = std::get<i>(input_reducers);
@@ -544,11 +544,11 @@ namespace ttg_madness {
 
       if (owner != world.rank()) {
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
-        worldobjT::send(owner, &opT::set_arg<keyT>, key);
+        worldobjT::send(owner, &ttT::set_arg<keyT>, key);
       } else {
         accessorT acc;
-        if (cache.insert(acc, key)) acc->second = new OpArgs(this->priomap(key));  // It will be deleted by the task q
-        OpArgs *args = acc->second;
+        if (cache.insert(acc, key)) acc->second = new TTArgs(this->priomap(key));  // It will be deleted by the task q
+        TTArgs *args = acc->second;
 
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
         args->derived = static_cast<derivedT *>(this);
@@ -570,9 +570,9 @@ namespace ttg_madness {
 
       if (owner != world.rank()) {
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : forwarding no-arg task: ");
-        worldobjT::send(owner, &opT::set_arg<keyT>);
+        worldobjT::send(owner, &ttT::set_arg<keyT>);
       } else {
-        auto task = new OpArgs();  // It will be deleted by the task q
+        auto task = new TTArgs();  // It will be deleted by the task q
 
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
         task->derived = static_cast<derivedT *>(this);
@@ -585,7 +585,7 @@ namespace ttg_madness {
     template <typename Key, size_t... IS>
     std::enable_if_t<!ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<IS...>, const Key &key,
                                                                 const input_values_tuple_type &args) {
-      int junk[] = {0, (set_arg<IS>(key, Op::get<IS>(args)), 0)...};
+      int junk[] = {0, (set_arg<IS>(key, TT::get<IS>(args)), 0)...};
       junk[0]++;
     }
 
@@ -595,8 +595,8 @@ namespace ttg_madness {
     template <std::size_t i, bool key_is_void = ttg::meta::is_void_v<keyT>>
     std::enable_if_t<key_is_void, void> set_argstream_size(std::size_t size) {
       // preconditions
-      assert(std::get<i>(input_reducers) && "Op::set_argstream_size called on nonstreaming input terminal");
-      assert(size > 0 && "Op::set_argstream_size(size) called with size=0");
+      assert(std::get<i>(input_reducers) && "TT::set_argstream_size called on nonstreaming input terminal");
+      assert(size > 0 && "TT::set_argstream_size(size) called with size=0");
 
       // body
       const auto owner = keymap();
@@ -604,28 +604,28 @@ namespace ttg_madness {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : forwarding stream size for terminal ", i);
         }
-        worldobjT::send(owner, &opT::template set_argstream_size<i, true>, size);
+        worldobjT::send(owner, &ttT::template set_argstream_size<i, true>, size);
       } else {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : setting stream size to ", size, " for terminal ", i);
         }
 
         accessorT acc;
-        if (cache.insert(acc, 0)) acc->second = new OpArgs();  // It will be deleted by the task q
-        OpArgs *args = acc->second;
+        if (cache.insert(acc, 0)) acc->second = new TTArgs();  // It will be deleted by the task q
+        TTArgs *args = acc->second;
 
         args->lock();
 
         // check if stream is already bounded
         if (args->stream_size[i] > 0) {
           ttg::print_error(world.rank(), ":", get_name(), " : error stream is already bounded : ", i);
-          throw std::runtime_error("Op::set_argstream_size called for a bounded stream");
+          throw std::runtime_error("TT::set_argstream_size called for a bounded stream");
         }
 
         // check if stream is already finalized
         if (args->nargs[i] == 0) {
           ttg::print_error(world.rank(), ":", get_name(), " : error stream is already finalized : ", i);
-          throw std::runtime_error("Op::set_argstream_size called for a finalized stream");
+          throw std::runtime_error("TT::set_argstream_size called for a finalized stream");
         }
 
         // commit changes
@@ -637,8 +637,8 @@ namespace ttg_madness {
 
     template <std::size_t i>
     void set_static_argstream_size(std::size_t size) {
-      assert(std::get<i>(input_reducers) && "Op::set_argstream_size called on nonstreaming input terminal");
-      assert(size > 0 && "Op::set_static_argstream_size(key,size) called with size=0");
+      assert(std::get<i>(input_reducers) && "TT::set_argstream_size called on nonstreaming input terminal");
+      assert(size > 0 && "TT::set_static_argstream_size(key,size) called with size=0");
 
       if (tracing()) {
         ttg::print(world.rank(), ":", get_name(), ": setting global stream size for terminal ", i);
@@ -647,7 +647,7 @@ namespace ttg_madness {
       // Check if stream is already bounded
       if (static_streamsize[i] > 0) {
         ttg::print_error(world.rank(), ":", get_name(), " : error stream is already bounded : ", i);
-        throw std::runtime_error("Op::set_static_argstream_size called for a bounded stream");
+        throw std::runtime_error("TT::set_static_argstream_size called for a bounded stream");
       }
 
       // commit changes
@@ -659,8 +659,8 @@ namespace ttg_madness {
     template <std::size_t i, typename Key = keyT, bool key_is_void = ttg::meta::is_void_v<Key>>
     std::enable_if_t<!key_is_void, void> set_argstream_size(const Key &key, std::size_t size) {
       // preconditions
-      assert(std::get<i>(input_reducers) && "Op::set_argstream_size called on nonstreaming input terminal");
-      assert(size > 0 && "Op::set_argstream_size(key,size) called with size=0");
+      assert(std::get<i>(input_reducers) && "TT::set_argstream_size called on nonstreaming input terminal");
+      assert(size > 0 && "TT::set_argstream_size(key,size) called with size=0");
 
       // body
       const auto owner = keymap(key);
@@ -668,28 +668,28 @@ namespace ttg_madness {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream size for terminal ", i);
         }
-        worldobjT::send(owner, &opT::template set_argstream_size<i>, key, size);
+        worldobjT::send(owner, &ttT::template set_argstream_size<i>, key, size);
       } else {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : ", key, ": setting stream size for terminal ", i);
         }
 
         accessorT acc;
-        if (cache.insert(acc, key)) acc->second = new OpArgs(this->priomap(key));  // It will be deleted by the task q
-        OpArgs *args = acc->second;
+        if (cache.insert(acc, key)) acc->second = new TTArgs(this->priomap(key));  // It will be deleted by the task q
+        TTArgs *args = acc->second;
 
         args->lock();
 
         // check if stream is already bounded
         if (args->stream_size[i] > 0) {
           ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error stream is already bounded : ", i);
-          throw std::runtime_error("Op::set_argstream_size called for a bounded stream");
+          throw std::runtime_error("TT::set_argstream_size called for a bounded stream");
         }
 
         // check if stream is already finalized
         if (args->nargs[i] == 0) {
           ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error stream is already finalized : ", i);
-          throw std::runtime_error("Op::set_argstream_size called for a finalized stream");
+          throw std::runtime_error("TT::set_argstream_size called for a finalized stream");
         }
 
         // commit changes
@@ -703,7 +703,7 @@ namespace ttg_madness {
     template <std::size_t i, typename Key = keyT, bool key_is_void = ttg::meta::is_void_v<Key>>
     std::enable_if_t<!key_is_void, void> finalize_argstream(const Key &key) {
       // preconditions
-      assert(std::get<i>(input_reducers) && "Op::finalize_argstream called on nonstreaming input terminal");
+      assert(std::get<i>(input_reducers) && "TT::finalize_argstream called on nonstreaming input terminal");
 
       // body
       const auto owner = keymap(key);
@@ -711,7 +711,7 @@ namespace ttg_madness {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
         }
-        worldobjT::send(owner, &opT::template finalize_argstream<i>, key);
+        worldobjT::send(owner, &ttT::template finalize_argstream<i>, key);
       } else {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
@@ -719,20 +719,20 @@ namespace ttg_madness {
 
         accessorT acc;
         const auto found = cache.find(acc, key);
-        assert(found && "Op::finalize_argstream called but no values had been received yet for this key");
+        assert(found && "TT::finalize_argstream called but no values had been received yet for this key");
         TTGUNUSED(found);
-        OpArgs *args = acc->second;
+        TTArgs *args = acc->second;
 
         // check if stream is already bounded
         if (args->stream_size[i] > 0) {
           ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error finalize called on bounded stream: ", i);
-          throw std::runtime_error("Op::finalize called for a bounded stream");
+          throw std::runtime_error("TT::finalize called for a bounded stream");
         }
 
         // check if stream is already finalized
         if (args->nargs[i] == 0) {
           ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error stream is already finalized : ", i);
-          throw std::runtime_error("Op::finalize called for a finalized stream");
+          throw std::runtime_error("TT::finalize called for a finalized stream");
         }
 
         // commit changes
@@ -758,7 +758,7 @@ namespace ttg_madness {
     template <std::size_t i, bool key_is_void = ttg::meta::is_void_v<keyT>>
     std::enable_if_t<key_is_void, void> finalize_argstream() {
       // preconditions
-      assert(std::get<i>(input_reducers) && "Op::finalize_argstream called on nonstreaming input terminal");
+      assert(std::get<i>(input_reducers) && "TT::finalize_argstream called on nonstreaming input terminal");
 
       // body
       const int owner = keymap();
@@ -766,7 +766,7 @@ namespace ttg_madness {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : forwarding stream finalize for terminal ", i);
         }
-        worldobjT::send(owner, &opT::template finalize_argstream<i, true>);
+        worldobjT::send(owner, &ttT::template finalize_argstream<i, true>);
       } else {
         if (tracing()) {
           ttg::print(world.rank(), ":", get_name(), " : finalizing stream for terminal ", i);
@@ -774,20 +774,20 @@ namespace ttg_madness {
 
         accessorT acc;
         const auto found = cache.find(acc, 0);
-        assert(found && "Op::finalize_argstream called but no values had been received yet for this key");
+        assert(found && "TT::finalize_argstream called but no values had been received yet for this key");
         TTGUNUSED(found);
-        OpArgs *args = acc->second;
+        TTArgs *args = acc->second;
 
         // check if stream is already bounded
         if (args->stream_size[i] > 0) {
           ttg::print_error(world.rank(), ":", get_name(), " : error finalize called on bounded stream: ", i);
-          throw std::runtime_error("Op::finalize called for a bounded stream");
+          throw std::runtime_error("TT::finalize called for a bounded stream");
         }
 
         // check if stream is already finalized
         if (args->nargs[i] == 0) {
           ttg::print_error(world.rank(), ":", get_name(), " : error stream is already finalized : ", i);
-          throw std::runtime_error("Op::finalize called for a finalized stream");
+          throw std::runtime_error("TT::finalize called for a finalized stream");
         }
 
         // commit changes
@@ -817,17 +817,17 @@ namespace ttg_madness {
     // involved but we would have to do it in a thread safe way
     // including for possibly already running tasks and remote
     // references.  This is not worth the effort ... wherever you are
-    // wanting to move/assign an Op you should be using a pointer.
-    Op(const Op &other) = delete;
-    Op &operator=(const Op &other) = delete;
-    Op(Op &&other) = delete;
-    Op &operator=(Op &&other) = delete;
+    // wanting to move/assign an TT you should be using a pointer.
+    TT(const TT &other) = delete;
+    TT &operator=(const TT &other) = delete;
+    TT(TT &&other) = delete;
+    TT &operator=(TT &&other) = delete;
 
     // Registers the callback for the i'th input terminal
     template <typename terminalT, std::size_t i>
     void register_input_callback(terminalT &input) {
       static_assert(std::is_same<keyT, typename terminalT::key_type>::value,
-                    "Op::register_input_callback(terminalT) -- incompatible terminalT");
+                    "TT::register_input_callback(terminalT) -- incompatible terminalT");
       using valueT = std::decay_t<typename terminalT::value_type>;
 
       //////////////////////////////////////////////////////////////////
@@ -918,7 +918,7 @@ namespace ttg_madness {
       int junk[] = {0, (std::get<IS>(inedges).set_out(&std::get<IS>(input_terminals)), 0)...};
       junk[0]++;
       if (tracing()) {
-        ttg::print(world.rank(), ":", get_name(), " : connected ", sizeof...(IS), " Op inputs to ", sizeof...(IS),
+        ttg::print(world.rank(), ":", get_name(), " : connected ", sizeof...(IS), " TT inputs to ", sizeof...(IS),
                    " Edges");
       }
     }
@@ -930,7 +930,7 @@ namespace ttg_madness {
       int junk[] = {0, (std::get<IS>(outedges).set_in(&std::get<IS>(output_terminals)), 0)...};
       junk[0]++;
       if (tracing()) {
-        ttg::print(world.rank(), ":", get_name(), " : connected ", sizeof...(IS), " Op outputs to ", sizeof...(IS),
+        ttg::print(world.rank(), ":", get_name(), " : connected ", sizeof...(IS), " TT outputs to ", sizeof...(IS),
                    " Edges");
       }
     }
@@ -938,9 +938,9 @@ namespace ttg_madness {
    public:
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
-    Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
+    TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
-        : ttg::OpBase(name, numins, numouts)
+        : ttg::TTBase(name, numins, numouts)
         , static_streamsize()
         , worldobjT(world.impl().impl())
         , world(world)
@@ -953,10 +953,10 @@ namespace ttg_madness {
       if (innames.size() != std::tuple_size<input_terminals_type>::value) {
         ttg::print_error(world.rank(), ":", get_name(), "#input_names", innames.size(), "!= #input_terminals",
                          std::tuple_size<input_terminals_type>::value);
-        throw this->get_name() + ":madnessttg::Op: #input names != #input terminals";
+        throw this->get_name() + ":madness::ttg::TT: #input names != #input terminals";
       }
       if (outnames.size() != std::tuple_size_v<output_terminalsT>)
-        throw this->get_name() + ":madnessttg::Op: #output names != #output terminals";
+        throw this->get_name() + ":madness::ttg::TT: #output names != #output terminals";
 
       register_input_terminals(input_terminals, innames);
       register_output_terminals(output_terminals, outnames);
@@ -966,17 +966,17 @@ namespace ttg_madness {
 
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
-    Op(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
+    TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
-        : Op(name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
+        : TT(name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
              std::forward<priomapT>(priomap)) {}
 
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
-    Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
+    TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ttg::World world,
        keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
-        : ttg::OpBase(name, numins, numouts)
+        : ttg::TTBase(name, numins, numouts)
         , static_streamsize()
         , worldobjT(ttg::get_default_world().impl().impl())
         , world(ttg::get_default_world())
@@ -989,10 +989,10 @@ namespace ttg_madness {
       if (innames.size() != std::tuple_size<input_terminals_type>::value) {
         ttg::print_error(world.rank(), ":", get_name(), "#input_names", innames.size(), "!= #input_terminals",
                          std::tuple_size<input_terminals_type>::value);
-        throw this->get_name() + ":madnessttg::Op: #input names != #input terminals";
+        throw this->get_name() + ":madness::ttg::TT: #input names != #input terminals";
       }
       if (outnames.size() != std::tuple_size<output_terminalsT>::value)
-        throw this->get_name() + ":madnessttg::Op: #output names != #output terminals";
+        throw this->get_name() + ":madness::ttg::T: #output names != #output terminals";
 
       register_input_terminals(input_terminals, innames);
       register_output_terminals(output_terminals, outnames);
@@ -1005,14 +1005,14 @@ namespace ttg_madness {
 
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
-    Op(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
+    TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
-        : Op(inedges, outedges, name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
+        : TT(inedges, outedges, name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
              std::forward<priomapT>(priomap)) {}
 
     // Destructor checks for unexecuted tasks
-    virtual ~Op() {
+    virtual ~TT() {
       if (cache.size() != 0) {
         std::cerr << world.rank() << ":"
                   << "warning: unprocessed tasks in destructor of operation '" << get_name()
@@ -1058,13 +1058,13 @@ namespace ttg_madness {
       priomap = pm;
     }
 
-    /// implementation of OpBase::make_executable()
+    /// implementation of TTBase::make_executable()
     void make_executable() {
       this->process_pending();
-      OpBase::make_executable();
+      TTBase::make_executable();
     }
 
-    /// Waits for the entire TTG associated with this op to be completed (collective)
+    /// Waits for the entire TTG associated with this TT to be completed (collective)
 
     /// This is a collective operation and must be invoked by the main
     /// thread on all processes.  In the MADNESS implementation it
@@ -1135,7 +1135,7 @@ namespace ttg_madness {
     }
   };
 
-#include "ttg/wrap.h"
+#include "ttg/make_tt.h"
 
 }  // namespace ttg_madness
 

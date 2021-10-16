@@ -6,13 +6,13 @@
 
 #include "ttg/fwd.h"
 
-#include "ttg/base/op.h"
+#include "ttg/base/tt.h"
 #include "ttg/edge.h"
 
 namespace ttg {
 
   template <typename input_terminalsT, typename output_terminalsT>
-  class CompositeOp : public OpBase {
+  class CompositeOp : public TTBase {
    public:
     static constexpr int numins = std::tuple_size<input_terminalsT>::value;    // number of input arguments
     static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or results

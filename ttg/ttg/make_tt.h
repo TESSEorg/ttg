@@ -221,7 +221,7 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>..
 // case 1 (keyT != void): void op(const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)
 // case 2 (keyT == void): void op(input_valuesT&&..., std::tuple<output_terminalsT...>&)
 template <typename keyT, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
-auto wrap_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
+auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
           const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
           const std::vector<std::string> &innames = std::vector<std::string>(
               std::tuple_size<std::tuple<ttg::Edge<keyT, input_edge_valuesT>...>>::value, "input"),
@@ -257,15 +257,24 @@ auto wrap_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
-// pattern from https://www.fluentcpp.com/2017/10/27/function-aliases-cpp/
-#define TTG_UTIL_ALIAS_TEMPLATE_FUNCTION(aliasname,funcname)\
-template<typename... Args> \
-inline auto aliasname(Args&&... args) \
-{ \
-    return funcname(std::forward<Args>(args)...); \
+template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
+inline auto wrapt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>...> &inedges,
+           const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
+           const std::vector<std::string> &innames =
+               std::vector<std::string>(std::tuple_size<std::tuple<ttg::Edge<keyT, input_valuesT>...>>::value, "input"),
+           const std::vector<std::string> &outnames =
+               std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
+  return make_tt_tpl<keyT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
-TTG_UTIL_ALIAS_TEMPLATE_FUNCTION(wrap, make_tt);
-TTG_UTIL_ALIAS_TEMPLATE_FUNCTION(wrapt, make_tt_tpl);
+template <typename keyT, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
+auto wrap(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
+             const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
+             const std::vector<std::string> &innames = std::vector<std::string>(
+                 std::tuple_size<std::tuple<ttg::Edge<keyT, input_edge_valuesT>...>>::value, "input"),
+             const std::vector<std::string> &outnames =
+                 std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
+  return make_tt<keyT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+}
 
 #endif  // CXXAPI_WRAP_H

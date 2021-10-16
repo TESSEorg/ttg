@@ -21,7 +21,12 @@ namespace ttg_parsec {}
 
 namespace ttg {
 
-  class OpBase;
+  class TTBase;
+
+  /// \internal OG name
+  using OpBase = TTBase;
+  /// \internal the name used in the ESPM2 paper
+  using TemplateTaskBase = TTBase;
 
   template <typename keyT = void, typename valueT = void>
   class Edge;

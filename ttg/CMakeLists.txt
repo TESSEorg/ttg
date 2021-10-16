@@ -21,7 +21,7 @@ set(ttg-util-headers
     )
 set(ttg-base-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/keymap.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/op.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/tt.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/terminal.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/world.h
     )
@@ -32,14 +32,14 @@ set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/func.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/fwd.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/impl_selector.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/op.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/tt.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/reduce.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/runtimes.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/terminal.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/traverse.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/world.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/wrap.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/make_tt.h
     )
 set(ttg-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg.h
