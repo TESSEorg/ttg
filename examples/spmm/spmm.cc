@@ -2101,10 +2101,11 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
   if (saveShape) {
     A_shp_os.open("bspmm.A.id="+saveShapeId+".bs=" + basis_set_name + ".T=" + std::to_string(maxTs) +
                   ".eps=" + std::to_string(tile_perelem_2norm_threshold) + ".nb", std::ios_base::out | std::ios_base::trunc);
+    A_shp_os << std::setprecision(15);
     A_shp_os << "SparseArray[{" << std::endl;
   }
 
-  // fill the matrix, only insert tiles with norm greater than the threshold
+      // fill the matrix, only insert tiles with norm greater than the threshold
   auto fill_matrix = [&](const auto &tiles) {
     SpMatrix<> M, Mref;
 
@@ -2191,7 +2192,7 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
                   elements.emplace_back(row_tile_idx, col_tile_idx, tile);
                   rowidx_to_colidx.at(row_tile_idx).emplace_back(col_tile_idx);
                   colidx_to_rowidx.at(col_tile_idx).emplace_back(row_tile_idx);
-                  total_tile_volume += tile.range().volume();
+                  total_tile_volume += tile_volume;
                 }
               }
             }
@@ -2242,7 +2243,7 @@ static void initBlSpLibint2(libint2::Operator libint2_op, libint2::any libint2_o
 
     const auto nbf = bs.nbf();
     const double density = total_tile_volume / (nbf * nbf);
-    const auto avg_tile_volume = total_tile_volume / elements.size();
+    const auto avg_tile_volume = total_tile_volume / nnz_tiles;
     M.setFromTriplets(elements.begin(), elements.end());
     if (buildRefs && rank == 0) Mref.setFromTriplets(ref_elements.begin(), ref_elements.end());
 
