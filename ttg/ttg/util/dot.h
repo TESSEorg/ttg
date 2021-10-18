@@ -25,13 +25,13 @@ namespace ttg {
     }
 
     // A unique name for the node derived from the pointer
-    std::string nodename(const OpBase *op) {
+    std::string nodename(const TTBase *op) {
       std::stringstream s;
       s << "n" << (void *)op;
       return s.str();
     }
 
-    void opfunc(OpBase *op) {
+    void opfunc(TTBase *op) {
       std::string opnm = nodename(op);
 
       buf << "        " << opnm << " [shape=record,style=filled,fillcolor=gray90,label=\"{";
@@ -95,7 +95,7 @@ namespace ttg {
    public:
     /// @return string containing the graph specification in the format understood by GraphViz's dot program
     template <typename... OpBasePtrs>
-    std::enable_if_t<(std::is_convertible_v<std::remove_const_t<std::remove_reference_t<OpBasePtrs>>, OpBase *> && ...),
+    std::enable_if_t<(std::is_convertible_v<std::remove_const_t<std::remove_reference_t<OpBasePtrs>>, TTBase *> && ...),
                      std::string>
     operator()(OpBasePtrs &&... ops) {
       reset();

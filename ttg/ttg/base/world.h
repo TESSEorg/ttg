@@ -32,7 +32,7 @@ namespace ttg {
     /// Base class for implementation-specific Worlds
     class WorldImplBase {
      private:
-      std::list<ttg::OpBase*> m_op_register;
+      std::list<ttg::TTBase*> m_op_register;
       std::vector<std::shared_ptr<std::promise<void>>> m_statuses;
       std::vector<std::function<void()>> m_callbacks;
       std::vector<std::shared_ptr<void>> m_ptrs;
@@ -88,12 +88,12 @@ namespace ttg {
 
       virtual void execute() {}
 
-      void register_op(ttg::OpBase* op) {
+      void register_op(ttg::TTBase* op) {
         // TODO: do we need locking here?
         m_op_register.push_back(op);
       }
 
-      void deregister_op(ttg::OpBase* op) {
+      void deregister_op(ttg::TTBase* op) {
         // TODO: do we need locking here?
         m_op_register.remove(op);
       }

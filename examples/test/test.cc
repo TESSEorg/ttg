@@ -108,9 +108,9 @@ class Everything {
 };
 
 class EverythingBase {
-  std::unique_ptr<OpBase> producer;
-  std::unique_ptr<OpBase> a;
-  std::unique_ptr<OpBase> consumer;
+  std::unique_ptr<TTBase> producer;
+  std::unique_ptr<TTBase> a;
+  std::unique_ptr<TTBase> consumer;
 
  public:
   EverythingBase() : producer(new Producer("producer")), a(new A("A")), consumer(new Consumer("consumer")) {
@@ -302,8 +302,8 @@ class Everything5 {
 };
 
 class EverythingComposite {
-  std::unique_ptr<OpBase> P;
-  std::unique_ptr<OpBase> AC;
+  std::unique_ptr<TTBase> P;
+  std::unique_ptr<TTBase> AC;
 
  public:
   EverythingComposite() {
@@ -322,13 +322,13 @@ class EverythingComposite {
     ttg::print("q  in<0>", (void *)(ttg::TerminalBase *)(std::get<0>(q)));
 
     // std::array<std::unique_ptr<OpBase>,2> ops{std::move(a),std::move(c)};
-    std::vector<std::unique_ptr<OpBase>> ops(2);
+    std::vector<std::unique_ptr<TTBase>> ops(2);
     ops[0] = std::move(a);
     ops[1] = std::move(c);
     ttg::print("opsin(0)", (void *)(ops[0]->in(0)));
     ttg::print("ops size", ops.size());
 
-    auto ac = make_composite_op(std::move(ops), q, std::make_tuple(), "Fred");
+    auto ac = make_composite_tt(std::move(ops), q, std::make_tuple(), "Fred");
 
     ttg::print("AC in<0>", (void *)(ttg::TerminalBase *)(ac->in<0>()));
     connect<0, 0>(p, ac);  // p->out<0>()->connect(ac->in<0>());
@@ -495,7 +495,7 @@ int try_main(int argc, char **argv) {
   //  debugger->set_cmd("gdb_xterm");
 
   {
-    ttg::OpBase::set_trace_all(false);
+    ttg::TTBase::set_trace_all(false);
 
     ttg_execute(ttg_default_execution_context());
 

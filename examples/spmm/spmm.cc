@@ -1306,7 +1306,7 @@ int main(int argc, char **argv) {
   {
     if (debug & (1 << 0)) {
       ttg::trace_on();
-      OpBase::set_trace_all(true);
+      TTBase::set_trace_all(true);
     }
 
     SpMatrix<> A, B, C, Aref, Bref;

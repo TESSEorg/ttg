@@ -48,7 +48,7 @@ namespace ttg {
   /// applies @c make_executable method to every op in the graph
   /// return true if there are no dangling out terminals
   template <typename... OpBasePtrs>
-  std::enable_if_t<(std::is_convertible_v<std::remove_const_t<std::remove_reference_t<OpBasePtrs>>, OpBase *> && ...),
+  std::enable_if_t<(std::is_convertible_v<std::remove_const_t<std::remove_reference_t<OpBasePtrs>>, TTBase *> && ...),
                    bool>
   make_graph_executable(OpBasePtrs &&... ops) {
     return ttg::make_traverse([](auto &&x) { std::forward<decltype(x)>(x)->make_executable(); })(
@@ -77,7 +77,7 @@ namespace ttg {
   }
 
   /// Connected producer output terminal outindex to consumer input terminal inindex (via OpBase pointers)
-  inline void connect(size_t outindex, size_t inindex, OpBase *producer, OpBase *consumer) {
+  inline void connect(size_t outindex, size_t inindex, TTBase *producer, TTBase *consumer) {
     connect(producer->out(outindex), consumer->in(inindex));
   }
 

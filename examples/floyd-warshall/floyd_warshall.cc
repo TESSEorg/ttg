@@ -585,7 +585,7 @@ int main(int argc, char** argv) {
   ttg::ttg_initialize(argc, argv);
   ttg_fence(ttg_default_execution_context());
 
-  ttg::OpBase::set_trace_all(false);
+  ttg::TTBase::set_trace_all(false);
 
   // NEW IMPLEMENTATION
   int problem_size;

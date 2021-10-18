@@ -12,7 +12,7 @@
 namespace ttg {
 
   template <typename input_terminalsT, typename output_terminalsT>
-  class CompositeOp : public TTBase {
+  class CompositeTT : public TTBase {
    public:
     static constexpr int numins = std::tuple_size<input_terminalsT>::value;    // number of input arguments
     static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or results
@@ -21,27 +21,27 @@ namespace ttg {
     using output_terminals_type = output_terminalsT;  // should be a tuple of pointers to output terminals
 
    private:
-    std::vector<std::unique_ptr<OpBase>> ops;
+    std::vector<std::unique_ptr<TTBase>> ops;
     input_terminals_type ins;
     output_terminals_type outs;
 
-    CompositeOp(const CompositeOp &) = delete;
-    CompositeOp &operator=(const CompositeOp &) = delete;
-    CompositeOp(const CompositeOp &&) = delete;  // Move should be OK
+    CompositeTT(const CompositeTT &) = delete;
+    CompositeTT &operator=(const CompositeTT &) = delete;
+    CompositeTT(const CompositeTT &&) = delete;  // Move should be OK
 
    public:
     template <typename opsT>
-    CompositeOp(opsT &&ops_take_ownership,
+    CompositeTT(opsT &&ops_take_ownership,
                 const input_terminals_type &ins,    // tuple of pointers to input terminals
                 const output_terminals_type &outs,  // tuple of pointers to output terminals
                 const std::string &name = "compositeop")
-        : OpBase(name, numins, numouts), ops(std::forward<opsT>(ops_take_ownership)), ins(ins), outs(outs) {
+        : TTBase(name, numins, numouts), ops(std::forward<opsT>(ops_take_ownership)), ins(ins), outs(outs) {
       if (ops.size() == 0) throw name + ":CompositeOp: need to wrap at least one op";  // see fence
 
       set_is_composite(true);
       for (auto &op : ops) op->set_is_within_composite(true, this);
-      set_terminals(ins, &CompositeOp<input_terminalsT, output_terminalsT>::set_input);
-      set_terminals(outs, &CompositeOp<input_terminalsT, output_terminalsT>::set_output);
+      set_terminals(ins, &CompositeTT<input_terminalsT, output_terminalsT>::set_input);
+      set_terminals(outs, &CompositeTT<input_terminalsT, output_terminalsT>::set_output);
 
       // traversal is still broken ... need to add checking for composite
     }
@@ -58,7 +58,7 @@ namespace ttg {
       return std::get<i>(outs);
     }
 
-    OpBase *get_op(std::size_t i) { return ops.at(i).get(); }
+    TTBase *get_op(std::size_t i) { return ops.at(i).get(); }
 
     void fence() { ops[0]->fence(); }
 
@@ -68,15 +68,15 @@ namespace ttg {
   };
 
   template <typename opsT, typename input_terminalsT, typename output_terminalsT>
-  std::unique_ptr<CompositeOp<input_terminalsT, output_terminalsT>> make_composite_op(
-      opsT &&ops, const input_terminalsT &ins, const output_terminalsT &outs, const std::string &name = "compositeop") {
-    return std::make_unique<CompositeOp<input_terminalsT, output_terminalsT>>(std::forward<opsT>(ops), ins, outs, name);
+  std::unique_ptr<CompositeTT<input_terminalsT, output_terminalsT>> make_composite_tt(
+      opsT &&ops, const input_terminalsT &ins, const output_terminalsT &outs, const std::string &name = "compositett") {
+    return std::make_unique<CompositeTT<input_terminalsT, output_terminalsT>>(std::forward<opsT>(ops), ins, outs, name);
   }
 
 
   /// A data sink for one input
   template <typename keyT, typename input_valueT>
-  class OpSink : public OpBase {
+  class SinkTT : public TTBase {
     static constexpr int numins = 1;
     static constexpr int numouts = 0;
 
@@ -88,10 +88,10 @@ namespace ttg {
     input_terminals_type input_terminals;
     output_terminals_type output_terminals;
 
-    OpSink(const OpSink &other) = delete;
-    OpSink &operator=(const OpSink &other) = delete;
-    OpSink(OpSink &&other) = delete;
-    OpSink &operator=(OpSink &&other) = delete;
+    SinkTT(const SinkTT &other) = delete;
+    SinkTT &operator=(const SinkTT &other) = delete;
+    SinkTT(SinkTT &&other) = delete;
+    SinkTT &operator=(SinkTT &&other) = delete;
 
     template <typename terminalT>
     void register_input_callback(terminalT &input) {
@@ -105,23 +105,22 @@ namespace ttg {
     }
 
   public:
-    OpSink(const std::string& inname="junk") : OpBase("sink", numins, numouts) {
+   SinkTT(const std::string& inname="junk") : TTBase("sink", numins, numouts) {
       register_input_terminals(input_terminals, std::vector<std::string>{inname});
       register_input_callback(std::get<0>(input_terminals));
     }
 
-    OpSink(const input_edges_type &inedges, const std::string& inname="junk") : OpBase("sink", numins, numouts) {
+    SinkTT(const input_edges_type &inedges, const std::string& inname="junk") : TTBase("sink", numins, numouts) {
       register_input_terminals(input_terminals, std::vector<std::string>{inname});
       register_input_callback(std::get<0>(input_terminals));
       std::get<0>(inedges).set_out(&std::get<0>(input_terminals));
     }
 
-    virtual ~OpSink() {}
+    virtual ~SinkTT() {}
 
     void fence() {}
 
-    void make_executable() {
-        OpBase::make_executable();
+    void make_executable() { TTBase::make_executable();
     }
 
     /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned

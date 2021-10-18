@@ -568,7 +568,7 @@ int main(int argc, char** argv) {
   // world.taskq.add(world.rank(), hi);
   ttg_fence(ttg_default_execution_context());
 
-  ttg::OpBase::set_trace_all(false);
+  ttg::TTBase::set_trace_all(false);
 
   // NEW IMPLEMENTATION
   int problem_size;
