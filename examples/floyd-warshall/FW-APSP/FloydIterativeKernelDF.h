@@ -6,9 +6,10 @@
 using namespace std;
 
 template <typename T>
-BlockMatrix<T> floyd_iterative_kernel(int block_size, BlockMatrix<T> m_ij, 
-							BlockMatrix<T> m_ik, BlockMatrix<T> m_kj) {
-	//BlockMatrix<T> bm(block_size, block_size);
+BlockMatrix<T> floyd_iterative_kernel(int block_size, BlockMatrix<T> m_ij,
+                                      const BlockMatrix<T>& m_ik,
+                                      const BlockMatrix<T>& m_kj) {
+  //BlockMatrix<T> bm(block_size, block_size);
   for(int k = 0; k < block_size; ++k) {
 		//#pragma ivdep
     for(int i = 0; i < block_size; ++i) {

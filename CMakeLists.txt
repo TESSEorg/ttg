@@ -32,6 +32,10 @@ include(ExternalDependenciesVersions)
 include(LoadFetchContent)
 include(AddCustomTargetSubproject)
 
+# augment GNUInstallDirs's dirs with CMAKEDIR
+set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
+        CACHE PATH "TTG CMAKE install directory")
+
 ########################################
 #### user-defined configuration options
 ########################################
@@ -94,3 +98,31 @@ add_custom_target_subproject(ttg check USES_TERMINAL COMMAND ${CMAKE_CTEST_COMMA
 add_subdirectory(tests)
 add_subdirectory(examples)
 add_subdirectory(doc)
+
+# Create the version file
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(ttg-config-version.cmake
+        VERSION ${TTG_VERSION} COMPATIBILITY AnyNewerVersion)
+
+# Create the targets file
+export(EXPORT ttg
+       FILE "${PROJECT_BINARY_DIR}/ttg-targets.cmake")
+
+# Create the configure file
+configure_package_config_file(cmake/ttg-config.cmake.in
+        "${PROJECT_BINARY_DIR}/ttg-config.cmake"
+        INSTALL_DESTINATION "${CMAKE_INSTALL_CMAKEDIR}"
+        PATH_VARS CMAKE_INSTALL_PREFIX CMAKE_INSTALL_BINDIR
+        CMAKE_INSTALL_INCLUDEDIR CMAKE_INSTALL_LIBDIR
+        CMAKE_INSTALL_DOCDIR CMAKE_INSTALL_CMAKEDIR)
+
+# Install config, version, and target files
+install(EXPORT ttg
+        FILE "ttg-targets.cmake"
+        DESTINATION "${CMAKE_INSTALL_CMAKEDIR}"
+        COMPONENT ttg-config)
+install(FILES
+        "${PROJECT_BINARY_DIR}/ttg-config.cmake"
+        "${PROJECT_BINARY_DIR}/ttg-config-version.cmake"
+        DESTINATION "${CMAKE_INSTALL_CMAKEDIR}"
+        COMPONENT ttg-config)

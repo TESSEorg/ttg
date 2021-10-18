@@ -30,6 +30,9 @@ namespace ttg_parsec {
 
   inline void ttg_register_status(ttg::World world, const std::shared_ptr<std::promise<void>> &status_ptr);
 
+  template <typename Callback>
+  inline void ttg_register_callback(ttg::World world, Callback &&callback);
+
   inline ttg::Edge<> &ttg_ctl_edge(ttg::World world);
 
   inline void ttg_sum(ttg::World world, double &value);

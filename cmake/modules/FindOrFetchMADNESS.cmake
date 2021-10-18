@@ -1,9 +1,13 @@
-find_package(MADNESS 0.10.1 CONFIG QUIET COMPONENTS world HINTS "${MADNESS_ROOT_DIR}")
+if (NOT TARGET MADworld)
+  find_package(MADNESS 0.10.1 CONFIG QUIET COMPONENTS world HINTS "${MADNESS_ROOT_DIR}")
+  if (TARGET MADworld)
+      message(STATUS "Found MADNESS: MADNESS_CONFIG=${MADNESS_CONFIG}")
+  endif (TARGET MADworld)
+endif (NOT TARGET MADworld)
 
 if (NOT TARGET MADworld)
-
   set(MADNESS_BUILD_MADWORLD_ONLY ON CACHE BOOL "Whether to build MADNESS runtime only")
-  set(ENABLE_PARSEC ON CACHE BOOL "Whether to use PaRSEC as the task backend of MADWorld")
+  set(MADNESS_TASK_BACKEND PaRSEC CACHE STRING "The task backend to use for MADNESS tasks")
   FetchContent_Declare(
           MADNESS
           GIT_REPOSITORY https://github.com/m-a-d-n-e-s-s/madness.git
@@ -14,10 +18,9 @@ if (NOT TARGET MADworld)
           SOURCE_DIR MADNESS_SOURCE_DIR
           BINARY_DIR MADNESS_BINARY_DIR
           )
-  set_property(DIRECTORY ${MADNESS_SOURCE_DIR} PROPERTY EXCLUDE_FROM_ALL TRUE)
-  # making madness targets EXCLUDE_FROM_ALL via the above makes its install statement "UB": https://cmake.org/cmake/help/latest/command/install.html#installing-targets
-  # force 'all' target to build madness and MADworld using this dummy target
-  add_custom_target(ttg-force-all-to-build-madness-target ALL DEPENDS madness MADworld)
+
+  # set MADNESS_CONFIG to the install location so that we know where to find it
+  set(MADNESS_CONFIG ${CMAKE_INSTALL_PREFIX}/${MADNESS_INSTALL_CMAKEDIR}/madness-config.cmake)
 
 endif(NOT TARGET MADworld)
 

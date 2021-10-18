@@ -3,6 +3,8 @@
 #include <iostream>
 #include <unordered_map>
 
+#include <ttg/serialization/splitmd_data_descriptor.h>
+
 template <typename T>
 class BlockMatrix {
  private:
@@ -44,7 +46,7 @@ class BlockMatrix {
     // Initialize all elements of the matrix to 1
     for (int i = 0; i < _rows; ++i) {
       for (int j = 0; j < _cols; ++j) {
-        m_block.get()[i * _cols + j] = 1;
+        m_block.get()[i * _cols + j] = i * _cols + j;
       }
     }
   }
@@ -137,6 +139,33 @@ std::ostream& operator<<(std::ostream& s, const BlockMatrix<T>& m) {
   return s;
 }
 
+
+namespace ttg {
+
+  template<typename T>
+  struct SplitMetadataDescriptor<BlockMatrix<T>>
+  {
+
+    using metadata_t = std::pair<int, int>;
+
+    metadata_t get_metadata(const BlockMatrix<T>& t)
+    {
+      return std::make_pair(t.rows(), t.cols());
+    }
+
+    auto get_data(BlockMatrix<T>& t)
+    {
+      return std::array<iovec, 1>({t.size()*sizeof(T), t.get()});
+    }
+
+    auto create_from_metadata(const metadata_t& meta)
+    {
+      return BlockMatrix<T>(meta.first, meta.second);
+    }
+  };
+
+} // namespace ttg
+
 // https://stackoverflow.com/questions/32685540/why-cant-i-compile-an-unordered-map-with-a-pair-as-key
 // We need this since pair cannot be hashed by unordered_map.
 struct pair_hash {
@@ -164,12 +193,21 @@ class Matrix {
  public:
   Matrix() = default;
   Matrix(int nb_row, int nb_col, int b_rows, int b_cols)
+      : Matrix(nb_row, nb_col, b_rows, b_cols, [](int i, int j){ return true; }) {
+
+  }
+
+  template<typename Predicate>
+  Matrix(int nb_row, int nb_col, int b_rows, int b_cols, Predicate&& p)
       : nb_row(nb_row), nb_col(nb_col), b_rows(b_rows), b_cols(b_cols) {
     for (int i = 0; i < nb_row; i++)
       for (int j = 0; j < nb_col; j++) {
-        m[std::make_pair(i, j)] = BlockMatrix<T>(b_rows, b_cols);
+        if (p(i, j)) {
+          m[std::make_pair(i, j)] = BlockMatrix<T>(b_rows, b_cols);
+        }
       }
   }
+
 
   ~Matrix() {}
 
@@ -183,7 +221,12 @@ class Matrix {
 
   void fill() {
     for (int i = 0; i < nb_row; i++)
-      for (int j = 0; j < nb_col; j++) m[std::make_pair(i, j)].fill();
+      for (int j = 0; j < nb_col; j++) {
+        auto it = m.find(std::make_pair(i, j));
+        if (it != m.end()) {
+          it->second.fill();
+        }
+      }
   }
 
   bool operator==(const Matrix& matrix) const { return (matrix.m == m); }

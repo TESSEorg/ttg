@@ -5,7 +5,7 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 
 # Why TTG?
 
-- TTG marries the idea of flow programming models with the key innovations in the PARSEC runtime for compact specification of DAGs (PTG).
+- TTG marries the idea of flowgraph programming models with the key innovations in the PARSEC runtime for compact specification of DAGs (PTG).
 - TTG can efficiently compose and execute irregular computation patterns which are poorly served by the current programming and execution models.
 - TTG has strong support for distributed hybrid architectures for running modern scientific algorithms efficiently on current and near-future supercomputers. 
 
@@ -27,20 +27,14 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 For MADNESS runtime, add the below header file.
 
 ```cpp
-#include "madness/ttg.h"
+#include "ttg/madness/ttg.h"
 ```
 
 For PaRSEC runtime, add the below header file.
 ```cpp
-#include "parsec/ttg.h"
+#include "ttg/parsec/ttg.h"
 ```
-Import the namespaces required for using the TTG API.
 
-```cpp
-using namespace madness;
-using namespace madness::ttg;
-using namespace ::ttg;
-```
 - Step 2 : Define a TaskId (Key) which represents a unique identifier for each task and which is hashable.
 
 - Step 3 : Define a factory that returns a TemplateTask for every function that runs the computation. Below factory function returns a TemplateTask for recursively exploring the wavefronts of the Smith Waterman algorithm. The code adopts several common design motifs of a TTG program. Complete implementation of the algorithm can be found in the [examples](examples/) directory.
@@ -95,7 +89,7 @@ auto make_sw1(const funcT& func, int block_size, const std::string &a, const std
       send<4>(Key(i,j), X(block_size-1, block_size-1), out);
   };
 
-	Edge<Key, BlockMatrix<T>> recur("recur");
+  Edge<Key, BlockMatrix<T>> recur("recur");
   return wrap(f, edges(recur), edges(recur, leftedge, topedge, diagedge, resultedge), "sw1", {"recur"},
               {"recur", "leftedge", "topedge", "diagedge", "resultedge"});
 }
@@ -104,7 +98,7 @@ auto make_sw1(const funcT& func, int block_size, const std::string &a, const std
 - Step 4 : Define the edges and verify that the graph is connected in the main program.
 
 ```cpp
-	ttg_initialize(argc, argv, -1);
+  ttg_initialize(argc, argv, -1);
 
   Edge<Key, BlockMatrix<int>> leftedge, topedge, diagedge;
   Edge<Key, int> resultedge;

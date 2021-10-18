@@ -90,7 +90,7 @@ namespace ttg {
       const T *t = reinterpret_cast<T *>(object);
       auto metadata = smd.get_metadata(t);
       size_t size = sizeof(metadata);
-      for (auto iovec : smd.get_data(t)) {
+      for (auto &&iovec : smd.get_data(t)) {
         size += iovec.num_bytes;
       }
 
@@ -112,7 +112,7 @@ namespace ttg {
       auto metadata = smd.get_metadata(t);
       std::memcpy(&char_buf[begin], metadata, sizeof(metadata));
       size_t pos = sizeof(metadata);
-      for (auto iovec : smd.get_data(t)) {
+      for (auto &&iovec : smd.get_data(t)) {
         std::memcpy(&char_buf[begin + pos], iovec.data, iovec.num_bytes);
         pos += iovec.num_bytes;
         assert(pos < size);
@@ -136,7 +136,7 @@ namespace ttg {
       T t_created = smd.create_from_metadata();
       size_t pos = sizeof(metadata);
       *t = t_created;
-      for (auto iovec : smd.get_data(t)) {
+      for (auto &&iovec : smd.get_data(t)) {
         std::memcpy(iovec.data, &char_buf[begin + pos], iovec.num_bytes);
         pos += iovec.num_bytes;
         assert(pos < size);
@@ -155,8 +155,7 @@ namespace ttg {
   template <typename T>
   struct default_data_descriptor<
       T, std::enable_if_t<((!std::is_trivially_copyable<T>::value && detail::is_madness_buffer_serializable_v<T>) ||
-                          detail::is_madness_user_buffer_serializable_v<T>) &&
-                          !ttg::has_split_metadata<T>::value>> {
+                           detail::is_madness_user_buffer_serializable_v<T>)&&!ttg::has_split_metadata<T>::value>> {
     static constexpr const bool serialize_size_is_const = false;
 
     static uint64_t payload_size(const void *object) {
