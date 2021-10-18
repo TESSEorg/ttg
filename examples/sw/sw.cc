@@ -122,7 +122,7 @@ auto make_result(bool verify, T expected, Edge<Key, T> result) {
     }
   };
 
-  return wrap(f, edges(result), edges(), "Final Output", {"result"}, {});
+  return make_tt(f, edges(result), edges(), "Final Output", {"result"}, {});
 }
 
 template <typename funcT, typename T>
@@ -156,7 +156,7 @@ auto make_sw2(const funcT& func, int block_size, const std::string& a, const std
         if (i == num_blocks - 1 && j == num_blocks - 1) send<3>(Key(i, j), X(block_size - 1, block_size - 1), out);
       };
 
-  return wrap(f, edges(leftedge, topedge, diagedge), edges(leftedge, topedge, diagedge, resultedge), "sw2",
+  return make_tt(f, edges(leftedge, topedge, diagedge), edges(leftedge, topedge, diagedge, resultedge), "sw2",
               {"leftedge", "topedge", "diagedge"}, {"leftedge", "topedge", "diagedge", "result"});
 }
 
@@ -208,7 +208,7 @@ auto make_sw1(const funcT& func, int block_size, const std::string& a, const std
   };
 
   Edge<Key, BlockMatrix<T>> recur("recur");
-  return wrap(f, edges(recur), edges(recur, leftedge, topedge, diagedge, resultedge), "sw1", {"recur"},
+  return make_tt(f, edges(recur), edges(recur, leftedge, topedge, diagedge, resultedge), "sw1", {"recur"},
               {"recur", "leftedge", "topedge", "diagedge", "resultedge"});
 }
 

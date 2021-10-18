@@ -309,8 +309,8 @@ std::ostream& operator<<(std::ostream&s, const Control& ctl) {
     return s;
 }
 
-class Printer : public Op<Key, std::tuple<>, Printer, Node> {
-    using baseT = Op<Key, std::tuple<>, Printer, Node>;
+class Printer : public TT<Key, std::tuple<>, Printer, Node> {
+    using baseT = TT<Key, std::tuple<>, Printer, Node>;
 public:
     Printer(const std::string& name) : baseT(name, {"input"}, {}) {}
 
@@ -325,8 +325,8 @@ public:
 };
 
 
-class GaxpyOp : public Op<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, GaxpyOp, Node, Node> {
-	using baseT =	   Op<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, GaxpyOp, Node, Node>;
+class GaxpyOp : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, GaxpyOp, Node, Node> {
+	using baseT =  TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, GaxpyOp, Node, Node>;
 
 	double alpha;
 	double beta;
@@ -338,7 +338,7 @@ public:
 	GaxpyOp(const double &alpha, const double &beta, const typename baseT::input_edges_type& inedges, const typename baseT::output_edges_type& outedges, const std::string& name)
 	: baseT(inedges, outedges, name, {"input_op1", "input_op2"}, {"iterator_op1", "result", "iterator_op2"}), alpha(alpha), beta(beta) {}
 
-	~GaxpyOp() {std::cout << "Gaxpy Op destructor\n";}
+	~GaxpyOp() {std::cout << "GaxpyOp destructor\n";}
 
 	void op(const Key &key, const std::tuple<Node, Node> &t, baseT::output_terminals_type &out) {
 		const Node &left = std::get<0>(t);
@@ -369,8 +369,8 @@ public:
 };
 
 
-class BinaryOp : public Op<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, BinaryOp, Node, Node> {
-	using baseT =   Op<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, BinaryOp, Node, Node>;
+class BinaryOp : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, BinaryOp, Node, Node> {
+	using baseT =   TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, BinaryOp, Node, Node>;
 
    using funcT = Vector (*)(const Vector &, const Vector&);
    funcT func;
@@ -430,8 +430,8 @@ public:
 };
 
 
-class Diff_prologue : public Op<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Diff_prologue, Node> {
-   using baseT =  	     Op<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Diff_prologue, Node>;
+class Diff_prologue : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Diff_prologue, Node> {
+   using baseT =  	     TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Diff_prologue, Node>;
 
 public:
 
@@ -452,8 +452,8 @@ public:
    }
 };
 
-class Diff_doIt : public Op<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Diff_doIt, Node, Node, Node> {
-   using baseT =         Op<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Diff_doIt, Node, Node, Node>;
+class Diff_doIt : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Diff_doIt, Node, Node, Node> {
+   using baseT =         TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Diff_doIt, Node, Node, Node>;
 
    Vector unfilter(const Vector &inputVector, int k, const Matrix * hg) const {
       Vector inputVector_copy(inputVector);
@@ -530,8 +530,8 @@ public:
 };
 
 
-class Compress_prologue : public Op<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Compress_prologue, Node> {
-   using baseT = 		 Op<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Compress_prologue, Node>;
+class Compress_prologue : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Compress_prologue, Node> {
+   using baseT = 		 TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Compress_prologue, Node>;
 
 public:
    Compress_prologue(const std::string &name)
@@ -564,8 +564,8 @@ public:
 
 };
 
-class Compress_doIt : public Op<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Compress_doIt, Node, Node> {
-   using baseT = 	     Op<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Compress_doIt, Node, Node>;
+class Compress_doIt : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Compress_doIt, Node, Node> {
+   using baseT = 	     TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Compress_doIt, Node, Node>;
 
 public:
    Compress_doIt(const std::string &name)
@@ -607,8 +607,8 @@ public:
 };
 
 
-class Reconstruct_prologue : public Op<Key, std::tuple<Out<Key, Vector>>, Reconstruct_prologue, Node> {
-   using baseT = 		    Op<Key, std::tuple<Out<Key, Vector>>, Reconstruct_prologue, Node>;
+class Reconstruct_prologue : public TT<Key, std::tuple<Out<Key, Vector>>, Reconstruct_prologue, Node> {
+   using baseT = 		    TT<Key, std::tuple<Out<Key, Vector>>, Reconstruct_prologue, Node>;
 
 public:
    Reconstruct_prologue(const std::string &name)
@@ -633,8 +633,8 @@ public:
 };
 
 
-class Reconstruct_doIt : public Op<Key, std::tuple<Out<Key, Vector>, Out<Key, Node>>, Reconstruct_doIt, Vector, Node> {
-   using baseT = Op<Key, std::tuple<Out<Key, Vector>, Out<Key, Node>>, Reconstruct_doIt, Vector, Node>;
+class Reconstruct_doIt : public TT<Key, std::tuple<Out<Key, Vector>, Out<Key, Node>>, Reconstruct_doIt, Vector, Node> {
+   using baseT = TT<Key, std::tuple<Out<Key, Vector>, Out<Key, Node>>, Reconstruct_doIt, Vector, Node>;
 
 public:
    Reconstruct_doIt(const std::string &name)
@@ -672,8 +672,8 @@ public:
 };
 
 
-class Project : public  Op<Key, std::tuple<Out<Key,Control>, Out<Key,Node>>, Project, Control> {
-    using baseT = 	Op<Key, std::tuple<Out<Key,Control>, Out<Key,Node>>, Project, Control>;
+class Project : public  TT<Key, std::tuple<Out<Key,Control>, Out<Key,Node>>, Project, Control> {
+    using baseT = 	TT<Key, std::tuple<Out<Key,Control>, Out<Key,Node>>, Project, Control>;
 
  public:
     using funcT = double(*)(double);
@@ -732,8 +732,8 @@ private:
 
 };
 
-class Producer : public Op<Key, std::tuple<Out<Key, Control>>, Producer> {
-	using baseT = 		Op<Key, std::tuple<Out<Key, Control>>, Producer>;
+class Producer : public TT<Key, std::tuple<Out<Key, Control>>, Producer> {
+	using baseT = 		TT<Key, std::tuple<Out<Key, Control>>, Producer>;
 
 public:
 	Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
@@ -752,8 +752,8 @@ public:
 
 
 // EXAMPLE 1
-class Everything : public Op<Key, std::tuple<>, Everything> {
-  using baseT = Op<Key, std::tuple<>, Everything>;
+class Everything : public TT<Key, std::tuple<>, Everything> {
+  using baseT = TT<Key, std::tuple<>, Everything>;
 
   Producer producer;
   Project project;
@@ -1364,7 +1364,7 @@ int main(int argc, char** argv) {
           xterm_debug(argv[0], 0);
   }
 
-  OpBase::set_trace_all(false); */
+  TTBase::set_trace_all(false); */
 
   ttg_initialize(argc, argv);
   auto &world = ttg::get_default_world();

@@ -143,7 +143,7 @@ auto make_start(params_t &tparams, Edge<Key, unsigned long> rand_input_edge,
     send<2>(key, tosend, out);
   };
 
-  return wrap<Key>(f, edges(), edges(rand_input_edge, main_iter_data_edge, input_send_edge), "Start", {}, 
+  return make_tt<Key>(f, edges(), edges(rand_input_edge, main_iter_data_edge, input_send_edge), "Start", {},
       {"random input edge", "main iteration data edge", "input send edge"});
 }
 
@@ -185,7 +185,7 @@ auto make_randomgen_op(params_t &tparams,
     }
   };
 
-  return wrap(f, edges(rand_input_edge, main_iter_data_edge, input_send_edge), 
+  return make_tt(f, edges(rand_input_edge, main_iter_data_edge, input_send_edge),
       edges(rand_input_edge, process_data_edge, process_send_edge), "generator", 
       {"rand input edge", "main_iterator_data_edge", "input_send_edge"}, 
       {"rand recur edge", "process_data_edge", "process_send_edge"});
@@ -255,7 +255,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
       }
     }; 
 
-    return wrap(f, edges(process_data_edge, process_send_edge), 
+    return make_tt(f, edges(process_data_edge, process_send_edge),
         edges(keep_data_edge, send_data_edge, send_to_other_data_edge, direct_update_data_edge, forward_send_edge), "Process Data", {
         "process data edge", "process send edge"}, {"keep data edge", "send data edge", 
         "send to other Ps data edge", "direct update data edge", "direct update send edge"}); 
@@ -297,7 +297,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
 
     };
 
-    return wrap(f, edges(keep_data_edge, send_data_edge, send_to_other_data_edge), 
+    return make_tt(f, edges(keep_data_edge, send_data_edge, send_to_other_data_edge),
         edges(process_data_edge, process_send_edge, update_data_edge, forward_send_edge), 
         "Receive Data from other Ps", 
         {"keep_data", "my_send_data", "recv_data"}, 
@@ -339,8 +339,8 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
       }
     };
 
-    return wrap(f, edges(fuse(direct_update_data_edge,update_data_edge), forward_send_edge), edges(main_iter_data_edge, input_send_edge, result_data_edge), 
-        "Random Update Op", {"update_edge", "forward_send_edge"}, {"main_iter_edge", "input_send_edge", "result_edge"});
+    return make_tt(f, edges(fuse(direct_update_data_edge,update_data_edge), forward_send_edge), edges(main_iter_data_edge, input_send_edge, result_data_edge),
+        "Random Update TT", {"update_edge", "forward_send_edge"}, {"main_iter_edge", "input_send_edge", "result_edge"});
   }
 
 #define NUPDATE (4 * TABLE_SIZE)
@@ -362,7 +362,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
         << " : " << ((temp <= 0.01*TABLE_SIZE) ? "PASSED!" : "FAILED!") << std::endl;*/
     };
 
-    return wrap<Key>(f, edges(result_edge), edges(), "Verify Op", {"result_edge"},{});
+    return make_tt<Key>(f, edges(result_edge), edges(), "Verify TT", {"result_edge"},{});
   }
 
   //Original GUPS Random Access benchmark code

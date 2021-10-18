@@ -94,10 +94,10 @@ namespace ttg {
 
    public:
     /// @return string containing the graph specification in the format understood by GraphViz's dot program
-    template <typename... OpBasePtrs>
-    std::enable_if_t<(std::is_convertible_v<std::remove_const_t<std::remove_reference_t<OpBasePtrs>>, TTBase *> && ...),
+    template <typename... TTBasePtrs>
+    std::enable_if_t<(std::is_convertible_v<std::remove_const_t<std::remove_reference_t<TTBasePtrs>>, TTBase *> && ...),
                      std::string>
-    operator()(OpBasePtrs &&... ops) {
+    operator()(TTBasePtrs &&... ops) {
       reset();
       buf.str(std::string());
       buf.clear();
@@ -105,7 +105,7 @@ namespace ttg {
       buf << "digraph G {\n";
       buf << "        ranksep=1.5;\n";
       bool t = true;
-      t &= (traverse(std::forward<OpBasePtrs>(ops)) && ... );
+      t &= (traverse(std::forward<TTBasePtrs>(ops)) && ... );
       buf << "}\n";
 
       reset();

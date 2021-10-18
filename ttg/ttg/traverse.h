@@ -85,9 +85,9 @@ namespace ttg {
         return status;
       }
 
-      // converters to OpBase*
-      static TTBase * to_OpBase_ptr(TTBase * op) { return op; }
-      static TTBase * to_OpBase_ptr(const TTBase * op) {
+      // converters to TTBase*
+      static TTBase * to_TTBase_ptr(TTBase * op) { return op; }
+      static TTBase * to_TTBase_ptr(const TTBase * op) {
         return const_cast<TTBase *>(op);
       }
 
@@ -105,17 +105,17 @@ namespace ttg {
   }  // namespace detail
 
   /// @brief Traverses a graph of ops in depth-first manner following out edges
-  /// @tparam OpVisitor A Callable type that visits each Op
+  /// @tparam TTVisitor A Callable type that visits each TT
   /// @tparam InVisitor A Callable type that visits each In terminal
   /// @tparam OutVisitor A Callable type that visits each Out terminal
-  template <typename OpVisitor = detail::Traverse::null_visitor<TTBase>,
+  template <typename TTVisitor = detail::Traverse::null_visitor<TTBase>,
       typename InVisitor = detail::Traverse::null_visitor<TerminalBase>,
       typename OutVisitor = detail::Traverse::null_visitor<TerminalBase>>
   class Traverse : private detail::Traverse {
    public:
     static_assert(
-        std::is_void<meta::void_t<decltype(std::declval<OpVisitor>()(std::declval<TTBase *>()))>>::value,
-        "Traverse<OpVisitor,...>: OpVisitor(OpBase *op) must be a valid expression");
+        std::is_void<meta::void_t<decltype(std::declval<TTVisitor>()(std::declval<TTBase *>()))>>::value,
+        "Traverse<TTVisitor,...>: TTVisitor(TTBase *op) must be a valid expression");
     static_assert(
         std::is_void<meta::void_t<decltype(std::declval<InVisitor>()(std::declval<TerminalBase *>()))>>::value,
         "Traverse<,InVisitor,>: InVisitor(TerminalBase *op) must be a valid expression");
@@ -123,32 +123,32 @@ namespace ttg {
         std::is_void<meta::void_t<decltype(std::declval<OutVisitor>()(std::declval<TerminalBase *>()))>>::value,
         "Traverse<...,OutVisitor>: OutVisitor(TerminalBase *op) must be a valid expression");
 
-    template <typename OpVisitor_ = detail::Traverse::null_visitor<TTBase>,
+    template <typename TTVisitor_ = detail::Traverse::null_visitor<TTBase>,
               typename InVisitor_ = detail::Traverse::null_visitor<TerminalBase>,
               typename OutVisitor_ = detail::Traverse::null_visitor<TerminalBase>>
-    Traverse(OpVisitor_ &&op_v = OpVisitor_{}, InVisitor_ &&in_v = InVisitor_{}, OutVisitor_ &&out_v = OutVisitor_{})
-        : op_visitor_(std::forward<OpVisitor_>(op_v))
+    Traverse(TTVisitor_ &&op_v = TTVisitor_{}, InVisitor_ &&in_v = InVisitor_{}, OutVisitor_ &&out_v = OutVisitor_{})
+        : op_visitor_(std::forward<TTVisitor_>(op_v))
         , in_visitor_(std::forward<InVisitor_>(in_v))
         , out_visitor_(std::forward<OutVisitor_>(out_v)){};
 
-    const OpVisitor &op_visitor() const { return op_visitor_; }
+    const TTVisitor &op_visitor() const { return op_visitor_; }
     const InVisitor &in_visitor() const { return in_visitor_; }
     const OutVisitor &out_visitor() const { return out_visitor_; }
 
-    /// Traverses graph starting at one or more Ops
-    template <typename ... OpBasePtrs>
-    std::enable_if_t<(std::is_convertible_v<std::remove_reference_t<OpBasePtrs>, TTBase *> && ...),bool>
+    /// Traverses graph starting at one or more TTs
+    template <typename ... TTBasePtrs>
+    std::enable_if_t<(std::is_convertible_v<std::remove_reference_t<TTBasePtrs>, TTBase *> && ...),bool>
         operator()(
-        TTBase * op, OpBasePtrs && ... ops) {
+        TTBase * op, TTBasePtrs && ... ops) {
       reset();
       bool result = traverse(op);
-      result &= (traverse(std::forward<OpBasePtrs>(ops)) && ... );
+      result &= (traverse(std::forward<TTBasePtrs>(ops)) && ... );
       reset();
       return result;
     }
 
    private:
-    OpVisitor op_visitor_;
+    TTVisitor op_visitor_;
     InVisitor in_visitor_;
     OutVisitor out_visitor_;
 
@@ -162,10 +162,10 @@ namespace ttg {
   namespace {
     auto trivial_1param_lambda = [](auto &&op) {};
   }
-  template <typename OpVisitor = decltype(trivial_1param_lambda)&, typename InVisitor = decltype(trivial_1param_lambda)&, typename OutVisitor = decltype(trivial_1param_lambda)&>
-  auto make_traverse(OpVisitor &&op_v = trivial_1param_lambda, InVisitor &&in_v = trivial_1param_lambda, OutVisitor &&out_v = trivial_1param_lambda) {
-    return Traverse<std::remove_reference_t<OpVisitor>, std::remove_reference_t<InVisitor>,
-                    std::remove_reference_t<OutVisitor>>{std::forward<OpVisitor>(op_v), std::forward<InVisitor>(in_v),
+  template <typename TTVisitor = decltype(trivial_1param_lambda)&, typename InVisitor = decltype(trivial_1param_lambda)&, typename OutVisitor = decltype(trivial_1param_lambda)&>
+  auto make_traverse(TTVisitor &&op_v = trivial_1param_lambda, InVisitor &&in_v = trivial_1param_lambda, OutVisitor &&out_v = trivial_1param_lambda) {
+    return Traverse<std::remove_reference_t<TTVisitor>, std::remove_reference_t<InVisitor>,
+                    std::remove_reference_t<OutVisitor>>{std::forward<TTVisitor>(op_v), std::forward<InVisitor>(in_v),
                                                          std::forward<OutVisitor>(out_v)};
   };
 

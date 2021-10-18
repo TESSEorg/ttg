@@ -190,7 +190,7 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>..
                      std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
   using output_terminals_type = typename ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
 
-  // Op needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
+  // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
   // 1. func_args_t = {const input_keyT&, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&}
   using func_args_t = boost::callable_traits::args_t<funcT>;
   constexpr const auto num_args = std::tuple_size<func_args_t>::value;
@@ -230,7 +230,7 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
                  std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
   using output_terminals_type = typename ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
 
-  // Op needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
+  // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
   // 1. func_args_t = {const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&}
   using func_args_t = boost::callable_traits::args_t<funcT>;
   constexpr const auto num_args = std::tuple_size<func_args_t>::value;

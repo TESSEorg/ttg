@@ -182,46 +182,46 @@ namespace ttg {
 
     namespace detail {
 
-      template <class Default, class Enabler, template <class...> class Op, class... Args>
+      template <class Default, class Enabler, template <class...> class TT, class... Args>
       struct detector {
         using value_t = std::false_type;
         using type = Default;
       };
 
-      template <class Default, template <class...> class Op, class... Args>
-      struct detector<Default, void_t<Op<Args...>>, Op, Args...> {
+      template <class Default, template <class...> class TT, class... Args>
+      struct detector<Default, void_t<TT<Args...>>, TT, Args...> {
         using value_t = std::true_type;
-        using type = Op<Args...>;
+        using type = TT<Args...>;
       };
 
     }  // namespace detail
 
-    template <template <class...> class Op, class... Args>
-    using is_detected = typename detail::detector<nonesuch, void, Op, Args...>::value_t;
+    template <template <class...> class TT, class... Args>
+    using is_detected = typename detail::detector<nonesuch, void, TT, Args...>::value_t;
 
-    template <template <class...> class Op, class... Args>
-    using detected_t = typename detail::detector<nonesuch, void, Op, Args...>::type;
+    template <template <class...> class TT, class... Args>
+    using detected_t = typename detail::detector<nonesuch, void, TT, Args...>::type;
 
-    template <class Default, template <class...> class Op, class... Args>
-    using detected_or = detail::detector<Default, void, Op, Args...>;
+    template <class Default, template <class...> class TT, class... Args>
+    using detected_or = detail::detector<Default, void, TT, Args...>;
 
-    template <template <class...> class Op, class... Args>
-    constexpr bool is_detected_v = is_detected<Op, Args...>::value;
+    template <template <class...> class TT, class... Args>
+    constexpr bool is_detected_v = is_detected<TT, Args...>::value;
 
-    template <class Default, template <class...> class Op, class... Args>
-    using detected_or_t = typename detected_or<Default, Op, Args...>::type;
+    template <class Default, template <class...> class TT, class... Args>
+    using detected_or_t = typename detected_or<Default, TT, Args...>::type;
 
-    template <class Expected, template <class...> class Op, class... Args>
-    using is_detected_exact = std::is_same<Expected, detected_t<Op, Args...>>;
+    template <class Expected, template <class...> class TT, class... Args>
+    using is_detected_exact = std::is_same<Expected, detected_t<TT, Args...>>;
 
-    template <class Expected, template <class...> class Op, class... Args>
-    constexpr bool is_detected_exact_v = is_detected_exact<Expected, Op, Args...>::value;
+    template <class Expected, template <class...> class TT, class... Args>
+    constexpr bool is_detected_exact_v = is_detected_exact<Expected, TT, Args...>::value;
 
-    template <class To, template <class...> class Op, class... Args>
-    using is_detected_convertible = std::is_convertible<detected_t<Op, Args...>, To>;
+    template <class To, template <class...> class TT, class... Args>
+    using is_detected_convertible = std::is_convertible<detected_t<TT, Args...>, To>;
 
-    template <class To, template <class...> class Op, class... Args>
-    constexpr bool is_detected_convertible_v = is_detected_convertible<To, Op, Args...>::value;
+    template <class To, template <class...> class TT, class... Args>
+    constexpr bool is_detected_convertible_v = is_detected_convertible<To, TT, Args...>::value;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // type_printer useful to print types in metaprograms

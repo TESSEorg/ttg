@@ -115,7 +115,7 @@ auto make_wavefront2(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
     }
   };
 
-  return wrap(f, edges(input, left, top, bottom_right), edges(left, top, result), "wavefront2",
+  return make_tt(f, edges(input, left, top, bottom_right), edges(left, top, result), "wavefront2",
               {"input", "left", "top", "bottom-right"}, {"left", "top", "result"});
 }
 
@@ -169,7 +169,7 @@ auto initiator(Matrix<T>* m, Edge<Key, BlockMatrix<T>>& out0, Edge<Key, BlockMat
     }
   };
 
-  return wrap<Key>(f, edges(), edges(out0, out1, out2, bottom_right0, bottom_right1, bottom_right2), "initiator", {},
+  return make_tt<Key>(f, edges(), edges(out0, out1, out2, bottom_right0, bottom_right1, bottom_right2), "initiator", {},
                    {"out0", "out1", "out2", "bottom_right0", "bottom-right1", "bottom-right2"});
 }
 
@@ -193,7 +193,7 @@ auto make_wavefront0(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
     send<1>(Key(i, j), res, out);
   };
 
-  return wrap(f, edges(input, bottom_right), edges(toporleft, result), "wavefront0", {"input", "bottom_right"},
+  return make_tt(f, edges(input, bottom_right), edges(toporleft, result), "wavefront0", {"input", "bottom_right"},
               {"toporleft", "result"});
 }
 
@@ -243,8 +243,8 @@ auto make_wavefront1(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
     }
   };
 
-  return wrap(f, edges(input, toporleft, bottom_right), edges(toporleft, output1, output2, result), "wavefront1",
-              {"input", "toporleft", "bottom_right"}, {"recur", "output1", "output2", "result"});
+  return make_tt(f, edges(input, toporleft, bottom_right), edges(toporleft, output1, output2, result), "wavefront1",
+                 {"input", "toporleft", "bottom_right"}, {"recur", "output1", "output2", "result"});
 }
 
 template <typename T>
@@ -256,7 +256,7 @@ auto make_result(Matrix<T>* r, const Edge<Key, BlockMatrix<T>>& result) {
     }
   };
 
-  return wrap(f, edges(result), edges(), "Final Output", {"result"}, {});
+  return make_tt(f, edges(result), edges(), "Final Output", {"result"}, {});
 }
 
 int main(int argc, char** argv) {

@@ -21,7 +21,7 @@ namespace ttg {
     using output_terminals_type = output_terminalsT;  // should be a tuple of pointers to output terminals
 
    private:
-    std::vector<std::unique_ptr<TTBase>> ops;
+    std::vector<std::unique_ptr<TTBase>> tts;
     input_terminals_type ins;
     output_terminals_type outs;
 
@@ -34,12 +34,12 @@ namespace ttg {
     CompositeTT(opsT &&ops_take_ownership,
                 const input_terminals_type &ins,    // tuple of pointers to input terminals
                 const output_terminals_type &outs,  // tuple of pointers to output terminals
-                const std::string &name = "compositeop")
-        : TTBase(name, numins, numouts), ops(std::forward<opsT>(ops_take_ownership)), ins(ins), outs(outs) {
-      if (ops.size() == 0) throw name + ":CompositeOp: need to wrap at least one op";  // see fence
+                const std::string &name = "compositett")
+        : TTBase(name, numins, numouts), tts(std::forward<opsT>(ops_take_ownership)), ins(ins), outs(outs) {
+      if (tts.size() == 0) throw name + ":CompositeTT: need to wrap at least one TT";  // see fence
 
       set_is_composite(true);
-      for (auto &op : ops) op->set_is_within_composite(true, this);
+      for (auto &op : tts) op->set_is_within_composite(true, this);
       set_terminals(ins, &CompositeTT<input_terminalsT, output_terminalsT>::set_input);
       set_terminals(outs, &CompositeTT<input_terminalsT, output_terminalsT>::set_output);
 
@@ -58,12 +58,12 @@ namespace ttg {
       return std::get<i>(outs);
     }
 
-    TTBase *get_op(std::size_t i) { return ops.at(i).get(); }
+    TTBase *get_op(std::size_t i) { return tts.at(i).get(); }
 
-    void fence() { ops[0]->fence(); }
+    void fence() { tts[0]->fence(); }
 
     void make_executable() {
-      for (auto &op : ops) op->make_executable();
+      for (auto &op : tts) op->make_executable();
     }
   };
 

@@ -235,8 +235,8 @@ auto make_wavefront2(const funcT& func, Matrix<T>* m, Edge<Key, BlockMatrix<T>>&
     }
   };
 
-  return wrap(f, edges(input1, input2), edges(input1, input2), "wavefront2", {"first", "second"},
-              {"output1", "output2"});
+  return make_tt(f, edges(input1, input2), edges(input1, input2), "wavefront2", {"first", "second"},
+                 {"output1", "output2"});
 }
 
 // Method to generate wavefront task with single input.
@@ -281,7 +281,7 @@ auto make_wavefront(const funcT& func, Matrix<T>* m, Edge<Key, BlockMatrix<T>>& 
   };
 
   Edge<Key, BlockMatrix<T>> recur("recur");
-  return wrap(f, edges(recur), edges(recur, input1, input2), "wavefront", {"control"}, {"recur", "output1", "output2"});
+  return make_tt(f, edges(recur), edges(recur, input1, input2), "wavefront", {"control"}, {"recur", "output1", "output2"});
 }
 
 int main(int argc, char** argv) {

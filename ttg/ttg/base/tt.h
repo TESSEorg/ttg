@@ -177,13 +177,13 @@ namespace ttg {
       return outputs[i];
     }
 
-    /// Returns a pointer to the i'th input terminal ... to make API consistent with Op
+    /// Returns a pointer to the i'th input terminal ... to make API consistent with TT
     template <std::size_t i>
     ttg::TerminalBase *in() {
       return in(i);
     }
 
-    /// Returns a pointer to the i'th output terminal ... to make API consistent with Op
+    /// Returns a pointer to the i'th output terminal ... to make API consistent with TT
     template <std::size_t i>
     ttg::TerminalBase *out() {
       return out(i);
@@ -191,7 +191,7 @@ namespace ttg {
 
     uint64_t get_instance_id() const { return instance_id; }
 
-    /// Waits for the entire TTG associated with this op to be completed (collective)
+    /// Waits for the entire TTG associated with this TT to be completed (collective)
     virtual void fence() = 0;
 
     /// Marks this executable
@@ -209,7 +209,7 @@ namespace ttg {
       do { \
         if (!this->is_executable()) { \
           std::ostringstream oss; \
-          oss << "Op is not executable at " << __FILE__ << ":" << __LINE__; \
+          oss << "TT is not executable at " << __FILE__ << ":" << __LINE__; \
           throw std::logic_error(oss.str().c_str()); \
         } \
       } while (0);
