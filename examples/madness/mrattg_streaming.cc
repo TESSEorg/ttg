@@ -32,7 +32,10 @@ using namespace ttg;
 #include "../mrafunctionfunctor.h"
 
 //#include "/usr/include/mkl/mkl.h" // assume for now but need to wrap
-#include "mkl.h"
+//#include "mkl.h"
+#include <madness/world/world.h>
+//Required for split md interface
+#include <ttg/serialization/splitmd_data_descriptor.h>
 
 using namespace mra;
 
@@ -66,6 +69,25 @@ struct KeyProcMap {
 //     }
 // };
 
+template <Dimension NDIM>
+class LevelPmapX {
+ private:
+     const int nproc;
+ public:
+    LevelPmapX() : nproc(0) {};
+
+    LevelPmapX(size_t nproc) : nproc(nproc) {}
+
+    /// Find the owner of a given key
+    HashValue operator()(const Key<3>& key) const {
+      Level n = key.level();
+      if (n == 0) return 0;
+        madness::hashT hash;
+        if (n <= 3 || (n&0x1)) hash = key.hash();
+        else hash = key.parent().hash();
+        return hash%nproc;
+    }
+ };
 
 /// A pmap that spatially decomposes the domain and by default slightly overdcomposes to attempt to load balance
 template <Dimension NDIM>
@@ -110,17 +132,174 @@ public:
 };
 
 
+/* Wrapper to allow moving and refcounting objects to avoid copying PODs */
+
+template <typename T, size_t K, Dimension NDIM>
+struct FunctionReconstructedNodeWrap {
+
+    using node_t = FunctionReconstructedNode<T, K, NDIM>;
+
+    FunctionReconstructedNodeWrap()
+    : m_node(new node_t())
+    { }
+
+    FunctionReconstructedNodeWrap(const Key<NDIM>& key)
+    : m_node(new node_t(key))
+    { }
+
+
+    /* FunctionReconstructedNodes are passed immutably through the tree so we can share them */
+    FunctionReconstructedNodeWrap(const FunctionReconstructedNodeWrap& other)
+    : m_node(other.m_node)
+    {
+      //std::cout << "FunctionReconstructedNodeWrap copy" << std::endl;
+    }
+
+
+    FunctionReconstructedNodeWrap(FunctionReconstructedNodeWrap&& other) = default;
+
+
+    /* FunctionReconstructedNodes are passed immutably through the tree so we can share them */
+    FunctionReconstructedNodeWrap& operator=(const FunctionReconstructedNodeWrap& other) {
+      m_node = other.m_node;
+      //std::cout << "FunctionReconstructedNodeWrap copy" << std::endl;
+      return *this;
+    }
+
+
+    FunctionReconstructedNodeWrap& operator=(FunctionReconstructedNodeWrap&& other) = default;
+
+    node_t& get() { return *m_node; }
+    const node_t& get() const { return *m_node; }
+
+  private:
+    mutable std::shared_ptr<node_t> m_node;
+
+};
+
+
+/* Make the FunctionReconstructedNodeWrap serializable */
+namespace madness::archive {
+  template <class Archive, typename T, size_t K, Dimension NDIM>
+  struct ArchiveSerializeImpl<Archive, FunctionReconstructedNodeWrap<T, K, NDIM>> {
+    static inline void serialize(const Archive& ar, FunctionReconstructedNodeWrap<T, K, NDIM>& obj) { ar& obj.get(); };
+  };
+}  // namespace madness::archive
+
+
+namespace ttg {
+  template<typename T, size_t K, Dimension NDIM>
+  struct SplitMetadataDescriptor<FunctionReconstructedNodeWrap<T, K, NDIM>>
+  {
+
+    using frn_t = FunctionReconstructedNodeWrap<T, K, NDIM>;
+
+    auto get_metadata(const frn_t& t)
+    {
+      //std::cout << "Using SMP interface for FunctionReconstructedNode" << std::endl;
+      return 0; // no metadata required, everything is compile-time constant
+    }
+
+    auto get_data(frn_t& t)
+    {
+      return std::array<iovec, 1>({sizeof(typename frn_t::node_t), &t.get()});
+    }
+
+    auto create_from_metadata(const int meta)
+    {
+      return frn_t();
+    }
+  };
+} // namespace ttg
+
+template <typename T, size_t K, Dimension NDIM>
+struct FunctionCompressedNodeWrap {
+
+    using node_t = FunctionCompressedNode<T, K, NDIM>;
+
+    FunctionCompressedNodeWrap()
+    : m_node(new node_t())
+    { }
+
+    FunctionCompressedNodeWrap(const Key<NDIM>& key)
+    : m_node(new node_t(key))
+    { }
+
+
+    /* FunctionCompressedNodes are passed immutably through the tree so we can share them */
+    FunctionCompressedNodeWrap(const FunctionCompressedNodeWrap& other)
+    : m_node(other.m_node)
+    {
+      //std::cout << "FunctionCompressedNodeWrap copy" << std::endl;
+    }
+
+
+    FunctionCompressedNodeWrap(FunctionCompressedNodeWrap&& other) = default;
+
+
+    /* FunctionCompressedNodes are passed immutably through the tree so we can share them */
+    FunctionCompressedNodeWrap& operator=(const FunctionCompressedNodeWrap& other) {
+      m_node = other.m_node;
+      return *this;
+    }
+
+
+    FunctionCompressedNodeWrap& operator=(FunctionCompressedNodeWrap&& other) = default;
+
+    node_t& get() { return *m_node; }
+    const node_t& get() const { return *m_node; }
+
+  private:
+    mutable std::shared_ptr<node_t> m_node;
+
+};
+
+
+/* Make the FunctionCompressedNodeWrap serializable */
+namespace madness::archive {
+  template <class Archive, typename T, size_t K, Dimension NDIM>
+  struct ArchiveSerializeImpl<Archive, FunctionCompressedNodeWrap<T, K, NDIM>> {
+    static inline void serialize(const Archive& ar, FunctionCompressedNodeWrap<T, K, NDIM>& obj) { ar& obj.get(); };
+  };
+}  // namespace madness::archive
+
+namespace ttg {
+  template<typename T, size_t K, Dimension NDIM>
+  struct SplitMetadataDescriptor<FunctionCompressedNodeWrap<T, K, NDIM>>
+  {
+
+    using fcn_t = FunctionCompressedNodeWrap<T, K, NDIM>;
+
+    auto get_metadata(const fcn_t& t)
+    {
+      //std::cout << "Using SMP interface for FunctionReconstructedNode" << std::endl;
+      return 0; // no metadata required, everything is compile-time constant
+    }
+
+    auto get_data(fcn_t& t)
+    {
+      return std::array<iovec, 1>({sizeof(typename fcn_t::node_t), &t.get()});
+    }
+
+    auto create_from_metadata(const int meta)
+    {
+      return fcn_t();
+    }
+  };
+} // namespace ttg
+
+
 /// An empty class used for pure control flows
 struct Control {};
 std::ostream& operator<<(std::ostream& s, const Control& ctl) {s << "Ctl"; return s;}
 
-template <typename T, size_t K, Dimension NDIM> using rnodeEdge = Edge<Key<NDIM>, FunctionReconstructedNode<T,K,NDIM>>;
-template <typename T, size_t K, Dimension NDIM> using cnodeEdge = Edge<Key<NDIM>, FunctionCompressedNode<T,K,NDIM>>;
+template <typename T, size_t K, Dimension NDIM> using rnodeEdge = Edge<Key<NDIM>, FunctionReconstructedNodeWrap<T,K,NDIM>>;
+template <typename T, size_t K, Dimension NDIM> using cnodeEdge = Edge<Key<NDIM>, FunctionCompressedNodeWrap<T,K,NDIM>>;
 template <Dimension NDIM> using doubleEdge = Edge<Key<NDIM>, double>;
 template <Dimension NDIM> using ctlEdge = Edge<Key<NDIM>, Control>;
 
-template <typename T, size_t K, Dimension NDIM> using rnodeOut = Out<Key<NDIM>, FunctionReconstructedNode<T,K,NDIM>>;
-template <typename T, size_t K, Dimension NDIM> using cnodeOut = Out<Key<NDIM>, FunctionCompressedNode<T,K,NDIM>>;
+template <typename T, size_t K, Dimension NDIM> using rnodeOut = Out<Key<NDIM>, FunctionReconstructedNodeWrap<T,K,NDIM>>;
+template <typename T, size_t K, Dimension NDIM> using cnodeOut = Out<Key<NDIM>, FunctionCompressedNodeWrap<T,K,NDIM>>;
 template <Dimension NDIM> using doubleOut = Out<Key<NDIM>, double>;
 template <Dimension NDIM> using ctlOut = Out<Key<NDIM>, Control>;
 
@@ -153,26 +332,32 @@ auto make_project(functorT& f,
                   rnodeEdge<T,K,NDIM>& result,
                   const std::string& name = "project") {
 
-    auto F = [f, thresh](const Key<NDIM>& key, Control&& junk, std::tuple<ctlOut<NDIM>, rnodeOut<T,K,NDIM>>& out) {
-        FunctionReconstructedNode<T,K,NDIM> node(key); // Our eventual result
-        auto& coeffs = node.coeffs; // Need to clean up OO design
+    auto F = [f, thresh](const Key<NDIM>& key, const Control& junk, std::tuple<ctlOut<NDIM>, rnodeOut<T,K,NDIM>>& out) {
+        FunctionReconstructedNodeWrap<T,K,NDIM> node(key); // Our eventual result
+        auto& coeffs = node.get().coeffs; // Need to clean up OO design
 
         if (key.level() < initial_level(f)) {
-            for (auto child : children(key)) send<0>(child, Control(), out);
+            std::vector<Key<NDIM>> bcast_keys;
+            /* TODO: children() returns an iteratable object but broadcast() expects a contiguous memory range.
+                     We need to fix broadcast to support any ranges */
+            for (auto child : children(key)) bcast_keys.push_back(child);
+            ::broadcast<0>(bcast_keys, Control(), out);
             coeffs = T(1e7); // set to obviously bad value to detect incorrect use
-            node.is_leaf = false;
+            node.get().is_leaf = false;
         }
         else if (is_negligible<functorT,T,NDIM>(f, Domain<NDIM>:: template bounding_box<T>(key),truncate_tol(key,thresh))) {
             coeffs = T(0.0);
-            node.is_leaf = true;
+            node.get().is_leaf = true;
         }
         else {
-            node.is_leaf = fcoeffs<functorT,T,K>(f, key, thresh, coeffs); // cannot deduce K
-            if (!node.is_leaf) {
-                for (auto child : children(key)) send<0>(child,Control(),out); // should be broadcast ?
+            node.get().is_leaf = fcoeffs<functorT,T,K>(f, key, thresh, coeffs); // cannot deduce K
+            if (!node.get().is_leaf) {
+                std::vector<Key<NDIM>> bcast_keys;
+                for (auto child : children(key)) bcast_keys.push_back(child);
+                ::broadcast<0>(bcast_keys, Control(), out);
             }
         }
-        send<1>(key, node, out); // always produce a result
+        send<1>(key, std::move(node), out); // always produce a result
     };
     ctlEdge<NDIM> refine("refine");
     return wrap(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
@@ -184,7 +369,7 @@ namespace detail {
     // Can get clever and do this recursively once we know what we want
     template <typename T, size_t K>  struct tree_types<T,K,1>{
         using Rout = rnodeOut<T,K,1>;
-        using Rin = FunctionReconstructedNode<T,K,1>;
+        using Rin = FunctionReconstructedNodeWrap<T,K,1>;
         using compress_out_type = std::tuple<Rout,Rout,cnodeOut<T,K,1>>;
         using compress_in_type  = std::tuple<Rin, Rin>;
         template <typename compfuncT>
@@ -193,7 +378,7 @@ namespace detail {
 
     template <typename T, size_t K>  struct tree_types<T,K,2>{
         using Rout = rnodeOut<T,K,2>;
-        using Rin = FunctionReconstructedNode<T,K,2>;
+        using Rin = FunctionReconstructedNodeWrap<T,K,2>;
         using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,cnodeOut<T,K,2>>;
         using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
@@ -202,7 +387,7 @@ namespace detail {
 
     template <typename T, size_t K>  struct tree_types<T,K,3>{
         using Rout = rnodeOut<T,K,3>;
-        using Rin = FunctionReconstructedNode<T,K,3>;
+        using Rin = FunctionReconstructedNodeWrap<T,K,3>;
       using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,Rout,Rout,Rout,Rout,cnodeOut<T,K,3>>;
       using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
@@ -213,13 +398,12 @@ namespace detail {
 // Stream leaf nodes up the tree as a prelude to compressing
 template <typename T, size_t K, Dimension NDIM>
 void send_leaves_up(const Key<NDIM>& key,
-                    FunctionReconstructedNode<T,K,NDIM>& inputs,//Why do we need a tuple here?
+                    const FunctionReconstructedNodeWrap<T,K,NDIM>& node,
                     std::tuple<rnodeOut<T,K,NDIM>, cnodeOut<T,K,NDIM>>& out) {
   //typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
   //Removed const from here!!
-  FunctionReconstructedNode<T,K,NDIM>& node = inputs; //std::get<0>(inputs);
-    node.sum = 0.0;   //
-    if (!node.has_children()) { // We are only interested in the leaves
+    node.get().sum = 0.0;   //
+    if (!node.get().has_children()) { // We are only interested in the leaves
         if (key.level() == 0) {  // Tree is just one node
             throw "not yet";
             // rnodeOut& result = std::get<Key<NDIM>::num_children>(out); // last one
@@ -237,7 +421,7 @@ void send_leaves_up(const Key<NDIM>& key,
 }
 
 template <typename T, size_t K, Dimension NDIM>
-void reduce_leaves(const Key<NDIM>& key, FunctionReconstructedNode<T,K,NDIM>& node, std::tuple<rnodeOut<T,K,NDIM>>& out) {
+void reduce_leaves(const Key<NDIM>& key, const FunctionReconstructedNodeWrap<T,K,NDIM>& node, std::tuple<rnodeOut<T,K,NDIM>>& out) {
   //std::cout << "Reduce_leaves " << node.key.childindex() << " " << node.neighbor_sum[node.key.childindex()] << std::endl;
   std::get<0>(out).send(key, node);
 }
@@ -245,22 +429,22 @@ void reduce_leaves(const Key<NDIM>& key, FunctionReconstructedNode<T,K,NDIM>& no
 // With data streaming up the tree run compression
 template <typename T, size_t K, Dimension NDIM>
 void do_compress(const Key<NDIM>& key,
-                 FunctionReconstructedNode<T,K,NDIM> &in,
+                 const FunctionReconstructedNodeWrap<T,K,NDIM> &in,
                  std::tuple<rnodeOut<T,K,NDIM>, cnodeOut<T,K,NDIM>> &out) {
   //const typename ::detail::tree_types<T,K,NDIM>::compress_in_type& in,
   //typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
     auto& child_slices = FunctionData<T,K,NDIM>::get_child_slices();
-    FunctionCompressedNode<T,K,NDIM> result(key); // The eventual result
-    auto& d = result.coeffs;
+    FunctionCompressedNodeWrap<T,K,NDIM> result(key); // The eventual result
+    auto& d = result.get().coeffs;
 
     T sumsq = 0.0;
     {   // Collect child coeffs and leaf info
         FixedTensor<T,2*K,NDIM> s;
         //auto ins = ::mra::tuple_to_array_of_ptrs_const(in); /// Ugh ... cannot get const to match
         for (size_t i : range(Key<NDIM>::num_children)) {
-            s(child_slices[i]) = in.neighbor_coeffs[i];
-            result.is_leaf[i] = in.is_neighbor_leaf[i];
-            sumsq += in.neighbor_sum[i]; // Accumulate sumsq from child difference coeffs
+            s(child_slices[i]) = in.get().neighbor_coeffs[i];
+            result.get().is_leaf[i] = in.get().is_neighbor_leaf[i];
+            sumsq += in.get().neighbor_sum[i]; // Accumulate sumsq from child difference coeffs
             //if (in.neighbor_sum[i] > 10000)
             //std::cout << i << " " << in.neighbor_sum[i] << " " << sumsq << std::endl;
 
@@ -270,13 +454,13 @@ void do_compress(const Key<NDIM>& key,
 
     // Recur up
     if (key.level() > 0) {
-        FunctionReconstructedNode<T,K,NDIM> p(key);
-        p.coeffs = d(child_slices[0]);
+        FunctionReconstructedNodeWrap<T,K,NDIM> p(key);
+        p.get().coeffs = d(child_slices[0]);
         d(child_slices[0]) = 0.0;
-        p.sum = d.sumabssq() + sumsq; // Accumulate sumsq of difference coeffs from this node and children
+        p.get().sum = d.sumabssq() + sumsq; // Accumulate sumsq of difference coeffs from this node and children
         //auto outs = ::mra::subtuple_to_array_of_ptrs<0,Key<NDIM>::num_children>(out);
         //outs[key.childindex()]->send(key.parent(), p);
-        send<0>(key.parent(), p, out);
+        send<0>(key.parent(), std::move(p), out);
     }
     else {
         std::cout << "At root of compressed tree: total normsq is " << sumsq + d.sumabssq() << std::endl;
@@ -284,7 +468,7 @@ void do_compress(const Key<NDIM>& key,
 
     // Send result to output tree
     //send<Key<NDIM>::num_children>(key,result,out);
-    send<1>(key, result, out);
+    send<1>(key, std::move(result), out);
 }
 
 
@@ -357,34 +541,41 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
 
 template <typename T, size_t K, Dimension NDIM>
 void do_reconstruct(const Key<NDIM>& key,
-                    const std::tuple<FunctionCompressedNode<T,K,NDIM>&,FixedTensor<T,K,NDIM>&>& t,
+                    const std::tuple<FunctionCompressedNodeWrap<T,K,NDIM>&,FixedTensor<T,K,NDIM>&>& t,
                     std::tuple<Out<Key<NDIM>,FixedTensor<T,K,NDIM>>,rnodeOut<T,K,NDIM>>& out) {
   const auto& child_slices = FunctionData<T,K,NDIM>::get_child_slices();
     auto& node = std::get<0>(t);
     const auto& from_parent = std::get<1>(t);
-    if (key.level() != 0) node.coeffs(child_slices[0]) = from_parent;
+    if (key.level() != 0) node.get().coeffs(child_slices[0]) = from_parent;
 
     FixedTensor<T,2*K,NDIM> s;
-    unfilter<T,K,NDIM>(node.coeffs, s);
+    unfilter<T,K,NDIM>(node.get().coeffs, s);
 
-    FunctionReconstructedNode<T,K,NDIM> r(key);
-    r.coeffs = T(0.0);
-    r.is_leaf = false;
-    ::send<1>(key, r, out); // Send empty interior node to result tree
+    std::array<std::vector<Key<NDIM>>, 2> bcast_keys;
+
+    FunctionReconstructedNodeWrap<T,K,NDIM> r(key);
+    r.get().coeffs = T(0.0);
+    r.get().is_leaf = false;
+    //::send<1>(key, r, out); // Send empty interior node to result tree
+    bcast_keys[1].push_back(key);
 
     KeyChildren<NDIM> children(key);
     for (auto it=children.begin(); it!=children.end(); ++it) {
         const Key<NDIM> child= *it;
-        r.key = child;
-        r.coeffs = s(child_slices[it.index()]);
-        r.is_leaf = node.is_leaf[it.index()];
-        if (r.is_leaf) {
-            ::send<1>(child, r, out);
+        r.get().key = child;
+        r.get().coeffs = s(child_slices[it.index()]);
+        r.get().is_leaf = node.get().is_leaf[it.index()];
+        if (r.get().is_leaf) {
+            //::send<1>(child, r, out);
+            bcast_keys[1].push_back(child);
         }
         else {
-            ::send<0>(child, r.coeffs, out);
+            //::send<0>(child, r.coeffs, out);
+            bcast_keys[0].push_back(child);
         }
     }
+    ::broadcast<0>(bcast_keys[0], r.get().coeffs, out);
+    ::broadcast<1>(bcast_keys[1], std::move(r), out);
 }
 
 template <typename T, size_t K, Dimension NDIM>
@@ -412,7 +603,8 @@ struct is_serializable {
 };
 static_assert(is_serializable<Key<2>>::value, "You just did something that stopped Key from being serializable"); // yes
 static_assert(is_serializable<SimpleTensor<float,2,2>>::value,"You just did something that stopped SimpleTensor from being serializable"); // yes
-static_assert(is_serializable<FunctionReconstructedNode<float,2,2>>::value,"You just did something that stopped FunctionReconstructedNode from being serializable"); // yes
+/* this does not hold anymore */
+//static_assert(is_serializable<FunctionReconstructedNodeWrap<float,2,2>>::value,"You just did something that stopped FunctionReconstructedNode from being serializable"); // yes
 
 // Test gaussian function
 template <typename T, Dimension NDIM>
@@ -461,9 +653,12 @@ public:
     template <size_t N>
     void operator()(const SimpleTensor<T,NDIM,N>& x, std::array<T,N>& values) const {
         distancesq(origin, x, values);
-        vscale(N, -expnt, &values[0]);
-        vexp(N, &values[0], &values[0]);
-        vscale(N, fac, &values[0]);
+        //vscale(N, -expnt, &values[0]);
+        //vexp(N, &values[0], &values[0]);
+        //vscale(N, fac, &values[0]);
+	for (T& value : values) {
+          value = fac * std::exp(-expnt*value);
+        }
     }
 
     Level initial_level() const {
@@ -545,18 +740,18 @@ void test1() {
         auto compress = make_compress<T,K,NDIM>(a, b);
 
         auto &reduce_leaves_op = std::get<1>(compress);
-        reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNode<T,K,NDIM> &&node,
-                                                           FunctionReconstructedNode<T,K,NDIM> &&another)
+        reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNodeWrap<T,K,NDIM> &&node,
+                                                           FunctionReconstructedNodeWrap<T,K,NDIM> &&another)
                                                         {
                                                           //Update self values into the array.
-                                                          node.neighbor_coeffs[node.key.childindex()] = node.coeffs;
-                                                          node.is_neighbor_leaf[node.key.childindex()] = node.is_leaf;
-                                                          node.neighbor_sum[node.key.childindex()] = node.sum;
-                                                          node.neighbor_coeffs[another.key.childindex()] = another.coeffs;
-                                                          node.is_neighbor_leaf[another.key.childindex()] = another.is_leaf;
-                                                          node.neighbor_sum[another.key.childindex()] = another.sum;
+                                                          node.get().neighbor_coeffs[node.get().key.childindex()] = node.get().coeffs;
+                                                          node.get().is_neighbor_leaf[node.get().key.childindex()] = node.get().is_leaf;
+                                                          node.get().neighbor_sum[node.get().key.childindex()] = node.get().sum;
+                                                          node.get().neighbor_coeffs[another.get().key.childindex()] = another.get().coeffs;
+                                                          node.get().is_neighbor_leaf[another.get().key.childindex()] = another.get().is_leaf;
+                                                          node.get().neighbor_sum[another.get().key.childindex()] = another.get().sum;
                                                           //std::cout << "Neighbor_sum[" << another.key.childindex() << "] : " << node.neighbor_sum <<std::endl;
-                                                          return node;
+                                                          return std::move(node);
                                                         });
         reduce_leaves_op->template set_static_argstream_size<0>(1 << NDIM);
 
@@ -587,28 +782,28 @@ void test1() {
         //std::cout << "==== begin dot ====\n";
         //std::cout << Dot()(start.get()) << std::endl;
         //std::cout << "====  end dot  ====\n";
-        
-        beg = std::chrono::high_resolution_clock::now();
+	beg = std::chrono::high_resolution_clock::now();
         // This kicks off the entire computation
         start->invoke(Key<NDIM>(0, {0}));
     }
 
     ttg_execute(ttg_default_execution_context());
     ttg_fence(ttg_default_execution_context());
-
+    
     if (ttg_default_execution_context().rank() == 0) {
-      end = std::chrono::high_resolution_clock::now();
-      std::cout << "TTG Execution Time (milliseconds) : "
-                << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 
-                << std::endl; 
+        end = std::chrono::high_resolution_clock::now();
+        std::cout << "TTG Execution Time (milliseconds) : "
+              << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000.0 << std::endl;
+
     }
 }
 
 template <typename T, size_t K, Dimension NDIM>
 void test2(size_t nfunc, T thresh = 1e-6) {
     FunctionData<T,K,NDIM>::initialize();
-    PartitionPmap<NDIM> pmap =  PartitionPmap<NDIM>(ttg_default_execution_context().size());
+    //PartitionPmap<NDIM> pmap =  PartitionPmap<NDIM>(ttg_default_execution_context().size());
     Domain<NDIM>::set_cube(-6.0,6.0);
+    LevelPmapX<NDIM> pmap = LevelPmapX<NDIM>(ttg_default_execution_context().size());
 
     srand48(5551212); // for reproducible results
     for (auto i : range(10000)) drand48(); // warmup generator
@@ -637,18 +832,18 @@ void test2(size_t nfunc, T thresh = 1e-6) {
         std::get<2>(compress)->set_keymap(pmap);
 
         auto &reduce_leaves_op = std::get<1>(compress);
-        reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNode<T,K,NDIM> &&node,
-                                                           FunctionReconstructedNode<T,K,NDIM> &&another)
+        reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNodeWrap<T,K,NDIM> &&node,
+                                                           FunctionReconstructedNodeWrap<T,K,NDIM> &&another)
                                                         {
                                                           //Update self values into the array.
-                                                          node.neighbor_coeffs[node.key.childindex()] = node.coeffs;
-                                                          node.is_neighbor_leaf[node.key.childindex()] = node.is_leaf;
-                                                          node.neighbor_sum[node.key.childindex()] = node.sum;
-                                                          node.neighbor_coeffs[another.key.childindex()] = another.coeffs;
-                                                          node.is_neighbor_leaf[another.key.childindex()] = another.is_leaf;
-                                                          node.neighbor_sum[another.key.childindex()] = another.sum;
+                                                          node.get().neighbor_coeffs[node.get().key.childindex()] = node.get().coeffs;
+                                                          node.get().is_neighbor_leaf[node.get().key.childindex()] = node.get().is_leaf;
+                                                          node.get().neighbor_sum[node.get().key.childindex()] = node.get().sum;
+                                                          node.get().neighbor_coeffs[another.get().key.childindex()] = another.get().coeffs;
+                                                          node.get().is_neighbor_leaf[another.get().key.childindex()] = another.get().is_leaf;
+                                                          node.get().neighbor_sum[another.get().key.childindex()] = another.get().sum;
                                                           //std::cout << "Neighbor_sum[" << another.key.childindex() << "] : " << node.neighbor_sum <<std::endl;
-                                                          return node;
+                                                          return std::move(node);
                                                         });
         reduce_leaves_op->template set_static_argstream_size<0>(1 << NDIM);
 
@@ -690,19 +885,24 @@ void test2(size_t nfunc, T thresh = 1e-6) {
     
     if (ttg_default_execution_context().rank() == 0) {
         end = std::chrono::high_resolution_clock::now();
-        std::cout << "TTG Execution Time (milliseconds) : "
-              << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
+        std::cout << "TTG Execution Time (seconds) : "
+              << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000000.0 << std::endl;
 
     }
 }
 
 int main(int argc, char** argv) {
-    ttg_initialize(argc, argv, 2);
+    ttg_initialize(argc, argv, -1);
+    int num_fn = 1;
+    if (argc > 1) {
+      num_fn = std::atoi(argv[1]);
+    }
+
     //std::cout << "Hello from madttg\n";
 
     //vmlSetMode(VML_HA | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // default
     //vmlSetMode(VML_EP | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // err is 10x default
-    vmlSetMode(VML_HA | VML_FTZDAZ_ON | VML_ERRMODE_DEFAULT); // err is same as default little faster
+    //vmlSetMode(VML_HA | VML_FTZDAZ_ON | VML_ERRMODE_DEFAULT); // err is same as default little faster
     //vmlSetMode(VML_EP | VML_FTZDAZ_ON  | VML_ERRMODE_DEFAULT); // err is 10x default
 
     GLinitialize();
@@ -711,7 +911,7 @@ int main(int argc, char** argv) {
         //test0<float,6,3>();
         //test1<float,6,3>();
         //test2<float,6,3>(20);
-        test2<double,10,3>(1, 1e-8);
+        test2<double,10,3>(num_fn, 1e-8);
         //test1<double,6,3>();
     }
 

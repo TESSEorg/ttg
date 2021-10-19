@@ -1341,8 +1341,12 @@ namespace ttg_parsec {
         if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
           // have a value already? if not, set, otherwise reduce
           if (nullptr == (copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in))) {
-            using decay_valueT = std::decay_t<valueT>;
-            copy = detail::create_new_datacopy(std::forward<Value>(value));
+            if (nullptr != parsec_ttg_caller  &&
+                nullptr != (copy = detail::find_copy_in_task(parsec_ttg_caller, &value))) {
+              copy = detail::register_data_copy<valueT>(copy, task, input_is_const);
+            } else {
+              copy = detail::create_new_datacopy(std::forward<Value>(value));
+            }
             task->parsec_task.data[i].data_in = copy;
           } else {
             // TODO: Ask Ed -- Why do we need a copy of value here?
