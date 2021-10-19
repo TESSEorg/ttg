@@ -3,6 +3,10 @@
 
 #include <functional>
 #include <type_traits>
+<<<<<<< HEAD
+=======
+#include <any>
+>>>>>>> 1833d5c13b72faeabc6265860076d5a145cf58f6
 #include "ttg/util/span.h"
 #include <any>
 
@@ -144,6 +148,10 @@ namespace ttg {
     };
     template <typename T>
     using void_to_Void_t = typename void_to_Void<T>::type;
+<<<<<<< HEAD
+=======
+    
+>>>>>>> 1833d5c13b72faeabc6265860076d5a145cf58f6
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // is_empty_tuple
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
