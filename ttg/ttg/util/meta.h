@@ -311,7 +311,7 @@ template<typename Key, typename Value>
 struct broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
 using type = std::function<void()>;
 };
-template <typename Key, typename Value> using move_callback_t = typename move_callback<Key,Value>::type;
+template <typename Key, typename Value> using broadcast_callback_t = typename broadcast_callback<Key,Value>::type;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // setsize_callback_t<key> = std::function<void(const keyT &, std::size_t)> protected against void key
@@ -399,24 +399,6 @@ using type = std::function<void()>;
 template <typename Key> using invoke_callback_t =
   typename invoke_callback<Key>::type;
 
-///////////////////
-//Defining a mapping function for indexing into data structures using pull terminals
-//////////////////
-template<typename Key, typename Enabler = void>
-struct mapper_function;
-template<typename Key>
-struct mapper_function<Key, std::enable_if_t<!is_void_v<Key>>> {
-  using type = std::function<std::vector<Key>(const Key &)>;
-};
-template<typename Key>
-struct mapper_function<Key, std::enable_if_t<is_void_v<Key>>> {
-  using type = std::function<void()>;
-};
-template <typename Key> using mapper_function_t = typename mapper_function<Key>::type;
-
-}  // only used by deep internals
-
-}  // namespace meta
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       // keymap_t<key,value> = std::function<int(const key&>, protected against void key
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -469,15 +451,25 @@ template <typename Key> using mapper_function_t = typename mapper_function<Key>:
                                                          IndexKey>{}, bool> = true>
         IndexKey(T t) : std::any(t)
         {}
-
-        /*template <typename Archive>
-        void serialize(Archive &ar)
-        {
-         std::cout << "Do we come here to serialize?\n";
-         //ar & madness::archive::wrap((unsigned char*)this, sizeof(*this));
-        }*/
       };
 
+      ///////////////////
+      // Defining a mapping function for indexing into data structures using pull terminals
+      //////////////////
+      template <typename Key, typename Enabler = void>
+      struct mapper_function;
+      template <typename Key>
+      struct mapper_function<Key, std::enable_if_t<!is_void_v<Key>>> {
+        using type = std::function<IndexKey (const Key &)>;
+      };
+      template <typename Key>
+      struct mapper_function<Key, std::enable_if_t<is_void_v<Key>>> {
+        using type = std::function<void()>;
+      };
+      template <typename Key>
+      using mapper_function_t = typename mapper_function<Key>::type;
+
+    } // namespace detail
 
   }  // namespace meta
 
