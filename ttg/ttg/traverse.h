@@ -10,14 +10,14 @@
 namespace ttg {
 
   namespace detail {
-    /// Traverses a graph of ops in depth-first manner following out edges
+    /// Traverses a graph of TTs in depth-first manner following out edges
     class Traverse {
       std::set<TTBase *> seen;
 
       bool visited(TTBase *p) { return !seen.insert(p).second; }
 
      public:
-      virtual void opfunc(TTBase *op) = 0;
+      virtual void ttfunc(TTBase *tt) = 0;
 
       virtual void infunc(TerminalBase *in) = 0;
 
@@ -27,27 +27,27 @@ namespace ttg {
 
       // Returns true if no null pointers encountered (i.e., if all
       // encountered terminals/operations are connected)
-      bool traverse(TTBase *op) {
-        if (!op) {
+      bool traverse(TTBase *tt) {
+        if (!tt) {
           std::cout << "ttg::Traverse: got a null op!\n";
           return false;
         }
 
-        if (visited(op)) return true;
+        if (visited(tt)) return true;
 
         bool status = true;
 
-        opfunc(op);
+        ttfunc(tt);
 
       int count = 0;
-      for (auto in : op->get_inputs()) {
+      for (auto in : tt->get_inputs()) {
           if (!in) {
               std::cout << "ttg::Traverse: got a null in!\n";
               status = false;
           } else {
               infunc(in);
               if (!in->is_connected()) {
-                  std::cout << "ttg::Traverse: " << op->get_name() << " input terminal #" << count << " " << in->get_name() << " is not connected\n";
+                  std::cout << "ttg::Traverse: " << tt->get_name() << " input terminal #" << count << " " << in->get_name() << " is not connected\n";
                   status = false;
               }
           }
@@ -55,21 +55,21 @@ namespace ttg {
       }
 
       count = 0;
-      for (auto out : op->get_outputs()) {
+      for (auto out : tt->get_outputs()) {
           if (!out) {
               std::cout << "ttg::Traverse: got a null out!\n";
               status = false;
           } else {
               outfunc(out);
               if (!out->is_connected()) {
-                  std::cout << "ttg::Traverse: " << op->get_name() << " output terminal #" << count << " " << out->get_name() << " is not connected\n";
+                  std::cout << "ttg::Traverse: " << tt->get_name() << " output terminal #" << count << " " << out->get_name() << " is not connected\n";
                   status = false;
               }
           }
           count++;
       }
 
-        for (auto out : op->get_outputs()) {
+        for (auto out : tt->get_outputs()) {
           if (out) {
             for (auto successor : out->get_connections()) {
               if (!successor) {
@@ -83,12 +83,6 @@ namespace ttg {
         }
 
         return status;
-      }
-
-      // converters to TTBase*
-      static TTBase * to_TTBase_ptr(TTBase * op) { return op; }
-      static TTBase * to_TTBase_ptr(const TTBase * op) {
-        return const_cast<TTBase *>(op);
       }
 
       /// visitor that does nothing
@@ -126,12 +120,12 @@ namespace ttg {
     template <typename TTVisitor_ = detail::Traverse::null_visitor<TTBase>,
               typename InVisitor_ = detail::Traverse::null_visitor<TerminalBase>,
               typename OutVisitor_ = detail::Traverse::null_visitor<TerminalBase>>
-    Traverse(TTVisitor_ &&op_v = TTVisitor_{}, InVisitor_ &&in_v = InVisitor_{}, OutVisitor_ &&out_v = OutVisitor_{})
-        : op_visitor_(std::forward<TTVisitor_>(op_v))
+    Traverse(TTVisitor_ &&tt_v = TTVisitor_{}, InVisitor_ &&in_v = InVisitor_{}, OutVisitor_ &&out_v = OutVisitor_{})
+        : tt_visitor_(std::forward<TTVisitor_>(tt_v))
         , in_visitor_(std::forward<InVisitor_>(in_v))
         , out_visitor_(std::forward<OutVisitor_>(out_v)){};
 
-    const TTVisitor &op_visitor() const { return op_visitor_; }
+    const TTVisitor &tt_visitor() const { return tt_visitor_; }
     const InVisitor &in_visitor() const { return in_visitor_; }
     const OutVisitor &out_visitor() const { return out_visitor_; }
 
@@ -148,11 +142,11 @@ namespace ttg {
     }
 
    private:
-    TTVisitor op_visitor_;
+    TTVisitor tt_visitor_;
     InVisitor in_visitor_;
     OutVisitor out_visitor_;
 
-    void opfunc(TTBase *op) { op_visitor_(op); }
+    void ttfunc(TTBase *tt) { tt_visitor_(tt); }
 
     void infunc(TerminalBase *in) { in_visitor_(in); }
 
@@ -163,9 +157,9 @@ namespace ttg {
     auto trivial_1param_lambda = [](auto &&op) {};
   }
   template <typename TTVisitor = decltype(trivial_1param_lambda)&, typename InVisitor = decltype(trivial_1param_lambda)&, typename OutVisitor = decltype(trivial_1param_lambda)&>
-  auto make_traverse(TTVisitor &&op_v = trivial_1param_lambda, InVisitor &&in_v = trivial_1param_lambda, OutVisitor &&out_v = trivial_1param_lambda) {
+  auto make_traverse(TTVisitor &&tt_v = trivial_1param_lambda, InVisitor &&in_v = trivial_1param_lambda, OutVisitor &&out_v = trivial_1param_lambda) {
     return Traverse<std::remove_reference_t<TTVisitor>, std::remove_reference_t<InVisitor>,
-                    std::remove_reference_t<OutVisitor>>{std::forward<TTVisitor>(op_v), std::forward<InVisitor>(in_v),
+                    std::remove_reference_t<OutVisitor>>{std::forward<TTVisitor>(tt_v), std::forward<InVisitor>(in_v),
                                                          std::forward<OutVisitor>(out_v)};
   };
 
@@ -174,9 +168,9 @@ namespace ttg {
 
   /// Prints the graph to std::cout in an ad hoc format
   static auto print_ttg = make_traverse(
-      [](auto *op) {
-        std::cout << "op: " << (void *)op << " " << op->get_name() << " numin " << op->get_inputs().size() << " numout "
-                  << op->get_outputs().size() << std::endl;
+      [](auto *tt) {
+        std::cout << "tt: " << (void *)tt << " " << tt->get_name() << " numin " << tt->get_inputs().size() << " numout "
+                  << tt->get_outputs().size() << std::endl;
       },
       [](auto *in) {
         std::cout << "  in: " << in->get_index() << " " << in->get_name() << " " << in->get_key_type_str() << " "

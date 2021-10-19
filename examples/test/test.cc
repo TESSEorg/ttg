@@ -513,7 +513,7 @@ int try_main(int argc, char **argv) {
 
     x1.start();  // myusleep(100);
 
-    // Now try with the composite operator make_ttping A and C
+    // Now try with the composite operator wrapping A and C
     EverythingComposite x2;
 
     std::cout << "\nComposite\n";
@@ -527,7 +527,7 @@ int try_main(int argc, char **argv) {
     std::cout << y.dot() << std::endl;
     y.start();  // myusleep(100);
 
-    // Next compose with make_ttpers using tuple API and edges
+    // Next compose with wrappers using tuple API and edges
     Everything3 z;
     std::cout << z.dot() << std::endl;
     z.start();  // myusleep(100);

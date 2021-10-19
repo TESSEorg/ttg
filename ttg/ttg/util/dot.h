@@ -31,14 +31,14 @@ namespace ttg {
       return s.str();
     }
 
-    void opfunc(TTBase *op) {
-      std::string opnm = nodename(op);
+    void ttfunc(TTBase *tt) {
+      std::string ttnm = nodename(tt);
 
-      buf << "        " << opnm << " [shape=record,style=filled,fillcolor=gray90,label=\"{";
+      buf << "        " << ttnm << " [shape=record,style=filled,fillcolor=gray90,label=\"{";
 
       size_t count = 0;
-      if (op->get_inputs().size() > 0) buf << "{";
-      for (auto in : op->get_inputs()) {
+      if (tt->get_inputs().size() > 0) buf << "{";
+      for (auto in : tt->get_inputs()) {
         if (in) {
           if (count != in->get_index()) throw "ttg::Dot: lost count of ins";
           buf << " <in" << count << ">"
@@ -49,16 +49,16 @@ namespace ttg {
               << " unknown ";
         }
         count++;
-        if (count < op->get_inputs().size()) buf << " |";
+        if (count < tt->get_inputs().size()) buf << " |";
       }
-      if (op->get_inputs().size() > 0) buf << "} |";
+      if (tt->get_inputs().size() > 0) buf << "} |";
 
-      buf << op->get_name() << " ";
+      buf << tt->get_name() << " ";
 
-      if (op->get_outputs().size() > 0) buf << " | {";
+      if (tt->get_outputs().size() > 0) buf << " | {";
 
       count = 0;
-      for (auto out : op->get_outputs()) {
+      for (auto out : tt->get_outputs()) {
         if (out) {
           if (count != out->get_index()) throw "ttg::Dot: lost count of outs";
           buf << " <out" << count << ">"
@@ -69,18 +69,18 @@ namespace ttg {
               << " unknown ";
         }
         count++;
-        if (count < op->get_outputs().size()) buf << " |";
+        if (count < tt->get_outputs().size()) buf << " |";
       }
 
-      if (op->get_outputs().size() > 0) buf << "}";
+      if (tt->get_outputs().size() > 0) buf << "}";
 
       buf << " } \"];\n";
 
-      for (auto out : op->get_outputs()) {
+      for (auto out : tt->get_outputs()) {
         if (out) {
           for (auto successor : out->get_connections()) {
             if (successor) {
-              buf << opnm << ":out" << out->get_index() << ":s -> " << nodename(successor->get_tt()) << ":in"
+              buf << ttnm << ":out" << out->get_index() << ":s -> " << nodename(successor->get_tt()) << ":in"
                   << successor->get_index() << ":n;\n";
             }
           }
