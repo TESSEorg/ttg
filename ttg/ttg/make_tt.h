@@ -1,7 +1,7 @@
 // to be #include'd within runtime::ttg namespace
 
-#ifndef CXXAPI_WRAP_H
-#define CXXAPI_WRAP_H
+#ifndef TTG_MAKE_TT_H
+#define TTG_MAKE_TT_H
 
 // Class to wrap a callable with signature
 //
@@ -281,4 +281,4 @@ template <typename keyT, typename funcT, typename... input_edge_valuesT, typenam
   return make_tt<keyT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
-#endif  // CXXAPI_WRAP_H
+#endif  // TTG_MAKE_TT_H

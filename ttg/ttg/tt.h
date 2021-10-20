@@ -1,5 +1,5 @@
-#ifndef TTG_UTIL_OP_H
-#define TTG_UTIL_OP_H
+#ifndef TTG_TT_H
+#define TTG_TT_H
 
 #include <vector>
 #include <memory>
@@ -155,4 +155,4 @@ namespace ttg {
 
 } // namespace ttg
 
-#endif // TTG_UTIL_OP_H
+#endif // TTG_TT_H

@@ -1,5 +1,5 @@
-#ifndef TTG_UTIL_IMPL_SELECTOR_H
-#define TTG_UTIL_IMPL_SELECTOR_H
+#ifndef TTG_IMPL_SELECTOR_H
+#define TTG_IMPL_SELECTOR_H
 
 /**
  * Select a default backend implementation if none was specified.
@@ -21,4 +21,4 @@
 #include "madness/import.h"
 #endif  // TTG_USE_MADNESS
 
-#endif // TTG_UTIL_IMPL_SELECTOR_H
+#endif // TTG_IMPL_SELECTOR_H

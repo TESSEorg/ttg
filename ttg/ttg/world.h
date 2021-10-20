@@ -1,5 +1,5 @@
-#ifndef TTG_UTIL_WORLD_H
-#define TTG_UTIL_WORLD_H
+#ifndef TTG_WORLD_H
+#define TTG_WORLD_H
 
 #include "ttg/impl_selector.h"
 
@@ -115,4 +115,4 @@ namespace ttg {
 
 } // namespace ttg
 
-#endif // TTG_UTIL_WORLD_H
+#endif // TTG_WORLD_H

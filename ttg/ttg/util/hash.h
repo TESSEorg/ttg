@@ -1,5 +1,5 @@
-#ifndef TTG_TTG_UTIL_HASH_H
-#define TTG_TTG_UTIL_HASH_H
+#ifndef TTG_UTIL_HASH_H
+#define TTG_UTIL_HASH_H
 
 #include <cstddef>
 #include <cstdint>
@@ -85,4 +85,4 @@ namespace ttg {
 
 }  // namespace ttg
 
-#endif  // TTG_TTG_UTIL_HASH_H
+#endif  // TTG_UTIL_HASH_H

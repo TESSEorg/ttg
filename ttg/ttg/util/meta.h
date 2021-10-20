@@ -1,5 +1,5 @@
-#ifndef CXXAPI_META_H
-#define CXXAPI_META_H
+#ifndef TTG_UTIL_META_H
+#define TTG_UTIL_META_H
 
 #include <functional>
 #include <type_traits>
@@ -390,4 +390,4 @@ template <typename Key, typename Value> using broadcast_callback_t = typename br
   } // namespace meta
 }  // namespace ttg
 
-#endif  // CXXAPI_SERIALIZATION_H_H
+#endif  // TTG_UTIL_META_H
