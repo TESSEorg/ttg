@@ -371,12 +371,11 @@ int main(int argc, char** argv) {
     auto comp1 = make_compress(a, compa, "compress(A)");
     auto &reduce_leaves_op = std::get<1>(comp1);
 
-    reduce_leaves_op->set_input_reducer<0>([](Node &&left, Node &&right) {
+    reduce_leaves_op->set_input_reducer<0>([](Node &left, const Node &right) {
                                            double s = (left.s + right.s) * 0.5;
                                            double d = (left.s - right.s) * 0.5;
-                                           return Node(left.key, s, d, true);
-                                         });
-    reduce_leaves_op->set_static_argstream_size<0>(2);
+                                           left = Node(left.key, s, d, true);
+                                         }, 2);
 
     auto norma2 = make_norm2(compa);
 
