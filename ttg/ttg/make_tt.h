@@ -236,7 +236,7 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   constexpr const auto num_args = std::tuple_size<func_args_t>::value;
   constexpr const auto void_key = ttg::meta::is_void_v<keyT>;
   static_assert(num_args == sizeof...(input_edge_valuesT) + (void_key ? 1 : 2),
-                "ttg::wrap(func, inedges): func's # of args != # of inedges");
+                "ttg::make_tt(func, inedges): func's # of args != # of inedges");
   // 2. input_args_t = {input_valuesT&&...}
   using input_args_t = typename ttg::meta::take_first_n<
       typename ttg::meta::drop_first_n<func_args_t, std::size_t(void_key ? 0 : 1)>::type,
