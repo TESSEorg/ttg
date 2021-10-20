@@ -328,7 +328,7 @@ class EverythingComposite {
     ttg::print("opsin(0)", (void *)(ops[0]->in(0)));
     ttg::print("ops size", ops.size());
 
-    auto ac = make_composite_tt(std::move(ops), q, std::make_tuple(), "Fred");
+    auto ac = make_ttg(std::move(ops), q, std::make_tuple(), "Fred");
 
     ttg::print("AC in<0>", (void *)(ttg::TerminalBase *)(ac->in<0>()));
     connect<0, 0>(p, ac);  // p->out<0>()->connect(ac->in<0>());

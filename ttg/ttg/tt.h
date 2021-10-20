@@ -11,37 +11,52 @@
 
 namespace ttg {
 
+  /// @brief a template task graph implementation
+
+  /// @tparam input_terminalsT a tuple of pointers to input terminals
+  /// @tparam output_terminalsT a tuple of pointers to output terminals
   template <typename input_terminalsT, typename output_terminalsT>
-  class CompositeTT : public TTBase {
+  class TTG : public TTBase {
    public:
     static constexpr int numins = std::tuple_size<input_terminalsT>::value;    // number of input arguments
     static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or results
 
-    using input_terminals_type = input_terminalsT;    // should be a tuple of pointers to input terminals
-    using output_terminals_type = output_terminalsT;  // should be a tuple of pointers to output terminals
+    using input_terminals_type = input_terminalsT;
+    using output_terminals_type = output_terminalsT;
 
    private:
     std::vector<std::unique_ptr<TTBase>> tts;
     input_terminals_type ins;
     output_terminals_type outs;
 
-    CompositeTT(const CompositeTT &) = delete;
-    CompositeTT &operator=(const CompositeTT &) = delete;
-    CompositeTT(const CompositeTT &&) = delete;  // Move should be OK
+    // not copyable
+    TTG(const TTG &) = delete;
+    TTG &operator=(const TTG &) = delete;
+    // movable
+    TTG(TTG && other) : TTBase(static_cast<TTBase&&>(other)), tts(other.tts), ins(std::move(other.ins)), outs(std::move(other.outs)) {
+        own_my_tts();
+    }
+    TTG& operator=(TTG &&other) {
+      static_cast<TTBase&>(*this) = static_cast<TTBase&&>(other);
+      tts = std::move(other.tts);
+      ins = std::move(other.ins);
+      outs = std::move(other.outs);
+      own_my_tts();
+      return *this;
+    };
 
    public:
     template <typename opsT>
-    CompositeTT(opsT &&ops_take_ownership,
-                const input_terminals_type &ins,    // tuple of pointers to input terminals
-                const output_terminals_type &outs,  // tuple of pointers to output terminals
-                const std::string &name = "compositett")
-        : TTBase(name, numins, numouts), tts(std::forward<opsT>(ops_take_ownership)), ins(ins), outs(outs) {
-      if (tts.size() == 0) throw name + ":CompositeTT: need to wrap at least one TT";  // see fence
+    TTG(opsT &&ops,
+        const input_terminals_type &ins,    // tuple of pointers to input terminals
+        const output_terminals_type &outs,  // tuple of pointers to output terminals
+        const std::string &name = "ttg")
+        : TTBase(name, numins, numouts), tts(std::forward<opsT>(ops)), ins(ins), outs(outs) {
+      if (tts.size() == 0) throw name + ":TTG: need to wrap at least one TT";  // see fence
 
-      set_is_composite(true);
-      for (auto &op : tts) op->set_is_within_composite(true, this);
-      set_terminals(ins, &CompositeTT<input_terminalsT, output_terminalsT>::set_input);
-      set_terminals(outs, &CompositeTT<input_terminalsT, output_terminalsT>::set_output);
+      set_terminals(ins, &TTG<input_terminalsT, output_terminalsT>::set_input);
+      set_terminals(outs, &TTG<input_terminalsT, output_terminalsT>::set_output);
+      own_my_tts();
 
       // traversal is still broken ... need to add checking for composite
     }
@@ -65,12 +80,19 @@ namespace ttg {
     void make_executable() {
       for (auto &op : tts) op->make_executable();
     }
+
+   private:
+    void own_my_tts() const {
+      for (auto &op : tts) op->owning_ttg = this;
+    }
+
   };
 
   template <typename opsT, typename input_terminalsT, typename output_terminalsT>
-  std::unique_ptr<CompositeTT<input_terminalsT, output_terminalsT>> make_composite_tt(
-      opsT &&ops, const input_terminalsT &ins, const output_terminalsT &outs, const std::string &name = "compositett") {
-    return std::make_unique<CompositeTT<input_terminalsT, output_terminalsT>>(std::forward<opsT>(ops), ins, outs, name);
+  std::unique_ptr<TTG<input_terminalsT, output_terminalsT>> make_ttg(opsT &&ops, const input_terminalsT &ins,
+                                                                     const output_terminalsT &outs,
+                                                                     const std::string &name = "ttg") {
+    return std::make_unique<TTG<input_terminalsT, output_terminalsT>>(std::forward<opsT>(ops), ins, outs, name);
   }
 
 
@@ -120,8 +142,7 @@ namespace ttg {
 
     void fence() {}
 
-    void make_executable() { TTBase::make_executable();
-    }
+    void make_executable() { TTBase::make_executable(); }
 
     /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned
     template <std::size_t i>
