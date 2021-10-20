@@ -48,13 +48,14 @@ namespace ttg {
     };
 
    public:
-    template <typename opsT>
-    TTG(opsT &&ops,
+    /// @tparam ttseqT a sequence of std::unique_ptr<TTBase>
+    template <typename ttseqT>
+    TTG(ttseqT &&tts,
         const input_terminals_type &ins,    // tuple of pointers to input terminals
         const output_terminals_type &outs,  // tuple of pointers to output terminals
         const std::string &name = "ttg")
-        : TTBase(name, numins, numouts), tts(std::forward<opsT>(ops)), ins(ins), outs(outs) {
-      if (tts.size() == 0) throw name + ":TTG: need to wrap at least one TT";  // see fence
+        : TTBase(name, numins, numouts), tts(std::forward<ttseqT>(tts)), ins(ins), outs(outs) {
+      if (this->tts.size() == 0) throw name + ":TTG: need to wrap at least one TT";  // see fence
 
       set_terminals(ins, &TTG<input_terminalsT, output_terminalsT>::set_input);
       set_terminals(outs, &TTG<input_terminalsT, output_terminalsT>::set_output);
@@ -90,11 +91,11 @@ namespace ttg {
 
   };
 
-  template <typename opsT, typename input_terminalsT, typename output_terminalsT>
-  auto make_ttg(opsT &&ops, const input_terminalsT &ins,
+  template <typename ttseqT, typename input_terminalsT, typename output_terminalsT>
+  auto make_ttg(ttseqT &&tts, const input_terminalsT &ins,
                 const output_terminalsT &outs,
                 const std::string &name = "ttg") {
-    return std::make_unique<TTG<input_terminalsT, output_terminalsT>>(std::forward<opsT>(ops), ins, outs, name);
+    return std::make_unique<TTG<input_terminalsT, output_terminalsT>>(std::forward<ttseqT>(tts), ins, outs, name);
   }
 
 
