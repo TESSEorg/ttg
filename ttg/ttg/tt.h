@@ -13,6 +13,8 @@ namespace ttg {
 
   /// @brief a template task graph implementation
 
+  /// It contains (owns) one or more TT objects. Since it can also be viewed as a TT object itself,
+  /// it is a TTBase and can be for recursive composition of TTG objects.
   /// @tparam input_terminalsT a tuple of pointers to input terminals
   /// @tparam output_terminalsT a tuple of pointers to output terminals
   template <typename input_terminalsT, typename output_terminalsT>
