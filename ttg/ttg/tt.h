@@ -63,13 +63,13 @@ namespace ttg {
 
     /// Return a pointer to i'th input terminal
     template <std::size_t i>
-    typename std::tuple_element<i, input_terminals_type>::type in() {
+    auto in() {
       return std::get<i>(ins);
     }
 
     /// Return a pointer to i'th output terminal
     template <std::size_t i>
-    typename std::tuple_element<i, output_terminalsT>::type out() {
+    auto out() {
       return std::get<i>(outs);
     }
 
@@ -89,9 +89,9 @@ namespace ttg {
   };
 
   template <typename opsT, typename input_terminalsT, typename output_terminalsT>
-  std::unique_ptr<TTG<input_terminalsT, output_terminalsT>> make_ttg(opsT &&ops, const input_terminalsT &ins,
-                                                                     const output_terminalsT &outs,
-                                                                     const std::string &name = "ttg") {
+  auto make_ttg(opsT &&ops, const input_terminalsT &ins,
+                const output_terminalsT &outs,
+                const std::string &name = "ttg") {
     return std::make_unique<TTG<input_terminalsT, output_terminalsT>>(std::forward<opsT>(ops), ins, outs, name);
   }
 
