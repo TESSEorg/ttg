@@ -99,34 +99,34 @@ namespace ttg {
     }
 
   private:
-   // non-copyable
+   // non-copyable, but movable
    TTBase(const TTBase &) = delete;
    TTBase &operator=(const TTBase &) = delete;
 
-   // movable
-   TTBase(TTBase && other) : instance_id(other.instance_id)
-       , name(std::move(other.name))
-           , inputs(std::move(other.inputs))
-           , outputs(std::move(other.outputs)) {
-     other.instance_id = -1;
-   }
-   TTBase &operator=(TTBase && other) {
-     instance_id = other.instance_id;
-     name = std::move(other.name);
-     inputs = std::move(other.inputs);
-     outputs = std::move(other.outputs);
-     other.instance_id = -1;
-     return *this;
-   }
+  protected:
+    TTBase(TTBase && other) : instance_id(other.instance_id)
+        , name(std::move(other.name))
+        , inputs(std::move(other.inputs))
+        , outputs(std::move(other.outputs)) {
+      other.instance_id = -1;
+    }
+    TTBase &operator=(TTBase && other) {
+      instance_id = other.instance_id;
+      name = std::move(other.name);
+      inputs = std::move(other.inputs);
+      outputs = std::move(other.outputs);
+      other.instance_id = -1;
+      return *this;
+    }
 
-  public:
-   TTBase(const std::string &name, size_t numins, size_t numouts)
+    TTBase(const std::string &name, size_t numins, size_t numouts)
         : instance_id(next_instance_id())
         , name(name)
         , inputs(numins)
         , outputs(numouts) {
     }
 
+   public:
     virtual ~TTBase() = default;
 
     /// Sets trace for all operations to value and returns previous setting
@@ -188,7 +188,7 @@ namespace ttg {
       return out(i);
     }
 
-    uint64_t get_instance_id() const { return instance_id; }
+    auto get_instance_id() const { return instance_id; }
 
     /// Waits for the entire TTG that contains this object to be completed (collective); if not contained by a
     /// TTG this is a no-op
