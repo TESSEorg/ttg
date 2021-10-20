@@ -16,7 +16,7 @@ using namespace ttg;
 
 /***
 
-     ** design choice: if an Op is used in phases so that it is never
+     ** design choice: if an TT is used in phases so that it is never
      ** possible for the same key to arrive at the same time it is
      ** permissible to reuse keys in op playing the same algorithmic role on
      ** successive iterations
@@ -91,11 +91,11 @@ auto make_binary_reduce(Edge<size_t,valueT>& in, Edge<sumresultkeyT,valueT>& res
     auto reducefn = [logic](const iNT& iN, const valueT& left, const valueT& right, outT& out) {logic(iN, left+right, out);};
 
     Edge<iNT,valueT> left, right;
-    auto start = wrap<size_t>(startfn, edges(in), edges(left,right,result), "startsum", {"in"}, {"left","right","result"});
-    auto reduce= wrap<iNT>(reducefn, edges(left,right), edges(left,right,result), "reducesum", {"left","right"}, {"left","right","result"});
+    auto start = make_tt<size_t>(startfn, edges(in), edges(left,right,result), "startsum", {"in"}, {"left","right","result"});
+    auto reduce= make_tt<iNT>(reducefn, edges(left,right), edges(left,right,result), "reducesum", {"left","right"}, {"left","right","result"});
     auto ins = std::make_tuple(start-> template in<0>());
     auto outs = std::make_tuple(reduce-> template out<2>());
-    std::vector<std::unique_ptr<ttg::OpBase>> ops(2);
+    std::vector<std::unique_ptr<ttg::TTBase>> ops(2);
     ops[0] = std::move(start);
     ops[1] = std::move(reduce);
     return make_composite_op(std::move(ops), ins, outs, "reduce");
@@ -121,7 +121,7 @@ auto make_start(Edge<iT,xT>& x, size_t N) {
     auto f = [N](const iT& unused, std::tuple<Out<iT,xT>>& out) {
         for (iT i=0; i<N; i++) ::send<0>(i, drand48(), out);
     };
-    return wrap<iT>(f, edges(), edges(x), "start", {}, {"x"});
+    return make_tt<iT>(f, edges(), edges(x), "start", {}, {"x"});
 }
 
 // Produce initial guess for y and forward xy
@@ -130,7 +130,7 @@ auto make_guess(Edge<iT,xT>& x, Edge<kiT,xyT>& xy) {
         yT y = 6.0+(8.0*x-12.0)*x; // quadratic part of taylor expansion about 0.5 (assuming x in (0,1))
         ::send<0>(kiT(0,i), xyT(x,y), out);
     };
-    return wrap<iT>(f, edges(x), edges(xy), "start", {"x"}, {"xy"});
+    return make_tt<iT>(f, edges(x), edges(xy), "start", {"x"}, {"xy"});
 }
 
 /// Update y and forward xy
@@ -141,7 +141,7 @@ auto make_iteration(Edge<kiT,xyT>&& xy, Edge<kiT,xyT>& xynew) {
         yT ynew = y*(2.0-x*y);
         ::send<0>(ki, xyT(x,ynew), out);
     };
-    return wrap<kiT>(f, edges(xy), edges(xynew), "iteration", {"xy"}, {"xynew"});
+    return make_tt<kiT>(f, edges(xy), edges(xynew), "iteration", {"xy"}, {"xynew"});
 }
 
 /// Compute (yold[i]-ynew[i])**2
@@ -154,14 +154,14 @@ auto make_residual(Edge<kiT,xyT>&& xy, Edge<kiT,xyT>& xynew, Edge<sumreskeyT,kT>
         ::send<1>(i, err*err, out);
         //::send<1>(i, (err*err)>1e-10?1:0, out); // Counts #converged
     };
-    return wrap<kiT>(f, edges(xy,xynew), edges(k,errsq), "residual", {"xy","xynew"}, {"k","errsq"});
+    return make_tt<kiT>(f, edges(xy,xynew), edges(k,errsq), "residual", {"xy","xynew"}, {"k","errsq"});
 }
 
 auto make_sum_result(Edge<sumreskeyT,kT>& k, Edge<sumreskeyT,yT>& sumresult, Edge<kT,yT>& errsqsum) {
     auto f = [](const sumreskeyT& unused, const kT& k, const yT& sumresult, std::tuple<Out<kT,yT>>& out) {
         ::send<0>(k, sumresult, out);
     };
-    return wrap<sumreskeyT>(f, edges(k,sumresult), edges(errsqsum), "sumres", {"k","sum"}, {"sum"});
+    return make_tt<sumreskeyT>(f, edges(k,sumresult), edges(errsqsum), "sumres", {"k","sum"}, {"sum"});
 }
 
 /// Use residual for this iteration (k) to produce boolean converged flag
@@ -172,7 +172,7 @@ auto make_converged(Edge<kT,yT>& errsqsum, Edge<kT,bool>& converged) {
     // ttg::print(" residual ", (errsqsum), " converged ", converged?"yes":"no");
     ::send<0>(k, converged, out);
   };
-    return wrap<kT>(f, edges(errsqsum), edges(converged), "convtest", {"errsqsum"}, {"converged"});
+    return make_tt<kT>(f, edges(errsqsum), edges(converged), "convtest", {"errsqsum"}, {"converged"});
 }
 
 /// Broadcast convergence flag for this iteration [k] to all vector
@@ -185,7 +185,7 @@ auto make_broadcast(Edge<kT,bool>& converged, Edge<kiT,bool>& bcast, size_t N) {
     auto f = [N](const kT& k, const bool& converged, std::tuple<Out<kiT,bool>>& out) {
         for (iT i=0; i<N; i++) ::send<0>(kiT(k,i),converged,out);
     };
-    return wrap<kT>(f, edges(converged), edges(bcast), "bcast", {"converged"}, {"bcast"});
+    return make_tt<kT>(f, edges(converged), edges(bcast), "bcast", {"converged"}, {"bcast"});
 }
 
 /// If converged produce result, otherwise continue to iterate
@@ -198,21 +198,21 @@ auto make_loop(Edge<kiT,bool>& bcast, Edge<kiT,xyT>& xynew, Edge<kiT,xyT>& xy, E
             send<0>(ki, xynew, out); // iterate
         }
     };
-    return wrap<kiT>(f, edges(bcast, xynew), edges(xy, result), "loop", {"bcast", "xynew"}, {"xy", "result"});
+    return make_tt<kiT>(f, edges(bcast, xynew), edges(xy, result), "loop", {"bcast", "xynew"}, {"xy", "result"});
 }
 
 /// Makes an operation that prints a stream
 template <typename keyT, typename valueT>
 auto make_printer(const Edge<keyT, valueT>& in, const char* str = "") {
     auto func = [str](const keyT& key, const valueT& value, std::tuple<>& out) { ttg::print(str, ":", key, ":", value); };
-    return wrap(func, edges(in), edges(), "printer", {"input"});
+    return make_tt(func, edges(in), edges(), "printer", {"input"});
 }
 
 /// Discards output
 template <typename keyT, typename valueT>
 auto make_dev_null(const Edge<keyT, valueT>& in) {
     auto func = [](const keyT& key, const valueT& value, std::tuple<>& out) {};
-    return wrap(func, edges(in), edges(), "devnull", {"input"});
+    return make_tt(func, edges(in), edges(), "devnull", {"input"});
 }
 
 int main(int argc, char** argv)

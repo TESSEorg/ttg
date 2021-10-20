@@ -12,8 +12,8 @@ using keyT = uint64_t;
 
 #include "ttg.h"
 
-class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int> {
-  using baseT = Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int>;
+class A : public TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int> {
+  using baseT = TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int>;
 
  public:
   A(const std::string &name) : baseT(name, {"inputA"}, {"resultA", "iterateA"}) {}
@@ -49,8 +49,8 @@ class A : public Op<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
   ~A() { std::cout << " A destructor\n"; }
 };
 
-class Producer : public Op<void, std::tuple<Out<keyT, int>>, Producer> {
-  using baseT = Op<void, std::tuple<Out<keyT, int>>, Producer>;
+class Producer : public TT<void, std::tuple<Out<keyT, int>>, Producer> {
+  using baseT = TT<void, std::tuple<Out<keyT, int>>, Producer>;
 
  public:
   Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
@@ -66,8 +66,8 @@ class Producer : public Op<void, std::tuple<Out<keyT, int>>, Producer> {
   ~Producer() { std::cout << " Producer destructor\n"; }
 };
 
-class Consumer : public Op<void, std::tuple<>, Consumer, const int> {
-  using baseT = Op<void, std::tuple<>, Consumer, const int>;
+class Consumer : public TT<void, std::tuple<>, Consumer, const int> {
+  using baseT = TT<void, std::tuple<>, Consumer, const int>;
 
  public:
   Consumer(const std::string &name) : baseT(name, {"input"}, {}) {}
@@ -108,9 +108,9 @@ class Everything {
 };
 
 class EverythingBase {
-  std::unique_ptr<OpBase> producer;
-  std::unique_ptr<OpBase> a;
-  std::unique_ptr<OpBase> consumer;
+  std::unique_ptr<TTBase> producer;
+  std::unique_ptr<TTBase> a;
+  std::unique_ptr<TTBase> consumer;
 
  public:
   EverythingBase() : producer(new Producer("producer")), a(new A("A")), consumer(new Consumer("consumer")) {
@@ -129,7 +129,7 @@ class EverythingBase {
     producer->make_executable();
     a->make_executable();
     consumer->make_executable();
-    // TODO need abstract base world? or OpBase need to provide OpBase::rank(), etc.
+    // TODO need abstract base world? or TTBase need to provide TTBase::rank(), etc.
     if (ttg_default_execution_context().rank() == 0) dynamic_cast<Producer *>(producer.get())->invoke();
   }  // Ugh!
 };
@@ -184,18 +184,18 @@ class Everything3 {
   Edge<keyT, int> P2A, A2A;
   Edge<void, int> A2C;
 
-  decltype(wrapt<void>(p, edges(), edges(P2A))) wp;
-  decltype(wrapt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
-  decltype(wrapt(c, edges(A2C), edges())) wc;
+  decltype(make_tt_tpl<void>(p, edges(), edges(P2A))) wp;
+  decltype(make_tt_tpl(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
+  decltype(make_tt_tpl(c, edges(A2C), edges())) wc;
 
  public:
   Everything3()
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrapt<void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
-      , wa(wrapt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
-      , wc(wrapt(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
+      , wp(make_tt_tpl<void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wa(make_tt_tpl(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
+      , wc(make_tt_tpl(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
 
   void print() { print_ttg(wp.get()); }
 
@@ -229,18 +229,18 @@ class Everything4 {
   Edge<keyT, int> P2A, A2A;
   Edge<void, int> A2C;
 
-  decltype(wrap<void>(p, edges(), edges(P2A))) wp;
-  decltype(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
-  decltype(wrap(c, edges(A2C), edges())) wc;
+  decltype(make_tt<void>(p, edges(), edges(P2A))) wp;
+  decltype(make_tt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
+  decltype(make_tt(c, edges(A2C), edges())) wc;
 
  public:
   Everything4()
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrap<void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
-      , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
-      , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
+      , wp(make_tt<void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wa(make_tt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
+      , wc(make_tt(c, edges(A2C), edges(), "consumer", {"result"}, {})) {}
 
   void print() { print_ttg(wp.get()); }
 
@@ -273,18 +273,18 @@ class Everything5 {
   Edge<keyT, int> P2A, A2A;
   Edge<void, int> A2C;
 
-  decltype(wrap<void>(p, edges(), edges(P2A))) wp;
-  decltype(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
-  decltype(wrap(c, edges(A2C), edges())) wc;
+  decltype(make_tt<void>(p, edges(), edges(P2A))) wp;
+  decltype(make_tt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
+  decltype(make_tt(c, edges(A2C), edges())) wc;
 
  public:
   Everything5()
       : P2A("P2A")
       , A2A("A2A")
       , A2C("A2C")
-      , wp(wrap<void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
-      , wa(wrap(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
-      , wc(wrap(c, edges(A2C), edges(), "consumer", {"result"}, {})) {
+      , wp(make_tt<void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wa(make_tt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
+      , wc(make_tt(c, edges(A2C), edges(), "consumer", {"result"}, {})) {
     wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
     if (wc->get_world().rank() == 0) wc->set_argstream_size<0>(100);
   }
@@ -302,8 +302,8 @@ class Everything5 {
 };
 
 class EverythingComposite {
-  std::unique_ptr<OpBase> P;
-  std::unique_ptr<OpBase> AC;
+  std::unique_ptr<TTBase> P;
+  std::unique_ptr<TTBase> AC;
 
  public:
   EverythingComposite() {
@@ -321,14 +321,14 @@ class EverythingComposite {
     const auto q = std::make_tuple(a->in<0>());
     ttg::print("q  in<0>", (void *)(ttg::TerminalBase *)(std::get<0>(q)));
 
-    // std::array<std::unique_ptr<OpBase>,2> ops{std::move(a),std::move(c)};
-    std::vector<std::unique_ptr<OpBase>> ops(2);
+    // std::array<std::unique_ptr<TTBase>,2> ops{std::move(a),std::move(c)};
+    std::vector<std::unique_ptr<TTBase>> ops(2);
     ops[0] = std::move(a);
     ops[1] = std::move(c);
     ttg::print("opsin(0)", (void *)(ops[0]->in(0)));
     ttg::print("ops size", ops.size());
 
-    auto ac = make_composite_op(std::move(ops), q, std::make_tuple(), "Fred");
+    auto ac = make_composite_tt(std::move(ops), q, std::make_tuple(), "Fred");
 
     ttg::print("AC in<0>", (void *)(ttg::TerminalBase *)(ac->in<0>()));
     connect<0, 0>(p, ac);  // p->out<0>()->connect(ac->in<0>());
@@ -363,17 +363,17 @@ class ReductionTest {
 
   Edge<int, int> G2R, R2C;  // !!!! Edges must be constructed before classes that use them
 
-  decltype(wrap<int>(generator, edges(), edges(G2R))) wg;
+  decltype(make_tt<int>(generator, edges(), edges(G2R))) wg;
   BinaryTreeReduce<int, decltype(std::plus<int>{}), int> reduction;
-  decltype(wrap(consumer, edges(R2C), edges())) wc;
+  decltype(make_tt(consumer, edges(R2C), edges())) wc;
 
  public:
   ReductionTest()
       : G2R("G2R")
       , R2C("R2C")
-      , wg(wrap<int>(generator, edges(), edges(G2R), "producer", {}, {"start"}))
+      , wg(make_tt<int>(generator, edges(), edges(G2R), "producer", {}, {"start"}))
       , reduction(G2R, R2C, 0, 0, std::plus<int>{})
-      , wc(wrap(consumer, edges(R2C), edges(), "consumer", {"result"}, {})) {}
+      , wc(make_tt(consumer, edges(R2C), edges(), "consumer", {"result"}, {})) {}
 
   void print() { print_ttg(wg.get()); }
 
@@ -401,18 +401,18 @@ class BroadcastTest {
 
   int root;
 
-  decltype(wrap<int>(generator, edges(), edges(G2B))) wg;
+  decltype(make_tt<int>(generator, edges(), edges(G2B))) wg;
   BinaryTreeBroadcast<int, int> broadcast;
-  decltype(wrap(consumer, edges(B2C), edges())) wc;
+  decltype(make_tt(consumer, edges(B2C), edges())) wc;
 
  public:
   BroadcastTest(int root = 0)
       : G2B("G2B")
       , B2C("B2C")
       , root(root)
-      , wg(wrap<int>(generator, edges(), edges(G2B), "producer", {}, {"start"}))
+      , wg(make_tt<int>(generator, edges(), edges(G2B), "producer", {}, {"start"}))
       , broadcast(G2B, B2C, {ttg_default_execution_context().rank()}, root)
-      , wc(wrap(consumer, edges(B2C), edges(), "consumer", {"result"}, {})) {}
+      , wc(make_tt(consumer, edges(B2C), edges(), "consumer", {"result"}, {})) {}
 
   void print() { print_ttg(wg.get()); }
 
@@ -445,7 +445,7 @@ class Fibonacci {
       // finalize<1> in the other clause
       // - reversing the order of sends will create a race between wc->set_arg->send<1> executing on this thread and
       // wa->set_arg->finalize<1> executing in thread pool
-      // - there is no way to detect the "undesired" outcome of the race without keeping expired OpArgs from the cache
+      // - there is no way to detect the "undesired" outcome of the race without keeping expired TTArgs from the cache
       // there is no way currently to avoid race if there is more than 1 process ... need to add the number of messages
       // that the reducing terminal will receive. The order of operations will still matter.
       send<1>(0, F_np2, outs);
@@ -460,15 +460,15 @@ class Fibonacci {
 
   Edge<int, int> N2N, N2C;  // !!!! Edges must be constructed before classes that use them
 
-  decltype(wrap(next, edges(N2N), edges(N2N, N2C))) wa;
-  decltype(wrap(consume, edges(N2C), edges())) wc;
+  decltype(make_tt(next, edges(N2N), edges(N2N, N2C))) wa;
+  decltype(make_tt(consume, edges(N2C), edges())) wc;
 
  public:
   Fibonacci()
       : N2N("N2N")
       , N2C("N2C")
-      , wa(wrap(next, edges(N2N), edges(N2N, N2C), "next", {"input"}, {"iterate", "sum"}))
-      , wc(wrap(consume, edges(N2C), edges(), "consumer", {"result"}, {})) {
+      , wa(make_tt(next, edges(N2N), edges(N2N, N2C), "next", {"input"}, {"iterate", "sum"}))
+      , wc(make_tt(consume, edges(N2C), edges(), "consumer", {"result"}, {})) {
     wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
   }
 
@@ -495,7 +495,7 @@ int try_main(int argc, char **argv) {
   //  debugger->set_cmd("gdb_xterm");
 
   {
-    ttg::OpBase::set_trace_all(false);
+    ttg::TTBase::set_trace_all(false);
 
     ttg_execute(ttg_default_execution_context());
 
@@ -532,7 +532,7 @@ int try_main(int argc, char **argv) {
     std::cout << z.dot() << std::endl;
     z.start();  // myusleep(100);
 
-    // Next compose with wrappers using unpacked tuple API and edges
+    // Next compose with make_ttpers using unpacked tuple API and edges
     Everything4 q;
     std::cout << q.dot() << std::endl;
     q.start();  // myusleep(100);
@@ -579,7 +579,7 @@ int try_main(int argc, char **argv) {
         fi.start();  // see Fibonacci::next() for why there is a race here when nproc>1 (works most of the time)
 
       // must fence here to flush out all tasks associated with Everything5 and Fibonacci
-      // TODO must fence in Op destructors to avoid compositional nightmares like this
+      // TODO must fence in TT destructors to avoid compositional nightmares like this
       ttg_fence(ttg_default_execution_context());
 
       // compose Fibonacci from free functions
@@ -622,8 +622,8 @@ int try_main(int argc, char **argv) {
         Edge<int, int> F2F;
         Edge<Void, int> F2P;
 
-        auto f = make_op(fib, edges(F2F), edges(F2F, F2P), "next");
-        auto p = make_op(print, edges(F2P), edges(), "print");
+        auto f = make_tt(fib, edges(F2F), edges(F2F, F2P), "next");
+        auto p = make_tt(print, edges(F2P), edges(), "print");
         p->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
         make_graph_executable(f.get());
         if (ttg_default_execution_context().rank() == 0) f->invoke(2, 1);

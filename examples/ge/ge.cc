@@ -128,10 +128,10 @@ std::ostream& operator<<(std::ostream& s, const Integer& intVal) {
 }
 
 class Initiator
-    : public Op<Integer, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>,
+    : public TT<Integer, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>,
                 Initiator> {
   using baseT =
-      Op<Integer, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, Initiator>;
+      TT<Integer, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, Initiator>;
 
  public:
   Initiator(const std::string& name) : baseT(name, {}, {"outA", "outB", "outC", "outD"}) {}
@@ -160,8 +160,8 @@ class Initiator
   }
 };
 
-class FuncA : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, FuncA, Control> {
-  using baseT = Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, FuncA, Control>;
+class FuncA : public TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, FuncA, Control> {
+  using baseT = TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, FuncA, Control>;
   double* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -240,8 +240,8 @@ class FuncA : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
   }
 };
 
-class FuncB : public Op<Key, std::tuple<Out<Key, Control>>, FuncB, Control, Control> {
-  using baseT = Op<Key, std::tuple<Out<Key, Control>>, FuncB, Control, Control>;
+class FuncB : public TT<Key, std::tuple<Out<Key, Control>>, FuncB, Control, Control> {
+  using baseT = TT<Key, std::tuple<Out<Key, Control>>, FuncB, Control, Control>;
   double* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -312,8 +312,8 @@ class FuncB : public Op<Key, std::tuple<Out<Key, Control>>, FuncB, Control, Cont
   }
 };
 
-class FuncC : public Op<Key, std::tuple<Out<Key, Control>>, FuncC, Control, Control> {
-  using baseT = Op<Key, std::tuple<Out<Key, Control>>, FuncC, Control, Control>;
+class FuncC : public TT<Key, std::tuple<Out<Key, Control>>, FuncC, Control, Control> {
+  using baseT = TT<Key, std::tuple<Out<Key, Control>>, FuncC, Control, Control>;
   double* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -384,9 +384,9 @@ class FuncC : public Op<Key, std::tuple<Out<Key, Control>>, FuncC, Control, Cont
   }
 };
 
-class FuncD : public Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>,
+class FuncD : public TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>,
                         FuncD, Control, Control, Control, Control> {
-  using baseT = Op<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, FuncD,
+  using baseT = TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, FuncD,
                    Control, Control, Control, Control>;
   double* adjacency_matrix_ttg;
   int problem_size;
@@ -562,13 +562,13 @@ int main(int argc, char** argv) {
           xterm_debug(argv[0], 0);
   }
 
-  OpBase::set_trace_all(false); */
+  TTBase::set_trace_all(false); */
   ttg_initialize(argc, argv, -1);
 
   // world.taskq.add(world.rank(), hi);
   ttg_fence(ttg_default_execution_context());
 
-  ttg::OpBase::set_trace_all(false);
+  ttg::TTBase::set_trace_all(false);
 
   // NEW IMPLEMENTATION
   int problem_size;

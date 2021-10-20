@@ -19,7 +19,7 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 - `TaskId` (aka `Key`): A unique identifier for each task. It should be hashable. For example, if computing a matrix multiplicaion, TaskId could be a triplet of integers identifying the tiles being operated upon.
 - `Terminal`: Input and output arguments are exposed by the runtime as terminals. Input terminal is a single assignment variable and is used by the runtime to determine when arguments of a task are available. An input terminal is programmable. For example, it could perform a reduction operation.
 - `Edge`: An output terminal is connected to the input terminal using edges. Multiple edges can connect to an input terminal enabling data to come from multiple sources and an output terminal might connect to multiple successors implying a broadcast operation.
-- `TemplateTask`: This wraps a user-defined function with informal signature void f(TaskId, Arg0, Arg1, ..., OutputTerminals). A task is marked for execution when all input arguments are received. To instantiate a TemplateTask, make\_tt function is used.  
+- `TemplateTask` (aka `TT`): This is a _template_ for creating tasks; its member function `op` defined the body of the task. It is typically created by wrapping a user-defined callable (free function or a lambda) with informal signature `void(TaskId, Arg0, Arg1, ..., OutputTerminals)` with `make_tt`. Task template is used to create a task for a given `TaskId` when all input data for the given `TaskId` have been received.
 
 # How to write a simple TTG program?
 
@@ -90,8 +90,8 @@ auto make_sw1(const funcT& func, int block_size, const std::string &a, const std
   };
 
   Edge<Key, BlockMatrix<T>> recur("recur");
-  return wrap(f, edges(recur), edges(recur, leftedge, topedge, diagedge, resultedge), "sw1", {"recur"},
-              {"recur", "leftedge", "topedge", "diagedge", "resultedge"});
+  return make_tt(f, edges(recur), edges(recur, leftedge, topedge, diagedge, resultedge), "sw1", {"recur"},
+                 {"recur", "leftedge", "topedge", "diagedge", "resultedge"});
 }
 ```
 

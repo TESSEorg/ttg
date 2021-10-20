@@ -132,11 +132,11 @@ std::ostream& operator<<(std::ostream& s, const Integer& intVal) {
 }
 
 template <typename T>
-class Initiator : public Op<Integer,
+class Initiator : public TT<Integer,
                             std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                        Out<Key, BlockMatrix<T>>>,
                             Initiator<T>> {
-  using baseT = Op<Integer,
+  using baseT = TT<Integer,
                    std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                               Out<Key, BlockMatrix<T>>>,
                    Initiator>;
@@ -179,8 +179,8 @@ class Initiator : public Op<Integer,
 };
 
 template <typename T>
-class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
-  using baseT = Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>>;
+class Finalizer : public TT<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
+  using baseT = TT<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>>;
   Matrix<T>* result_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -253,11 +253,11 @@ class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
 };
 
 template <typename T>
-class FuncA : public Op<Key,
+class FuncA : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>>,
                         FuncA<T>, BlockMatrix<T>> {
-  using baseT = Op<Key,
+  using baseT = TT<Key,
                    std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                               Out<Key, BlockMatrix<T>>>,
                    FuncA, BlockMatrix<T>>;
@@ -346,10 +346,10 @@ class FuncA : public Op<Key,
 };
 
 template <typename T>
-class FuncB : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncB<T>, BlockMatrix<T>,
+class FuncB : public TT<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncB<T>, BlockMatrix<T>,
                         BlockMatrix<T>> {
   using baseT =
-      Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncB, BlockMatrix<T>, BlockMatrix<T>>;
+      TT<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncB, BlockMatrix<T>, BlockMatrix<T>>;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -427,10 +427,10 @@ class FuncB : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
 };
 
 template <typename T>
-class FuncC : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncC<T>, BlockMatrix<T>,
+class FuncC : public TT<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncC<T>, BlockMatrix<T>,
                         BlockMatrix<T>> {
   using baseT =
-      Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncC, BlockMatrix<T>, BlockMatrix<T>>;
+      TT<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncC, BlockMatrix<T>, BlockMatrix<T>>;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -509,11 +509,11 @@ class FuncC : public Op<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
 };
 
 template <typename T>
-class FuncD : public Op<Key,
+class FuncD : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>>,
                         FuncD<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>> {
-  using baseT = Op<Key,
+  using baseT = TT<Key,
                    std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                               Out<Key, BlockMatrix<T>>>,
                    FuncD, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>>;
@@ -690,7 +690,7 @@ void ge_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
   ttg_initialize(argc, argv);
-  ttg::OpBase::set_trace_all(false);
+  ttg::TTBase::set_trace_all(false);
 
   auto world = ttg_default_execution_context();
 

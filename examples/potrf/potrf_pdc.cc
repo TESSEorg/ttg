@@ -290,7 +290,7 @@ auto make_potrf(MatrixT<T>& A,
     }
     ttg::broadcast<0, 1>(std::make_tuple(std::array<Key2, 1>{Key2(K, K)}, keylist), std::move(tile_kk), out);
   };
-  return ttg::wrap(f, ttg::edges(input), ttg::edges(output_result, output_trsm), "POTRF", {"tile_kk"}, {"output_result", "output_trsm"});
+  return ttg::make_tt(f, ttg::edges(input), ttg::edges(output_result, output_trsm), "POTRF", {"tile_kk"}, {"output_result", "output_trsm"});
 }
 
 template <typename T>
@@ -379,7 +379,7 @@ auto make_trsm(MatrixT<T>& A,
                                                keylist_row, keylist_col),
                             std::move(tile_mk), out);
   };
-  return ttg::wrap(f, ttg::edges(input_kk, input_mk), ttg::edges(output_result, output_diag, output_row, output_col),
+  return ttg::make_tt(f, ttg::edges(input_kk, input_mk), ttg::edges(output_result, output_diag, output_row, output_col),
                    "TRSM", {"tile_kk", "tile_mk"}, {"output_result", "output_diag", "output_row", "output_col"});
 }
 
@@ -445,7 +445,7 @@ auto make_syrk(MatrixT<T>& A,
     }
 
   };
-  return ttg::wrap(f,
+  return ttg::make_tt(f,
                    ttg::edges(input_mk, input_mm),
                    ttg::edges(output_potrf, output_syrk), "SYRK",
                    {"tile_mk", "tile_mm"}, {"output_potrf", "output_syrk"});
@@ -517,7 +517,7 @@ auto make_gemm(MatrixT<T>& A,
       ttg::send<1>(Key3(I, J, K+1), std::move(tile_nm), out);
     }
   };
-  return ttg::wrap(f,
+  return ttg::make_tt(f,
                    ttg::edges(input_nk, input_mk, input_nm),
                    ttg::edges(output_trsm, output_gemm), "GEMM",
                    {"input_nk", "input_mk", "input_nm"},
@@ -560,7 +560,7 @@ auto initiator(MatrixT<T>& A,
     }
   };
 
-  return ttg::wrap<Key3>(f, ttg::edges(), ttg::edges(syrk_potrf, gemm_trsm, syrk_syrk, gemm_gemm), "INITIATOR");
+  return ttg::make_tt<Key3>(f, ttg::edges(), ttg::edges(syrk_potrf, gemm_trsm, syrk_syrk, gemm_gemm), "INITIATOR");
 }
 
 template <typename T>
@@ -580,7 +580,7 @@ auto make_result(MatrixT<T>& A, const ttg::Edge<Key2, MatrixTile<T>>& result) {
 #endif // TTG_USE_USER_TERMDET
   };
 
-  return ttg::wrap(f, ttg::edges(result), ttg::edges(), "Final Output", {"result"}, {});
+  return ttg::make_tt(f, ttg::edges(result), ttg::edges(), "Final Output", {"result"}, {});
 }
 
 

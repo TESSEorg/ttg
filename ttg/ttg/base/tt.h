@@ -13,8 +13,8 @@
 namespace ttg {
 
   namespace detail {
-    // If true prints trace of all assignments and all op invocations
-    inline bool &op_base_trace_accessor(void) {
+    // If true prints trace of all assignments and all TT invocations
+    inline bool &tt_base_trace_accessor(void) {
       static bool trace = false;
       return trace;
     }
@@ -22,7 +22,7 @@ namespace ttg {
 
   /// Provides basic information and graph connectivity (eventually statistics,
   /// etc.)
-  class OpBase {
+  class TTBase {
   private:
     uint64_t instance_id;  //< Unique ID for object
 
@@ -32,7 +32,7 @@ namespace ttg {
     bool trace_instance;              //< If true traces just this instance
     bool is_composite;                //< True if the operator is composite
     bool is_within_composite;         //< True if the operator is part of a composite
-    OpBase *containing_composite_op;  //< If part of a composite, points to composite operator
+    TTBase *containing_composite_tt;  //< If part of a composite, points to composite operator
 
     bool executable;
 
@@ -44,12 +44,12 @@ namespace ttg {
 
   protected:
     void set_input(size_t i, TerminalBase *t) {
-      if (i >= inputs.size()) throw(name+":OpBase: out of range i setting input");
+      if (i >= inputs.size()) throw(name+":TTBase: out of range i setting input");
       inputs[i] = t;
     }
 
     void set_output(size_t i, TerminalBase *t) {
-      if (i >= outputs.size()) throw(name+":OpBase: out of range i setting output");
+      if (i >= outputs.size()) throw(name+":TTBase: out of range i setting output");
       outputs[i] = t;
     }
 
@@ -76,37 +76,37 @@ namespace ttg {
     template <typename terminalsT, typename namesT>
     void register_input_terminals(terminalsT &terms, const namesT &names) {
       register_terminals<false>(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, names,
-                                &OpBase::set_input);
+                                &TTBase::set_input);
     }
 
     // Used by op ... terminalsT will be a tuple of terminals
     template <typename terminalsT, typename namesT>
     void register_output_terminals(terminalsT &terms, const namesT &names) {
       register_terminals<true>(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, names,
-                              &OpBase::set_output);
+                              &TTBase::set_output);
     }
 
-    // Used by composite op ... terminalsT will be a tuple of pointers to terminals
+    // Used by composite TT ... terminalsT will be a tuple of pointers to terminals
     template <std::size_t... IS, typename terminalsT, typename setfuncT>
     void set_terminals(std::index_sequence<IS...>, terminalsT &terms, const setfuncT setfunc) {
       int junk[] = {0, ((this->*setfunc)(IS, std::get<IS>(terms)), 0)...};
       junk[0]++;
     }
 
-    // Used by composite op ... terminalsT will be a tuple of pointers to terminals
+    // Used by composite TT ... terminalsT will be a tuple of pointers to terminals
     template <typename terminalsT, typename setfuncT>
     void set_terminals(const terminalsT &terms, const setfuncT setfunc) {
       set_terminals(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, setfunc);
     }
 
   private:
-    OpBase(const OpBase &) = delete;
-    OpBase &operator=(const OpBase &) = delete;
-    OpBase(OpBase &&) = delete;
-    OpBase &operator=(OpBase &&) = delete;
+   TTBase(const TTBase &) = delete;
+   TTBase &operator=(const TTBase &) = delete;
+   TTBase(TTBase &&) = delete;
+   TTBase &operator=(TTBase &&) = delete;
 
   public:
-    OpBase(const std::string &name, size_t numins, size_t numouts)
+   TTBase(const std::string &name, size_t numins, size_t numouts)
         : instance_id(next_instance_id())
         , name(name)
         , inputs(numins)
@@ -114,18 +114,18 @@ namespace ttg {
         , trace_instance(false)
         , is_composite(false)
         , is_within_composite(false)
-        , containing_composite_op(0)
+        , containing_composite_tt(0)
         , executable(false) {
       // std::cout << name << "@" << (void *)this << " -> " << instance_id << std::endl;
     }
 
-    virtual ~OpBase() = default;
+    virtual ~TTBase() = default;
 
     virtual void release() { }
 
     /// Sets trace for all operations to value and returns previous setting
     static bool set_trace_all(bool value) {
-      std::swap(ttg::detail::op_base_trace_accessor(), value);
+      std::swap(ttg::detail::tt_base_trace_accessor(), value);
       return value;
     }
 
@@ -136,17 +136,17 @@ namespace ttg {
     }
 
     /// Returns true if tracing set for either this instance or all instances
-    bool get_trace() { return ttg::detail::op_base_trace_accessor() || trace_instance; }
+    bool get_trace() { return ttg::detail::tt_base_trace_accessor() || trace_instance; }
     bool tracing() { return get_trace(); }
 
     void set_is_composite(bool value) { is_composite = value; }
     bool get_is_composite() const { return is_composite; }
-    void set_is_within_composite(bool value, OpBase *op) {
+    void set_is_within_composite(bool value, TTBase *op) {
       is_within_composite = value;
-      containing_composite_op = op;
+      containing_composite_tt = op;
     }
     bool get_is_within_composite() const { return is_within_composite; }
-    OpBase *get_containing_composite_op() const { return containing_composite_op; }
+    TTBase *get_containing_composite_op() const { return containing_composite_tt; }
 
     /// Sets the name of this operation
     void set_name(const std::string &name) { this->name = name; }
@@ -167,23 +167,23 @@ namespace ttg {
 
     /// Returns a pointer to the i'th input terminal
     ttg::TerminalBase *in(size_t i) {
-      if (i >= inputs.size()) throw name + ":OpBase: you are requesting an input terminal that does not exist";
+      if (i >= inputs.size()) throw name + ":TTBase: you are requesting an input terminal that does not exist";
       return inputs[i];
     }
 
     /// Returns a pointer to the i'th output terminal
     ttg::TerminalBase *out(size_t i) {
-      if (i >= outputs.size()) throw name + "OpBase: you are requesting an output terminal that does not exist";
+      if (i >= outputs.size()) throw name + "TTBase: you are requesting an output terminal that does not exist";
       return outputs[i];
     }
 
-    /// Returns a pointer to the i'th input terminal ... to make API consistent with Op
+    /// Returns a pointer to the i'th input terminal ... to make API consistent with TT
     template <std::size_t i>
     ttg::TerminalBase *in() {
       return in(i);
     }
 
-    /// Returns a pointer to the i'th output terminal ... to make API consistent with Op
+    /// Returns a pointer to the i'th output terminal ... to make API consistent with TT
     template <std::size_t i>
     ttg::TerminalBase *out() {
       return out(i);
@@ -191,7 +191,7 @@ namespace ttg {
 
     uint64_t get_instance_id() const { return instance_id; }
 
-    /// Waits for the entire TTG associated with this op to be completed (collective)
+    /// Waits for the entire TTG associated with this TT to be completed (collective)
     virtual void fence() = 0;
 
     /// Marks this executable
@@ -209,7 +209,7 @@ namespace ttg {
       do { \
         if (!this->is_executable()) { \
           std::ostringstream oss; \
-          oss << "Op is not executable at " << __FILE__ << ":" << __LINE__; \
+          oss << "TT is not executable at " << __FILE__ << ":" << __LINE__; \
           throw std::logic_error(oss.str().c_str()); \
         } \
       } while (0);
@@ -217,7 +217,7 @@ namespace ttg {
   };
 
 
-  inline void OpBase::make_executable() { executable = true; }
+  inline void TTBase::make_executable() { executable = true; }
 
 } // namespace ttg
 

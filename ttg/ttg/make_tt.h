@@ -9,9 +9,10 @@
 // case 2 (keyT == void): void op(std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&)
 //
 template <typename funcT, typename keyT, typename output_terminalsT, typename... input_valuesT>
-class WrapOp
-    : public Op<keyT, output_terminalsT, WrapOp<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...> {
-  using baseT = Op<keyT, output_terminalsT, WrapOp<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...>;
+class CallableWrapTT : public TT<keyT, output_terminalsT,
+                                 CallableWrapTT<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...> {
+  using baseT =
+      TT<keyT, output_terminalsT, CallableWrapTT<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...>;
 
   using input_values_tuple_type = typename baseT::input_values_tuple_type;
   using input_refs_tuple_type = typename baseT::input_refs_tuple_type;
@@ -37,25 +38,25 @@ class WrapOp
 
  public:
   template <typename funcT_>
-  WrapOp(funcT_ &&f, const input_edges_type &inedges, const output_edges_type &outedges,
-         const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
+  CallableWrapTT(funcT_ &&f, const input_edges_type &inedges, const output_edges_type &outedges,
+                 const std::string &name, const std::vector<std::string> &innames,
+                 const std::vector<std::string> &outnames)
       : baseT(inedges, outedges, name, innames, outnames), func(std::forward<funcT_>(f)) {}
 
-  template<typename funcT_>
-  WrapOp(funcT_ &&f,
-         const std::string &name,
-         const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
+  template <typename funcT_>
+  CallableWrapTT(funcT_ &&f, const std::string &name, const std::vector<std::string> &innames,
+                 const std::vector<std::string> &outnames)
       : baseT(name, innames, outnames), func(std::forward<funcT_>(f)) {}
 
-  template<typename Key, typename ArgsTuple>
+  template <typename Key, typename ArgsTuple>
   std::enable_if_t<std::is_same_v<ArgsTuple, input_refs_tuple_type> && !ttg::meta::is_empty_tuple_v<ArgsTuple> &&
                        !ttg::meta::is_void_v<Key>,
                    void>
-  op(Key&& key, ArgsTuple &&args_tuple, output_terminalsT &out) {
+  op(Key &&key, ArgsTuple &&args_tuple, output_terminalsT &out) {
     call_func(std::forward<Key>(key), std::forward<ArgsTuple>(args_tuple), out);
   }
 
-  template<typename ArgsTuple, typename Key = keyT>
+  template <typename ArgsTuple, typename Key = keyT>
   std::enable_if_t<std::is_same_v<ArgsTuple, input_refs_tuple_type> && !ttg::meta::is_empty_tuple_v<ArgsTuple> &&
                        ttg::meta::is_void_v<Key>,
                    void>
@@ -77,11 +78,11 @@ class WrapOp
 };
 
 template <typename funcT, typename keyT, typename output_terminalsT, typename input_values_tupleT>
-struct WrapOpUnwrapTuple;
+struct CallableWrapTTUnwrapTuple;
 
 template <typename funcT, typename keyT, typename output_terminalsT, typename... input_valuesT>
-struct WrapOpUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<input_valuesT...>> {
-  using type = WrapOp<funcT, keyT, output_terminalsT, std::remove_reference_t<input_valuesT>...>;
+struct CallableWrapTTUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<input_valuesT...>> {
+  using type = CallableWrapTT<funcT, keyT, output_terminalsT, std::remove_reference_t<input_valuesT>...>;
 };
 
 // Class to wrap a callable with signature
@@ -90,10 +91,11 @@ struct WrapOpUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<input_values
 // case 2 (keyT == void): void op(input_valuesT&&..., std::tuple<output_terminalsT...>&)
 //
 template <typename funcT, typename keyT, typename output_terminalsT, typename... input_valuesT>
-class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, output_terminalsT, input_valuesT...>,
-                             input_valuesT...> {
-  using baseT =
-      Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...>;
+class CallableWrapTTArgs
+    : public TT<keyT, output_terminalsT, CallableWrapTTArgs<funcT, keyT, output_terminalsT, input_valuesT...>,
+                input_valuesT...> {
+  using baseT = TT<keyT, output_terminalsT, CallableWrapTTArgs<funcT, keyT, output_terminalsT, input_valuesT...>,
+                   input_valuesT...>;
 
   using input_values_tuple_type = typename baseT::input_values_tuple_type;
   using input_refs_tuple_type = typename baseT::input_refs_tuple_type;
@@ -121,24 +123,23 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
   }
 
   template <typename OutputTerminals>
-  void call_func(OutputTerminals & out) {
+  void call_func(OutputTerminals &out) {
     func(out);
   }
 
  public:
-
   template <typename funcT_>
-  WrapOpArgs(funcT_ &&f, const input_edges_type &inedges,
-             const typename baseT::output_edges_type &outedges, const std::string &name,
-             const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
+  CallableWrapTTArgs(funcT_ &&f, const input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
+                     const std::string &name, const std::vector<std::string> &innames,
+                     const std::vector<std::string> &outnames)
       : baseT(inedges, outedges, name, innames, outnames), func(std::forward<funcT_>(f)) {}
 
-  template<typename funcT_>
-  WrapOpArgs(funcT_ &&f, const std::string &name,
-             const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
+  template <typename funcT_>
+  CallableWrapTTArgs(funcT_ &&f, const std::string &name, const std::vector<std::string> &innames,
+                     const std::vector<std::string> &outnames)
       : baseT(name, innames, outnames), func(std::forward<funcT_>(f)) {}
 
-  template<typename Key, typename ArgsTuple>
+  template <typename Key, typename ArgsTuple>
   std::enable_if_t<std::is_same_v<ArgsTuple, input_refs_tuple_type> &&
                        !ttg::meta::is_empty_tuple_v<input_refs_tuple_type> && !ttg::meta::is_void_v<Key>,
                    void>
@@ -147,13 +148,12 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
               std::make_index_sequence<std::tuple_size<ArgsTuple>::value>{});
   };
 
-  template<typename ArgsTuple, typename Key = keyT>
+  template <typename ArgsTuple, typename Key = keyT>
   std::enable_if_t<std::is_same_v<ArgsTuple, input_refs_tuple_type> &&
                        !ttg::meta::is_empty_tuple_v<input_refs_tuple_type> && ttg::meta::is_void_v<Key>,
                    void>
   op(ArgsTuple &&args_tuple, output_terminalsT &out) {
-    call_func(std::forward<ArgsTuple>(args_tuple), out,
-              std::make_index_sequence<std::tuple_size<ArgsTuple>::value>{});
+    call_func(std::forward<ArgsTuple>(args_tuple), out, std::make_index_sequence<std::tuple_size<ArgsTuple>::value>{});
   };
 
   template <typename Key, typename ArgsTuple = input_refs_tuple_type>
@@ -167,15 +167,14 @@ class WrapOpArgs : public Op<keyT, output_terminalsT, WrapOpArgs<funcT, keyT, ou
       output_terminalsT &out) {
     call_func(out);
   };
-
 };
 
 template <typename funcT, typename keyT, typename output_terminalsT, typename input_values_tupleT>
-struct WrapOpArgsUnwrapTuple;
+struct CallableWrapTTArgsUnwrapTuple;
 
 template <typename funcT, typename keyT, typename output_terminalsT, typename... input_valuesT>
-struct WrapOpArgsUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<input_valuesT...>> {
-  using type = WrapOpArgs<funcT, keyT, output_terminalsT, std::remove_reference_t<input_valuesT>...>;
+struct CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<input_valuesT...>> {
+  using type = CallableWrapTTArgs<funcT, keyT, output_terminalsT, std::remove_reference_t<input_valuesT>...>;
 };
 
 // Factory function to assist in wrapping a callable with signature
@@ -183,35 +182,37 @@ struct WrapOpArgsUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<input_va
 // case 1 (keyT != void): void op(const input_keyT&, std::tuple<input_valuesT&...>&&, std::tuple<output_terminalsT...>&)
 // case 2 (keyT == void): void op(std::tuple<input_valuesT&...>&&, std::tuple<output_terminalsT...>&)
 template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
-auto wrapt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>...> &inedges,
-           const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
-           const std::vector<std::string> &innames =
-               std::vector<std::string>(std::tuple_size<std::tuple<ttg::Edge<keyT, input_valuesT>...>>::value, "input"),
-           const std::vector<std::string> &outnames =
-               std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
+auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>...> &inedges,
+                 const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
+                 const std::vector<std::string> &innames = std::vector<std::string>(
+                     std::tuple_size<std::tuple<ttg::Edge<keyT, input_valuesT>...>>::value, "input"),
+                 const std::vector<std::string> &outnames =
+                     std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
   using output_terminals_type = typename ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
 
-  // Op needs actual types of arguments to func ... extract them and pass to WrapOpArgs
+  // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
   // 1. func_args_t = {const input_keyT&, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&}
   using func_args_t = boost::callable_traits::args_t<funcT>;
   constexpr const auto num_args = std::tuple_size<func_args_t>::value;
   constexpr const auto void_key = ttg::meta::is_void_v<keyT>;
-  static_assert(num_args == (void_key ? 2 : 3), "ttg::wrapt(func, ...): func must take 3 arguments (or 2, if keyT=void)");
+  static_assert(num_args == (void_key ? 2 : 3),
+                "ttg::make_tt_tpl(func, ...): func must take 3 arguments (or 2, if keyT=void)");
   // 2. input_args_t = {input_valuesT&&...}
   using input_args_t = std::decay_t<typename std::tuple_element<void_key ? 0 : 1, func_args_t>::type>;
   using decayed_input_args_t = ttg::meta::decayed_tuple_t<input_args_t>;
-  using wrapT = typename WrapOpUnwrapTuple<funcT, keyT, output_terminals_type, input_args_t>::type;
+  using wrapT = typename CallableWrapTTUnwrapTuple<funcT, keyT, output_terminals_type, input_args_t>::type;
   // not sure if we need this level of type checking ...
   // TODO determine the generic signature of func
   if constexpr (!void_key) {
-    static_assert(std::is_same_v<typename std::tuple_element<0, func_args_t>::type, const keyT &>,
-                  "ttg::wrapt(func, inedges, outedges): first argument of func must be const keyT& (unless keyT = void)");
+    static_assert(
+        std::is_same_v<typename std::tuple_element<0, func_args_t>::type, const keyT &>,
+        "ttg::make_tt_tpl(func, inedges, outedges): first argument of func must be const keyT& (unless keyT = void)");
   }
   static_assert(std::is_same_v<decayed_input_args_t, std::tuple<input_valuesT...>>,
-                "ttg::wrapt(func, inedges, outedges): inedges value types do not match argument types of func");
+                "ttg::make_tt_tpl(func, inedges, outedges): inedges value types do not match argument types of func");
   static_assert(
       std::is_same_v<typename std::tuple_element<num_args - 1, func_args_t>::type, output_terminals_type &>,
-      "ttg::wrapt(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
+      "ttg::make_tt_tpl(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
 
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
@@ -221,15 +222,15 @@ auto wrapt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>...> &in
 // case 1 (keyT != void): void op(const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)
 // case 2 (keyT == void): void op(input_valuesT&&..., std::tuple<output_terminalsT...>&)
 template <typename keyT, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
-auto wrap(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
-          const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
-          const std::vector<std::string> &innames = std::vector<std::string>(
-              std::tuple_size<std::tuple<ttg::Edge<keyT, input_edge_valuesT>...>>::value, "input"),
-          const std::vector<std::string> &outnames =
-              std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
+auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
+             const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
+             const std::vector<std::string> &innames = std::vector<std::string>(
+                 std::tuple_size<std::tuple<ttg::Edge<keyT, input_edge_valuesT>...>>::value, "input"),
+             const std::vector<std::string> &outnames =
+                 std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
   using output_terminals_type = typename ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
 
-  // Op needs actual types of arguments to func ... extract them and pass to WrapOpArgs
+  // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
   // 1. func_args_t = {const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&}
   using func_args_t = boost::callable_traits::args_t<funcT>;
   constexpr const auto num_args = std::tuple_size<func_args_t>::value;
@@ -241,30 +242,43 @@ auto wrap(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...>
       typename ttg::meta::drop_first_n<func_args_t, std::size_t(void_key ? 0 : 1)>::type,
       std::tuple_size<func_args_t>::value - (void_key ? 1 : 2)>::type;
   using decayed_input_args_t = ttg::meta::decayed_tuple_t<input_args_t>;
-  using wrapT = typename WrapOpArgsUnwrapTuple<funcT, keyT, output_terminals_type, input_args_t>::type;
+  using wrapT = typename CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminals_type, input_args_t>::type;
   // not sure if we need this level of type checking ...
   // TODO determine the generic signature of func
   if constexpr (!void_key) {
-    static_assert(std::is_same_v<typename std::tuple_element<0, func_args_t>::type, const keyT &>,
-                  "ttg::wrap(func, inedges, outedges): first argument of func must be const keyT& (unless keyT = void)");
+    static_assert(
+        std::is_same_v<typename std::tuple_element<0, func_args_t>::type, const keyT &>,
+        "ttg::make_tt(func, inedges, outedges): first argument of func must be const keyT& (unless keyT = void)");
   }
   static_assert(std::is_same_v<decayed_input_args_t, std::tuple<input_edge_valuesT...>>,
-                "ttg::wrap(func, inedges, outedges): inedges value types do not match argument types of func");
+                "ttg::make_tt(func, inedges, outedges): inedges value types do not match argument types of func");
   static_assert(
       std::is_same_v<typename std::tuple_element<num_args - 1, func_args_t>::type, output_terminals_type &>,
-      "ttg::wrap(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
+      "ttg::make_tt(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
 
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
-// pattern from https://www.fluentcpp.com/2017/10/27/function-aliases-cpp/
-#define TTG_UTIL_ALIAS_TEMPLATE_FUNCTION(aliasname,funcname)\
-template<typename... Args> \
-inline auto aliasname(Args&&... args) \
-{ \
-    return funcname(std::forward<Args>(args)...); \
+template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
+[[deprecated("use make_tt_tpl instead")]] inline auto wrapt(
+    funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>...> &inedges,
+    const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
+    const std::vector<std::string> &innames =
+        std::vector<std::string>(std::tuple_size<std::tuple<ttg::Edge<keyT, input_valuesT>...>>::value, "input"),
+    const std::vector<std::string> &outnames =
+        std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
+  return make_tt_tpl<keyT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
-TTG_UTIL_ALIAS_TEMPLATE_FUNCTION(make_op, wrap);
+template <typename keyT, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
+[[deprecated("use make_tt instead")]] auto wrap(
+    funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
+    const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
+    const std::vector<std::string> &innames =
+        std::vector<std::string>(std::tuple_size<std::tuple<ttg::Edge<keyT, input_edge_valuesT>...>>::value, "input"),
+    const std::vector<std::string> &outnames =
+        std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
+  return make_tt<keyT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+}
 
 #endif  // CXXAPI_WRAP_H

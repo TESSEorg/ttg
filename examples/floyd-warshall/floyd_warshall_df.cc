@@ -105,11 +105,11 @@ std::ostream& operator<<(std::ostream& s, const Control ctl) {
 }
 
 template <typename T>
-class Initiator : public Op<int,
+class Initiator : public TT<int,
                             std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                        Out<Key, BlockMatrix<T>>>,
                             Initiator<T>> {
-  using baseT = Op<int,
+  using baseT = TT<int,
                    std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                               Out<Key, BlockMatrix<T>>>,
                    Initiator>;
@@ -154,8 +154,8 @@ class Initiator : public Op<int,
 };
 
 template <typename T>
-class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
-  using baseT = Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>>;
+class Finalizer : public TT<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
+  using baseT = TT<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>>;
   Matrix<T>* result_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -232,12 +232,12 @@ class Finalizer : public Op<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
 };
 
 template <typename T>
-class FuncA : public Op<Key,
+class FuncA : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>>,
                         FuncA<T>, BlockMatrix<T>> {
-  using baseT = Op<
+  using baseT = TT<
       Key,
       std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                  Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
@@ -336,11 +336,11 @@ class FuncA : public Op<Key,
 };
 
 template <typename T>
-class FuncB : public Op<Key,
+class FuncB : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
                         FuncB<T>, BlockMatrix<T>, const BlockMatrix<T>> {
-  using baseT = Op<Key,
+  using baseT = TT<Key,
                    std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                               Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
                    FuncB, BlockMatrix<T>, const BlockMatrix<T>>;
@@ -429,11 +429,11 @@ class FuncB : public Op<Key,
 };
 
 template <typename T>
-class FuncC : public Op<Key,
+class FuncC : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
                         FuncC<T>, BlockMatrix<T>, const BlockMatrix<T>> {
-  using baseT = Op<Key,
+  using baseT = TT<Key,
                    std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                               Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
                    FuncC, BlockMatrix<T>, const BlockMatrix<T>>;
@@ -521,11 +521,11 @@ class FuncC : public Op<Key,
 };
 
 template <typename T>
-class FuncD : public Op<Key,
+class FuncD : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
                         FuncD<T>, BlockMatrix<T>, const BlockMatrix<T>, const BlockMatrix<T>> {
-  using baseT = Op<Key,
+  using baseT = TT<Key,
                    std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                               Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
                    FuncD, BlockMatrix<T>, const BlockMatrix<T>, const BlockMatrix<T>>;
@@ -701,7 +701,7 @@ void floyd_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
   ttg_initialize(argc, argv);
-  ttg::OpBase::set_trace_all(false);
+  ttg::TTBase::set_trace_all(false);
 
   ttg::World world = ttg::get_default_world();
 

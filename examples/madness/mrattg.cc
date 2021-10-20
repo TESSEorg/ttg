@@ -85,13 +85,13 @@ auto make_printer(const Edge<keyT, valueT>& in, const char* str = "", const bool
             std::cout << str << " (" << key << "," << value << ")" << std::endl;
         }
     };
-    return wrap(func, edges(in), edges(), "printer", {"input"});
+    return make_tt(func, edges(in), edges(), "printer", {"input"});
 }
 
 template <Dimension NDIM>
 auto make_start(const ctlEdge<NDIM>& ctl) {
     auto func = [](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>>& out) { send<0>(key, Control(), out); };
-    return wrap<Key<NDIM>>(func, edges(), edges(ctl), "start", {}, {"control"});
+    return make_tt<Key<NDIM>>(func, edges(), edges(ctl), "start", {}, {"control"});
 }
 
 
@@ -127,7 +127,7 @@ auto make_project(functorT& f,
         send<1>(key, node, out); // always produce a result
     };
     ctlEdge<NDIM> refine("refine");
-    return wrap(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
+    return make_tt(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
 }
 
 namespace detail {
@@ -269,7 +269,7 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
 
     auto ins = std::make_tuple(s-> template in<0>());
     auto outs = std::make_tuple(c-> template out<num_children>());
-    std::vector<std::unique_ptr<ttg::OpBase>> ops(2);
+    std::vector<std::unique_ptr<ttg::TTBase>> ops(2);
     ops[0] = std::move(s);
     ops[1] = std::move(c);
 
@@ -312,7 +312,7 @@ template <typename T, size_t K, Dimension NDIM>
 auto make_reconstruct(const cnodeEdge<T,K,NDIM>& in, rnodeEdge<T,K,NDIM>& out, const std::string& name = "reconstruct") {
     Edge<Key<NDIM>,FixedTensor<T,K,NDIM>> S("S");  // passes scaling functions down
 
-    auto s = wrapt(&do_reconstruct<T,K,NDIM>, edges(in, S), edges(S, out), name, {"input", "s"}, {"s", "output"});
+    auto s = make_tt_tpl(&do_reconstruct<T,K,NDIM>, edges(in, S), edges(S, out), name, {"input", "s"}, {"s", "output"});
 
     if (get_default_world().rank() == 0) {
         s->template in<1>()->send(Key<NDIM>{0,{0}}, FixedTensor<T,K,NDIM>()); // Prime the flow of scaling functions
@@ -457,7 +457,7 @@ void test1() {
 
     ctlEdge<NDIM> ctl("start");
     auto start = make_start(ctl);
-    std::vector<std::unique_ptr<ttg::OpBase>> ops;
+    std::vector<std::unique_ptr<ttg::TTBase>> ops;
     for (auto i : range(3)) {
         TTGUNUSED(i);
         rnodeEdge<T,K,NDIM> a("a"), c("c");

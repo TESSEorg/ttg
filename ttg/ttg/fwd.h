@@ -21,10 +21,21 @@ namespace ttg_parsec {}
 
 namespace ttg {
 
-  class OpBase;
+  class TTBase;
+
+  /// \internal OG name
+  using OpBase [[deprecated("use TTBase instead")]] = TTBase;
+  /// \internal the name used in the ESPM2 paper
+  using TemplateTaskBase = TTBase;
 
   template <typename keyT = void, typename valueT = void>
   class Edge;
+
+  template <typename input_terminalsT, typename output_terminalsT>
+  class CompositeTT;
+
+  template <typename input_terminalsT, typename output_terminalsT>
+  using CompositeOp [[deprecated("use CompositeTT instead")]] = CompositeTT<input_terminalsT, output_terminalsT>;
 
   class World;
 

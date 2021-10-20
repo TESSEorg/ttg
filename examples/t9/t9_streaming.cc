@@ -143,7 +143,7 @@ auto make_printer(const Edge<keyT, valueT>& in, const char* str = "") {
   auto func = [str](const keyT& key, const valueT& value, std::tuple<>& out) {
     std::cout << str << " (" << key << "," << value << ")" << std::endl;
   };
-  return wrap(func, edges(in), edges(), "printer", {"input"});
+  return make_tt(func, edges(in), edges(), "printer", {"input"});
 }
 
 template <typename funcT>
@@ -165,7 +165,7 @@ auto make_project(const funcT& func, ctlEdge& ctl, nodeEdge& result, const std::
     }
   };
   ctlEdge refine("refine");
-  return wrap(f, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
+  return make_tt(f, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
 }
 
 template <typename funcT>
@@ -182,7 +182,7 @@ auto make_binary_op(const funcT& func, nodeEdge left, nodeEdge right, nodeEdge R
     }
   };
   nodeEdge L("L"), R("R");
-  return wrap(f, edges(fuse(left, L), fuse(right, R)), edges(L, R, Result), name, {"left", "right"},
+  return make_tt(f, edges(fuse(left, L), fuse(right, R)), edges(L, R, Result), name, {"left", "right"},
               {"refineL", "refineR", "result"});
 }
 
@@ -214,8 +214,8 @@ void diff(const Key& key, Node&& left, Node&& center, Node&& right,
 auto make_diff(nodeEdge in, nodeEdge out, const std::string& name = "diff") {
   nodeEdge L("L"), C("C"), R("R");
   return std::make_tuple(
-      wrap(send_to_output_tree, edges(in), edges(L, C, R), "send_to_output_tree", {"input"}, {"L", "C", "R"}),
-      wrap(diff, edges(L, C, R), edges(L, C, R, out), name, {"L", "C", "R"}, {"L", "C", "R", "result"}));
+      make_tt(send_to_output_tree, edges(in), edges(L, C, R), "send_to_output_tree", {"input"}, {"L", "C", "R"}),
+      make_tt(diff, edges(L, C, R), edges(L, C, R, out), name, {"L", "C", "R"}, {"L", "C", "R", "result"}));
 }
 
 void reduce_leaves(const Key& key, const Node& node, std::tuple<nodeOut>& out) {
@@ -266,9 +266,9 @@ void send_leaves_up(const Key& key, const Node& node, std::tuple<nodeOut, nodeOu
 auto make_compress(const nodeEdge& in, nodeEdge& out, const std::string& name = "compress") {
   nodeEdge N("N"), reducedN("reducedN"), recur("recur");
   return std::make_tuple(
-            wrap(send_leaves_up, edges(in), edges(N, out), "send_leaves_up", {"input"}, {"N", "result"}),
-            wrap(reduce_leaves, edges(fuse(recur, N)), edges(reducedN), "reduce_leaves", {"input"}, {"ReducedN"}),
-            wrap(do_compress, edges(reducedN), edges(recur, out), name, {"child"}, {"N", "result"}));
+            make_tt(send_leaves_up, edges(in), edges(N, out), "send_leaves_up", {"input"}, {"N", "result"}),
+            make_tt(reduce_leaves, edges(fuse(recur, N)), edges(reducedN), "reduce_leaves", {"input"}, {"ReducedN"}),
+            make_tt(do_compress, edges(reducedN), edges(recur, out), name, {"child"}, {"N", "result"}));
 }
 
 void start_reconstruct(const Key& key, const Node& node, std::tuple<doubleOut>& out) {
@@ -287,13 +287,13 @@ void do_reconstruct(const Key& key, double s, const Node& node, std::tuple<doubl
 
 auto make_reconstruct(const nodeEdge& in, nodeEdge& out, const std::string& name = "reconstruct") {
   doubleEdge S("S");  // passes scaling functions down
-  return std::make_tuple(wrap(start_reconstruct, edges(in), edges(S), "start reconstruct", {"nodes"}, {"node0"}),
-                         wrap(do_reconstruct, edges(S, in), edges(S, out), name, {"s", "nodes"}, {"s", "result"}));
+  return std::make_tuple(make_tt(start_reconstruct, edges(in), edges(S), "start reconstruct", {"nodes"}, {"node0"}),
+                         make_tt(do_reconstruct, edges(S, in), edges(S, out), name, {"s", "nodes"}, {"s", "result"}));
 }
 
 // cannot easily replace this with wrapper due to persistent state
-class Norm2 : public Op<Key, std::tuple<>, Norm2, Node> {
-  using baseT = Op<Key, std::tuple<>, Norm2, Node>;
+class Norm2 : public TT<Key, std::tuple<>, Norm2, Node> {
+  using baseT = TT<Key, std::tuple<>, Norm2, Node>;
   double sumsq;
   std::mutex charon;
 
@@ -321,7 +321,7 @@ auto make_norm2(const nodeEdge& in) { return std::make_unique<Norm2>(in); }  // 
 
 auto make_start(const ctlEdge& ctl) {
   auto func = [](const Key& key, std::tuple<ctlOut>& out) { send<0>(key, Control(), out); };
-  return wrap<Key>(func, edges(), edges(ctl), "start", {}, {"control"});
+  return make_tt<Key>(func, edges(), edges(ctl), "start", {}, {"control"});
 }
 
 // Operations used with BinaryOp
@@ -345,7 +345,7 @@ double R(const double x) { return (A(x) + B(x)) * C(x); }
 int main(int argc, char** argv) {
   ttg_initialize(argc, argv, -1);
   {
-    //ttg::OpBase::set_trace_all(true);
+    //ttg::TTBase::set_trace_all(true);
     ctlEdge ctl("start ctl");
     nodeEdge a("a"), b("b"), c("c"), abc("abc"), diffa("diffa"), errdiff("errdiff"), errabc("errabc"), a_plus_b("a+b"),
         a_plus_b_times_c("(a+b)*c"), deriva("deriva"), compa("compa"), recona("recona");

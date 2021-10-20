@@ -27,10 +27,10 @@ namespace ttg {
   ///
   template <typename Value, typename BinaryOp, typename OutKey>
   class BinaryTreeReduce
-      : public Op<int, std::tuple<Out<int, Value>, Out<int, Value>, Out<int, Value>, Out<OutKey, Value>>,
+      : public TT<int, std::tuple<Out<int, Value>, Out<int, Value>, Out<int, Value>, Out<OutKey, Value>>,
                   BinaryTreeReduce<Value, BinaryOp, OutKey>, Value, Value, Value> {
    public:
-    using baseT = Op<int, std::tuple<Out<int, Value>, Out<int, Value>, Out<int, Value>, Out<OutKey, Value>>,
+    using baseT = TT<int, std::tuple<Out<int, Value>, Out<int, Value>, Out<int, Value>, Out<OutKey, Value>>,
                      BinaryTreeReduce<Value, BinaryOp, OutKey>, Value, Value, Value>;
 
     BinaryTreeReduce(Edge<int, Value> &in, Edge<OutKey, Value> &out, int root = 0, OutKey dest_key = OutKey(),
@@ -107,9 +107,9 @@ namespace ttg {
 /// This reduces a set of {Key,Value} pairs using Reducer
 ///
 template <typename InKey, template Value, template Reducer, template OutKey>
-class Reduce : public Op<InKey, std::tuple<Out<OutKey, Value>>, Reduce<InKey, Value, Reducer, OutKey>, Value> {
+class Reduce : public TT<InKey, std::tuple<Out<OutKey, Value>>, Reduce<InKey, Value, Reducer, OutKey>, Value> {
  public:
-  using baseT = Op<InKey, std::tuple<Out<OutKey, Value>>, Reduce<InKey, Value, Reducer, OutKey>, Value>;
+  using baseT = TT<InKey, std::tuple<Out<OutKey, Value>>, Reduce<InKey, Value, Reducer, OutKey>, Value>;
 
   Reduce(Edge<InKey, Value> &in, Edge<OutKey, Value> &out, OutKey dest_key = OutKey(), std::size_t nitems = 1,
          World &world = default_execution_context())

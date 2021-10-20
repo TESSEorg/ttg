@@ -3,11 +3,10 @@
 
 #include <string>
 #include <vector>
+#include "ttg/fwd.h"
 
 namespace ttg {
 
-  // forward-decl
-  class OpBase;
 
   /// Provides basic information and graph connectivity (eventually statistics,
   /// etc.)
@@ -23,7 +22,7 @@ namespace ttg {
     };
 
   private:
-    OpBase *op;                  //< Pointer to containing operation
+    TTBase *tt;                  //< Pointer to containing operation
     size_t n;                    //< Index of terminal
     std::string name;            //< Name of terminal
     bool connected;              //< True if is connected
@@ -35,18 +34,18 @@ namespace ttg {
     TerminalBase(const TerminalBase &) = delete;
     TerminalBase(TerminalBase &&) = delete;
 
-    friend class OpBase;
+    friend class TTBase;
     template <typename keyT, typename valueT>
     friend class In;
     template <typename keyT, typename valueT>
     friend class Out;
 
   protected:
-      TerminalBase() : op(0), n(0), name(""), connected(false) {}
+      TerminalBase() : tt(0), n(0), name(""), connected(false) {}
 
-    void set(OpBase *op, size_t index, const std::string &name, const std::string &key_type_str,
+    void set(TTBase *tt, size_t index, const std::string &name, const std::string &key_type_str,
             const std::string &value_type_str, Type type) {
-      this->op = op;
+      this->tt = tt;
       this->n = index;
       this->name = name;
       this->key_type_str = key_type_str;
@@ -58,33 +57,33 @@ namespace ttg {
     void connect_base(TerminalBase *successor) { successors_.push_back(successor); connected = true; successor->connected = true;}
 
   public:
-    /// Return ptr to containing op
-    OpBase *get_op() const {
-      if (!op) throw "ttg::TerminalBase:get_op() but op is null";
-      return op;
+    /// Return ptr to containing tt
+    TTBase *get_tt() const {
+      if (!tt) throw "ttg::TerminalBase:get_tt() but tt is null";
+      return tt;
     }
 
     /// Returns index of terminal
     size_t get_index() const {
-      if (!op) throw "ttg::TerminalBase:get_index() but op is null";
+      if (!tt) throw "ttg::TerminalBase:get_index() but tt is null";
       return n;
     }
 
     /// Returns name of terminal
     const std::string &get_name() const {
-      if (!op) throw "ttg::TerminalBase:get_name() but op is null";
+      if (!tt) throw "ttg::TerminalBase:get_name() but tt is null";
       return name;
     }
 
     /// Returns string representation of key type
     const std::string &get_key_type_str() const {
-      if (!op) throw "ttg::TerminalBase:get_key_type_str() but op is null";
+      if (!tt) throw "ttg::TerminalBase:get_key_type_str() but tt is null";
       return key_type_str;
     }
 
     /// Returns string representation of value type
     const std::string &get_value_type_str() const {
-      if (!op) throw "ttg::TerminalBase:get_value_type_str() but op is null";
+      if (!tt) throw "ttg::TerminalBase:get_value_type_str() but tt is null";
       return value_type_str;
     }
 

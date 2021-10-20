@@ -7,11 +7,11 @@
 
 #include <tuple>
 
-#include "ttg/util/tree.h"
 #include "ttg/func.h"
-#include "ttg/op.h"
-#include "ttg/world.h"
 #include "ttg/fwd.h"
+#include "ttg/tt.h"
+#include "ttg/util/tree.h"
+#include "ttg/world.h"
 
 namespace ttg {
 
@@ -25,10 +25,10 @@ namespace ttg {
   /// @note this is equivalent to MPI_Bcast.
   ///
   template <typename Value, typename OutKey = int>
-  class BinaryTreeBroadcast : public Op<int, std::tuple<Out<int, Value>, Out<int, Value>, Out<OutKey, Value>>,
+  class BinaryTreeBroadcast : public TT<int, std::tuple<Out<int, Value>, Out<int, Value>, Out<OutKey, Value>>,
                                         BinaryTreeBroadcast<Value, OutKey>, Value> {
    public:
-    using baseT = Op<int, std::tuple<Out<int, Value>, Out<int, Value>, Out<OutKey, Value>>,
+    using baseT = TT<int, std::tuple<Out<int, Value>, Out<int, Value>, Out<OutKey, Value>>,
                      BinaryTreeBroadcast<Value, OutKey>, Value>;
 
     BinaryTreeBroadcast(Edge<int, Value> &in, Edge<OutKey, Value> &out, std::vector<OutKey> local_keys, int root = 0,

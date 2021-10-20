@@ -93,7 +93,7 @@ auto make_wavefront2(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
         res = func(i, j, MB, NB, input, left, top, bottom_right[0], bottom_right[1]);
     }
 
-    //Processing finished for this block, so send it to output Op
+    //Processing finished for this block, so send it to output TT
     send<2>(Key(i,j), res, out);
 
     if (next_i < MB) {
@@ -162,9 +162,9 @@ auto initiator(Matrix<T>* m, Edge<Key, BlockMatrix<T>>& out0, Edge<Key, BlockMat
     }
   };
 
-  return wrap<Key>(f, edges(), edges(out0, out1, out2, bottom_right0, bottom_right1, 
-                  bottom_right2), "initiator", {}, {"out0", "out1", "out2", 
-                  "bottom_right0", "bottom-right1", "bottom-right2"});
+  return make_tt<Key>(f, edges(), edges(out0, out1, out2, bottom_right0, bottom_right1, bottom_right2),
+                      "initiator", {}, {"out0", "out1", "out2",
+                      "bottom_right0", "bottom-right1", "bottom-right2"});
 }
 
 template <typename funcT, typename T>
