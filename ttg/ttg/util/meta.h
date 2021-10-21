@@ -373,7 +373,7 @@ template <typename Key, typename Value> using broadcast_callback_t = typename br
       struct input_reducer_type;
       template <typename T>
       struct input_reducer_type<T, std::enable_if_t<!is_void_v<T>>> {
-        using type = std::function<std::decay_t<T>(std::decay_t<T> &&, std::decay_t<T> &&)>;
+        using type = std::function<void(std::decay_t<T> &, const std::decay_t<T> &)>;
       };
       template <typename T>
       struct input_reducer_type<T, std::enable_if_t<is_void_v<T>>> {

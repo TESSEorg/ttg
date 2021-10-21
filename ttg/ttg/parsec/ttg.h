@@ -836,7 +836,7 @@ namespace ttg_parsec {
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<input_valueTs...>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
-    std::size_t static_stream_goal[numins];
+    std::array<std::size_t, numins> static_stream_goal;
 
    public:
     ttg::World get_world() const { return world; }
@@ -1280,7 +1280,7 @@ namespace ttg_parsec {
         newtask->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)] =
             reinterpret_cast<detail::parsec_static_op_t>(&TT::static_op<ttg::ExecutionSpace::CUDA>);
 
-      for(int i = 0; i < numins; i++) {
+      for(int i = 0; i < static_stream_goal.size(); ++i) {
         newtask->stream[i].goal = static_stream_goal[i];
       }
 
@@ -1345,12 +1345,7 @@ namespace ttg_parsec {
             copy = detail::create_new_datacopy(std::forward<Value>(value));
             task->parsec_task.data[i].data_in = copy;
           } else {
-            // TODO: Ask Ed -- Why do we need a copy of value here?
-            valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
-            *reinterpret_cast<std::decay_t<valueT> *>(copy->device_private) =
-                std::move(reducer(reinterpret_cast<std::decay_t<valueT> &&>(
-                                      *reinterpret_cast<std::decay_t<valueT> *>(copy->device_private)),
-                                  std::move(value_copy)));
+            reducer(*reinterpret_cast<std::decay_t<valueT>*>(copy->device_private), value);
           }
         } else {
           reducer();  // even if this was a control input, must execute the reducer for possible side effects
@@ -1898,6 +1893,19 @@ namespace ttg_parsec {
     // \param size positive integer that specifies the default stream size
     template <std::size_t i>
     void set_static_argstream_size(std::size_t size) {
+      assert(std::get<i>(input_reducers) && "TT::set_argstream_size called on nonstreaming input terminal");
+      assert(size > 0 && "TT::set_static_argstream_size(key,size) called with size=0");
+
+      if (tracing()) {
+        ttg::print(world.rank(), ":", get_name(), ": setting global stream size for terminal ", i);
+      }
+
+      // Check if stream is already bounded
+      if (static_stream_goal[i] > 0) {
+        ttg::print_error(world.rank(), ":", get_name(), " : error stream is already bounded : ", i);
+        throw std::runtime_error("TT::set_static_argstream_size called for a bounded stream");
+      }
+
       static_stream_goal[i] = size;
     }
 
@@ -2472,7 +2480,16 @@ namespace ttg_parsec {
 
     template <std::size_t i, typename Reducer>
     void set_input_reducer(Reducer &&reducer) {
+      if (tracing()) {
+        ttg::print(world.rank(), ":", get_name(), " : setting reducer for terminal ", i);
+      }
       std::get<i>(input_reducers) = reducer;
+    }
+
+    template <std::size_t i, typename Reducer>
+    void set_input_reducer(Reducer &&reducer, std::size_t size) {
+      set_input_reducer<i>(std::forward<Reducer>(reducer));
+      set_static_argstream_size<i>(size);
     }
 
     // Returns reference to input terminal i to facilitate connection --- terminal

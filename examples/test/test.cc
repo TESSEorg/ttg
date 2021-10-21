@@ -285,7 +285,7 @@ class Everything5 {
       , wp(make_tt<void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
       , wa(make_tt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
       , wc(make_tt(c, edges(A2C), edges(), "consumer", {"result"}, {})) {
-    wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
+    wc->set_input_reducer<0>([](int &a, const int &b) { a += b; });
     if (wc->get_world().rank() == 0) wc->set_argstream_size<0>(100);
   }
 
@@ -469,7 +469,7 @@ class Fibonacci {
       , N2C("N2C")
       , wa(make_tt(next, edges(N2N), edges(N2N, N2C), "next", {"input"}, {"iterate", "sum"}))
       , wc(make_tt(consume, edges(N2C), edges(), "consumer", {"result"}, {})) {
-    wc->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
+    wc->set_input_reducer<0>([](int &a, const int &b) { a += b; });
   }
 
   void print() { print_ttg(wa.get()); }
@@ -624,7 +624,7 @@ int try_main(int argc, char **argv) {
 
         auto f = make_tt(fib, edges(F2F), edges(F2F, F2P), "next");
         auto p = make_tt(print, edges(F2P), edges(), "print");
-        p->set_input_reducer<0>([](int &&a, int &&b) { return a + b; });
+        p->set_input_reducer<0>([](int &a, const int &b) { a += b; });
         make_graph_executable(f.get());
         if (ttg_default_execution_context().rank() == 0) f->invoke(2, 1);
 

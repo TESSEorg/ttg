@@ -383,10 +383,7 @@ namespace ttg_madness {
                 args->nargs[i] = 1;
               }
             } else {
-              // Why do we need to move the value here??
-              valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
-              this->get<i, std::decay_t<valueT> &>(args->input_values) =
-                  std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->input_values), std::move(value_copy)));
+              reducer(this->get<i, std::decay_t<valueT> &>(args->input_values), value);
             }
           } else {
             reducer();  // even if this was a control input, must execute the reducer for possible side effects
@@ -494,10 +491,8 @@ namespace ttg_madness {
               args->nargs[i] = 1;
             }
           } else {
-            valueT value_copy = value;  // use constexpr if to avoid making a copy if given nonconst rvalue
             // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
-            this->get<i, std::decay_t<valueT> &>(args->input_values) =
-                std::move(reducer(this->get<i, std::decay_t<valueT> &&>(args->input_values), std::move(value_copy)));
+            reducer(this->get<i, std::decay_t<valueT>&>(args->input_values), value);
           }
           // update the counter if the stream is bounded
           // this assumes that the stream size is set before data starts flowing ... strong-typing streams will solve
@@ -1041,6 +1036,12 @@ namespace ttg_madness {
         ttg::print(world.rank(), ":", get_name(), " : setting reducer for terminal ", i);
       }
       std::get<i>(input_reducers) = reducer;
+    }
+
+    template <std::size_t i, typename Reducer>
+    void set_input_reducer(Reducer &&reducer, std::size_t size) {
+      set_input_reducer<i>(std::forward<Reducer>(reducer));
+      set_static_argstream_size<i>(size);
     }
 
     template <typename Keymap>
