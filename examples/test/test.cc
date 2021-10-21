@@ -328,7 +328,7 @@ class EverythingComposite {
     ttg::print("opsin(0)", (void *)(ops[0]->in(0)));
     ttg::print("ops size", ops.size());
 
-    auto ac = make_composite_tt(std::move(ops), q, std::make_tuple(), "Fred");
+    auto ac = make_ttg(std::move(ops), q, std::make_tuple(), "Fred");
 
     ttg::print("AC in<0>", (void *)(ttg::TerminalBase *)(ac->in<0>()));
     connect<0, 0>(p, ac);  // p->out<0>()->connect(ac->in<0>());
@@ -540,30 +540,32 @@ int try_main(int argc, char **argv) {
 #if 0  // can we make something like this happen? ... edges are named, but terminals are indexed, so components are
        // "reusable"
     {
-      ttg.let([]() {
-           std::cout << "produced 0" << std::endl;
-           // sends {Void{}, 0} to the first terminal
-           return 0;
-           // this is equivalent to:
-           // send<0>({Void{}, 0}); return;
-          })
-         .attach_outputs({"A"})
-         // {void,value} is implicitly converted to {key,void}?
-         .let([](auto &&key) {
+      TTG ttg;
+      auto [A, B] = ttg.edges("A", "B");  // TODO: abstract Edge
+      ttg.emplace([&]() {
+        std::cout << "produced 0" << std::endl;
+        sendk(A, 0);
+      })
+      .emplace([&](int key) {
            if (key <= 100) {
-             send<0>(key + 1);
+             sendk(A, key + 1);
            }
            else {
-             send<1>(key);
+             sendk(B, key);
            }
-          })
-         .attach_inputs({"A"})
-         .attach_outputs({"A", "B"})
-         .let([](auto &&key) {
+          }, A)
+       .emplace([](int key) {
            std::cout << "consumed" << key << std::endl;
-          })
-         .attach_inputs({"B"});
+          }, B);
       ttg.submit(execution_context);
+
+      // how to compose with existing functions
+      ttg.emplace(fn, /* inedges = */ ttg.edges("A", "B"), /* outedges = */ ttg.edges("C"));  // arguments of fn are used to deduce task id + argument types
+      // this is equivalen to
+      ttg.emplace([&](const T1& a, const T2& b) {
+        auto c = fn(a, b);
+        sendv(C, c);
+      }, A, B);
     }
 #endif
 

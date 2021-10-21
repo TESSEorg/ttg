@@ -146,7 +146,7 @@ auto make_producer(ttg::Edge<int, MatrixTile<T>>& out1, ttg::Edge<int, MatrixTil
 
     ttg::broadcast<0, 1>(std::make_tuple(std::move(keylist1), std::move(keylist2)), std::move(tile), out);
   };
-  return ttg::wrap<int>(f, ttg::edges(), ttg::edges(out1, out2), "PRODUCER");
+  return ttg::make_tt<int>(f, ttg::edges(), ttg::edges(out1, out2), "PRODUCER");
 }
 
 template <typename T>
@@ -162,7 +162,7 @@ auto make_consumer(ttg::Edge<int, MatrixTile<T>>& in, int instance)
       }
     }
   };
-  return ttg::wrap(f, ttg::edges(in), ttg::edges(), "CONSUMER");
+  return ttg::make_tt(f, ttg::edges(in), ttg::edges(), "CONSUMER");
 }
 
 

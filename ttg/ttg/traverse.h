@@ -1,5 +1,5 @@
-#ifndef TTG_UTIL_TRAVERSE_H
-#define TTG_UTIL_TRAVERSE_H
+#ifndef TTG_TRAVERSE_H
+#define TTG_TRAVERSE_H
 
 #include <iostream>
 #include <set>
@@ -184,4 +184,4 @@ namespace ttg {
 
 } // namespace ttg
 
-#endif // TTG_UTIL_TRAVERSE_H
+#endif // TTG_TRAVERSE_H

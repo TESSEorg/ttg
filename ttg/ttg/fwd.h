@@ -32,10 +32,15 @@ namespace ttg {
   class Edge;
 
   template <typename input_terminalsT, typename output_terminalsT>
-  class CompositeTT;
+  class TTG;
 
+  /// \internal the name consistent with the API defined in the ESPM2 paper
   template <typename input_terminalsT, typename output_terminalsT>
-  using CompositeOp [[deprecated("use CompositeTT instead")]] = CompositeTT<input_terminalsT, output_terminalsT>;
+  using TemplateTaskGraph = TTG<input_terminalsT, output_terminalsT>;
+
+  /// \internal the OG name
+  template <typename input_terminalsT, typename output_terminalsT>
+  using CompositeOp [[deprecated("use TTG instead")]] = TTG<input_terminalsT, output_terminalsT>;
 
   class World;
 

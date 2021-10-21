@@ -1,5 +1,5 @@
-#ifndef TTG_UTIL_FUNC_H
-#define TTG_UTIL_FUNC_H
+#ifndef TTG_FUNC_H
+#define TTG_FUNC_H
 
 #include <tuple>
 #include <memory>
@@ -211,4 +211,4 @@ namespace ttg {
 
 }  // namespace ttg
 
-#endif // TTG_UTIL_FUNC_H
+#endif // TTG_FUNC_H

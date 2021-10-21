@@ -110,7 +110,6 @@ auto make_sw1(const funcT& func, int block_size, const std::string &a, const std
 
   auto connected = make_graph_executable(s.get());
   assert(connected);
-  TTGUNUSED(connected);
   std::cout << "Graph is connected.\n";
 ```
 

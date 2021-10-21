@@ -11,6 +11,8 @@
 #define TTG_PARSEC_IMPORTED 1
 #define TTG_IMPL_NS ttg_parsec
 
+namespace ttg_parsec {}
+
 namespace ttg {
 
   /* Mark the ttg_parsec namespace as the default */

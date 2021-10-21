@@ -16,9 +16,9 @@ namespace ttg {
 
     /// describes the terminal type
     enum class Type {
-      Write,   /// can only be written to
-      Read,    /// can only be read from
-      Consume  /// provides consumable data
+      Write,   //!< can only be written to
+      Read,    //!< can only be used to read immutable data
+      Consume  //!< can only be used to read consumable data
     };
 
   private:

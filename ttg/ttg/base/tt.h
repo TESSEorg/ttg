@@ -20,21 +20,20 @@ namespace ttg {
     }
   } // namespace detail
 
-  /// Provides basic information and graph connectivity (eventually statistics,
-  /// etc.)
+  /// A base class for all template tasks
   class TTBase {
   private:
-    uint64_t instance_id;  //< Unique ID for object
+    int64_t instance_id;  //!< Unique ID for object; in after-move state will be -1
 
     std::string name;
     std::vector<TerminalBase *> inputs;
     std::vector<TerminalBase *> outputs;
-    bool trace_instance;              //< If true traces just this instance
-    bool is_composite;                //< True if the operator is composite
-    bool is_within_composite;         //< True if the operator is part of a composite
-    TTBase *containing_composite_tt;  //< If part of a composite, points to composite operator
+    bool trace_instance = false;      //!< If true traces just this instance
+    const TTBase *owning_ttg = nullptr;     //!< the containing TTG, if any
+    template <typename input_terminalsT, typename output_terminalsT>
+    friend class TTG;  // TTG needs to be able to control owning_ttg
 
-    bool executable;
+    bool executable = false;          //!< ready to execute?
 
     // Default copy/move/assign all OK
     static uint64_t next_instance_id() {
@@ -100,28 +99,35 @@ namespace ttg {
     }
 
   private:
+   // non-copyable, but movable
    TTBase(const TTBase &) = delete;
    TTBase &operator=(const TTBase &) = delete;
-   TTBase(TTBase &&) = delete;
-   TTBase &operator=(TTBase &&) = delete;
 
-  public:
-   TTBase(const std::string &name, size_t numins, size_t numouts)
+  protected:
+    TTBase(TTBase && other) : instance_id(other.instance_id)
+        , name(std::move(other.name))
+        , inputs(std::move(other.inputs))
+        , outputs(std::move(other.outputs)) {
+      other.instance_id = -1;
+    }
+    TTBase &operator=(TTBase && other) {
+      instance_id = other.instance_id;
+      name = std::move(other.name);
+      inputs = std::move(other.inputs);
+      outputs = std::move(other.outputs);
+      other.instance_id = -1;
+      return *this;
+    }
+
+    TTBase(const std::string &name, size_t numins, size_t numouts)
         : instance_id(next_instance_id())
         , name(name)
         , inputs(numins)
-        , outputs(numouts)
-        , trace_instance(false)
-        , is_composite(false)
-        , is_within_composite(false)
-        , containing_composite_tt(0)
-        , executable(false) {
-      // std::cout << name << "@" << (void *)this << " -> " << instance_id << std::endl;
+        , outputs(numouts) {
     }
 
+   public:
     virtual ~TTBase() = default;
-
-    virtual void release() { }
 
     /// Sets trace for all operations to value and returns previous setting
     static bool set_trace_all(bool value) {
@@ -139,14 +145,7 @@ namespace ttg {
     bool get_trace() { return ttg::detail::tt_base_trace_accessor() || trace_instance; }
     bool tracing() { return get_trace(); }
 
-    void set_is_composite(bool value) { is_composite = value; }
-    bool get_is_composite() const { return is_composite; }
-    void set_is_within_composite(bool value, TTBase *op) {
-      is_within_composite = value;
-      containing_composite_tt = op;
-    }
-    bool get_is_within_composite() const { return is_within_composite; }
-    TTBase *get_containing_composite_op() const { return containing_composite_tt; }
+    std::optional<std::reference_wrapper<const TTBase>> ttg() const { return owning_ttg ? std::cref(*owning_ttg) : std::optional<std::reference_wrapper<const TTBase>>{}; }
 
     /// Sets the name of this operation
     void set_name(const std::string &name) { this->name = name; }
@@ -189,10 +188,13 @@ namespace ttg {
       return out(i);
     }
 
-    uint64_t get_instance_id() const { return instance_id; }
+    auto get_instance_id() const { return instance_id; }
 
-    /// Waits for the entire TTG associated with this TT to be completed (collective)
+    /// Waits for the entire TTG that contains this object to be completed (collective); if not contained by a
+    /// TTG this is a no-op
     virtual void fence() = 0;
+
+    virtual void release() {}
 
     /// Marks this executable
     /// @return nothing

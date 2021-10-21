@@ -18,7 +18,7 @@ endif(TTG_PRERELEASE_ID)
 # Declare TTG =======================================================
 project(ttg
     VERSION ${TTG_VERSION}
-    DESCRIPTION "Task Template Graph: flowgraph programming model"
+    DESCRIPTION "Template Task Graph: flowgraph programming model"
     LANGUAGES CXX
     HOMEPAGE_URL "https://tesseorg.github.io/ttg/")
 
@@ -53,24 +53,24 @@ endif (FORCE_COLORED_OUTPUT)
 ##########################
 #### prerequisites
 ##########################
-# sparse tensor algorithms need Eigen
-find_package(Eigen3)
-message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
-if (EIGEN3_FOUND)
-  add_library(eigen3 INTERFACE IMPORTED)
-  set_property(TARGET eigen3 PROPERTY
-          INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
-endif (EIGEN3_FOUND)
 # Boost
 include(FindOrFetchBoost)
-# Cereal
-include(FindOrFetchCereal)
-# BTAS brings in linear algebra (BLAS++/LAPACK++)
-include(FindOrFetchBTAS)
-# OpenMP may also be used by some examples
-find_package(OpenMP COMPONENTS CXX)
-# std::execution may also be used by some examples
-find_package(CXXStdExecution)
+if (BUILD_TESTING)
+  # sparse tensor algorithms need Eigen
+  find_package(Eigen3)
+  message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
+  if (EIGEN3_FOUND)
+    add_library(eigen3 INTERFACE IMPORTED)
+    set_property(TARGET eigen3 PROPERTY
+            INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
+  endif (EIGEN3_FOUND)
+  # BTAS brings in linear algebra (BLAS++/LAPACK++)
+  include(FindOrFetchBTAS)
+  # OpenMP may also be used by some examples
+  find_package(OpenMP COMPONENTS CXX)
+  # std::execution may also be used by some examples
+  find_package(CXXStdExecution)
+endif (BUILD_TESTING)
 
 ##########################
 #### prerequisite runtimes

@@ -11,7 +11,7 @@
 #define TTG_MADNESS_IMPORTED 1
 #define TTG_IMPL_NS ttg_madness
 
-namespace ttg_madness {};
+namespace ttg_madness {}
 
 namespace ttg {
 
@@ -19,6 +19,6 @@ namespace ttg {
 
   constexpr const ttg::Runtime ttg_runtime = ttg::Runtime::MADWorld;
 
-}
+}  // namespace ttg
 
 #endif  // TTG_MADNESS_IMPORT_H
