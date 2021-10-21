@@ -18,7 +18,7 @@ endif(TTG_PRERELEASE_ID)
 # Declare TTG =======================================================
 project(ttg
     VERSION ${TTG_VERSION}
-    DESCRIPTION "Task Template Graph: flowgraph programming model"
+    DESCRIPTION "Template Task Graph: flowgraph programming model"
     LANGUAGES CXX
     HOMEPAGE_URL "https://tesseorg.github.io/ttg/")
 
