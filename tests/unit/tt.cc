@@ -65,7 +65,6 @@ namespace tt_v_i {
 // {task_id,data} = {void, int, void}
 namespace tt_v_iv {
 
-#ifndef TTG_USE_MADNESS  // not yet supported by MADNESS backend?
   class tt : public ttg::TT<void, std::tuple<>, tt, const int, void> {
     using baseT = ttg::TT<void, std::tuple<>, tt, const int, void>;
 
@@ -80,7 +79,6 @@ namespace tt_v_iv {
 
     ~tt() {}
   };
-#endif  // !defined(TTG_USE_MADNESS)
 
 }  // namespace tt_v_iv
 
@@ -149,11 +147,9 @@ TEST_CASE("TemplateTask", "[core]") {
       CHECK_NOTHROW(std::make_unique<tt_v_i::tt>(ttg::edges(in), ttg::edges(), ""));
       CHECK_NOTHROW(ttg::make_tt<void>([](const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
 
-#ifndef TTG_USE_MADNESS
       ttg::Edge<void, void> in2;
       CHECK_NOTHROW(std::make_unique<tt_v_iv::tt>(ttg::edges(in, in2), ttg::edges(), ""));
       CHECK_NOTHROW(ttg::make_tt<void>([](const int &datum, std::tuple<> &outs) {}, ttg::edges(in, in2), ttg::edges()));
-#endif
     }
     {  // nonvoid task id, nonvoid data
       ttg::Edge<int, int> in;

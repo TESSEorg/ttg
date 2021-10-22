@@ -363,7 +363,7 @@ namespace ttg_madness {
           throw std::runtime_error("TT::set_arg called for a finalized stream");
         }
 
-        auto reducer = std::get<i>(input_reducers);
+        const auto &reducer = std::get<i>(input_reducers);
         if (reducer) {  // is this a streaming input? reduce the received value
           // N.B. Right now reductions are done eagerly, without spawning tasks
           //      this means we must lock
@@ -471,7 +471,7 @@ namespace ttg_madness {
           throw std::runtime_error("TT::set_arg called for a finalized stream");
         }
 
-        auto reducer = std::get<i>(input_reducers);
+        const auto &reducer = std::get<i>(input_reducers);
         if (reducer) {  // is this a streaming input? reduce the received value
           // N.B. Right now reductions are done eagerly, without spawning tasks
           //      this means we must lock
@@ -479,22 +479,27 @@ namespace ttg_madness {
           if (tracing()) {
             ttg::print_error(world.rank(), ":", get_name(), " : reducing value into argument : ", i);
           }
-          // have a value already? if not, set, otherwise reduce
-          if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
-            this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
-            // now have a value, reset nargs
-            if (args->stream_size[i] != 0) {
-              args->nargs[i] = args->stream_size[i];
-            } else if (static_streamsize[i] != 0) {
-              args->stream_size[i] = static_streamsize[i];
-              args->nargs[i] = static_streamsize[i];
+          if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
+            // have a value already? if not, set, otherwise reduce
+            if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
+              this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
+              // now have a value, reset nargs
+              if (args->stream_size[i] != 0) {
+                args->nargs[i] = args->stream_size[i];
+              } else if (static_streamsize[i] != 0) {
+                args->stream_size[i] = static_streamsize[i];
+                args->nargs[i] = static_streamsize[i];
+              } else {
+                args->nargs[i] = 1;
+              }
             } else {
-              args->nargs[i] = 1;
+              // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
+              reducer(this->get<i, std::decay_t<valueT> &>(args->input_values), value);
             }
-          } else {
-            // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
-            reducer(this->get<i, std::decay_t<valueT>&>(args->input_values), value);
+          } else {  // call anyway in case it has side effects
+            reducer();
           }
+
           // update the counter if the stream is bounded
           // this assumes that the stream size is set before data starts flowing ... strong-typing streams will solve
           // this
@@ -528,7 +533,7 @@ namespace ttg_madness {
     // case 5
     template <std::size_t i, typename Key = keyT, typename Value>
     std::enable_if_t<ttg::meta::is_void_v<Key> && std::is_void_v<Value>, void> set_arg() {
-      set_arg<i>(ttg::Void{});
+      // set_arg<i>(ttg::Void{});
     }
 
     // case 3
