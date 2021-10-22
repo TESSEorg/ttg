@@ -241,13 +241,14 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
   // 1. func_args_t = {const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&}
   using func_args_t = boost::callable_traits::args_t<funcT>;
-  constexpr const auto num_args = std::tuple_size<func_args_t>::value;
-  constexpr const auto void_key = ttg::meta::is_void_v<keyT>;
+  constexpr auto num_args = std::tuple_size<func_args_t>::value;
+  constexpr auto void_key = ttg::meta::is_void_v<keyT>;
+  constexpr auto have_void_datum = !ttg::meta::is_none_void_v<input_edge_valuesT...>;
 
   // if have data inputs and (always last) control input, convert last input to Void to make logic easier
   using input_values_full_tuple_type = std::tuple<ttg::meta::void_to_Void_t<std::decay_t<input_edge_valuesT>>...>;
   using input_values_tuple_type =
-      std::conditional_t<ttg::meta::is_none_void_v<input_edge_valuesT...>, input_values_full_tuple_type,
+      std::conditional_t<!have_void_datum, input_values_full_tuple_type,
                          typename ttg::meta::drop_last_n<input_values_full_tuple_type, std::size_t{1}>::type>;
   // make sure that input_values_tuple_type does not contain void
   static_assert(!ttg::meta::is_any_void_v<input_values_tuple_type>);
@@ -257,10 +258,12 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   // 2. input_args_t = {input_valuesT&&...}
   using input_args_t = typename ttg::meta::take_first_n<
       typename ttg::meta::drop_first_n<func_args_t, std::size_t(void_key ? 0 : 1)>::type,
-      std::tuple_size<func_args_t>::value - (void_key ? 1 : 2)>::type;
+      std::tuple_size_v<func_args_t> - (void_key ? 1 : 2)>::type;
   using decayed_input_args_t = ttg::meta::decayed_tuple_t<input_args_t>;
-  using wrapT = typename CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminals_type,
-                                                       std::tuple<input_edge_valuesT...>>::type;
+  // 3. full_input_args_t = !have_void_datum ? input_args_t : input_args_t+void
+  using full_input_args_t =
+      std::conditional_t<!have_void_datum, input_args_t, ttg::meta::tuple_concat_t<input_args_t, std::tuple<void>>>;
+  using wrapT = typename CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminals_type, full_input_args_t>::type;
   // not sure if we need this level of type checking ...
   // TODO determine the generic signature of func
   if constexpr (!void_key) {
