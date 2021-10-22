@@ -111,6 +111,9 @@ namespace ttg {
     constexpr bool is_any_void_v = (is_void_v<Ts> || ...);
 
     template <typename... Ts>
+    constexpr bool is_any_void_v<std::tuple<Ts...>> = (is_void_v<Ts> || ...);
+
+    template <typename... Ts>
     constexpr bool is_any_Void_v = (is_Void_v<Ts> || ...);
 
     template <typename... Ts>

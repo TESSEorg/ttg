@@ -219,6 +219,7 @@ namespace ttg_madness {
     using input_values_tuple_type =
         std::conditional_t<ttg::meta::is_none_void_v<input_valueTs...>, input_values_full_tuple_type,
                            typename ttg::meta::drop_last_n<input_values_full_tuple_type, std::size_t{1}>::type>;
+    static_assert(!ttg::meta::is_any_void_v<input_values_tuple_type>);
     using input_refs_tuple_type =
         std::conditional_t<ttg::meta::is_none_void_v<input_valueTs...>, input_refs_full_tuple_type,
                            typename ttg::meta::drop_last_n<input_refs_full_tuple_type, std::size_t{1}>::type>;
