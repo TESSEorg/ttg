@@ -31,6 +31,8 @@ int main(int argc, char** argv) {
 
   const auto nranks = ttg::ttg_default_execution_context().size();
   std::cout << "ready to run TTG unit tests with " << nranks << " ranks" << (nranks > 1 ? "s" : "") << std::endl;
+
+  ttg::ttg_execute(ttg::ttg_default_execution_context());
 #endif
 
   int result = session.run(argc, argv);
