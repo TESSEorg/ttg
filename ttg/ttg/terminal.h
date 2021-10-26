@@ -109,35 +109,42 @@ namespace ttg {
     std::enable_if_t<!meta::is_void_v<Value>,void>
     broadcast(const rangeT &keylist, const Value &value) {
       if (broadcast_callback) {
-        broadcast_callback(ttg::span(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), value);
+        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
+          broadcast_callback(ttg::span(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), value);
+        } else {
+          /* got something we cannot iterate over (single element?) so put one element in the span */
+          broadcast_callback(ttg::span<const keyT>(&keylist, 1), value);
+        }
       } else {
-        for (auto&& key : keylist) send(key, value);
+        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
+          for (auto&& key : keylist) send(key, value);
+        } else {
+          /* single element */
+          send(keylist, value);
+        }
       }
     }
 
     template <typename rangeT, typename Value = valueT>
     std::enable_if_t<!meta::is_void_v<Value>,void>
     broadcast(const rangeT &keylist, Value &&value) {
+      const Value& v = value;
       if (broadcast_callback) {
-        const Value& v = value;
-        broadcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), v);
+        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
+          broadcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), v);
+        } else {
+          /* got something we cannot iterate over (single element?) so put one element in the span */
+          broadcast_callback(ttg::span<const keyT>(&keylist, 1), v);
+        }
       } else {
-        const Value& vref = value;
-        for (auto&& key : keylist) send(key, vref);
+        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
+          for (auto&& key : keylist) send(key, v);
+        } else {
+          /* got something we cannot iterate over (single element?) so put one element in the span */
+          broadcast_callback(ttg::span<const keyT>(&keylist, 1), v);
+        }
       }
     }
-
-    template <typename rangeT, typename Value = valueT>
-    std::enable_if_t<!meta::is_void_v<Value>,void>
-    broadcast(const rangeT &keylist, std::shared_ptr<const Value> &value_ptr) {
-      if (broadcast_callback) {
-        broadcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), *value_ptr);
-      } else {
-        const Value& vref = *value_ptr;
-        for (auto&& key : keylist) send(key, vref);
-      }
-    }
-
 
     template <typename Key = keyT>
     std::enable_if_t<!meta::is_void_v<Key>,void>
@@ -326,21 +333,6 @@ namespace ttg {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->broadcast(keylist, value);
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
           static_cast<In<keyT, valueT> *>(successor)->broadcast(keylist, value);
-        }
-      }
-    }
-
-    // An optimized implementation will need a separate callback for broadcast
-    // with a specific value for rangeT
-    template<typename rangeT, typename Key = keyT, typename Value = valueT>
-    std::enable_if_t<meta::is_none_void_v<Key,Value>,void>
-    broadcast(const rangeT &keylist, std::shared_ptr<const Value> &value_ptr) {  // NO MOVE YET
-      for (auto && successor : successors()) {
-        assert(successor->get_type() != TerminalBase::Type::Write);
-        if (successor->get_type() == TerminalBase::Type::Read) {
-          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->broadcast(keylist, value_ptr);
-        } else if (successor->get_type() == TerminalBase::Type::Consume) {
-          static_cast<In<keyT, valueT> *>(successor)->broadcast(keylist, value_ptr);
         }
       }
     }

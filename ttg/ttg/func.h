@@ -154,7 +154,11 @@ namespace ttg {
   namespace detail {
     template <size_t KeyId, size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT>
     void broadcast(const std::tuple<RangesT...>& keylists, valueT&& value, std::tuple<output_terminalsT...> &t) {
-      if (std::get<KeyId>(keylists).size() > 0) {
+      if constexpr (ttg::meta::is_iterable_v<std::tuple_element_t<KeyId, std::tuple<RangesT...>>>) {
+        if (std::distance(std::begin(std::get<KeyId>(keylists)), std::end(std::get<KeyId>(keylists))) > 0) {
+          std::get<i>(t).broadcast(std::get<KeyId>(keylists), value);
+        }
+      } else {
         std::get<i>(t).broadcast(std::get<KeyId>(keylists), value);
       }
       if constexpr(sizeof...(I) > 0) {
