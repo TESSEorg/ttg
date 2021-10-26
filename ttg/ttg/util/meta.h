@@ -428,7 +428,24 @@ namespace ttg {
       using input_reducers_t = typename input_reducers<valueTs...>::type;
 
     }  // namespace detail
-  }    // namespace meta
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // check whether a type is iterable
+    // Taken from https://en.cppreference.com/w/cpp/types/void_t
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <typename T, typename = void>
+    struct is_iterable : std::false_type {};
+
+    // this gets used only when we can call std::begin() and std::end() on that type
+    template <typename T>
+    struct is_iterable<T, std::void_t<decltype(std::begin(std::declval<T>())),
+                                      decltype(std::end(std::declval<T>()))
+                                    >
+                      > : std::true_type {};
+
+    template <typename T>
+    constexpr bool is_iterable_v = is_iterable<T>::value;
+  } // namespace meta
 }  // namespace ttg
 
 #endif  // TTG_UTIL_META_H

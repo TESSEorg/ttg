@@ -288,7 +288,7 @@ auto make_potrf(MatrixT<T>& A,
       /* send tile to trsm */
       keylist.push_back(Key2(m, K));
     }
-    ttg::broadcast<0, 1>(std::make_tuple(std::array<Key2, 1>{Key2(K, K)}, keylist), std::move(tile_kk), out);
+    ttg::broadcast<0, 1>(std::make_tuple(Key2(K, K), keylist), std::move(tile_kk), out);
   };
   return ttg::make_tt(f, ttg::edges(input), ttg::edges(output_result, output_trsm), "POTRF", {"tile_kk"}, {"output_result", "output_trsm"});
 }
@@ -374,8 +374,8 @@ auto make_trsm(MatrixT<T>& A,
       keylist_col.push_back(Key3(m, I, K));
     }
 
-    ttg::broadcast<0, 1, 2, 3>(std::make_tuple(std::array<Key2, 1>{key},
-                                               std::array<Key2, 1>{Key2(I, K)},
+    ttg::broadcast<0, 1, 2, 3>(std::make_tuple(key,
+                                               Key2(I, K),
                                                keylist_row, keylist_col),
                             std::move(tile_mk), out);
   };
