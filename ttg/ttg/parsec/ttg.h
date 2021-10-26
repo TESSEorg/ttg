@@ -387,10 +387,18 @@ namespace ttg_parsec {
           nullptr;  // callback used to release the task from with the static context of complete_task_and_release
       void *tt_ptr = nullptr;  // pointer to the TT object, passed to deferred_release
 
+      parsec_ttg_task_base_t() {
+        /* make sure the data copies field is properly initialized to avoid issues
+         * during completion of dummy tasks */
+        std::for_each_n(&parsec_task.data[0], MAX_PARAM_COUNT,
+                        [](parsec_data_pair_t& pair){ pair.data_in = nullptr; });
+      }
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class) {
         PARSEC_OBJ_CONSTRUCT(&this->parsec_task, parsec_task_t);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
+        std::for_each_n(&parsec_task.data[0], MAX_PARAM_COUNT,
+                        [](parsec_data_pair_t& pair){ pair.data_in = nullptr; });
       }
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
@@ -418,6 +426,9 @@ namespace ttg_parsec {
         std::size_t size;
       } size_goal_t;
       size_goal_t stream[NumStreams] = {};
+
+      parsec_ttg_task_t() : parsec_ttg_task_base_t()
+      { }
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
       : parsec_ttg_task_base_t(mempool, task_class)
