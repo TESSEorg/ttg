@@ -151,9 +151,13 @@ namespace ttg_parsec {
       if (task == nullptr || ptr == nullptr) {
         return copy;
       }
-      while (++j < MAX_CALL_PARAM_COUNT) {
-        if (NULL != task->data[j].data_in && task->data[j].data_in->device_private == ptr) {
-          copy = reinterpret_cast<ttg_data_copy_t *>(task->data[j].data_in);
+      while (++j < MAX_PARAM_COUNT) {
+        if (NULL != task->data[j].data_in) {
+          if (task->data[j].data_in->device_private == ptr) {
+            copy = reinterpret_cast<ttg_data_copy_t *>(task->data[j].data_in);
+            break;
+          }
+        } else {
           break;
         }
       }
@@ -373,13 +377,12 @@ namespace ttg_parsec {
     typedef void (*parsec_static_op_t)(void *);  // static_op will be cast to this type
 
     struct parsec_ttg_task_base_t {
-      parsec_task_t parsec_task = {};
+      parsec_task_t parsec_task;
       int32_t in_data_count = 0;
-      parsec_hash_table_item_t tt_ht_item = {};
+      parsec_hash_table_item_t tt_ht_item;
       parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces] =
           {nullptr};
       void *object_ptr = nullptr;
-      void (*static_set_arg)(int, int) = nullptr;
       void (*deferred_release)(void *, parsec_ttg_task_base_t *) =
           nullptr;  // callback used to release the task from with the static context of complete_task_and_release
       void *tt_ptr = nullptr;  // pointer to the TT object, passed to deferred_release
@@ -398,7 +401,8 @@ namespace ttg_parsec {
         parsec_task.task_class = task_class;
         parsec_task.status = PARSEC_TASK_STATUS_HOOK;
         parsec_task.taskpool = taskpool;
-        parsec_task.data[0].data_in = nullptr;
+        std::for_each_n(&parsec_task.data[0], MAX_PARAM_COUNT,
+                        [](parsec_data_pair_t& pair){ pair.data_in = nullptr; });
         parsec_task.priority = priority;
       }
     };
@@ -559,28 +563,30 @@ namespace ttg_parsec {
       return PARSEC_SUCCESS;
     }
 
+    /* TODO: template this function on the type of the value and use
+     *       delete directly instead of going through `delete_fn`.
+     *       Need to be careful about array types!
+     */
     inline void release_data_copy(ttg_data_copy_t *copy) {
-      if (nullptr != copy) {
-        if (nullptr != copy->device_private) {
-          if (copy->readers > 0) {
-            int32_t readers = parsec_atomic_fetch_dec_int32(&copy->readers);
-            if (1 == readers) {
-              copy->delete_fn(copy->device_private);
-              copy->device_private = NULL;
-            }
+      if (nullptr != copy->device_private) {
+        if (copy->readers > 0) {
+          int32_t readers = parsec_atomic_fetch_dec_int32(&copy->readers);
+          if (1 == readers) {
+            copy->delete_fn(copy->device_private);
+            copy->device_private = NULL;
           }
         }
-        if (NULL != copy->push_task) {
-          /* Release the task if it was deferrred */
-          parsec_task_t *push_task = copy->push_task;
-          if (parsec_atomic_cas_ptr(&copy->push_task, push_task, nullptr)) {
-            parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)copy->push_task;
-            assert(deferred_op->deferred_release);
-            deferred_op->deferred_release(deferred_op->tt_ptr, deferred_op);
-          }
-        }
-        PARSEC_OBJ_RELEASE(copy);
       }
+      if (NULL != copy->push_task) {
+        /* Release the task if it was deferrred */
+        parsec_task_t *push_task = copy->push_task;
+        if (parsec_atomic_cas_ptr(&copy->push_task, push_task, nullptr)) {
+          parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)copy->push_task;
+          assert(deferred_op->deferred_release);
+          deferred_op->deferred_release(deferred_op->tt_ptr, deferred_op);
+        }
+      }
+      PARSEC_OBJ_RELEASE(copy);
     }
 
     template <typename Value>
@@ -2295,6 +2301,7 @@ namespace ttg_parsec {
       parsec_ttg_es = es;
       for (int i = 0; i < MAX_PARAM_COUNT; i++) {
         ttg_data_copy_t *copy = reinterpret_cast<ttg_data_copy_t *>(task->data[i].data_in);
+        if (nullptr == copy) break;
         detail::release_data_copy(copy);
         task->data[i].data_in = nullptr;
       }
