@@ -1080,12 +1080,10 @@ namespace ttg_parsec {
             /* unpack the header and start the RMA transfers */
             ttg::SplitMetadataDescriptor<decvalueT> descr;
             using metadata_t = decltype(descr.get_metadata(std::declval<decvalueT>()));
-            size_t metadata_size = sizeof(metadata_t);
 
             /* unpack the metadata */
             metadata_t metadata;
-            std::memcpy(&metadata, msg->bytes + pos, metadata_size);
-            pos += metadata_size;
+            pos = unpack(metadata, msg->bytes, pos);
 
             /* unpack the remote rank */
             int remote;
@@ -1101,7 +1099,7 @@ namespace ttg_parsec {
 
             /* nothing else to do if the object is empty */
             if (0 == num_iovecs) {
-              set_arg_from_msg_keylist<i>(keylist, descr.create_from_metadata(metadata));
+              set_arg_from_msg_keylist<i>(keylist, descr.create_from_metadata(std::move(metadata)));
             } else {
 
               /* extract the callback tag */
@@ -1111,7 +1109,7 @@ namespace ttg_parsec {
 
               /* create the value from the metadata */
               auto activation =
-                  new detail::rma_delayed_activate(std::move(keylist), descr.create_from_metadata(metadata), num_iovecs,
+                  new detail::rma_delayed_activate(std::move(keylist), descr.create_from_metadata(std::move(metadata)), num_iovecs,
                                                   [this, num_keys](std::vector<keyT> &&keylist, valueT &&value) {
                                                     set_arg_from_msg_keylist<i>(keylist, value);
                                                     this->world.impl().decrement_inflight_msg();
@@ -1517,10 +1515,8 @@ namespace ttg_parsec {
 
         ttg::SplitMetadataDescriptor<decvalueT> descr;
         auto metadata = descr.get_metadata(value);
-        size_t metadata_size = sizeof(metadata);
-        /* pack the metadata */
-        std::memcpy(msg->bytes + pos, &metadata, metadata_size);
-        pos += metadata_size;
+        pos = pack(metadata, msg->bytes, pos);
+
         /* pack the local rank */
         int rank = world.rank();
         std::memcpy(msg->bytes + pos, &rank, sizeof(rank));
@@ -1789,7 +1785,6 @@ namespace ttg_parsec {
         std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
                                                              msg_header_t::MSG_SET_ARG, i);
         auto metadata = descr.get_metadata(value);
-        size_t metadata_size = sizeof(metadata);
 
         ttg_data_copy_t *copy;
         copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
@@ -1819,8 +1814,7 @@ namespace ttg_parsec {
           msg->tt_id.num_keys = num_keys;
 
           /* pack the metadata */
-          std::memcpy(msg->bytes + pos, &metadata, metadata_size);
-          pos += metadata_size;
+          pos = pack(metadata, msg->bytes, pos);
           /* pack the local rank */
           int rank = world.rank();
           std::memcpy(msg->bytes + pos, &rank, sizeof(rank));
