@@ -43,6 +43,7 @@
 #include <string>
 #include <tuple>
 #include <vector>
+#include <variant>
 
 #include <parsec.h>
 #include <parsec/class/parsec_hash_table.h>
@@ -2539,25 +2540,138 @@ namespace ttg_parsec {
       ttg::TTBase::make_executable();
     }
 
-    /// keymap accessor
-    /// @return the keymap
-    const decltype(keymap) &get_keymap() const { return keymap; }
-
-    /// keymap setter
-    template <typename Keymap>
-    void set_keymap(Keymap &&km) {
-      keymap = km;
-    }
-
-    /// priority map accessor
-    /// @return the priority map
-    const decltype(priomap) &get_priomap() const { return priomap; }
+    /**
+     * A set of attributes supported by TTG.
+     */
+    enum class Attribute : size_t {
+      PRIORITY = 0,
+      PROCESS,
+      FINAL,
+      SOURCE,
+      IMMEDIATE
+    };
 
     /// priomap setter
     /// @arg pm a function that maps a key to an integral priority value.
     template <typename Priomap>
+    [[deprecated("Use set_attribute_map with Attribute::PRIORITY")]]
     void set_priomap(Priomap &&pm) {
-      priomap = pm;
+      set_attribute_map<Attribute::PRIORITY>(std::forward<Priomap>(pm));
+    }
+
+    /// keymap setter
+    template <typename Keymap>
+    void set_keymap(Keymap &&km) {
+      set_attribute_map<Attribute::PROCESS>(std::forward<Keymap>(km));
+    }
+
+    /**
+     * An attribute value that can store either a fixed value or a function
+     * to query that value based on a provided key.
+     */
+    template<typename KeyT, typename ValueT>
+    struct AttributeValue {
+      using value_type = std::decay_t<ValueT>;
+      using key_type   = std::decay_t<KeyT>;
+      using function_type = std::function<value_type(const key_type&)>;
+    private:
+      std::variant<function_type, value_type> v;
+      bool has_function = false;
+    public:
+
+      AttributeValue() : v(value_type{})
+      { }
+
+      template<typename Value_>
+      AttributeValue(Value_&& value) : v(std::forward<Value_>(value))
+      { }
+
+      void set(const function_type& fn) {
+        std::get<0>(v) = fn;
+        has_function = true;
+      }
+
+      void set(function_type&& fn) {
+        std::get<0>(v) = std::forward<function_type>(fn);
+        has_function = true;
+      }
+
+      void set(const value_type& val) {
+        std::get<1>(v) = val;
+        has_function = false;
+      }
+
+      void set(value_type&& val) {
+        std::get<1>(v) = std::forward<value_type>(val);
+        has_function = false;
+      }
+
+      value_type get(const KeyT& key) {
+        return has_function ? std::get<0>(v)(key) : std::get<1>(v);
+      }
+
+    };
+
+
+    /* Overload for keys of type void */
+    template<typename ValueT>
+    struct AttributeValue<void, ValueT> {
+      using value_type = std::decay_t<ValueT>;
+      using function_type = std::function<value_type(void)>;
+    private:
+      std::variant<function_type, value_type> v;
+      bool has_function = false;
+    public:
+
+      AttributeValue() : v(value_type{})
+      { }
+
+      template<typename Value_>
+      AttributeValue(Value_&& value) : v(std::forward<Value_>(value))
+      { }
+
+      void set(const function_type& fn) {
+        std::get<0>(v) = fn;
+      }
+
+      void set(function_type&& fn) {
+        std::get<0>(v) = std::forward<function_type>(fn);
+      }
+
+      void set(const value_type& val) {
+        std::get<1>(v) = val;
+      }
+
+      void set(value_type&& val) {
+        std::get<1>(v) = std::forward<value_type>(val);
+      }
+
+      value_type get() {
+        return has_function ? std::get<0>(v)() : std::get<1>(v);
+      }
+
+    };
+
+
+    std::tuple<AttributeValue<keyT, int32_t>,
+               AttributeValue<keyT, int32_t>,
+               AttributeValue<keyT, bool>,
+               AttributeValue<keyT, bool>,
+               AttributeValue<keyT, bool>> keymaps;
+
+    template<Attribute A, typename Map>
+    void set_attribute_map(Map&& op) {
+      std::get<A>(keymaps).set(std::forward<Map>(op));
+    }
+
+    template<Attribute A, typename Value>
+    void set_attribute_value(Value&& val) {
+      std::get<A>(keymaps).set(std::forward<Value>(val));
+    }
+
+    template<Attribute A, typename KeyT>
+    const auto& get_attribute(KeyT&& key) {
+      return std::get<A>(keymaps).get(key);
     }
 
     // Register the static_op function to associate it to instance_id
