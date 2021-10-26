@@ -8,6 +8,7 @@
 #include "ttg/base/terminal.h"
 #include "ttg/util/print.h"
 #include "ttg/util/trace.h"
+#include "ttg/util/diagnose.h"
 #include "ttg/terminal.h"
 
 namespace ttg {
@@ -63,10 +64,8 @@ namespace ttg {
       }
 
       ~EdgeImpl() {
-        if (ins.size() == 0 || outs.size() == 0) {
-            std::cerr << "Edge: destroying edge pimpl ('" << name << "') with either in or out not "
-                       "assigned --- graph may be incomplete"
-                    << std::endl;
+        if (diagnose() && ((ins.size() == 0 && outs.size() != 0) || (ins.size() != 0 && outs.size() == 0))) {
+            print_error("Edge: destroying edge pimpl ('", name, "') with either in or out not assigned --- graph may be incomplete");
         }
       }
     };
