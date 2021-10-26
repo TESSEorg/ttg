@@ -401,6 +401,7 @@ namespace ttg_parsec {
         parsec_task.task_class = task_class;
         parsec_task.status = PARSEC_TASK_STATUS_HOOK;
         parsec_task.taskpool = taskpool;
+        parsec_task.chore_id = 0;
         std::for_each_n(&parsec_task.data[0], MAX_PARAM_COUNT,
                         [](parsec_data_pair_t& pair){ pair.data_in = nullptr; });
         parsec_task.priority = priority;
