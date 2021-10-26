@@ -2540,6 +2540,17 @@ namespace ttg_parsec {
       set_arg<keyT>();
     }
 
+   private:
+
+    void invoke() override {
+      if constexpr (ttg::meta::is_void_v<keyT>)
+        invoke<keyT>();
+      else
+        TTBase::invoke();
+    }
+
+   public:
+
     void make_executable() override {
       register_static_op_function();
       ttg::TTBase::make_executable();

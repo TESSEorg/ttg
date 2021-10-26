@@ -111,6 +111,14 @@ namespace ttg {
       for (auto &edge : p) edge->set_out(out);
     }
 
+    // pure control edge should be usable to fire off a task
+    template <typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<ttg::meta::is_all_void_v<Key, Value>> fire() const {
+      for (auto &&e : p)
+        for (auto &&out : e->outs) {
+          out->get_tt()->invoke();
+        }
+    }
   };
 
 

@@ -129,6 +129,12 @@ namespace ttg {
    public:
     virtual ~TTBase() = default;
 
+    // Manual injection of a task that has no key or arguments
+    virtual void invoke() {
+      std::cerr << "TTBase::invoke() invoked on a TT that did not override it" << std::endl;
+      abort();
+    }
+
     /// Sets trace for all operations to value and returns previous setting
     static bool set_trace_all(bool value) {
       std::swap(ttg::detail::tt_base_trace_accessor(), value);
