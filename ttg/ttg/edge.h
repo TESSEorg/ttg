@@ -71,7 +71,7 @@ namespace ttg {
       }
     };
 
-    // We have a vector here to accomodate fusing multiple edges together
+    // We have a vector here to accommodate fusing multiple edges together
     // when connecting them all to a single terminal.
     mutable std::vector<std::shared_ptr<EdgeImpl>> p;  // Need shallow copy semantics
 
@@ -83,7 +83,6 @@ namespace ttg {
                   "Edge<keyT,valueT> assumes keyT is a non-decayable type");
     static_assert(std::is_same<valueT, std::decay_t<valueT>>::value,
                   "Edge<keyT,valueT> assumes valueT is a non-decayable type");
-    static constexpr bool is_an_edge = true;
 
     Edge(const std::string name = "anonymous edge") : p(1) { p[0] = std::make_shared<EdgeImpl>(name); }
 
@@ -113,10 +112,6 @@ namespace ttg {
       for (auto &edge : p) edge->set_out(out);
     }
 
-    // this is currently just a hack, need to understand better whether this is a good idea
-    Out<keyT, valueT> *in(size_t edge_index = 0, size_t terminal_index = 0) {
-      return p.at(edge_index)->ins.at(terminal_index);
-    }
   };
 
 

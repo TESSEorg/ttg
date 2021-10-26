@@ -1066,7 +1066,7 @@ namespace ttg_madness {
     }
 
     /// implementation of TTBase::make_executable()
-    void make_executable() {
+    void make_executable() override {
       this->process_pending();
       TTBase::make_executable();
     }
@@ -1077,7 +1077,7 @@ namespace ttg_madness {
     /// thread on all processes.  In the MADNESS implementation it
     /// fences the entire world associated with the TTG.  If you wish to
     /// fence TTGs independently, then give each its own world.
-    void fence() { ttg_fence(world); }
+    void fence() override { ttg_fence(world); }
 
     /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned
     template <std::size_t i>
