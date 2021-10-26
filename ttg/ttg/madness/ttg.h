@@ -1127,16 +1127,12 @@ namespace ttg_madness {
       set_arg<Key>();
     }
 
-   private:
-
     void invoke() override {
       if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>)
         invoke<keyT>();
       else
         TTBase::invoke();
     }
-
-   public:
 
     /// keymap accessor
     /// @return the keymap
