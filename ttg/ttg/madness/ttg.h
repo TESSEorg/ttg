@@ -144,6 +144,11 @@ namespace ttg_madness {
     world.impl().register_ptr(ptr);
   }
 
+  template <typename T>
+  inline void ttg_register_ptr(ttg::World world, std::unique_ptr<T> &&ptr) {
+    world.impl().register_ptr(std::move(ptr));
+  }
+
   inline void ttg_register_status(ttg::World world, const std::shared_ptr<std::promise<void>> &status_ptr) {
     world.impl().register_status(status_ptr);
   }
