@@ -155,7 +155,7 @@ namespace ttg {
 
     /// Gets the demangled class name (uses RTTI)
     std::string get_class_name() const {
-      return boost::core::demangle(typeid(*this).name());
+      return ttg::detail::demangled_type_name(this);
     }
 
     /// Returns the vector of input terminals
