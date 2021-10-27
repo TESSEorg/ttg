@@ -56,8 +56,11 @@ endif (FORCE_COLORED_OUTPUT)
 #### prerequisites
 ##########################
 include(CTest)
+enable_testing()
 if (BUILD_TESTING)
     include(FindOrFetchCatch2)
+    list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/contrib)
+    include(Catch)
 endif (BUILD_TESTING)
 
 ###########################
@@ -105,10 +108,17 @@ endif(TARGET MADworld)
 ##########################
 add_subdirectory(ttg)
 
-enable_testing(true)
-add_custom_target_subproject(ttg check USES_TERMINAL COMMAND ${CMAKE_CTEST_COMMAND} -V -R "ttg/test/" )
-add_subdirectory(tests)
-add_subdirectory(examples)
+if (BUILD_TESTING OR TTG_EXAMPLES)
+    add_custom_target_subproject(ttg check USES_TERMINAL COMMAND ${CMAKE_CTEST_COMMAND} -V -R "ttg/test/" )
+else()
+    add_custom_target_subproject(ttg check USES_TERMINAL COMMAND ${CMAKE_COMMAND} -E echo "check-ttg target disabled since neither BUILD_TESTING nor TTG_EXAMPLES is true" )
+endif()
+if (BUILD_TESTING)
+  add_subdirectory(tests)
+endif(BUILD_TESTING)
+if (TTG_EXAMPLES)
+  add_subdirectory(examples)
+endif(TTG_EXAMPLES)
 add_subdirectory(doc)
 
 # Create the version file
