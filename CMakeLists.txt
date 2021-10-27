@@ -40,6 +40,8 @@ set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
 #### user-defined configuration options
 ########################################
 option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" ON)
+option(TTG_EXAMPLES "Whether to build examples" OFF)
+option(TTG_FETCH_BOOST "Whether to fetch+build Boost, if missing" OFF)
 # See https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
 option (FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." TRUE)
 if (FORCE_COLORED_OUTPUT)
@@ -53,9 +55,19 @@ endif (FORCE_COLORED_OUTPUT)
 ##########################
 #### prerequisites
 ##########################
+include(CTest)
+if (BUILD_TESTING)
+    include(FindOrFetchCatch2)
+endif (BUILD_TESTING)
+
+###########################
+#### optional prerequisites
+###########################
 # Boost
 include(FindOrFetchBoost)
-if (BUILD_TESTING)
+# Cereal
+#include(FindOrFetchCereal)
+if (TTG_EXAMPLES)
   # sparse tensor algorithms need Eigen
   find_package(Eigen3)
   message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
@@ -70,7 +82,9 @@ if (BUILD_TESTING)
   find_package(OpenMP COMPONENTS CXX)
   # std::execution may also be used by some examples
   find_package(CXXStdExecution)
-endif (BUILD_TESTING)
+  # to compare against potrf
+  include(FindDPLASMA)
+endif (TTG_EXAMPLES)
 
 ##########################
 #### prerequisite runtimes
@@ -85,8 +99,6 @@ include(FindOrFetchMADNESS)
 if (TARGET MADworld)
   message(STATUS "MADNESS_FOUND=1")
 endif(TARGET MADworld)
-
-include(FindDPLASMA)
 
 ##########################
 #### Components

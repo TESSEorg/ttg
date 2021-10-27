@@ -33,6 +33,7 @@ jobs:
         -DBUILD_SHARED_LIBS=OFF
         -DMPIEXEC_PREFLAGS='--bind-to;none;--allow-run-as-root'
         -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install
+        -DTTG_EXAMPLES=ON
 
     steps:
     - uses: actions/checkout@v2

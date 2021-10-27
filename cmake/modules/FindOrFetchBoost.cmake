@@ -8,7 +8,7 @@ if (TARGET Boost::boost)
     list(APPEND _msg " includes Boost::serialization")
   endif(TARGET Boost::serialization)
   message(STATUS "${_msg}")
-else (TARGET Boost::boost)
+elseif (TTG_FETCH_BOOST)
 
   FetchContent_Declare(
           CMAKEBOOST
@@ -34,9 +34,4 @@ else (TARGET Boost::boost)
             COMPONENT boost-libs)
   endif()
 
-endif(TARGET Boost::boost)
-
-# postcond check
-if (NOT TARGET Boost::boost)
-  message(FATAL_ERROR "FindOrFetchBoost could not make Boost::boost target available")
-endif(NOT TARGET Boost::boost)
+endif()

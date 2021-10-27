@@ -1,7 +1,4 @@
-include(FindOrFetchCatch2)
-
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/contrib)
-include(CTest)
 include(Catch)
 
 # serialization test: probes serialization via all supported serialization methods (MADNESS, Boost::serialization, cereal) that are available
