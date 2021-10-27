@@ -18,7 +18,7 @@ macro(add_ttg_test_executable _executable _ranksrange _cmdline_args)
         if (MPIEXEC_EXECUTABLE)
             set(_ttg_test_${_executable}_run_cmd_${p} ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${p} ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${_executable}> ${MPIEXEC_POSTFLAGS})
         else (MPIEXEC_EXECUTABLE)
-            set(_ttg_test_${_executable}_run_cmd_${p} ${CMAKE_COMMAND} -E echo "skipped TTG run test for executable ${_executable}: MPIEXEC_EXECUTABLE not found/given, see documentation for CMake's FindMPI module for instructions on how to help find it")
+            set(_ttg_test_${_executable}_run_cmd_${p} ${CMAKE_COMMAND} -E cmake_echo_color --red "skipped TTG run test for executable ${_executable}: MPIEXEC_EXECUTABLE not found/given, see documentation for CMake's FindMPI module for instructions on how to help find it")
         endif (MPIEXEC_EXECUTABLE)
         add_test(NAME ttg/test/${_executable}/run-np-${p}
                 COMMAND ${_ttg_test_${_executable}_run_cmd_${p}} ${_cmdline_args})
