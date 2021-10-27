@@ -91,8 +91,8 @@ namespace ttg {
 
   // Make a tuple of Edges ... needs some type checking injected
   template <typename... inedgesT>
-  auto edges(const inedgesT &... args) {
-    return std::make_tuple(args...);
+  auto edges(inedgesT &&...args) {
+    return std::make_tuple(std::forward<inedgesT>(args)...);
   }
 
   template <typename keyT, typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg::ttg_runtime>

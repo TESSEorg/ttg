@@ -681,6 +681,11 @@ namespace ttg_parsec {
     world.impl().register_ptr(ptr);
   }
 
+  template <typename T>
+  inline void ttg_register_ptr(ttg::World world, std::unique_ptr<T> &&ptr) {
+    world.impl().register_ptr(std::move(ptr));
+  }
+
   inline void ttg_register_status(ttg::World world, const std::shared_ptr<std::promise<void>> &status_ptr) {
     world.impl().register_status(status_ptr);
   }
@@ -776,6 +781,7 @@ namespace ttg_parsec {
     using input_values_tuple_type =
         std::conditional_t<ttg::meta::is_none_void_v<input_valueTs...>, input_values_full_tuple_type,
                            typename ttg::meta::drop_last_n<input_values_full_tuple_type, std::size_t{1}>::type>;
+    static_assert(!ttg::meta::is_any_void_v<input_values_tuple_type>);
     using input_refs_tuple_type =
         std::conditional_t<ttg::meta::is_none_void_v<input_valueTs...>, input_refs_full_tuple_type,
                            typename ttg::meta::drop_last_n<input_refs_full_tuple_type, std::size_t{1}>::type>;
@@ -2508,31 +2514,46 @@ namespace ttg_parsec {
 
     // Manual injection of a task with all input arguments specified as a tuple
     template <typename Key = keyT>
-    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> invoke(const Key &key, const input_refs_tuple_type &args) {
+    std::enable_if_t<!ttg::meta::is_void_v<Key> &&
+                     !ttg::meta::is_empty_tuple_v<input_refs_tuple_type>, void>
+    invoke(const Key &key, const input_refs_tuple_type &args) {
       TTG_OP_ASSERT_EXECUTABLE();
       set_args(std::make_index_sequence<std::tuple_size<input_refs_tuple_type>::value>{}, key, args);
     }
 
     // Manual injection of a key-free task and all input arguments specified as a tuple
     template <typename Key = keyT>
-    std::enable_if_t<ttg::meta::is_void_v<Key>, void> invoke(const input_refs_tuple_type &args) {
+    std::enable_if_t<ttg::meta::is_void_v<Key> && !ttg::meta::is_empty_tuple_v<input_refs_tuple_type>, void>
+    invoke(const input_refs_tuple_type &args) {
       TTG_OP_ASSERT_EXECUTABLE();
       set_args(std::make_index_sequence<std::tuple_size<input_refs_tuple_type>::value>{}, args);
     }
 
     // Manual injection of a task that has no arguments
     template <typename Key = keyT>
-    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> invoke(const Key &key) {
+    std::enable_if_t<!ttg::meta::is_void_v<Key> && ttg::meta::is_empty_tuple_v<input_refs_tuple_type>, void>
+    invoke(const Key &key) {
       TTG_OP_ASSERT_EXECUTABLE();
       set_arg<keyT>(key);
     }
 
     // Manual injection of a task that has no key or arguments
     template <typename Key = keyT>
-    std::enable_if_t<ttg::meta::is_void_v<Key>, void> invoke() {
+    std::enable_if_t<ttg::meta::is_void_v<Key> && ttg::meta::is_empty_tuple_v<input_refs_tuple_type>, void>
+    invoke() {
       TTG_OP_ASSERT_EXECUTABLE();
       set_arg<keyT>();
     }
+
+    // overrides TTBase::invoke()
+    void invoke() override {
+      if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_refs_tuple_type>)
+        invoke<keyT>();
+      else
+        TTBase::invoke();
+    }
+
+   public:
 
     void make_executable() override {
       register_static_op_function();

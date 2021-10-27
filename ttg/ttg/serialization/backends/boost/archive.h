@@ -159,7 +159,7 @@ namespace ttg::detail {
   /// @param[in] size the size of the buffer, in bytes
   /// @param[in] buf_offset if non-zero, specifies the first byte of @p buf to which data will be written
   /// @return a boost_buffer_oarchive object referring to @p buf
-  auto make_boost_buffer_oarchive(void* const buf, std::size_t size, std::size_t buf_offset = 0) {
+  inline auto make_boost_buffer_oarchive(void* const buf, std::size_t size, std::size_t buf_offset = 0) {
     assert(buf_offset <= size);
     using arrsink_t = boost::iostreams::basic_array_sink<char>;
     return boost_buffer_oarchive(arrsink_t(static_cast<char*>(buf) + buf_offset, size - buf_offset));
@@ -172,7 +172,7 @@ namespace ttg::detail {
   /// @param[in] buf_offset if non-zero, specifies the first byte of @p buf to which data will be written
   /// @return a boost_buffer_oarchive object referring to @p buf
   template <std::size_t N>
-  auto make_boost_buffer_oarchive(char (&buf)[N], std::size_t buf_offset = 0) {
+  inline auto make_boost_buffer_oarchive(char (&buf)[N], std::size_t buf_offset = 0) {
     assert(buf_offset <= N);
     using arrsink_t = boost::iostreams::basic_array_sink<char>;
     return boost_buffer_oarchive(arrsink_t(&(buf[buf_offset]), N - buf_offset));
@@ -256,7 +256,7 @@ namespace ttg::detail {
   /// @param[in] size the size of the buffer, in bytes
   /// @param[in] buf_offset if non-zero, specifies the first byte of @p buf from which data will be read
   /// @return a boost_buffer_iarchive object referring to @p buf
-  auto make_boost_buffer_iarchive(const void* const buf, std::size_t size, std::size_t buf_offset = 0) {
+  inline auto make_boost_buffer_iarchive(const void* const buf, std::size_t size, std::size_t buf_offset = 0) {
     assert(buf_offset <= size);
     using arrsrc_t = boost::iostreams::basic_array_source<char>;
     return boost_buffer_iarchive(arrsrc_t(static_cast<const char*>(buf) + buf_offset, size - buf_offset));
@@ -269,7 +269,7 @@ namespace ttg::detail {
   /// @param[in] buf_offset if non-zero, specifies the first byte of @p buf from which data will be read
   /// @return a boost_buffer_iarchive object referring to @p buf
   template <std::size_t N>
-  auto make_boost_buffer_iarchive(const char (&buf)[N], std::size_t buf_offset = 0) {
+  inline auto make_boost_buffer_iarchive(const char (&buf)[N], std::size_t buf_offset = 0) {
     assert(buf_offset <= N);
     using arrsrc_t = boost::iostreams::basic_array_source<char>;
     return boost_buffer_iarchive(arrsrc_t(&(buf[buf_offset]), N - buf_offset));
