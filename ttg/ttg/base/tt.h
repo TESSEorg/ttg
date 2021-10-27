@@ -2,9 +2,9 @@
 #define TTG_BASE_OP_H
 
 #include <cstdint>
-#include <string>
 #include <iostream>
 #include <sstream>
+#include <string>
 #include <vector>
 
 #include "ttg/base/terminal.h"
@@ -18,22 +18,22 @@ namespace ttg {
       static bool trace = false;
       return trace;
     }
-  } // namespace detail
+  }  // namespace detail
 
   /// A base class for all template tasks
   class TTBase {
-  private:
+   private:
     int64_t instance_id;  //!< Unique ID for object; in after-move state will be -1
 
     std::string name;
     std::vector<TerminalBase *> inputs;
     std::vector<TerminalBase *> outputs;
-    bool trace_instance = false;      //!< If true traces just this instance
-    const TTBase *owning_ttg = nullptr;     //!< the containing TTG, if any
+    bool trace_instance = false;         //!< If true traces just this instance
+    const TTBase *owning_ttg = nullptr;  //!< the containing TTG, if any
     template <typename input_terminalsT, typename output_terminalsT>
     friend class TTG;  // TTG needs to be able to control owning_ttg
 
-    bool executable = false;          //!< ready to execute?
+    bool executable = false;  //!< ready to execute?
 
     // Default copy/move/assign all OK
     static uint64_t next_instance_id() {
@@ -41,24 +41,24 @@ namespace ttg {
       return id++;
     }
 
-  protected:
+   protected:
     void set_input(size_t i, TerminalBase *t) {
-      if (i >= inputs.size()) throw(name+":TTBase: out of range i setting input");
+      if (i >= inputs.size()) throw(name + ":TTBase: out of range i setting input");
       inputs[i] = t;
     }
 
     void set_output(size_t i, TerminalBase *t) {
-      if (i >= outputs.size()) throw(name+":TTBase: out of range i setting output");
+      if (i >= outputs.size()) throw(name + ":TTBase: out of range i setting output");
       outputs[i] = t;
     }
 
     template <bool out, typename terminalT, std::size_t i, typename setfuncT>
     void register_terminal(terminalT &term, const std::string &name, const setfuncT setfunc) {
       term.set(this, i, name, detail::demangled_type_name<typename terminalT::key_type>(),
-              detail::demangled_type_name<typename terminalT::value_type>(),
-              out ? TerminalBase::Type::Write
-                  : (std::is_const<typename terminalT::value_type>::value ? TerminalBase::Type::Read
-                                                                          : TerminalBase::Type::Consume));
+               detail::demangled_type_name<typename terminalT::value_type>(),
+               out ? TerminalBase::Type::Write
+                   : (std::is_const<typename terminalT::value_type>::value ? TerminalBase::Type::Read
+                                                                           : TerminalBase::Type::Consume));
       (this->*setfunc)(i, &term);
     }
 
@@ -82,7 +82,7 @@ namespace ttg {
     template <typename terminalsT, typename namesT>
     void register_output_terminals(terminalsT &terms, const namesT &names) {
       register_terminals<true>(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, names,
-                              &TTBase::set_output);
+                               &TTBase::set_output);
     }
 
     // Used by composite TT ... terminalsT will be a tuple of pointers to terminals
@@ -98,19 +98,20 @@ namespace ttg {
       set_terminals(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, setfunc);
     }
 
-  private:
-   // non-copyable, but movable
-   TTBase(const TTBase &) = delete;
-   TTBase &operator=(const TTBase &) = delete;
+   private:
+    // non-copyable, but movable
+    TTBase(const TTBase &) = delete;
+    TTBase &operator=(const TTBase &) = delete;
 
-  protected:
-    TTBase(TTBase && other) : instance_id(other.instance_id)
+   protected:
+    TTBase(TTBase &&other)
+        : instance_id(other.instance_id)
         , name(std::move(other.name))
         , inputs(std::move(other.inputs))
         , outputs(std::move(other.outputs)) {
       other.instance_id = -1;
     }
-    TTBase &operator=(TTBase && other) {
+    TTBase &operator=(TTBase &&other) {
       instance_id = other.instance_id;
       name = std::move(other.name);
       inputs = std::move(other.inputs);
@@ -120,14 +121,16 @@ namespace ttg {
     }
 
     TTBase(const std::string &name, size_t numins, size_t numouts)
-        : instance_id(next_instance_id())
-        , name(name)
-        , inputs(numins)
-        , outputs(numouts) {
-    }
+        : instance_id(next_instance_id()), name(name), inputs(numins), outputs(numouts) {}
 
    public:
     virtual ~TTBase() = default;
+
+    // Manual injection of a task that has no key or arguments
+    virtual void invoke() {
+      std::cerr << "TTBase::invoke() invoked on a TT that did not override it" << std::endl;
+      abort();
+    }
 
     /// Sets trace for all operations to value and returns previous setting
     static bool set_trace_all(bool value) {
@@ -145,7 +148,9 @@ namespace ttg {
     bool get_trace() { return ttg::detail::tt_base_trace_accessor() || trace_instance; }
     bool tracing() { return get_trace(); }
 
-    std::optional<std::reference_wrapper<const TTBase>> ttg() const { return owning_ttg ? std::cref(*owning_ttg) : std::optional<std::reference_wrapper<const TTBase>>{}; }
+    std::optional<std::reference_wrapper<const TTBase>> ttg() const {
+      return owning_ttg ? std::cref(*owning_ttg) : std::optional<std::reference_wrapper<const TTBase>>{};
+    }
 
     /// Sets the name of this operation
     void set_name(const std::string &name) { this->name = name; }
@@ -154,9 +159,7 @@ namespace ttg {
     const std::string &get_name() const { return name; }
 
     /// Gets the demangled class name (uses RTTI)
-    std::string get_class_name() const {
-      return ttg::detail::demangled_type_name(this);
-    }
+    std::string get_class_name() const { return ttg::detail::demangled_type_name(this); }
 
     /// Returns the vector of input terminals
     const std::vector<TerminalBase *> &get_inputs() const { return inputs; }
@@ -207,20 +210,18 @@ namespace ttg {
     /// Asserts that this is executable
     /// Use this macro from inside a derived class
     /// @throw std::logic_error if this is not executable
-#define TTG_OP_ASSERT_EXECUTABLE() \
-      do { \
-        if (!this->is_executable()) { \
-          std::ostringstream oss; \
-          oss << "TT is not executable at " << __FILE__ << ":" << __LINE__; \
-          throw std::logic_error(oss.str().c_str()); \
-        } \
-      } while (0);
-
+#define TTG_OP_ASSERT_EXECUTABLE()                                      \
+  do {                                                                  \
+    if (!this->is_executable()) {                                       \
+      std::ostringstream oss;                                           \
+      oss << "TT is not executable at " << __FILE__ << ":" << __LINE__; \
+      throw std::logic_error(oss.str().c_str());                        \
+    }                                                                   \
+  } while (0);
   };
-
 
   inline void TTBase::make_executable() { executable = true; }
 
-} // namespace ttg
+}  // namespace ttg
 
-#endif // TTG_BASE_OP_H
+#endif  // TTG_BASE_OP_H

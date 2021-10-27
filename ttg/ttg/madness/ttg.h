@@ -144,6 +144,11 @@ namespace ttg_madness {
     world.impl().register_ptr(ptr);
   }
 
+  template <typename T>
+  inline void ttg_register_ptr(ttg::World world, std::unique_ptr<T> &&ptr) {
+    world.impl().register_ptr(std::move(ptr));
+  }
+
   inline void ttg_register_status(ttg::World world, const std::shared_ptr<std::promise<void>> &status_ptr) {
     world.impl().register_status(status_ptr);
   }
@@ -219,6 +224,7 @@ namespace ttg_madness {
     using input_values_tuple_type =
         std::conditional_t<ttg::meta::is_none_void_v<input_valueTs...>, input_values_full_tuple_type,
                            typename ttg::meta::drop_last_n<input_values_full_tuple_type, std::size_t{1}>::type>;
+    static_assert(!ttg::meta::is_any_void_v<input_values_tuple_type>);
     using input_refs_tuple_type =
         std::conditional_t<ttg::meta::is_none_void_v<input_valueTs...>, input_refs_full_tuple_type,
                            typename ttg::meta::drop_last_n<input_refs_full_tuple_type, std::size_t{1}>::type>;
@@ -362,7 +368,7 @@ namespace ttg_madness {
           throw std::runtime_error("TT::set_arg called for a finalized stream");
         }
 
-        auto reducer = std::get<i>(input_reducers);
+        const auto &reducer = std::get<i>(input_reducers);
         if (reducer) {  // is this a streaming input? reduce the received value
           // N.B. Right now reductions are done eagerly, without spawning tasks
           //      this means we must lock
@@ -470,7 +476,7 @@ namespace ttg_madness {
           throw std::runtime_error("TT::set_arg called for a finalized stream");
         }
 
-        auto reducer = std::get<i>(input_reducers);
+        const auto &reducer = std::get<i>(input_reducers);
         if (reducer) {  // is this a streaming input? reduce the received value
           // N.B. Right now reductions are done eagerly, without spawning tasks
           //      this means we must lock
@@ -478,22 +484,27 @@ namespace ttg_madness {
           if (tracing()) {
             ttg::print_error(world.rank(), ":", get_name(), " : reducing value into argument : ", i);
           }
-          // have a value already? if not, set, otherwise reduce
-          if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
-            this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
-            // now have a value, reset nargs
-            if (args->stream_size[i] != 0) {
-              args->nargs[i] = args->stream_size[i];
-            } else if (static_streamsize[i] != 0) {
-              args->stream_size[i] = static_streamsize[i];
-              args->nargs[i] = static_streamsize[i];
+          if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
+            // have a value already? if not, set, otherwise reduce
+            if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
+              this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
+              // now have a value, reset nargs
+              if (args->stream_size[i] != 0) {
+                args->nargs[i] = args->stream_size[i];
+              } else if (static_streamsize[i] != 0) {
+                args->stream_size[i] = static_streamsize[i];
+                args->nargs[i] = static_streamsize[i];
+              } else {
+                args->nargs[i] = 1;
+              }
             } else {
-              args->nargs[i] = 1;
+              // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
+              reducer(this->get<i, std::decay_t<valueT> &>(args->input_values), value);
             }
-          } else {
-            // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
-            reducer(this->get<i, std::decay_t<valueT>&>(args->input_values), value);
+          } else {  // call anyway in case it has side effects
+            reducer();
           }
+
           // update the counter if the stream is bounded
           // this assumes that the stream size is set before data starts flowing ... strong-typing streams will solve
           // this
@@ -527,7 +538,7 @@ namespace ttg_madness {
     // case 5
     template <std::size_t i, typename Key = keyT, typename Value>
     std::enable_if_t<ttg::meta::is_void_v<Key> && std::is_void_v<Value>, void> set_arg() {
-      set_arg<i>(ttg::Void{});
+      // set_arg<i>(ttg::Void{});
     }
 
     // case 3
@@ -1060,7 +1071,7 @@ namespace ttg_madness {
     }
 
     /// implementation of TTBase::make_executable()
-    void make_executable() {
+    void make_executable() override {
       this->process_pending();
       TTBase::make_executable();
     }
@@ -1071,7 +1082,7 @@ namespace ttg_madness {
     /// thread on all processes.  In the MADNESS implementation it
     /// fences the entire world associated with the TTG.  If you wish to
     /// fence TTGs independently, then give each its own world.
-    void fence() { ttg_fence(world); }
+    void fence() override { ttg_fence(world); }
 
     /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned
     template <std::size_t i>
@@ -1114,6 +1125,13 @@ namespace ttg_madness {
     std::enable_if_t<ttg::meta::is_void_v<Key> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>, void> invoke() {
       TTG_OP_ASSERT_EXECUTABLE();
       set_arg<Key>();
+    }
+
+    void invoke() override {
+      if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>)
+        invoke<keyT>();
+      else
+        TTBase::invoke();
     }
 
     /// keymap accessor

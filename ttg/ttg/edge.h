@@ -8,6 +8,7 @@
 #include "ttg/base/terminal.h"
 #include "ttg/util/print.h"
 #include "ttg/util/trace.h"
+#include "ttg/util/diagnose.h"
 #include "ttg/terminal.h"
 
 namespace ttg {
@@ -63,15 +64,13 @@ namespace ttg {
       }
 
       ~EdgeImpl() {
-        if (ins.size() == 0 || outs.size() == 0) {
-            std::cerr << "Edge: destroying edge pimpl ('" << name << "') with either in or out not "
-                       "assigned --- graph may be incomplete"
-                    << std::endl;
+        if (diagnose() && ((ins.size() == 0 && outs.size() != 0) || (ins.size() != 0 && outs.size() == 0))) {
+            print_error("Edge: destroying edge pimpl ('", name, "') with either in or out not assigned --- graph may be incomplete");
         }
       }
     };
 
-    // We have a vector here to accomodate fusing multiple edges together
+    // We have a vector here to accommodate fusing multiple edges together
     // when connecting them all to a single terminal.
     mutable std::vector<std::shared_ptr<EdgeImpl>> p;  // Need shallow copy semantics
 
@@ -83,7 +82,6 @@ namespace ttg {
                   "Edge<keyT,valueT> assumes keyT is a non-decayable type");
     static_assert(std::is_same<valueT, std::decay_t<valueT>>::value,
                   "Edge<keyT,valueT> assumes valueT is a non-decayable type");
-    static constexpr bool is_an_edge = true;
 
     Edge(const std::string name = "anonymous edge") : p(1) { p[0] = std::make_shared<EdgeImpl>(name); }
 
@@ -113,9 +111,13 @@ namespace ttg {
       for (auto &edge : p) edge->set_out(out);
     }
 
-    // this is currently just a hack, need to understand better whether this is a good idea
-    Out<keyT, valueT> *in(size_t edge_index = 0, size_t terminal_index = 0) {
-      return p.at(edge_index)->ins.at(terminal_index);
+    // pure control edge should be usable to fire off a task
+    template <typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<ttg::meta::is_all_void_v<Key, Value>> fire() const {
+      for (auto &&e : p)
+        for (auto &&out : e->outs) {
+          out->get_tt()->invoke();
+        }
     }
   };
 

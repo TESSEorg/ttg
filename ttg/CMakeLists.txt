@@ -7,6 +7,7 @@ set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/bug.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/demangle.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/diagnose.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/dot.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/future.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/hash.h

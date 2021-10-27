@@ -32,10 +32,16 @@ namespace ttg {
     /// Base class for implementation-specific Worlds
     class WorldImplBase {
      private:
+      template <typename T>
+      std::function<void(void*)> make_deleter() {
+        return {[](void* p) { delete static_cast<T*>(p); }};
+      }
+
       std::list<ttg::TTBase*> m_op_register;
       std::vector<std::shared_ptr<std::promise<void>>> m_statuses;
       std::vector<std::function<void()>> m_callbacks;
       std::vector<std::shared_ptr<void>> m_ptrs;
+      std::vector<std::unique_ptr<void, std::function<void(void*)>>> m_unique_ptrs;
       bool m_is_valid = true;
 
      protected:
@@ -63,6 +69,11 @@ namespace ttg {
       template <typename T>
       void register_ptr(const std::shared_ptr<T>& ptr) {
         m_ptrs.emplace_back(ptr);
+      }
+
+      template <typename T>
+      void register_ptr(std::unique_ptr<T>&& ptr) {
+        m_unique_ptrs.emplace_back(ptr.release(), make_deleter<T>());
       }
 
       void register_status(const std::shared_ptr<std::promise<void>>& status_ptr) {

@@ -90,6 +90,44 @@ namespace ttg {
     template <typename Tuple>
     using decayed_tuple_t = typename decayed_tuple<Tuple>::type;
 
+    template <typename Tuple1, typename Tuple2>
+    struct tuple_concat;
+
+    template <typename... Ts, typename... Us>
+    struct tuple_concat<std::tuple<Ts...>, std::tuple<Us...>> {
+      using type = decltype(std::tuple_cat(std::declval<std::tuple<Ts...>>(), std::declval<std::tuple<Us...>>()));
+    };
+
+    template <typename Tuple1, typename Tuple2>
+    using tuple_concat_t = typename tuple_concat<Tuple1, Tuple2>::type;
+
+    // filtered_tuple<tuple,p>::type returns tuple with types for which the predicate evaluates to true
+    template <typename Tuple, template <typename> typename Predicate>
+    struct filtered_tuple;
+
+    namespace detail {
+      template <bool>
+      struct keep_or_drop {
+        template <typename E>
+        using type = std::tuple<E>;
+      };
+
+      template <>
+      struct keep_or_drop<false> {
+        template <typename E>
+        using type = std::tuple<>;
+      };
+    }  // namespace detail
+
+    template <template <typename> typename Pred, typename... Es>
+    struct filtered_tuple<std::tuple<Es...>, Pred> {
+      using type = decltype(std::tuple_cat(
+          std::declval<typename detail::keep_or_drop<Pred<Es>::value>::template type<Es>>()...));
+    };
+
+    template <typename Tuple, template <typename> typename Pred>
+    using filtered_tuple_t = typename filtered_tuple<Tuple, Pred>::type;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // is_Void_v
     // is_void_v = Void or void
@@ -109,6 +147,9 @@ namespace ttg {
 
     template <typename... Ts>
     constexpr bool is_any_void_v = (is_void_v<Ts> || ...);
+
+    template <typename... Ts>
+    constexpr bool is_any_void_v<std::tuple<Ts...>> = (is_void_v<Ts> || ...);
 
     template <typename... Ts>
     constexpr bool is_any_Void_v = (is_Void_v<Ts> || ...);
@@ -291,29 +332,29 @@ namespace ttg {
       template <typename Key, typename Value>
       using move_callback_t = typename move_callback<Key, Value>::type;
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// broadcast_callback_t<key,value> = std::function<void(const key&, value&&>, protected against void key or value
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-template<typename Key, typename Value, typename Enabler = void>
-struct broadcast_callback;
-template<typename Key, typename Value>
-struct broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
-using type = std::function<void(const ttg::span<const Key>&, const Value&)>;
-};
-template<typename Key, typename Value>
-struct broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
-using type = std::function<void(const ttg::span<const Key>&)>;
-};
-template<typename Key, typename Value>
-struct broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
-using type = std::function<void(const Value&)>;
-};
-template<typename Key, typename Value>
-struct broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
-using type = std::function<void()>;
-};
-template <typename Key, typename Value> using broadcast_callback_t = typename broadcast_callback<Key,Value>::type;
-
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // broadcast_callback_t<key,value> = std::function<void(const key&, value&&>, protected against void key or value
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      template <typename Key, typename Value, typename Enabler = void>
+      struct broadcast_callback;
+      template <typename Key, typename Value>
+      struct broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
+        using type = std::function<void(const ttg::span<const Key> &, const Value &)>;
+      };
+      template <typename Key, typename Value>
+      struct broadcast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
+        using type = std::function<void(const ttg::span<const Key> &)>;
+      };
+      template <typename Key, typename Value>
+      struct broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
+        using type = std::function<void(const Value &)>;
+      };
+      template <typename Key, typename Value>
+      struct broadcast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
+        using type = std::function<void()>;
+      };
+      template <typename Key, typename Value>
+      using broadcast_callback_t = typename broadcast_callback<Key, Value>::type;
 
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       // setsize_callback_t<key> = std::function<void(const keyT &, std::size_t)> protected against void key
