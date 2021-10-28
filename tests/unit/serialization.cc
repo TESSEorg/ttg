@@ -50,8 +50,10 @@ static_assert(!cereal::traits::is_output_serializable<std::array<POD, 3>, cereal
 #endif  // TTG_SERIALIZATION_SUPPORTS_CEREAL
 
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<POD>);
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, POD>);
 static_assert(ttg::detail::has_freestanding_boost_serialize_with_version_v<POD, boost::archive::binary_oarchive>);
+#endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<POD>);
 static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<POD>);
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<std::array<POD, 3>>);

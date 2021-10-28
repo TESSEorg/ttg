@@ -22,8 +22,6 @@ project(ttg
     LANGUAGES CXX
     HOMEPAGE_URL "https://tesseorg.github.io/ttg/")
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
@@ -40,6 +38,8 @@ set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
 #### user-defined configuration options
 ########################################
 option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" ON)
+option(TTG_EXAMPLES "Whether to build examples" OFF)
+option(TTG_FETCH_BOOST "Whether to fetch+build Boost, if missing" OFF)
 # See https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
 option (FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." TRUE)
 if (FORCE_COLORED_OUTPUT)
@@ -53,9 +53,22 @@ endif (FORCE_COLORED_OUTPUT)
 ##########################
 #### prerequisites
 ##########################
+include(CTest)
+enable_testing()
+if (BUILD_TESTING)
+    include(FindOrFetchCatch2)
+    list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/contrib)
+    include(Catch)
+endif (BUILD_TESTING)
+
+###########################
+#### optional prerequisites
+###########################
 # Boost
 include(FindOrFetchBoost)
-if (BUILD_TESTING)
+# Cereal
+#include(FindOrFetchCereal)
+if (TTG_EXAMPLES)
   # sparse tensor algorithms need Eigen
   find_package(Eigen3)
   message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
@@ -70,7 +83,9 @@ if (BUILD_TESTING)
   find_package(OpenMP COMPONENTS CXX)
   # std::execution may also be used by some examples
   find_package(CXXStdExecution)
-endif (BUILD_TESTING)
+  # to compare against potrf
+  include(FindDPLASMA)
+endif (TTG_EXAMPLES)
 
 ##########################
 #### prerequisite runtimes
@@ -86,17 +101,22 @@ if (TARGET MADworld)
   message(STATUS "MADNESS_FOUND=1")
 endif(TARGET MADworld)
 
-include(FindDPLASMA)
-
 ##########################
 #### Components
 ##########################
 add_subdirectory(ttg)
 
-enable_testing(true)
-add_custom_target_subproject(ttg check USES_TERMINAL COMMAND ${CMAKE_CTEST_COMMAND} -V -R "ttg/test/" )
-add_subdirectory(tests)
-add_subdirectory(examples)
+if (BUILD_TESTING OR TTG_EXAMPLES)
+    add_custom_target_subproject(ttg check USES_TERMINAL COMMAND ${CMAKE_CTEST_COMMAND} -V -R "ttg/test/" )
+else()
+    add_custom_target_subproject(ttg check USES_TERMINAL COMMAND ${CMAKE_COMMAND} -E cmake_echo_color --red "check-ttg target disabled since neither BUILD_TESTING nor TTG_EXAMPLES is true" )
+endif()
+if (BUILD_TESTING)
+  add_subdirectory(tests)
+endif(BUILD_TESTING)
+if (TTG_EXAMPLES)
+  add_subdirectory(examples)
+endif(TTG_EXAMPLES)
 add_subdirectory(doc)
 
 # Create the version file

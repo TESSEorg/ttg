@@ -7,14 +7,14 @@
 #
 # creates library ttg-X
 #
-# example: add_ttg_library(ttg-test "test/test1.cc;test/test2.cc" PUBLIC_HEADER "test/test.h" LINK_LIBRARIES ttg-serialization )
+# example: add_ttg_library(ttg-test "test/test1.cc;test/test2.cc" PUBLIC_HEADER "test/test.h" LINK_LIBRARIES ttg-serialization INCLUDE_DIRECTORIES "external/boost" )
 #          creates library ttg-test that depends on ttg-serialization
 #
 
 macro(add_ttg_library)
 
     set(optionArgs )
-    set(multiValueArgs PUBLIC_HEADER LINK_LIBRARIES COMPILE_DEFINITIONS)
+    set(multiValueArgs PUBLIC_HEADER LINK_LIBRARIES COMPILE_DEFINITIONS INCLUDE_DIRECTORIES)
     cmake_parse_arguments(ADD_TTG_LIBRARY "${optionArgs}" ""
             "${multiValueArgs}" ${ARGN})
 
@@ -45,11 +45,24 @@ macro(add_ttg_library)
       endforeach(_dep)
 
       target_compile_definitions(${_library} PUBLIC "${ADD_TTG_LIBRARY_COMPILE_DEFINITIONS}")
+      target_compile_features(${_library} PUBLIC cxx_std_17)
 
       target_include_directories(${_library} PUBLIC
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
             )
+
+      foreach(_inc ${ADD_TTG_LIBRARY_INCLUDE_DIRECTORIES})
+          if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_inc}")
+              target_include_directories(${_library} PUBLIC
+                      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/${_inc}>
+                      $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/${_inc}>
+                      )
+          elseif(EXISTS "${_inc}")
+              target_include_directories(${_library} PUBLIC ${_inc})
+          endif()
+      endforeach(_inc)
+
     else (NOT _header_only)
         add_library(${_library} INTERFACE)
 
@@ -62,15 +75,24 @@ macro(add_ttg_library)
         endforeach(_dep)
 
         target_compile_definitions(${_library} INTERFACE "${ADD_TTG_LIBRARY_COMPILE_DEFINITIONS}")
+        target_compile_features(${_library} INTERFACE cxx_std_17)
 
         # Use current CMAKE_CXX_FLAGS to compile targets dependent on this library
         string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
         target_compile_options(${_library} INTERFACE $<INSTALL_INTERFACE:${CMAKE_CXX_FLAG_LIST}>)
 
-        target_include_directories(${_library} INTERFACE
-                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-                $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-                )
+        foreach(_inc ${ADD_TTG_LIBRARY_INCLUDE_DIRECTORIES})
+            message(STATUS "_inc=${CMAKE_CURRENT_SOURCE_DIR}/${_inc}")
+            if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_inc}")
+                target_include_directories(${_library} INTERFACE
+                        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/${_inc}>
+                        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/${_inc}>
+                        )
+            elseif(EXISTS "${_inc}")
+                target_include_directories(${_library} INTERFACE ${_inc})
+            endif()
+        endforeach(_inc)
+
     endif(NOT _header_only)
 
     # this does not work with hierarchies of header files

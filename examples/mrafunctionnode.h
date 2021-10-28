@@ -5,8 +5,6 @@
 #include <iostream>
 #include <type_traits>
 
-#include <boost/callable_traits.hpp>
-
 #include "mratypes.h"
 #include "mradomain.h"
 #include "mrasimpletensor.h"

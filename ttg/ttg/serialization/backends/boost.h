@@ -7,8 +7,11 @@
 
 #include <type_traits>
 
-#include <boost/type_traits/is_array.hpp>
-#include <boost/type_traits/remove_extent.hpp>
+#if __has_include(<boost/type_traits/is_array.hpp>)
+#  define TTG_HAS_BOOST_HEADERS 1
+#  include <boost/type_traits/is_array.hpp>
+#  include <boost/type_traits/remove_extent.hpp>
+#endif
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
 #include <boost/archive/binary_iarchive.hpp>
@@ -55,12 +58,17 @@ namespace ttg::detail {
   template <typename Archive, typename T, typename Enabler = void>
   struct is_boost_array_serializable;
 
+#ifdef TTG_HAS_BOOST_HEADERS
   template <typename Archive, typename T>
   struct is_boost_array_serializable<Archive, T, std::enable_if_t<!boost::is_array<T>::value>> : std::false_type {};
 
   template <typename Archive, typename T>
   struct is_boost_array_serializable<Archive, T, std::enable_if_t<boost::is_array<T>::value>>
       : std::bool_constant<is_boost_serializable_v<Archive, boost::remove_extent_t<T>>> {};
+#else
+  template <typename Archive, typename T>
+  struct is_boost_array_serializable<Archive, T> : std::false_type {};
+#endif
 
   template <typename Archive, typename T>
   inline static constexpr bool is_boost_array_serializable_v = is_boost_array_serializable<Archive, T>::value;

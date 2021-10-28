@@ -1,15 +1,10 @@
-include(FindOrFetchCatch2)
 include(AddTTGExecutable)
-
-list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/contrib)
-include(CTest)
-include(Catch)
 
 # TT unit test: core TTG ops
 add_ttg_executable(core-unittests-ttg "tt.cc;ranges.cc;unit_main.cpp" LINK_LIBRARIES "Catch2::Catch2")
 
 # serialization test: probes serialization via all supported serialization methods (MADNESS, Boost::serialization, cereal) that are available
-add_executable(serialization serialization.cc unit_main.cpp)
+add_executable(serialization "serialization.cc;unit_main.cpp")
 target_link_libraries(serialization "Catch2::Catch2;ttg-serialization")
 if (TARGET BTAS::BTAS)
     target_link_libraries(serialization BTAS::BTAS)
