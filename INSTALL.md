@@ -49,11 +49,9 @@ TTG includes several examples that may require additional prerequisites. These a
   - [BTAS](https://github.com/ValeevGroup/BTAS) library: for the _block_-sparse case only
     - BTAS' prerequisites are listed [here](https://github.com/ValeevGroup/BTAS#prerequisites)
 
-# build
-- `cmake <cmake args>`
-- `cmake --build . --target <test or example you want (see below)>`
+# configure + build
+- `cmake -S /path/to/ttg/source/directory -B /path/to/ttg/build/directory <cmake args>`
+- `cmake --build /path/to/ttg/build/directory [--target <check-ttg | install>]`
 
 ## useful cmake command-line arguments:
 - `CMAKE_CXX_COMPILER`, e.g. `-DCMAKE_CXX_COMPILER=clang++` to use clang
-- `BOOST_ROOT`, e.g. `-DBOOST_ROOT=path` (to ensure that `path` is correct look for `path/boost/version.hpp` exists)
-
