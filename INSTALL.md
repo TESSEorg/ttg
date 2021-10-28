@@ -25,11 +25,11 @@ While the list of prerequisites is short, note that the runtimes have many more 
 Also: it is _strongly_ recommended that the runtimes are built as parts of the TTG build process (this requires some of the optional prerequisites, listed below). This will make sure that the correct versions of the runtimes are used.
 
 ## optional prerequisites
-- [Git]() 1.8 or later: needed to obtain the source code for PaRSEC or MADNESS runtimes
-- [Boost](https://boost.org/) version 1.66 or later: needed to be able to use TTG with classes serializable by the [Boost.Serialization]() library.
-  - The [Boost.Serialization]() library is not header-only, i.e., it must be compiled.
+- [Git](https://git-scm.com) 1.8 or later: needed to obtain the source code for PaRSEC or MADNESS runtimes
+- [Boost](https://boost.org/) version 1.66 or later: needed to use TTG with classes serializable by the [Boost.Serialization](https://www.boost.org/doc/libs/master/libs/serialization/doc/index.html) library.
+  - The [Boost.Serialization](https://www.boost.org/doc/libs/master/libs/serialization/doc/index.html) library is not header-only, i.e., it must be compiled.
   - If the Boost package is not detected TTG can download and build Boost as part of its build process; to do that configure TTG with the CMake cache variable `TTG_FETCH_BOOST` set to `ON` (e.g., by adding `-DTTG_FETCH_BOOST=ON` to the CMake executable command line)
-  - Note for package maintainers: TTG includes source of the [Boost.CallableTraits]() library, but it is only used if the Boost package is not detected.
+  - Note for package maintainers: TTG includes source of the [Boost.CallableTraits](https://www.boost.org/doc/libs/master/libs/callable_traits/doc/html/index.html) library, but it is only used if the Boost package is not detected.
 
 ## transitive prerequisites
 
