@@ -37,6 +37,14 @@ namespace ttg {
     std::cerr << t;
     detail::print_helper(std::cerr, ts...) << std::endl;
   }
+
+  /// atomically prints to std::clog a sequence of items (separated by ttg::print_separator) followed by std::endl
+  template <typename T, typename... Ts>
+  void log(const T &t, const Ts &... ts) {
+    std::lock_guard<std::mutex> lock(detail::print_mutex_accessor<detail::StdOstreamTag::Cout>());
+    std::clog << t;
+    detail::print_helper(std::clog, ts...) << std::endl;
+  }
 } // namespace ttg
 
 #endif // TTG_PRINT_H

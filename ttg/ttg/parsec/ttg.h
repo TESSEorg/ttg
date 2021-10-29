@@ -113,10 +113,8 @@ namespace ttg_parsec {
         void *data_cpy = malloc(size);
         assert(data_cpy != 0);
         memcpy(data_cpy, data, size);
-        if (ttg::tracing()) {
-          ttg::print("ttg_parsec(", ttg_default_execution_context().rank(), ") Delaying delivery of message (",
-                     src_rank, ", ", op_id, ", ", data_cpy, ", ", size, ")");
-        }
+        ttg::trace("ttg_parsec(", ttg_default_execution_context().rank(), ") Delaying delivery of message (",
+                   src_rank, ", ", op_id, ", ", data_cpy, ", ", size, ")");
         delayed_unpack_actions.insert(std::make_pair(op_id, std::make_tuple(src_rank, data_cpy, size)));
         static_map_mutex.unlock();
         return 1;
@@ -289,10 +287,7 @@ namespace ttg_parsec {
         if (parsec_taskpool_started) {
           // We are locally ready (i.e. we won't add new tasks)
           tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
-          if (ttg::tracing()) {
-            int rank = this->rank();
-            ttg::print("ttg_parsec(", rank, "): final waiting for completion");
-          }
+          ttg::trace("ttg_parsec(", this->rank(), "): final waiting for completion");
           parsec_context_wait(ctx);
         }
         release_ops();
@@ -331,20 +326,14 @@ namespace ttg_parsec {
     virtual void fence_impl(void) override {
       int rank = this->rank();
       if (!parsec_taskpool_started) {
-        if (ttg::tracing()) {
-          ttg::print("ttg_parsec::(", rank, "): parsec taskpool has not been started, fence is a simple MPI_Barrier");
-        }
+        ttg::trace("ttg_parsec::(", rank, "): parsec taskpool has not been started, fence is a simple MPI_Barrier");
         MPI_Barrier(comm());
         return;
       }
-      if (ttg::tracing()) {
-        ttg::print("ttg_parsec::(", rank, "): parsec taskpool is ready for completion");
-      }
+      ttg::trace("ttg_parsec::(", rank, "): parsec taskpool is ready for completion");
       // We are locally ready (i.e. we won't add new tasks)
       tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
-      if (ttg::tracing()) {
-        ttg::print("ttg_parsec(", rank, "): waiting for completion");
-      }
+      ttg::trace("ttg_parsec(", rank, "): waiting for completion");
       parsec_context_wait(ctx);
 
       // We need the synchronization between the end of the context and the restart of the taskpool
@@ -877,9 +866,9 @@ namespace ttg_parsec {
       parsec_ttg_caller = parsec_task;
       if (obj->tracing()) {
         if constexpr (!ttg::meta::is_void_v<keyT>)
-          ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": executing");
+          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": executing");
         else
-          ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : executing");
+          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : executing");
       }
 
       if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
@@ -898,9 +887,9 @@ namespace ttg_parsec {
 
       if (obj->tracing()) {
         if constexpr (!ttg::meta::is_void_v<keyT>)
-          ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": done executing");
+          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": done executing");
         else
-          ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
+          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
       }
     }
 
@@ -1290,7 +1279,7 @@ namespace ttg_parsec {
         newtask->stream[i].goal = static_stream_goal[i];
       }
 
-      if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
+      ttg::trace(world.rank(), ":", get_name(), " : ", key, ": creating task");
       return newtask;
     }
 
@@ -1301,13 +1290,11 @@ namespace ttg_parsec {
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<Key>;
 
-      if (tracing()) {
-        if constexpr (!valueT_is_Void) {
-          ttg::print(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i,
-                     " : value = ", value);
-        } else {
-          ttg::print(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
-        }
+      if constexpr (!valueT_is_Void) {
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i,
+                   " : value = ", value);
+      } else {
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
       }
 
       parsec_key_t hk = 0;
@@ -1432,9 +1419,9 @@ namespace ttg_parsec {
         parsec_key_t hk = task->pkey();
         if (tt.tracing()) {
           if constexpr (!keyT_is_Void) {
-            ttg::print(tt.world.rank(), ":", tt.get_name(), " : ", task->key, ": submitting task for op ");
+            ttg::trace(tt.world.rank(), ":", tt.get_name(), " : ", task->key, ": submitting task for op ");
           } else {
-            ttg::print(tt.world.rank(), ":", tt.get_name(), ": submitting task for op ");
+            ttg::trace(tt.world.rank(), ":", tt.get_name(), ": submitting task for op ");
           }
         }
         if (RemoveFromHash) parsec_hash_table_remove(&tt.tasks_table, hk);
@@ -1601,9 +1588,9 @@ namespace ttg_parsec {
         if constexpr (derived_has_cuda_op())
           task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)] =
               reinterpret_cast<detail::parsec_static_op_t>(&TT::static_op_noarg<ttg::ExecutionSpace::CUDA>);
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": creating task");
         world_impl.increment_created();
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
         world_impl.increment_sent_to_sched();
         __parsec_schedule(es, &task->parsec_task, 0);
       } else {
@@ -1643,9 +1630,9 @@ namespace ttg_parsec {
         if constexpr (derived_has_cuda_op())
           task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)] =
               reinterpret_cast<detail::parsec_static_op_t>(&TT::static_op_noarg<ttg::ExecutionSpace::CUDA>);
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : creating task");
+        ttg::trace(world.rank(), ":", get_name(), " : creating task");
         world_impl.increment_created();
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
+        ttg::trace(world.rank(), ":", get_name(), " : submitting task for op ");
         world_impl.increment_sent_to_sched();
         __parsec_schedule(es, &task->parsec_task, 0);
       }
@@ -1902,9 +1889,7 @@ namespace ttg_parsec {
       assert(std::get<i>(input_reducers) && "TT::set_argstream_size called on nonstreaming input terminal");
       assert(size > 0 && "TT::set_static_argstream_size(key,size) called with size=0");
 
-      if (tracing()) {
-        ttg::print(world.rank(), ":", get_name(), ": setting global stream size for terminal ", i);
-      }
+      this->trace(world.rank(), ":", get_name(), ": setting global stream size for terminal ", i);
 
       // Check if stream is already bounded
       if (static_stream_goal[i] > 0) {
@@ -1926,9 +1911,7 @@ namespace ttg_parsec {
       // body
       const auto owner = keymap(key);
       if (owner != world.rank()) {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), ":", key, " : forwarding stream size for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), ":", key, " : forwarding stream size for terminal ", i);
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
         uint64_t pos = 0;
@@ -1945,9 +1928,7 @@ namespace ttg_parsec {
         parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
                           sizeof(msg_header_t) + pos);
       } else {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), ":", key, " : setting stream size to ", size, " for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), ":", key, " : setting stream size to ", size, " for terminal ", i);
 
         auto hk = reinterpret_cast<parsec_key_t>(&key);
         task_t *task;
@@ -1981,9 +1962,7 @@ namespace ttg_parsec {
       // body
       const auto owner = keymap();
       if (owner != world.rank()) {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), " : forwarding stream size for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), " : forwarding stream size for terminal ", i);
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
         uint64_t pos = 0;
@@ -1999,9 +1978,7 @@ namespace ttg_parsec {
         parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
                           sizeof(msg_header_t) + pos);
       } else {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), " : setting stream size to ", size, " for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), " : setting stream size to ", size, " for terminal ", i);
 
         parsec_key_t hk = 0;
         task_t *task;
@@ -2033,9 +2010,7 @@ namespace ttg_parsec {
       // body
       const auto owner = keymap(key);
       if (owner != world.rank()) {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
         uint64_t pos = 0;
@@ -2051,9 +2026,7 @@ namespace ttg_parsec {
         parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
                           sizeof(msg_header_t) + pos);
       } else {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
 
         auto hk = reinterpret_cast<parsec_key_t>(&key);
         task_t *task = nullptr;
@@ -2084,9 +2057,7 @@ namespace ttg_parsec {
       // body
       const auto owner = keymap();
       if (owner != world.rank()) {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), ": forwarding stream finalize for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), ": forwarding stream finalize for terminal ", i);
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
         uint64_t pos = 0;
@@ -2100,9 +2071,7 @@ namespace ttg_parsec {
         parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
                           sizeof(msg_header_t) + pos);
       } else {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), ": finalizing stream for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), ": finalizing stream for terminal ", i);
 
         auto hk = static_cast<parsec_key_t>(0);
         task_t *task = nullptr;
@@ -2486,9 +2455,7 @@ namespace ttg_parsec {
 
     template <std::size_t i, typename Reducer>
     void set_input_reducer(Reducer &&reducer) {
-      if (tracing()) {
-        ttg::print(world.rank(), ":", get_name(), " : setting reducer for terminal ", i);
-      }
+      ttg::trace(world.rank(), ":", get_name(), " : setting reducer for terminal ", i);
       std::get<i>(input_reducers) = reducer;
     }
 
@@ -2585,9 +2552,7 @@ namespace ttg_parsec {
     void register_static_op_function(void) {
       int rank;
       MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-      if (tracing()) {
-        ttg::print("ttg_parsec(", rank, ") Inserting into static_id_to_op_map at ", get_instance_id());
-      }
+      ttg::trace("ttg_parsec(", rank, ") Inserting into static_id_to_op_map at ", get_instance_id());
       static_set_arg_fct_call_t call = std::make_pair(&TT::static_set_arg, this);
       auto &world_impl = world.impl();
       static_map_mutex.lock();
@@ -2595,10 +2560,8 @@ namespace ttg_parsec {
       if (delayed_unpack_actions.count(get_instance_id()) > 0) {
         auto tp = world_impl.taskpool();
 
-        if (tracing()) {
-          ttg::print("ttg_parsec(", rank, ") There are ", delayed_unpack_actions.count(get_instance_id()),
-                     " messages delayed with op_id ", get_instance_id());
-        }
+        ttg::trace("ttg_parsec(", rank, ") There are ", delayed_unpack_actions.count(get_instance_id()),
+                   " messages delayed with op_id ", get_instance_id());
 
         auto se = delayed_unpack_actions.equal_range(get_instance_id());
         std::vector<static_set_arg_fct_arg_t> tmp;
@@ -2610,10 +2573,8 @@ namespace ttg_parsec {
         static_map_mutex.unlock();
 
         for (auto it : tmp) {
-          if (tracing()) {
-            ttg::print("ttg_parsec(", rank, ") Unpacking delayed message (", ", ", get_instance_id(), ", ",
-                       std::get<1>(it), ", ", std::get<2>(it), ")");
-          }
+          ttg::print("ttg_parsec(", rank, ") Unpacking delayed message (", ", ", get_instance_id(), ", ",
+                     std::get<1>(it), ", ", std::get<2>(it), ")");
           int rc = detail::static_unpack_msg(&parsec_ce, world_impl.parsec_ttg_tag(), std::get<1>(it), std::get<2>(it),
                                              std::get<0>(it), NULL);
           assert(rc == 0);

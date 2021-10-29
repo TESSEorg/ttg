@@ -53,5 +53,10 @@ TTG includes several examples that may require additional prerequisites. These a
 - `cmake -S /path/to/ttg/source/directory -B /path/to/ttg/build/directory <cmake args>`
 - `cmake --build /path/to/ttg/build/directory [--target <check-ttg | install>]`
 
-## useful cmake command-line arguments:
-- `CMAKE_CXX_COMPILER`, e.g. `-DCMAKE_CXX_COMPILER=clang++` to use clang
+## useful cmake cache variables:
+
+|Variable                         |Default             | Description   |
+|---------------------------------|--------------------|---------------|
+| `BUILD_TESTING`                 | `ON`               | whether target `check-ttg` and its relatives will actually build and run unit tests |
+| `TTG_EXAMPLES`                  | `OFF`              | whether target `check-ttg` and its relatives will actually build and run examples; setting this to `ON` will cause detection of several optional prerequisites, and (if missing) building from source |
+| `TTG_ENABLE_TRACE`              | `OFF`              | setting this to `ON` will enable the ability to instrument TTG code for tracing (see `ttg::trace()`, etc.); if this is set to `OFF`, `ttg::trace()` is a no-op |
