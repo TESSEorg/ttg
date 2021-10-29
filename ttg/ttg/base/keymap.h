@@ -21,7 +21,13 @@ namespace ttg {
 
       template <typename Key = keyT>
       std::enable_if_t<!meta::is_void_v<Key>,int>
-      operator()(const Key &key) const { return ttg::hash<keyT>{}(key) % world_size; }
+      operator()(const Key &key) const {
+        if (world_size == 1) {
+          return 0;
+        } else {
+          return ttg::hash<keyT>{}(key) % world_size;
+        }
+      }
       template <typename Key = keyT>
       std::enable_if_t<meta::is_void_v<Key>,int>
       operator()() const { return 0; }
