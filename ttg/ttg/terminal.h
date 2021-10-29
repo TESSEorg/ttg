@@ -50,7 +50,9 @@ namespace ttg {
     }
 
    public:
-    In() {}
+    In()
+    : TerminalBase(std::is_const<valueT>::value ? TerminalBase::Type::Read : TerminalBase::Type::Consume)
+    {}
 
     void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback,
                       const broadcast_callback_type &bcast_callback = broadcast_callback_type{},
@@ -174,10 +176,6 @@ namespace ttg {
       if (!finalize_callback) throw std::runtime_error("finalize callback not initialized");
       finalize_callback();
     }
-
-    Type get_type() const override {
-      return std::is_const<valueT>::value ? TerminalBase::Type::Read : TerminalBase::Type::Consume;
-    }
   };
 
   // Output terminal
@@ -201,7 +199,7 @@ namespace ttg {
     Out &operator=(const Out &&other) = delete;
 
    public:
-    Out() {}
+    Out() : TerminalBase(TerminalBase::Type::Write) {}
 
     /// \note will check data types unless macro \c NDEBUG is defined
     void connect(TerminalBase *in) override {
@@ -388,8 +386,6 @@ namespace ttg {
         }
       }
     }
-
-    Type get_type() const override { return TerminalBase::Type::Write; }
   };
 
 } // namespace ttg

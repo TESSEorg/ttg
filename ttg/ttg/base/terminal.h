@@ -23,9 +23,10 @@ namespace ttg {
 
   private:
     TTBase *tt;                  //< Pointer to containing operation
-    size_t n;                    //< Index of terminal
-    std::string name;            //< Name of terminal
-    bool connected;              //< True if is connected
+    size_t n = 0;                    //< Index of terminal
+    std::string name = "";            //< Name of terminal
+    bool connected = false;              //< True if is connected
+    Type type;
     std::string key_type_str;    //< String describing key type
     std::string value_type_str;  //< String describing value type
 
@@ -41,7 +42,7 @@ namespace ttg {
     friend class Out;
 
   protected:
-      TerminalBase() : tt(0), n(0), name(""), connected(false) {}
+    TerminalBase(Type type) : type(type) {}
 
     void set(TTBase *tt, size_t index, const std::string &name, const std::string &key_type_str,
             const std::string &value_type_str, Type type) {
@@ -50,6 +51,7 @@ namespace ttg {
       this->name = name;
       this->key_type_str = key_type_str;
       this->value_type_str = value_type_str;
+      this->type = type;
     }
 
     /// Add directed connection (this --> successor) in internal representation of the TTG.
@@ -88,7 +90,9 @@ namespace ttg {
     }
 
     /// Returns the terminal type
-    virtual Type get_type() const = 0;
+    Type get_type() {
+      return this->type;
+    }
 
     /// Get connections to successors
     const std::vector<TerminalBase *> &get_connections() const { return successors_; }
