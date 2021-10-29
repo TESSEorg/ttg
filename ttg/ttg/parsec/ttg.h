@@ -67,7 +67,6 @@ int parsec_add_fetch_runtime_task(parsec_taskpool_t *tp, int tasks);
 }
 
 namespace ttg_parsec {
-  inline thread_local parsec_task_t *parsec_ttg_caller;
   inline thread_local parsec_execution_stream_t *parsec_ttg_es;
 
   typedef void (*static_set_arg_fct_type)(void *, size_t, ttg::TTBase *);
@@ -144,47 +143,6 @@ namespace ttg_parsec {
         delete typed_ptr;
       }
     };
-
-    inline ttg_data_copy_t *find_copy_in_task(parsec_task_t *task, const void *ptr) {
-      ttg_data_copy_t *copy = nullptr;
-      int j = -1;
-      if (task == nullptr || ptr == nullptr) {
-        return copy;
-      }
-      while (++j < MAX_CALL_PARAM_COUNT) {
-        if (NULL != task->data[j].data_in && task->data[j].data_in->device_private == ptr) {
-          copy = reinterpret_cast<ttg_data_copy_t *>(task->data[j].data_in);
-          break;
-        }
-      }
-      return copy;
-    }
-
-    inline bool add_copy_to_task(ttg_data_copy_t *copy, parsec_task_t *task) {
-      if (task == nullptr || copy == nullptr) {
-        return false;
-      }
-
-      int j = 0;
-      while (j < MAX_PARAM_COUNT && nullptr != task->data[j].data_in) {
-        ++j;
-      }
-
-      if (MAX_PARAM_COUNT > j) {
-        task->data[j].data_in = copy;
-        return true;
-      }
-      return false;
-    }
-
-    inline void remove_data_copy(ttg_data_copy_t *copy, parsec_task_t *task) {
-      for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
-        if (copy == task->data[i].data_in) {
-          task->data[i].data_in = nullptr;
-          break;
-        }
-      }
-    }
 
   }  // namespace detail
 
@@ -373,8 +331,9 @@ namespace ttg_parsec {
     typedef void (*parsec_static_op_t)(void *);  // static_op will be cast to this type
 
     struct parsec_ttg_task_base_t {
-      parsec_task_t parsec_task = {};
-      int32_t in_data_count = 0;
+      parsec_task_t parsec_task;
+      int32_t in_data_count = 0; //< number of satisfied inputs
+      int32_t    data_count = 0; //< number of data elements in parsec_task.data
       parsec_hash_table_item_t tt_ht_item = {};
       parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces] =
           {nullptr};
@@ -391,15 +350,16 @@ namespace ttg_parsec {
       }
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
-                        parsec_taskpool_t *taskpool, void *object_ptr, int32_t priority)
-          : object_ptr(object_ptr) {
+                        parsec_taskpool_t *taskpool, void *object_ptr, int32_t priority, int data_count)
+          : data_count(data_count)
+          , object_ptr(object_ptr) {
         PARSEC_OBJ_CONSTRUCT(&this->parsec_task, parsec_task_t);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
         parsec_task.status = PARSEC_TASK_STATUS_HOOK;
         parsec_task.taskpool = taskpool;
-        parsec_task.data[0].data_in = nullptr;
         parsec_task.priority = priority;
+        parsec_task.chore_id = 0;
       }
     };
 
@@ -421,8 +381,8 @@ namespace ttg_parsec {
       }
 
       parsec_ttg_task_t(Key key, parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
-                        parsec_taskpool_t *taskpool, void *object_ptr, int32_t priority)
-          : parsec_ttg_task_base_t(mempool, task_class, taskpool, object_ptr, priority), key(key)
+                        parsec_taskpool_t *taskpool, void *object_ptr, int32_t priority, int data_count)
+          : parsec_ttg_task_base_t(mempool, task_class, taskpool, object_ptr, priority, data_count), key(key)
       {
         tt_ht_item.key = pkey();
       }
@@ -447,14 +407,61 @@ namespace ttg_parsec {
       }
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
-                        parsec_taskpool_t *taskpool, void *object_ptr, int32_t priority)
-          : parsec_ttg_task_base_t(mempool, task_class, taskpool, object_ptr, priority)
+                        parsec_taskpool_t *taskpool, void *object_ptr, int32_t priority, int data_count)
+          : parsec_ttg_task_base_t(mempool, task_class, taskpool, object_ptr, priority, data_count)
       {
         tt_ht_item.key = pkey();
       }
 
       parsec_key_t pkey() { return 0; }
     };
+
+    inline ttg_data_copy_t *find_copy_in_task(parsec_ttg_task_base_t *task, const void *ptr) {
+      ttg_data_copy_t *res = nullptr;
+      if (task == nullptr || ptr == nullptr) {
+        return res;
+      }
+      for (int i = 0; i < task->data_count; ++i) {
+        auto copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
+        if (NULL != copy && copy->device_private == ptr) {
+          res = reinterpret_cast<ttg_data_copy_t *>(copy);
+          break;
+        }
+      }
+      return res;
+    }
+
+    inline bool add_copy_to_task(ttg_data_copy_t *copy, parsec_ttg_task_base_t *task) {
+      if (task == nullptr || copy == nullptr) {
+        return false;
+      }
+
+      if (MAX_PARAM_COUNT < task->data_count) {
+        throw std::logic_error("Too many data copies, check MAX_PARAM_COUNT!");
+      }
+
+      task->parsec_task.data[task->data_count].data_in = copy;
+      task->data_count++;
+      return true;
+    }
+
+    inline void remove_data_copy(ttg_data_copy_t *copy, parsec_ttg_task_base_t *task) {
+      int i;
+      /* find and remove entry */
+      for (i = 0; i < task->data_count; ++i) {
+        if (copy == task->parsec_task.data[i].data_in) {
+          task->parsec_task.data[i].data_in = nullptr;
+          break;
+        }
+      }
+      /* move all other elements one up */
+      for (; i < task->data_count-1; ++i) {
+        task->parsec_task.data[i].data_in = task->parsec_task.data[i+1].data_in;
+      }
+      /* null last element */
+      task->parsec_task.data[i].data_in = nullptr;
+      task->data_count--;
+    }
 
 
     template<typename Value>
@@ -560,27 +567,25 @@ namespace ttg_parsec {
     }
 
     inline void release_data_copy(ttg_data_copy_t *copy) {
-      if (nullptr != copy) {
-        if (nullptr != copy->device_private) {
-          if (copy->readers > 0) {
-            int32_t readers = parsec_atomic_fetch_dec_int32(&copy->readers);
-            if (1 == readers) {
-              copy->delete_fn(copy->device_private);
-              copy->device_private = NULL;
-            }
+      if (nullptr != copy->device_private) {
+        if (copy->readers > 0) {
+          int32_t readers = parsec_atomic_fetch_dec_int32(&copy->readers);
+          if (1 == readers) {
+            copy->delete_fn(copy->device_private);
+            copy->device_private = NULL;
           }
         }
-        if (NULL != copy->push_task) {
-          /* Release the task if it was deferrred */
-          parsec_task_t *push_task = copy->push_task;
-          if (parsec_atomic_cas_ptr(&copy->push_task, push_task, nullptr)) {
-            parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)copy->push_task;
-            assert(deferred_op->deferred_release);
-            deferred_op->deferred_release(deferred_op->tt_ptr, deferred_op);
-          }
-        }
-        PARSEC_OBJ_RELEASE(copy);
       }
+      if (NULL != copy->push_task) {
+        /* Release the task if it was deferrred */
+        parsec_task_t *push_task = copy->push_task;
+        if (parsec_atomic_cas_ptr(&copy->push_task, push_task, nullptr)) {
+          parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)copy->push_task;
+          assert(deferred_op->deferred_release);
+          deferred_op->deferred_release(deferred_op->tt_ptr, deferred_op);
+        }
+      }
+      PARSEC_OBJ_RELEASE(copy);
     }
 
     template <typename Value>
@@ -634,11 +639,11 @@ namespace ttg_parsec {
           /* replace the task that was deferred */
           parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)copy_in->push_task;
           ttg_data_copy_t *deferred_replace_copy;
-          deferred_replace_copy = detail::find_copy_in_task(copy_in->push_task, copy_in->device_private);
+          deferred_replace_copy = detail::find_copy_in_task(deferred_op, copy_in->device_private);
           /* replace the copy in the deferred task */
-          for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
-            if (copy_in->push_task->data[i].data_in == copy_in) {
-              copy_in->push_task->data[i].data_in = new_copy;
+          for (int i = 0; i < deferred_op->data_count; ++i) {
+            if (deferred_op->parsec_task.data[i].data_in == copy_in) {
+              deferred_op->parsec_task.data[i].data_in = new_copy;
               break;
             }
           }
@@ -655,6 +660,8 @@ namespace ttg_parsec {
       return copy_res;
     }
   }  // namespace detail
+
+  inline thread_local detail::parsec_ttg_task_base_t *parsec_ttg_caller;
 
   template <typename... RestOfArgs>
   inline void ttg_initialize(int argc, char **argv, int taskpool_size, RestOfArgs &&...) {
@@ -868,7 +875,7 @@ namespace ttg_parsec {
       ttT *baseobj = (ttT *)task->object_ptr;
       derivedT *obj = (derivedT *)task->object_ptr;
       assert(parsec_ttg_caller == NULL);
-      parsec_ttg_caller = parsec_task;
+      parsec_ttg_caller = (detail::parsec_ttg_task_base_t*)parsec_task;
       if (obj->tracing()) {
         if constexpr (!ttg::meta::is_void_v<keyT>)
           ttg::print(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": executing");
@@ -904,7 +911,7 @@ namespace ttg_parsec {
       ttT *baseobj = (ttT *)task->object_ptr;
       derivedT *obj = (derivedT *)task->object_ptr;
       assert(parsec_ttg_caller == NULL);
-      parsec_ttg_caller = parsec_task;
+      parsec_ttg_caller = (detail::parsec_ttg_task_base_t*)parsec_task;
       if constexpr (!ttg::meta::is_void_v<keyT>) {
         baseobj->template op<Space>(task->key, obj->output_terminals);
       } else if constexpr (ttg::meta::is_void_v<keyT>) {
@@ -1020,7 +1027,7 @@ namespace ttg_parsec {
 
       /* save the current task and set the dummy task */
       auto parsec_ttg_caller_save = parsec_ttg_caller;
-      parsec_ttg_caller = &dummy->parsec_task;
+      parsec_ttg_caller = dummy;
 
       /* iterate over the keys and have them use the copy we made */
       for (auto&& key : keylist) {
@@ -1266,12 +1273,12 @@ namespace ttg_parsec {
         priority = priomap(key);
         /* placement-new the task */
         newtask = new (taskobj)
-            task_t(key, mempool, &this->self, world_impl.taskpool(), this, priority);
+            task_t(key, mempool, &this->self, world_impl.taskpool(), this, priority, numins);
       } else {
         priority = priomap();
         /* placement-new the task */
         newtask = new (taskobj)
-            task_t(mempool, &this->self, world_impl.taskpool(), this, priority);
+            task_t(mempool, &this->self, world_impl.taskpool(), this, priority, numins);
       }
 
       newtask->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
@@ -1421,7 +1428,6 @@ namespace ttg_parsec {
           }
         }
 
-        world_impl.increment_sent_to_sched();
         parsec_execution_stream_t *es = world_impl.execution_stream();
         parsec_key_t hk = task->pkey();
         if (tt.tracing()) {
@@ -1588,7 +1594,7 @@ namespace ttg_parsec {
         parsec_thread_mempool_t *mempool = get_task_mempool();
         char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
 
-        task = new (taskobj) task_t(key, mempool, &this->self, world_impl.taskpool(), this, priomap(key));
+        task = new (taskobj) task_t(key, mempool, &this->self, world_impl.taskpool(), this, priomap(key), numins);
 
         task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
             reinterpret_cast<detail::parsec_static_op_t>(&TT::static_op_noarg<ttg::ExecutionSpace::Host>);
@@ -1631,7 +1637,7 @@ namespace ttg_parsec {
         parsec_execution_stream_s *es = world_impl.execution_stream();
         parsec_thread_mempool_t *mempool = get_task_mempool();
         task = new (parsec_thread_mempool_allocate(mempool))
-            task_t(mempool, &this->self, world_impl.taskpool(), this, priomap());
+            task_t(mempool, &this->self, world_impl.taskpool(), this, priomap(), numins);
         task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
             reinterpret_cast<detail::parsec_static_op_t>(&TT::static_op_noarg<ttg::ExecutionSpace::Host>);
         if constexpr (derived_has_cuda_op())
@@ -2290,13 +2296,15 @@ namespace ttg_parsec {
 
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
 
-    static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *task) {
+    static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *t) {
       parsec_execution_stream_t *safe_es = parsec_ttg_es;
       parsec_ttg_es = es;
-      for (int i = 0; i < MAX_PARAM_COUNT; i++) {
-        ttg_data_copy_t *copy = reinterpret_cast<ttg_data_copy_t *>(task->data[i].data_in);
+      auto *task = (detail::parsec_ttg_task_base_t*)t;
+      for (int i = 0; i < task->data_count; i++) {
+        ttg_data_copy_t *copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
+        if (nullptr == copy) continue;
         detail::release_data_copy(copy);
-        task->data[i].data_in = nullptr;
+        task->parsec_task.data[i].data_in = nullptr;
       }
       task_t *tt = (task_t *)task;
       if (tt->deferred_release) {
