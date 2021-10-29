@@ -272,12 +272,9 @@ namespace ttg_parsec {
     auto *taskpool() { return tpool; }
 
     void increment_created() { taskpool()->tdm.module->taskpool_addto_nb_tasks(taskpool(), 1); }
-    void increment_sent_to_sched() { parsec_atomic_fetch_inc_int32(&sent_to_sched_counter()); }
 
     void increment_inflight_msg() { taskpool()->tdm.module->taskpool_addto_nb_pa(taskpool(),  1); }
     void decrement_inflight_msg() { taskpool()->tdm.module->taskpool_addto_nb_pa(taskpool(), -1); }
-
-    int32_t sent_to_sched() const { return this->sent_to_sched_counter(); }
 
     virtual void final_task() override {
 #ifdef TTG_USE_USER_TERMDET
@@ -320,11 +317,6 @@ namespace ttg_parsec {
     parsec_execution_stream_t *es = nullptr;
     parsec_taskpool_t *tpool = nullptr;
     bool parsec_taskpool_started = false;
-
-    volatile int32_t &sent_to_sched_counter() const {
-      static volatile int32_t sent_to_sched = 0;
-      return sent_to_sched;
-    }
   };
 
   namespace detail {
@@ -1604,7 +1596,6 @@ namespace ttg_parsec {
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": creating task");
         world_impl.increment_created();
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
-        world_impl.increment_sent_to_sched();
         __parsec_schedule(es, &task->parsec_task, 0);
       } else {
         using msg_t = detail::msg_t;
@@ -1646,7 +1637,6 @@ namespace ttg_parsec {
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : creating task");
         world_impl.increment_created();
         if (tracing()) ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
-        world_impl.increment_sent_to_sched();
         __parsec_schedule(es, &task->parsec_task, 0);
       }
     }
