@@ -42,6 +42,8 @@ namespace ttg {
       std::vector<std::function<void()>> m_callbacks;
       std::vector<std::shared_ptr<void>> m_ptrs;
       std::vector<std::unique_ptr<void, std::function<void(void*)>>> m_unique_ptrs;
+      int world_size;
+      int world_rank;
       bool m_is_valid = true;
 
      protected:
@@ -55,14 +57,21 @@ namespace ttg {
         }
       }
 
-     public:
-      WorldImplBase(void) {}
+    protected:
+      WorldImplBase(int size, int rank)
+      : world_size(size), world_rank(rank)
+      {}
 
+    public:
       virtual ~WorldImplBase(void) { m_is_valid = false; }
 
-      virtual int size(void) const = 0;
+      int size(void) {
+        return world_size;
+      }
 
-      virtual int rank(void) const = 0;
+      int rank(void) {
+        return world_rank;
+      }
 
       virtual void destroy(void) = 0;
 

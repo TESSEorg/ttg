@@ -69,9 +69,14 @@ namespace ttg_madness {
     ttg::Edge<> m_ctl_edge;
 
    public:
-    WorldImpl(::madness::World &world) : m_impl(world) {}
+    WorldImpl(::madness::World &world)
+    : WorldImplBase(world.size(), world.rank())
+    , m_impl(world)
+    {}
 
-    WorldImpl(const SafeMPI::Intracomm &comm) : m_impl(*new ::madness::World(comm)), m_allocated(true) {}
+    WorldImpl(const SafeMPI::Intracomm &comm)
+    : WorldImplBase(comm.Get_size(), comm.Get_rank())
+    , m_impl(*new ::madness::World(comm)), m_allocated(true) {}
 
     /* Deleted copy ctor */
     WorldImpl(const WorldImpl &other) = delete;
@@ -86,10 +91,6 @@ namespace ttg_madness {
 
     /* Deleted move assignment */
     WorldImpl &operator=(WorldImpl &&other) = delete;
-
-    virtual int size(void) const override { return m_impl.size(); }
-
-    virtual int rank(void) const override { return m_impl.rank(); }
 
     virtual void fence_impl(void) override { m_impl.gop.fence(); }
 
