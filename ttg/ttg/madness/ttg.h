@@ -631,8 +631,8 @@ namespace ttg_madness {
 
     template <std::size_t i>
     void set_static_argstream_size(std::size_t size) {
-      assert(std::get<i>(input_reducers) && "Op::set_argstream_size called on nonstreaming input terminal");
-      assert(size > 0 && "Op::set_static_argstream_size(key,size) called with size=0");
+      assert(std::get<i>(input_reducers) && "TT::set_argstream_size called on nonstreaming input terminal");
+      assert(size > 0 && "TT::set_static_argstream_size(key,size) called with size=0"); 
 
       if (tracing()) {
         ttg::print(world.rank(), ":", get_name(), ": setting global stream size for terminal ", i);
@@ -641,7 +641,7 @@ namespace ttg_madness {
       // Check if stream is already bounded
       if (static_streamsize[i] > 0) {
         ttg::print_error(world.rank(), ":", get_name(), " : error stream is already bounded : ", i);
-        throw std::runtime_error("Op::set_static_argstream_size called for a bounded stream");
+        throw std::runtime_error("TT::set_static_argstream_size called for a bounded stream");
       }
 
       // commit changes
