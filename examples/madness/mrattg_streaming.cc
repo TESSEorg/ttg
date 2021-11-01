@@ -487,8 +487,7 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
 
   return std::make_tuple(make_tt(&send_leaves_up<T,K,NDIM>, edges(in), edges(children1, out), "send_leaves_up", {"input"}, {"children1", "output"}),
                            make_tt(&reduce_leaves<T,K,NDIM>, edges(children1), edges(children2), "reduce_leaves", {"children1"}, {"children2"}),
-                           make_tt(&do_compress<T,K,NDIM>, edges(children2), edges(children1,out), "do_compress", {"children2"}, {"recur","output"})
-                           );
+                           make_tt(&do_compress<T,K,NDIM>, edges(children2), edges(children1,out), "do_compress", {"children2"}, {"recur","output"}));
 }
 
 template <typename T, size_t K, Dimension NDIM>

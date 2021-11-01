@@ -1,6 +1,7 @@
 // TTG AND MADNESS RUNTIME STUFF
 
-#include "ttg.h"
+//#define WORLD_INSTANTIATE_STATIC_TEMPLATES
+#include <ttg.h>
 using namespace ttg;
 
 // APPLICATION STUFF BELOW
@@ -365,7 +366,7 @@ public:
         const T L = Domain<NDIM>::get_max_width();
         const T a = expnt*L*L;
         double n = std::log(a/(4*K*K*(N*log10+std::log(fac))))/(2*log2);
-        std::cout << expnt << " " << a << " " << n << std::endl;
+        //std::cout << expnt << " " << a << " " << n << std::endl;
         initlev = Level(n<2 ? 2.0 : std::ceil(n));
     }
 
@@ -481,25 +482,35 @@ void test1() {
         ops.push_back(std::move(printer3));
     }
 
+    std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
+
     auto connected = make_graph_executable(start.get());
     assert(connected);
-    if (ttg_default_execution_context().rank() == 0) {
-        std::cout << "Is everything connected? " << connected << std::endl;
-        std::cout << "==== begin dot ====\n";
-        std::cout << Dot()(start.get()) << std::endl;
-        std::cout << "====  end dot  ====\n";
 
+    if (ttg_default_execution_context().rank() == 0) {
+        //std::cout << "Is everything connected? " << connected << std::endl;
+        //std::cout << "==== begin dot ====\n";
+        //std::cout << Dot()(start.get()) << std::endl;
+        //std::cout << "====  end dot  ====\n";
+
+	beg = std::chrono::high_resolution_clock::now();
         // This kicks off the entire computation
         start->invoke(Key<NDIM>(0, {0}));
     }
 
     ttg_execute(ttg_default_execution_context());
     ttg_fence(ttg_default_execution_context());
+    if (ttg_default_execution_context().rank() == 0) {
+    	end = std::chrono::high_resolution_clock::now();
+    	std::cout << "TTG Execution Time (milliseconds) : "
+              << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
+
+    }
 }
 
 int main(int argc, char** argv) {
     ttg_initialize(argc, argv, 2);
-    std::cout << "Hello from madttg\n";
+    //std::cout << "Hello from madttg\n";
 
     //vmlSetMode(VML_HA | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // default
     //vmlSetMode(VML_EP | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // err is 10x default
