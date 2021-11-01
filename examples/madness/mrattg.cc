@@ -1,8 +1,6 @@
 // TTG AND MADNESS RUNTIME STUFF
 
-//#define WORLD_INSTANTIATE_STATIC_TEMPLATES
-#include <ttg.h>
-// using namespace madness; // don't want this to avoid collisions with new mad stuff
+#include "ttg.h"
 using namespace ttg;
 
 // APPLICATION STUFF BELOW
@@ -14,7 +12,6 @@ using namespace ttg;
 #include <algorithm>
 #include <functional>
 #include <type_traits>
-#include <chrono>
 
 #include "../mragl.h"
 #include "../mrakey.h"
@@ -27,8 +24,6 @@ using namespace ttg;
 #include "../mrafunctiondata.h"
 #include "../mrafunctionnode.h"
 #include "../mrafunctionfunctor.h"
-
-//#include "mkl.h" // assume for now but need to wrap
 
 using namespace mra;
 
@@ -141,7 +136,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,cnodeOut<T,K,1>>;
         using compress_in_type  = std::tuple<Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = WrapOp<compfuncT, Key<1>, compress_out_type, Rin, Rin>;
+        using compwrap_type = CallableWrapTT<compfuncT, Key<1>, compress_out_type, Rin, Rin>;
     };
 
     template <typename T, size_t K>  struct tree_types<T,K,2>{
@@ -150,7 +145,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,cnodeOut<T,K,2>>;
         using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = WrapOp<compfuncT, Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
+        using compwrap_type = CallableWrapTT<compfuncT, Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
     };
 
     template <typename T, size_t K>  struct tree_types<T,K,3>{
@@ -159,7 +154,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,Rout,Rout,Rout,Rout,cnodeOut<T,K,3>>;
         using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = WrapOp<compfuncT, Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
+        using compwrap_type = CallableWrapTT<compfuncT, Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
     };
 };
 
@@ -243,7 +238,7 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
     constexpr size_t num_children = Key<NDIM>::num_children;
 
     using sendfuncT = decltype(&send_leaves_up<T,K,NDIM>);
-    using sendwrapT = WrapOp<sendfuncT, Key<NDIM>, typename ::detail::tree_types<T,K,NDIM>::compress_out_type, FunctionReconstructedNode<T,K,NDIM> >;
+    using sendwrapT = CallableWrapTT<sendfuncT, Key<NDIM>, typename ::detail::tree_types<T,K,NDIM>::compress_out_type, FunctionReconstructedNode<T,K,NDIM> >;
     using compfuncT = decltype(&do_compress<T,K,NDIM>);
     using compwrapT = typename ::detail::tree_types<T,K,NDIM>::template compwrap_type<compfuncT>;
 
@@ -274,7 +269,7 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
     ops[0] = std::move(s);
     ops[1] = std::move(c);
 
-    return make_composite_op(std::move(ops), ins, outs, name);
+    return make_ttg(std::move(ops), ins, outs, name);
 }
 
 template <typename T, size_t K, Dimension NDIM>
@@ -324,7 +319,7 @@ auto make_reconstruct(const cnodeEdge<T,K,NDIM>& in, rnodeEdge<T,K,NDIM>& out, c
 
 template <typename keyT, typename valueT>
 auto make_sink(const Edge<keyT,valueT>& e) {
-    return std::make_unique<OpSink<keyT,valueT>>(e);
+    return std::make_unique<SinkTT<keyT,valueT>>(e);
 }
 
 // For checking we haven't broken something while developing
@@ -370,7 +365,7 @@ public:
         const T L = Domain<NDIM>::get_max_width();
         const T a = expnt*L*L;
         double n = std::log(a/(4*K*K*(N*log10+std::log(fac))))/(2*log2);
-        //std::cout << expnt << " " << a << " " << n << std::endl;
+        std::cout << expnt << " " << a << " " << n << std::endl;
         initlev = Level(n<2 ? 2.0 : std::ceil(n));
     }
 
@@ -383,9 +378,12 @@ public:
     template <size_t N>
     void operator()(const SimpleTensor<T,NDIM,N>& x, std::array<T,N>& values) const {
         distancesq(origin, x, values);
-        vscale(N, -expnt, &values[0]);
-        vexp(N, &values[0], &values[0]);
-        vscale(N, fac, &values[0]);
+        //vscale(N, -expnt, &values[0]);
+        //vexp(N, &values[0], &values[0]);
+        //vscale(N, fac, &values[0]);
+	for (T& value : values) {
+          value = fac * std::exp(-expnt*value);
+        }	
     }
 
     Level initial_level() const {
@@ -468,12 +466,12 @@ void test1() {
         auto compress = make_compress<T,K,NDIM>(a, b);
         auto recon = make_reconstruct<T,K,NDIM>(b,c);
 
-        // auto printer =   make_printer(a,"projected    ", false);
-        // auto printer2 =  make_printer(b,"compressed   ", false);
-        // auto printer3 =  make_printer(c,"reconstructed", false);
-        auto printer =   make_sink(a);
-        auto printer2 =  make_sink(b);
-        auto printer3 =  make_sink(c);
+        auto printer =   make_printer(a,"projected    ", false);
+        auto printer2 =  make_printer(b,"compressed   ", false);
+        auto printer3 =  make_printer(c,"reconstructed", false);
+        //auto printer =   make_sink(a);
+        //auto printer2 =  make_sink(b);
+        //auto printer3 =  make_sink(c);
 
         ops.push_back(std::move(p1));
         ops.push_back(std::move(compress));
@@ -483,37 +481,29 @@ void test1() {
         ops.push_back(std::move(printer3));
     }
 
-    std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
-
     auto connected = make_graph_executable(start.get());
     assert(connected);
-    
     if (ttg_default_execution_context().rank() == 0) {
-        //std::cout << "Is everything connected? " << connected << std::endl;
-        //std::cout << "==== begin dot ====\n";
-        //std::cout << Dot()(start.get()) << std::endl;
-        //std::cout << "====  end dot  ====\n";
-        beg = std::chrono::high_resolution_clock::now(); 
+        std::cout << "Is everything connected? " << connected << std::endl;
+        std::cout << "==== begin dot ====\n";
+        std::cout << Dot()(start.get()) << std::endl;
+        std::cout << "====  end dot  ====\n";
+
         // This kicks off the entire computation
         start->invoke(Key<NDIM>(0, {0}));
     }
 
     ttg_execute(ttg_default_execution_context());
     ttg_fence(ttg_default_execution_context());
-    if (ttg_default_execution_context().rank() == 0) {
-      end = std::chrono::high_resolution_clock::now();
-      std::cout << "TTG Execution Time (milliseconds) : "
-                << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count())/1000 << std::endl;
-    }
 }
 
 int main(int argc, char** argv) {
     ttg_initialize(argc, argv, 2);
-    //std::cout << "Hello from madttg\n";
+    std::cout << "Hello from madttg\n";
 
     //vmlSetMode(VML_HA | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // default
     //vmlSetMode(VML_EP | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // err is 10x default
-    vmlSetMode(VML_HA | VML_FTZDAZ_ON | VML_ERRMODE_DEFAULT); // err is same as default little faster
+    //vmlSetMode(VML_HA | VML_FTZDAZ_ON | VML_ERRMODE_DEFAULT); // err is same as default little faster
     //vmlSetMode(VML_EP | VML_FTZDAZ_ON  | VML_ERRMODE_DEFAULT); // err is 10x default
 
     GLinitialize();

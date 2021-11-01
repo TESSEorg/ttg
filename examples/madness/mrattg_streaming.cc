@@ -310,13 +310,13 @@ auto make_printer(const Edge<keyT, valueT>& in, const char* str = "", const bool
             std::cout << str << " (" << key << "," << value << ")" << std::endl;
         }
     };
-    return wrap(func, edges(in), edges(), "printer", {"input"});
+    return make_tt(func, edges(in), edges(), "printer", {"input"});
 }
 
 template <Dimension NDIM>
 auto make_start(const ctlEdge<NDIM>& ctl) {
     auto func = [](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>>& out) { send<0>(key, Control(), out); };
-    return wrap<Key<NDIM>>(func, edges(), edges(ctl), "start", {}, {"control"});
+    return make_tt<Key<NDIM>>(func, edges(), edges(ctl), "start", {}, {"control"});
 }
 
 
@@ -358,7 +358,7 @@ auto make_project(functorT& f,
         send<1>(key, std::move(node), out); // always produce a result
     };
     ctlEdge<NDIM> refine("refine");
-    return wrap(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
+    return make_tt(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
 }
 
 namespace detail {
@@ -371,7 +371,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,cnodeOut<T,K,1>>;
         using compress_in_type  = std::tuple<Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = WrapOp<compfuncT, Key<1>, compress_out_type, Rin, Rin>;
+        using compmake_tt_type = TT<compfuncT, Key<1>, compress_out_type, Rin, Rin>;
     };
 
     template <typename T, size_t K>  struct tree_types<T,K,2>{
@@ -380,7 +380,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,cnodeOut<T,K,2>>;
         using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = WrapOp<compfuncT, Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
+        using compmake_tt_type = TT<compfuncT, Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
     };
 
     template <typename T, size_t K>  struct tree_types<T,K,3>{
@@ -389,7 +389,7 @@ namespace detail {
       using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,Rout,Rout,Rout,Rout,cnodeOut<T,K,3>>;
       using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = WrapOp<compfuncT, Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
+        using compmake_tt_type = TT<compfuncT, Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
     };
 };
 
@@ -483,57 +483,11 @@ std::string int2bitstring(size_t i, size_t width) {
 /// Make a composite operator that implements compression for a single function
 template <typename T, size_t K, Dimension NDIM>
 auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std::string& name = "compress") {
-
-  //constexpr size_t num_children = Key<NDIM>::num_children;
-
-    /*using sendfuncT = decltype(&send_leaves_up<T,K,NDIM>);
-    //using sendwrapT = WrapOp<sendfuncT, Key<NDIM>, typename ::detail::tree_types<T,K,NDIM>::compress_out_type, FunctionReconstructedNode<T,K,NDIM> >;
-    using sendwrapT = WrapOp<sendfuncT, Key<NDIM>, std::tuple<rnodeOut<T,K,NDIM>>, FunctionReconstructedNode<T,K,NDIM> >;
-    using compfuncT = decltype(&do_compress<T,K,NDIM>);
-    //using compwrapT = typename ::detail::tree_types<T,K,NDIM>::template compwrap_type<compfuncT>;
-    using compwrapT = WrapOp<compfuncT, Key<NDIM>, std::tuple<rnodeOut<T,K,NDIM>, cnodeOut<T,K,NDIM>>, FunctionReconstructedNode<T,K,NDIM> >;
-    using reducefuncT = decltype(&reduce_leaves<T,K,NDIM>);
-    using reducewrapT = WrapOp<reducefuncT, Key<NDIM>, std::tuple<rnodeOut<T,K,NDIM>>, FunctionReconstructedNode<T,K,NDIM> >;
-    */
-    // Make names for terminals that connect child boxes
-    /*std::vector<std::string> outnames;
-    for (auto i : range(num_children)) {
-        outnames.push_back(std::string("child:")+int2bitstring(i,NDIM));
-        }*/
-    //std::vector<std::string> innames=outnames;
-    //outnames.push_back("output");
-
   rnodeEdge<T,K,NDIM> children1("children1"), children2("children2");
 
-    //Do we need to send output from send_leaves_up?
-    /*auto s = std::unique_ptr<sendwrapT>(new sendwrapT(&send_leaves_up<T,K,NDIM>, "send_leaves_up", {"input"}, {"children1"}));
-    auto r = std::unique_ptr<reducewrapT>(new reducewrapT(&reduce_leaves<T,K,NDIM>, "reduce_leaves", {"children1"}, {"children2"}));
-    auto c = std::unique_ptr<compwrapT>(new compwrapT(&do_compress<T,K,NDIM>, "do_compress", {"children2"}, {"output"}));
-
-    in.set_out(s-> template in<0>()); // Connect input to s
-    //out.set_in(s-> template out<1>()); // Connect s result to output
-    out.set_in(c-> template out<1>()); // Connect c result to output
-    children1.set_out(r-> template in<0>());
-    children2.set_in(r-> template out<0>());
-    */
-    // Connect send_leaves_up to do_compress and recurrence for do_compress
-    /*for (auto i : range(num_children)) {
-        connect(i,i,s.get(),c.get()); // this via base class terminals
-        connect(i,i,c.get(),c.get());
-        }*/
-
-    //auto ins = std::make_tuple(s-> template in<0>());
-    //auto outs = std::make_tuple(c-> template out<1>());
-    //std::vector<std::unique_ptr<ttg::OpBase>> ops(3);
-    //ops[0] = std::move(s);
-    //ops[1] = std::move(r);
-    //ops[2] = std::move(c);
-
-    //return make_composite_op(std::move(ops), ins, outs, name);
-
-  return std::make_tuple(wrap(&send_leaves_up<T,K,NDIM>, edges(in), edges(children1, out), "send_leaves_up", {"input"}, {"children1", "output"}),
-                           wrap(&reduce_leaves<T,K,NDIM>, edges(children1), edges(children2), "reduce_leaves", {"children1"}, {"children2"}),
-                           wrap(&do_compress<T,K,NDIM>, edges(children2), edges(children1,out), "do_compress", {"children2"}, {"recur","output"})
+  return std::make_tuple(make_tt(&send_leaves_up<T,K,NDIM>, edges(in), edges(children1, out), "send_leaves_up", {"input"}, {"children1", "output"}),
+                           make_tt(&reduce_leaves<T,K,NDIM>, edges(children1), edges(children2), "reduce_leaves", {"children1"}, {"children2"}),
+                           make_tt(&do_compress<T,K,NDIM>, edges(children2), edges(children1,out), "do_compress", {"children2"}, {"recur","output"})
                            );
 }
 
@@ -580,7 +534,7 @@ template <typename T, size_t K, Dimension NDIM>
 auto make_reconstruct(const cnodeEdge<T,K,NDIM>& in, rnodeEdge<T,K,NDIM>& out, const std::string& name = "reconstruct") {
     Edge<Key<NDIM>,FixedTensor<T,K,NDIM>> S("S");  // passes scaling functions down
 
-    auto s = wrapt(&do_reconstruct<T,K,NDIM>, edges(in, S), edges(S, out), name, {"input", "s"}, {"s", "output"});
+    auto s = make_tt_tpl(&do_reconstruct<T,K,NDIM>, edges(in, S), edges(S, out), name, {"input", "s"}, {"s", "output"});
 
     if (get_default_world().rank() == 0) {
       s->template in<1>()->send(Key<NDIM>{0,{0}}, FixedTensor<T,K,NDIM>()); // Prime the flow of scaling functions
@@ -591,7 +545,7 @@ auto make_reconstruct(const cnodeEdge<T,K,NDIM>& in, rnodeEdge<T,K,NDIM>& out, c
 
 template <typename keyT, typename valueT>
 auto make_sink(const Edge<keyT,valueT>& e) {
-    return std::make_unique<OpSink<keyT,valueT>>(e);
+    return std::make_unique<SinkTT<keyT,valueT>>(e);
 }
 
 // For checking we haven't broken something while developing
@@ -651,9 +605,12 @@ public:
     template <size_t N>
     void operator()(const SimpleTensor<T,NDIM,N>& x, std::array<T,N>& values) const {
         distancesq(origin, x, values);
-        vscale(N, -expnt, &values[0]);
-        vexp(N, &values[0], &values[0]);
-        vscale(N, fac, &values[0]);
+        //vscale(N, -expnt, &values[0]);
+        //vexp(N, &values[0], &values[0]);
+        //vscale(N, fac, &values[0]);
+	for (T& value : values) {
+          value = fac * std::exp(-expnt*value);
+        }
     }
 
     Level initial_level() const {
@@ -726,7 +683,7 @@ void test1() {
     
     ctlEdge<NDIM> ctl("start");
     auto start = make_start(ctl);
-    std::vector<std::unique_ptr<ttg::OpBase>> ops;
+    std::vector<std::unique_ptr<ttg::TTBase>> ops;
     for (auto i : range(3)) {
         TTGUNUSED(i);
         rnodeEdge<T,K,NDIM> a("a"), c("c");
@@ -736,8 +693,8 @@ void test1() {
         auto compress = make_compress<T,K,NDIM>(a, b);
 
         auto &reduce_leaves_op = std::get<1>(compress);
-        reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNodeWrap<T,K,NDIM> &&node,
-                                                           FunctionReconstructedNodeWrap<T,K,NDIM> &&another)
+        reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNodeWrap<T,K,NDIM> &node,
+                                                           const FunctionReconstructedNodeWrap<T,K,NDIM> &another)
                                                         {
                                                           //Update self values into the array.
                                                           node.get().neighbor_coeffs[node.get().key.childindex()] = node.get().coeffs;
@@ -746,19 +703,17 @@ void test1() {
                                                           node.get().neighbor_coeffs[another.get().key.childindex()] = another.get().coeffs;
                                                           node.get().is_neighbor_leaf[another.get().key.childindex()] = another.get().is_leaf;
                                                           node.get().neighbor_sum[another.get().key.childindex()] = another.get().sum;
-                                                          //std::cout << "Neighbor_sum[" << another.key.childindex() << "] : " << node.neighbor_sum <<std::endl;
-                                                          return std::move(node);
                                                         });
         reduce_leaves_op->template set_static_argstream_size<0>(1 << NDIM);
 
         auto recon = make_reconstruct<T,K,NDIM>(b,c);
 
-        // auto printer =   make_printer(a,"projected    ", false);
-        // auto printer2 =  make_printer(b,"compressed   ", false);
-        // auto printer3 =  make_printer(c,"reconstructed", false);
-        auto printer =   make_sink(a);
-        auto printer2 =  make_sink(b);
-        auto printer3 =  make_sink(c);
+        auto printer =   make_printer(a,"projected    ", false);
+        auto printer2 =  make_printer(b,"compressed   ", false);
+        auto printer3 =  make_printer(c,"reconstructed", false);
+        //auto printer =   make_sink(a);
+        //auto printer2 =  make_sink(b);
+        //auto printer3 =  make_sink(c);
 
         ops.push_back(std::move(p1));
         ops.push_back(std::move(std::get<0>(compress)));
@@ -798,98 +753,6 @@ void test1() {
 template <typename T, size_t K, Dimension NDIM>
 void test2(size_t nfunc, T thresh = 1e-6) {
     FunctionData<T,K,NDIM>::initialize();
-    PartitionPmap<NDIM> pmap =  PartitionPmap<NDIM>(ttg_default_execution_context().size());
-    Domain<NDIM>::set_cube(-6.0,6.0);
-
-    srand48(5551212); // for reproducible results
-    for (auto i : range(10000)) drand48(); // warmup generator
-
-    ctlEdge<NDIM> ctl("start");
-    auto start = make_start(ctl);
-    std::vector<std::unique_ptr<ttg::OpBase>> ops;
-    for (auto i : range(nfunc)) {
-        T expnt = 30000.0;
-        Coordinate<T,NDIM> r;
-        for (size_t d=0; d<NDIM; d++) {
-            r[d] = T(-6.0) + T(12.0)*drand48();
-        }
-        auto ff = Gaussian<T,NDIM>(expnt, r);
-        
-        TTGUNUSED(i);
-        rnodeEdge<T,K,NDIM> a("a"), c("c");
-        cnodeEdge<T,K,NDIM> b("b");
-
-        auto p1 = make_project(ff, T(thresh), ctl, a, "project A");
-        p1->set_keymap(pmap);
-
-        auto compress = make_compress<T,K,NDIM>(a, b);
-        std::get<0>(compress)->set_keymap(pmap);
-        std::get<1>(compress)->set_keymap(pmap);
-        std::get<2>(compress)->set_keymap(pmap);
-
-        auto &reduce_leaves_op = std::get<1>(compress);
-        reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNodeWrap<T,K,NDIM> &&node,
-                                                           FunctionReconstructedNodeWrap<T,K,NDIM> &&another)
-                                                        {
-                                                          //Update self values into the array.
-                                                          node.get().neighbor_coeffs[node.get().key.childindex()] = node.get().coeffs;
-                                                          node.get().is_neighbor_leaf[node.get().key.childindex()] = node.get().is_leaf;
-                                                          node.get().neighbor_sum[node.get().key.childindex()] = node.get().sum;
-                                                          node.get().neighbor_coeffs[another.get().key.childindex()] = another.get().coeffs;
-                                                          node.get().is_neighbor_leaf[another.get().key.childindex()] = another.get().is_leaf;
-                                                          node.get().neighbor_sum[another.get().key.childindex()] = another.get().sum;
-                                                          //std::cout << "Neighbor_sum[" << another.key.childindex() << "] : " << node.neighbor_sum <<std::endl;
-                                                          return std::move(node);
-                                                        });
-        reduce_leaves_op->template set_static_argstream_size<0>(1 << NDIM);
-
-        auto recon = make_reconstruct<T,K,NDIM>(b,c);
-        recon->set_keymap(pmap);
-
-        //auto printer =   make_printer(a,"projected    ", true);
-        // auto printer2 =  make_printer(b,"compressed   ", false);
-        // auto printer3 =  make_printer(c,"reconstructed", false);
-        auto printer =   make_sink(a);
-        auto printer2 =  make_sink(b);
-        auto printer3 =  make_sink(c);
-
-        ops.push_back(std::move(p1));
-        ops.push_back(std::move(std::get<0>(compress)));
-        ops.push_back(std::move(std::get<1>(compress)));
-        ops.push_back(std::move(std::get<2>(compress)));
-        ops.push_back(std::move(recon));
-        ops.push_back(std::move(printer));
-        ops.push_back(std::move(printer2));
-        ops.push_back(std::move(printer3));
-    }
-    
-    std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
-    auto connected = make_graph_executable(start.get());
-    assert(connected);    
-    if (ttg_default_execution_context().rank() == 0) {
-        //std::cout << "Is everything connected? " << connected << std::endl;
-        //std::cout << "==== begin dot ====\n";
-        //std::cout << Dot()(start.get()) << std::endl;
-        //std::cout << "====  end dot  ====\n";
-	beg = std::chrono::high_resolution_clock::now();
-        // This kicks off the entire computation
-        start->invoke(Key<NDIM>(0, {0}));
-    }
-
-    ttg_execute(ttg_default_execution_context());
-    ttg_fence(ttg_default_execution_context());
-
-    if (ttg_default_execution_context().rank() == 0) {
-      end = std::chrono::high_resolution_clock::now();
-      std::cout << "TTG Execution Time (milliseconds) : "
-                << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 
-                << std::endl; 
-    }
-}
-
-template <typename T, size_t K, Dimension NDIM>
-void test2(size_t nfunc, T thresh = 1e-6) {
-    FunctionData<T,K,NDIM>::initialize();
     //PartitionPmap<NDIM> pmap =  PartitionPmap<NDIM>(ttg_default_execution_context().size());
     Domain<NDIM>::set_cube(-6.0,6.0);
     LevelPmapX<NDIM> pmap = LevelPmapX<NDIM>(ttg_default_execution_context().size());
@@ -899,7 +762,7 @@ void test2(size_t nfunc, T thresh = 1e-6) {
 
     ctlEdge<NDIM> ctl("start");
     auto start = make_start(ctl);
-    std::vector<std::unique_ptr<ttg::OpBase>> ops;
+    std::vector<std::unique_ptr<ttg::TTBase>> ops;
     for (auto i : range(nfunc)) {
         T expnt = 30000.0;
         Coordinate<T,NDIM> r;
@@ -921,18 +784,15 @@ void test2(size_t nfunc, T thresh = 1e-6) {
         std::get<2>(compress)->set_keymap(pmap);
 
         auto &reduce_leaves_op = std::get<1>(compress);
-        reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNode<T,K,NDIM> &&node,
-                                                           FunctionReconstructedNode<T,K,NDIM> &&another)
+        reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNodeWrap<T,K,NDIM> &node,
+                                                           const FunctionReconstructedNodeWrap<T,K,NDIM> &another)
                                                         {
-                                                          //Update self values into the array.
-                                                          node.neighbor_coeffs[node.key.childindex()] = node.coeffs;
-                                                          node.is_neighbor_leaf[node.key.childindex()] = node.is_leaf;
-                                                          node.neighbor_sum[node.key.childindex()] = node.sum;
-                                                          node.neighbor_coeffs[another.key.childindex()] = another.coeffs;
-                                                          node.is_neighbor_leaf[another.key.childindex()] = another.is_leaf;
-                                                          node.neighbor_sum[another.key.childindex()] = another.sum;
-                                                          //std::cout << "Neighbor_sum[" << another.key.childindex() << "] : " << node.neighbor_sum <<std::endl;
-                                                          return node;
+							  node.get().neighbor_coeffs[node.get().key.childindex()] = node.get().coeffs;
+                                                          node.get().is_neighbor_leaf[node.get().key.childindex()] = node.get().is_leaf;
+                                                          node.get().neighbor_sum[node.get().key.childindex()] = node.get().sum;
+                                                          node.get().neighbor_coeffs[another.get().key.childindex()] = another.get().coeffs;
+                                                          node.get().is_neighbor_leaf[another.get().key.childindex()] = another.get().is_leaf;
+                                                          node.get().neighbor_sum[another.get().key.childindex()] = another.get().sum;
                                                         });
         reduce_leaves_op->template set_static_argstream_size<0>(1 << NDIM);
 
@@ -991,7 +851,7 @@ int main(int argc, char** argv) {
 
     //vmlSetMode(VML_HA | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // default
     //vmlSetMode(VML_EP | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // err is 10x default
-    vmlSetMode(VML_HA | VML_FTZDAZ_ON | VML_ERRMODE_DEFAULT); // err is same as default little faster
+    //vmlSetMode(VML_HA | VML_FTZDAZ_ON | VML_ERRMODE_DEFAULT); // err is same as default little faster
     //vmlSetMode(VML_EP | VML_FTZDAZ_ON  | VML_ERRMODE_DEFAULT); // err is 10x default
 
     GLinitialize();
