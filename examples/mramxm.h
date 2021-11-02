@@ -18,32 +18,19 @@ namespace mra {
 
         // Need to add complex and mixed versions (the latter might require using the Fortran BLAS API)
 
-	static inline void gemm (const blas::Layout Layout, const blas::Op transa, const blas::Op transb,
+        static inline void gemm (const blas::Layout Layout, const blas::Op transa, const blas::Op transb,
                                  const cblas_int m, const cblas_int n, const cblas_int k,
                                  const float alpha, const float *a, const cblas_int lda, const float *b, const cblas_int ldb,
                                  const float beta, float *c, const cblas_int ldc) {
-		blas::gemm(Layout, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+            blas::gemm(Layout, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
         }
-
+        
         static inline void gemm (const blas::Layout Layout, const blas::Op transa, const blas::Op transb,
                                  const cblas_int m, const cblas_int n, const cblas_int k,
                                  const double alpha, const double *a, const cblas_int lda, const double *b, const cblas_int ldb,
                                  const double beta, double *c, const cblas_int ldc) {
-		blas::gemm(Layout, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+            blas::gemm(Layout, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
         }
-        /*static inline void gemm (const CBLAS_ORDER Layout, const CBLAS_TRANSPOSE transa, const CBLAS_TRANSPOSE transb,
-                                 const cblas_int m, const cblas_int n, const cblas_int k,
-                                 const float alpha, const float *a, const cblas_int lda, const float *b, const cblas_int ldb,
-                                 const float beta, float *c, const cblas_int ldc) {
-            cblas_sgemm(Layout, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
-        }
-        
-        static inline void gemm (const CBLAS_ORDER Layout, const CBLAS_TRANSPOSE transa, const CBLAS_TRANSPOSE transb,
-                                 const cblas_int m, const cblas_int n, const cblas_int k,
-                                 const double alpha, const double *a, const cblas_int lda, const double *b, const cblas_int ldb,
-                                 const double beta, double *c, const cblas_int ldc) {
-            cblas_dgemm(Layout, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
-        }*/
     }
     
     
@@ -98,9 +85,9 @@ namespace mra {
 
     static inline void vscale(size_t N, const std::complex<double>& s, double* x) {
         cblas_zscal(detail::cblas_int(N), &s, x, detail::cblas_int(1));
-    }*/
+    }
 
-  /*static inline void vexp(size_t N, const float* a, float* y) {
+    static inline void vexp(size_t N, const float* a, float* y) {
         vsExp(detail::cblas_int(N), a, y);
     }
 
@@ -114,7 +101,7 @@ namespace mra {
 
     static inline void vexp(size_t N, const std::complex<double>& a, std::complex<double>* y) {
         vzExp(detail::cblas_int(N), (const MKL_Complex16*)(&a), (MKL_Complex16*)(y));
-	}*/
+    }*/
     
 }
 

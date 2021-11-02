@@ -97,10 +97,10 @@ auto make_start(const ctlEdge<NDIM>& ctl) {
 /// Returns an std::unique_ptr to the object
 template <typename functorT, typename T, size_t K, Dimension NDIM>
 auto make_project(functorT& f,
-                  const T thresh, /// should be scalar value not complex
-                  ctlEdge<NDIM>& ctl,
-                  rnodeEdge<T,K,NDIM>& result,
-                  const std::string& name = "project") {
+        const T thresh, /// should be scalar value not complex
+        ctlEdge<NDIM>& ctl,
+        rnodeEdge<T,K,NDIM>& result,
+        const std::string& name = "project") {
 
     auto F = [f, thresh](const Key<NDIM>& key, Control&& junk, std::tuple<ctlOut<NDIM>, rnodeOut<T,K,NDIM>>& out) {
         FunctionReconstructedNode<T,K,NDIM> node(key); // Our eventual result
@@ -137,7 +137,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,cnodeOut<T,K,1>>;
         using compress_in_type  = std::tuple<Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = CallableWrapTT<compfuncT, Key<1>, compress_out_type, Rin, Rin>;
+            using compwrap_type = CallableWrapTT<compfuncT, Key<1>, compress_out_type, Rin, Rin>;
     };
 
     template <typename T, size_t K>  struct tree_types<T,K,2>{
@@ -146,7 +146,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,cnodeOut<T,K,2>>;
         using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = CallableWrapTT<compfuncT, Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
+            using compwrap_type = CallableWrapTT<compfuncT, Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
     };
 
     template <typename T, size_t K>  struct tree_types<T,K,3>{
@@ -155,15 +155,15 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,Rout,Rout,Rout,Rout,cnodeOut<T,K,3>>;
         using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = CallableWrapTT<compfuncT, Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
+            using compwrap_type = CallableWrapTT<compfuncT, Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
     };
 };
 
 // Stream leaf nodes up the tree as a prelude to compressing
 template <typename T, size_t K, Dimension NDIM>
 void send_leaves_up(const Key<NDIM>& key,
-                    const std::tuple<FunctionReconstructedNode<T,K,NDIM>>& inputs,
-                    typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
+        const std::tuple<FunctionReconstructedNode<T,K,NDIM>>& inputs,
+        typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
     const FunctionReconstructedNode<T,K,NDIM>& node = std::get<0>(inputs);
     node.sum = 0.0;   //
     if (!node.has_children()) { // We are only interested in the leaves
@@ -186,8 +186,8 @@ void send_leaves_up(const Key<NDIM>& key,
 // With data streaming up the tree run compression
 template <typename T, size_t K, Dimension NDIM>
 void do_compress(const Key<NDIM>& key,
-                 const typename ::detail::tree_types<T,K,NDIM>::compress_in_type& in,
-                 typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
+        const typename ::detail::tree_types<T,K,NDIM>::compress_in_type& in,
+        typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
     auto& child_slices = FunctionData<T,K,NDIM>::get_child_slices();
     FunctionCompressedNode<T,K,NDIM> result(key); // The eventual result
     auto& d = result.coeffs;
@@ -275,8 +275,8 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
 
 template <typename T, size_t K, Dimension NDIM>
 void do_reconstruct(const Key<NDIM>& key,
-                    const std::tuple<FunctionCompressedNode<T,K,NDIM>&,FixedTensor<T,K,NDIM>&>& t,
-                    std::tuple<Out<Key<NDIM>,FixedTensor<T,K,NDIM>>,rnodeOut<T,K,NDIM>>& out) {
+        const std::tuple<FunctionCompressedNode<T,K,NDIM>&,FixedTensor<T,K,NDIM>&>& t,
+        std::tuple<Out<Key<NDIM>,FixedTensor<T,K,NDIM>>,rnodeOut<T,K,NDIM>>& out) {
     const auto& child_slices = FunctionData<T,K,NDIM>::get_child_slices();
     auto& node = std::get<0>(t);
     const auto& from_parent = std::get<1>(t);
@@ -350,12 +350,12 @@ class Gaussian {
     const T fac;
     const T maxr;
     Level initlev;
-public:
+    public:
     Gaussian(T expnt, const Coordinate<T,NDIM>& origin)
         : expnt(expnt)
-        , origin(origin)
-        , fac(std::pow(T(2.0*expnt/M_PI),T(0.25*NDIM)))
-        , maxr(std::sqrt(std::log(fac/1e-12)/expnt))
+          , origin(origin)
+          , fac(std::pow(T(2.0*expnt/M_PI),T(0.25*NDIM)))
+          , maxr(std::sqrt(std::log(fac/1e-12)/expnt))
     {
         // Pick initial level such that average gap between quadrature points
         // will find a significant value
@@ -377,15 +377,15 @@ public:
     // }
 
     template <size_t N>
-    void operator()(const SimpleTensor<T,NDIM,N>& x, std::array<T,N>& values) const {
-        distancesq(origin, x, values);
-        //vscale(N, -expnt, &values[0]);
-        //vexp(N, &values[0], &values[0]);
-        //vscale(N, fac, &values[0]);
-	for (T& value : values) {
-          value = fac * std::exp(-expnt*value);
-        }	
-    }
+        void operator()(const SimpleTensor<T,NDIM,N>& x, std::array<T,N>& values) const {
+            distancesq(origin, x, values);
+            //vscale(N, -expnt, &values[0]);
+            //vexp(N, &values[0], &values[0]);
+            //vscale(N, fac, &values[0]);
+            for (T& value : values) {
+                value = fac * std::exp(-expnt*value);
+            }	
+        }
 
     Level initial_level() const {
         return this->initlev;
@@ -458,7 +458,7 @@ void test1() {
     ctlEdge<NDIM> ctl("start");
     auto start = make_start(ctl);
     std::vector<std::unique_ptr<ttg::TTBase>> ops;
-    for (auto i : range(3)) {
+    for (auto i : range(1)) {
         TTGUNUSED(i);
         rnodeEdge<T,K,NDIM> a("a"), c("c");
         cnodeEdge<T,K,NDIM> b("b");
@@ -493,7 +493,7 @@ void test1() {
         //std::cout << Dot()(start.get()) << std::endl;
         //std::cout << "====  end dot  ====\n";
 
-	beg = std::chrono::high_resolution_clock::now();
+        beg = std::chrono::high_resolution_clock::now();
         // This kicks off the entire computation
         start->invoke(Key<NDIM>(0, {0}));
     }
@@ -501,9 +501,9 @@ void test1() {
     ttg_execute(ttg_default_execution_context());
     ttg_fence(ttg_default_execution_context());
     if (ttg_default_execution_context().rank() == 0) {
-    	end = std::chrono::high_resolution_clock::now();
-    	std::cout << "TTG Execution Time (milliseconds) : "
-              << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
+        end = std::chrono::high_resolution_clock::now();
+        std::cout << "TTG Execution Time (milliseconds) : "
+            << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;
 
     }
 }
