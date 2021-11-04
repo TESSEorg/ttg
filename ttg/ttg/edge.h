@@ -10,6 +10,7 @@
 #include "ttg/util/diagnose.h"
 #include "ttg/util/print.h"
 #include "ttg/util/trace.h"
+#include "boost/callable_traits.hpp"
 
 namespace ttg {
 
@@ -24,6 +25,8 @@ namespace ttg {
   template <typename keyT, typename valueT>
   class Edge {
    private:
+    using mapper_function_type = meta::detail::mapper_function_t<keyT>;
+    using mapper_ret_type = boost::callable_traits::return_type_t<mapper_function_type>;
     // An EdgeImpl represents a single edge that most usually will
     // connect a single output terminal with a single
     // input terminal.  However, we had to relax this constraint in
@@ -37,17 +40,32 @@ namespace ttg {
     // to a single terminal.
     struct EdgeImpl {
       std::string name;
+      bool is_pull_edge = false;
       std::vector<TerminalBase *> outs;  // In<keyT, valueT> or In<keyT, const valueT>
       std::vector<Out<keyT, valueT> *> ins;
 
+      Container<keyT, mapper_ret_type, valueT> container;
+      mapper_function_type mapper_function;
+
       EdgeImpl() : name(""), outs(), ins() {}
 
-      EdgeImpl(const std::string &name) : name(name), outs(), ins() {}
+      EdgeImpl(const std::string &name, bool is_pull = false) : name(name),
+                is_pull_edge(is_pull), outs(), ins() {}
+
+      EdgeImpl(const std::string &name, bool is_pull, Container<keyT, mapper_ret_type, valueT> &c,
+               mapper_function_type &mapper) :
+        name(name),
+        is_pull_edge(is_pull),
+        container(c),
+        mapper_function(mapper),
+        outs(),
+        ins() {}
 
       void set_in(Out<keyT, valueT> *in) {
         if (ins.size()) {
           trace("Edge: ", name, " : has multiple inputs");
         }
+        in->is_pull_terminal = is_pull_edge;
         ins.push_back(in);
         try_to_connect_new_in(in);
       }
@@ -56,6 +74,9 @@ namespace ttg {
         if (outs.size()) {
           trace("Edge: ", name, " : has multiple outputs");
         }
+        out->is_pull_terminal = is_pull_edge;
+        static_cast<In<keyT, valueT>*>(out)->mapper = mapper_function;
+        static_cast<In<keyT, valueT>*>(out)->container = container;
         outs.push_back(out);
         try_to_connect_new_out(out);
       }
@@ -67,14 +88,18 @@ namespace ttg {
 
       void try_to_connect_new_out(TerminalBase *out) const {
         assert(out->get_type() != TerminalBase::Type::Write);  // out must be an In<>
-        for (auto in : ins)
-          if (in && out) in->connect(out);
+        if (out->is_pull_terminal) {
+          out->connect_pull_nopred(out);
+        }
+        else {
+          for (auto in : ins)
+            if (in && out) in->connect(out);
+        }
       }
 
       ~EdgeImpl() {
-        if (diagnose() && ((ins.size() == 0 && outs.size() != 0) || (ins.size() != 0 && outs.size() == 0))) {
-          print_error("Edge: destroying edge pimpl ('", name,
-                      "') with either in or out not assigned --- graph may be incomplete");
+        if (diagnose() && ((ins.size() == 0 && outs.size() != 0) || (ins.size() != 0 && outs.size() == 0)) && !is_pull_edge) {
+            print_error("Edge: destroying edge pimpl ('", name, "') with either in or out not assigned --- graph may be incomplete");
         }
       }
     };
@@ -91,8 +116,18 @@ namespace ttg {
     static_assert(std::is_same_v<valueT, std::decay_t<valueT>>,
                   "Edge<keyT,valueT> assumes valueT is a non-decayable type");
 
-    /// Default anonymous and unconnected Edge.
-    Edge(const std::string name = "anonymous edge") : p(1) { p[0] = std::make_shared<EdgeImpl>(name); }
+    Edge(const std::string name = "anonymous edge", bool is_pull = false) : p(1) {
+      p[0] = std::make_shared<EdgeImpl>(name, is_pull);
+    }
+
+    Edge(const std::string name, bool is_pull, Container<keyT, mapper_ret_type, valueT> c,
+         mapper_function_type mapper,
+         ttg::meta::detail::keymap_t<mapper_ret_type> ckeymap
+         ) : p(1) {
+      c.keymap = ckeymap;
+      c.mapper = mapper;
+      p[0] = std::make_shared<EdgeImpl>(name, is_pull, c, mapper);
+    }
 
     /// Edge carrying a tuple of values
     template <typename... valuesT, typename = std::enable_if_t<(std::is_same_v<valuesT, valueT> && ...)>>
@@ -114,6 +149,10 @@ namespace ttg {
         if (!edge->ins.empty()) return true;
       }
       return result;
+    }
+
+    bool is_pull_edge() const {
+      return p.at(0)->is_pull_edge;
     }
 
     /// Sets the output terminal that goes into this Edge

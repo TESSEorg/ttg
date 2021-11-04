@@ -11,8 +11,46 @@
 #include "ttg/util/meta.h"
 #include "ttg/util/trace.h"
 #include "ttg/world.h"
+#include "ttg/base/keymap.h"
+#include "boost/callable_traits.hpp"
 
 namespace ttg {
+  template<typename tkeyT, typename keyT, typename valueT>
+  struct Container : std::any {
+    std::function<valueT (keyT const& key, Container const&)> get = nullptr;
+    ttg::meta::detail::keymap_t<keyT> keymap;
+    meta::detail::mapper_function_t<tkeyT> mapper;
+
+    Container() = default;
+
+    template<class T, std::enable_if_t<!std::is_same<std::decay_t<T>,
+                                                     Container>{}, bool> = true>
+    //Store a pointer to the user's container in std::any, no copies
+    Container(T &t) : std::any(&t)
+                    ,get([this](keyT const &key, Container const& self) {
+                            //at method returns a const ref to the item.
+                            //TODO: Compile-time error handling
+                            using key_type = typename T::key_type;
+                            return (std::any_cast<T*>(self))->at(std::any_cast<key_type>(key));
+                          })
+      {}
+  };
+
+  template <typename valueT> struct Container<void, void, valueT> {
+    std::function<std::nullptr_t ()> get = nullptr;
+  };
+
+  template <typename keyT> struct Container<void, keyT, void> {
+    std::function<std::nullptr_t (keyT const& key, Container const& self)> get = nullptr;
+  };
+
+  template <typename valueT> struct Container<ttg::Void, void, valueT> {
+    std::function<std::nullptr_t ()> get = nullptr;
+  };
+
+  template <> struct Container<void, void, void> {
+    std::function<std::nullptr_t ()> get = nullptr;
+  };
 
   /// \brief Base type for input terminals receiving messages annotated by task IDs of type `keyT`
   /// \tparam <keyT> a task ID type (can be `void`)
@@ -76,6 +114,7 @@ namespace ttg {
   /// \tparam <keyT> a task ID type (can be `void`)
   /// \tparam <valueT> a data type (can be `void`); a const `valueT` indicates that the incoming data is passed by
   ///         const reference
+
   template <typename keyT = void, typename valueT = void>
   class In : public InTerminalBase<keyT> {
    public:
@@ -93,6 +132,10 @@ namespace ttg {
     using setsize_callback_type = typename base_type::setsize_callback_type;
     using finalize_callback_type = typename base_type::finalize_callback_type;
     static constexpr bool is_an_input_terminal = true;
+
+    using mapper_ret_type = boost::callable_traits::return_type_t<meta::detail::mapper_function_t<keyT>>;
+    Container<keyT, mapper_ret_type, valueT> container;
+    meta::detail::mapper_function_t<keyT> mapper;
 
    private:
     send_callback_type send_callback;
@@ -360,11 +403,34 @@ namespace ttg {
             ")");
 #endif
       this->connect_base(in);
+      //If I am a pull terminal, add me as (in)'s predecessor
+      if (is_pull_terminal)
+        in->connect_pull(this);
+    }
+
+    auto nsuccessors() const {
+      return get_connections().size();
+    }
+    const auto& successors() const {
+      return get_connections();
     }
 
     template <typename Key = keyT, typename Value = valueT>
-    std::enable_if_t<meta::is_none_void_v<Key, Value>, void> send(const Key &key, const Value &value) {
-      for (auto &&successor : this->successors()) {
+    std::enable_if_t<meta::is_none_void_v<Key,Value> && std::is_same_v<Value,std::remove_reference_t<Value>>,void>
+    send_to(const Key &key, Value &&value, std::size_t i)
+    {
+      //std::cout << "send_to called for successor " << i << " " << get_name() << "\n";
+      TerminalBase *successor = successors().at(i);
+      if (successor->get_type() == TerminalBase::Type::Read) {
+        static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
+      } else if (successor->get_type() == TerminalBase::Type::Consume) {
+        static_cast<In<keyT, valueT> *>(successor)->send(key, value);
+      }
+    }
+
+    template<typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<meta::is_none_void_v<Key,Value>,void> send(const Key &key, const Value &value) {
+      for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
