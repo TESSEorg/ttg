@@ -629,9 +629,9 @@ int main(int argc, char** argv) {
   }
 
   //Trigger the initiator on all other processes as well
-  if (world_size > 1 && ttg_default_execution_context().rank() != 0) {
+  /*if (world_size > 1 && ttg_default_execution_context().rank() != 0) {
     i->invoke(Key(my_rank,0));
-  }
+  }*/
 
   execute();
   fence();
