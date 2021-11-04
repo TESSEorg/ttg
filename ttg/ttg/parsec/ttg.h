@@ -11,6 +11,7 @@
 /* include ttg header to make symbols available in case this header is included directly */
 #include "../../ttg.h"
 
+#include "ttg/attributes.h"
 #include "ttg/base/keymap.h"
 #include "ttg/base/tt.h"
 #include "ttg/base/world.h"
@@ -832,8 +833,41 @@ namespace ttg_parsec {
         make_finalize_argstream_fcts(std::make_index_sequence<numins>{});
 
     ttg::World world;
-    ttg::meta::detail::keymap_t<keyT> keymap;
-    ttg::meta::detail::keymap_t<keyT> priomap;
+
+    ttg::tt_attribute_set_t<keyT> attributes;
+
+    // wrapper for attribute keymap
+    template<typename KeyT, typename = std::enable_if_t<!ttg::meta::is_void_v<KeyT>>>
+    inline int keymap(KeyT&& key) const {
+      return get_attribute<ttg::Attribute::PROCESS>(key);
+    }
+
+    inline int keymap() const {
+      if constexpr (ttg::meta::is_void_v<keyT>) {
+        return get_attribute<ttg::Attribute::PROCESS>().get();
+      } else {
+        // will never be used, but we cannot disable this function using enable_if
+        throw std::logic_error("UNREACHABLE!");
+      }
+    }
+
+    // wrapper for attribute priomap
+    template<typename KeyT, typename = std::enable_if_t<!ttg::meta::is_void_v<KeyT>>>
+    inline
+    int priomap(KeyT&& key) const {
+      return get_attribute<ttg::Attribute::PRIORITY>(key);
+    }
+
+    inline
+    int priomap() const {
+      if constexpr (ttg::meta::is_void_v<keyT>) {
+        return get_attribute<ttg::Attribute::PRIORITY>().get();
+      } else {
+        // will never be used, but we cannot disable this function using enable_if
+        throw std::logic_error("UNREACHABLE!");
+      }
+    }
+
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<input_valueTs...>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
@@ -2315,12 +2349,15 @@ namespace ttg_parsec {
        ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT() )
         : ttg::TTBase(name, numins, numouts)
         , world(world)
-        // if using default keymap, rebind to the given world
-        , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
-                     ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
-                     : decltype(keymap)(std::forward<keymapT>(keymap_)))
-        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_)))
         , static_stream_goal() {
+
+      // if using default keymap, rebind to the given world
+      if constexpr (std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value) {
+        set_attribute<ttg::Attribute::PROCESS>(ttg::detail::default_keymap<keyT>(world));
+      } else {
+        set_attribute<ttg::Attribute::PROCESS>(keymap_);
+      }
+
       // Cannot call these in base constructor since terminals not yet constructed
       if (innames.size() != std::tuple_size<input_terminals_type>::value)
         throw std::logic_error("ttg_parsec::OP: #input names != #input terminals");
@@ -2540,138 +2577,47 @@ namespace ttg_parsec {
       ttg::TTBase::make_executable();
     }
 
-    /**
-     * A set of attributes supported by TTG.
-     */
-    enum class Attribute : size_t {
-      PRIORITY = 0,
-      PROCESS,
-      FINAL,
-      SOURCE,
-      IMMEDIATE
-    };
-
     /// priomap setter
     /// @arg pm a function that maps a key to an integral priority value.
     template <typename Priomap>
     [[deprecated("Use set_attribute_map with Attribute::PRIORITY")]]
     void set_priomap(Priomap &&pm) {
-      set_attribute_map<Attribute::PRIORITY>(std::forward<Priomap>(pm));
+      set_attribute<ttg::Attribute::PRIORITY>(std::forward<Priomap>(pm));
     }
 
     /// keymap setter
     template <typename Keymap>
+    [[deprecated("Use set_attribute_map with Attribute::PROCESS")]]
     void set_keymap(Keymap &&km) {
-      set_attribute_map<Attribute::PROCESS>(std::forward<Keymap>(km));
+      set_attribute<ttg::Attribute::PROCESS>(std::forward<Keymap>(km));
     }
 
-    /**
-     * An attribute value that can store either a fixed value or a function
-     * to query that value based on a provided key.
-     */
-    template<typename KeyT, typename ValueT>
-    struct AttributeValue {
-      using value_type = std::decay_t<ValueT>;
-      using key_type   = std::decay_t<KeyT>;
-      using function_type = std::function<value_type(const key_type&)>;
-    private:
-      std::variant<function_type, value_type> v;
-      bool has_function = false;
-    public:
-
-      AttributeValue() : v(value_type{})
-      { }
-
-      template<typename Value_>
-      AttributeValue(Value_&& value) : v(std::forward<Value_>(value))
-      { }
-
-      void set(const function_type& fn) {
-        std::get<0>(v) = fn;
-        has_function = true;
-      }
-
-      void set(function_type&& fn) {
-        std::get<0>(v) = std::forward<function_type>(fn);
-        has_function = true;
-      }
-
-      void set(const value_type& val) {
-        std::get<1>(v) = val;
-        has_function = false;
-      }
-
-      void set(value_type&& val) {
-        std::get<1>(v) = std::forward<value_type>(val);
-        has_function = false;
-      }
-
-      value_type get(const KeyT& key) {
-        return has_function ? std::get<0>(v)(key) : std::get<1>(v);
-      }
-
-    };
-
-
-    /* Overload for keys of type void */
-    template<typename ValueT>
-    struct AttributeValue<void, ValueT> {
-      using value_type = std::decay_t<ValueT>;
-      using function_type = std::function<value_type(void)>;
-    private:
-      std::variant<function_type, value_type> v;
-      bool has_function = false;
-    public:
-
-      AttributeValue() : v(value_type{})
-      { }
-
-      template<typename Value_>
-      AttributeValue(Value_&& value) : v(std::forward<Value_>(value))
-      { }
-
-      void set(const function_type& fn) {
-        std::get<0>(v) = fn;
-      }
-
-      void set(function_type&& fn) {
-        std::get<0>(v) = std::forward<function_type>(fn);
-      }
-
-      void set(const value_type& val) {
-        std::get<1>(v) = val;
-      }
-
-      void set(value_type&& val) {
-        std::get<1>(v) = std::forward<value_type>(val);
-      }
-
-      value_type get() {
-        return has_function ? std::get<0>(v)() : std::get<1>(v);
-      }
-
-    };
-
-
-    std::tuple<AttributeValue<keyT, int32_t>,
-               AttributeValue<keyT, int32_t>,
-               AttributeValue<keyT, bool>,
-               AttributeValue<keyT, bool>,
-               AttributeValue<keyT, bool>> keymaps;
-
-    template<Attribute A, typename Map>
-    void set_attribute_map(Map&& op) {
-      std::get<A>(keymaps).set(std::forward<Map>(op));
+    template<ttg::Attribute A, typename ValueOrFnT>
+    void set_attribute(ValueOrFnT&& x) {
+      static_assert(std::tuple_element_t<(size_t)A, ttg::tt_attribute_set_t<keyT>>::attribute_id == A, "Someone broke the attributes order!");
+      std::get<(size_t)A>(attributes).set(std::forward<ValueOrFnT>(x));
     }
 
-    template<Attribute A, typename Value>
-    void set_attribute_value(Value&& val) {
-      std::get<A>(keymaps).set(std::forward<Value>(val));
+    template<ttg::Attribute A, typename KeyT, typename = std::enable_if_t<!std::is_void_v<KeyT>>>
+    const auto get_attribute(KeyT&& key) const {
+      static_assert(std::tuple_element_t<(size_t)A, ttg::tt_attribute_set_t<keyT>>::attribute_id == A, "Someone broke the attributes order!");
+      return std::get<(size_t)A>(attributes).get(key);
     }
 
-    template<Attribute A, typename KeyT>
-    const auto& get_attribute(KeyT&& key) {
-      return std::get<A>(keymaps).get(key);
+    template<ttg::Attribute A, typename KeyT, typename = std::enable_if_t<std::is_void_v<KeyT>>>
+    const auto get_attribute() const {
+      static_assert(std::tuple_element_t<(size_t)A, ttg::tt_attribute_set_t<keyT>>::attribute_id == A, "Someone broke the attributes order!");
+      return std::get<(size_t)A>(attributes).get();
+    }
+
+    template<ttg::Attribute A>
+    const auto& get_attribute(void) const {
+      static_assert(std::tuple_element_t<(size_t)A, ttg::tt_attribute_set_t<keyT>>::attribute_id == A, "Someone broke the attributes order!");
+      return std::get<(size_t)A>(attributes);
+    }
+
+    inline const auto& get_keymap() const {
+      return get_attribute<ttg::Attribute::PROCESS>();
     }
 
     // Register the static_op function to associate it to instance_id

@@ -26,6 +26,7 @@ set(ttg-base-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/world.h
     )
 set(ttg-impl-headers
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/attributes.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/broadcast.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/edge.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/execution.h
