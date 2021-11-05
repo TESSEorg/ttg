@@ -784,6 +784,7 @@ namespace ttg_parsec {
     using input_refs_tuple_type =
         std::conditional_t<ttg::meta::is_none_void_v<input_edge_typesT>, input_refs_full_tuple_type,
                            typename ttg::meta::drop_last_n<input_refs_full_tuple_type, std::size_t{1}>::type>;
+    using input_crefs_tuple_type = ttg::meta::add_const_tuple_t<input_refs_tuple_type>;
     using args_refs_tuple_type =
         std::conditional_t<ttg::meta::is_none_void_v<input_edge_typesT>, args_refs_full_tuple_type,
                            typename ttg::meta::drop_last_n<args_refs_full_tuple_type, std::size_t{1}>::type>;
@@ -866,7 +867,7 @@ namespace ttg_parsec {
 
     template <std::size_t... IS>
     static args_refs_tuple_type make_tuple_of_ref_from_array(task_t *task, std::index_sequence<IS...>) {
-      return input_refs_tuple_type{static_cast<typename std::tuple_element<IS, args_refs_tuple_type>::type>(
+      return args_refs_tuple_type{static_cast<typename std::tuple_element<IS, args_refs_tuple_type>::type>(
           *reinterpret_cast<std::remove_reference_t<typename std::tuple_element<IS, args_refs_tuple_type>::type> *>(
               task->parsec_task.data[IS].data_in->device_private))...};
     }
@@ -1370,7 +1371,7 @@ namespace ttg_parsec {
             }
             task->parsec_task.data[i].data_in = copy;
           } else {
-            reducer(*reinterpret_cast<std::decay_t<valueT> *>(copy->device_private), value);
+            reducer(*reinterpret_cast<std::decay_t<input_arg_type>*>(copy->device_private), value);
           }
         } else {
           reducer();  // even if this was a control input, must execute the reducer for possible side effects
@@ -1910,7 +1911,7 @@ namespace ttg_parsec {
     // Used by invoke to set all arguments associated with a task
     template <typename Key, size_t... IS>
     std::enable_if_t<ttg::meta::is_none_void_v<Key>, void> set_args(std::index_sequence<IS...>, const Key &key,
-                                                                    const input_refs_tuple_type &args) {
+                                                                    const input_crefs_tuple_type &args) {
       int junk[] = {0, (set_arg<IS>(key, TT::get<IS>(args)), 0)...};
       junk[0]++;
     }
@@ -1918,7 +1919,7 @@ namespace ttg_parsec {
     // Used by invoke to set all arguments associated with a task
     template <typename Key = keyT, size_t... IS>
     std::enable_if_t<ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<IS...>,
-                                                               const input_refs_tuple_type &args) {
+                                                               const input_crefs_tuple_type &args) {
       int junk[] = {0, (set_arg<IS>(TT::get<IS>(args)), 0)...};
       junk[0]++;
     }
@@ -2521,38 +2522,40 @@ namespace ttg_parsec {
 
     // Manual injection of a task with all input arguments specified as a tuple
     template <typename Key = keyT>
-    std::enable_if_t<!ttg::meta::is_void_v<Key> && !ttg::meta::is_empty_tuple_v<input_refs_tuple_type>, void> invoke(
-        const Key &key, const input_refs_tuple_type &args) {
+    std::enable_if_t<!ttg::meta::is_void_v<Key> &&
+                     !ttg::meta::is_empty_tuple_v<input_crefs_tuple_type>, void>
+    invoke(const Key &key, const input_crefs_tuple_type &args) {
       TTG_OP_ASSERT_EXECUTABLE();
-      set_args(std::make_index_sequence<std::tuple_size<input_refs_tuple_type>::value>{}, key, args);
+      set_args(std::make_index_sequence<std::tuple_size<input_crefs_tuple_type>::value>{}, key, args);
     }
 
     // Manual injection of a key-free task and all input arguments specified as a tuple
     template <typename Key = keyT>
-    std::enable_if_t<ttg::meta::is_void_v<Key> && !ttg::meta::is_empty_tuple_v<input_refs_tuple_type>, void> invoke(
-        const input_refs_tuple_type &args) {
+    std::enable_if_t<ttg::meta::is_void_v<Key> && !ttg::meta::is_empty_tuple_v<input_crefs_tuple_type>, void>
+    invoke(const input_crefs_tuple_type &args) {
       TTG_OP_ASSERT_EXECUTABLE();
-      set_args(std::make_index_sequence<std::tuple_size<input_refs_tuple_type>::value>{}, args);
+      set_args(std::make_index_sequence<std::tuple_size<input_crefs_tuple_type>::value>{}, args);
     }
 
     // Manual injection of a task that has no arguments
     template <typename Key = keyT>
-    std::enable_if_t<!ttg::meta::is_void_v<Key> && ttg::meta::is_empty_tuple_v<input_refs_tuple_type>, void> invoke(
-        const Key &key) {
+    std::enable_if_t<!ttg::meta::is_void_v<Key> && ttg::meta::is_empty_tuple_v<input_crefs_tuple_type>, void>
+    invoke(const Key &key) {
       TTG_OP_ASSERT_EXECUTABLE();
       set_arg<keyT>(key);
     }
 
     // Manual injection of a task that has no key or arguments
     template <typename Key = keyT>
-    std::enable_if_t<ttg::meta::is_void_v<Key> && ttg::meta::is_empty_tuple_v<input_refs_tuple_type>, void> invoke() {
+    std::enable_if_t<ttg::meta::is_void_v<Key> && ttg::meta::is_empty_tuple_v<input_crefs_tuple_type>, void>
+    invoke() {
       TTG_OP_ASSERT_EXECUTABLE();
       set_arg<keyT>();
     }
 
     // overrides TTBase::invoke()
     void invoke() override {
-      if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_refs_tuple_type>)
+      if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_crefs_tuple_type>)
         invoke<keyT>();
       else
         TTBase::invoke();

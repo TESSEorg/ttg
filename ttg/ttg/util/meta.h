@@ -67,7 +67,7 @@ namespace ttg {
     };
 
     // tuple<Ts...> -> tuple<std::remove_reference_t<Ts>...>
-    template <typename T, typename Enabler = void>
+    template <typename T>
     struct nonref_tuple;
 
     template <typename... Ts>
@@ -79,7 +79,7 @@ namespace ttg {
     using nonref_tuple_t = typename nonref_tuple<Tuple>::type;
 
     // tuple<Ts...> -> tuple<std::decay_t<Ts>...>
-    template <typename T, typename Enabler = void>
+    template <typename T>
     struct decayed_tuple;
 
     template <typename... Ts>
@@ -89,6 +89,33 @@ namespace ttg {
 
     template <typename Tuple>
     using decayed_tuple_t = typename decayed_tuple<Tuple>::type;
+
+
+    // like std::add_const but adds const to references
+    template<typename T>
+    struct add_const {
+      using type = std::add_const_t<T>;
+    };
+
+    template<typename T>
+    struct add_const<T&> {
+      using type = std::add_lvalue_reference_t<std::add_const_t<T>>;
+    };
+
+    template<typename T>
+    using add_const_t = typename add_const<T>::type;
+
+    // tuple<Ts...> -> tuple<std::add_const<Ts>...>
+    template <typename T>
+    struct add_const_tuple;
+
+    template <typename... Ts>
+    struct add_const_tuple<std::tuple<Ts...>> {
+      using type = std::tuple<typename add_const<Ts>::type...>;
+    };
+
+    template <typename Tuple>
+    using add_const_tuple_t = typename add_const_tuple<Tuple>::type;
 
     template <typename Tuple1, typename Tuple2>
     struct tuple_concat;

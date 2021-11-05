@@ -3,6 +3,9 @@
 
 #include "ttg.h"
 
+#include "ttg/serialization.h"
+#include "ttg/serialization/std/vector.h"
+
 /* TODO: Get rid of using statement */
 using namespace ttg;
 
@@ -301,6 +304,55 @@ class Everything5 {
   }
 };
 
+
+class Everything6 {
+  static void p(std::tuple<Out<keyT, int>> &out) {
+    ttg::print("produced ", 0);
+    send<0>(0, 0, out);
+  }
+
+  static void a(const keyT &key, const int &value, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
+    if (value < 100) {
+      send<1>(key + 1, value + 1, out);
+      sendv<0>(value, out);
+    }
+  }
+
+  static void c(const std::vector<int> &values, std::tuple<> &out) { ttg::print("consumed ", values.size()); }
+
+  // !!!! Edges must be constructed before classes that use them
+  Edge<keyT, int> P2A, A2A;
+  Edge<void, int> A2C;
+
+  decltype(make_tt<void>(p, edges(), edges(P2A))) wp;
+  decltype(make_tt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A))) wa;
+  decltype(make_tt(c, edges(A2C), edges())) wc;
+
+ public:
+  Everything6()
+      : P2A("P2A")
+      , A2A("A2A")
+      , A2C("A2C")
+      , wp(make_tt<void>(p, edges(), edges(P2A), "producer", {}, {"start"}))
+      , wa(make_tt(a, edges(fuse(P2A, A2A)), edges(A2C, A2A), "A", {"input"}, {"result", "iterate"}))
+      , wc(make_tt(c, edges(A2C), edges(), "consumer", {"result"}, {})) {
+    wc->set_input_reducer<0>([](std::vector<int> &a, const int &b) { a.push_back(b); });
+    if (wc->get_world().rank() == 0) wc->set_argstream_size<0>(100);
+  }
+
+  void print() { print_ttg(wp.get()); }
+
+  std::string dot() { return Dot{}(wp.get()); }
+
+  void start() {
+    wp->make_executable();
+    wa->make_executable();
+    wc->make_executable();
+    if (wp->get_world().rank() == 0) wp->invoke();
+  }
+};
+
+
 class EverythingComposite {
   std::unique_ptr<TTBase> P;
   std::unique_ptr<TTBase> AC;
@@ -574,6 +626,10 @@ int try_main(int argc, char **argv) {
       Everything5 q5;
       std::cout << q5.dot() << std::endl;
       q5.start();
+
+      Everything6 q6;
+      std::cout << q6.dot() << std::endl;
+      q6.start();
 
       Fibonacci fi;
       std::cout << fi.dot() << std::endl << std::endl;
