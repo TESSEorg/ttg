@@ -178,6 +178,20 @@ namespace ttg {
     }
   };
 
+  template<typename keyT, typename... valuesT>
+  struct input_terminals_tuple {
+    using type = std::tuple<ttg::In<keyT, valuesT>...>;
+  };
+
+  template<typename keyT, typename... valuesT>
+  struct input_terminals_tuple<keyT, std::tuple<valuesT...>> {
+    using type = std::tuple<ttg::In<keyT, valuesT>...>;
+  };
+
+  template<typename keyT, typename... valuesT>
+  using input_terminals_tuple_t = typename input_terminals_tuple<keyT, valuesT...>::type;
+
+
   // Output terminal
   template <typename keyT = void, typename valueT = void>
   class Out : public TerminalBase {
@@ -381,6 +395,20 @@ namespace ttg {
       }
     }
   };
+
+  template<typename keyT, typename... valuesT>
+  struct output_terminals_tuple {
+    using type = std::tuple<ttg::Out<keyT, valuesT>...>;
+  };
+
+  template<typename keyT, typename... valuesT>
+  struct output_terminals_tuple<keyT, std::tuple<valuesT...>> {
+    using type = std::tuple<ttg::Out<keyT, valuesT>...>;
+  };
+
+  template<typename keyT, typename... valuesT>
+  using output_terminals_tuple_t = typename output_terminals_tuple<keyT, valuesT...>::type;
+
 
 } // namespace ttg
 

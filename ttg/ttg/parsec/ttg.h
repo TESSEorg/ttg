@@ -738,10 +738,12 @@ namespace ttg_parsec {
     };
   }  // namespace detail
 
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
+  template <typename keyT, typename output_terminalsT, typename derivedT,
+            typename input_edge_typesT, typename input_argsT>
   class TT : public ttg::TTBase, detail::ParsecTTBase {
-   private:
-    using ttT = TT<keyT, output_terminalsT, derivedT, input_valueTs...>;
+  protected:
+    using ttT = TT<keyT, output_terminalsT, derivedT, input_edge_typesT, input_argsT>;
+  private:
     parsec_mempool_t mempools;
 
     // check for a non-type member named have_cuda_op
@@ -751,8 +753,8 @@ namespace ttg_parsec {
     bool alive = true;
 
    public:
-    static constexpr int numins = sizeof...(input_valueTs);                    // number of input arguments
-    static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs
+    static constexpr int numins = std::tuple_size_v<input_edge_typesT>;        // number of input arguments
+    static constexpr int numouts = std::tuple_size_v<output_terminalsT>;       // number of outputs
     static constexpr int numflows = std::max(numins, numouts);                 // max number of flows
 
     /// @return true if derivedT::have_cuda_op exists and is defined to true
@@ -764,25 +766,34 @@ namespace ttg_parsec {
       }
     }
 
-    using input_terminals_type = std::tuple<ttg::In<keyT, input_valueTs>...>;
-    using input_args_type = std::tuple<input_valueTs...>;
-    using input_edges_type = std::tuple<ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
-    static_assert(ttg::meta::is_none_Void_v<input_valueTs...>, "ttg::Void is for internal use only, do not use it");
+    using input_terminals_type = ttg::input_terminals_tuple_t<keyT, input_edge_typesT>;
+    using input_args_type = input_argsT;
+    using input_edges_type = ttg::edges_tuple_t<keyT, ttg::meta::decayed_tuple_t<input_edge_typesT>>;
+    static_assert(ttg::meta::is_none_Void_v<input_edge_typesT>, "ttg::Void is for internal use only, do not use it");
+    static_assert(ttg::meta::is_none_Void_v<input_argsT>,       "ttg::Void is for internal use only, do not use it");
     // if have data inputs and (always last) control input, convert last input to Void to make logic easier
-    using input_values_full_tuple_type = std::tuple<ttg::meta::void_to_Void_t<std::decay_t<input_valueTs>>...>;
+    using input_values_full_tuple_type = ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<input_edge_typesT>>;
     using input_refs_full_tuple_type =
-        std::tuple<std::add_lvalue_reference_t<ttg::meta::void_to_Void_t<input_valueTs>>...>;
+        ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<input_edge_typesT>>;
+    using args_refs_full_tuple_type =
+        ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<input_argsT>>;
     using input_values_tuple_type =
-        std::conditional_t<ttg::meta::is_none_void_v<input_valueTs...>, input_values_full_tuple_type,
+        std::conditional_t<ttg::meta::is_none_void_v<input_edge_typesT>, input_values_full_tuple_type,
                            typename ttg::meta::drop_last_n<input_values_full_tuple_type, std::size_t{1}>::type>;
     static_assert(!ttg::meta::is_any_void_v<input_values_tuple_type>);
     using input_refs_tuple_type =
-        std::conditional_t<ttg::meta::is_none_void_v<input_valueTs...>, input_refs_full_tuple_type,
+        std::conditional_t<ttg::meta::is_none_void_v<input_edge_typesT>, input_refs_full_tuple_type,
                            typename ttg::meta::drop_last_n<input_refs_full_tuple_type, std::size_t{1}>::type>;
-    using input_unwrapped_values_tuple_type = input_values_tuple_type;
+    using args_refs_tuple_type =
+        std::conditional_t<ttg::meta::is_none_void_v<input_edge_typesT>, args_refs_full_tuple_type,
+                           typename ttg::meta::drop_last_n<args_refs_full_tuple_type, std::size_t{1}>::type>;
     static constexpr int numinvals =
         std::tuple_size_v<input_refs_tuple_type>;  // number of input arguments with values (i.e. omitting the control
                                                    // input, if any)
+
+    static_assert(std::tuple_size_v<input_refs_tuple_type> == std::tuple_size_v<args_refs_tuple_type>,
+                  "Number of input edge types must match number of invocation arguments!");
+
 
     using output_terminals_type = output_terminalsT;
     using output_edges_type = typename ttg::terminals_to_edges<output_terminalsT>::type;
@@ -833,7 +844,7 @@ namespace ttg_parsec {
     ttg::meta::detail::keymap_t<keyT> keymap;
     ttg::meta::detail::keymap_t<keyT> priomap;
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
-    ttg::meta::detail::input_reducers_t<input_valueTs...>
+    ttg::meta::detail::input_reducers_t<input_args_type, input_edge_typesT>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
     std::array<std::size_t, numins> static_stream_goal;
 
@@ -854,9 +865,9 @@ namespace ttg_parsec {
     }
 
     template <std::size_t... IS>
-    static input_refs_tuple_type make_tuple_of_ref_from_array(task_t *task, std::index_sequence<IS...>) {
-      return input_refs_tuple_type{static_cast<typename std::tuple_element<IS, input_refs_tuple_type>::type>(
-          *reinterpret_cast<std::remove_reference_t<typename std::tuple_element<IS, input_refs_tuple_type>::type> *>(
+    static args_refs_tuple_type make_tuple_of_ref_from_array(task_t *task, std::index_sequence<IS...>) {
+      return input_refs_tuple_type{static_cast<typename std::tuple_element<IS, args_refs_tuple_type>::type>(
+          *reinterpret_cast<std::remove_reference_t<typename std::tuple_element<IS, args_refs_tuple_type>::type> *>(
               task->parsec_task.data[IS].data_in->device_private))...};
     }
 
@@ -875,12 +886,12 @@ namespace ttg_parsec {
       }
 
       if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-        input_refs_tuple_type input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
+        auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
         baseobj->template op<Space>(task->key, std::move(input), obj->output_terminals);
       } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
         baseobj->template op<Space>(task->key, obj->output_terminals);
       } else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-        input_refs_tuple_type input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
+        auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
         baseobj->template op<Space>(std::move(input), obj->output_terminals);
       } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
         baseobj->template op<Space>(obj->output_terminals);
@@ -1311,6 +1322,15 @@ namespace ttg_parsec {
       task_t *task;
       auto &world_impl = world.impl();
       auto &reducer = std::get<i>(input_reducers);
+      using input_arg_type = std::decay_t<std::tuple_element_t<i, input_args_type>>;
+      using decay_value_t = std::decay_t<valueT>;
+      constexpr const bool edge_arg_same_type = std::is_same_v<decay_value_t, input_arg_type>;
+      if constexpr (!edge_arg_same_type && !std::is_convertible_v<decay_value_t, input_arg_type>) {
+        /* if the types don't match and are not convertible we have to rely on a reducer to be available */
+        if (!reducer) {
+          throw std::logic_error("Types are not convertible and no reducer was set!");
+        }
+      }
       bool release = false;
       bool remove_from_hash = true;
       /* If we have only one input and no reducer on that input we can skip the hash table */
@@ -1339,9 +1359,14 @@ namespace ttg_parsec {
           if (nullptr == (copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in))) {
             using decay_valueT = std::decay_t<valueT>;
             if (nullptr == copy_in) {
-              copy = detail::create_new_datacopy(std::forward<Value>(value));
+              if constexpr(edge_arg_same_type) {
+                copy = detail::create_new_datacopy(std::forward<Value>(value));
+              } else {
+                /* need to convert */
+                copy = detail::create_new_datacopy(static_cast<input_arg_type>(value));
+              }
             } else {
-              copy = detail::register_data_copy<valueT>(copy_in, task, input_is_const);
+              copy = detail::register_data_copy<input_arg_type>(copy_in, task, input_is_const);
             }
             task->parsec_task.data[i].data_in = copy;
           } else {
@@ -1373,9 +1398,14 @@ namespace ttg_parsec {
 
           if (nullptr != copy) {
             /* register_data_copy might provide us with a different copy if !input_is_const */
-            copy = detail::register_data_copy<valueT>(copy, task, input_is_const);
+            copy = detail::register_data_copy<input_arg_type>(copy, task, input_is_const);
           } else {
-            copy = detail::create_new_datacopy(std::forward<Value>(value));
+            if constexpr(edge_arg_same_type) {
+              copy = detail::create_new_datacopy(std::forward<Value>(value));
+            } else {
+              /* need to convert */
+              copy = detail::create_new_datacopy(static_cast<input_arg_type>(value));
+            }
           }
           /* if we registered as a writer and were the first to register with this copy
            * we need to defer the release of this task to give other tasks a chance to

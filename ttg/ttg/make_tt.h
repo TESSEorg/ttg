@@ -10,9 +10,13 @@
 //
 template <typename funcT, typename keyT, typename output_terminalsT, typename... input_valuesT>
 class CallableWrapTT : public TT<keyT, output_terminalsT,
-                                 CallableWrapTT<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...> {
+                                 CallableWrapTT<funcT, keyT, output_terminalsT, input_valuesT...>,
+                                 std::tuple<input_valuesT...>,
+                                 std::decay_t<std::tuple_element_t<ttg::meta::is_void_v<keyT> ? 0 : 1, boost::callable_traits::args_t<funcT>>>> {
   using baseT =
-      TT<keyT, output_terminalsT, CallableWrapTT<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...>;
+      TT<keyT, output_terminalsT, CallableWrapTT<funcT, keyT, output_terminalsT, input_valuesT...>,
+         std::tuple<input_valuesT...>,
+         std::decay_t<std::tuple_element_t<ttg::meta::is_void_v<keyT> ? 0 : 1, boost::callable_traits::args_t<funcT>>>>;
 
   using input_values_tuple_type = typename baseT::input_values_tuple_type;
   using input_refs_tuple_type = typename baseT::input_refs_tuple_type;
@@ -65,14 +69,14 @@ class CallableWrapTT : public TT<keyT, output_terminalsT,
   }
 
   template <typename Key, typename ArgsTuple = input_values_tuple_type>
-  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && !ttg::meta::is_void_v<Key>, void> op(
-      Key &&key, output_terminalsT &out) {
+  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && !ttg::meta::is_void_v<Key>, void>
+  op(Key &&key, output_terminalsT &out) {
     call_func(std::forward<Key>(key), out);
   }
 
   template <typename Key = keyT, typename ArgsTuple = input_values_tuple_type>
-  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && ttg::meta::is_void_v<Key>, void> op(
-      output_terminalsT &out) {
+  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && ttg::meta::is_void_v<Key>, void>
+  op(output_terminalsT &out) {
     call_func(out);
   }
 };
@@ -93,9 +97,17 @@ struct CallableWrapTTUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<inpu
 template <typename funcT, typename keyT, typename output_terminalsT, typename... input_valuesT>
 class CallableWrapTTArgs
     : public TT<keyT, output_terminalsT, CallableWrapTTArgs<funcT, keyT, output_terminalsT, input_valuesT...>,
-                input_valuesT...> {
+                std::tuple<input_valuesT...>,
+                typename ttg::meta::drop_last_n<
+                            typename ttg::meta::drop_first_n<boost::callable_traits::args_t<funcT>,
+                                                             ttg::meta::is_void_v<keyT> ? 0 : 1>::type,
+                            1>::type> {
   using baseT = TT<keyT, output_terminalsT, CallableWrapTTArgs<funcT, keyT, output_terminalsT, input_valuesT...>,
-                   input_valuesT...>;
+                   std::tuple<input_valuesT...>,
+                   typename ttg::meta::drop_last_n<
+                              typename ttg::meta::drop_first_n<boost::callable_traits::args_t<funcT>,
+                                                               ttg::meta::is_void_v<keyT> ? 0 : 1>::type,
+                              1>::type>;
 
   using input_values_tuple_type = typename baseT::input_values_tuple_type;
   using input_refs_tuple_type = typename baseT::input_refs_tuple_type;
@@ -157,14 +169,14 @@ class CallableWrapTTArgs
   };
 
   template <typename Key, typename ArgsTuple = input_refs_tuple_type>
-  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && !ttg::meta::is_void_v<Key>, void> op(
-      Key &&key, output_terminalsT &out) {
+  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && !ttg::meta::is_void_v<Key>, void>
+  op(Key &&key, output_terminalsT &out) {
     call_func(std::forward<Key>(key), out);
   };
 
   template <typename Key = keyT, typename ArgsTuple = input_refs_tuple_type>
-  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && ttg::meta::is_void_v<Key>, void> op(
-      output_terminalsT &out) {
+  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && ttg::meta::is_void_v<Key>, void>
+  op(output_terminalsT &out) {
     call_func(out);
   };
 };

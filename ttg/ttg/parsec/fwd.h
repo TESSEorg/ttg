@@ -7,7 +7,8 @@
 
 namespace ttg_parsec {
 
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
+  template <typename keyT, typename output_terminalsT, typename derivedT,
+            typename input_edge_typesT = std::tuple<>, typename input_argsT = input_edge_typesT>
   class TT;
 
   /// \internal the OG name

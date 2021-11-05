@@ -155,6 +155,9 @@ namespace ttg {
     constexpr bool is_any_Void_v = (is_Void_v<Ts> || ...);
 
     template <typename... Ts>
+    constexpr bool is_any_Void_v<std::tuple<Ts...>> = (is_Void_v<Ts> || ...);
+
+    template <typename... Ts>
     constexpr bool is_none_void_v = !is_any_void_v<Ts...>;
 
     template <typename... Ts>
@@ -185,6 +188,29 @@ namespace ttg {
     };
     template <typename T>
     using void_to_Void_t = typename void_to_Void<T>::type;
+
+
+    template <typename... T>
+    struct void_to_Void_tuple;
+
+    template <typename... T>
+    struct void_to_Void_tuple<std::tuple<T...>> {
+      using type = std::tuple<void_to_Void_t<T>...>;
+    };
+
+    template <typename tupleT>
+    using void_to_Void_tuple_t = typename void_to_Void_tuple<std::decay_t<tupleT>>::type;
+
+    template <typename... T>
+    struct add_lvalue_reference_tuple;
+
+    template <typename... T>
+    struct add_lvalue_reference_tuple<std::tuple<T...>> {
+      using type = std::tuple<std::add_lvalue_reference_t<T>...>;
+    };
+
+    template <typename tupleT>
+    using add_lvalue_reference_tuple_t = typename add_lvalue_reference_tuple<tupleT>::type;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // is_empty_tuple
@@ -410,22 +436,27 @@ namespace ttg {
       //   &&)>...>
       // protected against void valueTs
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-      template <typename T, typename Enabler = void>
+      template <typename U, typename T, typename Enabler = void>
       struct input_reducer_type;
-      template <typename T>
-      struct input_reducer_type<T, std::enable_if_t<!is_void_v<T>>> {
-        using type = std::function<void(std::decay_t<T> &, const std::decay_t<T> &)>;
+      template <typename U, typename T>
+      struct input_reducer_type<U, T, std::enable_if_t<!is_void_v<T>>> {
+        using type = std::function<void(std::decay_t<U> &, const std::decay_t<T> &)>;
       };
-      template <typename T>
-      struct input_reducer_type<T, std::enable_if_t<is_void_v<T>>> {
+      template <typename U, typename T>
+      struct input_reducer_type<U, T, std::enable_if_t<is_void_v<T>>> {
         using type = std::function<void()>;
       };
-      template <typename... valueTs>
-      struct input_reducers {
-        using type = std::tuple<typename input_reducer_type<valueTs>::type...>;
+
+      template<typename... valueTs>
+      struct input_reducers;
+
+      template <typename... valueUs, typename... valueTs>
+      struct input_reducers<std::tuple<valueUs...>, std::tuple<valueTs...>> {
+        using type = std::tuple<typename input_reducer_type<valueUs, valueTs>::type...>;
       };
+
       template <typename... valueTs>
-      using input_reducers_t = typename input_reducers<valueTs...>::type;
+      using input_reducers_t = typename input_reducers<std::decay_t<valueTs>...>::type;
 
     }  // namespace detail
 
@@ -445,6 +476,31 @@ namespace ttg {
 
     template <typename T>
     constexpr bool is_iterable_v = is_iterable<T>::value;
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // The input argument types to the op() call of a TT
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template<typename KeyT, typename OpArgsTupleT>
+    struct op_input_args{
+      // drop the key (first) and output terminal (last) argument
+      using type = typename drop_last_n<typename drop_first_n<OpArgsTupleT, 1>::type, 1>::type;
+    };
+
+    template<typename OpArgsTupleT>
+    struct op_input_args<void, OpArgsTupleT>{
+      // drop the output terminal (last) argument
+      using type = typename drop_last_n<OpArgsTupleT, 1>::type;
+    };
+
+    template<typename OpArgsTupleT>
+    struct op_input_args<ttg::Void, OpArgsTupleT>{
+      // drop the output terminal (last) argument
+      using type = typename drop_last_n<OpArgsTupleT, 1>::type;
+    };
+
+    template<typename KeyT, typename OpArgsTupleT>
+    using op_input_args_t = typename op_input_args<KeyT, OpArgsTupleT>::type;
   } // namespace meta
 }  // namespace ttg
 

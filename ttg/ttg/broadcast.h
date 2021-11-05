@@ -26,10 +26,10 @@ namespace ttg {
   ///
   template <typename Value, typename OutKey = int>
   class BinaryTreeBroadcast : public TT<int, std::tuple<Out<int, Value>, Out<int, Value>, Out<OutKey, Value>>,
-                                        BinaryTreeBroadcast<Value, OutKey>, Value> {
+                                        BinaryTreeBroadcast<Value, OutKey>, std::tuple<Value>> {
    public:
     using baseT = TT<int, std::tuple<Out<int, Value>, Out<int, Value>, Out<OutKey, Value>>,
-                     BinaryTreeBroadcast<Value, OutKey>, Value>;
+                     BinaryTreeBroadcast<Value, OutKey>, std::tuple<Value>>;
 
     BinaryTreeBroadcast(Edge<int, Value> &in, Edge<OutKey, Value> &out, std::vector<OutKey> local_keys, int root = 0,
                         World world = ttg::default_execution_context(), int max_key = -1,
