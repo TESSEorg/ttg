@@ -218,9 +218,7 @@ namespace ttg {
               detail::demangled_type_name(this) + "\ntype of other Terminal" + detail::demangled_type_name(in));
       } else  // successor->type() == TerminalBase::Type::Write
         throw std::invalid_argument(std::string("you are trying to connect an Out terminal to another Out terminal"));
-      if (tracing()) {
-        print(rank(), ": connected Out<> ", get_name(), "(ptr=", this, ") to In<> ", in->get_name(), "(ptr=", in, ")");
-      }
+      trace(rank(), ": connected Out<> ", get_name(), "(ptr=", this, ") to In<> ", in->get_name(), "(ptr=", in, ")");
 #endif
       this->connect_base(in);
     }
@@ -270,9 +268,7 @@ namespace ttg {
 
     template<typename Key = keyT, typename Value = valueT>
     std::enable_if_t<meta::is_all_void_v<Key,Value>,void> send() {
-      if (tracing()) {
-        print(rank(), ": in ", get_name(), "(ptr=", this, ") Out<>::send: #successors=", successors().size());
-      }
+      trace(rank(), ": in ", get_name(), "(ptr=", this, ") Out<>::send: #successors=", successors().size());
       for (auto && successor : successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
@@ -283,9 +279,7 @@ namespace ttg {
         else {
           throw std::logic_error("Out<>: invalid successor type");
         }
-        if (tracing()) {
-          print("Out<> ", get_name(), "(ptr=", this, ") send to In<> ", successor->get_name(), "(ptr=", successor, ")");
-        }
+        trace("Out<> ", get_name(), "(ptr=", this, ") send to In<> ", successor->get_name(), "(ptr=", successor, ")");
       }
     }
 

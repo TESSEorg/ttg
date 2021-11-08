@@ -132,21 +132,44 @@ namespace ttg {
       abort();
     }
 
-    /// Sets trace for all operations to value and returns previous setting
+    /// Sets trace for all operations to value and returns previous setting.
+    /// This has no effect unless `trace_enabled()==true`
     static bool set_trace_all(bool value) {
-      std::swap(ttg::detail::tt_base_trace_accessor(), value);
+      if constexpr (trace_enabled())
+        std::swap(ttg::detail::tt_base_trace_accessor(), value);
       return value;
     }
 
-    /// Sets trace for just this instance to value and returns previous setting
+    /// Sets trace for just this instance to value and returns previous setting.
+    /// This has no effect unless `trace_enabled()==true`
     bool set_trace_instance(bool value) {
-      std::swap(trace_instance, value);
+      if constexpr (trace_enabled())
+        std::swap(trace_instance, value);
       return value;
     }
 
-    /// Returns true if tracing set for either this instance or all instances
-    bool get_trace() { return ttg::detail::tt_base_trace_accessor() || trace_instance; }
-    bool tracing() { return get_trace(); }
+    /// @return false if `trace_enabled()==false`, else true if tracing set for either this instance or all instances
+    bool get_trace() {
+      if constexpr (trace_enabled()) return ttg::detail::tt_base_trace_accessor() || trace_instance;
+    }
+
+    /// @return false if `trace_enabled()==false`, else true if tracing set for either this instance or all instances
+    bool tracing() {
+      if constexpr (trace_enabled())
+        return get_trace();
+      else
+        return false;
+    }
+
+    /// Like ttg::trace(), but only produces tracing output if `this->tracing()==true`
+    template <typename T, typename... Ts>
+    inline void trace(const T &t, const Ts &... ts) {
+      if constexpr (trace_enabled()) {
+        if (this->tracing()) {
+          log(t, ts...);
+        }
+      }
+    }
 
     std::optional<std::reference_wrapper<const TTBase>> ttg() const {
       return owning_ttg ? std::cref(*owning_ttg) : std::optional<std::reference_wrapper<const TTBase>>{};

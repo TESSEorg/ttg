@@ -5,11 +5,12 @@
 #include <mutex>
 
 namespace ttg {
+  constexpr char print_separator = ' ';
   namespace detail {
     inline std::ostream &print_helper(std::ostream &out) { return out; }
     template <typename T, typename... Ts>
     inline std::ostream &print_helper(std::ostream &out, const T &t, const Ts &... ts) {
-      out << ' ' << t;
+      out << print_separator << t;
       return print_helper(out, ts...);
     }
     //
@@ -21,6 +22,7 @@ namespace ttg {
     }
   }  // namespace detail
 
+  /// atomically prints to std::cout a sequence of items (separated by ttg::print_separator) followed by std::endl
   template <typename T, typename... Ts>
   void print(const T &t, const Ts &... ts) {
     std::lock_guard<std::mutex> lock(detail::print_mutex_accessor<detail::StdOstreamTag::Cout>());
@@ -28,11 +30,20 @@ namespace ttg {
     detail::print_helper(std::cout, ts...) << std::endl;
   }
 
+  /// atomically prints to std::cerr a sequence of items (separated by ttg::print_separator) followed by std::endl
   template <typename T, typename... Ts>
   void print_error(const T &t, const Ts &... ts) {
-    std::lock_guard<std::mutex> lock(detail::print_mutex_accessor<detail::StdOstreamTag::Cout>()); // don't mix cerr and cout
+    std::lock_guard<std::mutex> lock(detail::print_mutex_accessor<detail::StdOstreamTag::Cout>());
     std::cerr << t;
     detail::print_helper(std::cerr, ts...) << std::endl;
+  }
+
+  /// atomically prints to std::clog a sequence of items (separated by ttg::print_separator) followed by std::endl
+  template <typename T, typename... Ts>
+  void log(const T &t, const Ts &... ts) {
+    std::lock_guard<std::mutex> lock(detail::print_mutex_accessor<detail::StdOstreamTag::Cout>());
+    std::clog << t;
+    detail::print_helper(std::clog, ts...) << std::endl;
   }
 } // namespace ttg
 
