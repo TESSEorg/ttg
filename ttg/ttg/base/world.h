@@ -65,11 +65,17 @@ namespace ttg {
     public:
       virtual ~WorldImplBase(void) { m_is_valid = false; }
 
-      int size(void) {
+      /**
+       * Returns the number of processes that belong this World.
+       */
+      int size() {
         return world_size;
       }
 
-      int rank(void) {
+      /**
+       * Returns the rank of the calling process in this World.
+       */
+      int rank() {
         return world_rank;
       }
 
@@ -94,6 +100,12 @@ namespace ttg {
         m_callbacks.emplace_back(callback);
       }
 
+
+      /**
+       * Wait for all tasks in this world to complete execution.
+       * This is a synchronizing call, even if no active tasks exist
+       * (i.e., fence() behaves as a barrier).
+       */
       void fence(void) {
         fence_impl();
         for (auto& status : m_statuses) {
@@ -106,18 +118,39 @@ namespace ttg {
         m_callbacks.clear();  // clear out the statuses
       }
 
+      /**
+       * Start the execution of tasks in this world. The call to execute()
+       * will return immediately, i.e., it will not wait for all tasks
+       * to complete executing.
+       *
+       * \sa fence
+       */
       virtual void execute() {}
 
+
+      /**
+       * Register a TT with this world. All registered TTs will be
+       * destroyed during destruction of this world.
+       */
       void register_op(ttg::TTBase* op) {
         // TODO: do we need locking here?
         m_op_register.push_back(op);
       }
 
+      /**
+       * Deregister a TT from this world. TTs deregister themselves during
+       * destruction to avoid dangling references.
+       */
       void deregister_op(ttg::TTBase* op) {
         // TODO: do we need locking here?
         m_op_register.remove(op);
       }
 
+
+      /**
+       * Whether this world is valid. A word is marked as invalid during destruction
+       * and/or finalization of TTG.
+       */
       bool is_valid(void) const { return m_is_valid; }
 
       virtual void final_task() {}
