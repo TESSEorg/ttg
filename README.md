@@ -98,7 +98,7 @@ auto make_sw1(const funcT& func, int block_size, const std::string &a, const std
 - Step 4 : Define the edges and verify that the graph is connected in the main program.
 
 ```cpp
-  ttg_initialize(argc, argv, -1);
+  initialize(argc, argv, -1);
 
   Edge<Key, BlockMatrix<int>> leftedge, topedge, diagedge;
   Edge<Key, int> resultedge;
@@ -116,11 +116,11 @@ auto make_sw1(const funcT& func, int block_size, const std::string &a, const std
 - Step 5 : Execute the graph.
 
 ```cpp
-  if (ttg_default_execution_context().rank() == 0)
+  if (default_execution_context().rank() == 0)
     s->in<0>()->send(Key(0,0), BlockMatrix<int>());
 
-  ttg_execute(ttg_default_execution_context());
-  ttg_fence(ttg_default_execution_context());
+  execute();
+  fence();
 ```
 
 - TTG API documentation is available for the following versions:

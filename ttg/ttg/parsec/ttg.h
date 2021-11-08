@@ -24,6 +24,7 @@
 #include "ttg/util/meta.h"
 #include "ttg/util/print.h"
 #include "ttg/util/trace.h"
+#include "ttg/util/env.h"
 
 #include "ttg/serialization/data_descriptor.h"
 
@@ -686,11 +687,12 @@ namespace ttg_parsec {
   inline thread_local detail::parsec_ttg_task_base_t *parsec_ttg_caller;
 
   template <typename... RestOfArgs>
-  inline void ttg_initialize(int argc, char **argv, int taskpool_size, RestOfArgs &&...) {
+  inline void ttg_initialize(int argc, char **argv, int num_threads, RestOfArgs &&...) {
     int provided;
     MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
 
-    auto world_ptr = new ttg_parsec::WorldImpl{&argc, &argv, taskpool_size};
+    if (num_threads < 1) num_threads = ttg::detail::num_threads();
+    auto world_ptr = new ttg_parsec::WorldImpl{&argc, &argv, num_threads};
     std::shared_ptr<ttg::base::WorldImplBase> world_sptr{static_cast<ttg::base::WorldImplBase *>(world_ptr)};
     ttg::World world{std::move(world_sptr)};
     ttg::detail::set_default_world(std::move(world));

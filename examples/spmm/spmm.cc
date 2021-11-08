@@ -587,7 +587,7 @@ class SpMM {
         }
         return std::make_tuple(a_colidx, true);
       }
-      abort();  // unreachable
+      ttg::abort();  // unreachable
     }
   };
 
@@ -1018,10 +1018,10 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
 }
 
 #if defined(BTAS_IS_USABLE)
-static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, size_t M, size_t N, size_t K, int minTs, int maxTs,
-                           double avgDensity, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &Aref, SpMatrix<> &Bref,
-                           bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles, std::vector<int> &kTiles,
-                           std::vector<std::vector<long>> &a_rowidx_to_colidx,
+static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, size_t M, size_t N, size_t K, int minTs,
+                           int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &Aref,
+                           SpMatrix<> &Bref, bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles,
+                           std::vector<int> &kTiles, std::vector<std::vector<long>> &a_rowidx_to_colidx,
                            std::vector<std::vector<long>> &a_colidx_to_rowidx,
                            std::vector<std::vector<long>> &b_rowidx_to_colidx,
                            std::vector<std::vector<long>> &b_colidx_to_rowidx, double &average_tile_size,
@@ -1191,7 +1191,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   gettimeofday(&start, nullptr);
   // ready, go! need only 1 kick, so must be done by 1 thread only
   if (ttg_default_execution_context().rank() == 0) control.start(P, Q);
-  ttg_fence(ttg_default_execution_context());
+  fence();
   gettimeofday(&end, nullptr);
   timersub(&end, &start, &diff);
   double tc = (double)diff.tv_sec + (double)diff.tv_usec / 1e6;
@@ -1269,9 +1269,9 @@ int main(int argc, char **argv) {
   cores = parseOption(nbCoreStr, cores);
 
   if (int dashdash = cmdOptionIndex(argv, argv + argc, "--") > -1) {
-    ttg_initialize(argc - dashdash, argv + dashdash, cores);
+    initialize(argc - dashdash, argv + dashdash, cores);
   } else {
-    ttg_initialize(1, argv, cores);
+    initialize(1, argv, cores);
   }
 
   std::string debugStr(getCmdOption(argv, argv + argc, "-d"));
@@ -1427,7 +1427,7 @@ int main(int argc, char **argv) {
 
     if (timing) {
       // Start up engine
-      ttg_execute(ttg_default_execution_context());
+      execute();
       for (int nrun = 0; nrun < nb_runs; nrun++) {
         timed_measurement(A, B, keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
                           a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles, nTiles, kTiles, M, N, K,
@@ -1459,8 +1459,8 @@ int main(int argc, char **argv) {
       // ready, go! need only 1 kick, so must be done by 1 thread only
       if (ttg_default_execution_context().rank() == 0) control.start(P, Q);
 
-      ttg_execute(ttg_default_execution_context());
-      ttg_fence(ttg_default_execution_context());
+      execute();
+      fence();
 
       // validate C=A*B against the reference output
       assert(has_value(c_status));

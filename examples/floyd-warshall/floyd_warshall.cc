@@ -582,8 +582,8 @@ bool equals(double* matrix1, double* matrix2, int problem_size);
 void floyd_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
-  ttg::ttg_initialize(argc, argv);
-  ttg_fence(ttg_default_execution_context());
+  initialize(argc, argv);
+  fence();
 
   ttg::TTBase::set_trace_all(false);
 
@@ -650,7 +650,7 @@ int main(int argc, char** argv) {
     free(adjacency_matrix_serial);
   }
 
-  ttg_finalize();
+  finalize();
 
   return 0;
 }

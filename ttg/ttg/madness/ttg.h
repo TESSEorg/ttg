@@ -16,6 +16,7 @@
 #include "ttg/runtimes.h"
 #include "ttg/tt.h"
 #include "ttg/util/bug.h"
+#include "ttg/util/env.h"
 #include "ttg/util/hash.h"
 #include "ttg/util/macro.h"
 #include "ttg/util/meta.h"
@@ -120,8 +121,9 @@ namespace ttg_madness {
   };
 
   template <typename... RestOfArgs>
-  inline void ttg_initialize(int argc, char **argv, RestOfArgs &&...) {
-    ::madness::World &madworld = ::madness::initialize(argc, argv);
+  inline void ttg_initialize(int argc, char **argv, int num_threads, RestOfArgs &&...) {
+    if (num_threads < 1) num_threads = ttg::detail::num_threads();
+    ::madness::World &madworld = ::madness::initialize(argc, argv, num_threads);
     auto *world_ptr = new ttg_madness::WorldImpl{madworld};
     std::shared_ptr<ttg::base::WorldImplBase> world_sptr{static_cast<ttg::base::WorldImplBase *>(world_ptr)};
     ttg::World world{std::move(world_sptr)};

@@ -700,7 +700,7 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
 void floyd_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
-  ttg_initialize(argc, argv);
+  initialize(argc, argv);
   ttg::TTBase::set_trace_all(false);
 
   ttg::World world = ttg::get_default_world();
@@ -712,7 +712,7 @@ int main(int argc, char** argv) {
   debugger->set_prefix(ttg_default_execution_context().rank());
   debugger->set_cmd("lldb_xterm");
 
-  ttg_fence(ttg_default_execution_context());
+  fence();
 
   for (int arg = 1; arg < argc; ++arg) {
     if (strcmp(argv[arg], "-dx") == 0) madness::xterm_debug(argv[0], 0);

@@ -155,7 +155,7 @@ auto make_wavefront(std::shared_ptr<double> m, const funcT& func, Edge<Key, Cont
 }
 
 int main(int argc, char** argv) {
-  ttg_initialize(argc, argv, -1);
+  initialize(argc, argv, -1);
   if (ttg_default_execution_context().size() > 1) {
     std::cout << "This is a shared memory version of Wavefront. Please run it on a single process.\n";
     ttg_abort();
@@ -191,8 +191,8 @@ int main(int argc, char** argv) {
     // s->send<0>(Key(0,0), Control());
   }
 
-  ttg_execute(ttg_default_execution_context());
-  ttg_fence(ttg_default_execution_context());
+  execute();
+  fence();
 
   if (ttg_default_execution_context().rank() == 0) {
     end = std::chrono::high_resolution_clock::now();

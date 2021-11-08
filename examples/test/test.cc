@@ -484,7 +484,7 @@ class Fibonacci {
 };
 
 int try_main(int argc, char **argv) {
-  ttg_initialize(argc, argv, 2);
+  ttg::initialize(argc, argv, 2);
 
   //  using mpqc::Debugger;
   //  auto debugger = std::make_shared<Debugger>();
@@ -497,7 +497,7 @@ int try_main(int argc, char **argv) {
   {
     ttg::TTBase::set_trace_all(false);
 
-    ttg_execute(ttg_default_execution_context());
+    ttg::execute();
 
     // First compose with manual classes and connections
     Everything x;
@@ -577,12 +577,12 @@ int try_main(int argc, char **argv) {
 
       Fibonacci fi;
       std::cout << fi.dot() << std::endl << std::endl;
-      if (ttg_default_execution_context().size() == 1)
+      if (ttg::default_execution_context().size() == 1)
         fi.start();  // see Fibonacci::next() for why there is a race here when nproc>1 (works most of the time)
 
       // must fence here to flush out all tasks associated with Everything5 and Fibonacci
       // TODO must fence in TT destructors to avoid compositional nightmares like this
-      ttg_fence(ttg_default_execution_context());
+      ttg::fence();
 
       // compose Fibonacci from free functions
       {
@@ -630,7 +630,7 @@ int try_main(int argc, char **argv) {
         make_graph_executable(f.get());
         if (ttg_default_execution_context().rank() == 0) f->invoke(2, 1);
 
-        ttg_fence(ttg_default_execution_context());
+        ttg::fence();
       }
     }
 
@@ -640,10 +640,10 @@ int try_main(int argc, char **argv) {
     BroadcastTest b;
     b.start();
 
-    ttg_fence(ttg_default_execution_context());
+    ttg::fence();
     std::cout << "\nFence done\n";
   }
-  ttg_finalize();
+  ttg::finalize();
   return 0;
 }
 

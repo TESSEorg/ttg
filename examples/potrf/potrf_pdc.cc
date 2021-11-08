@@ -616,9 +616,9 @@ int main(int argc, char **argv)
     profiling_enabled = true;
   }
 
-  ttg::ttg_initialize(argc, argv, nthreads);
+  ttg::initialize(argc, argv, nthreads);
 
-  auto world = ttg::ttg_default_execution_context();
+  auto world = ttg::default_execution_context();
 
 #if USE_PARSEC_PROF_API
   if (nullptr != prof_filename) {
@@ -743,8 +743,8 @@ int main(int argc, char **argv)
   }
   op_init->invoke(Key3{0, 0, 0});
 
-  ttg::ttg_execute(world);
-  ttg::ttg_fence(world);
+  ttg::execute(world);
+  ttg::fence(world);
   if (world.rank() == 0) {
     end = std::chrono::high_resolution_clock::now();
     auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
@@ -827,7 +827,7 @@ int main(int argc, char **argv)
   }
 #endif // USE_PARSEC_PROF_API
 
-  ttg::ttg_finalize();
+  ttg::finalize();
   return 0;
 }
 

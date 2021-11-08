@@ -26,21 +26,21 @@ int main(int argc, char** argv) {
   std::wcerr.sync_with_stdio(true);
 
 #ifdef TTG_EXECUTABLE
-  ttg::ttg_initialize(argc, argv);
+  ttg::initialize(argc, argv);
   ttg::diagnose_off();  // turn off diagnostics
 
   const auto nranks = ttg::ttg_default_execution_context().size();
   std::cout << "ready to run TTG unit tests with " << nranks << " ranks" << (nranks > 1 ? "s" : "") << std::endl;
 
-  ttg::ttg_execute(ttg::ttg_default_execution_context());
+  ttg::execute();
 #endif
 
   int result = session.run(argc, argv);
 
   // global clean-up...
 #ifdef TTG_EXECUTABLE
-  ttg::ttg_fence(ttg::ttg_default_execution_context());
-  ttg::ttg_finalize();
+  ttg::fence();
+  ttg::finalize();
 #endif
 
   return result;

@@ -26,10 +26,13 @@
 
 #include "ttg/edge.h"
 
-#if defined(TTG_USE_MADNESS)
-#include "ttg/madness/ttg.h"
-#elif defined(TTG_USE_PARSEC)
+#if defined(TTG_USE_PARSEC)
 #include "ttg/parsec/ttg.h"
-#endif  // TTG_USE_MADNESS|PARSEC
+#elif defined(TTG_USE_MADNESS)
+#include "ttg/madness/ttg.h"
+#endif  // TTG_USE_PARSEC|MADNESS
+
+// these headers use the default backend
+#include "ttg/run.h"
 
 #endif  // TTG_H_INCLUDED

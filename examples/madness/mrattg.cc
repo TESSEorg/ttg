@@ -442,8 +442,8 @@ void test0() {
         start->invoke(Key<NDIM>(0, {0}));
     }
 
-    ttg_execute(ttg_default_execution_context());
-    ttg_fence(ttg_default_execution_context());
+    execute();
+    fence();
 }
 
 
@@ -494,12 +494,12 @@ void test1() {
         start->invoke(Key<NDIM>(0, {0}));
     }
 
-    ttg_execute(ttg_default_execution_context());
-    ttg_fence(ttg_default_execution_context());
+    execute();
+    fence();
 }
 
 int main(int argc, char** argv) {
-    ttg_initialize(argc, argv, 2);
+    initialize(argc, argv, 2);
     std::cout << "Hello from madttg\n";
 
     //vmlSetMode(VML_HA | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // default

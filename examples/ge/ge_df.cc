@@ -689,7 +689,7 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
 void ge_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
-  ttg_initialize(argc, argv);
+  initialize(argc, argv);
   ttg::TTBase::set_trace_all(false);
 
   auto world = ttg_default_execution_context();

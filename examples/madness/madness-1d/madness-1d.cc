@@ -1366,7 +1366,7 @@ int main(int argc, char** argv) {
 
   TTBase::set_trace_all(false); */
 
-  ttg_initialize(argc, argv);
+  initialize(argc, argv);
   auto &world = ttg::get_default_world();
   // world.taskq.add(world.rank(), hi);
   ttg_fence(world);
@@ -1455,7 +1455,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  ttg_fence(ttg_default_execution_context());
+  fence();
   ttg_finalize();
   return 0;
 }

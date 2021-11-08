@@ -246,7 +246,7 @@ int main(int argc, char* argv[]) {
             << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1e3 << std::endl;
 
   // int val2 = SW_OpenMP(a, b, r, base_size);
-  ttg_initialize(argc, argv, -1);
+  initialize(argc, argv, -1);
 
   Edge<Key, BlockMatrix<int>> leftedge, topedge, diagedge;
   Edge<Key, int> resultedge;
@@ -268,8 +268,8 @@ int main(int argc, char* argv[]) {
     s->in<0>()->send(Key(0, 0), BlockMatrix<int>());
   }
 
-  ttg_execute(ttg_default_execution_context());
-  ttg_fence(ttg_default_execution_context());
+  execute();
+  fence();
   if (ttg_default_execution_context().rank() == 0) {
     end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "

@@ -331,7 +331,7 @@ double C(const double x) { return std::exp(-x * x) * std::sin(x); }
 double R(const double x) { return (A(x) + B(x)) * C(x); }
 
 int main(int argc, char** argv) {
-  ttg_initialize(argc, argv, -1);
+  initialize(argc, argv, -1);
   {
     ctlEdge ctl("start ctl");
     nodeEdge a("a"), b("b"), c("c"), abc("abc"), diffa("diffa"), errdiff("errdiff"), errabc("errabc"), a_plus_b("a+b"),
@@ -389,8 +389,8 @@ int main(int argc, char** argv) {
       // This kicks off the entire computation
       start->invoke(Key(0, 0));
     }
-    ttg_execute(ttg_default_execution_context());
-    ttg_fence(ttg_default_execution_context());
+    execute();
+    fence();
 
     double nap = norma->get(), nac = norma2->get(), nar = norma3->get(), nabcerr = normabcerr->get(),
            ndifferr = normdifferr->get();

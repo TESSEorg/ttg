@@ -217,7 +217,7 @@ auto make_dev_null(const Edge<keyT, valueT>& in) {
 
 int main(int argc, char** argv)
 {
-    ttg_initialize(argc, argv, 2);
+    initialize(argc, argv, 2);
     std::cout << "Hello from reciprocal\n";
 
     // Give random number generator process-dependent state.  Also
@@ -261,8 +261,8 @@ int main(int argc, char** argv)
             start->invoke(0);
         }
 
-        ttg_execute(ttg_default_execution_context());
-        ttg_fence(ttg_default_execution_context());
+        execute();
+        fence();
     }
     catch (std::string e) {
         std::cout << "std::string Exception: " << e << std::endl;
@@ -271,7 +271,7 @@ int main(int argc, char** argv)
         std::cout << "char* Exception: " << e << std::endl;
     }
 
-    ttg_fence(ttg_default_execution_context());
+    fence();
     ttg_finalize();
     return 0;
 }

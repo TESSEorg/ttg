@@ -168,7 +168,7 @@ auto make_consumer(ttg::Edge<int, MatrixTile<T>>& in, int instance)
 
 TEST_CASE("Split-Metadata Serialization", "[serialization]") {
 {
-  auto world = ttg::ttg_default_execution_context();
+  auto world = ttg::default_execution_context();
 
   std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
 
@@ -204,8 +204,8 @@ TEST_CASE("Split-Metadata Serialization", "[serialization]") {
     producer->invoke(0);
   }
 
-  ttg::ttg_execute(world);
-  ttg::ttg_fence(world);
+  ttg::execute(world);
+  ttg::fence(world);
   if (world.rank() == 0) {
     end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "
