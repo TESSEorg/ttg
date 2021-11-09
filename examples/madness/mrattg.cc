@@ -1,8 +1,6 @@
 // TTG AND MADNESS RUNTIME STUFF
 
 #include "ttg.h"
-// using namespace madness; // don't want this to avoid collisions with new mad stuff
-using namespace ttg;
 
 // APPLICATION STUFF BELOW
 #include <cmath>
@@ -32,7 +30,7 @@ using namespace mra;
 template <Dimension NDIM>
 struct KeyProcMap {
     const size_t size;
-    KeyProcMap() : size(get_default_world().size()) {}
+    KeyProcMap() : size(ttg::get_default_world().size()) {}
     std::size_t operator()(const Key<NDIM>& key) const {return key.hash() % size;}
 };
 
@@ -63,32 +61,32 @@ struct KeyProcMap {
 struct Control {};
 std::ostream& operator<<(std::ostream& s, const Control& ctl) {s << "Ctl"; return s;}
 
-template <typename T, size_t K, Dimension NDIM> using rnodeEdge = Edge<Key<NDIM>, FunctionReconstructedNode<T,K,NDIM>>;
-template <typename T, size_t K, Dimension NDIM> using cnodeEdge = Edge<Key<NDIM>, FunctionCompressedNode<T,K,NDIM>>;
-template <Dimension NDIM> using doubleEdge = Edge<Key<NDIM>, double>;
-template <Dimension NDIM> using ctlEdge = Edge<Key<NDIM>, Control>;
+template <typename T, size_t K, Dimension NDIM> using rnodeEdge = ttg::Edge<Key<NDIM>, FunctionReconstructedNode<T,K,NDIM>>;
+template <typename T, size_t K, Dimension NDIM> using cnodeEdge = ttg::Edge<Key<NDIM>, FunctionCompressedNode<T,K,NDIM>>;
+template <Dimension NDIM> using doubleEdge = ttg::Edge<Key<NDIM>, double>;
+template <Dimension NDIM> using ctlEdge = ttg::Edge<Key<NDIM>, Control>;
 
-template <typename T, size_t K, Dimension NDIM> using rnodeOut = Out<Key<NDIM>, FunctionReconstructedNode<T,K,NDIM>>;
-template <typename T, size_t K, Dimension NDIM> using cnodeOut = Out<Key<NDIM>, FunctionCompressedNode<T,K,NDIM>>;
-template <Dimension NDIM> using doubleOut = Out<Key<NDIM>, double>;
-template <Dimension NDIM> using ctlOut = Out<Key<NDIM>, Control>;
+template <typename T, size_t K, Dimension NDIM> using rnodeOut = ttg::Out<Key<NDIM>, FunctionReconstructedNode<T,K,NDIM>>;
+template <typename T, size_t K, Dimension NDIM> using cnodeOut = ttg::Out<Key<NDIM>, FunctionCompressedNode<T,K,NDIM>>;
+template <Dimension NDIM> using doubleOut = ttg::Out<Key<NDIM>, double>;
+template <Dimension NDIM> using ctlOut = ttg::Out<Key<NDIM>, Control>;
 
 std::mutex printer_guard;
 template <typename keyT, typename valueT>
-auto make_printer(const Edge<keyT, valueT>& in, const char* str = "", const bool doprint=true) {
+auto make_printer(const ttg::Edge<keyT, valueT>& in, const char* str = "", const bool doprint=true) {
     auto func = [str,doprint](const keyT& key, const valueT& value, std::tuple<>& out) {
         if (doprint) {
             std::lock_guard<std::mutex> obolus(printer_guard);
             std::cout << str << " (" << key << "," << value << ")" << std::endl;
         }
     };
-    return make_tt(func, edges(in), edges(), "printer", {"input"});
+    return make_tt(func, edges(in), ttg::edges(), "printer", {"input"});
 }
 
 template <Dimension NDIM>
 auto make_start(const ctlEdge<NDIM>& ctl) {
-    auto func = [](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>>& out) { send<0>(key, Control(), out); };
-    return make_tt<Key<NDIM>>(func, edges(), edges(ctl), "start", {}, {"control"});
+    auto func = [](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>>& out) { ttg::send<0>(key, Control(), out); };
+    return ttg::make_tt<Key<NDIM>>(func, ttg::edges(), edges(ctl), "start", {}, {"control"});
 }
 
 
@@ -107,7 +105,7 @@ auto make_project(functorT& f,
         auto& coeffs = node.coeffs; // Need to clean up OO design
 
         if (key.level() < initial_level(f)) {
-            for (auto child : children(key)) send<0>(child, Control(), out);
+            for (auto child : children(key)) ttg::send<0>(child, Control(), out);
             coeffs = T(1e7); // set to obviously bad value to detect incorrect use
             node.is_leaf = false;
         }
@@ -118,13 +116,13 @@ auto make_project(functorT& f,
         else {
             node.is_leaf = fcoeffs<functorT,T,K>(f, key, thresh, coeffs); // cannot deduce K
             if (!node.is_leaf) {
-                for (auto child : children(key)) send<0>(child,Control(),out); // should be broadcast ?
+                for (auto child : children(key)) ttg::send<0>(child,Control(),out); // should be broadcast ?
             }
         }
-        send<1>(key, node, out); // always produce a result
+        ttg::send<1>(key, node, out); // always produce a result
     };
     ctlEdge<NDIM> refine("refine");
-    return make_tt(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
+    return ttg::make_tt(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
 }
 
 namespace detail {
@@ -137,7 +135,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,cnodeOut<T,K,1>>;
         using compress_in_type  = std::tuple<Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = CallableWrapTT<compfuncT, Key<1>, compress_out_type, Rin, Rin>;
+        using compwrap_type = ttg::CallableWrapTT<compfuncT, Key<1>, compress_out_type, Rin, Rin>;
     };
 
     template <typename T, size_t K>  struct tree_types<T,K,2>{
@@ -146,7 +144,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,cnodeOut<T,K,2>>;
         using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = CallableWrapTT<compfuncT, Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
+        using compwrap_type = ttg::CallableWrapTT<compfuncT, Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
     };
 
     template <typename T, size_t K>  struct tree_types<T,K,3>{
@@ -155,7 +153,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,Rout,Rout,Rout,Rout,cnodeOut<T,K,3>>;
         using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = CallableWrapTT<compfuncT, Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
+        using compwrap_type = ttg::CallableWrapTT<compfuncT, Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
     };
 };
 
@@ -218,7 +216,7 @@ void do_compress(const Key<NDIM>& key,
     }
 
     // Send result to output tree
-    send<Key<NDIM>::num_children>(key,result,out);
+    ttg::send<Key<NDIM>::num_children>(key,result,out);
 }
 
 
@@ -239,7 +237,7 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
     constexpr size_t num_children = Key<NDIM>::num_children;
 
     using sendfuncT = decltype(&send_leaves_up<T,K,NDIM>);
-    using sendwrapT = CallableWrapTT<sendfuncT, Key<NDIM>, typename ::detail::tree_types<T,K,NDIM>::compress_out_type, FunctionReconstructedNode<T,K,NDIM> >;
+    using sendwrapT = ttg::CallableWrapTT<sendfuncT, Key<NDIM>, typename ::detail::tree_types<T,K,NDIM>::compress_out_type, FunctionReconstructedNode<T,K,NDIM> >;
     using compfuncT = decltype(&do_compress<T,K,NDIM>);
     using compwrapT = typename ::detail::tree_types<T,K,NDIM>::template compwrap_type<compfuncT>;
 
@@ -276,7 +274,7 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
 template <typename T, size_t K, Dimension NDIM>
 void do_reconstruct(const Key<NDIM>& key,
                     const std::tuple<FunctionCompressedNode<T,K,NDIM>&,FixedTensor<T,K,NDIM>&>& t,
-                    std::tuple<Out<Key<NDIM>,FixedTensor<T,K,NDIM>>,rnodeOut<T,K,NDIM>>& out) {
+                    std::tuple<ttg::Out<Key<NDIM>,FixedTensor<T,K,NDIM>>,rnodeOut<T,K,NDIM>>& out) {
     const auto& child_slices = FunctionData<T,K,NDIM>::get_child_slices();
     auto& node = std::get<0>(t);
     const auto& from_parent = std::get<1>(t);
@@ -288,7 +286,7 @@ void do_reconstruct(const Key<NDIM>& key,
     FunctionReconstructedNode<T,K,NDIM> r(key);
     r.coeffs = T(0.0);
     r.is_leaf = false;
-    ::send<1>(key, r, out); // Send empty interior node to result tree
+    ttg::send<1>(key, r, out); // Send empty interior node to result tree
 
     KeyChildren<NDIM> children(key);
     for (auto it=children.begin(); it!=children.end(); ++it) {
@@ -297,21 +295,21 @@ void do_reconstruct(const Key<NDIM>& key,
         r.coeffs = s(child_slices[it.index()]);
         r.is_leaf = node.is_leaf[it.index()];
         if (r.is_leaf) {
-            ::send<1>(child, r, out);
+            ttg::send<1>(child, r, out);
         }
         else {
-            ::send<0>(child, r.coeffs, out);
+            ttg::send<0>(child, r.coeffs, out);
         }
     }
 }
 
 template <typename T, size_t K, Dimension NDIM>
 auto make_reconstruct(const cnodeEdge<T,K,NDIM>& in, rnodeEdge<T,K,NDIM>& out, const std::string& name = "reconstruct") {
-    Edge<Key<NDIM>,FixedTensor<T,K,NDIM>> S("S");  // passes scaling functions down
+  ttg::Edge<Key<NDIM>,FixedTensor<T,K,NDIM>> S("S");  // passes scaling functions down
 
-    auto s = make_tt_tpl(&do_reconstruct<T,K,NDIM>, edges(in, S), edges(S, out), name, {"input", "s"}, {"s", "output"});
+    auto s = ttg::make_tt_tpl(&do_reconstruct<T,K,NDIM>, edges(in, S), edges(S, out), name, {"input", "s"}, {"s", "output"});
 
-    if (get_default_world().rank() == 0) {
+    if (ttg::get_default_world().rank() == 0) {
         s->template in<1>()->send(Key<NDIM>{0,{0}}, FixedTensor<T,K,NDIM>()); // Prime the flow of scaling functions
     }
 
@@ -319,8 +317,8 @@ auto make_reconstruct(const cnodeEdge<T,K,NDIM>& in, rnodeEdge<T,K,NDIM>& out, c
 }
 
 template <typename keyT, typename valueT>
-auto make_sink(const Edge<keyT,valueT>& e) {
-    return std::make_unique<SinkTT<keyT,valueT>>(e);
+auto make_sink(const ttg::Edge<keyT,valueT>& e) {
+    return std::make_unique<ttg::SinkTT<keyT,valueT>>(e);
 }
 
 // For checking we haven't broken something while developing
@@ -384,7 +382,7 @@ public:
         //vscale(N, fac, &values[0]);
         for (T& value : values) {
             value = fac * std::exp(-expnt*value);
-        }	
+        }
     }
 
     Level initial_level() const {
@@ -432,18 +430,18 @@ void test0() {
     auto printer3 =  make_printer(c,"reconstructed", false);
     auto connected = make_graph_executable(start.get());
     assert(connected);
-    if (ttg_default_execution_context().rank() == 0) {
+    if (ttg::ttg_default_execution_context().rank() == 0) {
         std::cout << "Is everything connected? " << connected << std::endl;
         std::cout << "==== begin dot ====\n";
-        std::cout << Dot()(start.get()) << std::endl;
+        std::cout << ttg::Dot()(start.get()) << std::endl;
         std::cout << "====  end dot  ====\n";
 
         // This kicks off the entire computation
         start->invoke(Key<NDIM>(0, {0}));
     }
 
-    execute();
-    fence();
+    ttg::execute();
+    ttg::fence();
 }
 
 
@@ -484,22 +482,22 @@ void test1() {
 
     auto connected = make_graph_executable(start.get());
     assert(connected);
-    if (ttg_default_execution_context().rank() == 0) {
+    if (ttg::default_execution_context().rank() == 0) {
         std::cout << "Is everything connected? " << connected << std::endl;
         std::cout << "==== begin dot ====\n";
-        std::cout << Dot()(start.get()) << std::endl;
+        std::cout << ttg::Dot()(start.get()) << std::endl;
         std::cout << "====  end dot  ====\n";
 
         // This kicks off the entire computation
         start->invoke(Key<NDIM>(0, {0}));
     }
 
-    execute();
-    fence();
+    ttg::execute();
+    ttg::fence();
 }
 
 int main(int argc, char** argv) {
-    initialize(argc, argv, 2);
+    ttg::initialize(argc, argv, 2);
     std::cout << "Hello from madttg\n";
 
     //vmlSetMode(VML_HA | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // default
@@ -515,9 +513,9 @@ int main(int argc, char** argv) {
         //test1<double,6,3>();
     }
 
-    ttg_fence(get_default_world());
+    ttg::fence();
 
-    ttg_finalize();
+    ttg::finalize();
 
 
     return 0;
