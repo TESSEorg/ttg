@@ -146,9 +146,24 @@ namespace ttg_parsec {
 
     ttg::Edge<> m_ctl_edge;
 
+    int query_comm_size() {
+      int comm_size;
+      MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+      return comm_size;
+    }
+
+    int query_comm_rank() {
+      int comm_rank;
+      MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
+      return comm_rank;
+    }
+
+
    public:
     static constexpr const int PARSEC_TTG_MAX_AM_SIZE = 1024 * 1024;
-    WorldImpl(int *argc, char **argv[], int ncores) {
+    WorldImpl(int *argc, char **argv[], int ncores)
+    : WorldImplBase(query_comm_size(), query_comm_rank())
+    {
       ttg::detail::register_world(*this);
       ctx = parsec_init(ncores, argc, argv);
       es = ctx->virtual_processes[0]->execution_streams[0];
@@ -206,19 +221,6 @@ namespace ttg_parsec {
 
     constexpr int parsec_ttg_tag() const { return _PARSEC_TTG_TAG; }
     constexpr int parsec_ttg_rma_tag() const { return _PARSEC_TTG_RMA_TAG; }
-
-    virtual int size() const override {
-      int size;
-
-      MPI_Comm_size(comm(), &size);
-      return size;
-    }
-
-    virtual int rank() const override {
-      int rank;
-      MPI_Comm_rank(comm(), &rank);
-      return rank;
-    }
 
     MPI_Comm comm() const { return MPI_COMM_WORLD; }
 
