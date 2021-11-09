@@ -224,13 +224,10 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
 
   void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
     std::lock_guard<std::mutex> lock(mtx_);
-    if (ttg::tracing()) {
-      auto &w = get_default_world();
-      ttg::print("rank =", w.rank(), "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
-                 "spmm.cc Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ",
-                 static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_), " for object @",
-                 static_cast<void *>(this));
-    }
+    ttg::trace("rank =", get_default_world().rank(), "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
+               "spmm.cc Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ",
+               static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_), " for object @",
+               static_cast<void *>(this));
     values_.emplace_back(key[0], key[1], baseT::template get<0>(elem));
   }
 
@@ -305,12 +302,12 @@ class SpMM {
       const auto k = key[1];
       auto world = get_default_world();
       assert(key[2] == world.rank());
-      if (tracing()) ttg::print("LocalBcastA(", i, ", ", k, ")");
+      ttg::trace("LocalBcastA(", i, ", ", k, ")");
       if (k >= b_rowidx_to_colidx_.size()) return;
       // broadcast a_ik to all existing {i,j,k}
       std::vector<Key<3>> ijk_keys;
       for (auto &j : b_rowidx_to_colidx_[k]) {
-        if (tracing()) ttg::print("Broadcasting A[", i, "][", k, "] to j=", j);
+        ttg::trace("Broadcasting A[", i, "][", k, "] to j=", j);
         if (keymap_(Key<2>({i, j})) == world.rank()) {
           ijk_keys.emplace_back(Key<3>({i, j, k}));
         }
@@ -336,7 +333,7 @@ class SpMM {
     void op(const Key<2> &key, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, Blk>> &a_ikp) {
       const auto i = key[0];
       const auto k = key[1];
-      if (tracing()) ttg::print("BcastA(", i, ", ", k, ")");
+      ttg::trace("BcastA(", i, ", ", k, ")");
       // broadcast a_ik to all existing {i,j,k}
       std::vector<Key<3>> ikp_keys;
       if (k >= b_rowidx_to_colidx_.size()) return;
@@ -346,7 +343,7 @@ class SpMM {
       for (auto &j : b_rowidx_to_colidx_[k]) {
         long proc = keymap(Key<2>({i, j}));
         if (!procmap[proc]) {
-          if (tracing()) ttg::print("Broadcasting A[", i, "][", k, "] to proc ", proc);
+          ttg::trace("Broadcasting A[", i, "][", k, "] to proc ", proc);
           ikp_keys.emplace_back(Key<3>({i, k, proc}));
           procmap[proc] = true;
         }
@@ -375,12 +372,12 @@ class SpMM {
       const auto j = key[1];
       auto world = get_default_world();
       assert(key[2] == world.rank());
-      if (tracing()) ttg::print("BcastB(", k, ", ", j, ")");
+      ttg::trace("BcastB(", k, ", ", j, ")");
       if (k >= a_colidx_to_rowidx_.size()) return;
       // broadcast b_kj to *jk
       std::vector<Key<3>> ijk_keys;
       for (auto &i : a_colidx_to_rowidx_[k]) {
-        if (tracing()) ttg::print("Broadcasting B[", k, "][", j, "] to i=", i);
+        ttg::trace("Broadcasting B[", k, "][", j, "] to i=", i);
         if (keymap_(Key<2>({i, j})) == world.rank()) {
           ijk_keys.emplace_back(Key<3>({i, j, k}));
         }
@@ -408,14 +405,14 @@ class SpMM {
       const auto j = key[1];
       // broadcast b_kj to *jk
       std::vector<Key<3>> kjp_keys;
-      if (tracing()) ttg::print("BcastB(", k, ", ", j, ")");
+      ttg::trace("BcastB(", k, ", ", j, ")");
       if (k >= a_colidx_to_rowidx_.size()) return;
       auto world = get_default_world();
       std::vector<bool> procmap(world.size());
       for (auto &i : a_colidx_to_rowidx_[k]) {
         long proc = baseT::get_keymap()(Key<2>({i, j}));
         if (!procmap[proc]) {
-          if (tracing()) ttg::print("Broadcasting A[", k, "][", j, "] to proc ", proc);
+          ttg::trace("Broadcasting A[", k, "][", j, "] to proc ", proc);
           kjp_keys.emplace_back(Key<3>({k, j, proc}));
           procmap[proc] = true;
         }
@@ -462,7 +459,7 @@ class SpMM {
               bool have_k;
               std::tie(k, have_k) = compute_first_k(i, j);
               if (have_k) {
-                if (tracing()) ttg::print("Initializing C[", i, "][", j, "] to zero");
+                ttg::trace("Initializing C[", i, "][", j, "] to zero");
 #if BLOCK_SPARSE_GEMM
                 Blk zero(btas::Range(mTiles[i], nTiles[j]), 0.0);
 #else
@@ -487,13 +484,11 @@ class SpMM {
       long next_k;
       bool have_next_k;
       std::tie(next_k, have_next_k) = compute_next_k(i, j, k);
-      if (tracing()) {
-        ttg::print("Rank ", ttg_default_execution_context().rank(),
-                   " :"
-                   " C[",
-                   i, "][", j, "]  += A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
-                   (have_next_k ? std::to_string(next_k) : "does not exist"));
-      }
+      ttg::trace("Rank ", ttg_default_execution_context().rank(),
+                 " :"
+                 " C[",
+                 i, "][", j, "]  += A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
+                 (have_next_k ? std::to_string(next_k) : "does not exist"));
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow
       if (have_next_k) {
@@ -620,7 +615,7 @@ class Control : public TT<void, std::tuple<Out<Key<2>>>, Control> {
     for (int i = 0; i < P; i++) {
       for (int j = 0; j < Q; j++) {
         Key<2> k{i, j};
-        if (ttg::tracing()) ttg::print("Control: enable {", i, ", ", j, "}");
+        ttg::trace("Control: enable {", i, ", ", j, "}");
         ::sendk<0>(k, out);
       }
     }

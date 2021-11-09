@@ -256,7 +256,7 @@ namespace ttg {
 
       void op(typename baseT::input_values_tuple_type &&ins, std::tuple<Out<void, Shape>> &out) {
         const auto &shape = baseT::template get<0>(ins);
-        if (::ttg::tracing()) ::ttg::print("Resizing ", static_cast<void *>(&matrix_));
+        ::ttg::trace("Resizing ", static_cast<void *>(&matrix_));
         matrix_.resize(shape.nrows(), shape.ncols());
         ::sendv<0>(shape, out);
       }
@@ -279,18 +279,14 @@ namespace ttg {
 
       void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
         std::lock_guard<std::mutex> lock(mtx_);
-        if (ttg::tracing()) {
-          auto &w = get_default_world();
-          ttg::print("rank =", w.rank(), "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
-                     "ttg_matrix.h Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem),
-                     " in ", static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_),
-                     " for object @", static_cast<void *>(this));
-        }
+        ttg::trace("rank =", get_default_world().rank(), "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
+                   "ttg_matrix.h Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem),
+                   " in ", static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_),
+                   " for object @", static_cast<void *>(this));
         values_.emplace_back(key[0], key[1], baseT::template get<0>(elem));
-        if (ttg::tracing())
-          ttg::print("rank =", get_default_world().rank(),
-                     "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
-                     "ttg_matrix.h Write::op: ttg_matrix.h matrix_\n", matrix_);
+        ttg::trace("rank =", get_default_world().rank(),
+                   "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
+                   "ttg_matrix.h Write::op: ttg_matrix.h matrix_\n", matrix_);
       }
 
       /// grab completion status as a future<void>

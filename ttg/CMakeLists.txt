@@ -74,8 +74,11 @@ endif (TARGET Boost::boost)
 if (TARGET TTG_Libunwind)
   list(APPEND ttg-deps TTG_Libunwind)
 endif(TARGET TTG_Libunwind)
+if (TTG_ENABLE_TRACE)
+  list(APPEND ttg-defs "TTG_ENABLE_TRACE=1")
+endif (TTG_ENABLE_TRACE)
 
-add_ttg_library(ttg "${ttg-sources}" PUBLIC_HEADER "${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers}" LINK_LIBRARIES "${ttg-deps}" INCLUDE_DIRECTORIES "${ttg-incs}")
+add_ttg_library(ttg "${ttg-sources}" PUBLIC_HEADER "${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers}" LINK_LIBRARIES "${ttg-deps}" INCLUDE_DIRECTORIES "${ttg-incs}" COMPILE_DEFINITIONS "${ttg-defs}")
 
 ########################
 ####### Serialization

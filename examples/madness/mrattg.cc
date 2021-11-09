@@ -1,7 +1,6 @@
 // TTG AND MADNESS RUNTIME STUFF
 
-#define WORLD_INSTANTIATE_STATIC_TEMPLATES
-#include "ttg/madness/ttg.h"
+#include "ttg.h"
 // using namespace madness; // don't want this to avoid collisions with new mad stuff
 using namespace ttg;
 
@@ -15,19 +14,17 @@ using namespace ttg;
 #include <functional>
 #include <type_traits>
 
-#include "mragl.h"
-#include "mrakey.h"
-#include "mramxm.h"
-#include "mramisc.h"
-#include "mratypes.h"
-#include "mradomain.h"
-#include "mratwoscale.h"
-#include "mrasimpletensor.h"
-#include "mrafunctiondata.h"
-#include "mrafunctionnode.h"
-#include "mrafunctionfunctor.h"
-
-#include "mkl.h" // assume for now but need to wrap
+#include "../mragl.h"
+#include "../mrakey.h"
+#include "../mramxm.h"
+#include "../mramisc.h"
+#include "../mratypes.h"
+#include "../mradomain.h"
+#include "../mratwoscale.h"
+#include "../mrasimpletensor.h"
+#include "../mrafunctiondata.h"
+#include "../mrafunctionnode.h"
+#include "../mrafunctionfunctor.h"
 
 using namespace mra;
 
@@ -140,7 +137,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,cnodeOut<T,K,1>>;
         using compress_in_type  = std::tuple<Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = WrapOp<compfuncT, Key<1>, compress_out_type, Rin, Rin>;
+        using compwrap_type = CallableWrapTT<compfuncT, Key<1>, compress_out_type, Rin, Rin>;
     };
 
     template <typename T, size_t K>  struct tree_types<T,K,2>{
@@ -149,7 +146,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,cnodeOut<T,K,2>>;
         using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = WrapOp<compfuncT, Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
+        using compwrap_type = CallableWrapTT<compfuncT, Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
     };
 
     template <typename T, size_t K>  struct tree_types<T,K,3>{
@@ -158,7 +155,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,Rout,Rout,Rout,Rout,cnodeOut<T,K,3>>;
         using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
-        using compwrap_type = WrapOp<compfuncT, Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
+        using compwrap_type = CallableWrapTT<compfuncT, Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
     };
 };
 
@@ -242,7 +239,7 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
     constexpr size_t num_children = Key<NDIM>::num_children;
 
     using sendfuncT = decltype(&send_leaves_up<T,K,NDIM>);
-    using sendwrapT = WrapOp<sendfuncT, Key<NDIM>, typename ::detail::tree_types<T,K,NDIM>::compress_out_type, FunctionReconstructedNode<T,K,NDIM> >;
+    using sendwrapT = CallableWrapTT<sendfuncT, Key<NDIM>, typename ::detail::tree_types<T,K,NDIM>::compress_out_type, FunctionReconstructedNode<T,K,NDIM> >;
     using compfuncT = decltype(&do_compress<T,K,NDIM>);
     using compwrapT = typename ::detail::tree_types<T,K,NDIM>::template compwrap_type<compfuncT>;
 
@@ -273,7 +270,7 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
     ops[0] = std::move(s);
     ops[1] = std::move(c);
 
-    return make_composite_op(std::move(ops), ins, outs, name);
+    return make_ttg(std::move(ops), ins, outs, name);
 }
 
 template <typename T, size_t K, Dimension NDIM>
@@ -323,7 +320,7 @@ auto make_reconstruct(const cnodeEdge<T,K,NDIM>& in, rnodeEdge<T,K,NDIM>& out, c
 
 template <typename keyT, typename valueT>
 auto make_sink(const Edge<keyT,valueT>& e) {
-    return std::make_unique<OpSink<keyT,valueT>>(e);
+    return std::make_unique<SinkTT<keyT,valueT>>(e);
 }
 
 // For checking we haven't broken something while developing
@@ -382,9 +379,12 @@ public:
     template <size_t N>
     void operator()(const SimpleTensor<T,NDIM,N>& x, std::array<T,N>& values) const {
         distancesq(origin, x, values);
-        vscale(N, -expnt, &values[0]);
-        vexp(N, &values[0], &values[0]);
-        vscale(N, fac, &values[0]);
+        //vscale(N, -expnt, &values[0]);
+        //vexp(N, &values[0], &values[0]);
+        //vscale(N, fac, &values[0]);
+        for (T& value : values) {
+            value = fac * std::exp(-expnt*value);
+        }	
     }
 
     Level initial_level() const {
@@ -458,7 +458,7 @@ void test1() {
     ctlEdge<NDIM> ctl("start");
     auto start = make_start(ctl);
     std::vector<std::unique_ptr<ttg::TTBase>> ops;
-    for (auto i : range(3)) {
+    for (auto i : range(1)) {
         TTGUNUSED(i);
         rnodeEdge<T,K,NDIM> a("a"), c("c");
         cnodeEdge<T,K,NDIM> b("b");
@@ -504,7 +504,7 @@ int main(int argc, char** argv) {
 
     //vmlSetMode(VML_HA | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // default
     //vmlSetMode(VML_EP | VML_FTZDAZ_OFF | VML_ERRMODE_DEFAULT); // err is 10x default
-    vmlSetMode(VML_HA | VML_FTZDAZ_ON | VML_ERRMODE_DEFAULT); // err is same as default little faster
+    //vmlSetMode(VML_HA | VML_FTZDAZ_ON | VML_ERRMODE_DEFAULT); // err is same as default little faster
     //vmlSetMode(VML_EP | VML_FTZDAZ_ON  | VML_ERRMODE_DEFAULT); // err is 10x default
 
     GLinitialize();

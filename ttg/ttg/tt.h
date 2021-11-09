@@ -123,10 +123,11 @@ namespace ttg {
       using valueT = std::decay_t<typename terminalT::value_type>;
       auto move_callback = [](const keyT &key, valueT &&value) {};
       auto send_callback = [](const keyT &key, const valueT &value) {};
+      auto broadcast_callback = [](const ttg::span<const keyT>& key, const valueT &value) {};
       auto setsize_callback = [](const keyT &key, std::size_t size) {};
       auto finalize_callback = [](const keyT &key) {};
 
-      input.set_callback(send_callback, move_callback, setsize_callback, finalize_callback);
+      input.set_callback(send_callback, move_callback, broadcast_callback, setsize_callback, finalize_callback);
     }
 
   public:

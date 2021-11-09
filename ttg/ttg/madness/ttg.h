@@ -348,7 +348,7 @@ namespace ttg_madness {
 
       const auto owner = keymap(key);
       if (owner != world.rank()) {
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
         // should be able on the other end to consume value (since it is just a temporary byproduct of serialization)
         // BUT compiler vomits when const std::remove_reference_t<Value>& -> std::decay_t<Value>
         // this exposes bad design in MemFuncWrapper (probably similar bugs elsewhere?) whose generic operator()
@@ -359,7 +359,7 @@ namespace ttg_madness {
         //      send_am will need to separate local and remote paths to deal with this
         worldobjT::send(owner, &ttT::template set_arg<i, Key, const std::remove_reference_t<Value> &>, key, value);
       } else {
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
 
         accessorT acc;
         if (cache.insert(acc, key)) acc->second = new TTArgs(this->priomap(key));  // It will be deleted by the task q
@@ -414,7 +414,7 @@ namespace ttg_madness {
 
         // ready to run the task?
         if (args->counter == 0) {
-          if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+          ttg::trace(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
           args->derived = static_cast<derivedT *>(this);
           args->key = key;
 
@@ -463,11 +463,11 @@ namespace ttg_madness {
       const int owner = keymap();
 
       if (owner != world.rank()) {
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : forwarding setting argument : ", i);
+        ttg::trace(world.rank(), ":", get_name(), " : forwarding setting argument : ", i);
         // CAVEAT see comment above in set_arg re:
         worldobjT::send(owner, &ttT::template set_arg<i, keyT, const std::remove_reference_t<Value> &>, value);
       } else {
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : received value for argument : ", i);
+        ttg::trace(world.rank(), ":", get_name(), " : received value for argument : ", i);
 
         accessorT acc;
         if (cache.insert(acc, 0)) acc->second = new TTArgs();  // It will be deleted by the task q
@@ -483,9 +483,7 @@ namespace ttg_madness {
           // N.B. Right now reductions are done eagerly, without spawning tasks
           //      this means we must lock
           args->lock();
-          if (tracing()) {
-            ttg::print_error(world.rank(), ":", get_name(), " : reducing value into argument : ", i);
-          }
+          ttg::trace(world.rank(), ":", get_name(), " : reducing value into argument : ", i);
           if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
             // have a value already? if not, set, otherwise reduce
             if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
@@ -512,10 +510,8 @@ namespace ttg_madness {
           // this
           if (args->stream_size[i] != 0) {
             args->nargs[i]--;
-            if (tracing()) {
-              ttg::print_error(world.rank(), ":", get_name(), " : stream ", i, " has size ", args->stream_size[i],
-                               " current nargs", args->nargs[i]);
-            }
+            ttg::trace(world.rank(), ":", get_name(), " : stream ", i, " has size ", args->stream_size[i],
+                       " current nargs", args->nargs[i]);
             if (args->nargs[i] == 0) args->counter--;
           }
           args->unlock();
@@ -527,7 +523,7 @@ namespace ttg_madness {
 
         // ready to run the task?
         if (args->counter == 0) {
-          if (tracing()) ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
+          ttg::trace(world.rank(), ":", get_name(), " : submitting task for op ");
           args->derived = static_cast<derivedT *>(this);
 
           world.impl().impl().taskq.add(args);
@@ -551,14 +547,14 @@ namespace ttg_madness {
       const int owner = keymap(key);
 
       if (owner != world.rank()) {
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
         worldobjT::send(owner, &ttT::set_arg<keyT>, key);
       } else {
         accessorT acc;
         if (cache.insert(acc, key)) acc->second = new TTArgs(this->priomap(key));  // It will be deleted by the task q
         TTArgs *args = acc->second;
 
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
         args->derived = static_cast<derivedT *>(this);
         args->key = key;
 
@@ -577,12 +573,12 @@ namespace ttg_madness {
       const int owner = keymap();
 
       if (owner != world.rank()) {
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : forwarding no-arg task: ");
+        ttg::trace(world.rank(), ":", get_name(), " : forwarding no-arg task: ");
         worldobjT::send(owner, &ttT::set_arg<keyT>);
       } else {
         auto task = new TTArgs();  // It will be deleted by the task q
 
-        if (tracing()) ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
+        ttg::trace(world.rank(), ":", get_name(), " : submitting task for op ");
         task->derived = static_cast<derivedT *>(this);
 
         world.impl().impl().taskq.add(task);
@@ -609,14 +605,10 @@ namespace ttg_madness {
       // body
       const auto owner = keymap();
       if (owner != world.rank()) {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), " : forwarding stream size for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), " : forwarding stream size for terminal ", i);
         worldobjT::send(owner, &ttT::template set_argstream_size<i, true>, size);
       } else {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), " : setting stream size to ", size, " for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), " : setting stream size to ", size, " for terminal ", i);
 
         accessorT acc;
         if (cache.insert(acc, 0)) acc->second = new TTArgs();  // It will be deleted by the task q
@@ -648,9 +640,7 @@ namespace ttg_madness {
       assert(std::get<i>(input_reducers) && "TT::set_argstream_size called on nonstreaming input terminal");
       assert(size > 0 && "TT::set_static_argstream_size(key,size) called with size=0");
 
-      if (tracing()) {
-        ttg::print(world.rank(), ":", get_name(), ": setting global stream size for terminal ", i);
-      }
+      ttg::trace(world.rank(), ":", get_name(), ": setting global stream size for terminal ", i);
 
       // Check if stream is already bounded
       if (static_streamsize[i] > 0) {
@@ -673,14 +663,10 @@ namespace ttg_madness {
       // body
       const auto owner = keymap(key);
       if (owner != world.rank()) {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream size for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": forwarding stream size for terminal ", i);
         worldobjT::send(owner, &ttT::template set_argstream_size<i>, key, size);
       } else {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), " : ", key, ": setting stream size for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": setting stream size for terminal ", i);
 
         accessorT acc;
         if (cache.insert(acc, key)) acc->second = new TTArgs(this->priomap(key));  // It will be deleted by the task q
@@ -716,14 +702,10 @@ namespace ttg_madness {
       // body
       const auto owner = keymap(key);
       if (owner != world.rank()) {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
         worldobjT::send(owner, &ttT::template finalize_argstream<i>, key);
       } else {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
 
         accessorT acc;
         const auto found = cache.find(acc, key);
@@ -748,9 +730,7 @@ namespace ttg_madness {
         args->counter--;
         // ready to run the task?
         if (args->counter == 0) {
-          if (tracing()) {
-            ttg::print(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
-          }
+          ttg::trace(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
           args->derived = static_cast<derivedT *>(this);
           args->key = key;
 
@@ -771,14 +751,10 @@ namespace ttg_madness {
       // body
       const int owner = keymap();
       if (owner != world.rank()) {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), " : forwarding stream finalize for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), " : forwarding stream finalize for terminal ", i);
         worldobjT::send(owner, &ttT::template finalize_argstream<i, true>);
       } else {
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), " : finalizing stream for terminal ", i);
-        }
+        ttg::trace(world.rank(), ":", get_name(), " : finalizing stream for terminal ", i);
 
         accessorT acc;
         const auto found = cache.find(acc, 0);
@@ -803,9 +779,7 @@ namespace ttg_madness {
         args->counter--;
         // ready to run the task?
         if (args->counter == 0) {
-          if (tracing()) {
-            ttg::print(world.rank(), ":", get_name(), " : submitting task for op ");
-          }
+          ttg::trace(world.rank(), ":", get_name(), " : submitting task for op ");
           args->derived = static_cast<derivedT *>(this);
 
           world.impl().impl().taskq.add(args);
@@ -903,10 +877,8 @@ namespace ttg_madness {
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
         auto finalize_callback = [this]() { finalize_argstream<i>(); };
         input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
-        if (tracing()) {
-          ttg::print(world.rank(), ":", get_name(), " : set callbacks for terminal ", input.get_name(),
-                     " assuming void {key,value} and no input");
-        }
+        ttg::trace(world.rank(), ":", get_name(), " : set callbacks for terminal ", input.get_name(),
+                   " assuming void {key,value} and no input");
       } else
         abort();
     }
@@ -925,10 +897,8 @@ namespace ttg_madness {
       static_assert(std::tuple_size_v<inedgesT> == std::tuple_size_v<input_terminals_type>);
       int junk[] = {0, (std::get<IS>(inedges).set_out(&std::get<IS>(input_terminals)), 0)...};
       junk[0]++;
-      if (tracing()) {
-        ttg::print(world.rank(), ":", get_name(), " : connected ", sizeof...(IS), " TT inputs to ", sizeof...(IS),
-                   " Edges");
-      }
+      ttg::trace(world.rank(), ":", get_name(), " : connected ", sizeof...(IS), " TT inputs to ", sizeof...(IS),
+                 " Edges");
     }
 
     template <std::size_t... IS, typename outedgesT>
@@ -937,10 +907,8 @@ namespace ttg_madness {
       static_assert(std::tuple_size_v<outedgesT> == std::tuple_size_v<output_terminalsT>);
       int junk[] = {0, (std::get<IS>(outedges).set_in(&std::get<IS>(output_terminals)), 0)...};
       junk[0]++;
-      if (tracing()) {
-        ttg::print(world.rank(), ":", get_name(), " : connected ", sizeof...(IS), " TT outputs to ", sizeof...(IS),
-                   " Edges");
-      }
+      ttg::trace(world.rank(), ":", get_name(), " : connected ", sizeof...(IS), " TT outputs to ", sizeof...(IS),
+                 " Edges");
     }
 
    public:
@@ -1045,9 +1013,7 @@ namespace ttg_madness {
 
     template <std::size_t i, typename Reducer>
     void set_input_reducer(Reducer &&reducer) {
-      if (tracing()) {
-        ttg::print(world.rank(), ":", get_name(), " : setting reducer for terminal ", i);
-      }
+      ttg::trace(world.rank(), ":", get_name(), " : setting reducer for terminal ", i);
       std::get<i>(input_reducers) = reducer;
     }
 

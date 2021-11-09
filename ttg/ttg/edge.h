@@ -37,16 +37,16 @@ namespace ttg {
       EdgeImpl(const std::string &name) : name(name), outs(), ins() {}
 
       void set_in(Out<keyT, valueT> *in) {
-        if (ins.size() && tracing()) {
-          print("Edge: ", name, " : has multiple inputs");
+        if (ins.size()) {
+          trace("Edge: ", name, " : has multiple inputs");
         }
         ins.push_back(in);
         try_to_connect_new_in(in);
       }
 
       void set_out(TerminalBase *out) {
-        if (outs.size() && tracing()) {
-          print("Edge: ", name, " : has multiple outputs");
+        if (outs.size()) {
+          trace("Edge: ", name, " : has multiple outputs");
         }
         outs.push_back(out);
         try_to_connect_new_out(out);
