@@ -8,7 +8,7 @@
 namespace ttg {
   namespace detail {
 
-    /// Determine the number of compute threads to use by TTG when not given to `ttg_initialize`
+    /// Determine the number of compute threads to use by TTG when not given to `ttg::initialize`
 
     /// The number of threads is queried from the environment variable `TTG_NUM_THREADS`; if not given,
     /// then `std::thread::hardware_concurrency` is used.
