@@ -14,14 +14,14 @@ namespace ttg_madness {
  * This allows programmatic control of watchpoints. Requires MADWorld using legacy ThreadPool and macOS. Example:
  * @code
  *   double x = 0.0;
- *   ::madnessttg::initialize_watchpoints();
- *   ::madnessttg::watchpoint_set(&x, ttg::detail::MemoryWatchpoint_x86_64::kWord,
+ *   ::ttg_madness::initialize_watchpoints();
+ *   ::ttg_madness::watchpoint_set(&x, ttg::detail::MemoryWatchpoint_x86_64::kWord,
  *     ttg::detail::MemoryWatchpoint_x86_64::kWhenWritten);
  *   x = 1.0;  // this will generate SIGTRAP ...
- *   ttg_default_execution_context().taskq.add([&x](){ x = 1.0; });  // and so will this ...
- *   ::madnessttg::watchpoint_set(&x, ttg::detail::MemoryWatchpoint_x86_64::kWord,
+ *   ::ttg_madness::ttg_default_execution_context().taskq.add([&x](){ x = 1.0; });  // and so will this ...
+ *   ::ttg_madness::watchpoint_set(&x, ttg::detail::MemoryWatchpoint_x86_64::kWord,
  *     ttg::detail::MemoryWatchpoint_x86_64::kWhenWrittenOrRead);
- *   ttg_default_execution_context().taskq.add([&x](){
+ *   ::ttg_madness::ttg_default_execution_context().taskq.add([&x](){
  *       std::cout << x << std::endl; });  // and even this!
  *
  * @endcode
@@ -51,11 +51,11 @@ namespace ttg_madness {
     /// must be called from main thread before setting watchpoints
     inline void initialize_watchpoints() {
 #if defined(HAVE_INTEL_TBB)
-      ttg::print_error(ttg::ttg_default_execution_context().rank(),
+      ttg::print_error(ttg::default_execution_context().rank(),
                        "WARNING: watchpoints are only supported with MADWorld using the legacy threadpool");
 #endif
 #if !defined(__APPLE__)
-      ttg::print_error(ttg::ttg_default_execution_context().rank(), "WARNING: watchpoints are only supported on macOS");
+      ttg::print_error(ttg::default_execution_context().rank(), "WARNING: watchpoints are only supported on macOS");
 #endif
       ttg::detail::MemoryWatchpoint_x86_64::Pool::initialize_instance(detail::watchpoints_threads());
     }
