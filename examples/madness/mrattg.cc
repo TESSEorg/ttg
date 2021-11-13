@@ -30,7 +30,7 @@ using namespace mra;
 template <Dimension NDIM>
 struct KeyProcMap {
     const size_t size;
-    KeyProcMap() : size(ttg::get_default_world().size()) {}
+    KeyProcMap() : size(ttg::default_execution_context().size()) {}
     std::size_t operator()(const Key<NDIM>& key) const {return key.hash() % size;}
 };
 
@@ -309,7 +309,7 @@ auto make_reconstruct(const cnodeEdge<T,K,NDIM>& in, rnodeEdge<T,K,NDIM>& out, c
 
     auto s = ttg::make_tt_tpl(&do_reconstruct<T,K,NDIM>, edges(in, S), edges(S, out), name, {"input", "s"}, {"s", "output"});
 
-    if (ttg::get_default_world().rank() == 0) {
+    if (ttg::default_execution_context().rank() == 0) {
         s->template in<1>()->send(Key<NDIM>{0,{0}}, FixedTensor<T,K,NDIM>()); // Prime the flow of scaling functions
     }
 

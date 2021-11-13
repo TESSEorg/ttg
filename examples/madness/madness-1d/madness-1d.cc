@@ -759,7 +759,7 @@ class Everything : public TT<Key, std::tuple<>, Everything> {
   Project project;
   Printer printer;
 
-  ttg::World &world;
+  ttg::World world;
 
  public:
   Everything()
@@ -767,7 +767,7 @@ class Everything : public TT<Key, std::tuple<>, Everything> {
       , producer("producer")
       , project(&funcA, "Project")
       , printer("Printer")
-      , world(ttg::get_default_world()) {
+      , world(ttg::default_execution_context()) {
     producer.out<0>()->connect(project.in<0>());
     project.out<1>()->connect(printer.in<0>());
     project.out<0>()->connect(project.in<0>());
@@ -794,7 +794,7 @@ class Everything_comp_rec_test {
    BinaryOp minusOp;
    Printer printer;
 
-   ttg::World &world;
+   ttg::World world;
 
   public:
    Everything_comp_rec_test()
@@ -806,7 +806,7 @@ class Everything_comp_rec_test {
        , reconstruct_doIt("Reconstruct_doIt")
        , minusOp(&sub, "minusOp")
        , printer("Printer")
-       , world(ttg::get_default_world()) {
+       , world(ttg::default_execution_context()) {
      producer.out<0>()->connect(project.in<0>());
      project.out<0>()->connect(project.in<0>());
      project.out<1>()->connect(compress_prologue.in<0>());
@@ -859,7 +859,7 @@ class Everything_cnc {
 
    Printer printer;
 
-   World &world;
+   World world;
 
 
 public:
@@ -871,7 +871,7 @@ public:
      , multOp(&mult, "A multiply B")
      , addOp(&add, "(A multiply B) add C")
      , printer("Printer")
-     , world(ttg::get_default_world()) {
+     , world(ttg::default_execution_context()) {
    producer.out<0>()->connect(project_funcA.in<0>());
    producer.out<0>()->connect(project_funcB.in<0>());
    producer.out<0>()->connect(project_funcC.in<0>());
@@ -915,7 +915,7 @@ class Everything_compress {
    Reconstruct_doIt reconstruct_doIt;
    Printer printer;
 
-   ttg::World &world;
+   ttg::World world;
 
   public:
    Everything_compress()
@@ -926,7 +926,7 @@ class Everything_compress {
        , reconstruct_prologue("Reconstruct_prologue")
        , reconstruct_doIt("Reconstruct_doIt")
        , printer("Printer")
-       , world(ttg::get_default_world()) {
+       , world(ttg::default_execution_context()) {
      producer.out<0>()->connect(project.in<0>());
 
      project.out<0>()->connect(project.in<0>());
@@ -978,7 +978,7 @@ class Everything_gaxpy_test2 {
 
    Printer printer;
 
-   ttg::World &world;
+   ttg::World world;
 
   public:
    Everything_gaxpy_test2()
@@ -993,7 +993,7 @@ class Everything_gaxpy_test2 {
        , reconstruct_prologue("reconstruct_prologue")
        , reconstruct_doIt("reconstruct_doIt")
        , printer("printer")
-       , world(ttg::get_default_world()) {
+       , world(ttg::default_execution_context()) {
      producer.out<0>()->connect(project_funcA1.in<0>());
      producer.out<0>()->connect(project_funcA2.in<0>());
 
@@ -1070,7 +1070,7 @@ class Everything_gaxpy_test3 {
    Reconstruct_doIt reconstruct_doIt;
 
    Printer printer;
-   ttg::World &world;
+   ttg::World world;
 
   public:
    Everything_gaxpy_test3()
@@ -1089,7 +1089,7 @@ class Everything_gaxpy_test3 {
        , reconstruct_prologue("reconstruct_prologue")
        , reconstruct_doIt("reconstruct_doIt")
        , printer("printer")
-       , world(ttg::get_default_world()) {
+       , world(ttg::default_execution_context()) {
      producer.out<0>()->connect(project_funcA.in<0>());
      producer.out<0>()->connect(project_funcB.in<0>());
 
@@ -1184,7 +1184,7 @@ class Everything_gaxpy_test {
 
         Printer printer;
 
-        ttg::World &world;
+        ttg::World world;
 
        public:
         Everything_gaxpy_test()
@@ -1201,7 +1201,7 @@ class Everything_gaxpy_test {
             , minusOp(&sub, "minusOp")
             , subOp(&sub, "subOp")
             , printer("printer")
-            , world(ttg::get_default_world()) {
+            , world(ttg::default_execution_context()) {
 		producer.out<0>()->connect(project_funcA.in<0>());
 		producer.out<0>()->connect(project_funcB.in<0>());
 
@@ -1277,7 +1277,7 @@ class Everything_diff {
    Diff_doIt diff_doIt;
    Printer printer;
 
-   ttg::World &world;
+   ttg::World world;
 
   public:
    Everything_diff()
@@ -1286,7 +1286,7 @@ class Everything_diff {
        , diff_prologue("Diff_prologue")
        , diff_doIt("Diff_doIt")
        , printer("Printer")
-       , world(ttg::get_default_world()) {
+       , world(ttg::default_execution_context()) {
      producer.out<0>()->connect(project.in<0>());
 
      project.out<0>()->connect(project.in<0>());
@@ -1328,7 +1328,7 @@ class Everything_diff_test {
    Diff_doIt diff_doIt;
    BinaryOp minusOp;
    Printer printer;
-   ttg::World &world;
+   ttg::World world;
 
    //Edge<Key, Node> p1, p2, inter, l, c, r, op1, op2, out;
 
@@ -1341,7 +1341,7 @@ public:
      , diff_doIt(edges(l, c, r), edges(l, c, r, op1), "Diff_doIt")
      , minusOp(&sub, edges(fuse(op1, r3), fuse(op2, r4)), edges(r3, out, r4), "diff_funcD sub funcDD")
      , printer(edges(out), "Printer")
-     , world(ttg::get_default_world()) {
+     , world(ttg::default_execution_context()) {
    fence();
  }
 
@@ -1367,7 +1367,7 @@ int main(int argc, char** argv) {
   TTBase::set_trace_all(false); */
 
   initialize(argc, argv);
-  auto &world = ttg::get_default_world();
+  auto world = ttg::default_execution_context();
   // world.taskq.add(world.rank(), hi);
   ttg_fence(world);
 

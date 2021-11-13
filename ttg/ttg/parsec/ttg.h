@@ -664,8 +664,8 @@ namespace ttg_parsec {
     ttg::detail::destroy_worlds<ttg_parsec::WorldImpl>();
     MPI_Finalize();
   }
-  inline void ttg_abort() { MPI_Abort(ttg::get_default_world().impl().comm(), 1); }
   inline ttg::World ttg_default_execution_context() { return ttg::get_default_world(); }
+  inline void ttg_abort() { MPI_Abort(ttg_default_execution_context().impl().comm(), 1); }
   inline void ttg_execute(ttg::World world) { world.impl().execute(); }
   inline void ttg_fence(ttg::World world) { world.impl().fence(); }
 
@@ -2231,7 +2231,7 @@ namespace ttg_parsec {
           std::make_index_sequence<std::tuple_size<input_terminals_tupleT>::value>{}, flows);
     }
 
-    void fence() override { ttg::get_default_world().impl().fence(); }
+    void fence() override { ttg::default_execution_context().impl().fence(); }
 
     static int key_equal(parsec_key_t a, parsec_key_t b, void *user_data) {
       if constexpr (std::is_same_v<keyT, void>) {
@@ -2400,8 +2400,8 @@ namespace ttg_parsec {
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
     TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
-        : TT(name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
+       keymapT &&keymap = keymapT(ttg::default_execution_context()), priomapT &&priomap = priomapT())
+        : TT(name, innames, outnames, ttg::default_execution_context(), std::forward<keymapT>(keymap),
              std::forward<priomapT>(priomap)) {}
 
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
@@ -2417,8 +2417,8 @@ namespace ttg_parsec {
               typename priomapT = ttg::detail::default_priomap<keyT>>
     TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
-        : TT(inedges, outedges, name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
+       keymapT &&keymap = keymapT(ttg::default_execution_context()), priomapT &&priomap = priomapT())
+        : TT(inedges, outedges, name, innames, outnames, ttg::default_execution_context(), std::forward<keymapT>(keymap),
              std::forward<priomapT>(priomap)) {}
 
     // Destructor checks for unexecuted tasks

@@ -279,13 +279,13 @@ namespace ttg {
 
       void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
         std::lock_guard<std::mutex> lock(mtx_);
-        ttg::trace("rank =", get_default_world().rank(),
+        ttg::trace("rank =", default_execution_context().rank(),
                    "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
                    "ttg_matrix.h Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem),
                    " in ", static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_), " for object @",
                    static_cast<void *>(this));
         values_.emplace_back(key[0], key[1], baseT::template get<0>(elem));
-        ttg::trace("rank =", get_default_world().rank(),
+        ttg::trace("rank =", default_execution_context().rank(),
                    "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
                    "ttg_matrix.h Write::op: ttg_matrix.h matrix_\n", matrix_);
       }

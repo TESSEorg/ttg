@@ -619,7 +619,7 @@ class FloydWarshall {
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
       , finalizer(result_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
                   "finalizer", adjacency_matrix_serial, verify_results)
-      , world(ttg::get_default_world())
+      , world(ttg::default_execution_context())
       , blocking_factor(blocking_factor) {
     funcA.set_keymap(keymap);
     funcB.set_keymap(keymap);
@@ -703,7 +703,7 @@ int main(int argc, char** argv) {
   initialize(argc, argv);
   ttg::TTBase::set_trace_all(false);
 
-  ttg::World world = ttg::get_default_world();
+  ttg::World world = ttg::default_execution_context();
 
   using mpqc::Debugger;
   auto debugger = std::make_shared<Debugger>();

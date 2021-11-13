@@ -575,7 +575,7 @@ auto make_result(MatrixT<T>& A, const ttg::Edge<Key2, MatrixTile<T>>& result) {
     }
 #ifdef TTG_USE_USER_TERMDET
     if (I == A.cols()-1 && J == A.rows()-1) {
-      ttg::get_default_world().impl().final_task();
+      ttg::default_execution_context().impl().final_task();
     }
 #endif // TTG_USE_USER_TERMDET
   };

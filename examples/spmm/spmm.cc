@@ -224,7 +224,7 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
 
   void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
     std::lock_guard<std::mutex> lock(mtx_);
-    ttg::trace("rank =", get_default_world().rank(), "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
+    ttg::trace("rank =", default_execution_context().rank(), "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
                "spmm.cc Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ",
                static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_), " for object @",
                static_cast<void *>(this));
@@ -300,7 +300,7 @@ class SpMM {
     void op(const Key<3> &key, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, Blk>> &a_ijk) {
       const auto i = key[0];
       const auto k = key[1];
-      auto world = get_default_world();
+      auto world = default_execution_context();
       assert(key[2] == world.rank());
       ttg::trace("LocalBcastA(", i, ", ", k, ")");
       if (k >= b_rowidx_to_colidx_.size()) return;
@@ -337,7 +337,7 @@ class SpMM {
       // broadcast a_ik to all existing {i,j,k}
       std::vector<Key<3>> ikp_keys;
       if (k >= b_rowidx_to_colidx_.size()) return;
-      auto world = get_default_world();
+      auto world = default_execution_context();
       std::vector<bool> procmap(world.size());
       auto keymap = baseT::get_keymap();
       for (auto &j : b_rowidx_to_colidx_[k]) {
@@ -370,7 +370,7 @@ class SpMM {
     void op(const Key<3> &key, typename baseT::input_values_tuple_type &&b_kj, std::tuple<Out<Key<3>, Blk>> &b_ijk) {
       const auto k = key[0];
       const auto j = key[1];
-      auto world = get_default_world();
+      auto world = default_execution_context();
       assert(key[2] == world.rank());
       ttg::trace("BcastB(", k, ", ", j, ")");
       if (k >= a_colidx_to_rowidx_.size()) return;
@@ -407,7 +407,7 @@ class SpMM {
       std::vector<Key<3>> kjp_keys;
       ttg::trace("BcastB(", k, ", ", j, ")");
       if (k >= a_colidx_to_rowidx_.size()) return;
-      auto world = get_default_world();
+      auto world = default_execution_context();
       std::vector<bool> procmap(world.size());
       for (auto &i : a_colidx_to_rowidx_[k]) {
         long proc = baseT::get_keymap()(Key<2>({i, j}));
@@ -1444,7 +1444,7 @@ int main(int argc, char **argv) {
                        mTiles, nTiles, kTiles, keymap);
       TTGUNUSED(a_times_b);
 
-      if (get_default_world().rank() == 0) std::cout << Dot{}(&a, &b) << std::endl;
+      if (default_execution_context().rank() == 0) std::cout << Dot{}(&a, &b) << std::endl;
 
       // ready to run!
       auto connected = make_graph_executable(&control);

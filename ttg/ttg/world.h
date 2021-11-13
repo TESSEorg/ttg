@@ -34,7 +34,7 @@ namespace ttg {
       struct default_keymap : ttg::detail::default_keymap_impl<keyT> {
        public:
         default_keymap() = default;
-        default_keymap(ttg::World& world) : ttg::detail::default_keymap_impl<keyT>(world.size()) {}
+        default_keymap(const ttg::World& world) : ttg::detail::default_keymap_impl<keyT>(world.size()) {}
       };
 
       template <typename keyT>

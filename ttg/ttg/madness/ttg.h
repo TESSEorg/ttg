@@ -52,7 +52,7 @@ namespace ttg_madness {
   class Graph {
    public:
     Graph() {
-      world_ = get_default_world();
+      world_ = default_execution_context();
     }
     Graph(World& w) : world_(w) {}
 
@@ -134,8 +134,8 @@ namespace ttg_madness {
     ttg::detail::destroy_worlds<ttg_madness::WorldImpl>();
     ::madness::finalize();
   }
-  inline void ttg_abort() { MPI_Abort(MPI_COMM_WORLD, 1); }
   inline ttg::World ttg_default_execution_context() { return ttg::get_default_world(); }
+  inline void ttg_abort() { MPI_Abort(ttg_default_execution_context().impl().impl().mpi.Get_mpi_comm(), 1); }
   inline void ttg_execute(ttg::World world) {
     // World executes tasks eagerly
   }
@@ -943,8 +943,8 @@ namespace ttg_madness {
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
     TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
-        : TT(name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
+       keymapT &&keymap = keymapT(ttg::default_execution_context()), priomapT &&priomap = priomapT())
+        : TT(name, innames, outnames, ttg::default_execution_context(), std::forward<keymapT>(keymap),
              std::forward<priomapT>(priomap)) {}
 
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
@@ -954,8 +954,8 @@ namespace ttg_madness {
        keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
         : ttg::TTBase(name, numins, numouts)
         , static_streamsize()
-        , worldobjT(ttg::get_default_world().impl().impl())
-        , world(ttg::get_default_world())
+        , worldobjT(ttg::default_execution_context().impl().impl())
+        , world(ttg::default_execution_context())
         // if using default keymap, rebind to the given world
         , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
                      ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
@@ -983,8 +983,8 @@ namespace ttg_madness {
               typename priomapT = ttg::detail::default_priomap<keyT>>
     TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::get_default_world()), priomapT &&priomap = priomapT())
-        : TT(inedges, outedges, name, innames, outnames, ttg::get_default_world(), std::forward<keymapT>(keymap),
+       keymapT &&keymap = keymapT(ttg::default_execution_context()), priomapT &&priomap = priomapT())
+        : TT(inedges, outedges, name, innames, outnames, ttg::default_execution_context(), std::forward<keymapT>(keymap),
              std::forward<priomapT>(priomap)) {}
 
     // Destructor checks for unexecuted tasks
