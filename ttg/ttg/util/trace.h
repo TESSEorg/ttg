@@ -25,7 +25,12 @@ namespace ttg {
   /// To enable tracing invoke trace_on(). To disable tracing
   /// \return false, if `trace_enabled()==false`, otherwise returns true if the most recent call to `trace_on()`
   /// has not been followed by `trace_off()`
-  inline bool tracing() { return trace_enabled() ? detail::trace_accessor() : false; }
+  inline bool tracing() {
+    if constexpr (trace_enabled())
+      return detail::trace_accessor();
+    else
+      return false;
+  }
 
   /// \brief enables tracing; if `trace_enabled()==true` this has no effect
   inline void trace_on() { if constexpr (trace_enabled()) detail::trace_accessor() = true; }
