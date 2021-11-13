@@ -149,13 +149,11 @@ namespace ttg {
     }
 
     /// @return false if `trace_enabled()==false`, else true if tracing set for either this instance or all instances
-    bool get_trace() {
-      return trace_enabled() && (ttg::detail::tt_base_trace_accessor() || trace_instance);
-    }
-
-    /// @return false if `trace_enabled()==false`, else true if tracing set for either this instance or all instances
-    bool tracing() {
-      return get_trace();
+    bool tracing() const {
+      if constexpr (trace_enabled())
+        return ttg::detail::tt_base_trace_accessor() || trace_instance;
+      else
+        return false;
     }
 
     /// Like ttg::trace(), but only produces tracing output if `this->tracing()==true`
