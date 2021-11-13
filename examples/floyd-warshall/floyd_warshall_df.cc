@@ -119,14 +119,14 @@ class Initiator : public TT<int,
   Initiator(Matrix<T>* adjacency_matrix_ttg, const std::string& name)
       : baseT(name, {}, {"outA", "outB", "outC", "outD"}), adjacency_matrix_ttg(adjacency_matrix_ttg) {
         /* Initiator should run on all ranks */
-        auto rank = ttg_default_execution_context().rank();
+        auto rank = ttg::default_execution_context().rank();
         this->set_keymap([=](int i){ return rank; });
       }
   Initiator(Matrix<T>* adjacency_matrix_ttg, const typename baseT::output_edges_type& outedges, const std::string& name)
       : baseT(edges(), outedges, name, {}, {"outA", "outB", "outC", "outD"})
       , adjacency_matrix_ttg(adjacency_matrix_ttg) {
         /* Initiator should run on all ranks */
-        auto rank = ttg_default_execution_context().rank();
+        auto rank = ttg::default_execution_context().rank();
         this->set_keymap([=](int i){ return rank; });
       }
 
@@ -709,7 +709,7 @@ int main(int argc, char** argv) {
   auto debugger = std::make_shared<Debugger>();
   Debugger::set_default_debugger(debugger);
   debugger->set_exec(argv[0]);
-  debugger->set_prefix(ttg_default_execution_context().rank());
+  debugger->set_prefix(ttg::default_execution_context().rank());
   debugger->set_cmd("lldb_xterm");
 
   fence();

@@ -103,7 +103,7 @@ class Everything {
     producer.make_executable();
     a.make_executable();
     consumer.make_executable();
-    if (ttg_default_execution_context().rank() == 0) producer.invoke();
+    if (default_execution_context().rank() == 0) producer.invoke();
   }
 };
 
@@ -130,7 +130,7 @@ class EverythingBase {
     a->make_executable();
     consumer->make_executable();
     // TODO need abstract base world? or TTBase need to provide TTBase::rank(), etc.
-    if (ttg_default_execution_context().rank() == 0) dynamic_cast<Producer *>(producer.get())->invoke();
+    if (default_execution_context().rank() == 0) dynamic_cast<Producer *>(producer.get())->invoke();
   }  // Ugh!
 };
 
@@ -347,14 +347,14 @@ class EverythingComposite {
     Producer *p = dynamic_cast<Producer *>(P.get());
     P->make_executable();
     AC->make_executable();
-    if (ttg_default_execution_context().rank() == 0) p->invoke();
+    if (default_execution_context().rank() == 0) p->invoke();
   }  // Ugh!
 };
 
 class ReductionTest {
   static void generator(const int &key, std::tuple<Out<int, int>> &out) {
     const auto value = std::rand();
-    ttg::print("ReductionTest: produced ", value, " on rank ", ttg_default_execution_context().rank());
+    ttg::print("ReductionTest: produced ", value, " on rank ", ttg::default_execution_context().rank());
     send<0>(key, value, out);
   }
   static void consumer(const int &key, const int &value, std::tuple<> &out) {
@@ -383,18 +383,18 @@ class ReductionTest {
     wg->make_executable();
     reduction.make_executable();
     wc->make_executable();
-    wg->invoke(ttg_default_execution_context().rank());
+    wg->invoke(ttg::default_execution_context().rank());
   }
 };
 
 class BroadcastTest {
   static void generator(const int &key, std::tuple<Out<int, int>> &out) {
     const auto value = std::rand();
-    ttg::print("BroadcastTest: produced ", value, " on rank ", ttg_default_execution_context().rank());
+    ttg::print("BroadcastTest: produced ", value, " on rank ", ttg::default_execution_context().rank());
     send<0>(key, value, out);
   }
   static void consumer(const int &key, const int &value, std::tuple<> &out) {
-    ttg::print("BroadcastTest: consumed ", value, " on rank ", ttg_default_execution_context().rank());
+    ttg::print("BroadcastTest: consumed ", value, " on rank ", ttg::default_execution_context().rank());
   }
 
   Edge<int, int> G2B, B2C;
@@ -411,7 +411,7 @@ class BroadcastTest {
       , B2C("B2C")
       , root(root)
       , wg(make_tt<int>(generator, edges(), edges(G2B), "producer", {}, {"start"}))
-      , broadcast(G2B, B2C, {ttg_default_execution_context().rank()}, root)
+      , broadcast(G2B, B2C, {ttg::default_execution_context().rank()}, root)
       , wc(make_tt(consumer, edges(B2C), edges(), "consumer", {"result"}, {})) {}
 
   void print() { print_ttg(wg.get()); }
@@ -490,7 +490,7 @@ int try_main(int argc, char **argv) {
   //  auto debugger = std::make_shared<Debugger>();
   //  Debugger::set_default_debugger(debugger);
   //  debugger->set_exec(argv[0]);
-  //  debugger->set_prefix(ttg_default_execution_context().rank());
+  //  debugger->set_prefix(ttg::default_execution_context().rank());
   //  debugger->set_cmd("lldb_xterm");
   //  debugger->set_cmd("gdb_xterm");
 
@@ -628,7 +628,7 @@ int try_main(int argc, char **argv) {
         auto p = make_tt(print, edges(F2P), edges(), "print");
         p->set_input_reducer<0>([](int &a, const int &b) { a += b; });
         make_graph_executable(f.get());
-        if (ttg_default_execution_context().rank() == 0) f->invoke(2, 1);
+        if (ttg::default_execution_context().rank() == 0) f->invoke(2, 1);
 
         ttg::fence();
       }

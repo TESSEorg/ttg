@@ -505,7 +505,7 @@ class FloydWarshall {
       , funcB(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcB")
       , funcC(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcC")
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
-      , world(ttg_default_execution_context())
+      , world(ttg::default_execution_context())
       , blocking_factor(blocking_factor) {
     initiator.out<0>()->connect(funcA.in<0>());
     initiator.out<1>()->connect(funcB.in<0>());

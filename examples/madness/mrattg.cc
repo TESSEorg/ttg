@@ -430,7 +430,7 @@ void test0() {
     auto printer3 =  make_printer(c,"reconstructed", false);
     auto connected = make_graph_executable(start.get());
     assert(connected);
-    if (ttg::ttg_default_execution_context().rank() == 0) {
+    if (ttg::default_execution_context().rank() == 0) {
         std::cout << "Is everything connected? " << connected << std::endl;
         std::cout << "==== begin dot ====\n";
         std::cout << ttg::Dot()(start.get()) << std::endl;

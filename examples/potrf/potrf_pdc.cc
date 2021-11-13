@@ -243,7 +243,7 @@ public:
   }
 
   bool is_local(int row, int col) const {
-    return ttg::ttg_default_execution_context().rank() == rank_of(row, col);
+    return ttg::default_execution_context().rank() == rank_of(row, col);
   }
 
   PaRSECMatrixT* parsec() {
@@ -897,7 +897,7 @@ int check_dpotrf( parsec_context_t *parsec, int loud,
     dplasma_enum_t side;
 
     two_dim_block_cyclic_init(&LLt, matrix_RealDouble, matrix_Tile,
-                              ttg::ttg_default_execution_context().size(), twodA->grid.rank,
+                              ttg::default_execution_context().size(), twodA->grid.rank,
                               A->mb, A->nb,
                               M, N,
                               0, 0,

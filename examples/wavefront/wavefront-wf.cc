@@ -156,7 +156,7 @@ auto make_wavefront(std::shared_ptr<double> m, const funcT& func, Edge<Key, Cont
 
 int main(int argc, char** argv) {
   initialize(argc, argv, -1);
-  if (ttg_default_execution_context().size() > 1) {
+  if (ttg::default_execution_context().size() > 1) {
     std::cout << "This is a shared memory version of Wavefront. Please run it on a single process.\n";
     ttg_abort();
   }
@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
   TTGUNUSED(connected);
   std::cout << "Graph is connected.\n";
 
-  if (ttg_default_execution_context().rank() == 0) {
+  if (ttg::default_execution_context().rank() == 0) {
     // std::cout << "==== begin dot ====\n";
     // std::cout << Dot()(s.get()) << std::endl;
     // std::cout << "==== end dot ====\n";
@@ -194,7 +194,7 @@ int main(int argc, char** argv) {
   execute();
   fence();
 
-  if (ttg_default_execution_context().rank() == 0) {
+  if (ttg::default_execution_context().rank() == 0) {
     end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "
               << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;

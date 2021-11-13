@@ -489,7 +489,7 @@ class GaussianElimination {
       , funcC(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcC")
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
       , blocking_factor(blocking_factor)
-      , world(ttg_default_execution_context()) {
+      , world(ttg::default_execution_context()) {
     initiator.out<0>()->connect(funcA.in<0>());
     initiator.out<1>()->connect(funcB.in<0>());
     initiator.out<2>()->connect(funcC.in<0>());

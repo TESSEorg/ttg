@@ -159,7 +159,7 @@ auto make_randomgen_op(params_t &tparams,
   {
     int niterate = tparams.ProcNumUpdates / CHUNK;
     auto [myprocnum, iter] = key.first;
-    //std::cout << "randomgen total iterations : " << niterate << " iteration : " << iter << ", rank :" << ttg_default_execution_context().rank() << std::endl;
+    //std::cout << "randomgen total iterations : " << niterate << " iteration : " << iter << ", rank :" << ttg::default_execution_context().rank() << std::endl;
 
     if (iter < niterate) {
       int i, j, logTableLocal, ipartner;
@@ -207,7 +207,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
     auto [myprocnum, iter] = first;
     auto j = second;
 
-    //std::cout << "processdata iteration : " << j << ", logNumProcs : " << tparams.logNumProcs << ", rank :" << ttg_default_execution_context().rank() << std::endl;
+    //std::cout << "processdata iteration : " << j << ", logNumProcs : " << tparams.logNumProcs << ", rank :" << ttg::default_execution_context().rank() << std::endl;
     if (j < tparams.logNumProcs) {
       int logTableLocal, ipartner;
       int ndata, nkeep, nsend, nrecv;
@@ -238,12 +238,12 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
         }
       }
 
-      //std::cout << "Sending processed data" << " with " << nsend << " elements from " << ttg_default_execution_context().rank()
+      //std::cout << "Sending processed data" << " with " << nsend << " elements from " << ttg::default_execution_context().rank()
       //<< " to pids : " << ipartner << " for j = " << j << std::endl;
       tosend.setn(nsend);
       send<1>(std::make_pair(key.first, j), tosend, out);
       send<2>(std::make_pair(std::make_pair(ipartner, key.first.second), j), tosend, out);
-      //std::cout << "Forward my data with " << nkeep << " elements from P#" << ttg_default_execution_context().rank() << "\n";
+      //std::cout << "Forward my data with " << nkeep << " elements from P#" << ttg::default_execution_context().rank() << "\n";
       data.setn(nkeep);
       send<0>(std::make_pair(key.first, j), data, out);
     }
@@ -280,7 +280,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
       int nrecv = other_data.getn();
       int ndata = nkeep + nrecv;
 
-      //std::cout << "receivedata j : " << j << ", rank :" << ttg_default_execution_context().rank() << " with " << nrecv << " elements" << " and my_data with " << nkeep << " elements" << std::endl;
+      //std::cout << "receivedata j : " << j << ", rank :" << ttg::default_execution_context().rank() << " with " << nrecv << " elements" << " and my_data with " << nkeep << " elements" << std::endl;
       //Copy other_data into my_data array
       for (int count = 0; count < nrecv; count++)
         keep_data(nkeep++) = other_data(count);
@@ -321,7 +321,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
       int ndata = my_data.getn();
       unsigned long datum, nlocalm1;
       int index;
-      //std::cout << "randomupdate iteration : " << iter << ", rank :" << ttg_default_execution_context().rank() << std::endl;
+      //std::cout << "randomupdate iteration : " << iter << ", rank :" << ttg::default_execution_context().rank() << std::endl;
       nlocalm1 = (unsigned long)(tparams.LocalTableSize - 1);
       //std::cout << "Data length : " << ndata << " nlocalm1 : " << nlocalm1 << std::endl;
       for (int i = 0; i < ndata; i++) {
@@ -333,7 +333,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
       if (iter == tparams.ProcNumUpdates / CHUNK - 1)
         send<2>(Key(std::make_pair(myprocnum, iter), 0), table, out);
       else {
-        //std::cout << "Iteration:" << iter << " done for process " << ttg_default_execution_context().rank() << "\n";
+        //std::cout << "Iteration:" << iter << " done for process " << ttg::default_execution_context().rank() << "\n";
         send<0>(Key(std::make_pair(myprocnum, iter+1), 0), my_data, out);
         send<1>(Key(std::make_pair(myprocnum, iter+1), 0), my_send_data, out);
       }
@@ -358,7 +358,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
         if (result_table[i] != verify_table[i])
         temp++;
 
-        std::cout << temp << " errors found in process " << ttg_default_execution_context().rank()
+        std::cout << temp << " errors found in process " << ttg::default_execution_context().rank()
         << " : " << ((temp <= 0.01*TABLE_SIZE) ? "PASSED!" : "FAILED!") << std::endl;*/
     };
 
@@ -446,7 +446,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
 
     initialize(argc, argv, -1);
 
-    tparams.NumProcs = ttg_default_execution_context().size();;
+    tparams.NumProcs = ttg::default_execution_context().size();;
     tparams.logTableSize = 19;
     tparams.TableSize = TABLE_SIZE;
     tparams.logNumProcs = log2(tparams.NumProcs);
@@ -454,8 +454,8 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
     tparams.MinLocalTableSize = (tparams.TableSize / tparams.NumProcs);
     tparams.LocalTableSize = tparams.MinLocalTableSize;
     tparams.ProcNumUpdates = 4 * tparams.LocalTableSize;
-    tparams.MyProc = ttg_default_execution_context().rank();
-    tparams.GlobalStartMyProc = (tparams.MinLocalTableSize * ttg_default_execution_context().rank());
+    tparams.MyProc = ttg::default_execution_context().rank();
+    tparams.GlobalStartMyProc = (tparams.MinLocalTableSize * ttg::default_execution_context().rank());
 
     std::vector<unsigned long> table(tparams.LocalTableSize);
     //std::vector<unsigned long> verify_table(tparams.LocalTableSize);
@@ -505,7 +505,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
     TTGUNUSED(connected);
     //std::cout << "Graph is connected.\n";
 
-    if (ttg_default_execution_context().rank() == 0) {
+    if (ttg::default_execution_context().rank() == 0) {
       std::cout << "==== begin dot ====\n";
       std::cout << Dot()(r0.get()) << std::endl;
       std::cout << "==== end dot ====\n";
@@ -520,7 +520,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
 
     execute();
     fence();
-    if (ttg_default_execution_context().rank() == 0) {
+    if (ttg::default_execution_context().rank() == 0) {
       end = std::chrono::high_resolution_clock::now();
       std::cout << "Total Main table size = 2^" << tparams.logTableSize << " = " << tparams.TableSize << " words\n";
       std::cout << "PE Main table size = 2^" << (tparams.logTableSize - tparams.logNumProcs) << " = "

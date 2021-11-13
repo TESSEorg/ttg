@@ -302,7 +302,7 @@ int main(int argc, char** argv) {
     TTGUNUSED(connected);
     std::cout << "Graph is connected.\n";
 
-    if (ttg_default_execution_context().rank() == 0) {
+    if (ttg::default_execution_context().rank() == 0) {
       //std::cout << "==== begin dot ====\n";
       //std::cout << Dot()(i.get()) << std::endl;
       //std::cout << "==== end dot ====\n";

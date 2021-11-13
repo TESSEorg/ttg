@@ -628,7 +628,7 @@ class GaussianElimination {
       , finalizer(result_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
                   "finalizer", adjacency_matrix_serial, verify_results)
       , blocking_factor(blocking_factor)
-      , world(ttg_default_execution_context()) {
+      , world(ttg::default_execution_context()) {
     initiator.template out<0>()->connect(funcA.template in<0>());
     initiator.template out<1>()->connect(funcB.template in<0>());
     initiator.template out<2>()->connect(funcC.template in<0>());
@@ -692,7 +692,7 @@ int main(int argc, char** argv) {
   initialize(argc, argv);
   ttg::TTBase::set_trace_all(false);
 
-  auto world = ttg_default_execution_context();
+  auto world = ttg::default_execution_context();
 
   // world.taskq.add(world.rank(), hi);
   ttg_fence(world);

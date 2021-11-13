@@ -747,7 +747,7 @@ void test1() {
 template <typename T, size_t K, Dimension NDIM>
 void test2(size_t nfunc, T thresh = 1e-6) {
     FunctionData<T,K,NDIM>::initialize();
-    //PartitionPmap<NDIM> pmap =  PartitionPmap<NDIM>(ttg_default_execution_context().size());
+    //PartitionPmap<NDIM> pmap =  PartitionPmap<NDIM>(ttg::default_execution_context().size());
     Domain<NDIM>::set_cube(-6.0,6.0);
     LevelPmapX<NDIM> pmap = LevelPmapX<NDIM>(ttg::default_execution_context().size());
 
