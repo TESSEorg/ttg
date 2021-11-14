@@ -157,7 +157,7 @@ auto make_sw2(const funcT& func, int block_size, const std::string& a, const std
       };
 
   return make_tt(f, edges(leftedge, topedge, diagedge), edges(leftedge, topedge, diagedge, resultedge), "sw2",
-              {"leftedge", "topedge", "diagedge"}, {"leftedge", "topedge", "diagedge", "result"});
+                 {"leftedge", "topedge", "diagedge"}, {"leftedge", "topedge", "diagedge", "result"});
 }
 
 template <typename funcT, typename T>
@@ -209,7 +209,7 @@ auto make_sw1(const funcT& func, int block_size, const std::string& a, const std
 
   Edge<Key, BlockMatrix<T>> recur("recur");
   return make_tt(f, edges(recur), edges(recur, leftedge, topedge, diagedge, resultedge), "sw1", {"recur"},
-              {"recur", "leftedge", "topedge", "diagedge", "resultedge"});
+                 {"recur", "leftedge", "topedge", "diagedge", "resultedge"});
 }
 
 int main(int argc, char* argv[]) {
@@ -246,7 +246,7 @@ int main(int argc, char* argv[]) {
             << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1e3 << std::endl;
 
   // int val2 = SW_OpenMP(a, b, r, base_size);
-  ttg_initialize(argc, argv, -1);
+  initialize(argc, argv, -1);
 
   Edge<Key, BlockMatrix<int>> leftedge, topedge, diagedge;
   Edge<Key, int> resultedge;
@@ -259,7 +259,7 @@ int main(int argc, char* argv[]) {
   TTGUNUSED(connected);
   std::cout << "Graph is connected.\n";
 
-  if (ttg_default_execution_context().rank() == 0) {
+  if (ttg::default_execution_context().rank() == 0) {
     // std::cout << "==== begin dot ====\n";
     // std::cout << Dot()(s.get()) << std::endl;
     // std::cout << "==== end dot ====\n";
@@ -268,9 +268,9 @@ int main(int argc, char* argv[]) {
     s->in<0>()->send(Key(0, 0), BlockMatrix<int>());
   }
 
-  ttg_execute(ttg_default_execution_context());
-  ttg_fence(ttg_default_execution_context());
-  if (ttg_default_execution_context().rank() == 0) {
+  execute();
+  fence();
+  if (ttg::default_execution_context().rank() == 0) {
     end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "
               << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;

@@ -6,7 +6,7 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 # Why TTG?
 
 - TTG marries the idea of flowgraph programming models with the key innovations in the PARSEC runtime for compact specification of DAGs (PTG).
-- TTG can efficiently compose and execute irregular computation patterns which are poorly served by the current programming and execution models.
+- TTG can be used to efficiently compose and execute irregular computation patterns which are poorly served by the current programming and execution models.
 - TTG has strong support for distributed hybrid architectures for running modern scientific algorithms efficiently on current and near-future supercomputers. 
 
 # Installation
@@ -23,122 +23,129 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 
 # How to write a simple TTG program?
 
-- Step 1 : Include the required header files. 
-For MADNESS runtime, add the below header file.
+1. Select the default TTG backend and include the required header files. To select the default backend define one (and only one) of the following macros, best via the command-line argument to the compiler or as an explicit `#define` statement:
+    - `TTG_USE_PARSEC`: selects the PaRSEC backend as the default;
+    - `TTG_USE_MADNESS`: selects the MADNESS backend as the default (expert-use only).
 
-```cpp
-#include "ttg/madness/ttg.h"
-```
+    For simple programs it is sufficient to include the top-level header file:
+    ```cpp
+    #include <ttg.h>
+    ```
+    It is also possible to hardwire the backend selection by including the corresponding backend-specific header directly; there is no need to `#include` the top-level TTG header or to define the backend selection macros:
+    - to use PaRSEC backend only, add:
+      ```cpp
+      #include <ttg/parsec/ttg.h>
+      ```
+    - to use the MADNESS backend only, add:
+      ```cpp
+      #include <ttg/madness/ttg.h>
+      ```
 
-For PaRSEC runtime, add the below header file.
-```cpp
-#include "ttg/parsec/ttg.h"
-```
+2. Define a TaskId (Key) class which represents a unique identifier for each task and which is hashable.
 
-- Step 2 : Define a TaskId (Key) which represents a unique identifier for each task and which is hashable.
+3. Define a factory that returns a TemplateTask for every function that runs the computation. Below factory function returns a TemplateTask for recursively exploring the wavefronts of the Smith Waterman algorithm. The code adopts several common design motifs of a TTG program. Complete implementation of the algorithm can be found in the [examples](examples/) directory.
 
-- Step 3 : Define a factory that returns a TemplateTask for every function that runs the computation. Below factory function returns a TemplateTask for recursively exploring the wavefronts of the Smith Waterman algorithm. The code adopts several common design motifs of a TTG program. Complete implementation of the algorithm can be found in the [examples](examples/) directory.
+   ```cpp
+   template <typename funcT, typename T>
+   auto make_sw1(const funcT& func, int block_size, const std::string &a, const std::string &b,
+                 int problem_size, ttg::Edge<Key, BlockMatrix<T>>& leftedge, ttg::Edge<Key, BlockMatrix<T>>& topedge,
+                 ttg::Edge<Key, BlockMatrix<T>>& diagedge, ttg::Edge<Key, T>& resultedge) {
+      auto f = [block_size, problem_size, a, b, func](const Key& key, BlockMatrix<T>&& toporleft,
+                  std::tuple<ttg::Out<Key, BlockMatrix<T>>, ttg::Out<Key, BlockMatrix<T>>,
+                  ttg::Out<Key, BlockMatrix<T>>, ttg::Out<Key, BlockMatrix<T>>, ttg::Out<Key, T>>& out) {
+        // Getting the block coordinates
+        auto[i, j] = key;
+        int next_i = i + 1;
+        int next_j = j + 1;
+        int num_blocks = problem_size / block_size;
 
-```cpp
-template <typename funcT, typename T>
-auto make_sw1(const funcT& func, int block_size, const std::string &a, const std::string &b,
-            int problem_size, Edge<Key, BlockMatrix<T>>& leftedge, Edge<Key, BlockMatrix<T>>& topedge,
-            Edge<Key, BlockMatrix<T>>& diagedge, Edge<Key, T>& resultedge) {
-  auto f = [block_size, problem_size, a, b, func](const Key& key, BlockMatrix<T>&& toporleft,
-              std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
-              Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, T>>& out) {
-    // Getting the block coordinates
-    auto[i, j] = key;
-    int next_i = i + 1;
-    int next_j = j + 1;
-    int num_blocks = problem_size / block_size;
+        BlockMatrix<T> X(block_size, block_size);
+        if (i == 0 && j == 0) {
+          //No top, left or diagonal blocks
+          X = sw_iterative(i, j, X, X, X, X, block_size, a, b, problem_size);
+        }
+        else if (i == 0) {
+          //Only left block, single dependency
+          X = sw_iterative(i, j, X, toporleft, X, X, block_size, a, b, problem_size);
+        }
+        else if (j == 0) {
+          //Only top block, single dependency
+          X = sw_iterative(i, j, X, X, toporleft, X, block_size, a, b, problem_size);
+        }
 
-    BlockMatrix<T> X(block_size, block_size);
-    if (i == 0 && j == 0) {
-      //No top, left or diagonal blocks
-      X = sw_iterative(i, j, X, X, X, X, block_size, a, b, problem_size);
-    }
-    else if (i == 0) {
-      //Only left block, single dependency
-      X = sw_iterative(i, j, X, toporleft, X, X, block_size, a, b, problem_size);
-    }
-    else if (j == 0) {
-      //Only top block, single dependency
-      X = sw_iterative(i, j, X, X, toporleft, X, block_size, a, b, problem_size);
-    }
-
-    //std::cout << X << std::endl;
-    if (next_i < num_blocks) {
-      //std::cout << "left " << next_i << " " << j << std::endl;
-      if (j == 0)  // send top block for next block computation
-        send<0>(Key(next_i, j), X, out);
-      else  // send top block for next block computation
-        send<2>(Key(next_i, j), X, out);
-    }
-    if (next_j < num_blocks) {
-      if (i == 0)  // send left block for next block computation
-        send<0>(Key(i, next_j), X, out);
-      else  // // send left block for next block computation
-        send<1>(Key(i, next_j), X, out);
-    }
-    if (next_i < num_blocks && next_j < num_blocks) {
-      send<3>(Key(next_i, next_j), X, out); //send diagonal block for next block computation
-    }
+        //std::cout << X << std::endl;
+        if (next_i < num_blocks) {
+          //std::cout << "left " << next_i << " " << j << std::endl;
+          if (j == 0)  // send top block for next block computation
+            ttg::send<0>(Key(next_i, j), X, out);
+          else  // send top block for next block computation
+            ttg::send<2>(Key(next_i, j), X, out);
+        }
+        if (next_j < num_blocks) {
+          if (i == 0)  // send left block for next block computation
+            ttg::send<0>(Key(i, next_j), X, out);
+          else  // // send left block for next block computation
+            ttg::send<1>(Key(i, next_j), X, out);
+        }
+        if (next_i < num_blocks && next_j < num_blocks) {
+          ttg::send<3>(Key(next_i, next_j), X, out); //send diagonal block for next block computation
+        }
   
-    if (i == num_blocks - 1 && j == num_blocks - 1)
-      send<4>(Key(i,j), X(block_size-1, block_size-1), out);
-  };
+        if (i == num_blocks - 1 && j == num_blocks - 1)
+          ttg::send<4>(Key(i,j), X(block_size-1, block_size-1), out);
+      };
 
-  Edge<Key, BlockMatrix<T>> recur("recur");
-  return make_tt(f, edges(recur), edges(recur, leftedge, topedge, diagedge, resultedge), "sw1", {"recur"},
-                 {"recur", "leftedge", "topedge", "diagedge", "resultedge"});
-}
-```
+      ttg::Edge<Key, BlockMatrix<T>> recur("recur");
+      return ttg::make_tt(f, ttg::edges(recur), ttg::edges(recur, leftedge, topedge, diagedge, resultedge), "sw1", {"recur"},
+                          {"recur", "leftedge", "topedge", "diagedge", "resultedge"});
+   }
+   ```
 
-- Step 4 : Define the edges and verify that the graph is connected in the main program.
+4. Define the edges and verify that the graph is connected in the main program.
 
-```cpp
-  ttg_initialize(argc, argv, -1);
+   ```cpp
+   ttg::initialize(argc, argv, -1);
 
-  Edge<Key, BlockMatrix<int>> leftedge, topedge, diagedge;
-  Edge<Key, int> resultedge;
-  auto s = make_sw1(sw_iterative<int>, block_size, a, b, problem_size, leftedge, topedge,
-                  diagedge, resultedge);
-  auto s1 = make_sw2(sw_iterative<int>, block_size, a, b, problem_size, leftedge, topedge,
-                  diagedge, resultedge);
-  auto r = make_result(verify, val1, resultedge);
+   ttg::Edge<Key, BlockMatrix<int>> leftedge, topedge, diagedge;
+   ttg::Edge<Key, int> resultedge;
+   auto s = make_sw1(sw_iterative<int>, block_size, a, b, problem_size, leftedge, topedge,
+                     diagedge, resultedge);
+   auto s1 = make_sw2(sw_iterative<int>, block_size, a, b, problem_size, leftedge, topedge,
+                     diagedge, resultedge);
+   auto r = make_result(verify, val1, resultedge);
 
-  auto connected = make_graph_executable(s.get());
-  assert(connected);
-  std::cout << "Graph is connected.\n";
-```
+   auto connected = ttg::make_graph_executable(s.get());
+   assert(connected);
+   std::cout << "Graph is connected.\n";
+   ```
 
-- Step 5 : Execute the graph.
+5. Execute the graph.
 
-```cpp
-  if (ttg_default_execution_context().rank() == 0)
-    s->in<0>()->send(Key(0,0), BlockMatrix<int>());
+   ```cpp
+   if (ttg::default_execution_context().rank() == 0)
+     s->in<0>()->send(Key(0,0), BlockMatrix<int>());
 
-  ttg_execute(ttg_default_execution_context());
-  ttg_fence(ttg_default_execution_context());
-```
+   ttg::execute();
+   ttg::fence();
+   ```
 
-- TTG API documentation is available for the following versions:
-    - [master branch](https://tesseorg.github.io/ttg/dox-master) .
-
-# Task Graph Visualization
+## Task Graph Visualization
 
 The task graph can be dumped into a DOT format using the below code in the main program after connecting the graph. [GraphViz](https://www.graphviz.org/) tools can be used to visualize the task graph.
 
 ```cpp
 std::cout << "==== begin dot ====\n";
-std::cout << Dot()(s.get()) << std::endl;
+std::cout << ttg::Dot()(s.get()) << std::endl;
 std::cout << "==== end dot ====\n";
 ```
 
 Below is a TTG graph generated by Smith Waterman algorithm. Each operation/TemplateTask factory is denoted by a rectangle with input terminals on the top and output terminals listed on the bottom part of the rectangle.
 
 ![](doc/images/sw-df.png)
+
+# TTG reference documentation
+TTG API documentation is available for the following versions:
+- [master branch](https://tesseorg.github.io/ttg/dox-master) .
 
 # Cite
 

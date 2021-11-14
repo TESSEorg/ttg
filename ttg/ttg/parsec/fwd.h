@@ -20,7 +20,7 @@ namespace ttg_parsec {
   class WorldImpl;
 
   template <typename... RestOfArgs>
-  inline void ttg_initialize(int argc, char **argv, int taskpool_size = -1, RestOfArgs &&...);
+  inline void ttg_initialize(int argc, char **argv, int num_threads = -1, RestOfArgs &&...);
 
   inline void ttg_finalize();
 

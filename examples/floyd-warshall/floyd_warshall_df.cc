@@ -119,14 +119,14 @@ class Initiator : public TT<int,
   Initiator(Matrix<T>* adjacency_matrix_ttg, const std::string& name)
       : baseT(name, {}, {"outA", "outB", "outC", "outD"}), adjacency_matrix_ttg(adjacency_matrix_ttg) {
         /* Initiator should run on all ranks */
-        auto rank = ttg_default_execution_context().rank();
+        auto rank = ttg::default_execution_context().rank();
         this->set_keymap([=](int i){ return rank; });
       }
   Initiator(Matrix<T>* adjacency_matrix_ttg, const typename baseT::output_edges_type& outedges, const std::string& name)
       : baseT(edges(), outedges, name, {}, {"outA", "outB", "outC", "outD"})
       , adjacency_matrix_ttg(adjacency_matrix_ttg) {
         /* Initiator should run on all ranks */
-        auto rank = ttg_default_execution_context().rank();
+        auto rank = ttg::default_execution_context().rank();
         this->set_keymap([=](int i){ return rank; });
       }
 
@@ -619,7 +619,7 @@ class FloydWarshall {
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
       , finalizer(result_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
                   "finalizer", adjacency_matrix_serial, verify_results)
-      , world(ttg::get_default_world())
+      , world(ttg::default_execution_context())
       , blocking_factor(blocking_factor) {
     funcA.set_keymap(keymap);
     funcB.set_keymap(keymap);
@@ -700,19 +700,19 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
 void floyd_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
-  ttg_initialize(argc, argv);
+  initialize(argc, argv);
   ttg::TTBase::set_trace_all(false);
 
-  ttg::World world = ttg::get_default_world();
+  ttg::World world = ttg::default_execution_context();
 
   using mpqc::Debugger;
   auto debugger = std::make_shared<Debugger>();
   Debugger::set_default_debugger(debugger);
   debugger->set_exec(argv[0]);
-  debugger->set_prefix(ttg_default_execution_context().rank());
+  debugger->set_prefix(ttg::default_execution_context().rank());
   debugger->set_cmd("lldb_xterm");
 
-  ttg_fence(ttg_default_execution_context());
+  fence();
 
   for (int arg = 1; arg < argc; ++arg) {
     if (strcmp(argv[arg], "-dx") == 0) madness::xterm_debug(argv[0], 0);

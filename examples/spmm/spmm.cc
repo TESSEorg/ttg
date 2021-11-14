@@ -199,7 +199,7 @@ class Read_SpMatrix : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMat
       , matrix_(matrix) {}
 
   void op(const Key<2> &key, std::tuple<Out<Key<2>, Blk>> &out) {
-    auto rank = ttg_default_execution_context().rank();
+    auto rank = ttg::default_execution_context().rank();
     for (int k = 0; k < matrix_.outerSize(); ++k) {
       for (typename SpMatrix<Blk>::InnerIterator it(matrix_, k); it; ++it) {
         if (rank == this->get_keymap()(Key<2>({it.row(), it.col()})))
@@ -224,7 +224,7 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>
 
   void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
     std::lock_guard<std::mutex> lock(mtx_);
-    ttg::trace("rank =", get_default_world().rank(), "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
+    ttg::trace("rank =", default_execution_context().rank(), "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
                "spmm.cc Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ",
                static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_), " for object @",
                static_cast<void *>(this));
@@ -300,7 +300,7 @@ class SpMM {
     void op(const Key<3> &key, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, Blk>> &a_ijk) {
       const auto i = key[0];
       const auto k = key[1];
-      auto world = get_default_world();
+      auto world = default_execution_context();
       assert(key[2] == world.rank());
       ttg::trace("LocalBcastA(", i, ", ", k, ")");
       if (k >= b_rowidx_to_colidx_.size()) return;
@@ -337,7 +337,7 @@ class SpMM {
       // broadcast a_ik to all existing {i,j,k}
       std::vector<Key<3>> ikp_keys;
       if (k >= b_rowidx_to_colidx_.size()) return;
-      auto world = get_default_world();
+      auto world = default_execution_context();
       std::vector<bool> procmap(world.size());
       auto keymap = baseT::get_keymap();
       for (auto &j : b_rowidx_to_colidx_[k]) {
@@ -370,7 +370,7 @@ class SpMM {
     void op(const Key<3> &key, typename baseT::input_values_tuple_type &&b_kj, std::tuple<Out<Key<3>, Blk>> &b_ijk) {
       const auto k = key[0];
       const auto j = key[1];
-      auto world = get_default_world();
+      auto world = default_execution_context();
       assert(key[2] == world.rank());
       ttg::trace("BcastB(", k, ", ", j, ")");
       if (k >= a_colidx_to_rowidx_.size()) return;
@@ -407,7 +407,7 @@ class SpMM {
       std::vector<Key<3>> kjp_keys;
       ttg::trace("BcastB(", k, ", ", j, ")");
       if (k >= a_colidx_to_rowidx_.size()) return;
-      auto world = get_default_world();
+      auto world = default_execution_context();
       std::vector<bool> procmap(world.size());
       for (auto &i : a_colidx_to_rowidx_[k]) {
         long proc = baseT::get_keymap()(Key<2>({i, j}));
@@ -453,7 +453,7 @@ class SpMM {
 
           // assuming here {i,j,k} for all k map to same node
           auto owner = keymap(Key<2>({i, j}));
-          if (owner == ttg_default_execution_context().rank()) {
+          if (owner == ttg::default_execution_context().rank()) {
             if (true) {
               decltype(i) k;
               bool have_k;
@@ -484,7 +484,7 @@ class SpMM {
       long next_k;
       bool have_next_k;
       std::tie(next_k, have_next_k) = compute_next_k(i, j, k);
-      ttg::trace("Rank ", ttg_default_execution_context().rank(),
+      ttg::trace("Rank ", ttg::default_execution_context().rank(),
                  " :"
                  " C[",
                  i, "][", j, "]  += A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
@@ -582,7 +582,7 @@ class SpMM {
         }
         return std::make_tuple(a_colidx, true);
       }
-      abort();  // unreachable
+      ttg::abort();  // unreachable
     }
   };
 
@@ -733,7 +733,7 @@ static void initSpMatrixMarket(const std::function<int(const Key<2> &)> &keymap,
     std::cerr << "Failed to load " << filename << ", bailing out..." << std::endl;
     ttg::ttg_abort();
   }
-  if (0 == ttg_default_execution_context().rank()) {
+  if (0 == ttg::default_execution_context().rank()) {
     std::cout << "##MatrixMarket file " << filename << " -- " << A.rows() << " x " << A.cols() << " -- " << A.nonZeros()
               << " nnz (density: " << (float)A.nonZeros() / (float)A.rows() / (float)A.cols() << ")" << std::endl;
   }
@@ -774,7 +774,7 @@ static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const c
   c = parseOption(option, c);
   d = parseOption(option, d);
 
-  if (ttg_default_execution_context().rank() == 0) {
+  if (ttg::default_execution_context().rank() == 0) {
     std::cout << "#R-MAT: " << N << " nodes, " << E << " edges, a/b/c/d = " << a << "/" << b << "/" << c << "/" << d
               << std::endl;
   }
@@ -800,7 +800,7 @@ static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const c
   B = A;
   C.resize(N, N);
 
-  if (ttg_default_execution_context().rank() == 0) {
+  if (ttg::default_execution_context().rank() == 0) {
     std::cout << "#R-MAT: " << E << " nonzero elements, density: " << (double)nnz / (double)N / (double)N << std::endl;
   }
 }
@@ -861,7 +861,7 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
   for (int nt = 0; nt < n; nt++) nTiles.push_back(196);
   for (int kt = 0; kt < k; kt++) kTiles.push_back(256);
 
-  int rank = ttg_default_execution_context().rank();
+  int rank = ttg::default_execution_context().rank();
 
   using triplet_t = Eigen::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
@@ -1013,15 +1013,15 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
 }
 
 #if defined(BTAS_IS_USABLE)
-static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, size_t M, size_t N, size_t K, int minTs, int maxTs,
-                           double avgDensity, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &Aref, SpMatrix<> &Bref,
-                           bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles, std::vector<int> &kTiles,
-                           std::vector<std::vector<long>> &a_rowidx_to_colidx,
+static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, size_t M, size_t N, size_t K, int minTs,
+                           int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &Aref,
+                           SpMatrix<> &Bref, bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles,
+                           std::vector<int> &kTiles, std::vector<std::vector<long>> &a_rowidx_to_colidx,
                            std::vector<std::vector<long>> &a_colidx_to_rowidx,
                            std::vector<std::vector<long>> &b_rowidx_to_colidx,
                            std::vector<std::vector<long>> &b_colidx_to_rowidx, double &average_tile_size,
                            double &Adensity, double &Bdensity, unsigned int seed) {
-  int rank = ttg_default_execution_context().rank();
+  int rank = ttg::default_execution_context().rank();
 
   int ts;
   std::mt19937 gen(seed);
@@ -1185,8 +1185,8 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   }, end{0}, diff{0};
   gettimeofday(&start, nullptr);
   // ready, go! need only 1 kick, so must be done by 1 thread only
-  if (ttg_default_execution_context().rank() == 0) control.start(P, Q);
-  ttg_fence(ttg_default_execution_context());
+  if (ttg::default_execution_context().rank() == 0) control.start(P, Q);
+  fence();
   gettimeofday(&end, nullptr);
   timersub(&end, &start, &diff);
   double tc = (double)diff.tv_sec + (double)diff.tv_usec / 1e6;
@@ -1197,7 +1197,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
 #else
   std::string rt("Unkown???");
 #endif
-  if (ttg_default_execution_context().rank() == 0) {
+  if (ttg::default_execution_context().rank() == 0) {
     std::cout << "TTG-" << rt << " PxQxg=   " << P << " " << Q << " 1 average_NB= " << avg_nb << " M= " << M
               << " N= " << N << " K= " << K << " Tiling= " << tiling_type << " A_density= " << Adensity
               << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
@@ -1264,9 +1264,9 @@ int main(int argc, char **argv) {
   cores = parseOption(nbCoreStr, cores);
 
   if (int dashdash = cmdOptionIndex(argv, argv + argc, "--") > -1) {
-    ttg_initialize(argc - dashdash, argv + dashdash, cores);
+    initialize(argc - dashdash, argv + dashdash, cores);
   } else {
-    ttg_initialize(1, argv, cores);
+    initialize(1, argv, cores);
   }
 
   std::string debugStr(getCmdOption(argv, argv + argc, "-d"));
@@ -1277,13 +1277,13 @@ int main(int argc, char **argv) {
     auto debugger = std::make_shared<Debugger>();
     Debugger::set_default_debugger(debugger);
     debugger->set_exec(argv[0]);
-    debugger->set_prefix(ttg_default_execution_context().rank());
+    debugger->set_prefix(ttg::default_execution_context().rank());
     // debugger->set_cmd("lldb_xterm");
     debugger->set_cmd("gdb_xterm");
   }
 
-  int mpi_size = ttg_default_execution_context().size();
-  int mpi_rank = ttg_default_execution_context().rank();
+  int mpi_size = ttg::default_execution_context().size();
+  int mpi_rank = ttg::default_execution_context().rank();
   int best_pq = mpi_size;
   int P, Q;
   for (int p = 1; p <= (int)sqrt(mpi_size); p++) {
@@ -1296,7 +1296,7 @@ int main(int argc, char **argv) {
       }
     }
   }
-  // ttg::launch_lldb(ttg_default_execution_context().rank(), argv[0]);
+  // ttg::launch_lldb(ttg::default_execution_context().rank(), argv[0]);
 
   {
     if (debug & (1 << 0)) {
@@ -1342,9 +1342,9 @@ int main(int argc, char **argv) {
     if (seed == 0) {
       std::random_device rd;
       seed = rd();
-      if (0 == ttg_default_execution_context().rank()) std::cerr << "#Random seeded with " << seed << std::endl;
+      if (0 == ttg::default_execution_context().rank()) std::cerr << "#Random seeded with " << seed << std::endl;
     }
-    ttg_broadcast(ttg_default_execution_context(), seed, 0);
+    ttg_broadcast(ttg::default_execution_context(), seed, 0);
 
     std::vector<int> mTiles;
     std::vector<int> nTiles;
@@ -1422,7 +1422,7 @@ int main(int argc, char **argv) {
 
     if (timing) {
       // Start up engine
-      ttg_execute(ttg_default_execution_context());
+      execute();
       for (int nrun = 0; nrun < nb_runs; nrun++) {
         timed_measurement(A, B, keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
                           a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles, nTiles, kTiles, M, N, K,
@@ -1444,7 +1444,7 @@ int main(int argc, char **argv) {
                        mTiles, nTiles, kTiles, keymap);
       TTGUNUSED(a_times_b);
 
-      if (get_default_world().rank() == 0) std::cout << Dot{}(&a, &b) << std::endl;
+      if (default_execution_context().rank() == 0) std::cout << Dot{}(&a, &b) << std::endl;
 
       // ready to run!
       auto connected = make_graph_executable(&control);
@@ -1452,14 +1452,14 @@ int main(int argc, char **argv) {
       TTGUNUSED(connected);
 
       // ready, go! need only 1 kick, so must be done by 1 thread only
-      if (ttg_default_execution_context().rank() == 0) control.start(P, Q);
+      if (ttg::default_execution_context().rank() == 0) control.start(P, Q);
 
-      ttg_execute(ttg_default_execution_context());
-      ttg_fence(ttg_default_execution_context());
+      execute();
+      fence();
 
       // validate C=A*B against the reference output
       assert(has_value(c_status));
-      if (ttg_default_execution_context().rank() == 0) {
+      if (ttg::default_execution_context().rank() == 0) {
         SpMatrix<> Cref = Aref * Bref;
 
         double norm_2_square, norm_inf;
@@ -1475,7 +1475,7 @@ int main(int argc, char **argv) {
 
       // validate Acopy=A against the reference output
       //      assert(has_value(copy_status));
-      //      if (ttg_default_execution_context().rank() == 0) {
+      //      if (ttg::default_execution_context().rank() == 0) {
       //        double norm_2_square, norm_inf;
       //        std::tie(norm_2_square, norm_inf) = norms<blk_t>(Acopy - A);
       //        std::cout << "||Acopy - A||_2      = " << std::sqrt(norm_2_square) << std::endl;

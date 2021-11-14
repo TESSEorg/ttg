@@ -25,7 +25,7 @@ using Key = std::pair<int, int>;
 struct Control {};
 
 template <typename T>
-inline BlockMatrix<T> stencil_computation(int i, int j, int M, int N, BlockMatrix<T> bm, BlockMatrix<T> left, 
+inline BlockMatrix<T> stencil_computation(int i, int j, int M, int N, BlockMatrix<T> bm, BlockMatrix<T> left,
                           BlockMatrix<T> top, BlockMatrix<T> right, BlockMatrix<T> bottom) {
   // i==0 -> no top block
   // j==0 -> no left block
@@ -57,7 +57,7 @@ void wavefront_serial(Matrix<T>* m, Matrix<T>* result, int n_brows, int n_bcols)
       if (j < n_bcols - 1) right = ((*m)(i, j + 1));
       if (j > 0) left = ((*m)(i, j - 1));
       if (i > 0) top = ((*m)(i - 1, j));
-      
+
       (*result)(i,j) = stencil_computation(i, j, n_brows, n_bcols, ((*m)(i,j)), (left), (top), (right), (bottom));
     }
   }
@@ -68,20 +68,20 @@ IMPORT_TTG_RUNTIME_NS
 
 // Method to generate  wavefront tasks with two inputs.
 template <typename funcT, typename T>
-auto make_wavefront2(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>>& input, 
-                      Edge<Key, BlockMatrix<T>>& left, Edge<Key, BlockMatrix<T>>& top, 
+auto make_wavefront2(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>>& input,
+                      Edge<Key, BlockMatrix<T>>& left, Edge<Key, BlockMatrix<T>>& top,
                       Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right,
                       Edge<Key, BlockMatrix<T>>& result) {
-  
+
   auto f = [MB, NB, func](const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& left, BlockMatrix<T>&& top,
                      std::vector<BlockMatrix<T>>&& bottom_right,
-                     std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, 
+                     std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                      Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
     int next_j = j + 1;
 
-    int size = bottom_right.size(); 
+    int size = bottom_right.size();
     //std::cout << "wf2 " << i << " " << j << " " << "size: " << bottom_right.size() <<  std::endl;
     BlockMatrix<T> res;
     if (i == MB - 1 && j == NB - 1)
@@ -109,12 +109,12 @@ auto make_wavefront2(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
 }
 
 template <typename T>
-auto initiator(Matrix<T>* m, Edge<Key, BlockMatrix<T>>& out0, Edge<Key, BlockMatrix<T>>& out1, 
+auto initiator(Matrix<T>* m, Edge<Key, BlockMatrix<T>>& out0, Edge<Key, BlockMatrix<T>>& out1,
               Edge<Key, BlockMatrix<T>>& out2, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right0,
               Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right1,
               Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right2) {
   auto f = [m](const Key& key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
-               Out<Key, BlockMatrix<T>>, 
+               Out<Key, BlockMatrix<T>>,
               Out<Key, std::vector<BlockMatrix<T>>>, Out<Key, std::vector<BlockMatrix<T>>>,
               Out<Key, std::vector<BlockMatrix<T>>>>& out)
   {
@@ -122,7 +122,7 @@ auto initiator(Matrix<T>* m, Edge<Key, BlockMatrix<T>>& out0, Edge<Key, BlockMat
       for (int j = 0; j < m->cols(); j++) {
         std::vector<BlockMatrix<T>> v;
         if (i == 0 && j == 0) {
-          //std::cout << "send 0 : " << i << " " << j << std::endl; 
+          //std::cout << "send 0 : " << i << " " << j << std::endl;
           send<0>(Key(i,j), (*m)(i,j), out);
           v.push_back((*m)(i,j+1));
           v.push_back((*m)(i+1,j));
@@ -168,8 +168,8 @@ auto initiator(Matrix<T>* m, Edge<Key, BlockMatrix<T>>& out0, Edge<Key, BlockMat
 }
 
 template <typename funcT, typename T>
-auto make_wavefront0(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>>& input, 
-                    Edge<Key, BlockMatrix<T>>& toporleft, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right, 
+auto make_wavefront0(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>>& input,
+                    Edge<Key, BlockMatrix<T>>& toporleft, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right,
                     //Edge<Key, BlockMatrix<T>>& right,
                     Edge<Key, BlockMatrix<T>>& result) {
   auto f = [func, MB, NB](const Key& key, BlockMatrix<T>&& input, std::vector<BlockMatrix<T>>&& bottom_right, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
@@ -178,11 +178,11 @@ auto make_wavefront0(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
     int next_j = j + 1;
 
     //std::cout << "wf0 " << i << " " << j << " " << "size: " << bottom_right.size() <<  std::endl;
-    BlockMatrix<T> res = func(i, j, MB, NB, input, input, input, bottom_right[0], bottom_right[1]);  
-    
+    BlockMatrix<T> res = func(i, j, MB, NB, input, input, input, bottom_right[0], bottom_right[1]);
+
     send<0>(Key(i,next_j), res, out);
     send<0>(Key(next_i,j), res, out);
-    
+
     send<1>(Key(i,j), res, out);
   };
 
@@ -193,8 +193,8 @@ auto make_wavefront0(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
 
 // Method to generate wavefront task with single input.
 template <typename funcT, typename T>
-auto make_wavefront1(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>>& input, 
-                    Edge<Key, BlockMatrix<T>>& toporleft, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right, 
+auto make_wavefront1(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>>& input,
+                    Edge<Key, BlockMatrix<T>>& toporleft, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right,
                     Edge<Key, BlockMatrix<T>>& output1,
                     Edge<Key, BlockMatrix<T>>& output2, Edge<Key, BlockMatrix<T>>& result) {
   auto f = [MB, NB, func](const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& previous, std::vector<BlockMatrix<T>>&& bottom_right, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
@@ -209,7 +209,7 @@ auto make_wavefront1(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
         res = func(i, j, MB, NB, input, previous, previous, bottom_right[0], bottom_right[0]);
       else
         res = func(i, j, MB, NB, input, previous, previous, bottom_right[0], bottom_right[1]);
-   
+
     //func(i, j, MB, NB, input, previous, previous, bottom_right[0], bottom_right[1]);
     //Processing finished for this block, so send it to output
     send<3>(Key(i,j), res, out);
@@ -219,26 +219,26 @@ auto make_wavefront1(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
         // Single predecessor, no left block
         send<0>(Key(next_i, j), res, out); //send top block
       }
-      else { 
+      else {
         // Two predecessors
         send<2>(Key(next_i, j), res, out); //send top block
-        
+
       }
     }
     if (next_j < NB) {
-      if (i == 0) { 
+      if (i == 0) {
         // Single predecessor, no top block
         send<0>(Key(i, next_j), res, out); //send left block
       }
-      else { 
+      else {
         // Two predecessors
         send<1>(Key(i, next_j), res, out); //send left block
       }
     }
   };
 
-  return wrap(f, edges(input, toporleft, bottom_right), edges(toporleft, output1, output2, result), "wavefront1", 
-              {"input", "toporleft", "bottom_right"}, 
+  return wrap(f, edges(input, toporleft, bottom_right), edges(toporleft, output1, output2, result), "wavefront1",
+              {"input", "toporleft", "bottom_right"},
               {"recur", "output1", "output2", "result"});
 }
 
@@ -289,7 +289,7 @@ int main(int argc, char** argv) {
   Edge<Key, std::vector<BlockMatrix<double>>> bottom_right0("bottom_right0"), bottom_right1("bottom_right1"),
         bottom_right2("bottom_right2");
 
-  ttg_initialize(argc, argv, -1);
+  initialize(argc, argv, -1);
   {
     auto i = initiator(m, input0, input1, input2, bottom_right0, bottom_right1, bottom_right2);
     auto s0 = make_wavefront0(stencil_computation<double>, n_brows, n_bcols, input0, toporleft, bottom_right0, result);
@@ -302,11 +302,11 @@ int main(int argc, char** argv) {
     TTGUNUSED(connected);
     std::cout << "Graph is connected.\n";
 
-    if (ttg_default_execution_context().rank() == 0) {
+    if (ttg::default_execution_context().rank() == 0) {
       //std::cout << "==== begin dot ====\n";
       //std::cout << Dot()(i.get()) << std::endl;
       //std::cout << "==== end dot ====\n";
-      
+
       beg = std::chrono::high_resolution_clock::now();
       i->invoke(Key(0,0));
       //i->in<0>()->send(Key(0, 0), Control());
@@ -314,8 +314,8 @@ int main(int argc, char** argv) {
       // s->send<0>(Key(0,0), Control());
     }
 
-    ttg_execute(ttg_default_execution_context());
-    ttg_fence(ttg_default_execution_context());
+    execute();
+    fence();
     end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "
               << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;

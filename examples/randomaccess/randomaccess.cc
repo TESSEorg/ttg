@@ -58,8 +58,8 @@ class RandomData {
     const unsigned long* get() const { return data.get(); }
     unsigned long* get() { return data.get(); }
 
-    unsigned long& operator() (int i) { 
-      return data.get()[i]; 
+    unsigned long& operator() (int i) {
+      return data.get()[i];
     }
 
     /*template<typename Archive>
@@ -131,7 +131,7 @@ HPCC_starts(long n)
 
 //Kick start the computation by generating a random number and instantiating the data arrays.
 auto make_start(params_t &tparams, Edge<Key, unsigned long> rand_input_edge,
-    Edge<Key, RandomData> &main_iter_data_edge, 
+    Edge<Key, RandomData> &main_iter_data_edge,
     Edge<Key, RandomData> &input_send_edge) {
   auto f = [tparams](const Key& key, std::tuple<Out<Key, unsigned long>, Out<Key, RandomData>, Out<Key, RandomData>> &out) {
     RandomData data(CHUNKBIG);
@@ -148,18 +148,18 @@ auto make_start(params_t &tparams, Edge<Key, unsigned long> rand_input_edge,
 }
 
 //Generates random data for exchanging with other processes.
-auto make_randomgen_op(params_t &tparams, 
-    Edge<Key, unsigned long> rand_input_edge, 
-    Edge<Key, RandomData> &main_iter_data_edge, 
+auto make_randomgen_op(params_t &tparams,
+    Edge<Key, unsigned long> rand_input_edge,
+    Edge<Key, RandomData> &main_iter_data_edge,
     Edge<Key, RandomData> &input_send_edge,
     Edge<Key, RandomData> &process_data_edge,
     Edge<Key, RandomData> &process_send_edge) {
-  auto f = [tparams](const Key& key, unsigned long ran, RandomData& data, RandomData& tosend, 
+  auto f = [tparams](const Key& key, unsigned long ran, RandomData& data, RandomData& tosend,
       std::tuple<Out<Key, unsigned long>, Out<Key, RandomData>, Out<Key, RandomData>> &out)
   {
     int niterate = tparams.ProcNumUpdates / CHUNK;
     auto [myprocnum, iter] = key.first;
-    //std::cout << "randomgen total iterations : " << niterate << " iteration : " << iter << ", rank :" << ttg_default_execution_context().rank() << std::endl;
+    //std::cout << "randomgen total iterations : " << niterate << " iteration : " << iter << ", rank :" << ttg::default_execution_context().rank() << std::endl;
 
     if (iter < niterate) {
       int i, j, logTableLocal, ipartner;
@@ -186,28 +186,28 @@ auto make_randomgen_op(params_t &tparams,
   };
 
   return make_tt(f, edges(rand_input_edge, main_iter_data_edge, input_send_edge),
-      edges(rand_input_edge, process_data_edge, process_send_edge), "generator", 
-      {"rand input edge", "main_iterator_data_edge", "input_send_edge"}, 
+      edges(rand_input_edge, process_data_edge, process_send_edge), "generator",
+      {"rand input edge", "main_iterator_data_edge", "input_send_edge"},
       {"rand recur edge", "process_data_edge", "process_send_edge"});
 }
 
 //Exchanges data with other processses (Send part of MPI_SendRecv)
-auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_edge, 
+auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_edge,
     Edge<Key, RandomData> &process_send_edge,
-    Edge<Key, RandomData> &keep_data_edge, 
+    Edge<Key, RandomData> &keep_data_edge,
     Edge<Key, RandomData> &send_data_edge,
     Edge<Key, RandomData> &send_to_other_data_edge,
     Edge<Key, RandomData> &direct_update_data_edge,
     Edge<Key, RandomData> &forward_send_edge)
 {
-  auto f = [tparams](const Key &key, RandomData &data, RandomData &tosend, 
-      std::tuple<Out<Key, RandomData>, Out<Key, RandomData>, 
+  auto f = [tparams](const Key &key, RandomData &data, RandomData &tosend,
+      std::tuple<Out<Key, RandomData>, Out<Key, RandomData>,
       Out<Key, RandomData>, Out<Key, RandomData>, Out<Key, RandomData>> &out) {
     auto [first, second] = key;
     auto [myprocnum, iter] = first;
     auto j = second;
 
-    //std::cout << "processdata iteration : " << j << ", logNumProcs : " << tparams.logNumProcs << ", rank :" << ttg_default_execution_context().rank() << std::endl;
+    //std::cout << "processdata iteration : " << j << ", logNumProcs : " << tparams.logNumProcs << ", rank :" << ttg::default_execution_context().rank() << std::endl;
     if (j < tparams.logNumProcs) {
       int logTableLocal, ipartner;
       int ndata, nkeep, nsend, nrecv;
@@ -238,39 +238,39 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
         }
       }
 
-      //std::cout << "Sending processed data" << " with " << nsend << " elements from " << ttg_default_execution_context().rank() 
+      //std::cout << "Sending processed data" << " with " << nsend << " elements from " << ttg::default_execution_context().rank()
       //<< " to pids : " << ipartner << " for j = " << j << std::endl;
       tosend.setn(nsend);
       send<1>(std::make_pair(key.first, j), tosend, out);
       send<2>(std::make_pair(std::make_pair(ipartner, key.first.second), j), tosend, out);
-      //std::cout << "Forward my data with " << nkeep << " elements from P#" << ttg_default_execution_context().rank() << "\n";
+      //std::cout << "Forward my data with " << nkeep << " elements from P#" << ttg::default_execution_context().rank() << "\n";
       data.setn(nkeep);
       send<0>(std::make_pair(key.first, j), data, out);
-    } 
+    }
       else
       {
         //std::cout << "no processing needed, sending data arrays with " << data.getn() << " and " << tosend.getn() << " elements\n";
         send<3>(std::make_pair(key.first, j), data, out);
         send<4>(std::make_pair(key.first, j), tosend, out);
       }
-    }; 
+    };
 
     return make_tt(f, edges(process_data_edge, process_send_edge),
         edges(keep_data_edge, send_data_edge, send_to_other_data_edge, direct_update_data_edge, forward_send_edge), "Process Data", {
-        "process data edge", "process send edge"}, {"keep data edge", "send data edge", 
-        "send to other Ps data edge", "direct update data edge", "direct update send edge"}); 
+        "process data edge", "process send edge"}, {"keep data edge", "send data edge",
+        "send to other Ps data edge", "direct update data edge", "direct update send edge"});
   }
 
   //Exchanges data with other processes (Recv part of MPI_SendRecv)
-  auto make_receivedata_op(params_t &tparams, 
+  auto make_receivedata_op(params_t &tparams,
       Edge<Key, RandomData> &keep_data_edge,
       Edge<Key, RandomData> &send_data_edge,
       Edge<Key, RandomData> &send_to_other_data_edge,
       Edge<Key, RandomData> &process_data_edge,
       Edge<Key, RandomData> &update_data_edge,
       Edge<Key, RandomData> &forward_send_edge, Edge<Key, RandomData> &process_send_edge) {
-    auto f = [tparams](const Key &key, RandomData &keep_data, RandomData &my_send_data, 
-        RandomData &other_data, 
+    auto f = [tparams](const Key &key, RandomData &keep_data, RandomData &my_send_data,
+        RandomData &other_data,
         std::tuple<Out<Key, RandomData>, Out<Key, RandomData>, Out<Key, RandomData>, Out<Key, RandomData>> &out) {
       auto [first, second] = key;
       auto [myprocnum, iter] = first;
@@ -280,13 +280,13 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
       int nrecv = other_data.getn();
       int ndata = nkeep + nrecv;
 
-      //std::cout << "receivedata j : " << j << ", rank :" << ttg_default_execution_context().rank() << " with " << nrecv << " elements" << " and my_data with " << nkeep << " elements" << std::endl;   
+      //std::cout << "receivedata j : " << j << ", rank :" << ttg::default_execution_context().rank() << " with " << nrecv << " elements" << " and my_data with " << nkeep << " elements" << std::endl;
       //Copy other_data into my_data array
       for (int count = 0; count < nrecv; count++)
         keep_data(nkeep++) = other_data(count);
 
       keep_data.setn(ndata);
-      send<0>(std::make_pair(first, j + 1), keep_data, out); 
+      send<0>(std::make_pair(first, j + 1), keep_data, out);
 
       if (j == tparams.logNumProcs) {
         send<2>(key, keep_data, out);
@@ -298,32 +298,32 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
     };
 
     return make_tt(f, edges(keep_data_edge, send_data_edge, send_to_other_data_edge),
-        edges(process_data_edge, process_send_edge, update_data_edge, forward_send_edge), 
-        "Receive Data from other Ps", 
-        {"keep_data", "my_send_data", "recv_data"}, 
+        edges(process_data_edge, process_send_edge, update_data_edge, forward_send_edge),
+        "Receive Data from other Ps",
+        {"keep_data", "my_send_data", "recv_data"},
         {"process_data_edge", "process_send_edge", "update_data_edge", "update_send_edge"});
   }
 
   //Update the data array and continue to next iteration
-  auto make_randomupdate_op(std::vector<unsigned long> &table, params_t &tparams, 
+  auto make_randomupdate_op(std::vector<unsigned long> &table, params_t &tparams,
       Edge<Key, RandomData> &direct_update_data_edge,
-      Edge<Key, RandomData> &update_data_edge, 
+      Edge<Key, RandomData> &update_data_edge,
       Edge<Key, RandomData> &forward_send_edge,
       Edge<Key, RandomData> &main_iter_data_edge,
       Edge<Key, RandomData> &input_send_edge,
       Edge<Key, std::vector<unsigned long>> &result_data_edge) {
     auto f = [&table, tparams](const Key& key, RandomData &my_data,
         RandomData &my_send_data,
-        std::tuple<Out<Key, RandomData>, 
+        std::tuple<Out<Key, RandomData>,
         Out<Key, RandomData>,
         Out<Key, std::vector<unsigned long>>> &out) {
       auto [myprocnum, iter] = key.first;
       int ndata = my_data.getn();
       unsigned long datum, nlocalm1;
       int index;
-      //std::cout << "randomupdate iteration : " << iter << ", rank :" << ttg_default_execution_context().rank() << std::endl;
+      //std::cout << "randomupdate iteration : " << iter << ", rank :" << ttg::default_execution_context().rank() << std::endl;
       nlocalm1 = (unsigned long)(tparams.LocalTableSize - 1);
-      //std::cout << "Data length : " << ndata << " nlocalm1 : " << nlocalm1 << std::endl; 
+      //std::cout << "Data length : " << ndata << " nlocalm1 : " << nlocalm1 << std::endl;
       for (int i = 0; i < ndata; i++) {
         datum = my_data(i);
         index = datum & nlocalm1;
@@ -333,7 +333,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
       if (iter == tparams.ProcNumUpdates / CHUNK - 1)
         send<2>(Key(std::make_pair(myprocnum, iter), 0), table, out);
       else {
-        //std::cout << "Iteration:" << iter << " done for process " << ttg_default_execution_context().rank() << "\n";
+        //std::cout << "Iteration:" << iter << " done for process " << ttg::default_execution_context().rank() << "\n";
         send<0>(Key(std::make_pair(myprocnum, iter+1), 0), my_data, out);
         send<1>(Key(std::make_pair(myprocnum, iter+1), 0), my_send_data, out);
       }
@@ -346,7 +346,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
 #define NUPDATE (4 * TABLE_SIZE)
 
   //TODO: Original MPI code needs to be run in order to validate the result.
-  auto make_verifyresult(params_t &tparams, //std::vector<unsigned long> &verify_table, 
+  auto make_verifyresult(params_t &tparams, //std::vector<unsigned long> &verify_table,
       Edge<Key, std::vector<unsigned long>> &result_edge) {
     auto f = [tparams](const Key& key, std::vector<unsigned long> &result_table, std::tuple<> &out) {
       /* Verification of results (in serial or "safe" mode; optional) */
@@ -358,7 +358,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
         if (result_table[i] != verify_table[i])
         temp++;
 
-        std::cout << temp << " errors found in process " << ttg_default_execution_context().rank() 
+        std::cout << temp << " errors found in process " << ttg::default_execution_context().rank()
         << " : " << ((temp <= 0.01*TABLE_SIZE) ? "PASSED!" : "FAILED!") << std::endl;*/
     };
 
@@ -444,9 +444,9 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
     //std::vector<unsigned long> table;
     params_t tparams;
 
-    ttg_initialize(argc, argv, -1);
+    initialize(argc, argv, -1);
 
-    tparams.NumProcs = ttg_default_execution_context().size();;
+    tparams.NumProcs = ttg::default_execution_context().size();;
     tparams.logTableSize = 19;
     tparams.TableSize = TABLE_SIZE;
     tparams.logNumProcs = log2(tparams.NumProcs);
@@ -454,14 +454,14 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
     tparams.MinLocalTableSize = (tparams.TableSize / tparams.NumProcs);
     tparams.LocalTableSize = tparams.MinLocalTableSize;
     tparams.ProcNumUpdates = 4 * tparams.LocalTableSize;
-    tparams.MyProc = ttg_default_execution_context().rank();
-    tparams.GlobalStartMyProc = (tparams.MinLocalTableSize * ttg_default_execution_context().rank());  
+    tparams.MyProc = ttg::default_execution_context().rank();
+    tparams.GlobalStartMyProc = (tparams.MinLocalTableSize * ttg::default_execution_context().rank());
 
     std::vector<unsigned long> table(tparams.LocalTableSize);
     //std::vector<unsigned long> verify_table(tparams.LocalTableSize);
 
     Edge<Key, unsigned long> rand_input_edge;
-    Edge<Key, RandomData> main_iter_data_edge, input_send_edge; 
+    Edge<Key, RandomData> main_iter_data_edge, input_send_edge;
     Edge<Key, RandomData> process_data_edge, process_send_edge;
     Edge<Key, RandomData> keep_data_edge, send_data_edge, direct_update_edge;
     Edge<Key, RandomData> send_to_other_data_edge, forward_send_edge, update_data_edge;
@@ -480,20 +480,20 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
     //Power2NodesMPIRandomAccessUpdateVerfy(verify_table, tparams);
 
     auto r0 = make_start(tparams, rand_input_edge, main_iter_data_edge, input_send_edge);
-    auto r1 = make_randomgen_op(tparams, rand_input_edge, main_iter_data_edge, input_send_edge, 
+    auto r1 = make_randomgen_op(tparams, rand_input_edge, main_iter_data_edge, input_send_edge,
         process_data_edge, process_send_edge);
-    auto r2 = make_processdata_op(tparams, process_data_edge, process_send_edge, 
+    auto r2 = make_processdata_op(tparams, process_data_edge, process_send_edge,
         keep_data_edge, send_data_edge,
         send_to_other_data_edge, direct_update_edge, forward_send_edge);
     auto r3 = make_receivedata_op(tparams, keep_data_edge, send_data_edge,
-        send_to_other_data_edge, process_data_edge, update_data_edge, 
+        send_to_other_data_edge, process_data_edge, update_data_edge,
         forward_send_edge, process_send_edge);
-    auto r4 = make_randomupdate_op(table, tparams, direct_update_edge, update_data_edge, 
-        forward_send_edge, main_iter_data_edge, 
+    auto r4 = make_randomupdate_op(table, tparams, direct_update_edge, update_data_edge,
+        forward_send_edge, main_iter_data_edge,
         input_send_edge, result_data_edge);
     auto r5 = make_verifyresult(tparams, result_data_edge);
 
-    auto keymap = [](const Key& key) { return key.first.first; }; 
+    auto keymap = [](const Key& key) { return key.first.first; };
     r0->set_keymap(keymap);
     r1->set_keymap(keymap);
     r2->set_keymap(keymap);
@@ -505,7 +505,7 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
     TTGUNUSED(connected);
     //std::cout << "Graph is connected.\n";
 
-    if (ttg_default_execution_context().rank() == 0) {
+    if (ttg::default_execution_context().rank() == 0) {
       std::cout << "==== begin dot ====\n";
       std::cout << Dot()(r0.get()) << std::endl;
       std::cout << "==== end dot ====\n";
@@ -518,12 +518,12 @@ auto make_processdata_op(params_t &tparams, Edge<Key, RandomData> &process_data_
       }
     }
 
-    ttg_execute(ttg_default_execution_context());
-    ttg_fence(ttg_default_execution_context());
-    if (ttg_default_execution_context().rank() == 0) {
+    execute();
+    fence();
+    if (ttg::default_execution_context().rank() == 0) {
       end = std::chrono::high_resolution_clock::now();
       std::cout << "Total Main table size = 2^" << tparams.logTableSize << " = " << tparams.TableSize << " words\n";
-      std::cout << "PE Main table size = 2^" << (tparams.logTableSize - tparams.logNumProcs) << " = " 
+      std::cout << "PE Main table size = 2^" << (tparams.logTableSize - tparams.logNumProcs) << " = "
         << tparams.TableSize/tparams.NumProcs << " words/PE ---- " << tparams.logNumProcs << "\n";
 
       std::cout << "Number of updates EXECUTED = " << 4 * tparams.TableSize << "\n";

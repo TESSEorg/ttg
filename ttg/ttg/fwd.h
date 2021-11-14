@@ -44,6 +44,14 @@ namespace ttg {
 
   class World;
 
+  template <typename... RestOfArgs>
+  void initialize(int argc, char **argv, int num_threads = -1, RestOfArgs &&...);
+  void finalize();
+  void abort();
+  World default_execution_context();
+  void execute(ttg::World world);
+  void fence(ttg::World world);
+
 }  // namespace ttg
 
 #include "ttg/impl_selector.h"

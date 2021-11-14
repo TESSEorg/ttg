@@ -72,7 +72,7 @@ class Printer : public TT<int, std::tuple<>, Printer, Value> {
 };
 
 int main(int argc, char** argv) {
-  ttg_initialize(argc, argv);
+  initialize(argc, argv);
 
   std::cout << "a\n";
   Value a;
@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
   connect<0, 0>(&x, &p);
   x.in<0>()->send(0, Value(33));
 
-  ttg_fence(ttg_default_execution_context());
+  fence();
   ttg_finalize();
   return 0;
 }

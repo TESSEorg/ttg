@@ -289,7 +289,7 @@ int main(int argc, char** argv) {
               << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1e3 << std::endl;
   }
 
-  ttg_initialize(argc, argv, -1);
+  ttg::initialize(argc, argv, -1);
   Edge<Key, BlockMatrix<double>> input0("input0"), input1("input1"), input2("input2"), toporleft("toporleft"),
       output1("output1"), output2("output2"), result("result");
   Edge<Key, std::vector<BlockMatrix<double>>> bottom_right0("bottom_right0"), bottom_right1("bottom_right1"),
@@ -308,7 +308,7 @@ int main(int argc, char** argv) {
   TTGUNUSED(connected);
   std::cout << "Graph is connected.\n";
 
-  if (ttg_default_execution_context().rank() == 0) {
+  if (ttg::default_execution_context().rank() == 0) {
     // std::cout << "==== begin dot ====\n";
     // std::cout << Dot()(i.get()) << std::endl;
     // std::cout << "==== end dot ====\n";
@@ -320,9 +320,9 @@ int main(int argc, char** argv) {
     // s->send<0>(Key(0,0), Control());
   }
 
-  ttg_execute(ttg_default_execution_context());
-  ttg_fence(ttg_default_execution_context());
-  if (ttg_default_execution_context().rank() == 0) {
+  execute();
+  fence();
+  if (ttg::default_execution_context().rank() == 0) {
     end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "
               << (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count()) / 1000 << std::endl;

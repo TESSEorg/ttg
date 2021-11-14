@@ -505,7 +505,7 @@ class FloydWarshall {
       , funcB(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcB")
       , funcC(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcC")
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
-      , world(ttg_default_execution_context())
+      , world(ttg::default_execution_context())
       , blocking_factor(blocking_factor) {
     initiator.out<0>()->connect(funcA.in<0>());
     initiator.out<1>()->connect(funcB.in<0>());
@@ -582,8 +582,8 @@ bool equals(double* matrix1, double* matrix2, int problem_size);
 void floyd_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
-  ttg::ttg_initialize(argc, argv);
-  ttg_fence(ttg_default_execution_context());
+  initialize(argc, argv);
+  fence();
 
   ttg::TTBase::set_trace_all(false);
 
@@ -650,7 +650,7 @@ int main(int argc, char** argv) {
     free(adjacency_matrix_serial);
   }
 
-  ttg_finalize();
+  finalize();
 
   return 0;
 }

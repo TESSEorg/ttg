@@ -243,7 +243,7 @@ public:
   }
 
   bool is_local(int row, int col) const {
-    return ttg::ttg_default_execution_context().rank() == rank_of(row, col);
+    return ttg::default_execution_context().rank() == rank_of(row, col);
   }
 
   PaRSECMatrixT* parsec() {
@@ -575,7 +575,7 @@ auto make_result(MatrixT<T>& A, const ttg::Edge<Key2, MatrixTile<T>>& result) {
     }
 #ifdef TTG_USE_USER_TERMDET
     if (I == A.cols()-1 && J == A.rows()-1) {
-      ttg::get_default_world().impl().final_task();
+      ttg::default_execution_context().impl().final_task();
     }
 #endif // TTG_USE_USER_TERMDET
   };
@@ -616,9 +616,9 @@ int main(int argc, char **argv)
     profiling_enabled = true;
   }
 
-  ttg::ttg_initialize(argc, argv, nthreads);
+  ttg::initialize(argc, argv, nthreads);
 
-  auto world = ttg::ttg_default_execution_context();
+  auto world = ttg::default_execution_context();
 
 #if USE_PARSEC_PROF_API
   if (nullptr != prof_filename) {
@@ -743,8 +743,8 @@ int main(int argc, char **argv)
   }
   op_init->invoke(Key3{0, 0, 0});
 
-  ttg::ttg_execute(world);
-  ttg::ttg_fence(world);
+  ttg::execute(world);
+  ttg::fence(world);
   if (world.rank() == 0) {
     end = std::chrono::high_resolution_clock::now();
     auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
@@ -827,7 +827,7 @@ int main(int argc, char **argv)
   }
 #endif // USE_PARSEC_PROF_API
 
-  ttg::ttg_finalize();
+  ttg::finalize();
   return 0;
 }
 
@@ -897,7 +897,7 @@ int check_dpotrf( parsec_context_t *parsec, int loud,
     dplasma_enum_t side;
 
     two_dim_block_cyclic_init(&LLt, matrix_RealDouble, matrix_Tile,
-                              ttg::ttg_default_execution_context().size(), twodA->grid.rank,
+                              ttg::default_execution_context().size(), twodA->grid.rank,
                               A->mb, A->nb,
                               M, N,
                               0, 0,

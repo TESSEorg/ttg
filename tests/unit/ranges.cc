@@ -5,7 +5,7 @@
 #include <memory>
 
 template <typename Iterator>
-auto range2flow(Iterator b, Iterator e, ttg::World world = ttg::ttg_default_execution_context()) {
+auto range2flow(Iterator b, Iterator e, ttg::World world = ttg::default_execution_context()) {
   ttg::Edge<std::size_t, typename std::iterator_traits<Iterator>::value_type> out;
   ttg::Edge<> ctl;
   auto range_reader = ttg::make_tt<void>(
@@ -20,9 +20,10 @@ auto range2flow(Iterator b, Iterator e, ttg::World world = ttg::ttg_default_exec
 }
 
 template <typename Value, typename Iterator>
-auto flow2range(const ttg::Edge<std::size_t, Value>& in, Iterator b, Iterator e, ttg::World world = ttg::ttg_default_execution_context()) {
+auto flow2range(const ttg::Edge<std::size_t, Value> &in, Iterator b, Iterator e,
+                ttg::World world = ttg::default_execution_context()) {
   auto range_writer = ttg::make_tt(
-      [b, e](const std::size_t& idx, Value&& value, std::tuple<> &outs) {
+      [b, e](const std::size_t &idx, Value &&value, std::tuple<> &outs) {
         assert(idx < std::distance(b, e));
         auto it = std::advance(b, idx);
         *it = std::move(value);
@@ -34,7 +35,7 @@ auto flow2range(const ttg::Edge<std::size_t, Value>& in, Iterator b, Iterator e,
 
 namespace ttg {
   template <typename Iterator, typename Op>
-  auto for_each(Iterator b, Iterator e, Op op, ttg::World world = ttg::ttg_default_execution_context()) {
+  auto for_each(Iterator b, Iterator e, Op op, ttg::World world = ttg::default_execution_context()) {
     auto [in, ctl] = range2flow(b, e, world);
     auto foreach_op = ttg::make_tt([&op](const std::size_t &idx, const int &datum, std::tuple<> &outs) { op(datum); },
                                    ttg::edges(in), ttg::edges());
@@ -49,10 +50,10 @@ namespace ttg {
 TEST_CASE("Ranges", "[core][ranges]") {
   SECTION("range_flow") {
     std::vector<int> v;
-    CHECK_NOTHROW(range2flow(v.begin(),v.end()));
+    CHECK_NOTHROW(range2flow(v.begin(), v.end()));
   }
   SECTION("foreach") {
     std::vector<int> v{1, 2, 3};
-    ttg::for_each(v.begin(), v.end(), [](const auto& value) { std::cout << value << std::endl; });
+    ttg::for_each(v.begin(), v.end(), [](const auto &value) { std::cout << value << std::endl; });
   }
 }

@@ -9,6 +9,7 @@ set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/demangle.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/diagnose.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/dot.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/env.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/future.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/hash.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/macro.h
@@ -35,6 +36,7 @@ set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/impl_selector.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/tt.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/reduce.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/run.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/runtimes.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/terminal.h
@@ -52,6 +54,7 @@ set(ttg-sources
         ${ttg-util-headers}
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/bug.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/env.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
     )
 # optional dependencies

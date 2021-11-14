@@ -628,7 +628,7 @@ class GaussianElimination {
       , finalizer(result_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
                   "finalizer", adjacency_matrix_serial, verify_results)
       , blocking_factor(blocking_factor)
-      , world(ttg_default_execution_context()) {
+      , world(ttg::default_execution_context()) {
     initiator.template out<0>()->connect(funcA.template in<0>());
     initiator.template out<1>()->connect(funcB.template in<0>());
     initiator.template out<2>()->connect(funcC.template in<0>());
@@ -689,10 +689,10 @@ bool equals(Matrix<double>* matrix1, double* matrix2, int problem_size, int bloc
 void ge_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
-  ttg_initialize(argc, argv);
+  initialize(argc, argv);
   ttg::TTBase::set_trace_all(false);
 
-  auto world = ttg_default_execution_context();
+  auto world = ttg::default_execution_context();
 
   // world.taskq.add(world.rank(), hi);
   ttg_fence(world);

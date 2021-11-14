@@ -489,7 +489,7 @@ class GaussianElimination {
       , funcC(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcC")
       , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
       , blocking_factor(blocking_factor)
-      , world(ttg_default_execution_context()) {
+      , world(ttg::default_execution_context()) {
     initiator.out<0>()->connect(funcA.in<0>());
     initiator.out<1>()->connect(funcB.in<0>());
     initiator.out<2>()->connect(funcC.in<0>());
@@ -520,9 +520,8 @@ class GaussianElimination {
   // NEW CODE
   void start() {
     if (world.rank() == 0) initiator.invoke(Integer(blocking_factor));
-    ttg_execute(ttg_default_execution_context());
+    execute();
   }
-  void fence() { ttg_fence(ttg_default_execution_context()); }
   // END NEW CODE
 };
 
@@ -553,20 +552,10 @@ bool equals(double* matrix1, double* matrix2, int problem_size);
 void ge_iterative(double* adjacency_matrix_serial, int problem_size);
 
 int main(int argc, char** argv) {
-  /*
   initialize(argc, argv);
-  World world(SafeMPI::COMM_WORLD);
-
-  for (int arg=1; arg<argc; ++arg) {
-      if (strcmp(argv[arg],"-dx")==0)
-          xterm_debug(argv[0], 0);
-  }
-
-  TTBase::set_trace_all(false); */
-  ttg_initialize(argc, argv, -1);
 
   // world.taskq.add(world.rank(), hi);
-  ttg_fence(ttg_default_execution_context());
+  fence();
 
   ttg::TTBase::set_trace_all(false);
 
@@ -618,7 +607,7 @@ int main(int argc, char** argv) {
                          base_size);
   // std::cout << ge.dot() << std::endl;
   ge.start();
-  ge.fence();
+  fence();
   std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
   cout << problem_size << " " << blocking_factor << " " << duration / 1000000.0 << endl;
