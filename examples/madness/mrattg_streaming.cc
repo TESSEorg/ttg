@@ -366,7 +366,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,cnodeOut<T,K,1>>;
         using compress_in_type  = std::tuple<Rin, Rin>;
         template <typename compfuncT>
-        using compmake_tt_type = ttg::TT<compfuncT, Key<1>, compress_out_type, Rin, Rin>;
+        using compmake_tt_type = ttg::TT<compfuncT, Key<1>, compress_out_type, std::tuple<Rin, Rin>>;
     };
 
     template <typename T, size_t K>  struct tree_types<T,K,2>{
@@ -375,7 +375,7 @@ namespace detail {
         using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,cnodeOut<T,K,2>>;
         using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
-        using compmake_tt_type = ttg::TT<compfuncT, Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
+        using compmake_tt_type = ttg::TT<compfuncT, Key<2>, compress_out_type, std::tuple<Rin, Rin, Rin, Rin>>;
     };
 
     template <typename T, size_t K>  struct tree_types<T,K,3>{
@@ -384,7 +384,7 @@ namespace detail {
       using compress_out_type = std::tuple<Rout,Rout,Rout,Rout,Rout,Rout,Rout,Rout,cnodeOut<T,K,3>>;
       using compress_in_type  = std::tuple<Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
         template <typename compfuncT>
-        using compmake_tt_type = ttg::TT<compfuncT, Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
+        using compmake_tt_type = ttg::TT<compfuncT, Key<3>, compress_out_type, std::tuple<Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>>;
     };
 };
 
