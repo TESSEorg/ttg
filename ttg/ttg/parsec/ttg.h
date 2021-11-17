@@ -2472,8 +2472,9 @@ namespace ttg_parsec {
         return;
       }
       alive = false;
-      /* print all outstanding tasks */
-      parsec_hash_table_for_all(&tasks_table, ht_iter_cb, this);
+      /* Not sure why but both GCC-10 and Clang-14 fail if 'this' is passed directly */
+      void *cb_data = this;
+      parsec_hash_table_for_all(&tasks_table, ht_iter_cb, cb_data);
       parsec_hash_table_fini(&tasks_table);
       parsec_mempool_destruct(&mempools);
       // uintptr_t addr = (uintptr_t)self.incarnations;

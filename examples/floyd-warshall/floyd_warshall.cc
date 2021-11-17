@@ -95,8 +95,7 @@ std::ostream& operator<<(std::ostream& s, const Control& ctl) {
 
 class Initiator : public TT<int, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>,
                             Initiator> {
-  using baseT =
-      TT<int, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, Initiator>;
+  using baseT = typename Initiator::ttT;
 
  public:
   Initiator(const std::string& name) : baseT(name, {}, {"outA", "outB", "outC", "outD"}) {}
@@ -128,11 +127,8 @@ class Initiator : public TT<int, std::tuple<Out<Key, Control>, Out<Key, Control>
 class FuncA : public TT<Key,
                         std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>,
                                    Out<Key, Control>, Out<Key, Control>>,
-                        FuncA, Control> {
-  using baseT = TT<Key,
-                   std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>,
-                              Out<Key, Control>, Out<Key, Control>>,
-                   FuncA, Control>;
+                        FuncA, std::tuple<Control>> {
+  using baseT = typename FuncA::ttT;
   double* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -224,10 +220,8 @@ class FuncB
     : public TT<
           Key,
           std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>,
-          FuncB, Control, Control> {
-  using baseT =
-      TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>,
-         FuncB, Control, Control>;
+          FuncB, std::tuple<Control, Control>> {
+  using baseT = typename FuncB::ttT;
   double* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -317,10 +311,8 @@ class FuncC
     : public TT<
           Key,
           std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>,
-          FuncC, Control, Control> {
-  using baseT =
-      TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>,
-         FuncC, Control, Control>;
+          FuncC, std::tuple<Control, Control>> {
+  using baseT = typename FuncC::ttT;
   double* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -407,9 +399,8 @@ class FuncC
 };
 
 class FuncD : public TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>,
-                        FuncD, Control, Control, Control> {
-  using baseT = TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, FuncD,
-                   Control, Control, Control>;
+                        FuncD, std::tuple<Control, Control, Control>> {
+  using baseT = typename FuncD::ttT;
   double* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;

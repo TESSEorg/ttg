@@ -154,8 +154,8 @@ class Initiator : public TT<int,
 };
 
 template <typename T>
-class Finalizer : public TT<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>> {
-  using baseT = TT<Key, std::tuple<>, Finalizer<T>, BlockMatrix<T>>;
+class Finalizer : public TT<Key, std::tuple<>, Finalizer<T>, std::tuple<BlockMatrix<T>>> {
+  using baseT = typename Finalizer::ttT;
   Matrix<T>* result_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -236,12 +236,8 @@ class FuncA : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>>,
-                        FuncA<T>, BlockMatrix<T>> {
-  using baseT = TT<
-      Key,
-      std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
-                 Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-      FuncA, BlockMatrix<T>>;
+                        FuncA<T>, std::tuple<BlockMatrix<T>>> {
+  using baseT = typename FuncA::ttT;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -339,11 +335,8 @@ template <typename T>
 class FuncB : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                        FuncB<T>, BlockMatrix<T>, const BlockMatrix<T>> {
-  using baseT = TT<Key,
-                   std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
-                              Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                   FuncB, BlockMatrix<T>, const BlockMatrix<T>>;
+                        FuncB<T>, std::tuple<BlockMatrix<T>, const BlockMatrix<T>>> {
+  using baseT = typename FuncB::ttT;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -432,11 +425,8 @@ template <typename T>
 class FuncC : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                        FuncC<T>, BlockMatrix<T>, const BlockMatrix<T>> {
-  using baseT = TT<Key,
-                   std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
-                              Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                   FuncC, BlockMatrix<T>, const BlockMatrix<T>>;
+                        FuncC<T>, std::tuple<BlockMatrix<T>, const BlockMatrix<T>>> {
+  using baseT = typename FuncC::ttT;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -524,11 +514,8 @@ template <typename T>
 class FuncD : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                        FuncD<T>, BlockMatrix<T>, const BlockMatrix<T>, const BlockMatrix<T>> {
-  using baseT = TT<Key,
-                   std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
-                              Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                   FuncD, BlockMatrix<T>, const BlockMatrix<T>, const BlockMatrix<T>>;
+                        FuncD<T>, std::tuple<BlockMatrix<T>, const BlockMatrix<T>, const BlockMatrix<T>>> {
+  using baseT = typename FuncD::ttT;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;

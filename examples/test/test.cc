@@ -16,7 +16,7 @@ using keyT = uint64_t;
 #include "ttg.h"
 
 class A : public TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, std::tuple<const int>> {
-  using baseT = TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, std::tuple<const int>>;
+  using baseT = typename A::ttT;
 
  public:
   A(const std::string &name) : baseT(name, {"inputA"}, {"resultA", "iterateA"}) {}
@@ -53,7 +53,7 @@ class A : public TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, std::tu
 };
 
 class Producer : public TT<void, std::tuple<Out<keyT, int>>, Producer> {
-  using baseT = TT<void, std::tuple<Out<keyT, int>>, Producer>;
+  using baseT = typename Producer::ttT;
 
  public:
   Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
@@ -70,7 +70,7 @@ class Producer : public TT<void, std::tuple<Out<keyT, int>>, Producer> {
 };
 
 class Consumer : public TT<void, std::tuple<>, Consumer, std::tuple<const int>> {
-  using baseT = TT<void, std::tuple<>, Consumer, std::tuple<const int>>;
+  using baseT = typename Consumer::ttT;
 
  public:
   Consumer(const std::string &name) : baseT(name, {"input"}, {}) {}

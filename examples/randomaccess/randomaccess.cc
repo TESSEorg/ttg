@@ -12,6 +12,7 @@
 #define CHUNKBIG (32*CHUNK)
 
 #include "ttg.h"
+#include "ttg/serialization.h"
 using namespace ttg;
 
 typedef struct params {
