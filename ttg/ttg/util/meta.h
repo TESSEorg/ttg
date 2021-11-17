@@ -239,6 +239,49 @@ namespace ttg {
     template <typename tupleT>
     using add_lvalue_reference_tuple_t = typename add_lvalue_reference_tuple<tupleT>::type;
 
+    template<typename T, typename... Ts>
+    struct none_has_reference
+    {
+      static constexpr bool value = !std::is_reference_v<T> && none_has_reference<Ts...>::value;
+    };
+
+    template<typename T>
+    struct none_has_reference<T>
+    {
+      static constexpr bool value = !std::is_reference_v<T>;
+    };
+
+    template<typename T>
+    struct tuple_none_has_reference;
+
+    template<typename T, typename... Ts>
+    struct tuple_none_has_reference<std::tuple<T, Ts...>>
+    {
+      static constexpr bool value = none_has_reference<T, Ts...>::value;
+    };
+
+    template<>
+    struct tuple_none_has_reference<std::tuple<>>
+    {
+      static constexpr bool value = true;
+    };
+
+
+    template<typename... Ts>
+    constexpr bool tuple_none_has_reference_v = tuple_none_has_reference<Ts...>::value;
+
+    template<typename T>
+    struct is_tuple : std::integral_constant<bool, false>
+    { };
+
+    template<typename... Ts>
+    struct is_tuple<std::tuple<Ts...>> : std::integral_constant<bool, true>
+    { };
+
+    template<typename T>
+    constexpr bool is_tuple_v = is_tuple<T>::value;
+
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // is_empty_tuple
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
