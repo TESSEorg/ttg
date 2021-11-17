@@ -575,8 +575,21 @@ namespace ttg_parsec {
       PARSEC_OBJ_RELEASE(copy);
     }
 
-    template <typename Value>
+    /**
+     * Register a new data copy with the task. If necessary, a new data copy will
+     * be created (i.e., if either the copy is mutable or the input and output types
+     * are different and a conversion is required).
+     *
+     * @param copy_in  Input data copy
+     * @param task     The task to register the copy with
+     * @param readonly Whether the task will use the copy readonly
+     *
+     * @tparam ValueCopyIn  The type of the value in copy_in
+     * @tparam ValueCopyOut The type of the value stored in the result copy (if different)
+     */
+    template <typename ValueCopyIn, typename ValueCopyOut = ValueCopyIn>
     inline ttg_data_copy_t *register_data_copy(ttg_data_copy_t *copy_in, parsec_ttg_task_base_t *task, bool readonly) {
+      constexpr const bool in_out_type_same = std::is_same_v<std::decay_t<ValueCopyIn>, std::decay_t<ValueCopyOut>>;
       ttg_data_copy_t *copy_res = copy_in;
       bool replace = false;
       int32_t readers = -1;
@@ -618,7 +631,14 @@ namespace ttg_parsec {
       }
 
       if (NULL == copy_res) {
-        ttg_data_copy_t *new_copy = detail::create_new_datacopy(*static_cast<Value *>(copy_in->device_private));
+        ttg_data_copy_t *new_copy;
+        if constexpr (in_out_type_same) {
+          new_copy = detail::create_new_datacopy(*static_cast<ValueCopyIn *>(copy_in->device_private));
+        } else {
+          /* need to convert types */
+          ValueCopyOut v(*static_cast<ValueCopyIn *>(copy_in->device_private));
+          new_copy = detail::create_new_datacopy(std::move(v));
+        }
         if (replace) {
           /* TODO: Make sure there is no race condition with the release in release_data_copy,
            * in particular when it comes to setting the callback and replacing the data */
@@ -1326,7 +1346,8 @@ namespace ttg_parsec {
       using input_arg_type = std::decay_t<std::tuple_element_t<i, input_args_type>>;
       using decay_value_t = std::decay_t<valueT>;
       constexpr const bool edge_arg_same_type = std::is_same_v<decay_value_t, input_arg_type>;
-      if constexpr (!edge_arg_same_type && !std::is_convertible_v<decay_value_t, input_arg_type>) {
+      constexpr const bool edge_arg_convertible = std::is_convertible_v<decay_value_t, input_arg_type>;
+      if constexpr (!edge_arg_same_type && !edge_arg_convertible) {
         /* if the types don't match and are not convertible we have to rely on a reducer to be available */
         if (!reducer) {
           throw std::logic_error("Types are not convertible and no reducer was set!");
@@ -1367,7 +1388,13 @@ namespace ttg_parsec {
                 copy = detail::create_new_datacopy(static_cast<input_arg_type>(value));
               }
             } else {
-              copy = detail::register_data_copy<input_arg_type>(copy_in, task, input_is_const);
+              if constexpr(edge_arg_convertible) {
+                copy = detail::register_data_copy<valueT, input_arg_type>(copy_in, task, input_is_const);
+              } else {
+                /* terminal and argument value are not convertible so we need to call the reducer */
+                copy = detail::create_new_datacopy(input_arg_type{});
+                reducer(*reinterpret_cast<std::decay_t<input_arg_type>*>(copy->device_private), value);
+              }
             }
             task->parsec_task.data[i].data_in = copy;
           } else {
