@@ -7,7 +7,8 @@
 
 namespace ttg_madness {
 
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
+  template <typename keyT, typename output_terminalsT, typename derivedT,
+            typename input_terminal_typesT = std::tuple<>, typename input_argsT = input_terminal_typesT>
   class TT;
 
   /// \internal the OG name
