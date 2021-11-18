@@ -205,7 +205,10 @@ namespace ttg_madness {
    public:
     using input_terminals_type = ttg::input_terminals_tuple_t<keyT, input_terminal_typesT>;
     using input_args_type = input_argsT;
-    using full_args_type = ttg::meta::decayed_tuple_t<input_args_type>;
+    using full_args_type =
+        typename ttg::meta::decayed_tuple_t<
+          std::conditional_t<ttg::meta::is_none_void_v<input_args_type>, input_args_type,
+                             typename ttg::meta::drop_last_n<input_args_type, std::size_t{1}>::type>>;
     using input_edges_type = ttg::edges_tuple_t<keyT, ttg::meta::decayed_tuple_t<input_terminal_typesT>>;
     static_assert(ttg::meta::is_none_Void_v<input_terminal_typesT>, "ttg::Void is for internal use only, do not use it");
     static_assert(ttg::meta::is_none_Void_v<input_argsT>,       "ttg::Void is for internal use only, do not use it");
@@ -487,7 +490,6 @@ namespace ttg_madness {
 
       using input_arg_type = std::decay_t<std::tuple_element_t<i, input_args_type>>;
       using decay_value_t = std::decay_t<valueT>;
-      constexpr const bool edge_arg_same_type = std::is_same_v<decay_value_t, input_arg_type>;
       constexpr const bool edge_arg_convertible = std::is_convertible_v<decay_value_t, input_arg_type>;
 
       const int owner = keymap();
