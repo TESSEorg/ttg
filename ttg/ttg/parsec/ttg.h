@@ -567,7 +567,7 @@ namespace ttg_parsec {
         /* Release the task if it was deferrred */
         parsec_task_t *push_task = copy->push_task;
         if (parsec_atomic_cas_ptr(&copy->push_task, push_task, nullptr)) {
-          parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)copy->push_task;
+          parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)push_task;
           assert(deferred_op->deferred_release);
           deferred_op->deferred_release(deferred_op->tt_ptr, deferred_op);
         }
@@ -579,8 +579,8 @@ namespace ttg_parsec {
     inline ttg_data_copy_t *register_data_copy(ttg_data_copy_t *copy_in, parsec_ttg_task_base_t *task, bool readonly) {
       ttg_data_copy_t *copy_res = copy_in;
       bool replace = false;
-      int32_t readers = -1;
-      if (readonly && copy_in->readers > 0) {
+      int32_t readers = copy_in->readers;
+      if (readonly && readers > 0) {
         /* simply increment the number of readers */
         readers = parsec_atomic_fetch_inc_int32(&copy_in->readers);
       }
@@ -1385,7 +1385,11 @@ namespace ttg_parsec {
         }
         if (needs_deferring) {
           if (nullptr == task->deferred_release) {
-            task->deferred_release = &release_task_to_scheduler<true>;
+            if (remove_from_hash) {
+              task->deferred_release = &release_task_to_scheduler<true>;
+            } else {
+              task->deferred_release = &release_task_to_scheduler<false>;
+            }
             task->tt_ptr = this;
           }
         }
@@ -2635,6 +2639,9 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
       assert(inserted);
       value_ptr = reinterpret_cast<Value *>(copy->device_private);
       copy_to_remove = copy;
+    } else {
+      /* the data was moved so the current task is not a writer anymore */
+      copy->readers = 1;
     }
     return std::move(*value_ptr);
   }
