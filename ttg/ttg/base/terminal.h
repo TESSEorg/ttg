@@ -90,7 +90,7 @@ namespace ttg {
     }
 
     /// Returns the terminal type
-    Type get_type() {
+    Type get_type() const {
       return this->type;
     }
 

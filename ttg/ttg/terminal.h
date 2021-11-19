@@ -286,31 +286,23 @@ namespace ttg {
     template <typename Key = keyT, typename Value = valueT>
     std::enable_if_t<meta::is_none_void_v<Key,Value> && std::is_same_v<Value,std::remove_reference_t<Value>>,void>
     send(const Key &key, Value &&value) {
-      std::size_t N = successors().size();
-      // find the first terminal that can consume the value
-      std::size_t move_terminal = N - 1;
+      const std::size_t N = nsuccessors();
+      TerminalBase *move_successor = nullptr;
+      // send copies to every terminal except the one we will move the results to
       for (std::size_t i = 0; i != N; ++i) {
-        if (successors().at(i)->get_type() == TerminalBase::Type::Consume) {
-          move_terminal = i;
-          break;
-        }
-      }
-      if (N > 0) {
-        // send copies to every terminal except the one we will move the results to
-        for (std::size_t i = 0; i != N; ++i) {
-          if (i != move_terminal) {
-            TerminalBase *successor = successors().at(i);
-            if (successor->get_type() == TerminalBase::Type::Read) {
-              static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
-            } else if (successor->get_type() == TerminalBase::Type::Consume) {
-              static_cast<In<keyT, valueT> *>(successor)->send(key, value);
-            }
+        TerminalBase *successor = successors().at(i);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          if (nullptr == move_successor) {
+            move_successor = successor;
+          } else {
+            static_cast<In<keyT, valueT> *>(successor)->send(key, value);
           }
         }
-        {
-          TerminalBase *successor = successors().at(move_terminal);
-          static_cast<In<keyT, valueT> *>(successor)->send(key, std::forward<Value>(value));
-        }
+      }
+      if (nullptr != move_successor) {
+        static_cast<In<keyT, valueT> *>(move_successor)->send(key, std::forward<Value>(value));
       }
     }
 
