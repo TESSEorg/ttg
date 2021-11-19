@@ -1320,6 +1320,11 @@ namespace ttg_parsec {
           task = create_new_task(key);
           world_impl.increment_created();
           parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
+        } else if (!reducer && numins == (task->in_data_count+1)) {
+          /* remove while we have the lock */
+          parsec_hash_table_nolock_remove(&tasks_table, hk);
+          remove_from_hash = false;
+          release = true;
         }
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
       } else {
@@ -1411,8 +1416,17 @@ namespace ttg_parsec {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       task_t *task = static_cast<task_t *>(base_task);
       ttT &tt = *reinterpret_cast<ttT *>(tt_ptr);
-      int32_t count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
-      assert(count <= tt.self.dependencies_goal);
+
+      /* if RemoveFromHash == false, someone has already removed the task from the hash table
+       * so we know that the task is ready, no need to do atomic increments here */
+      constexpr const bool is_ready = !RemoveFromHash;
+      int32_t count;
+      if constexpr(is_ready) {
+        count = numins;
+      } else {
+        count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
+        assert(count <= tt.self.dependencies_goal);
+      }
       auto &world_impl = tt.world.impl();
 
       if (count == numins) {
