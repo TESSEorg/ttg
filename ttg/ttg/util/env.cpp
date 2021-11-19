@@ -5,6 +5,7 @@
 #include "ttg/util/env.h"
 
 #include <thread>
+#include <stdexcept>
 
 #include <cstdlib>
 
