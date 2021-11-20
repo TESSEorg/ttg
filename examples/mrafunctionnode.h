@@ -174,10 +174,6 @@ namespace mra {
         FunctionReconstructedNode(const Key<NDIM>& key) : key(key), sum(0.0), is_leaf(false) {}
         T normf() const {return (is_leaf ? coeffs.normf() : 0.0);}
         bool has_children() const {return !is_leaf;}
-    	//Can't make it a vector to keep the class as POD.
-        std::array<FixedTensor<T, K, NDIM>, 1 << NDIM> neighbor_coeffs;
-        std::array<bool, 1 << NDIM> is_neighbor_leaf;
-        std::array<T, 1 << NDIM> neighbor_sum;
     };
     
     template <typename T, size_t K, Dimension NDIM>

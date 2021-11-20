@@ -374,6 +374,10 @@ namespace ttg_madness {
       static_assert(std::is_same_v<std::decay_t<Value>, std::decay_t<valueT>>,
                     "TT::set_arg(key,value) given value of type incompatible with TT");
 
+      using input_arg_type = std::decay_t<std::tuple_element_t<i, input_args_type>>;
+      using decay_value_t = std::decay_t<valueT>;
+      constexpr const bool edge_arg_convertible = std::is_convertible_v<decay_value_t, input_arg_type>;
+
       const auto owner = keymap(key);
       if (owner != world.rank()) {
         ttg::trace(world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
@@ -406,8 +410,14 @@ namespace ttg_madness {
           if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
             // have a value already? if not, set, otherwise reduce
             if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
-              this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
-
+              //this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
+              if constexpr(edge_arg_convertible) {
+                /* convert the types by assignment */
+                this->get<i, std::decay_t<input_arg_type> &>(args->input_values) = std::forward<Value>(value);
+              } else {
+                /* have to call reducer to do the conversion */
+                reducer(this->get<i, std::decay_t<input_arg_type> &>(args->input_values), value);
+              }
               // now have a value, reset nargs
               // check if we have a stream size for the op, which has precedence over the global setting.
               if (args->stream_size[i] != 0) {
@@ -419,7 +429,7 @@ namespace ttg_madness {
                 args->nargs[i] = 1;
               }
             } else {
-              reducer(this->get<i, std::decay_t<valueT> &>(args->input_values), value);
+              reducer(this->get<i, std::decay_t<input_arg_type> &>(args->input_values), value);
             }
           } else {
             reducer();  // even if this was a control input, must execute the reducer for possible side effects
@@ -433,11 +443,13 @@ namespace ttg_madness {
           }
           args->unlock();
         } else {                                          // this is a nonstreaming input => set the value
-          if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
+          if constexpr(!edge_arg_convertible) {
+            throw std::logic_error("Types are not convertible and no reducer was set!");
+          } else {
             this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
+            args->nargs[i] = 0;
+            args->counter--;
           }
-          args->nargs[i] = 0;
-          args->counter--;
         }
 
         // ready to run the task?

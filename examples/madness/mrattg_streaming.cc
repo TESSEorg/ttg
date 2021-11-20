@@ -413,16 +413,10 @@ void send_leaves_up(const Key<NDIM>& key,
     }
 }
 
-template <typename T, size_t K, Dimension NDIM>
-void reduce_leaves(const Key<NDIM>& key, const FunctionReconstructedNodeWrap<T,K,NDIM>& node, std::tuple<rnodeOut<T,K,NDIM>>& out) {
-  //std::cout << "Reduce_leaves " << node.key.childindex() << " " << node.neighbor_sum[node.key.childindex()] << std::endl;
-  std::get<0>(out).send(key, node);
-}
-
 // With data streaming up the tree run compression
 template <typename T, size_t K, Dimension NDIM>
 void do_compress(const Key<NDIM>& key,
-                 const FunctionReconstructedNodeWrap<T,K,NDIM> &in,
+                 const std::array<FunctionReconstructedNodeWrap<T,K,NDIM>, 1<<NDIM > &ins,
                  std::tuple<rnodeOut<T,K,NDIM>, cnodeOut<T,K,NDIM>> &out) {
   //const typename ::detail::tree_types<T,K,NDIM>::compress_in_type& in,
   //typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
@@ -435,9 +429,9 @@ void do_compress(const Key<NDIM>& key,
         FixedTensor<T,2*K,NDIM> s;
         //auto ins = ::mra::tuple_to_array_of_ptrs_const(in); /// Ugh ... cannot get const to match
         for (size_t i : range(Key<NDIM>::num_children)) {
-            s(child_slices[i]) = in.get().neighbor_coeffs[i];
-            result.get().is_leaf[i] = in.get().is_neighbor_leaf[i];
-            sumsq += in.get().neighbor_sum[i]; // Accumulate sumsq from child difference coeffs
+          s(child_slices[i]) = ins[i].get().coeffs; //in.get().neighbor_coeffs[i];
+          result.get().is_leaf[i] = ins[i].get().is_leaf; //in.get().is_neighbor_leaf[i];
+          sumsq += ins[i].get().sum; //in.get().neighbor_sum[i]; // Accumulate sumsq from child difference coeffs
             //if (in.neighbor_sum[i] > 10000)
             //std::cout << i << " " << in.neighbor_sum[i] << " " << sumsq << std::endl;
 
@@ -478,11 +472,10 @@ std::string int2bitstring(size_t i, size_t width) {
 /// Make a composite operator that implements compression for a single function
 template <typename T, size_t K, Dimension NDIM>
 auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std::string& name = "compress") {
-  rnodeEdge<T,K,NDIM> children1("children1"), children2("children2");
+  rnodeEdge<T,K,NDIM> children1("children1");
 
   return std::make_tuple(ttg::make_tt(&send_leaves_up<T,K,NDIM>, edges(in), edges(children1, out), "send_leaves_up", {"input"}, {"children1", "output"}),
-                         ttg::make_tt(&reduce_leaves<T,K,NDIM>, edges(children1), edges(children2), "reduce_leaves", {"children1"}, {"children2"}),
-                         ttg::make_tt(&do_compress<T,K,NDIM>, edges(children2), edges(children1,out), "do_compress", {"children2"}, {"recur","output"}));
+                         ttg::make_tt(&do_compress<T,K,NDIM>, edges(children1), edges(children1,out), "do_compress", {"children2"}, {"recur","output"}));
 }
 
 template <typename T, size_t K, Dimension NDIM>
@@ -687,16 +680,10 @@ void test1() {
         auto compress = make_compress<T,K,NDIM>(a, b);
 
         auto &reduce_leaves_op = std::get<1>(compress);
-        reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNodeWrap<T,K,NDIM> &node,
+        reduce_leaves_op->template set_input_reducer<0>([](std::array<FunctionReconstructedNodeWrap<T, K, NDIM>, 1<<NDIM> &nodes,
                                                            const FunctionReconstructedNodeWrap<T,K,NDIM> &another)
                                                         {
-                                                          //Update self values into the array.
-                                                          node.get().neighbor_coeffs[node.get().key.childindex()] = node.get().coeffs;
-                                                          node.get().is_neighbor_leaf[node.get().key.childindex()] = node.get().is_leaf;
-                                                          node.get().neighbor_sum[node.get().key.childindex()] = node.get().sum;
-                                                          node.get().neighbor_coeffs[another.get().key.childindex()] = another.get().coeffs;
-                                                          node.get().is_neighbor_leaf[another.get().key.childindex()] = another.get().is_leaf;
-                                                          node.get().neighbor_sum[another.get().key.childindex()] = another.get().sum;
+                                                          nodes[another.get().key.childindex()] = another;
                                                         });
         reduce_leaves_op->template set_static_argstream_size<0>(1 << NDIM);
 
@@ -712,7 +699,6 @@ void test1() {
         ops.push_back(std::move(p1));
         ops.push_back(std::move(std::get<0>(compress)));
         ops.push_back(std::move(std::get<1>(compress)));
-        ops.push_back(std::move(std::get<2>(compress)));
         ops.push_back(std::move(recon));
         ops.push_back(std::move(printer));
         ops.push_back(std::move(printer2));
@@ -775,19 +761,12 @@ void test2(size_t nfunc, T thresh = 1e-6) {
         auto compress = make_compress<T,K,NDIM>(a, b);
         std::get<0>(compress)->set_keymap(pmap);
         std::get<1>(compress)->set_keymap(pmap);
-        std::get<2>(compress)->set_keymap(pmap);
 
         auto &reduce_leaves_op = std::get<1>(compress);
-	reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNodeWrap<T,K,NDIM> &node,
+	reduce_leaves_op->template set_input_reducer<0>([](std::array<FunctionReconstructedNodeWrap<T, K, NDIM>, 1<<NDIM> &nodes,
                                                            const FunctionReconstructedNodeWrap<T,K,NDIM> &another)
                                                         {
-                                                          //Update self values into the array.
-                                                          node.get().neighbor_coeffs[node.get().key.childindex()] = node.get().coeffs;
-                                                          node.get().is_neighbor_leaf[node.get().key.childindex()] = node.get().is_leaf;
-                                                          node.get().neighbor_sum[node.get().key.childindex()] = node.get().sum;
-                                                          node.get().neighbor_coeffs[another.get().key.childindex()] = another.get().coeffs;
-                                                          node.get().is_neighbor_leaf[another.get().key.childindex()] = another.get().is_leaf;
-                                                          node.get().neighbor_sum[another.get().key.childindex()] = another.get().sum;
+                                                          nodes[another.get().key.childindex()] = another;
                                                         });
         reduce_leaves_op->template set_static_argstream_size<0>(1 << NDIM);
 
@@ -804,7 +783,6 @@ void test2(size_t nfunc, T thresh = 1e-6) {
         ops.push_back(std::move(p1));
         ops.push_back(std::move(std::get<0>(compress)));
         ops.push_back(std::move(std::get<1>(compress)));
-        ops.push_back(std::move(std::get<2>(compress)));
         ops.push_back(std::move(recon));
         ops.push_back(std::move(printer));
         ops.push_back(std::move(printer2));
