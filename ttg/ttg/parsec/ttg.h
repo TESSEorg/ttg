@@ -1390,9 +1390,13 @@ namespace ttg_parsec {
             if (nullptr == copy_in) {
               if constexpr(edge_arg_same_type) {
                 copy = detail::create_new_datacopy(std::forward<Value>(value));
-              } else {
+              } else if constexpr (edge_arg_convertible) {
                 /* need to convert */
                 copy = detail::create_new_datacopy(static_cast<input_arg_type>(value));
+              } else {
+                /* terminal and argument value are not convertible so we need to call the reducer */
+                copy = detail::create_new_datacopy(input_arg_type{});
+                reducer(*reinterpret_cast<std::decay_t<input_arg_type>*>(copy->device_private), value);
               }
             } else {
               if constexpr(edge_arg_convertible) {
@@ -1437,9 +1441,11 @@ namespace ttg_parsec {
           } else {
             if constexpr(edge_arg_same_type) {
               copy = detail::create_new_datacopy(std::forward<Value>(value));
-            } else {
+            } else if constexpr (edge_arg_convertible) {
               /* need to convert */
               copy = detail::create_new_datacopy(static_cast<input_arg_type>(value));
+            } else {
+              throw std::logic_error("Types not convertible and no reducer provided!");
             }
           }
           /* if we registered as a writer and were the first to register with this copy
