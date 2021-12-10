@@ -50,10 +50,17 @@ namespace ttg {
       auto operator()(const T &t) const { return t.hash(); }
     };
 
-    /// instantiation of hash for types which have member function hash()
+    /// instantiation of hash for void
     template <>
     struct hash<void, void> {
       auto operator()() const { return detail::FNVhasher::initial_value(); }
+    };
+
+    /// instantiation of hash for integral types smaller or equal to size_t
+    template <typename T>
+    struct hash<T, std::enable_if_t<std::is_integral_v<std::decay_t<T>> &&
+                                    sizeof(T) <= sizeof(std::size_t), void>> {
+      auto operator()(T t) const { return static_cast<std::size_t>(t); }
     };
 
     /// default implementation uses the bitwise hasher FNVhasher
