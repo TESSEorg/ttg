@@ -344,7 +344,7 @@ namespace ttg_madness {
             if (owner != world.rank()) {
               get_terminal_data<i, Key>(owner, key);
             } else {
-              auto value = (in.container).get(k, in.container);
+              auto value = (in.container).get(k);
               if (args->nargs[i] == 0) {
                 ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
                                    ": error argument is already finalized : ", i);
@@ -369,7 +369,6 @@ namespace ttg_madness {
 
     template <std::size_t i, typename Key>
     void get_terminal_data(const int owner,
-                           //const ttg::meta::detail::IndexKey &key,
                            const Key &key) {
       if (owner != world.rank()) {
         worldobjT::send(owner, &ttT::template get_terminal_data<i, Key>, owner, key);
@@ -377,7 +376,7 @@ namespace ttg_madness {
       else {
         auto &in = std::get<i>(input_terminals);
         const auto k = in.container.mapper(key);
-        auto value = (in.container).get(k, in.container);
+        auto value = (in.container).get(k);
         worldobjT::send(keymap(key), &ttT::template set_arg<i, Key,
                         const std::remove_reference_t<decltype(value)>&>, key, value);
       }

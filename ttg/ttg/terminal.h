@@ -15,42 +15,54 @@
 #include "boost/callable_traits.hpp"
 
 namespace ttg {
-  template<typename tkeyT, typename keyT, typename valueT>
-  struct Container : std::any {
-    std::function<valueT (keyT const& key, Container const&)> get = nullptr;
-    ttg::meta::detail::keymap_t<keyT> keymap;
-    meta::detail::mapper_function_t<tkeyT> mapper;
+  namespace detail {
 
-    Container() = default;
+    /* Wraps any key,value data structure.
+     * Elements of the data structure can be accessed using get method, which calls the at method of the Container.
+     * tkeyT - taskID
+     * keyT - Key type of the Container
+     * valueT - Value type of the Container
+    */
+    template<typename tkeyT, typename keyT, typename valueT>
+    struct ContainerWrapper {
+      std::function<valueT (keyT const& key)> get = nullptr;
+      ttg::meta::detail::keymap_t<keyT> keymap;
+      meta::detail::mapper_function_t<tkeyT> mapper;
 
-    template<class T, std::enable_if_t<!std::is_same<std::decay_t<T>,
-                                                     Container>{}, bool> = true>
-    //Store a pointer to the user's container in std::any, no copies
-    Container(T &t) : std::any(&t)
-                    ,get([this](keyT const &key, Container const& self) {
-                            //at method returns a const ref to the item.
-                            //TODO: Compile-time error handling
-                            using key_type = typename T::key_type;
-                            return (std::any_cast<T*>(self))->at(std::any_cast<key_type>(key));
-                          })
-      {}
-  };
+      ContainerWrapper() = default;
 
-  template <typename valueT> struct Container<void, void, valueT> {
-    std::function<std::nullptr_t ()> get = nullptr;
-  };
+      template<typename T, std::enable_if_t<!std::is_same<std::decay_t<T>,
+                                                          ContainerWrapper>{}, bool> = true>
+        //Store a pointer to the user's container in std::any, no copies
+        ContainerWrapper(T &t) : get([&t](keyT const &key) {
+                                if constexpr (!std::is_class_v<T> && std::is_function_v<T>)
+                                  return (t)(key);
+                                else
+                                {
+                                  using key_type = typename T::key_type;
+                                  //at method returns a const ref to the item.
+                                  return t.at(std::any_cast<key_type>(key));
+                                }
+                              })
+        {}
+    };
 
-  template <typename keyT> struct Container<void, keyT, void> {
-    std::function<std::nullptr_t (keyT const& key, Container const& self)> get = nullptr;
-  };
+    template <typename valueT> struct ContainerWrapper<void, void, valueT> {
+      std::function<std::nullptr_t ()> get = nullptr;
+    };
 
-  template <typename valueT> struct Container<ttg::Void, void, valueT> {
-    std::function<std::nullptr_t ()> get = nullptr;
-  };
+    template <typename keyT> struct ContainerWrapper<void, keyT, void> {
+      std::function<std::nullptr_t (keyT const& key)> get = nullptr;
+    };
 
-  template <> struct Container<void, void, void> {
-    std::function<std::nullptr_t ()> get = nullptr;
-  };
+    template <typename valueT> struct ContainerWrapper<ttg::Void, void, valueT> {
+      std::function<std::nullptr_t ()> get = nullptr;
+    };
+
+    template <> struct ContainerWrapper<void, void, void> {
+      std::function<std::nullptr_t ()> get = nullptr;
+    };
+  } //namespace detail
 
   /// \brief Base type for input terminals receiving messages annotated by task IDs of type `keyT`
   /// \tparam <keyT> a task ID type (can be `void`)
@@ -134,7 +146,7 @@ namespace ttg {
     static constexpr bool is_an_input_terminal = true;
 
     using mapper_ret_type = boost::callable_traits::return_type_t<meta::detail::mapper_function_t<keyT>>;
-    Container<keyT, mapper_ret_type, valueT> container;
+    ttg::detail::ContainerWrapper<keyT, mapper_ret_type, valueT> container;
     meta::detail::mapper_function_t<keyT> mapper;
 
    private:

@@ -539,13 +539,13 @@ int main(int argc, char** argv) {
     delete m2;
   }
 
-  std::function<ttg::meta::detail::IndexKey (const Key&)> get_bottomindex_func =
+  std::function<Key (const Key&)> get_bottomindex_func =
     [n_brows, n_bcols](const Key& key) {
     //std::cout << "Getting bottom index for " << key.first << ":" << key.second << std::endl;
       return get_bottomindex(key, n_brows, n_bcols);
   };
 
-  std::function<ttg::meta::detail::IndexKey (const Key&)> get_rightindex_func =
+  std::function<Key (const Key&)> get_rightindex_func =
     [n_brows, n_bcols](const Key& key) {
     //std::cout << "Getting right index for " << key.first << ":" << key.second << std::endl;
       return get_rightindex(key, n_brows, n_bcols);
@@ -554,14 +554,14 @@ int main(int argc, char** argv) {
   //Should return single piece of data, not a vector.
   //User will take care of tiling if needed.
   //Input key and output key types can be different.
-  std::function<ttg::meta::detail::IndexKey (const Key&)> get_inputindex_func =
+  std::function<Key (const Key&)> get_inputindex_func =
     [n_brows, n_bcols](const Key& key) {
       return key;
   };
 
   auto keymap = [local_row_count](const Key& key) { return key.first / local_row_count; };
 
-  auto container_keymap = [local_row_count](const ttg::meta::detail::IndexKey &key) {
+  auto container_keymap = [local_row_count](const Key &key) {
                             auto k = std::any_cast<std::pair<int, int>>(key);
                             return k.first / local_row_count;
                           };

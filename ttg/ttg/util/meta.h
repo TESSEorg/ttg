@@ -842,14 +842,6 @@ namespace ttg {
       };
       template <typename Key> using invoke_callback_t = typename invoke_callback<Key>::type;
 
-      struct IndexKey : std::any {
-        IndexKey() = default;
-        template<class T, std::enable_if_t<!std::is_same<std::decay_t<T>,
-                                                         IndexKey>{}, bool> = true>
-        IndexKey(T t) : std::any(t)
-        {}
-      };
-
       ///////////////////
       // Defining a mapping function for indexing into data structures using pull terminals
       //////////////////
@@ -857,7 +849,7 @@ namespace ttg {
       struct mapper_function;
       template <typename Key>
       struct mapper_function<Key, std::enable_if_t<!is_void_v<Key>>> {
-        using type = std::function<IndexKey (const Key &)>;
+        using type = std::function<Key (const Key &)>;
       };
       template <typename Key>
       struct mapper_function<Key, std::enable_if_t<is_void_v<Key>>> {
