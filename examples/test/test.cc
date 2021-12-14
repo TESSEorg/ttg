@@ -426,63 +426,6 @@ class BroadcastTest {
   }
 };
 
-// Computes Fibonacci numbers up to some value
-class Fibonacci {
-  // compute all numbers up to this value
-  static constexpr const int max() { return 1000; }
-
-  // computes next value: F_{n+2} = F_{n+1} + F_{n}, seeded by F_1 = 2, F_0 = 1
-  static void next(const int &F_np1 /* aka key */, const int &F_n, std::tuple<Out<int, int>, Out<int, int>> &outs) {
-    // if this is first call reduce F_np1 and F_n also
-    if (F_np1 == 2 && F_n == 1) send<1>(0, F_np1 + F_n, outs);
-
-    const auto F_np2 = F_np1 + F_n;
-    if (F_np2 < max()) {
-      // on 1 process the right order of sends can avoid the race iff reductions are inline (on-current-thread) and not
-      // async (nthread>1):
-      // - send<1> will call wc->set_arg which will eagerly reduce the argument
-      // - send<0> then will call wa->set_arg which will create task for key F_np2 ... that can potentially call
-      // finalize<1> in the other clause
-      // - reversing the order of sends will create a race between wc->set_arg->send<1> executing on this thread and
-      // wa->set_arg->finalize<1> executing in thread pool
-      // - there is no way to detect the "undesired" outcome of the race without keeping expired TTArgs from the cache
-      // there is no way currently to avoid race if there is more than 1 process ... need to add the number of messages
-      // that the reducing terminal will receive. The order of operations will still matter.
-      send<1>(0, F_np2, outs);
-      send<0>(F_np2, F_np1, outs);
-    } else
-      finalize<1>(0, outs);
-  }
-
-  static void consume(const int &key, const int &value, std::tuple<> &out) {
-    ttg::print("sum of Fibonacci numbers up to ", max(), " = ", value);
-  }
-
-  Edge<int, int> N2N, N2C;  // !!!! Edges must be constructed before classes that use them
-
-  decltype(make_tt(next, edges(N2N), edges(N2N, N2C))) wa;
-  decltype(make_tt(consume, edges(N2C), edges())) wc;
-
- public:
-  Fibonacci()
-      : N2N("N2N")
-      , N2C("N2C")
-      , wa(make_tt(next, edges(N2N), edges(N2N, N2C), "next", {"input"}, {"iterate", "sum"}))
-      , wc(make_tt(consume, edges(N2C), edges(), "consumer", {"result"}, {})) {
-    wc->set_input_reducer<0>([](int &a, const int &b) { a += b; });
-  }
-
-  void print() { print_ttg(wa.get()); }
-
-  std::string dot() { return Dot{}(wa.get()); }
-
-  void start() {
-    wa->make_executable();
-    wc->make_executable();
-    if (wa->get_world().rank() == 0) wa->invoke(2, 1);
-  }
-};
-
 int try_main(int argc, char **argv) {
   ttg::initialize(argc, argv, 2);
 
@@ -575,63 +518,9 @@ int try_main(int argc, char **argv) {
       std::cout << q5.dot() << std::endl;
       q5.start();
 
-      Fibonacci fi;
-      std::cout << fi.dot() << std::endl << std::endl;
-      if (ttg::default_execution_context().size() == 1)
-        fi.start();  // see Fibonacci::next() for why there is a race here when nproc>1 (works most of the time)
-
-      // must fence here to flush out all tasks associated with Everything5 and Fibonacci
+      // must fence here to flush out all tasks associated with Everything5
       // TODO must fence in TT destructors to avoid compositional nightmares like this
       ttg::fence();
-
-      // compose Fibonacci from free functions
-      {
-        const auto max = 1000;
-        // Sum Fibonacci numbers up to max
-        auto fib = [&](const int &F_n_plus_1, const int &F_n, std::tuple<Out<int, int>, Out<Void, int>> &outs) {
-          // if this is first call reduce F_n also
-          if (F_n_plus_1 == 2 && F_n == 1) sendv<1>(F_n, outs);
-
-          const auto F_n_plus_2 = F_n_plus_1 + F_n;
-          if (F_n_plus_1 < max) {
-            sendv<1>(F_n_plus_1, outs);
-            send<0>(F_n_plus_2, F_n_plus_1, outs);
-          } else
-            finalize<1>(outs);
-        };
-
-        auto print = [max](const int &value, std::tuple<> &out) {
-          ttg::print("sum of Fibonacci numbers up to ", max, " = ", value);
-          {  // validate the result
-            auto ref_value = 0;
-            // recursive lambda pattern from http://pedromelendez.com/blog/2015/07/16/recursive-lambdas-in-c14/
-            auto validator = [max, &ref_value](int f_np1, int f_n) {
-              auto impl = [max, &ref_value](int f_np1, int f_n, const auto &impl_ref) -> void {
-                assert(f_n < max);
-                ref_value += f_n;
-                if (f_np1 < max) {
-                  const auto f_np2 = f_np1 + f_n;
-                  impl_ref(f_np2, f_np1, impl_ref);
-                }
-              };
-              impl(f_np1, f_n, impl);
-            };
-            validator(2, 1);
-            assert(value == ref_value);
-          }
-        };
-
-        Edge<int, int> F2F;
-        Edge<Void, int> F2P;
-
-        auto f = make_tt(fib, edges(F2F), edges(F2F, F2P), "next");
-        auto p = make_tt(print, edges(F2P), edges(), "print");
-        p->set_input_reducer<0>([](int &a, const int &b) { a += b; });
-        make_graph_executable(f.get());
-        if (ttg::default_execution_context().rank() == 0) f->invoke(2, 1);
-
-        ttg::fence();
-      }
     }
 
     ReductionTest t;
