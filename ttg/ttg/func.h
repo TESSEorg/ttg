@@ -182,13 +182,25 @@ namespace ttg {
   }
 
   template <typename keyT, typename output_terminalT>
-  void set_size(const keyT &key, const std::size_t size, output_terminalT &t) {
+  std::enable_if_t<!meta::is_void_v<keyT>,void>
+  set_size(const keyT &key, const std::size_t size, output_terminalT &t) {
     t.set_size(key, size);
   }
 
   template <size_t i, typename keyT, typename... output_terminalsT>
-  void set_size(const keyT &key, const std::size_t size, std::tuple<output_terminalsT...> &t) {
+  std::enable_if_t<!meta::is_void_v<keyT>,void>
+  set_size(const keyT &key, const std::size_t size, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).set_size(key, size);
+  }
+
+  template <typename output_terminalT>
+  void set_size(const std::size_t size, output_terminalT &t) {
+    t.set_size(size);
+  }
+
+  template <size_t i, typename... output_terminalsT>
+  void set_size(const std::size_t size, std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).set_size(size);
   }
 
   template <typename keyT, typename output_terminalT>
