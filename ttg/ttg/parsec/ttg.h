@@ -1414,13 +1414,6 @@ namespace ttg_parsec {
       auto &world_impl = tt.world.impl();
 
       if (count == numins) {
-        /* reset the reader counters of all mutable copies to 1 */
-        for (int j = 0; j < numins; j++) {
-          if (nullptr != task->parsec_task.data[j].data_in && task->parsec_task.data[j].data_in->readers < 0) {
-            task->parsec_task.data[j].data_in->readers = 1;
-          }
-        }
-
         parsec_execution_stream_t *es = world_impl.execution_stream();
         parsec_key_t hk = task->pkey();
         if (tt.tracing()) {
@@ -2591,6 +2584,9 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
       assert(inserted);
       value_ptr = reinterpret_cast<Value *>(copy->device_private);
       copy_to_remove = copy;
+    } else {
+      /* this copy won't be modified anymore so mark it as read-only */
+      copy->readers = 1;
     }
     return std::move(*value_ptr);
   }
