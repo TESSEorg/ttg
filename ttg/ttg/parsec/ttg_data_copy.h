@@ -9,9 +9,8 @@ typedef void (data_copy_delete_fn)(void*);
 
 } // extern C
 
-/* Extension of PaRSEC's data copy. Note that we use the underlying
- * ref-counting here to avoid further levels of indirection
- * (e.g., std::shared_ptr). */
+/* Extension of PaRSEC's data copy. Note that we use the readers field
+ * to facilitate the ref-counting of the data copy.*/
 struct ttg_data_copy_t : public parsec_data_copy_t {
   data_copy_delete_fn* delete_fn;
 };

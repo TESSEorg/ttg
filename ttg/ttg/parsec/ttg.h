@@ -457,7 +457,8 @@ namespace ttg_parsec {
     template <typename Value>
     inline ttg_data_copy_t *create_new_datacopy(Value &&value) {
       using decay_value_t = std::decay_t<Value>;
-      ttg_data_copy_t *copy = PARSEC_OBJ_NEW(ttg_data_copy_t);
+      ttg_data_copy_t *copy = new ttg_data_copy_t;
+      PARSEC_OBJ_CONSTRUCT(copy, ttg_data_copy_t);
       copy->device_private = new decay_value_t(std::forward<Value>(value));
       copy->readers = 1;
       copy->delete_fn = &ttg_parsec::detail::typed_delete_t<decay_value_t>::delete_type;
@@ -552,25 +553,37 @@ namespace ttg_parsec {
     }
 
     inline void release_data_copy(ttg_data_copy_t *copy) {
-      if (nullptr != copy->device_private) {
-        if (copy->readers > 0) {
-          int32_t readers = parsec_atomic_fetch_dec_int32(&copy->readers);
-          if (1 == readers) {
+      if (NULL != copy->push_task) {
+        /* Release the the deferred task.
+         * The copy was mutable and will be mutated by the released task,
+         * so simply transfer ownership.
+         */
+        parsec_task_t *push_task = copy->push_task;
+        copy->push_task = nullptr;
+        parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)push_task;
+        assert(deferred_op->deferred_release);
+        deferred_op->deferred_release(deferred_op->tt_ptr, deferred_op);
+      } else {
+        if (copy->readers < 0) {
+          /* current task mutated the data but there are no consumers so prepare
+          * the copy to be freed below */
+          copy->readers = 1;
+        }
+
+        int32_t readers = copy->readers;
+        if (copy->readers > 1) {
+          /* potentially more than one reader, decrement atomically */
+          readers = parsec_atomic_fetch_dec_int32(&copy->readers);
+        }
+        /* if there was only one reader (the current task) we release the copy */
+        if (1 == readers) {
+          if (nullptr != copy->device_private) {
             copy->delete_fn(copy->device_private);
             copy->device_private = NULL;
           }
+          delete copy;
         }
       }
-      if (NULL != copy->push_task) {
-        /* Release the task if it was deferrred */
-        parsec_task_t *push_task = copy->push_task;
-        if (parsec_atomic_cas_ptr(&copy->push_task, push_task, nullptr)) {
-          parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)copy->push_task;
-          assert(deferred_op->deferred_release);
-          deferred_op->deferred_release(deferred_op->tt_ptr, deferred_op);
-        }
-      }
-      PARSEC_OBJ_RELEASE(copy);
     }
 
     template <typename Value>
@@ -578,10 +591,12 @@ namespace ttg_parsec {
       ttg_data_copy_t *copy_res = copy_in;
       bool replace = false;
       int32_t readers = -1;
+
       if (readonly && copy_in->readers > 0) {
         /* simply increment the number of readers */
         readers = parsec_atomic_fetch_inc_int32(&copy_in->readers);
       }
+
       if (readers < 0) {
         /* someone is going to write into this copy -> we need to make a copy */
         copy_res = NULL;
@@ -597,12 +612,17 @@ namespace ttg_parsec {
          * Try to replace the readers with a negative value that indicates
          * the value is mutable. If that fails we know that there are other
          * readers or writers already.
+         *
+         * NOTE: this check is not atomic: either there is a single reader
+         *       (current task) or there are others, in which we case won't
+         *       touch it.
          */
-        if (parsec_atomic_cas_int32(&copy_in->readers, 1, INT32_MIN)) {
+        if (1 == copy_in->readers) {
           /**
            * no other readers, mark copy as mutable and defer the release
            * of the task
            */
+          copy_in->readers = INT32_MIN;
           assert(nullptr == copy_in->push_task);
           assert(nullptr != task);
           copy_in->push_task = &task->parsec_task;
@@ -610,9 +630,6 @@ namespace ttg_parsec {
           /* there are readers of this copy already, make a copy that we can mutate */
           copy_res = NULL;
         }
-      }
-      if (NULL != copy_res) {
-        PARSEC_OBJ_RETAIN(copy_res);
       }
 
       if (NULL == copy_res) {
