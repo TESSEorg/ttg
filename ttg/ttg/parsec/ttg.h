@@ -331,7 +331,7 @@ namespace ttg_parsec {
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class, int data_count)
           : data_count(data_count) {
-        PARSEC_OBJ_CONSTRUCT(&this->parsec_task, parsec_task_t);
+        PARSEC_LIST_ITEM_SINGLETON(&this->parsec_task);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
       }
@@ -339,7 +339,7 @@ namespace ttg_parsec {
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
                              parsec_taskpool_t *taskpool, void *object_ptr, int32_t priority, int data_count)
           : data_count(data_count), object_ptr(object_ptr) {
-        PARSEC_OBJ_CONSTRUCT(&this->parsec_task, parsec_task_t);
+        PARSEC_LIST_ITEM_SINGLETON(&this->parsec_task);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
         parsec_task.status = PARSEC_TASK_STATUS_HOOK;
