@@ -120,25 +120,6 @@ namespace ttg_parsec {
     static int get_remote_complete_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg, size_t msg_size,
                                       int src, void *cb_data);
 
-    /* Helper function to properly delete a pointer, with the potential for
-     * template speciailization */
-    template <typename T>
-    struct typed_delete_t {
-      static void delete_type(void *ptr) {
-        T *typed_ptr = reinterpret_cast<T *>(ptr);
-        delete typed_ptr;
-      }
-    };
-
-    template <typename T>
-    struct typed_delete_t<std::shared_ptr<T>> {
-      static void delete_type(void *ptr) {
-        std::shared_ptr<T> *typed_ptr = reinterpret_cast<std::shared_ptr<T> *>(ptr);
-        typed_ptr->reset();
-        delete typed_ptr;
-      }
-    };
-
   }  // namespace detail
 
   class WorldImpl : public ttg::base::WorldImplBase {
@@ -413,9 +394,9 @@ namespace ttg_parsec {
         return res;
       }
       for (int i = 0; i < task->data_count; ++i) {
-        auto copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
+        auto copy = static_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
         if (NULL != copy && copy->device_private == ptr) {
-          res = reinterpret_cast<ttg_data_copy_t *>(copy);
+          res = copy;
           break;
         }
       }
@@ -456,12 +437,8 @@ namespace ttg_parsec {
 
     template <typename Value>
     inline ttg_data_copy_t *create_new_datacopy(Value &&value) {
-      using decay_value_t = std::decay_t<Value>;
-      ttg_data_copy_t *copy = new ttg_data_copy_t;
-      PARSEC_OBJ_CONSTRUCT(copy, ttg_data_copy_t);
-      copy->device_private = new decay_value_t(std::forward<Value>(value));
-      copy->readers = 1;
-      copy->delete_fn = &ttg_parsec::detail::typed_delete_t<decay_value_t>::delete_type;
+      using value_type = std::decay_t<Value>;
+      ttg_data_copy_t *copy = new ttg_data_value_copy_t<value_type>(std::forward<Value>(value));
       return copy;
     }
 
@@ -577,10 +554,6 @@ namespace ttg_parsec {
         }
         /* if there was only one reader (the current task) we release the copy */
         if (1 == readers) {
-          if (nullptr != copy->device_private) {
-            copy->delete_fn(copy->device_private);
-            copy->device_private = NULL;
-          }
           delete copy;
         }
       }
@@ -590,7 +563,7 @@ namespace ttg_parsec {
     inline ttg_data_copy_t *register_data_copy(ttg_data_copy_t *copy_in, parsec_ttg_task_base_t *task, bool readonly) {
       ttg_data_copy_t *copy_res = copy_in;
       bool replace = false;
-      int32_t readers = -1;
+      int32_t readers = copy_in->readers;
 
       if (readonly && copy_in->readers > 0) {
         /* simply increment the number of readers */
@@ -601,6 +574,10 @@ namespace ttg_parsec {
         /* someone is going to write into this copy -> we need to make a copy */
         copy_res = NULL;
         if (readonly) {
+          /* we replace the copy in a deferred task if the copy will be mutated by
+           * the deferred task and we are readonly.
+           * That way, we can share the copy with other readonly tasks and release
+           * the deferred task. */
           replace = true;
         }
       } else if (!readonly) {
@@ -634,14 +611,10 @@ namespace ttg_parsec {
 
       if (NULL == copy_res) {
         ttg_data_copy_t *new_copy = detail::create_new_datacopy(*static_cast<Value *>(copy_in->device_private));
-        if (replace) {
-          /* TODO: Make sure there is no race condition with the release in release_data_copy,
-           * in particular when it comes to setting the callback and replacing the data */
-
+        if (replace && nullptr != copy_in->push_task) {
           /* replace the task that was deferred */
           parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)copy_in->push_task;
-          ttg_data_copy_t *deferred_replace_copy;
-          deferred_replace_copy = detail::find_copy_in_task(deferred_op, copy_in->device_private);
+          new_copy->readers = INT32_MIN;
           /* replace the copy in the deferred task */
           for (int i = 0; i < deferred_op->data_count; ++i) {
             if (deferred_op->parsec_task.data[i].data_in == copy_in) {
@@ -656,6 +629,9 @@ namespace ttg_parsec {
           ++copy_in->readers;    // register as reader
           copy_res = copy_in;    // return the copy we were passed
         } else {
+          if (!readonly) {
+            new_copy->readers = INT32_MIN;
+          }
           copy_res = new_copy;  // return the new copy
         }
       }
@@ -1342,7 +1318,7 @@ namespace ttg_parsec {
         if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
           // have a value already? if not, set, otherwise reduce
           ttg_data_copy_t *copy = nullptr;
-          if (nullptr == (copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in))) {
+          if (nullptr == (copy = static_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in))) {
             using decay_valueT = std::decay_t<valueT>;
             if (nullptr == copy_in) {
               copy = detail::create_new_datacopy(std::forward<Value>(value));
@@ -1386,12 +1362,16 @@ namespace ttg_parsec {
           /* if we registered as a writer and were the first to register with this copy
            * we need to defer the release of this task to give other tasks a chance to
            * make a copy of the original data */
-          needs_deferring = (copy->readers < 0);
+          needs_deferring = (copy->push_task != nullptr);
           task->parsec_task.data[i].data_in = copy;
         }
         if (needs_deferring) {
           if (nullptr == task->deferred_release) {
-            task->deferred_release = &release_task_to_scheduler<true>;
+            if (remove_from_hash) {
+              task->deferred_release = &release_task_to_scheduler<true>;
+            } else {
+              task->deferred_release = &release_task_to_scheduler<false>;
+            }
             task->tt_ptr = this;
           }
         }
@@ -2227,7 +2207,7 @@ namespace ttg_parsec {
       parsec_ttg_es = es;
       auto *task = (detail::parsec_ttg_task_base_t *)t;
       for (int i = 0; i < task->data_count; i++) {
-        ttg_data_copy_t *copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
+        ttg_data_copy_t *copy = static_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
         if (nullptr == copy) continue;
         detail::release_data_copy(copy);
         task->parsec_task.data[i].data_in = nullptr;
