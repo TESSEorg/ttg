@@ -1014,18 +1014,15 @@ namespace ttg_parsec {
       parsec_ttg_caller = dummy;
 
       /* iterate over the keys and have them use the copy we made */
-      parsec_list_t tasklist;
-      PARSEC_OBJ_CONSTRUCT(&tasklist, parsec_list_t);
+      parsec_task_t *task_ring = nullptr;
       for (auto &&key : keylist) {
-        set_arg_local_impl<i>(key, *reinterpret_cast<valueT *>(copy->device_private), copy, &tasklist);
+        set_arg_local_impl<i>(key, *reinterpret_cast<valueT *>(copy->device_private), copy, &task_ring);
       }
 
-      if (!parsec_list_nolock_is_empty(&tasklist)) {
-        parsec_list_item_t *taskring = parsec_list_unchain(&tasklist);
+      if (nullptr != task_ring) {
         auto &world_impl = world.impl();
-        __parsec_schedule(world_impl.execution_stream(), (parsec_task_t *)taskring, 0);
+        __parsec_schedule(world_impl.execution_stream(), task_ring, 0);
       }
-      PARSEC_OBJ_DESTRUCT(&tasklist);
 
       /* restore the previous task */
       parsec_ttg_caller = parsec_ttg_caller_save;
@@ -1289,7 +1286,7 @@ namespace ttg_parsec {
     // Used to set the i'th argument
     template <std::size_t i, typename Key, typename Value>
     void set_arg_local_impl(const Key &key, Value &&value, ttg_data_copy_t *copy_in = nullptr,
-                            parsec_list_t *task_list = nullptr) {
+                            parsec_task_t **task_ring = nullptr) {
       using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
       constexpr const bool input_is_const = std::is_const_v<std::tuple_element_t<i, input_args_type>>;
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
@@ -1398,9 +1395,9 @@ namespace ttg_parsec {
       }
       if (release) {
         if (remove_from_hash) {
-          release_task<true>(this, task, task_list);
+          release_task<true>(this, task, task_ring);
         } else {
-          release_task<false>(this, task, task_list);
+          release_task<false>(this, task, task_ring);
         }
       }
     }
@@ -1412,7 +1409,7 @@ namespace ttg_parsec {
 
     template <bool RemoveFromHash>
     static void release_task(void *tt_ptr, detail::parsec_ttg_task_base_t *base_task,
-                             parsec_list_t *task_list = nullptr) {
+                             parsec_task_t **task_ring = nullptr) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       task_t *task = static_cast<task_t *>(base_task);
       ttT &tt = *reinterpret_cast<ttT *>(tt_ptr);
@@ -1447,10 +1444,16 @@ namespace ttg_parsec {
           }
         }
         if (RemoveFromHash) parsec_hash_table_remove(&tt.tasks_table, hk);
-        if (nullptr == task_list) {
+        if (nullptr == task_ring) {
           __parsec_schedule(es, &task->parsec_task, 0);
+        } else if (*task_ring == nullptr) {
+          /* the first task is set directly */
+          *task_ring = &task->parsec_task;
         } else {
-          parsec_list_prepend(task_list, &task->parsec_task.super);
+          /* push into the ring */
+          parsec_list_item_ring_push_sorted(&(*task_ring)->super,
+                                            &task->parsec_task.super,
+                                            offsetof(parsec_task_t, priority));
         }
       }
     }
@@ -1660,22 +1663,19 @@ namespace ttg_parsec {
 
     template <int i, typename Iterator, typename Value>
     void broadcast_arg_local(Iterator &&begin, Iterator &&end, const Value &value) {
-      parsec_list_t task_list;
-      PARSEC_OBJ_CONSTRUCT(&task_list, parsec_list_t);
+      parsec_task_t *task_ring = nullptr;
       ttg_data_copy_t *copy = nullptr;
       if (nullptr != parsec_ttg_caller) {
         copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
       }
 
       for (auto it = begin; it != end; ++it) {
-        set_arg_local_impl<i>(*it, value, copy, &task_list);
+        set_arg_local_impl<i>(*it, value, copy, &task_ring);
       }
       /* submit all ready tasks at once */
-      if (!parsec_list_nolock_is_empty(&task_list)) {
-        auto ring = (parsec_task_t *)parsec_list_unchain(&task_list);
-        __parsec_schedule(world.impl().execution_stream(), ring, 0);
+      if (nullptr != task_ring) {
+        __parsec_schedule(world.impl().execution_stream(), task_ring, 0);
       }
-      PARSEC_OBJ_DESTRUCT(&task_list);
     }
 
     template <std::size_t i, typename Key, typename Value>
