@@ -1,36 +1,22 @@
-# Template Task Graph User Guide (#userguide)
-
-## Contents (#toc)
-
-* [Building and Installing TTG](https://github.com/TESSEorg/ttg/blob/master/INSTALL.md)
-* [Your First TTG Program](#firstprog)
-* [Compiling Your First TTG Program](#compiling)
-
-## Your First TTG Program(#firstprog)
-
-The following code creates four tasks, one of type A, two of type B
-(B(0) and B(1)), and one of type C, and ensures that A runs before
-both B tasks, and that both B tasks run before C.
-
-![Simple Diamond DAG](simple.png)
-
-```
+//
+// Created by herault on 1/14/22.
+//
 #include <ttg.h>
 
 using namespace ttg;
 
 static void a(std::tuple<Out<int, double>> &out) {
-  ttg::print("Called task A");
+  ttg::print("Called task A ");
   send<0>(0, 1.0, out);
   send<0>(1, 2.0, out);
 }
 
-static void b(const int &key, const double &input, std::tuple<Out<void, double>, Out<void, double>>&out) {
+static void b(const int &key, const double &input, std::tuple<Out<void, double>, Out<void, double>> &out) {
   ttg::print("Called task B(", key, ") with input data ", input);
-  if(key == 0)
-    sendv<0>(input+1.0, out);
+  if (key == 0)
+    sendv<0>(input + 1.0, out);
   else
-    sendv<1>(input+1.0, out);
+    sendv<1>(input + 1.0, out);
 }
 
 static void c(const double &b0, const double &b1, std::tuple<> &out) {
@@ -53,7 +39,7 @@ int main(int argc, char **argv) {
     wb->make_executable();
     wc->make_executable();
 
-    if(wa->get_world().rank() == 0) wa->invoke();
+    if (wa->get_world().rank() == 0) wa->invoke();
 
     ttg::execute();
     ttg::fence(ttg::get_default_world());
@@ -62,9 +48,3 @@ int main(int argc, char **argv) {
   ttg::finalize();
   return EXIT_SUCCESS;
 }
-
-```
-
-## Compiling Your First TTG Program(#compiling)
-
-TBD: See Issue [#207](https://github.com/TESSEorg/ttg/issues/207)

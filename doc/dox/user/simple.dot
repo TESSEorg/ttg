@@ -1,0 +1,9 @@
+Digraph G {
+rankdir="LR";
+B0 [label="B(0)"];
+B1 [label="B(1)"];
+A -> B1;
+A -> B0;
+B0 -> C;
+B1 -> C;
+}
