@@ -490,7 +490,7 @@ namespace ttg_madness {
 
           bool initialize_not_reduce = false;
           if (args->nargs[i] == std::numeric_limits<std::int64_t>::max()) {
-            // initialize the value, if needed, upon receit of the first datum
+            // initialize the value, if needed, upon receipt of the first datum
             if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
               initialize_not_reduce = true;
             }
@@ -641,7 +641,8 @@ namespace ttg_madness {
         // commit changes
         args->stream_size[i] = size;
         // if messages already received for this key update the expected-received counter
-        if (args->nargs[i] != 0) {
+        const auto messages_received_already = args->nargs[i] != std::numeric_limits<std::int64_t>::max();
+        if (messages_received_already) {
           // cannot have received more messages than expected
           if (-(args->nargs[i]) > size) {
             ttg::print_error(world.rank(), ":", get_name(),
@@ -720,7 +721,8 @@ namespace ttg_madness {
         // commit changes
         args->stream_size[i] = size;
         // if messages already received for this key update the expected-received counter
-        if (args->nargs[i] != 0) args->nargs[i] += size;
+        const auto messages_received_already = args->nargs[i] != std::numeric_limits<std::int64_t>::max();
+        if (messages_received_already) args->nargs[i] += size;
         // if done, update the counter
         if (args->nargs[i] == 0) args->counter--;
 
