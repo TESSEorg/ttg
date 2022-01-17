@@ -441,12 +441,13 @@ namespace ttg_parsec {
 
     inline void remove_data_copy(ttg_data_copy_t *copy, parsec_ttg_task_base_t *task) {
       int i;
-      /* find and remove entry */
-      for (i = 0; i < task->data_count; ++i) {
+      /* find and remove entry; copies are usually appended and removed, so start from back */
+      for (i = task->data_count; i >= 0; --i) {
         if (copy == task->parsec_task.data[i].data_in) {
           break;
         }
       }
+      if (i < 0) return;
       /* move all following elements one up */
       for (; i < task->data_count - 1; ++i) {
         task->parsec_task.data[i].data_in = task->parsec_task.data[i + 1].data_in;
