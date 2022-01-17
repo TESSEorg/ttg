@@ -59,7 +59,7 @@ TEST_CASE("Fibonacci", "[fib][core]") {
           },
           ttg::edges(F2P), ttg::edges());
       print_op->set_input_reducer<0>([](int &a, const int &b) { a = a + b; });
-      fib_op->make_executable();
+      make_graph_executable(fib_op);
       if (ttg::default_execution_context().rank() == 0) fib_op->invoke(1, 0);
       ttg::ttg_fence(ttg::default_execution_context());
     }
@@ -101,7 +101,7 @@ TEST_CASE("Fibonacci", "[fib][core]") {
       ::ttg::print("fib reducer: current value = ", a, ", incremented by ", b, " set to ", a + b);
       a = a + b;
     });
-    fib_op->make_executable();
+    make_graph_executable(fib_op);
     ttg::ttg_fence(ttg::default_execution_context());
     if (ttg::default_execution_context().rank() == 0) fib_op->invoke(0, std::make_pair(1, 0));
     ttg::ttg_fence(ttg::default_execution_context());
