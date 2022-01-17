@@ -48,7 +48,7 @@ namespace ttg {
   /// applies @c make_executable method to every op in the graph
   /// return true if there are no dangling out terminals
   template <typename... TTBasePtrs>
-  std::enable_if_t<(std::is_convertible_v<std::remove_const_t<std::remove_reference_t<TTBasePtrs>>, TTBase *> && ...),
+  std::enable_if_t<(std::is_convertible_v<decltype(*(std::declval<TTBasePtrs>())), TTBase&> && ...),
                    bool>
   make_graph_executable(TTBasePtrs &&... ops) {
     return ttg::make_traverse([](auto &&x) { std::forward<decltype(x)>(x)->make_executable(); })(
