@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <optional>
 
 #include "ttg/base/terminal.h"
 #include "ttg/util/demangle.h"

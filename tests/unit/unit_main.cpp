@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
   ttg::diagnose_off();  // turn off diagnostics
 
   const auto nranks = ttg::default_execution_context().size();
-  std::cout << "ready to run TTG unit tests with " << nranks << " ranks" << (nranks > 1 ? "s" : "") << std::endl;
+  std::cout << "ready to run TTG unit tests with " << nranks << " rank" << (nranks > 1 ? "s" : "") << std::endl;
 
   ttg::execute();
 #endif

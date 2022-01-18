@@ -70,14 +70,10 @@ namespace ttg_madness {
     ttg::Edge<> m_ctl_edge;
 
    public:
-    WorldImpl(::madness::World &world)
-    : WorldImplBase(world.size(), world.rank())
-    , m_impl(world)
-    {}
+    WorldImpl(::madness::World &world) : WorldImplBase(world.size(), world.rank()), m_impl(world) {}
 
     WorldImpl(const SafeMPI::Intracomm &comm)
-    : WorldImplBase(comm.Get_size(), comm.Get_rank())
-    , m_impl(*new ::madness::World(comm)), m_allocated(true) {}
+        : WorldImplBase(comm.Get_size(), comm.Get_rank()), m_impl(*new ::madness::World(comm)), m_allocated(true) {}
 
     /* Deleted copy ctor */
     WorldImpl(const WorldImpl &other) = delete;
@@ -254,14 +250,11 @@ namespace ttg_madness {
 
      public:
       int counter;  // Tracks the number of arguments finalized
-      std::array<std::size_t, numins>
-          nargs;  // Tracks the number of expected values
-                  // for any type of input: 0 = finalized;
-                  // for a streaming input the following values are possible:
-                  // - 0: finalized
-                  // - std::numeric_limits<std::size_t>::max(): initial state (there is no value yet)
-                  // - 1: if streaming: have a value, waiting for more
-                  // - n: if nonstreaming: expect this many more values
+      std::array<std::int64_t, numins>
+          nargs;  // Tracks the number of expected values minus the number of received values
+                  // 0 = finalized
+                  // for a streaming input initialized to std::numeric_limits<std::int64_t>::max()
+                  // which indicates that the value needs to be initialized
       std::array<std::size_t, numins> stream_size;  // Expected number of values to receive, to be used for streaming
                                                     // inputs (0 = unbounded stream, >0 = bounded stream)
       input_values_tuple_type input_values;         // The input values (does not include control)
@@ -287,7 +280,7 @@ namespace ttg_madness {
           , nargs()
           , stream_size()
           , input_values() {
-        std::fill(nargs.begin(), nargs.end(), std::numeric_limits<std::size_t>::max());
+        std::fill(nargs.begin(), nargs.end(), std::numeric_limits<std::int64_t>::max());
       }
 
       virtual void run(::madness::World &world) override {
@@ -376,34 +369,43 @@ namespace ttg_madness {
           // N.B. Right now reductions are done eagerly, without spawning tasks
           //      this means we must lock
           args->lock();
-          if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
-            // have a value already? if not, set, otherwise reduce
-            if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
-              this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
 
-              // now have a value, reset nargs
-              // check if we have a stream size for the op, which has precedence over the global setting.
-              if (args->stream_size[i] != 0) {
-                args->nargs[i] = args->stream_size[i];
-              } else if (static_streamsize[i] != 0) {
-                args->stream_size[i] = static_streamsize[i];
-                args->nargs[i] = static_streamsize[i];
-              } else {
-                args->nargs[i] = 1;
-              }
-            } else {
-              reducer(this->get<i, std::decay_t<valueT> &>(args->input_values), value);
+          bool initialize_not_reduce = false;
+          if (args->nargs[i] == std::numeric_limits<std::int64_t>::max()) {
+            // upon first datum initialize, if needed
+            if constexpr (!ttg::meta::is_void_v<valueT>) {
+              initialize_not_reduce = true;
             }
+
+            // initialize nargs
+            // if we have a stream size for the op, use it first
+            if (args->stream_size[i] != 0) {
+              assert(args->stream_size[i] <= static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max()));
+              args->nargs[i] = args->stream_size[i];
+            } else if (static_streamsize[i] != 0) {
+              assert(static_streamsize[i] <= static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max()));
+              args->stream_size[i] = static_streamsize[i];
+              args->nargs[i] = static_streamsize[i];
+            } else {
+              args->nargs[i] = 0;
+            }
+          }
+
+          if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
+            if (initialize_not_reduce)
+              this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
+            else
+              reducer(this->get<i, std::decay_t<valueT> &>(args->input_values), value);
           } else {
             reducer();  // even if this was a control input, must execute the reducer for possible side effects
           }
-          // update the counter if the stream is bounded
-          // this assumes that the stream size is set before data starts flowing ... strong-typing streams will solve
-          // this
-          if (args->stream_size[i] != 0) {
-            args->nargs[i]--;
-            if (args->nargs[i] == 0) args->counter--;
-          }
+
+          // update the counter
+          args->nargs[i]--;
+
+          // is this the last message?
+          if (args->nargs[i] == 0) args->counter--;
+
           args->unlock();
         } else {                                          // this is a nonstreaming input => set the value
           if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
@@ -485,36 +487,43 @@ namespace ttg_madness {
           //      this means we must lock
           args->lock();
           ttg::trace(world.rank(), ":", get_name(), " : reducing value into argument : ", i);
-          if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
-            // have a value already? if not, set, otherwise reduce
-            if (args->nargs[i] == std::numeric_limits<std::size_t>::max()) {
-              this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
-              // now have a value, reset nargs
-              if (args->stream_size[i] != 0) {
-                args->nargs[i] = args->stream_size[i];
-              } else if (static_streamsize[i] != 0) {
-                args->stream_size[i] = static_streamsize[i];
-                args->nargs[i] = static_streamsize[i];
-              } else {
-                args->nargs[i] = 1;
-              }
-            } else {
-              // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
-              reducer(this->get<i, std::decay_t<valueT> &>(args->input_values), value);
+
+          bool initialize_not_reduce = false;
+          if (args->nargs[i] == std::numeric_limits<std::int64_t>::max()) {
+            // initialize the value, if needed, upon receipt of the first datum
+            if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
+              initialize_not_reduce = true;
             }
+
+            // now have a value, reset nargs
+            if (args->stream_size[i] != 0) {
+              assert(args->stream_size[i] <= static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max()));
+              args->nargs[i] = args->stream_size[i];
+            } else if (static_streamsize[i] != 0) {
+              assert(static_streamsize[i] <= static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max()));
+              args->stream_size[i] = static_streamsize[i];
+              args->nargs[i] = static_streamsize[i];
+            } else {
+              args->nargs[i] = 0;
+            }
+          }
+
+          if constexpr (!ttg::meta::is_void_v<valueT>) {
+            // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
+            if (initialize_not_reduce)
+              this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
+            else
+              reducer(this->get<i, std::decay_t<valueT> &>(args->input_values), value);
           } else {  // call anyway in case it has side effects
             reducer();
           }
 
-          // update the counter if the stream is bounded
-          // this assumes that the stream size is set before data starts flowing ... strong-typing streams will solve
-          // this
-          if (args->stream_size[i] != 0) {
-            args->nargs[i]--;
-            ttg::trace(world.rank(), ":", get_name(), " : stream ", i, " has size ", args->stream_size[i],
-                       " current nargs", args->nargs[i]);
-            if (args->nargs[i] == 0) args->counter--;
-          }
+          // update the counter
+          args->nargs[i]--;
+
+          // is this the last message?
+          if (args->nargs[i] == 0) args->counter--;
+
           args->unlock();
         } else {  // this is a nonstreaming input => set the value
           this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
@@ -631,8 +640,30 @@ namespace ttg_madness {
 
         // commit changes
         args->stream_size[i] = size;
-
+        // if messages already received for this key update the expected-received counter
+        const auto messages_received_already = args->nargs[i] != std::numeric_limits<std::int64_t>::max();
+        if (messages_received_already) {
+          // cannot have received more messages than expected
+          if (-(args->nargs[i]) > size) {
+            ttg::print_error(world.rank(), ":", get_name(),
+                             " : error stream received more messages than specified via set_argstream_size : ", i);
+            throw std::runtime_error("TT::set_argstream_size(n): n less than the number of messages already received");
+          }
+          args->nargs[i] += size;
+        }
+        // if done, update the counter
+        if (args->nargs[i] == 0) args->counter--;
         args->unlock();
+
+        // ready to run the task?
+        if (args->counter == 0) {
+          ttg::trace(world.rank(), ":", get_name(), " : submitting task for op ");
+          args->derived = static_cast<derivedT *>(this);
+
+          world.impl().impl().taskq.add(args);
+
+          cache.erase(acc);
+        }
       }
     }
 
@@ -689,8 +720,24 @@ namespace ttg_madness {
 
         // commit changes
         args->stream_size[i] = size;
+        // if messages already received for this key update the expected-received counter
+        const auto messages_received_already = args->nargs[i] != std::numeric_limits<std::int64_t>::max();
+        if (messages_received_already) args->nargs[i] += size;
+        // if done, update the counter
+        if (args->nargs[i] == 0) args->counter--;
 
         args->unlock();
+
+        // ready to run the task?
+        if (args->counter == 0) {
+          ttg::trace(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
+          args->derived = static_cast<derivedT *>(this);
+          args->key = key;
+
+          world.impl().impl().taskq.add(args);
+
+          cache.erase(acc);
+        }
       }
     }
 
@@ -985,8 +1032,8 @@ namespace ttg_madness {
     TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        keymapT &&keymap = keymapT(ttg::default_execution_context()), priomapT &&priomap = priomapT())
-        : TT(inedges, outedges, name, innames, outnames, ttg::default_execution_context(), std::forward<keymapT>(keymap),
-             std::forward<priomapT>(priomap)) {}
+        : TT(inedges, outedges, name, innames, outnames, ttg::default_execution_context(),
+             std::forward<keymapT>(keymap), std::forward<priomapT>(priomap)) {}
 
     // Destructor checks for unexecuted tasks
     virtual ~TT() {
