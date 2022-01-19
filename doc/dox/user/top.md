@@ -83,7 +83,7 @@ target_compile_definitions(first-parsec PRIVATE TTG_USE_PARSEC=1)
 target_link_libraries(first-parsec PRIVATE ttg-parsec)
 
 add_executable(first-mad first.cc)
-target_compile_definitions(first-mad PRIVATE TTG_USE_MADNESS=1 WORLD_INSTANTIATE_STATIC_TEMPLATES=1)
+target_compile_definitions(first-mad PRIVATE TTG_USE_MADNESS=1)
 target_link_libraries(first-mad PRIVATE ttg-mad)
 ~~~~~~~~~~~~~
 
@@ -103,8 +103,7 @@ cmake -Dttg_DIR=/path/to/ttg/lib/cmake/ttg /path/to/your/sourcedir
 
 When source code `#include <ttg.h>`, it needs to define which backend it uses.
 In this example, we do that from the command line, by adding the compile-definition
-`TTG_USE_PARSEC=1` or `TTG_USE_MADNESS=1`. The MADNESS backend also requires
-defining `WORLD_INSTANTIATE_STATIC_TEMPLATES` to 1.
+`TTG_USE_PARSEC=1` or `TTG_USE_MADNESS=1`. 
 
 It is then sufficient to tell CMake that the executable depends on the
 corresponding TTG target to add the appropriate include path and link
