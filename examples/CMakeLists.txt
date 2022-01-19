@@ -28,8 +28,8 @@ add_ttg_executable(wavefront-wf wavefront/wavefront-wf.cc SINGLERANKONLY)
 add_ttg_executable(wavefront-wf2 wavefront/wavefront-wf2.cc SINGLERANKONLY)
 add_ttg_executable(wavefront-df wavefront/wavefront-df.cc RUNTIMES "mad")
 add_ttg_executable(fw-apsp floyd-warshall/floyd_warshall.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
-
 add_ttg_executable(helloworld helloworld/helloworld.cpp)
+add_ttg_executable(simplegenerator simplegenerator/simplegenerator.cc RUNTIMES "mad")
 
 if(TARGET DPLASMA::dplasma)
   add_ttg_executable(potrf potrf/potrf_pdc.cc LINK_LIBRARIES lapackpp DPLASMA::dplasma MADworld)
