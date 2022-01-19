@@ -161,7 +161,7 @@ if (TARGET MADworld)
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/ttg.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/watch.h)
   # N.B. ttg-mad can use MADNESS serialization only
-  add_ttg_library(ttg-mad "${ttg-mad-headers}" PUBLIC_HEADER "${ttg-mad-headers}" LINK_LIBRARIES "ttg;MADworld;ttg-serialization-madness")
+  add_ttg_library(ttg-mad "${ttg-mad-headers}" PUBLIC_HEADER "${ttg-mad-headers}" LINK_LIBRARIES "ttg;MADworld;ttg-serialization-madness" COMPILE_DEFINITIONS "WORLD_INSTANTIATE_STATIC_TEMPLATES=1")
 endif(TARGET MADworld)
 
 ########################
