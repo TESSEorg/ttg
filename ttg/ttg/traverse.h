@@ -39,35 +39,37 @@ namespace ttg {
 
         ttfunc(tt);
 
-      int count = 0;
-      for (auto in : tt->get_inputs()) {
+        int count = 0;
+        for (auto in : tt->get_inputs()) {
           if (!in) {
-              std::cout << "ttg::Traverse: got a null in!\n";
-              status = false;
+            std::cout << "ttg::Traverse: got a null in!\n";
+            status = false;
           } else {
-              infunc(in);
-              if (!in->is_connected()) {
-                  std::cout << "ttg::Traverse: " << tt->get_name() << " input terminal #" << count << " " << in->get_name() << " is not connected\n";
-                  status = false;
-              }
+            infunc(in);
+            if (!in->is_connected()) {
+              std::cout << "ttg::Traverse: " << tt->get_name() << " input terminal #" << count << " " << in->get_name()
+                        << " is not connected\n";
+              status = false;
+            }
           }
           count++;
-      }
+        }
 
-      count = 0;
-      for (auto out : tt->get_outputs()) {
+        count = 0;
+        for (auto out : tt->get_outputs()) {
           if (!out) {
-              std::cout << "ttg::Traverse: got a null out!\n";
-              status = false;
+            std::cout << "ttg::Traverse: got a null out!\n";
+            status = false;
           } else {
-              outfunc(out);
-              if (!out->is_connected()) {
-                  std::cout << "ttg::Traverse: " << tt->get_name() << " output terminal #" << count << " " << out->get_name() << " is not connected\n";
-                  status = false;
-              }
+            outfunc(out);
+            if (!out->is_connected()) {
+              std::cout << "ttg::Traverse: " << tt->get_name() << " output terminal #" << count << " "
+                        << out->get_name() << " is not connected\n";
+              status = false;
+            }
           }
           count++;
-      }
+        }
 
         for (auto out : tt->get_outputs()) {
           if (out) {
@@ -83,6 +85,27 @@ namespace ttg {
         }
 
         return status;
+      }
+
+      template <typename TT>
+      std::enable_if_t<std::is_base_of_v<TTBase, TT> && !std::is_same_v<TT, TTBase>,
+                       bool>
+      traverse(TT* tt) {
+        return traverse(static_cast<TTBase*>(tt));
+      }
+
+      template <typename TT>
+      std::enable_if_t<std::is_base_of_v<TTBase, TT>,
+                       bool>
+      traverse(const std::shared_ptr<TTBase>& tt) {
+        return traverse(tt.get());
+      }
+
+      template <typename TT, typename Deleter>
+      std::enable_if_t<std::is_base_of_v<TTBase, TT>,
+                       bool>
+      traverse(const std::unique_ptr<TT, Deleter>& tt) {
+        return traverse(tt.get());
       }
 
       /// visitor that does nothing
@@ -130,10 +153,11 @@ namespace ttg {
     const OutVisitor &out_visitor() const { return out_visitor_; }
 
     /// Traverses graph starting at one or more TTs
-    template <typename ... TTBasePtrs>
-    std::enable_if_t<(std::is_convertible_v<std::remove_reference_t<TTBasePtrs>, TTBase *> && ...),bool>
+    template <typename TTBasePtr, typename ... TTBasePtrs>
+    std::enable_if_t<std::is_base_of_v<TTBase, std::decay_t<decltype(*(std::declval<TTBasePtr>()))>> && (std::is_base_of_v<TTBase, std::decay_t<decltype(*(std::declval<TTBasePtrs>()))>> && ...),
+                     bool>
         operator()(
-        TTBase * op, TTBasePtrs && ... ops) {
+        TTBasePtr&& op, TTBasePtrs && ... ops) {
       reset();
       bool result = traverse(op);
       result &= (traverse(std::forward<TTBasePtrs>(ops)) && ... );

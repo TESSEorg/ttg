@@ -37,8 +37,10 @@ namespace ttg {
   template <typename Iterator, typename Op>
   auto for_each(Iterator b, Iterator e, Op op, ttg::World world = ttg::default_execution_context()) {
     auto [in, ctl] = range2flow(b, e, world);
-    auto foreach_op = ttg::make_tt([&op](const std::size_t &idx, const int &datum, std::tuple<> &outs) { op(datum); },
-                                   ttg::edges(in), ttg::edges());
+    auto foreach_op =
+        ttg::make_tt([&op](const std::size_t &idx, const typename std::iterator_traits<Iterator>::value_type &datum,
+                           std::tuple<> &outs) { op(datum); },
+                     ttg::edges(in), ttg::edges());
     foreach_op->make_executable();
     ttg::ttg_register_ptr(world, std::move(foreach_op));
     ctl.fire();

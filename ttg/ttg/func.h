@@ -48,7 +48,7 @@ namespace ttg {
   /// applies @c make_executable method to every op in the graph
   /// return true if there are no dangling out terminals
   template <typename... TTBasePtrs>
-  std::enable_if_t<(std::is_convertible_v<std::remove_const_t<std::remove_reference_t<TTBasePtrs>>, TTBase *> && ...),
+  std::enable_if_t<(std::is_convertible_v<decltype(*(std::declval<TTBasePtrs>())), TTBase&> && ...),
                    bool>
   make_graph_executable(TTBasePtrs &&... ops) {
     return ttg::make_traverse([](auto &&x) { std::forward<decltype(x)>(x)->make_executable(); })(
@@ -182,13 +182,25 @@ namespace ttg {
   }
 
   template <typename keyT, typename output_terminalT>
-  void set_size(const keyT &key, const std::size_t size, output_terminalT &t) {
+  std::enable_if_t<!meta::is_void_v<keyT>,void>
+  set_size(const keyT &key, const std::size_t size, output_terminalT &t) {
     t.set_size(key, size);
   }
 
   template <size_t i, typename keyT, typename... output_terminalsT>
-  void set_size(const keyT &key, const std::size_t size, std::tuple<output_terminalsT...> &t) {
+  std::enable_if_t<!meta::is_void_v<keyT>,void>
+  set_size(const keyT &key, const std::size_t size, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).set_size(key, size);
+  }
+
+  template <typename output_terminalT>
+  void set_size(const std::size_t size, output_terminalT &t) {
+    t.set_size(size);
+  }
+
+  template <size_t i, typename... output_terminalsT>
+  void set_size(const std::size_t size, std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).set_size(size);
   }
 
   template <typename keyT, typename output_terminalT>

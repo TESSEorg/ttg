@@ -1,7 +1,7 @@
 include(AddTTGExecutable)
 
 # TT unit test: core TTG ops
-add_ttg_executable(core-unittests-ttg "tt.cc;ranges.cc;unit_main.cpp" LINK_LIBRARIES "Catch2::Catch2")
+add_ttg_executable(core-unittests-ttg "fibonacci.cc;ranges.cc;tt.cc;unit_main.cpp" LINK_LIBRARIES "Catch2::Catch2")
 
 # serialization test: probes serialization via all supported serialization methods (MADNESS, Boost::serialization, cereal) that are available
 add_executable(serialization "serialization.cc;unit_main.cpp")
