@@ -155,6 +155,8 @@ auto make_project(const funcT& func, ctlEdge& ctl, nodeEdge& result, const std::
     const double boxsize = 2.0 * L * pow2(-key.n);
     const double err = std::sqrt(d * d * boxsize);  // Estimate the norm2 error
 
+    std::cout << "project: " << key << std::endl;
+
     if ((key.n >= 5) && (err <= thresh)) {
       send<1>(key, Node(key, s, 0.0, false), out);
     } else {
@@ -171,6 +173,7 @@ template <typename funcT>
 auto make_binary_op(const funcT& func, nodeEdge left, nodeEdge right, nodeEdge Result,
                     const std::string& name = "binaryop") {
   auto f = [&func](const Key& key, Node&& left, Node&& right, std::tuple<nodeOut, nodeOut, nodeOut>& out) {
+    std::cout << "binary_op: " << key << std::endl;
     if (!(left.has_children || right.has_children)) {
       send<2>(key, Node(key, func(left.s, right.s), 0.0, false), out);
     } else {
@@ -194,6 +197,7 @@ void send_to_output_tree(const Key& key, const Node& node, std::tuple<nodeOut, n
 void diff(const Key& key, Node&& left, Node&& center, Node&& right,
           std::tuple<nodeOut, nodeOut, nodeOut, nodeOut>& out) {
   nodeOut &L = std::get<0>(out), &C = std::get<1>(out), &R = std::get<2>(out), &result = std::get<3>(out);
+  std::cout << "diff: " << key << std::endl;
   if (!(left.has_children || center.has_children || right.has_children)) {
     double derivative = (right.s - left.s) / (4.0 * ::L * pow2(-key.n));
     result.send(key, Node(key, derivative, 0.0, false));
@@ -223,6 +227,7 @@ void do_compress(const Key& key, double left, double right, std::tuple<doubleOut
 
   double s = (left + right) * 0.5;
   double d = (left - right) * 0.5;
+  std::cout << "do_compress: " << key << std::endl;
 
   if (key.n == 0) {
     result.send(key, Node(key, s, d, true));
@@ -239,6 +244,7 @@ void send_leaves_up(const Key& key, const Node& node, std::tuple<doubleOut, doub
   doubleOut &L = std::get<0>(out), &R = std::get<1>(out);
   nodeOut& result = std::get<2>(out);
 
+  std::cout << "send_leaves_up: " << key << std::endl;
   if (!node.has_children) {
     if (key.n == 0) {  // Tree is just one node
       result.send(key, node);
@@ -293,6 +299,7 @@ class Norm2 : public TT<Key, std::tuple<>, Norm2, Node> {
   template <typename InputTuple>
   void op(const Key& key, InputTuple&& t, std::tuple<>& output) {
     std::lock_guard<std::mutex> obolus(charon);  // <<<<<<<<<< mutex
+    std::cout << "Norm2: " << key << std::endl;
     const Node& node = baseT::get<0>(t);
     const double boxsize = 2.0 * L * pow2(-key.n);
     sumsq += (node.s * node.s + node.d * node.d) * boxsize;
