@@ -17,6 +17,7 @@ if [ "$#" -ne 1 ] || ([ "$1" != "amd64" ] && [ "$1" != "arm64" ]); then
 fi
 
 export CMAKE_VERSION=3.19.5
+export CLANG_VERSION=9
 export DIRNAME=`dirname $0`
 export ABSDIRNAME=`pwd $DIRNAME`
 if [ "$1" = "amd64" ]; then
@@ -55,12 +56,12 @@ RUN apt-get update && apt-get upgrade -y -o Dpkg::Options::="--force-confold"
 
 # build MPQC4
 # 1. basic prereqs
-RUN apt-get update && apt-get install -y cmake ninja-build libblas-dev liblapack-dev liblapacke-dev bison flex mpich libboost-dev libeigen3-dev git wget libtbb-dev clang-8 libc++-8-dev libc++abi-8-dev && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+RUN apt-get update && apt-get install -y cmake ninja-build libblas-dev liblapack-dev liblapacke-dev bison flex mpich libboost-dev libeigen3-dev git wget libtbb-dev clang-${CLANG_VERSION} libc++-${CLANG_VERSION}-dev libc++abi-${CLANG_VERSION}-dev && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 # 2. recent cmake
 RUN CMAKE_URL="https://cmake.org/files/v${CMAKE_VERSION%.[0-9]}/cmake-${CMAKE_VERSION}-Linux-${ARCH_CMAKE}.tar.gz" && wget --no-check-certificate -O - \$CMAKE_URL | tar --strip-components=1 -xz -C /usr/local
 ENV CMAKE=/usr/local/bin/cmake
 # 3. clone and build TTG
-RUN mkdir -p /home/tesse && cd /home/tesse && git clone https://github.com/TESSEorg/ttg.git && mkdir ttg-build && cd ttg-build && \$CMAKE ../ttg -GNinja -DCMAKE_CXX_COMPILER=clang++-8 -DCMAKE_C_COMPILER=clang-8 -DCMAKE_INSTALL_PREFIX=/home/tesse/ttg-install -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF && \$CMAKE --build . --target install
+RUN mkdir -p /home/tesse && cd /home/tesse && git clone https://github.com/TESSEorg/ttg.git && mkdir ttg-build && cd ttg-build && \$CMAKE ../ttg -GNinja -DCMAKE_CXX_COMPILER=clang++-${CLANG_VERSION} -DCMAKE_C_COMPILER=clang-${CLANG_VERSION} -DCMAKE_INSTALL_PREFIX=/home/tesse/ttg-install -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF && \$CMAKE --build . --target install
 
 # Clean up APT when done.
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
