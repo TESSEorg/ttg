@@ -5,6 +5,7 @@
 * [Building and Installing TTG](https://github.com/TESSEorg/ttg/blob/master/INSTALL.md)
 * [Your First TTG Program](#firstprog)
 * [Compiling Your First TTG Program](#compiling)
+* [Data-Dependent Program](#datadependent)
 
 ## <a name="firstprog">Your First TTG Program</a>
 
@@ -14,17 +15,41 @@ both B tasks, and that both B tasks run before C.
 
 ![Simple Diamond DAG](simple.png)
 
-~~~~~~~~~~~~~{.cpp}
+~~~~~~~~~~~~~{.c++}
 #include <ttg.h>
 
 using namespace ttg;
-
+~~~~~~~~~~~~~
+To implement a TTG program, the user just needs to include `ttg.h`. The selection
+of the task backend is usually done at compile time through a compiler definition.
+However, before include `ttg.h`, the user could `#define TTG_USE_PARSEC 1` or
+`#define TTG_USE_MADNESS 1`. Note that only one of the backends can be defined,
+and the recommended way is to define which backend is used when invoking the
+compiler (see [Compiling Your First TTG Program](#compiling) below).
+~~~~~~~~~~~~~{.c++}
 static void a(std::tuple<Out<int, double>> &out) {
   ttg::print("Called task A");
   send<0>(0, 1.0, out);
   send<0>(1, 2.0, out);
 }
+~~~~~~~~~~~~~
+This is the function that implements tasks of type A. Tasks of this type have no key
+to identify them, and receive no input data. Their only output terminal is defined to
+receive a key of type `int` and a value of type `double`.
 
+We use `ttg::print` to printout information, as a convenience function that also
+avoids messages from multiple threads to interfere with each other.
+
+The task sends the value `1.0` to `B(0)` by outputing the key of type `int` and
+value `0` with the data of type `double` and value `1.0` on the output terminal of
+index `<0>`, and the key of type `int` and value `1` with the data of type `double`
+and value `2.0` on the same output terminal.
+
+Because the two keys are different, these two sends instantiate two different
+target tasks. Which task depends on how the function is wrapped into a template
+task (TT), and how the terminals of this template task are connected to other 
+terminals of template tasks (see below).
+~~~~~~~~~~~~~{.c++}
 static void b(const int &key, const double &input, std::tuple<Out<void, double>, Out<void, double>>&out) {
   ttg::print("Called task B(", key, ") with input data ", input);
   if(key == 0)
@@ -32,38 +57,98 @@ static void b(const int &key, const double &input, std::tuple<Out<void, double>,
   else
     sendv<1>(input+1.0, out);
 }
+~~~~~~~~~~~~~
+This function defines the behavior of tasks of type B.
 
+This time, tasks of type B have an integer identifier (`key`), an input value
+(`value`), of type `double`, and two output terminals. Both output terminals have no
+identifier (keys of type `void`), and carry a data of type `double`.
+
+The task sends to different terminals depending on the value of `key`: tasks with
+a `key` of `0` output on the terminal of index `<0>`, while tasks with another `key`
+output on the terminal of index `<1>`. They also output different values on these
+edges.
+
+Because the output terminals do not define a task identifier (their keys are of type
+`void`), one cannot use `send`, but needs to use `sendv`. `sendv` differs from `send`
+only in the fact that `send` requires a key identifier for the destination task,
+while `sendv` does not.
+~~~~~~~~~~~~~{.c++}
 static void c(const double &b0, const double &b1, std::tuple<> &out) {
   ttg::print("Called task C with inputs ", b0, " from B(0) and ", b1, " from B(1)");
 }
-
+~~~~~~~~~~~~~
+Tasks of type C are implemented with this function. It's a sink task: no
+`send` are emitted by this task that takes no task identifier, defines no output
+terminals, and only an input value of type `double`.
+~~~~~~~~~~~~~{.c++}
 int main(int argc, char **argv) {
   ttg::initialize(argc, argv, -1);
+~~~~~~~~~~~~~
+The code needs to initialize ttg before any other ttg-related calls.
+~~~~~~~~~~~~~{.c++}
+  Edge<int, double> A_B("A->B");
+  Edge<void, double> B_C0("B->C0");
+  Edge<void, double> B_C1("B->C1");
+~~~~~~~~~~~~~
+We define 3 edges, to connect the different tasks together.
 
-  {
-    Edge<int, double> A_B("A->B");
-    Edge<void, double> B_C0("B->C0");
-    Edge<void, double> B_C1("B->C1");
+They have different prototypes: `A_B` carries an identifier of type `int` and a
+value of type `double`, while `B_C0` and B_C1` carry no identifier (`void`) and
+a value of type `double`.
 
-    auto wa(make_tt<void>(a, edges(), edges(A_B), "A", {}, {"to B"}));
-    auto wb(make_tt(b, edges(A_B), edges(B_C0, B_C1), "B", {"from A"}, {"to 1st input of C", "to 2nd input of C"}));
-    auto wc(make_tt(c, edges(B_C0, B_C1), edges(), "C", {"From B", "From B"}, {}));
+To help debugging, we give unique meaningful names to these edges in the
+constructor argument.
 
-    wa->make_executable();
-    wb->make_executable();
-    wc->make_executable();
+We need only three edges, because these edges define connections between
+the template tasks, not connections between tasks. Their instantation by
+`send` or `sendv` define the actual edges between tasks.
 
-    if(wa->get_world().rank() == 0) wa->invoke();
+There are two edges connecting `B` to `C` because `C` has two input terminals,
+and if we used the same edge between `B` and `C`, sending on that edge would trigger
+`C` twice.
+~~~~~~~~~~~~~{.c++}
+  auto wa(make_tt<void>(a, edges(), edges(A_B), "A", {}, {"to B"}));
+  auto wb(make_tt(b, edges(A_B), edges(B_C0, B_C1), "B", {"from A"}, {"to 1st input of C", "to 2nd input of C"}));
+  auto wc(make_tt(c, edges(B_C0, B_C1), edges(), "C", {"From B", "From B"}, {}));
+~~~~~~~~~~~~~
+We now define the three template tasks `wa`, `wb`, and `wc`, using the `make_tt`
+helper.
 
-    ttg::execute();
-    ttg::fence(ttg::get_default_world());
-  }
+`make_tt` takes as parameters the function that implements the task, the list of
+input edges that are connected to its input terminals, the list of output edges
+that are connected to its output terminals, the name of the task, the list of names
+for the input terminals, and the list of names for the output terminals.
 
+These TT, and the edges, define the template task graph that will then be
+instantiated as a DAG of tasks by the execution.
+~~~~~~~~~~~~~{.c++}
+  wa->make_executable();
+~~~~~~~~~~~~~
+Before executing the first tasks, the template task graph must be made executable
+by calling `make_executable()` on each source task of the graph. This computes
+internal state necessary to track all dependencies, and registers active message
+handles for each template task type.
+~~~~~~~~~~~~~{.c++}
+  if(wa->get_world().rank() == 0) wa->invoke();
+~~~~~~~~~~~~~
+We need to startup the DAG of tasks by invoking the initial tasks. In this simple
+DAG, there is a single initial task that runs on rank 0, which is the task A.
+~~~~~~~~~~~~~{.c++}
+  ttg::execute();
+~~~~~~~~~~~~~
+We can then start the execution of the DAG of tasks. This will enable the compute
+threads in the ttg library, and start instantiating tasks as the execution unfolds.
+~~~~~~~~~~~~~{.c++}
+  ttg::fence(ttg::get_default_world());
+~~~~~~~~~~~~~
+With `fence`, we wait for the completion of all DAGs started.
+~~~~~~~~~~~~~{.c++}
   ttg::finalize();
   return EXIT_SUCCESS;
 }
-
 ~~~~~~~~~~~~~
+And finally, we can shutdown the ttg library and return from the application.
 
 ## <a name="compiling">Compiling Your First TTG Program</a>
 
@@ -108,3 +193,157 @@ In this example, we do that from the command line, by adding the compile-definit
 It is then sufficient to tell CMake that the executable depends on the
 corresponding TTG target to add the appropriate include path and link
 commands.
+
+## <a name="datadependent">Data Dependent Program</a>
+
+We now extend the first example to illustrate a data-dependent application
+behavior. Consider now that the tasks of type C can dynamically decide to
+iterate over the simple DAG of tasks before, depending on the values
+received as input.
+
+To make the example simple, we will simply define a threshold: if the data
+sent by B(0) plus the data sent by B(1) is lower than this threshold, then
+the DAG should be iterated, otherwise the application is completed.
+
+One way of representing this behavior is denoted by the graph below:
+
+![Iterative Diamond DAG](iterative.png)
+
+First, because each task in the DAG needs to be uniquely identified, and there
+are potentially many tasks of type A or C, tasks of these kinds now need to 
+get an identifier. Second, tasks of type B are not only identified by 0 or 1, but
+also need another identifier that denotes to which task of A or C it is
+connected. We extend the identifier type of B to a `Key2` to do this
+simply.
+
+Second, the function that implements the task for C needs to decide dynamically
+if it continues iterating or not. This is done by conditionally calling `ttg::send`
+in this function. If the function does not call `ttg::send`, then the no more
+task is discovered, and the whole operation will complete.
+
+~~~~~~~~~~~~~~~{.c++}
+#include <ttg.h>
+#include <madness/world/world.h>
+~~~~~~~~~~~~~~~
+The inclusion of the `madness/world/world.h` file is necessary to use the MADNESS
+serialization mechanism. For the sake of simplicity, we use the same serialization
+mechanism for both the PaRSEC and the MADNESS backends.
+~~~~~~~~~~~~~~~{.c++}
+using namespace ttg;
+
+const double threshold = 100.0;
+~~~~~~~~~~~~~~~
+We define the threshold as a globally visible constant.
+~~~~~~~~~~~~~~~{.c++}
+struct Key2 {
+  int k = 0, i = 0;
+  madness::hashT hash_val;
+
+  Key2() { rehash(); }
+  Key2(int k, int i) : k(k), i(i){ rehash(); }
+
+  madness::hashT hash() const { return hash_val; }
+  void rehash() {
+    hash_val = (static_cast<madness::hashT>(k) << 32)
+        ^ (static_cast<madness::hashT>(i));
+  }
+
+  // Equality test
+  bool operator==(const Key2& b) const { return k == b.k && i == b.i; }
+
+  // Inequality test
+  bool operator!=(const Key2& b) const { return !((*this) == b); }
+
+  template <typename Archive>
+  void serialize(Archive& ar) {
+    ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
+  }
+};
+
+namespace std {
+  std::ostream &operator<<(std::ostream &os, const Key2 &key) {
+    os << "{" << key.k << ", " << key.i << "}";
+    return os;
+  }
+}  // namespace std
+~~~~~~~~~~~~~~~
+As the key type of the tasks of type B is compound, no default serialization,
+hashing, and printout are provided, and the user code needs to provide these
+capabilities.
+
+We define the key type as a simple structure with two integers, and provide
+hashing capabilities in `hash()` and `rehash()`, comparators in `operator==`
+and `operator!=`, and a MADNESS serialization in `serialize`. For debugging
+and tracing purposes, we also extend the `std::operator<<` to printout an
+object of type `Key2`
+
+Once the key type is fully defined, we can modify the simple program to
+reflect the new Template Task Graph:
+~~~~~~~~~~~~~~~{.c++}
+static void a(const int &k, const double &input, std::tuple<Out<Key2, double>> &out) {
+  ttg::print("Called task A(", k, ")");
+  send<0>(Key2{k, 0}, 1.0 + input, out);
+  send<0>(Key2{k, 1}, 2.0 + input, out);
+}
+~~~~~~~~~~~~~~~
+Tasks of type A now take an integer key, and an input value; the output is modified
+to take a `Key2` (as tasks of type B have keys of type `Key2`).
+~~~~~~~~~~~~~~~{.c++}
+static void b(const Key2 &key, const double &input, std::tuple<Out<int, double>, Out<int, double>> &out) {
+  ttg::print("Called task B(", key, ") with input data ", input);
+  if (key.i == 0)
+    send<0>(key.k, input + 1.0, out);
+  else
+    send<1>(key.k, input + 1.0, out);
+}
+~~~~~~~~~~~~~~~
+Tasks of type B now take a key of type `Key2`, and the output is modified
+to take an integer key. We then use `send` instead of `sendv`, because `sendv`
+is only used to send to a task that does not have a key identifier.
+~~~~~~~~~~~~~~~{.c++}
+static void c(const int &k, const double &b0, const double &b1, std::tuple<Out<int, double>> &out) {
+  ttg::print("Called task C(", k, ") with inputs ", b0, " from B(", k, " 0) and ", b1, " from B(", k, " 1)");
+  if(b0 + b1 < threshold) {
+    ttg::print("  ", b0, "+", b1, "<", threshold, " so continuing to iterate");
+    send<0>(k+1, b0+b1, out);
+  } else {
+    ttg::print("  ", b0, "+", b1, ">=", threshold, " so stopping the iterations");
+  }
+}
+~~~~~~~~~~~~~~~
+Tasks of type C are modified the same way, and the function that implements the
+task holds the dynamic decision to continue in the DAG or not.
+~~~~~~~~~~~~~~~{.c++}
+int main(int argc, char **argv) {
+  ttg::initialize(argc, argv, -1);
+
+  Edge<Key2, double> A_B("A(k)->B(k)");
+  Edge<int, double> B_C0("B(k)->C0(k)");
+  Edge<int, double> B_C1("B(k)->C1(k)");
+  Edge<int, double> C_A("C(k)->A(k)");
+~~~~~~~~~~~~~~~
+We update the edges types to reflect the new tasks prototypes, and add a new
+edge, that loops from C(k) to A(k+1) (note that the value of the key is decided
+in the function itself, this has no impact on this part of the code).
+~~~~~~~~~~~~~~~{.c++}
+  auto wa(make_tt(a, edges(C_A), edges(A_B), "A", {"from C"}, {"to B"}));
+  auto wb(make_tt(b, edges(A_B), edges(B_C0, B_C1), "B", {"from A"}, {"to 1st input of C", "to 2nd input of C"}));
+  auto wc(make_tt(c, edges(B_C0, B_C1), edges(C_A), "C", {"From B", "From B"}, {"to A"}));
+~~~~~~~~~~~~~~~
+The `make_tt` calls are also updated to reflect the new task prototypes, and include
+the edge from C(k) to A(k+1).
+~~~~~~~~~~~~~~~{.c++}
+  wa->make_executable();
+
+  if (wa->get_world().rank() == 0) wa->invoke(0, 0.0);
+~~~~~~~~~~~~~~~
+When invoking A(0, 0.0), one needs to provide the key for the task and the
+input value for each input that A now defines.
+~~~~~~~~~~~~~~~{.c++}
+  ttg::execute();
+  ttg::fence(ttg::get_default_world());
+
+  ttg::finalize();
+  return EXIT_SUCCESS;
+}
+~~~~~~~~~~~~~~~

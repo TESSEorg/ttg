@@ -26,24 +26,20 @@ static void c(const double &b0, const double &b1, std::tuple<> &out) {
 int main(int argc, char **argv) {
   ttg::initialize(argc, argv, -1);
 
-  {
-    Edge<int, double> A_B("A->B");
-    Edge<void, double> B_C0("B->C0");
-    Edge<void, double> B_C1("B->C1");
+  Edge<int, double> A_B("A->B");
+  Edge<void, double> B_C0("B->C0");
+  Edge<void, double> B_C1("B->C1");
 
-    auto wa(make_tt<void>(a, edges(), edges(A_B), "A", {}, {"to B"}));
-    auto wb(make_tt(b, edges(A_B), edges(B_C0, B_C1), "B", {"from A"}, {"to 1st input of C", "to 2nd input of C"}));
-    auto wc(make_tt(c, edges(B_C0, B_C1), edges(), "C", {"From B", "From B"}, {}));
+  auto wa(make_tt<void>(a, edges(), edges(A_B), "A", {}, {"to B"}));
+  auto wb(make_tt(b, edges(A_B), edges(B_C0, B_C1), "B", {"from A"}, {"to 1st input of C", "to 2nd input of C"}));
+  auto wc(make_tt(c, edges(B_C0, B_C1), edges(), "C", {"From B", "From B"}, {}));
 
-    wa->make_executable();
-    wb->make_executable();
-    wc->make_executable();
+  wa->make_executable();
 
-    if (wa->get_world().rank() == 0) wa->invoke();
+  if (wa->get_world().rank() == 0) wa->invoke();
 
-    ttg::execute();
-    ttg::fence(ttg::get_default_world());
-  }
+  ttg::execute();
+  ttg::fence(ttg::get_default_world());
 
   ttg::finalize();
   return EXIT_SUCCESS;
