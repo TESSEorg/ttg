@@ -1,8 +1,8 @@
 #ifndef TTG_FUNC_H
 #define TTG_FUNC_H
 
-#include <tuple>
 #include <memory>
+#include <tuple>
 
 #include "ttg/edge.h"
 #include "ttg/impl_selector.h"
@@ -14,7 +14,6 @@ namespace ttg {
 
   namespace detail {
 
-
     /* Wrapper allowing implementations to provide copies of data the user
      * passed to send and broadcast. The value returned by operator() will
      * be passed to all terminals. By default, the user-provided copy is
@@ -22,34 +21,30 @@ namespace ttg {
      * Implementations may provide specializations using the ttg::Runtime tag.
      * TODO: can we avoid the three overloads?
      */
-    template<ttg::Runtime Runtime>
+    template <ttg::Runtime Runtime>
     struct value_copy_handler {
-      template<typename Value>
-      inline constexpr
-      Value&& operator()(Value&& value) const {
+      template <typename Value>
+      inline constexpr Value &&operator()(Value &&value) const {
         return std::forward<Value>(value);
       }
 
-      template<typename Value>
-      inline constexpr
-      const Value& operator()(const Value& value) const {
+      template <typename Value>
+      inline constexpr const Value &operator()(const Value &value) const {
         return value;
       }
 
-      template<typename Value>
-      inline constexpr
-      Value& operator()(Value& value) const {
+      template <typename Value>
+      inline constexpr Value &operator()(Value &value) const {
         return value;
       }
     };
 
-  } // namespace detail
+  }  // namespace detail
 
   /// applies @c make_executable method to every op in the graph
   /// return true if there are no dangling out terminals
   template <typename... TTBasePtrs>
-  std::enable_if_t<(std::is_convertible_v<decltype(*(std::declval<TTBasePtrs>())), TTBase&> && ...),
-                   bool>
+  std::enable_if_t<(std::is_convertible_v<decltype(*(std::declval<TTBasePtrs>())), TTBase &> && ...), bool>
   make_graph_executable(TTBasePtrs &&... ops) {
     return ttg::make_traverse([](auto &&x) { std::forward<decltype(x)>(x)->make_executable(); })(
         std::forward<TTBasePtrs>(ops)...);
@@ -64,7 +59,8 @@ namespace ttg {
     out->connect(in);
   }
 
-  /// Connected producer output terminal outindex to consumer input terminal inindex (via unique or otherwise wrapped pointers to Ops)
+  /// Connected producer output terminal outindex to consumer input terminal inindex (via unique or otherwise wrapped
+  /// pointers to Ops)
   template <std::size_t outindex, std::size_t inindex, typename producer_op_ptr, typename successor_op_ptr>
   void connect(producer_op_ptr &p, successor_op_ptr &s) {
     connect(p->template out<outindex>(), s->template in<inindex>());
@@ -83,6 +79,7 @@ namespace ttg {
 
   // Fuse edges into one ... all the types have to be the same ... just using
   // valuesT for variadic args
+  /// Fuse multiple edges into one. All edges must have the same prototype.
   template <typename keyT, typename... valuesT>
   auto fuse(const Edge<keyT, valuesT> &... args) {
     using valueT = typename std::tuple_element<0, std::tuple<valuesT...>>::type;  // grab first type
@@ -90,28 +87,47 @@ namespace ttg {
   }
 
   // Make a tuple of Edges ... needs some type checking injected
+  /// Make a tuple of Edges.
   template <typename... inedgesT>
-  auto edges(inedgesT &&...args) {
+  auto edges(inedgesT &&... args) {
     return std::make_tuple(std::forward<inedgesT>(args)...);
   }
 
+  /// Output a value and a task identifier on a given terminal
+  ///  for an op with a single output terminal, when passing a RW object
+  ///  @param[in]   key: the task identifier of the destination task
+  ///  @param[in] value: the data to send on the output terminal
+  ///  @param[in,out] t: the output terminals of the op
   template <typename keyT, typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg::ttg_runtime>
   void send(const keyT &key, const valueT &value, output_terminalT &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     t.send(key, copy_handler(value));
   }
 
+  /// Output a value and a task identifier on a given terminal.
+  ///  for an op with a single output terminal, when passing a rvalue reference object
+  ///  @param[in]   key: the task identifier of the destination task
+  ///  @param[in] value: the rvalue reference to the data to send on the output terminal
+  ///  @param[in,out] t: the output terminals of the op
   template <typename keyT, typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg::ttg_runtime>
   void send(const keyT &key, valueT &&value, output_terminalT &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     t.send(key, copy_handler(std::forward<valueT>(value)));
   }
 
+  /// Trigger a control-flow only output terminal.
+  ///  for an op with a single output terminal
+  ///  @param[in]   key: the task identifier of the destination task
+  ///  @param[in,out] t: the output terminals of the op
   template <typename keyT, typename output_terminalT>
   void sendk(const keyT &key, output_terminalT &t) {
     t.sendk(key);
   }
 
+  /// Output a value on a given terminal that does not take a task identifier.
+  ///  for an op with a single output terminal
+  ///  @param[in]   value: rvalue reference to the object that must be output on the output terminal
+  ///  @param[in,out]   t: the output terminals of the op
   // TODO if sendk is removed, rename to send
   template <typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg::ttg_runtime>
   void sendv(valueT &&value, output_terminalT &t) {
@@ -119,41 +135,60 @@ namespace ttg {
     t.sendv(copy_handler(std::forward<valueT>(value)));
   }
 
+  /// Trigger a control-only terminal that does not take a task identifier.
+  ///  for an op with a single output terminal
+  ///  @param[in,out] t: the output terminals of the op
   template <typename keyT, typename valueT, typename output_terminalT>
   void send(output_terminalT &t) {
     t.send();
   }
 
-  template <size_t i, typename keyT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg::ttg_runtime>
-  std::enable_if_t<meta::is_none_void_v<keyT,std::decay_t<valueT>>,void>
-      send(const keyT &key, valueT &&value, std::tuple<output_terminalsT...> &t) {
+  /// Output a value on a given terminal that does not take a task identifier.
+  ///  when passing a rvalue reference object
+  ///  @tparam <i>: index of the output terminal to trigger
+  ///  @param[in]   key: the task identifier of the destination task
+  ///  @param[in] value: rvalue reference to the object to send on the terminal
+  ///  @param[in,out] t: the output terminals of the op
+  template <size_t i, typename keyT, typename valueT, typename... output_terminalsT,
+            ttg::Runtime Runtime = ttg::ttg_runtime>
+  std::enable_if_t<meta::is_none_void_v<keyT, std::decay_t<valueT>>, void> send(const keyT &key, valueT &&value,
+                                                                                std::tuple<output_terminalsT...> &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     std::get<i>(t).send(key, copy_handler(std::forward<valueT>(value)));
   }
 
+  /// Trigger a control flow-only output terminal
+  ///  @tparam <i>: index of the output terminal to trigger
+  ///  @param[in]   key: the task identifier of the destination task
+  ///  @param[in,out] t: the output terminals of the op
   // TODO decide whether we need this ... (how common will be pure control flow?)
   template <size_t i, typename keyT, typename... output_terminalsT>
-  std::enable_if_t<!meta::is_void_v<keyT>,void>
-  sendk(const keyT &key, std::tuple<output_terminalsT...> &t) {
+  std::enable_if_t<!meta::is_void_v<keyT>, void> sendk(const keyT &key, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).sendk(key);
   }
 
+  /// Output a value on an output terminal that does not take a task identifier
+  ///  @tparam <i>: index of the output terminal to trigger
+  ///  @param[in] value: rvalue reference to the object to send on the terminal
+  ///  @param[in,out] t: the output terminals of the op
   // TODO if sendk is removed, rename to send
   template <size_t i, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg::ttg_runtime>
-  std::enable_if_t<!meta::is_void_v<valueT>,void>
-  sendv(valueT &&value, std::tuple<output_terminalsT...> &t) {
+  std::enable_if_t<!meta::is_void_v<valueT>, void> sendv(valueT &&value, std::tuple<output_terminalsT...> &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     std::get<i>(t).sendv(copy_handler(std::forward<valueT>(value)));
   }
 
+  /// Trigger a control flow-only terminal on an output terminal that does not take a task identifier
+  ///  @tparam <i>: index of the output terminal to trigger
+  ///  @param[in,out] t: the output terminals of the op
   template <size_t i, typename... output_terminalsT>
   void send(std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).send();
   }
 
   namespace detail {
-    template <size_t KeyId, size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT>
-    void broadcast(const std::tuple<RangesT...>& keylists, valueT&& value, std::tuple<output_terminalsT...> &t) {
+    template <size_t KeyId, size_t i, size_t... I, typename... RangesT, typename valueT, typename... output_terminalsT>
+    void broadcast(const std::tuple<RangesT...> &keylists, valueT &&value, std::tuple<output_terminalsT...> &t) {
       if constexpr (ttg::meta::is_iterable_v<std::tuple_element_t<KeyId, std::tuple<RangesT...>>>) {
         if (std::distance(std::begin(std::get<KeyId>(keylists)), std::end(std::get<KeyId>(keylists))) > 0) {
           std::get<i>(t).broadcast(std::get<KeyId>(keylists), value);
@@ -161,35 +196,37 @@ namespace ttg {
       } else {
         std::get<i>(t).broadcast(std::get<KeyId>(keylists), value);
       }
-      if constexpr(sizeof...(I) > 0) {
-        detail::broadcast<KeyId+1, I...>(keylists, value, t);
+      if constexpr (sizeof...(I) > 0) {
+        detail::broadcast<KeyId + 1, I...>(keylists, value, t);
       }
     }
-  } // namespace detail
+  }  // namespace detail
 
-  template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg::ttg_runtime>
+  template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT,
+            ttg::Runtime Runtime = ttg::ttg_runtime>
   void broadcast(const rangeT &keylist, valueT &&value, std::tuple<output_terminalsT...> &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     std::get<i>(t).broadcast(keylist, copy_handler(std::forward<valueT>(value)));
   }
 
-  template <size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg::ttg_runtime>
-  void broadcast(const std::tuple<RangesT...>& keylists, valueT &&value, std::tuple<output_terminalsT...> &t) {
-    static_assert(sizeof...(I)+1 == sizeof...(RangesT),
+  template <size_t i, size_t... I, typename... RangesT, typename valueT, typename... output_terminalsT,
+            ttg::Runtime Runtime = ttg::ttg_runtime>
+  void broadcast(const std::tuple<RangesT...> &keylists, valueT &&value, std::tuple<output_terminalsT...> &t) {
+    static_assert(sizeof...(I) + 1 == sizeof...(RangesT),
                   "Number of selected output terminals must match the number of keylists!");
     detail::value_copy_handler<Runtime> copy_handler;
     detail::broadcast<0, i, I...>(keylists, copy_handler(std::forward<valueT>(value)), t);
   }
 
   template <typename keyT, typename output_terminalT>
-  std::enable_if_t<!meta::is_void_v<keyT>,void>
-  set_size(const keyT &key, const std::size_t size, output_terminalT &t) {
+  std::enable_if_t<!meta::is_void_v<keyT>, void> set_size(const keyT &key, const std::size_t size,
+                                                          output_terminalT &t) {
     t.set_size(key, size);
   }
 
   template <size_t i, typename keyT, typename... output_terminalsT>
-  std::enable_if_t<!meta::is_void_v<keyT>,void>
-  set_size(const keyT &key, const std::size_t size, std::tuple<output_terminalsT...> &t) {
+  std::enable_if_t<!meta::is_void_v<keyT>, void> set_size(const keyT &key, const std::size_t size,
+                                                          std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).set_size(key, size);
   }
 
@@ -204,14 +241,12 @@ namespace ttg {
   }
 
   template <typename keyT, typename output_terminalT>
-  std::enable_if_t<!meta::is_void_v<keyT>,void>
-  finalize(const keyT &key, output_terminalT &t) {
+  std::enable_if_t<!meta::is_void_v<keyT>, void> finalize(const keyT &key, output_terminalT &t) {
     t.finalize(key);
   }
 
   template <size_t i, typename keyT, typename... output_terminalsT>
-  std::enable_if_t<!meta::is_void_v<keyT>,void>
-  finalize(const keyT &key, std::tuple<output_terminalsT...> &t) {
+  std::enable_if_t<!meta::is_void_v<keyT>, void> finalize(const keyT &key, std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).finalize(key);
   }
 
@@ -227,4 +262,4 @@ namespace ttg {
 
 }  // namespace ttg
 
-#endif // TTG_FUNC_H
+#endif  // TTG_FUNC_H

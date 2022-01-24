@@ -684,7 +684,9 @@ namespace ttg_madness {
       static_streamsize[i] = size;
     }
 
-    /// sets stream size for input \c i
+    /// sets stream size for input \c i and key \c key
+    /// \tparam <i>: index of the input terminal to set
+    /// \param key the task identifier
     /// \param size positive integer that specifies the stream size
     template <std::size_t i, typename Key = keyT, bool key_is_void = ttg::meta::is_void_v<Key>>
     std::enable_if_t<!key_is_void, void> set_argstream_size(const Key &key, std::size_t size) {

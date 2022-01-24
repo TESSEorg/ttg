@@ -28,18 +28,18 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
     - `TTG_USE_MADNESS`: selects the MADNESS backend as the default (expert-use only).
 
     For simple programs it is sufficient to include the top-level header file:
-    ```cpp
-    #include <ttg.h>
-    ```
+```cpp
+#include <ttg.h>
+```
     It is also possible to hardwire the backend selection by including the corresponding backend-specific header directly; there is no need to `#include` the top-level TTG header or to define the backend selection macros:
     - to use PaRSEC backend only, add:
-      ```cpp
-      #include <ttg/parsec/ttg.h>
-      ```
+```cpp
+#include <ttg/parsec/ttg.h>
+```
     - to use the MADNESS backend only, add:
-      ```cpp
-      #include <ttg/madness/ttg.h>
-      ```
+```cpp
+#include <ttg/madness/ttg.h>
+```
 
 2. Define a TaskId (Key) class which represents a unique identifier for each task and which is hashable.
 
