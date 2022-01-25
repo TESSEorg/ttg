@@ -87,28 +87,28 @@ namespace ttg {
   }
 
   // Make a tuple of Edges ... needs some type checking injected
-  /// Make a tuple of Edges.
+  /// \brief Make a tuple of Edges
+  /// \param args: variable argumetn list of Edges
+  /// \return the tuple of Edges
+  /// \note All Edges must have the same prototype
   template <typename... inedgesT>
   auto edges(inedgesT &&... args) {
     return std::make_tuple(std::forward<inedgesT>(args)...);
   }
 
-  /// Output a value and a task identifier on a given terminal
-  ///  for an op with a single output terminal, when passing a RW object
-  ///  @param[in]   key: the task identifier of the destination task
-  ///  @param[in] value: the data to send on the output terminal
-  ///  @param[in,out] t: the output terminals of the op
+  /// \fn void ttg::send(const keyT &key, const valueT &value, output_terminalT &out)
+  /// \brief Output a task identifier and value on a given output terminal
+  /// \tparam <i> The output terminal index on which key and value are output
+  /// \param[in] key: the key that identifies the task receiving the value
+  /// \param[in] value: the value to propagate through this terminal
+  /// \param[in,out] out: the tuple of output  terminals
+
   template <typename keyT, typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg::ttg_runtime>
   void send(const keyT &key, const valueT &value, output_terminalT &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     t.send(key, copy_handler(value));
   }
 
-  /// Output a value and a task identifier on a given terminal.
-  ///  for an op with a single output terminal, when passing a rvalue reference object
-  ///  @param[in]   key: the task identifier of the destination task
-  ///  @param[in] value: the rvalue reference to the data to send on the output terminal
-  ///  @param[in,out] t: the output terminals of the op
   template <typename keyT, typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg::ttg_runtime>
   void send(const keyT &key, valueT &&value, output_terminalT &t) {
     detail::value_copy_handler<Runtime> copy_handler;
@@ -135,20 +135,11 @@ namespace ttg {
     t.sendv(copy_handler(std::forward<valueT>(value)));
   }
 
-  /// Trigger a control-only terminal that does not take a task identifier.
-  ///  for an op with a single output terminal
-  ///  @param[in,out] t: the output terminals of the op
   template <typename keyT, typename valueT, typename output_terminalT>
   void send(output_terminalT &t) {
     t.send();
   }
 
-  /// Output a value on a given terminal that does not take a task identifier.
-  ///  when passing a rvalue reference object
-  ///  @tparam <i>: index of the output terminal to trigger
-  ///  @param[in]   key: the task identifier of the destination task
-  ///  @param[in] value: rvalue reference to the object to send on the terminal
-  ///  @param[in,out] t: the output terminals of the op
   template <size_t i, typename keyT, typename valueT, typename... output_terminalsT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
   std::enable_if_t<meta::is_none_void_v<keyT, std::decay_t<valueT>>, void> send(const keyT &key, valueT &&value,
@@ -178,9 +169,6 @@ namespace ttg {
     std::get<i>(t).sendv(copy_handler(std::forward<valueT>(value)));
   }
 
-  /// Trigger a control flow-only terminal on an output terminal that does not take a task identifier
-  ///  @tparam <i>: index of the output terminal to trigger
-  ///  @param[in,out] t: the output terminals of the op
   template <size_t i, typename... output_terminalsT>
   void send(std::tuple<output_terminalsT...> &t) {
     std::get<i>(t).send();

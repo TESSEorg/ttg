@@ -7,16 +7,18 @@ using namespace ttg;
 
 static void a(std::tuple<Out<int, double>> &out) {
   ttg::print("Called task A ");
-  send<0>(0, 1.0, out);
-  send<0>(1, 2.0, out);
+
+  /**! \link ttg::send() */ send /**! \endlink */<0>(0, 1.0, out);
+
+  /**! \link ttg::send() */ send /**! \endlink */<0>(1, 2.0, out);
 }
 
 static void b(const int &key, const double &input, std::tuple<Out<void, double>, Out<void, double>> &out) {
   ttg::print("Called task B(", key, ") with input data ", input);
   if (key == 0)
-    sendv<0>(input + 1.0, out);
+    /**! \link ttg::sendv() */ sendv /**! \endlink */<0>(input + 1.0, out);
   else
-    sendv<1>(input + 1.0, out);
+    /**! \link ttg::send() */ sendv /**! \endlink */<1>(input + 1.0, out);
 }
 
 static void c(const double &b0, const double &b1, std::tuple<> &out) {
@@ -44,3 +46,8 @@ int main(int argc, char **argv) {
   ttg::finalize();
   return EXIT_SUCCESS;
 }
+
+/**
+ * \example simple.cc
+ * This is the first example of a simple diamond DAG using Template Task Graph.
+ */

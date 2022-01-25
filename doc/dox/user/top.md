@@ -13,26 +13,22 @@ The following code creates four tasks, one of type A, two of type B
 (B(0) and B(1)), and one of type C, and ensures that A runs before
 both B tasks, and that both B tasks run before C.
 
-![Simple Diamond DAG](simple.png)
+\dotfile simple.dot "Simple diamond DAG"
 
-~~~~~~~~~~~~~{.cpp}
-#include <ttg.h>
+\dontinclude simple.cc
+\skip #include
+\until namespace ttg
 
-using namespace ttg;
-~~~~~~~~~~~~~
 To implement a TTG program, the user just needs to include `ttg.h`. The selection
 of the task backend is usually done at compile time through a compiler definition.
 However, before include `ttg.h`, the user could `#define TTG_USE_PARSEC 1` or
 `#define TTG_USE_MADNESS 1`. Note that only one of the backends can be defined,
 and the recommended way is to define which backend is used when invoking the
 compiler (see [Compiling Your First TTG Program](#compiling) below).
-~~~~~~~~~~~~~{.cpp}
-static void a(std::tuple<Out<int, double>> &out) {
-  ttg::print("Called task A");
-  ttg::send<0>(0, 1.0, out);
-  ttg::send<0>(1, 2.0, out);
-}
-~~~~~~~~~~~~~
+
+\skip static
+\until }
+
 This is the function that implements tasks of type A. Tasks of this type have no key
 to identify them, and receive no input data. Their only output terminal is defined to
 receive a key of type `int` and a value of type `double`.
@@ -49,15 +45,10 @@ Because the two keys are different, these two `ttg::send` instantiate two differ
 target tasks. Which task depends on how the function is wrapped into a template
 task (TT), and how the terminals of this template task are connected to other 
 terminals of template tasks (see below).
-~~~~~~~~~~~~~{.cpp}
-static void b(const int &key, const double &input, std::tuple<Out<void, double>, Out<void, double>>&out) {
-  ttg::print("Called task B(", key, ") with input data ", input);
-  if(key == 0)
-    ttg::sendv<0>(input+1.0, out);
-  else
-    ttg::sendv<1>(input+1.0, out);
-}
-~~~~~~~~~~~~~
+
+\skip static
+\until }
+
 This function defines the behavior of tasks of type B.
 
 This time, tasks of type B have an integer identifier (`key`), an input value
@@ -73,28 +64,26 @@ Because the output terminals do not define a task identifier (their keys are of 
 `void`), one cannot use `ttg::send`, but needs to use `ttg::sendv`. `ttg::sendv` 
 differs from `ttg::send` only in the fact that `ttg::send` requires a key identifier 
 for the destination task, while `ttg::sendv` does not.
-~~~~~~~~~~~~~{.cpp}
-static void c(const double &b0, const double &b1, std::tuple<> &out) {
-  ttg::print("Called task C with inputs ", b0, " from B(0) and ", b1, " from B(1)");
-}
-~~~~~~~~~~~~~
+
+\skip static
+\until }
+
 Tasks of type C are implemented with this function. It's a sink task: no
 `ttg::send` are emitted by this task that takes no task identifier, defines no output
 terminals, and only an input value of type `double`.
-~~~~~~~~~~~~~{.cpp}
-int main(int argc, char **argv) {
-  ttg::initialize(argc, argv, -1);
-~~~~~~~~~~~~~
+
+\skip main
+\until ttg::initialize
+
 The code needs to initialize ttg before any other ttg-related calls.
-~~~~~~~~~~~~~{.cpp}
-  ttg::Edge<int, double> A_B("A->B");
-  ttg::Edge<void, double> B_C0("B->C0");
-  ttg::Edge<void, double> B_C1("B->C1");
-~~~~~~~~~~~~~
+
+\skip Edge
+\until B_C1
+
 We define 3 edges, to connect the different tasks together.
 
 They have different prototypes: `A_B` carries an identifier of type `int` and a
-value of type `double`, while `B_C0` and B_C1` carry no identifier (`void`) and
+value of type `double`, while `B_C0` and `B_C1` carry no identifier (`void`) and
 a value of type `double`.
 
 To help debugging, we give unique meaningful names to these edges in the
@@ -107,49 +96,47 @@ the template tasks, not connections between tasks. Their instantiation by
 There are two edges connecting `B` to `C` because `C` has two input terminals,
 and if we used the same edge between `B` and `C`, sending on that edge would trigger
 `C` twice.
-~~~~~~~~~~~~~{.cpp}
-  auto wa(ttg::make_tt<void>(a, ttg::edges(), ttg::edges(A_B), "A", {}, {"to B"}));
-  auto wb(ttg::make_tt(b, ttg::edges(A_B), ttg::edges(B_C0, B_C1), "B", {"from A"}, {"to 1st input of C", "to 2nd input of C"}));
-  auto wc(ttg::make_tt(c, ttg::edges(B_C0, B_C1), ttg::edges(), "C", {"From B", "From B"}, {}));
-~~~~~~~~~~~~~
+
+\skip wa
+\until wc
+
 We now define the three template tasks `wa`, `wb`, and `wc`, using the `make_tt`
 helper.
 
-`ttg::make_tt` takes as parameters the function that implements the task, the list of
+`make_tt()` takes as parameters the function that implements the task, the list of
 input edges that are connected to its input terminals, the list of output edges
 that are connected to its output terminals, the name of the task, the list of names
 for the input terminals, and the list of names for the output terminals.
 
 These TTs and the edges define the template task graph that will then be
 instantiated as a DAG of tasks by the execution.
-~~~~~~~~~~~~~{.cpp}
-  wa->make_executable();
-~~~~~~~~~~~~~
+
+\skip make_executable
+\until invoke
+
 Before executing the first tasks, the template task graph must be made executable
-by calling `ttg::make_executable()` on each source task of the graph. This computes
+by calling `ttg::TTBase::make_executable()` on each source task of the graph. This computes
 internal state necessary to track all dependencies, and registers active message
 handles for each template task type.
-~~~~~~~~~~~~~{.cpp}
-  if(wa->get_world().rank() == 0) wa->invoke();
-~~~~~~~~~~~~~
-We need to start the DAG of tasks by invoking the initial tasks with `ttg::invoke()`.
+
+We need to start the DAG of tasks by invoking the initial tasks with `ttg::TTBase::invoke()`.
 In this simple  DAG, there is a single initial task, the task A, which runs on rank 0.
-~~~~~~~~~~~~~{.cpp}
-  ttg::execute();
-~~~~~~~~~~~~~
+
+\skip execute
+\until fence
+
 We can then start the execution of the DAG of tasks. This will enable the 
 compute-threads in the ttg library, and start instantiating tasks as the execution 
 unfolds.
-~~~~~~~~~~~~~{.cpp}
-  ttg::fence(ttg::get_default_world());
-~~~~~~~~~~~~~
+
 With `ttg::fence()`, we wait for the completion of all DAGs started.
-~~~~~~~~~~~~~{.cpp}
-  ttg::finalize();
-  return EXIT_SUCCESS;
-}
-~~~~~~~~~~~~~
+
+\skip finalize
+\until }
+
 And finally, we can shut down the ttg library and return from the application.
+
+\ref simple.cc "Full first example"
 
 ## <a name="compiling">Compiling Your First TTG Program</a>
 
