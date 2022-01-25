@@ -13,6 +13,10 @@
 
 namespace ttg {
 
+  /// An object of the Edge class represents the connection between an Output terminal and
+  /// an input terminal, and can carry data between terminals.
+  /// \tparam <keyT> type of the destination task identifiers (keys)
+  /// \tparam <valueT> type of the data carried by the Edge.
   template <typename keyT, typename valueT>
   class Edge {
    private:
@@ -83,8 +87,10 @@ namespace ttg {
     static_assert(std::is_same<valueT, std::decay_t<valueT>>::value,
                   "Edge<keyT,valueT> assumes valueT is a non-decayable type");
 
+    /// Default anonymous and unconnected Edge.
     Edge(const std::string name = "anonymous edge") : p(1) { p[0] = std::make_shared<EdgeImpl>(name); }
 
+    /// Edge carrying a tuple of values
     template <typename... valuesT>
     Edge(const Edge<keyT, valuesT> &... edges) : p(0) {
       std::vector<Edge<keyT, valueT>> v = {edges...};
@@ -93,7 +99,7 @@ namespace ttg {
       }
     }
 
-    /// probes if this is already has at least one input
+    /// probes if this is already has at least one input received on the input terminal
     bool live() const {
       bool result = false;
       for(const auto& edge: p) {
@@ -103,15 +109,18 @@ namespace ttg {
       return result;
     }
 
+    /// Sets the output terminal that goes into this Edge
     void set_in(Out<keyT, valueT> *in) const {
       for (auto &edge : p) edge->set_in(in);
     }
 
+    /// Sets the input terminal that this Edge goes into
     void set_out(TerminalBase *out) const {
       for (auto &edge : p) edge->set_out(out);
     }
 
-    // pure control edge should be usable to fire off a task
+    /// Triggers the input terminal the Edge is connected to
+    /// @note Only valid for pure control Edges that connect to tasks without identifiers and do not carry data
     template <typename Key = keyT, typename Value = valueT>
     std::enable_if_t<ttg::meta::is_all_void_v<Key, Value>> fire() const {
       for (auto &&e : p)

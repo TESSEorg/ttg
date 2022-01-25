@@ -127,7 +127,7 @@ namespace ttg {
    public:
     virtual ~TTBase() = default;
 
-    // Manual injection of a task that has no key or arguments
+    /// Manual injection of a task that has no key or arguments
     virtual void invoke() {
       std::cerr << "TTBase::invoke() invoked on a TT that did not override it" << std::endl;
       abort();

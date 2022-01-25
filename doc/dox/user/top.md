@@ -17,7 +17,7 @@ both B tasks, and that both B tasks run before C.
 
 \dontinclude simple.cc
 \skip #include
-\until namespace ttg
+\until #include
 
 To implement a TTG program, the user just needs to include `ttg.h`. The selection
 of the task backend is usually done at compile time through a compiler definition.
@@ -100,10 +100,10 @@ and if we used the same edge between `B` and `C`, sending on that edge would tri
 \skip wa
 \until wc
 
-We now define the three template tasks `wa`, `wb`, and `wc`, using the `make_tt`
+We now define the three template tasks `wa`, `wb`, and `wc`, using the `ttg::make_tt`
 helper.
 
-`make_tt()` takes as parameters the function that implements the task, the list of
+`ttg::make_tt` takes as parameters the function that implements the task, the list of
 input edges that are connected to its input terminals, the list of output edges
 that are connected to its output terminals, the name of the task, the list of names
 for the input terminals, and the list of names for the output terminals.
@@ -195,7 +195,7 @@ the DAG should be iterated, otherwise the application is completed.
 
 One way of representing this behavior is denoted by the graph below:
 
-![Iterative Diamond DAG](iterative.png)
+\dotfile iterative.dot "Iterative diamond DAG"
 
 First, because each task in the DAG needs to be uniquely identified, and there
 are potentially many tasks of type A or C, tasks of these kinds now need to 
@@ -209,52 +209,22 @@ if it continues iterating or not. This is done by conditionally calling `ttg::se
 in this function. If the function does not call `ttg::send`, then the no more
 task is discovered, and the whole operation will complete.
 
-~~~~~~~~~~~~~~~{.cpp}
-#include <ttg.h>
-#include <madness/world/world.h>
-~~~~~~~~~~~~~~~
+\dontinclude iterative.cc
+\skip #include
+\until #include <ttg.h>
+
 The inclusion of the `madness/world/world.h` file is necessary to use the MADNESS
 serialization mechanism. For the sake of simplicity, we use the same serialization
 mechanism for both the PaRSEC and the MADNESS backends.
-~~~~~~~~~~~~~~~{.cpp}
-using namespace ttg;
 
-const double threshold = 100.0;
-~~~~~~~~~~~~~~~
+\skip const
+\until const
+
 We define the threshold as a globally visible constant.
-~~~~~~~~~~~~~~~{.cpp}
-struct Key2 {
-  int k = 0, i = 0;
-  madness::hashT hash_val;
 
-  Key2() { rehash(); }
-  Key2(int k, int i) : k(k), i(i){ rehash(); }
+\skip struct
+\until // namespace std
 
-  madness::hashT hash() const { return hash_val; }
-  void rehash() {
-    hash_val = (static_cast<madness::hashT>(k) << 32)
-        ^ (static_cast<madness::hashT>(i));
-  }
-
-  // Equality test
-  bool operator==(const Key2& b) const { return k == b.k && i == b.i; }
-
-  // Inequality test
-  bool operator!=(const Key2& b) const { return !((*this) == b); }
-
-  template <typename Archive>
-  void serialize(Archive& ar) {
-    ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
-  }
-};
-
-namespace std {
-  std::ostream &operator<<(std::ostream &os, const Key2 &key) {
-    os << "{" << key.k << ", " << key.i << "}";
-    return os;
-  }
-}  // namespace std
-~~~~~~~~~~~~~~~
 As the key type of the tasks of type B is compound, no default serialization,
 hashing, and printout are provided, and the user code needs to provide these
 capabilities.
@@ -267,71 +237,50 @@ object of type `Key2`
 
 Once the key type is fully defined, we can modify the simple program to
 reflect the new Template Task Graph:
-~~~~~~~~~~~~~~~{.cpp}
-static void a(const int &k, const double &input, std::tuple<Out<Key2, double>> &out) {
-  ttg::print("Called task A(", k, ")");
-  ttg::send<0>(Key2{k, 0}, 1.0 + input, out);
-  ttg::send<0>(Key2{k, 1}, 2.0 + input, out);
-}
-~~~~~~~~~~~~~~~
+
+\skip static
+\until }
+\until }
+\until }
+
 Tasks of type A now take an integer key, and an input value; the output is modified
 to take a `Key2` (as tasks of type B have keys of type `Key2`).
-~~~~~~~~~~~~~~~{.cpp}
-static void b(const Key2 &key, const double &input, std::tuple<ttg::Out<int, double>, ttg::Out<int, double>> &out) {
-  ttg::print("Called task B(", key, ") with input data ", input);
-  if (key.i == 0)
-    ttg::send<0>(key.k, input + 1.0, out);
-  else
-    ttg::send<1>(key.k, input + 1.0, out);
-}
-~~~~~~~~~~~~~~~
+
+\skip static
+\until }
+
 Tasks of type B now take a key of type `Key2`, and the output is modified
 to take an integer key. We then use `ttg::send` instead of `ttg::sendv`, 
 because `ttg::sendv` is only used to send to a task that does not have a key identifier.
-~~~~~~~~~~~~~~~{.cpp}
-static void c(const int &k, const double &b0, const double &b1, std::tuple<ttg::Out<int, double>> &out) {
-  ttg::print("Called task C(", k, ") with inputs ", b0, " from B(", k, " 0) and ", b1, " from B(", k, " 1)");
-  if(b0 + b1 < threshold) {
-    ttg::print("  ", b0, "+", b1, "<", threshold, " so continuing to iterate");
-    ttg::send<0>(k+1, b0+b1, out);
-  } else {
-    ttg::print("  ", b0, "+", b1, ">=", threshold, " so stopping the iterations");
-  }
-}
-~~~~~~~~~~~~~~~
+
+\skip static
+\until }
+\until }
+\until }
+
 Tasks of type C are modified the same way, and the function that implements the
 task holds the dynamic decision to continue in the DAG or not.
-~~~~~~~~~~~~~~~{.cpp}
-int main(int argc, char **argv) {
-  ttg::initialize(argc, argv, -1);
 
-  ttg::Edge<Key2, double> A_B("A(k)->B(k)");
-  ttg::Edge<int, double> B_C0("B(k)->C0(k)");
-  ttg::Edge<int, double> B_C1("B(k)->C1(k)");
-  ttg::Edge<int, double> C_A("C(k)->A(k)");
-~~~~~~~~~~~~~~~
+\skip main
+\until C_A
+
 We update the edges types to reflect the new tasks prototypes, and add a new
 edge, that loops from C(k) to A(k+1) (note that the value of the key is decided
 in the function itself, this has no impact on this part of the code).
-~~~~~~~~~~~~~~~{.cpp}
-  auto wa(ttg::make_tt(a, ttg::edges(C_A), ttg::edges(A_B), "A", {"from C"}, {"to B"}));
-  auto wb(ttg::make_tt(b, ttg::edges(A_B), ttg::edges(B_C0, B_C1), "B", {"from A"}, {"to 1st input of C", "to 2nd input of C"}));
-  auto wc(ttg::make_tt(c, ttg::edges(B_C0, B_C1), ttg::edges(C_A), "C", {"From B", "From B"}, {"to A"}));
-~~~~~~~~~~~~~~~
+
+\skip wa
+\until wc
+
 The `ttg::make_tt` calls are also updated to reflect the new task prototypes, and include
 the edge from C(k) to A(k+1).
-~~~~~~~~~~~~~~~{.cpp}
-  wa->make_executable();
 
-  if (wa->get_world().rank() == 0) wa->invoke(0, 0.0);
-~~~~~~~~~~~~~~~
+\skip make_executable
+\until invoke
+
 When invoking A(0, 0.0), one needs to provide the key for the task and the
 input value for each input that A now defines.
-~~~~~~~~~~~~~~~{.cpp}
-  ttg::execute();
-  ttg::fence(ttg::get_default_world());
 
-  ttg::finalize();
-  return EXIT_SUCCESS;
-}
-~~~~~~~~~~~~~~~
+\skip execute
+\until }
+
+\ref iterative.cc "Full iterative diamond example"
