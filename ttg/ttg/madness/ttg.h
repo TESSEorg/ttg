@@ -335,34 +335,26 @@ namespace ttg_madness {
     cacheT cache;
 
    protected:
-     template <typename terminalT, std::size_t i, typename Key>
+    template <typename terminalT, std::size_t i, typename Key>
     void invoke_pull_terminal(terminalT &in, const Key &key, TTArgs *args) {
       if (in.is_pull_terminal) {
-        if (in.mapper) {
-          const auto k = in.container.mapper(key);
-          const auto owner = in.container.keymap(k);
-            if (owner != world.rank()) {
-              get_terminal_data<i, Key>(owner, key);
-            } else {
-              auto value = (in.container).get(k);
-              if (args->nargs[i] == 0) {
-                ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
-                                   ": error argument is already finalized : ", i);
-                throw std::runtime_error("Op::set_arg called for a finalized stream");
-              }
-
-              if (typeid(value) != typeid(std::nullptr_t) && i < std::tuple_size_v<input_values_tuple_type>) {
-                this->get<i, std::decay_t<decltype(value)> &>(args->input_values) =
-                  std::forward<decltype(value)>(value);
-                args->nargs[i] = 0;
-                args->counter--;
-              }
-            }
+        auto owner = in.container.owner(key);
+        if (owner != world.rank()) {
+          get_terminal_data<i, Key>(owner, key);
         } else {
-          //throw error??
-          ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
-                                   ": pull terminal does not have a mapper : ", i);
-          throw std::runtime_error("Pull terminal invoked without a mapper");
+          auto value = (in.container).get(key);
+          if (args->nargs[i] == 0) {
+            ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
+                               ": error argument is already finalized : ", i);
+            throw std::runtime_error("Op::set_arg called for a finalized stream");
+          }
+
+          if (typeid(value) != typeid(std::nullptr_t) && i < std::tuple_size_v<input_values_tuple_type>) {
+            this->get<i, std::decay_t<decltype(value)> &>(args->input_values) =
+              std::forward<decltype(value)>(value);
+            args->nargs[i] = 0;
+            args->counter--;
+          }
         }
       }
     }
@@ -375,8 +367,7 @@ namespace ttg_madness {
       }
       else {
         auto &in = std::get<i>(input_terminals);
-        const auto k = in.container.mapper(key);
-        auto value = (in.container).get(k);
+        auto value = (in.container).get(key);
         worldobjT::send(keymap(key), &ttT::template set_arg<i, Key,
                         const std::remove_reference_t<decltype(value)>&>, key, value);
       }

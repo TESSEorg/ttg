@@ -59,9 +59,9 @@ int main(int argc, char** argv) {
                 };
 
   Edge<keyT, Control> ctl("control");
-  Edge<keyT, int> input("input",true,generator,
-                        [](const keyT& key) { return key; },
-                        keymap);
+  Edge<keyT, int> input("input", true, {generator,
+                        [](const keyT& key)-> const keyT { return key; },
+                                       keymap});
   Edge<keyT, int> output("output");
 
   auto init = make_initiator(ctl);

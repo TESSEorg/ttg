@@ -539,13 +539,13 @@ int main(int argc, char** argv) {
     delete m2;
   }
 
-  std::function<Key (const Key&)> get_bottomindex_func =
+  std::function<const Key (const Key&)> get_bottomindex_func =
     [n_brows, n_bcols](const Key& key) {
     //std::cout << "Getting bottom index for " << key.first << ":" << key.second << std::endl;
       return get_bottomindex(key, n_brows, n_bcols);
   };
 
-  std::function<Key (const Key&)> get_rightindex_func =
+  std::function<const Key (const Key&)> get_rightindex_func =
     [n_brows, n_bcols](const Key& key) {
     //std::cout << "Getting right index for " << key.first << ":" << key.second << std::endl;
       return get_rightindex(key, n_brows, n_bcols);
@@ -554,7 +554,7 @@ int main(int argc, char** argv) {
   //Should return single piece of data, not a vector.
   //User will take care of tiling if needed.
   //Input key and output key types can be different.
-  std::function<Key (const Key&)> get_inputindex_func =
+  std::function<const Key (const Key&)> get_inputindex_func =
     [n_brows, n_bcols](const Key& key) {
       return key;
   };
@@ -572,10 +572,11 @@ int main(int argc, char** argv) {
     outputLB("outputLB"), outputLR("outputLR"), output2R("output2R"), output2B("output2B"),
     output2TL("output2TL"), output2LL("output2LL"),
     result("result");
-  Edge<Key, BlockMatrix<double>> bottom0("bottom0", true, m, get_bottomindex_func, container_keymap);
-  Edge<Key, BlockMatrix<double>> right0("right0", true, m, get_rightindex_func, container_keymap);
+  //Send data and the mapper and keymap for the data as an initializer list to store it in the terminal
+  Edge<Key, BlockMatrix<double>> bottom0("bottom0", true, {m, get_bottomindex_func, container_keymap});
+  Edge<Key, BlockMatrix<double>> right0("right0", true, {m, get_rightindex_func, container_keymap});
 
-  Edge<Key, BlockMatrix<double>> block("block", true, m, get_inputindex_func, container_keymap);
+  Edge<Key, BlockMatrix<double>> block("block", true, {m, get_inputindex_func, container_keymap});
   // OpBase::set_trace_all(true);
   OpBase::set_lazy_pull(false);
 

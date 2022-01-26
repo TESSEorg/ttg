@@ -19,48 +19,71 @@ namespace ttg {
 
     /* Wraps any key,value data structure.
      * Elements of the data structure can be accessed using get method, which calls the at method of the Container.
-     * tkeyT - taskID
-     * keyT - Key type of the Container
+     * keyT - taskID
      * valueT - Value type of the Container
     */
-    template<typename tkeyT, typename keyT, typename valueT>
+    template<typename keyT, typename valueT>
     struct ContainerWrapper {
       std::function<valueT (keyT const& key)> get = nullptr;
-      ttg::meta::detail::keymap_t<keyT> keymap;
-      meta::detail::mapper_function_t<tkeyT> mapper;
+      std::function<size_t (keyT const& key)> owner = nullptr;
 
       ContainerWrapper() = default;
 
-      template<typename T, std::enable_if_t<!std::is_same<std::decay_t<T>,
+      template<typename T, typename mapperT, typename keymapT, std::enable_if_t<!std::is_same<std::decay_t<T>,
                                                           ContainerWrapper>{}, bool> = true>
         //Store a pointer to the user's container in std::any, no copies
-        ContainerWrapper(T &t) : get([&t](keyT const &key) {
-                                if constexpr (!std::is_class_v<T> && std::is_function_v<T>)
-                                  return (t)(key);
-                                else
-                                {
-                                  using key_type = typename T::key_type;
-                                  //at method returns a const ref to the item.
-                                  return t.at(std::any_cast<key_type>(key));
-                                }
-                              })
-        {}
+        ContainerWrapper(T &t, mapperT &&mapper,
+                         keymapT &&keymap) : get([&t,&mapper](keyT const &key) {
+                                                  if constexpr (!std::is_class_v<T> && std::is_function_v<T>) {
+                                                      auto k = mapper(key);
+                                                      return t(k); //Call the user-defined lambda function.
+                                                    }
+                                                  else
+                                                    {
+                                                      auto k = mapper(key);
+                                                      using key_type = typename T::key_type;
+                                                      //at method returns a const ref to the item.
+                                                      return t.at(std::any_cast<key_type>(k));
+                                                    }
+                                                }),
+                                            owner([&t, &mapper, &keymap](keyT const &key) {
+                                                    auto idx = mapper(key); //Mapper to map task ID to index of the data structure.
+                                                    return keymap(idx);
+                                                  })
+        {
+         //Validate mapper and keymap function arguments
+         using mapper_args_t = boost::callable_traits::args_t<mapperT>;
+         constexpr auto num_args = std::tuple_size<mapper_args_t>::value;
+         static_assert(num_args == 1);
+         static_assert(std::is_same_v<typename std::tuple_element<0, mapper_args_t>::type, const keyT &>,
+                       "argument of Mapper must be const keyT& (unless keyT = void)");
+         using km_args_t = boost::callable_traits::args_t<keymapT>;
+         using mapper_ret_type = boost::callable_traits::return_type_t<mapperT>;
+         constexpr auto num_km_args = std::tuple_size<km_args_t>::value;
+         static_assert(num_km_args == 1);
+         static_assert(std::is_same_v<std::remove_reference_t<typename std::tuple_element<0, km_args_t>::type>, mapper_ret_type>,
+                       "argument of Keymap must be the return type of the Mapper.");
+        }
     };
 
-    template <typename valueT> struct ContainerWrapper<void, void, valueT> {
+    template <typename valueT> struct ContainerWrapper<void, valueT> {
       std::function<std::nullptr_t ()> get = nullptr;
+      std::function<bool ()> owner = nullptr;
     };
 
-    template <typename keyT> struct ContainerWrapper<void, keyT, void> {
+    template <typename keyT> struct ContainerWrapper<keyT, void> {
       std::function<std::nullptr_t (keyT const& key)> get = nullptr;
+      std::function<bool (keyT const& key)> owner = nullptr;
     };
 
-    template <typename valueT> struct ContainerWrapper<ttg::Void, void, valueT> {
+    template <typename valueT> struct ContainerWrapper<ttg::Void, valueT> {
       std::function<std::nullptr_t ()> get = nullptr;
+      std::function<bool ()> owner = nullptr;
     };
 
-    template <> struct ContainerWrapper<void, void, void> {
+    template <> struct ContainerWrapper<void, void> {
       std::function<std::nullptr_t ()> get = nullptr;
+      std::function<bool ()> owner = nullptr;
     };
   } //namespace detail
 
@@ -144,10 +167,7 @@ namespace ttg {
     using setsize_callback_type = typename base_type::setsize_callback_type;
     using finalize_callback_type = typename base_type::finalize_callback_type;
     static constexpr bool is_an_input_terminal = true;
-
-    using mapper_ret_type = boost::callable_traits::return_type_t<meta::detail::mapper_function_t<keyT>>;
-    ttg::detail::ContainerWrapper<keyT, mapper_ret_type, valueT> container;
-    meta::detail::mapper_function_t<keyT> mapper;
+    ttg::detail::ContainerWrapper<keyT, valueT> container;
 
    private:
     send_callback_type send_callback;
