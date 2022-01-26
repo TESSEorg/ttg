@@ -562,8 +562,7 @@ int main(int argc, char** argv) {
   auto keymap = [local_row_count](const Key& key) { return key.first / local_row_count; };
 
   auto container_keymap = [local_row_count](const Key &key) {
-                            auto k = std::any_cast<std::pair<int, int>>(key);
-                            return k.first / local_row_count;
+                            return key.first / local_row_count;
                           };
 
   Edge<Key, BlockMatrix<double>> input0("input0"), toporleft("toporleft"),

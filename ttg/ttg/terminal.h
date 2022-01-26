@@ -11,7 +11,6 @@
 #include "ttg/util/meta.h"
 #include "ttg/util/trace.h"
 #include "ttg/world.h"
-#include "ttg/base/keymap.h"
 #include "boost/callable_traits.hpp"
 
 namespace ttg {
@@ -43,7 +42,7 @@ namespace ttg {
                                                       auto k = mapper(key);
                                                       using key_type = typename T::key_type;
                                                       //at method returns a const ref to the item.
-                                                      return t.at(std::any_cast<key_type>(k));
+                                                      return t.at(k);
                                                     }
                                                 }),
                                             owner([&t, &mapper, &keymap](keyT const &key) {

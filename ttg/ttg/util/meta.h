@@ -3,7 +3,6 @@
 
 #include <functional>
 #include <type_traits>
-#include <any>
 #include "ttg/util/span.h"
 #include "ttg/util/typelist.h"
 
@@ -841,22 +840,6 @@ namespace ttg {
         using type = std::function<void()>;
       };
       template <typename Key> using invoke_callback_t = typename invoke_callback<Key>::type;
-
-      ///////////////////
-      // Defining a mapping function for indexing into data structures using pull terminals
-      //////////////////
-      template <typename Key, typename Enabler = void>
-      struct mapper_function;
-      template <typename Key>
-      struct mapper_function<Key, std::enable_if_t<!is_void_v<Key>>> {
-        using type = std::function<Key (const Key &)>;
-      };
-      template <typename Key>
-      struct mapper_function<Key, std::enable_if_t<is_void_v<Key>>> {
-        using type = std::function<void()>;
-      };
-      template <typename Key>
-      using mapper_function_t = typename mapper_function<Key>::type;
 
     }  // namespace detail
 
