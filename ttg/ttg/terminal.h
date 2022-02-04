@@ -14,6 +14,10 @@
 
 namespace ttg {
 
+  /// Input Terminal
+  /// \tparam <keyT> Type of task identifier (should be the same type as the task idenfitier for the TT that holds
+  ///                this Input Terminal
+  /// \tparam <valueT> Type of data that serves as input for this terminal
   template <typename keyT = void, typename valueT = void>
   class In : public TerminalBase {
    public:
@@ -50,10 +54,20 @@ namespace ttg {
     }
 
    public:
+    /// Default constructor of an Input Terminal
     In()
     : TerminalBase(std::is_const<valueT>::value ? TerminalBase::Type::Read : TerminalBase::Type::Consume)
     {}
 
+    /// Define the callbacks used by the backend task system to implement data movement
+    /// when a data is set in this Input Terminal
+    /// \param[in] send_callback: when an object must be copied inside this terminal
+    /// \param[in] move_callback: when a rvalue reference is std::move onto this terminal
+    /// \param[in] bcast_callback: when this terminal receives a list of task identifiers to broadcast a data to
+    /// \param[in] finalize_callback: if the terminal is a reduce terminal, denotes that no other local thread
+    ///     will continue adding data onto this terminal
+    /// \param[in] setsize_callback: if the terminal is a reduce terminal, announces how many items will be set
+    ///     unto this terminal for reduction
     void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback,
                       const broadcast_callback_type &bcast_callback = broadcast_callback_type{},
                       const setsize_callback_type &setsize_callback = setsize_callback_type{},
@@ -178,7 +192,7 @@ namespace ttg {
     }
   };
 
-  // Output terminal
+  /// An Output terminal
   template <typename keyT = void, typename valueT = void>
   class Out : public TerminalBase {
    public:
