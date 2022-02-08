@@ -69,24 +69,6 @@ endif (BUILD_TESTING)
 include(FindOrFetchBoost)
 # Cereal
 #include(FindOrFetchCereal)
-if (TTG_EXAMPLES)
-  # sparse tensor algorithms need Eigen
-  find_package(Eigen3)
-  message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
-  if (EIGEN3_FOUND)
-    add_library(eigen3 INTERFACE IMPORTED)
-    set_property(TARGET eigen3 PROPERTY
-            INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
-  endif (EIGEN3_FOUND)
-  # BTAS brings in linear algebra (BLAS++/LAPACK++)
-  include(FindOrFetchBTAS)
-  # OpenMP may also be used by some examples
-  find_package(OpenMP COMPONENTS CXX)
-  # std::execution may also be used by some examples
-  find_package(CXXStdExecution)
-  # to compare against potrf
-  include(FindDPLASMA)
-endif (TTG_EXAMPLES)
 
 ##########################
 #### prerequisite runtimes
@@ -101,6 +83,30 @@ include(FindOrFetchMADNESS)
 if (TARGET MADworld)
   message(STATUS "MADNESS_FOUND=1")
 endif(TARGET MADworld)
+
+##########################
+#### Examples
+##########################
+# N.B. discover last so that we do not affect core dependencies
+if (TTG_EXAMPLES)
+    # sparse tensor algorithms need Eigen
+    find_package(Eigen3)
+    message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
+    if (EIGEN3_FOUND)
+        add_library(eigen3 INTERFACE IMPORTED)
+        set_property(TARGET eigen3 PROPERTY
+                INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
+    endif (EIGEN3_FOUND)
+    # BTAS brings in linear algebra (BLAS++/LAPACK++)
+    include(FindOrFetchBTAS)
+    # OpenMP may also be used by some examples
+    find_package(OpenMP COMPONENTS CXX)
+    # std::execution may also be used by some examples
+    find_package(CXXStdExecution)
+    # to compare against potrf
+    include(FindDPLASMA)
+endif (TTG_EXAMPLES)
+
 
 ##########################
 #### Components
