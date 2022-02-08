@@ -174,34 +174,38 @@ namespace ttg_madness {
   /// \tparam keyT a Key type
   /// \tparam output_terminalsT
   /// \tparam derivedT
-  /// \tparam input_valueTs pack of *value* types (no references; pointers are OK) encoding the types of input values
+  /// \tparam input_valueTs ttg::typelist of *value* types (no references; pointers are OK) encoding the types of input values
   ///         flowing into this TT; a const type indicates nonmutating (read-only) use, nonconst type
   ///         indicates mutating use (e.g. the corresponding input can be used as scratch, moved-from, etc.)
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
+  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs>
   class TT : public ttg::TTBase,
-             public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs...>> {
+             public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs>> {
+
+    static_assert(ttg::detail::is_typelist_v<input_valueTs>, "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
+    using input_tuple_type = typename input_valueTs::tuple_type;
+
    public:
+    using ttT = TT;
     /// preconditions
-    static_assert((!std::is_reference_v<input_valueTs> && ...), "input_valueTs cannot contain reference types");
+    static_assert((ttg::meta::none_has_reference_v<input_valueTs>), "input_valueTs cannot contain reference types");
 
    private:
     ttg::World world;
     ttg::meta::detail::keymap_t<keyT> keymap;
     ttg::meta::detail::keymap_t<keyT> priomap;
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
-    ttg::meta::detail::input_reducers_t<input_valueTs...>
+    ttg::meta::detail::input_reducers_t<input_tuple_type>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
-    std::array<std::size_t, sizeof...(input_valueTs)> static_streamsize;
+    std::array<std::size_t, std::tuple_size_v<input_tuple_type>> static_streamsize;
 
    public:
     ttg::World get_world() const { return world; }
 
    protected:
-    using ttT = TT<keyT, output_terminalsT, derivedT, input_valueTs...>;
     using worldobjT = ::madness::WorldObject<ttT>;
 
-    static constexpr int numins = sizeof...(input_valueTs);                    // number of input arguments
+    static constexpr int numins = std::tuple_size_v<input_tuple_type>;                    // number of input arguments
     static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or
     // results
 
@@ -211,26 +215,28 @@ namespace ttg_madness {
       size_t call_depth = 0;  // how deep calls are nested
     } threaddata;
 
-    using input_terminals_type = std::tuple<ttg::In<keyT, input_valueTs>...>;
-    using input_edges_type = std::tuple<ttg::Edge<keyT, std::decay_t<input_valueTs>>...>;
-    static_assert(ttg::meta::is_none_Void_v<input_valueTs...>, "ttg::Void is for internal use only, do not use it");
-    static_assert(ttg::meta::is_none_void_v<input_valueTs...> || ttg::meta::is_last_void_v<input_valueTs...>,
+   public:
+    using input_terminals_type = ttg::detail::input_terminals_tuple_t<keyT, input_tuple_type>;
+    using input_edges_type = ttg::detail::edges_tuple_t<keyT, ttg::meta::decayed_tuple_t<input_tuple_type>>;
+    static_assert(ttg::meta::is_none_Void_v<input_valueTs>, "ttg::Void is for internal use only, do not use it");
+    static_assert(ttg::meta::is_none_void_v<input_valueTs> || ttg::meta::is_last_void_v<input_valueTs>,
                   "at most one void input can be handled, and it must come last");
     // if have data inputs and (always last) control input, convert last input to Void to make logic easier
-    using input_values_full_tuple_type = std::tuple<ttg::meta::void_to_Void_t<std::decay_t<input_valueTs>>...>;
+    using input_values_full_tuple_type = ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
     using input_refs_full_tuple_type =
-        std::tuple<std::add_lvalue_reference_t<ttg::meta::void_to_Void_t<input_valueTs>>...>;
+        ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<input_tuple_type>>;
     using input_values_tuple_type =
-        std::conditional_t<ttg::meta::is_none_void_v<input_valueTs...>, input_values_full_tuple_type,
+        std::conditional_t<ttg::meta::is_none_void_v<input_valueTs>, input_values_full_tuple_type,
                            typename ttg::meta::drop_last_n<input_values_full_tuple_type, std::size_t{1}>::type>;
     static_assert(!ttg::meta::is_any_void_v<input_values_tuple_type>);
     using input_refs_tuple_type =
-        std::conditional_t<ttg::meta::is_none_void_v<input_valueTs...>, input_refs_full_tuple_type,
+        std::conditional_t<ttg::meta::is_none_void_v<input_valueTs>, input_refs_full_tuple_type,
                            typename ttg::meta::drop_last_n<input_refs_full_tuple_type, std::size_t{1}>::type>;
 
     using output_terminals_type = output_terminalsT;
     using output_edges_type = typename ttg::terminals_to_edges<output_terminalsT>::type;
 
+   protected:
     template <std::size_t i, typename resultT, typename InTuple>
     static resultT get(InTuple &&intuple) {
       return static_cast<resultT>(std::get<i>(std::forward<InTuple>(intuple)));

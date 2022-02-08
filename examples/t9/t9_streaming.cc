@@ -292,8 +292,8 @@ auto make_reconstruct(const nodeEdge& in, nodeEdge& out, const std::string& name
 }
 
 // cannot easily replace this with wrapper due to persistent state
-class Norm2 : public TT<Key, std::tuple<>, Norm2, Node> {
-  using baseT = TT<Key, std::tuple<>, Norm2, Node>;
+class Norm2 : public TT<Key, std::tuple<>, Norm2, ttg::typelist<Node>> {
+  using baseT = typename Norm2::ttT;
   double sumsq;
   std::mutex charon;
 

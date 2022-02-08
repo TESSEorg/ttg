@@ -5,6 +5,7 @@
 #include <type_traits>
 
 #include "ttg/util/span.h"
+#include "ttg/util/typelist.h"
 
 namespace ttg {
 
@@ -146,19 +147,37 @@ namespace ttg {
     constexpr bool is_all_void_v = (is_void_v<Ts> && ...);
 
     template <typename... Ts>
+    constexpr bool is_all_void_v<ttg::typelist<Ts...>> = is_all_void_v<Ts...>;
+
+    template <typename... Ts>
+    constexpr bool is_all_Void_v = (is_Void_v<Ts> && ...);
+
+    template <typename... Ts>
+    constexpr bool is_all_Void_v<ttg::typelist<Ts...>> = is_all_Void_v<Ts...>;
+
+    template <typename... Ts>
     constexpr bool is_any_void_v = (is_void_v<Ts> || ...);
 
     template <typename... Ts>
-    constexpr bool is_any_void_v<std::tuple<Ts...>> = (is_void_v<Ts> || ...);
+    constexpr bool is_any_void_v<ttg::typelist<Ts...>> = is_all_void_v<Ts...>;
 
     template <typename... Ts>
     constexpr bool is_any_Void_v = (is_Void_v<Ts> || ...);
 
     template <typename... Ts>
+    constexpr bool is_any_Void_v<ttg::typelist<Ts...>> = is_any_Void_v<Ts...>;
+
+    template <typename... Ts>
     constexpr bool is_none_void_v = !is_any_void_v<Ts...>;
 
     template <typename... Ts>
+    constexpr bool is_none_void_v<ttg::typelist<Ts...>> = is_none_void_v<Ts...>;
+
+    template <typename... Ts>
     constexpr bool is_none_Void_v = !is_any_Void_v<Ts...>;
+
+    template <typename... Ts>
+    constexpr bool is_none_Void_v<ttg::typelist<Ts...>> = is_none_Void_v<Ts...>;
 
     template <typename... Ts>
     struct is_last_void;
@@ -173,6 +192,12 @@ namespace ttg {
     struct is_last_void<T1, Ts...> : public is_last_void<Ts...> {};
 
     template <typename... Ts>
+    struct is_last_void<std::tuple<Ts...>> : public is_last_void<Ts...> {};
+
+    template <typename... Ts>
+    struct is_last_void<ttg::typelist<Ts...>> : public is_last_void<Ts...> {};
+
+    template <typename... Ts>
     constexpr bool is_last_void_v = is_last_void<Ts...>::value;
 
     template <typename T>
@@ -185,6 +210,67 @@ namespace ttg {
     };
     template <typename T>
     using void_to_Void_t = typename void_to_Void<T>::type;
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Tuple-element type conversions
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    template <typename T>
+    struct void_to_Void_tuple;
+
+    template <typename... Ts>
+    struct void_to_Void_tuple<std::tuple<Ts...>> {
+      using type = std::tuple<void_to_Void_t<Ts>...>;
+    };
+
+    template <typename tupleT>
+    using void_to_Void_tuple_t = typename void_to_Void_tuple<std::decay_t<tupleT>>::type;
+
+    template <typename T>
+    struct add_lvalue_reference_tuple;
+
+    template <typename... Ts>
+    struct add_lvalue_reference_tuple<std::tuple<Ts...>> {
+      using type = std::tuple<std::add_lvalue_reference_t<Ts>...>;
+    };
+
+    template <typename tupleT>
+    using add_lvalue_reference_tuple_t = typename add_lvalue_reference_tuple<tupleT>::type;
+
+    template<typename T, typename... Ts>
+    struct none_has_reference
+    {
+      static constexpr bool value = !std::is_reference_v<T> && none_has_reference<Ts...>::value;
+    };
+
+    template<typename T>
+    struct none_has_reference<T>
+    {
+      static constexpr bool value = !std::is_reference_v<T>;
+    };
+
+    template<typename... T>
+    struct none_has_reference<ttg::typelist<T...>> : none_has_reference<T...>
+    { };
+
+    template<>
+    struct none_has_reference<ttg::typelist<>> : std::true_type
+    { };
+
+    template<typename... T>
+    constexpr bool none_has_reference_v = none_has_reference<T...>::value;
+
+    template<typename T>
+    struct is_tuple : std::integral_constant<bool, false>
+    { };
+
+    template<typename... Ts>
+    struct is_tuple<std::tuple<Ts...>> : std::integral_constant<bool, true>
+    { };
+
+    template<typename T>
+    constexpr bool is_tuple_v = is_tuple<T>::value;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // is_empty_tuple
@@ -422,6 +508,10 @@ namespace ttg {
       };
       template <typename... valueTs>
       struct input_reducers {
+        using type = std::tuple<typename input_reducer_type<valueTs>::type...>;
+      };
+      template <typename... valueTs>
+      struct input_reducers<std::tuple<valueTs...>> {
         using type = std::tuple<typename input_reducer_type<valueTs>::type...>;
       };
       template <typename... valueTs>

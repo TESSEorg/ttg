@@ -12,8 +12,8 @@ using keyT = uint64_t;
 
 #include "ttg.h"
 
-class A : public TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int> {
-  using baseT = TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int>;
+class A : public TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, ttg::typelist<const int>> {
+  using baseT = typename A::ttT;
 
  public:
   A(const std::string &name) : baseT(name, {"inputA"}, {"resultA", "iterateA"}) {}
@@ -50,7 +50,7 @@ class A : public TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
 };
 
 class Producer : public TT<void, std::tuple<Out<keyT, int>>, Producer> {
-  using baseT = TT<void, std::tuple<Out<keyT, int>>, Producer>;
+  using baseT = typename Producer::ttT;
 
  public:
   Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
@@ -66,8 +66,8 @@ class Producer : public TT<void, std::tuple<Out<keyT, int>>, Producer> {
   ~Producer() { std::cout << " Producer destructor\n"; }
 };
 
-class Consumer : public TT<void, std::tuple<>, Consumer, const int> {
-  using baseT = TT<void, std::tuple<>, Consumer, const int>;
+class Consumer : public TT<void, std::tuple<>, Consumer, ttg::typelist<const int>> {
+  using baseT = typename Consumer::ttT;
 
  public:
   Consumer(const std::string &name) : baseT(name, {"input"}, {}) {}

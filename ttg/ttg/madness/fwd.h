@@ -2,20 +2,21 @@
 #define TTG_MADNESS_FWD_H
 
 #include "ttg/fwd.h"
+#include "ttg/util/typelist.h"
 
 #include <future>
 
 namespace ttg_madness {
 
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
+  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs = ttg::typelist<>>
   class TT;
 
   /// \internal the OG name
   template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
-  using Op [[deprecated("use TT instead")]] = TT<keyT, output_terminalsT, derivedT, input_valueTs...>;
+  using Op [[deprecated("use TT instead")]] = TT<keyT, output_terminalsT, derivedT, ttg::typelist<input_valueTs...>>;
   /// \internal the name in the ESPM2 paper
   template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
-  using TemplateTask = TT<keyT, output_terminalsT, derivedT, input_valueTs...>;
+  using TemplateTask = TT<keyT, output_terminalsT, derivedT, ttg::typelist<input_valueTs...>>;
 
   class WorldImpl;
 
