@@ -10,9 +10,8 @@
 //
 template <typename funcT, typename keyT, typename output_terminalsT, typename... input_valuesT>
 class CallableWrapTT : public TT<keyT, output_terminalsT,
-                                 CallableWrapTT<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...> {
-  using baseT =
-      TT<keyT, output_terminalsT, CallableWrapTT<funcT, keyT, output_terminalsT, input_valuesT...>, input_valuesT...>;
+                                 CallableWrapTT<funcT, keyT, output_terminalsT, input_valuesT...>, ttg::typelist<input_valuesT...>> {
+  using baseT = typename CallableWrapTT::ttT;
 
   using input_values_tuple_type = typename baseT::input_values_tuple_type;
   using input_refs_tuple_type = typename baseT::input_refs_tuple_type;
@@ -93,9 +92,8 @@ struct CallableWrapTTUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<inpu
 template <typename funcT, typename keyT, typename output_terminalsT, typename... input_valuesT>
 class CallableWrapTTArgs
     : public TT<keyT, output_terminalsT, CallableWrapTTArgs<funcT, keyT, output_terminalsT, input_valuesT...>,
-                input_valuesT...> {
-  using baseT = TT<keyT, output_terminalsT, CallableWrapTTArgs<funcT, keyT, output_terminalsT, input_valuesT...>,
-                   input_valuesT...>;
+                ttg::typelist<input_valuesT...>> {
+  using baseT = typename CallableWrapTTArgs::ttT;
 
   using input_values_tuple_type = typename baseT::input_values_tuple_type;
   using input_refs_tuple_type = typename baseT::input_refs_tuple_type;

@@ -7,8 +7,8 @@
 // {task_id,data} = {void, void}
 namespace tt_v_v {
 
-  class tt : public ttg::TT<void, std::tuple<>, tt, void> {
-    using baseT = ttg::TT<void, std::tuple<>, tt, void>;
+  class tt : public ttg::TT<void, std::tuple<>, tt, std::tuple<void>> {
+    using baseT = typename tt::ttT;
 
    public:
     tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
@@ -26,8 +26,8 @@ namespace tt_v_v {
 // {task_id,data} = {int, void}
 namespace tt_i_v {
 
-  class tt : public ttg::TT<int, std::tuple<>, tt, void> {
-    using baseT = ttg::TT<int, std::tuple<>, tt, void>;
+  class tt : public ttg::TT<int, std::tuple<>, tt, std::tuple<void>> {
+    using baseT = typename tt::ttT;
 
    public:
     tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
@@ -45,8 +45,8 @@ namespace tt_i_v {
 // {task_id,data} = {void, int}
 namespace tt_v_i {
 
-  class tt : public ttg::TT<void, std::tuple<>, tt, const int> {
-    using baseT = ttg::TT<void, std::tuple<>, tt, const int>;
+  class tt : public ttg::TT<void, std::tuple<>, tt, std::tuple<const int>> {
+    using baseT = typename tt::ttT;
 
    public:
     tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
@@ -65,8 +65,8 @@ namespace tt_v_i {
 // {task_id,data} = {void, int, void}
 namespace tt_v_iv {
 
-  class tt : public ttg::TT<void, std::tuple<>, tt, const int, void> {
-    using baseT = ttg::TT<void, std::tuple<>, tt, const int, void>;
+  class tt : public ttg::TT<void, std::tuple<>, tt, std::tuple<const int, void>> {
+    using baseT = typename tt::ttT;
 
    public:
     tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
@@ -85,8 +85,8 @@ namespace tt_v_iv {
 // {task_id,data} = {int, int}
 namespace tt_i_i {
 
-  class tt : public ttg::TT<int, std::tuple<>, tt, const int> {
-    using baseT = ttg::TT<int, std::tuple<>, tt, const int>;
+  class tt : public ttg::TT<int, std::tuple<>, tt, std::tuple<const int>> {
+    using baseT = typename tt::ttT;
 
    public:
     tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
@@ -104,8 +104,8 @@ namespace tt_i_i {
 // {task_id,data} = {int, int, void}
 namespace tt_i_iv {
 
-  class tt : public ttg::TT<int, std::tuple<>, tt, const int, void> {
-    using baseT = ttg::TT<int, std::tuple<>, tt, const int, void>;
+  class tt : public ttg::TT<int, std::tuple<>, tt, std::tuple<const int, void>> {
+    using baseT = typename tt::ttT;
 
    public:
     tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,

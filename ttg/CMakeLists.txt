@@ -18,6 +18,7 @@ set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/span.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/trace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/tree.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/typelist.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/void.h
     )

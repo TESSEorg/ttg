@@ -188,9 +188,9 @@ inline int tile2rank(int i, int j, int P, int Q) {
 
 // flow data from an existing SpMatrix on rank 0
 template <typename Blk = blk_t, typename Keymap = std::function<int(const Key<2> &)>>
-class Read_SpMatrix : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void> {
+class Read_SpMatrix : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk, Keymap>, ttg::typelist<void>> {
  public:
-  using baseT = TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk>, void>;
+  using baseT = typename Read_SpMatrix::ttT;
 
   Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>> &ctl, Edge<Key<2>, Blk> &out,
                 Keymap &keymap)
@@ -214,9 +214,9 @@ class Read_SpMatrix : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMat
 
 // flow (move?) data into an existing SpMatrix on rank 0
 template <typename Blk = blk_t>
-class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk> {
+class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, ttg::typelist<Blk>> {
  public:
-  using baseT = TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, Blk>;
+  using baseT = typename Write_SpMatrix::ttT;
 
   template <typename Keymap>
   Write_SpMatrix(SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &in, Keymap &&keymap)
@@ -286,9 +286,9 @@ class SpMM {
   }
 
   /// Locally broadcast A[i][k] to all {i,j,k} such that B[j][k] exists
-  class LocalBcastA : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastA, Blk> {
+  class LocalBcastA : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastA, ttg::typelist<Blk>> {
    public:
-    using baseT = TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastA, Blk>;
+    using baseT = typename LocalBcastA::ttT;
 
     LocalBcastA(Edge<Key<3>, Blk> &a, Edge<Key<3>, Blk> &a_ijk,
                 const std::vector<std::vector<long>> &b_rowidx_to_colidx, Keymap keymap)
@@ -321,9 +321,9 @@ class SpMM {
   };  // class LocalBcastA
 
   /// broadcast A[i][k] to all procs where B[j][k]
-  class BcastA : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, Blk> {
+  class BcastA : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, ttg::typelist<Blk>> {
    public:
-    using baseT = TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, Blk>;
+    using baseT = typename BcastA::ttT;
 
     BcastA(Edge<Key<2>, Blk> &a, Edge<Key<3>, Blk> &a_ikp, const std::vector<std::vector<long>> &b_rowidx_to_colidx,
            Keymap keymap)
@@ -356,9 +356,9 @@ class SpMM {
   };  // class BcastA
 
   /// broadcast B[k][j] to all {i,j,k} such that A[i][k] exists
-  class LocalBcastB : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastB, Blk> {
+  class LocalBcastB : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastB, ttg::typelist<Blk>> {
    public:
-    using baseT = TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastB, Blk>;
+    using baseT = typename LocalBcastB::ttT;
 
     LocalBcastB(Edge<Key<3>, Blk> &b, Edge<Key<3>, Blk> &b_ijk,
                 const std::vector<std::vector<long>> &a_colidx_to_rowidx, Keymap keymap)
@@ -391,9 +391,9 @@ class SpMM {
   };  // class BcastA
 
   /// broadcast B[k][j] to all {i,j,k} such that A[i][k] exists
-  class BcastB : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, Blk> {
+  class BcastB : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, ttg::typelist<Blk>> {
    public:
-    using baseT = TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, Blk>;
+    using baseT = typename BcastB::ttT;
 
     BcastB(Edge<Key<2>, Blk> &b, Edge<Key<3>, Blk> &b_kjp, const std::vector<std::vector<long>> &a_colidx_to_rowidx,
            Keymap keymap)
@@ -426,9 +426,10 @@ class SpMM {
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
   class MultiplyAdd
-      : public TT<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, const Blk, const Blk, Blk> {
+      : public TT<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>,
+                  MultiplyAdd, ttg::typelist<const Blk, const Blk, Blk>> {
    public:
-    using baseT = TT<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd, const Blk, const Blk, Blk>;
+    using baseT = typename MultiplyAdd::ttT;
 
     MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
                 const std::vector<std::vector<long>> &a_rowidx_to_colidx,
@@ -583,6 +584,7 @@ class SpMM {
         return std::make_tuple(a_colidx, true);
       }
       ttg::abort();  // unreachable
+      return std::make_tuple(0, false);
     }
   };
 
@@ -604,7 +606,7 @@ class SpMM {
 };
 
 class Control : public TT<void, std::tuple<Out<Key<2>>>, Control> {
-  using baseT = TT<void, std::tuple<Out<Key<2>>>, Control>;
+  using baseT = typename Control::ttT;
   int P;
   int Q;
 
