@@ -739,7 +739,7 @@ namespace ttg_parsec {
     };
   }  // namespace detail
 
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs>
+  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs, typename PolicyT>
   class TT : public ttg::TTBase, detail::ParsecTTBase {
    private:
     /// preconditions
@@ -748,6 +748,7 @@ namespace ttg_parsec {
     static_assert(ttg::meta::is_tuple_v<output_terminalsT>, "Second template argument for ttg::TT must be std::tuple containing the output terminal types");
     static_assert((ttg::meta::none_has_reference_v<input_valueTs>), "Input typelist cannot contain reference types");
     static_assert(ttg::meta::is_none_Void_v<input_valueTs>, "ttg::Void is for internal use only, do not use it");
+    static_assert(std::is_base_of_v<ttg::TTPolicyBase, PolicyT>, "The policy must be derived from TTPolicyBase");
 
     parsec_mempool_t mempools;
 
@@ -835,12 +836,26 @@ namespace ttg_parsec {
         make_finalize_argstream_fcts(std::make_index_sequence<numins>{});
 
     ttg::World world;
-    ttg::meta::detail::keymap_t<keyT> keymap;
-    ttg::meta::detail::keymap_t<keyT> priomap;
+    //ttg::meta::detail::keymap_t<keyT> keymap;
+    //ttg::meta::detail::keymap_t<keyT> priomap;
+    PolicyT policy;
+
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<input_tuple_type>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
     std::array<std::size_t, numins> static_stream_goal;
+
+    /** Legacy wrapper */
+    inline
+    int keymap(const keyT& key) const {
+      return policy.procmap(key);
+    }
+
+    /** Legacy wrapper */
+    inline
+    int priomap(const keyT& key) const {
+      return policy.priomap(key);
+    }
 
    public:
     ttg::World get_world() const { return world; }
@@ -2313,23 +2328,22 @@ namespace ttg_parsec {
     }
 
    public:
-    template <typename keymapT = ttg::detail::default_keymap<keyT>,
-              typename priomapT = ttg::detail::default_priomap<keyT>>
+    template <typename policyT = PolicyT>
     TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
+       ttg::World world, policyT&& policy)
         : ttg::TTBase(name, numins, numouts)
         , world(world)
         // if using default keymap, rebind to the given world
-        , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
-                     ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
-                     : decltype(keymap)(std::forward<keymapT>(keymap_)))
-        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_)))
+        , policy(std::forward<policyT>(policy))
         , static_stream_goal() {
       // Cannot call these in base constructor since terminals not yet constructed
       if (innames.size() != std::tuple_size<input_terminals_type>::value)
         throw std::logic_error("ttg_parsec::OP: #input names != #input terminals");
       if (outnames.size() != std::tuple_size<output_terminalsT>::value)
         throw std::logic_error("ttg_parsec::OP: #output names != #output terminals");
+
+      /* rebind the process map to the provided world */
+      policy.rebind(world);
 
       auto &world_impl = world.impl();
       world_impl.register_op(this);
@@ -2419,29 +2433,47 @@ namespace ttg_parsec {
                              NULL);
     }
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>,
-              typename priomapT = ttg::detail::default_priomap<keyT>>
+    template <typename policyT = PolicyT>
     TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::default_execution_context()), priomapT &&priomap = priomapT())
-        : TT(name, innames, outnames, ttg::default_execution_context(), std::forward<keymapT>(keymap),
-             std::forward<priomapT>(priomap)) {}
+       policyT&& policy)
+        : TT(name, innames, outnames, ttg::default_execution_context(), std::forward<policyT>(policy))
+    {}
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>,
-              typename priomapT = ttg::detail::default_priomap<keyT>>
+    template <typename policyT = PolicyT, typename = std::enable_if_t<std::is_default_constructible_v<policyT>>>
+    TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
+        : TT(name, innames, outnames, ttg::default_execution_context(), policyT())
+    {}
+
+    template <typename policyT = PolicyT>
     TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ttg::World world,
-       keymapT &&keymap_ = keymapT(), priomapT &&priomap = priomapT())
-        : TT(name, innames, outnames, world, std::forward<keymapT>(keymap_), std::forward<priomapT>(priomap)) {
+       policyT&& policy)
+        : TT(name, innames, outnames, world, std::forward<policyT>(policy)) {
       connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numins>{}, inedges);
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
     }
-    template <typename keymapT = ttg::detail::default_keymap<keyT>,
-              typename priomapT = ttg::detail::default_priomap<keyT>>
+
+    template <typename policyT = PolicyT, typename = std::enable_if_t<std::is_default_constructible_v<policyT>>>
+    TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
+       const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ttg::World world)
+        : TT(inedges, outedges, name, innames, outnames, world, policyT()) {
+      connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numins>{}, inedges);
+      connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
+    }
+
+    template <typename policyT = PolicyT>
     TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::default_execution_context()), priomapT &&priomap = priomapT())
-        : TT(inedges, outedges, name, innames, outnames, ttg::default_execution_context(), std::forward<keymapT>(keymap),
-             std::forward<priomapT>(priomap)) {}
+       policyT&& policy)
+        : TT(inedges, outedges, name, innames, outnames, ttg::default_execution_context(),
+             std::forward<policyT>(policy))
+    {}
+
+    template <typename policyT = PolicyT, typename = std::enable_if_t<std::is_default_constructible_v<policyT>>>
+    TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
+       const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
+        : TT(inedges, outedges, name, innames, outnames, ttg::default_execution_context(), policyT())
+    {}
 
     // Destructor checks for unexecuted tasks
     virtual ~TT() { release(); }
@@ -2561,23 +2593,54 @@ namespace ttg_parsec {
 
     /// keymap accessor
     /// @return the keymap
-    const decltype(keymap) &get_keymap() const { return keymap; }
+    auto get_keymap() const { return policy.get_procmap(); }
 
     /// keymap setter
-    template <typename Keymap>
+    /// Alias for \c set_procmap
+    /// Disabled if the used policy does not permit overriding the procmap.
+    template<typename Keymap>
     void set_keymap(Keymap &&km) {
-      keymap = km;
+      set_procmap(std::forward<Keymap>(km));
     }
+
+    /// process map accessor
+    /// @return the process map
+    auto get_procmap() const { return policy.get_procmap(); }
+
+    /// process map setter
+    /// Disabled if the used policy does not permit overriding the procmap.
+    template<typename ProcMap, typename Policy = PolicyT,
+             typename Enabler = std::enable_if_t<std::is_assignable_v<Policy::procmap_t, ProcMap>, void>>
+    void set_procmap(ProcMap &&km) {
+      policy.set_procmap(std::forward<Keymap>(km));
+    }
+
 
     /// priority map accessor
     /// @return the priority map
-    const decltype(priomap) &get_priomap() const { return priomap; }
+    auto get_priomap() const { return policy.get_priomap(); }
 
     /// priomap setter
+    /// Disabled if the used policy does not permit overriding the procmap.
     /// @arg pm a function that maps a key to an integral priority value.
-    template <typename Priomap>
-    void set_priomap(Priomap &&pm) {
-      priomap = pm;
+    template<typename PrioMap, typename Policy = PolicyT,
+             typename Enabler = std::enable_if_t<std::is_assignable_v<Policy::priomap_t, PrioMap>, void>>
+    void set_priomap(PrioMap &&pm) {
+      policy.set_priomap(std::forward<PrioMap>(pm));
+    }
+
+
+    /// priority map accessor
+    /// @return the priority map
+    auto get_inlinemap() const { return policy.get_inlinemap(); }
+
+    /// priomap setter
+    /// Disabled if the used policy does not permit overriding the procmap.
+    /// @arg pm a function that maps a key to an integral priority value.
+    template<typename InlineMap, typename Policy = PolicyT,
+             typename Enabler = std::enable_if_t<std::is_assignable_v<Policy::inlinemap_t, InlineMap>, void>>
+    void set_inlinemap(InlineMap &&pm) {
+      policy.set_inlinemap(std::forward<InlineMap>(pm));
     }
 
     // Register the static_op function to associate it to instance_id

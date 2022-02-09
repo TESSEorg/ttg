@@ -50,6 +50,20 @@ namespace ttg {
       operator()() const { return 0; }
     };
 
+    /// the default priority map implementation
+    template <typename keyT>
+    struct default_inlinemap_impl {
+      default_inlinemap_impl() = default;
+
+      template <typename Key = keyT>
+      std::enable_if_t<!meta::is_void_v<Key>,int>
+      operator()(const Key &key) const { return 0; }
+      template <typename Key = keyT>
+      std::enable_if_t<meta::is_void_v<Key>,int>
+      operator()() const { return 0; }
+    };
+
+
   }  // namespace detail
 
 } // namespace ttg
