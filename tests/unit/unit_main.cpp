@@ -7,6 +7,7 @@
 
 #ifdef TTG_EXECUTABLE
 #include <ttg.h>
+#include <ttg/util/bug.h>
 #endif
 
 int main(int argc, char** argv) {
@@ -26,6 +27,8 @@ int main(int argc, char** argv) {
   std::wcerr.sync_with_stdio(true);
 
 #ifdef TTG_EXECUTABLE
+  // ttg::launch_lldb();
+  // ttg::launch_gdb();
   ttg::initialize(argc, argv);
   ttg::diagnose_off();  // turn off diagnostics
 
