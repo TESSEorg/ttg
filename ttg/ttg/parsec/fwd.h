@@ -9,7 +9,7 @@
 
 namespace ttg_parsec {
 
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs = ttg::typelist<>, typename Policies = TTPolicy>
+  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs = ttg::typelist<>, typename Policies = ttg::TTPolicyBase<keyT>>
   class TT;
 
   /// \internal the OG name

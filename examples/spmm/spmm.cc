@@ -202,7 +202,7 @@ class Read_SpMatrix : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMat
     auto rank = ttg::default_execution_context().rank();
     for (int k = 0; k < matrix_.outerSize(); ++k) {
       for (typename SpMatrix<Blk>::InnerIterator it(matrix_, k); it; ++it) {
-        if (rank == this->get_keymap()(Key<2>({it.row(), it.col()})))
+        if (rank == this->get_policy().procmap(Key<2>({it.row(), it.col()})))
           ::send<0>(Key<2>({it.row(), it.col()}), it.value(), out);
       }
     }
@@ -339,9 +339,9 @@ class SpMM {
       if (k >= b_rowidx_to_colidx_.size()) return;
       auto world = default_execution_context();
       std::vector<bool> procmap(world.size());
-      auto keymap = baseT::get_keymap();
+      auto& policy = baseT::get_policy();
       for (auto &j : b_rowidx_to_colidx_[k]) {
-        long proc = keymap(Key<2>({i, j}));
+        long proc = policy.procmap(Key<2>({i, j}));
         if (!procmap[proc]) {
           ttg::trace("Broadcasting A[", i, "][", k, "] to proc ", proc);
           ikp_keys.emplace_back(Key<3>({i, k, proc}));
@@ -410,7 +410,7 @@ class SpMM {
       auto world = default_execution_context();
       std::vector<bool> procmap(world.size());
       for (auto &i : a_colidx_to_rowidx_[k]) {
-        long proc = baseT::get_keymap()(Key<2>({i, j}));
+        long proc = baseT::get_policy().procmap(Key<2>({i, j}));
         if (!procmap[proc]) {
           ttg::trace("Broadcasting A[", k, "][", j, "] to proc ", proc);
           kjp_keys.emplace_back(Key<3>({k, j, proc}));

@@ -10,6 +10,7 @@
 #include <mutex>
 
 #include "ttg/util/tree.h"
+#include "ttg/policies.h"
 
 namespace ttg {
 
@@ -37,7 +38,8 @@ namespace ttg {
                      Edge<int, Value> inout = Edge<int, Value>{}, Edge<int, Value> inout_l = Edge<int, Value>{},
                      Edge<int, Value> inout_r = Edge<int, Value>{})
         : baseT(edges(fuse(in, inout), inout_l, inout_r), edges(inout, inout_l, inout_r, out), "BinaryTreeReduce",
-                {"in|inout", "inout_l", "inout_r"}, {"inout", "inout_l", "inout_r", "out"}, world, [](int key) { return key; })
+                {"in|inout", "inout_l", "inout_r"}, {"inout", "inout_l", "inout_r", "out"}, world,
+                ttg::TTPolicyBase<int>([](int key) { return key; }))
         , tree_((max_key == -1 ? world.size() : max_key), root)
         , dest_key_(dest_key)
         , op_(std::move(op)) {
@@ -91,7 +93,7 @@ namespace ttg {
       // iterate over keys that map to me ... if keys are equivalent to ranks this can be made simpler
       const auto my_rank = this->get_world().rank();
       for (auto key = 0; key != tree_.size(); ++key) {
-        if (my_rank == this->get_keymap()(key)) {
+        if (my_rank == this->get_policy().procmap(key)) {
           auto keys = tree_.child_keys(key);
           if (keys.first == -1) this->template set_arg<1>(key, Value());
           if (keys.second == -1) this->template set_arg<2>(key, Value());

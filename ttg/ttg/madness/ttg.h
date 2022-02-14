@@ -177,9 +177,9 @@ namespace ttg_madness {
   /// \tparam input_valueTs ttg::typelist of *value* types (no references; pointers are OK) encoding the types of input values
   ///         flowing into this TT; a const type indicates nonmutating (read-only) use, nonconst type
   ///         indicates mutating use (e.g. the corresponding input can be used as scratch, moved-from, etc.)
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs>
+  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs, typename PolicyT>
   class TT : public ttg::TTBase,
-             public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs>> {
+             public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs, PolicyT>> {
 
     static_assert(ttg::detail::is_typelist_v<input_valueTs>, "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
     using input_tuple_type = typename input_valueTs::tuple_type;
@@ -191,13 +191,41 @@ namespace ttg_madness {
 
    private:
     ttg::World world;
-    ttg::meta::detail::keymap_t<keyT> keymap;
-    ttg::meta::detail::keymap_t<keyT> priomap;
+    //ttg::meta::detail::keymap_t<keyT> keymap;
+    //ttg::meta::detail::keymap_t<keyT> priomap;
+    PolicyT policy;
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<input_tuple_type>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
     std::array<std::size_t, std::tuple_size_v<input_tuple_type>> static_streamsize;
+
+    /** Legacy wrapper */
+    template<typename KeyT = keyT, typename = std::enable_if_t<!std::is_void_v<KeyT>>>
+    inline
+    int keymap(const KeyT& key) const {
+      return policy.procmap(key);
+    }
+
+    template<typename KeyT = keyT, typename = std::enable_if_t<std::is_void_v<KeyT>>>
+    inline
+    int keymap() const {
+      return policy.procmap();
+    }
+
+    /** Legacy wrapper */
+    template<typename KeyT = keyT, typename = std::enable_if_t<!std::is_void_v<KeyT>>>
+    inline
+    int priomap(const KeyT& key) const {
+      return policy.priomap(key);
+    }
+
+    template<typename KeyT = keyT, typename = std::enable_if_t<std::is_void_v<KeyT>>>
+    inline
+    int priomap() const {
+      return policy.priomap();
+    }
+
 
    public:
     ttg::World get_world() const { return world; }
@@ -1077,19 +1105,36 @@ namespace ttg_madness {
       set_static_argstream_size<i>(size);
     }
 
-    template <typename Keymap>
-    void set_keymap(Keymap &&km) {
-      keymap = km;
+    /// process map setter
+    /// Disabled if the used policy does not permit overriding the procmap.
+    template<typename ProcMap, typename Policy = PolicyT,
+             typename Enabler = std::enable_if_t<std::is_assignable_v<decltype(Policy::procmap), ProcMap>, void>>
+    void set_procmap(ProcMap &&km) {
+      policy.procmap = std::forward<ProcMap>(km);
     }
-
-    auto get_priomap(void) const { return priomap; }
 
     /// Set the priority map, mapping a Key to an integral value.
     /// Higher values indicate higher priority. The default priority is 0, higher
     /// values are treated as high priority tasks in the MADNESS backend.
-    template <typename Priomap>
-    void set_priomap(Priomap &&pm) {
-      priomap = pm;
+    /// Disabled if the used policy does not permit overriding the procmap.
+    /// @arg pm a function that maps a key to an integral priority value.
+    template<typename PrioMap, typename Policy = PolicyT,
+             typename Enabler = std::enable_if_t<std::is_assignable_v<typename Policy::priomap_t, PrioMap>, void>>
+    void set_priomap(PrioMap &&pm) {
+      policy.priomap = std::forward<PrioMap>(pm);
+    }
+
+    /// priomap setter
+    /// Disabled if the used policy does not permit overriding the procmap.
+    /// @arg pm a function that maps a key to an integral priority value.
+    template<typename InlineMap, typename Policy = PolicyT,
+             typename Enabler = std::enable_if_t<std::is_assignable_v<typename Policy::inlinemap_t, InlineMap>, void>>
+    void set_inlinemap(InlineMap &&pm) {
+      policy.inlinemap = std::forward<InlineMap>(pm);
+    }
+
+    const auto& get_policy() const {
+      return policy;
     }
 
     /// implementation of TTBase::make_executable()

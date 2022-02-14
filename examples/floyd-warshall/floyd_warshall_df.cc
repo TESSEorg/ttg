@@ -104,6 +104,29 @@ std::ostream& operator<<(std::ostream& s, const Control ctl) {
   return s;
 }
 
+template<typename ProcMap>
+struct Policy : ttg::TTPolicyBase<Key> {
+  ProcMap procmap_;
+
+  Policy(const ProcMap& pm)
+  : TTPolicyBase(), procmap_(pm)
+  { }
+
+  Policy(const Policy& p) = default;
+
+  int procmap(const Key& key) const {
+    return procmap_(key);
+  }
+
+  int priomap(const Key&) const {
+    return 0;
+  }
+
+  int inlinemap(const Key&) const {
+    return 0;
+  }
+};
+
 template <typename T>
 class Initiator : public TT<int,
                             std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
@@ -150,8 +173,8 @@ class Initiator : public TT<int,
   }
 };
 
-template <typename T>
-class Finalizer : public TT<Key, std::tuple<>, Finalizer<T>, ttg::typelist<BlockMatrix<T>>> {
+template <typename T, typename Policy>
+class Finalizer : public TT<Key, std::tuple<>, Finalizer<T, Policy>, ttg::typelist<BlockMatrix<T>>, Policy> {
   using baseT = typename Finalizer::ttT;
   Matrix<T>* result_matrix_ttg;
   int problem_size;
@@ -164,9 +187,9 @@ class Finalizer : public TT<Key, std::tuple<>, Finalizer<T>, ttg::typelist<Block
 
  public:
   Finalizer(Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
-            int recursive_fan_out, int base_size, const std::string& name, T* adjacency_matrix_serial,
+            int recursive_fan_out, int base_size, const std::string& name, T* adjacency_matrix_serial, Policy policy,
             bool verify_results = false)
-      : baseT(name, {"input"}, {})
+      : baseT(name, {"input"}, {}, policy)
       , result_matrix_ttg(result_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
@@ -178,8 +201,8 @@ class Finalizer : public TT<Key, std::tuple<>, Finalizer<T>, ttg::typelist<Block
 
   Finalizer(Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
             int recursive_fan_out, int base_size, const typename baseT::input_edges_type& inedges,
-            const typename baseT::output_edges_type& outedges, const std::string& name)
-      : baseT(inedges, outedges, name, {"input"}, {})
+            const typename baseT::output_edges_type& outedges, const std::string& name, Policy policy)
+      : baseT(inedges, outedges, name, {"input"}, {}, policy)
       , result_matrix_ttg(result_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
@@ -228,12 +251,12 @@ class Finalizer : public TT<Key, std::tuple<>, Finalizer<T>, ttg::typelist<Block
   }
 };
 
-template <typename T>
+template <typename T, typename Policy>
 class FuncA : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>>,
-                        FuncA<T>, ttg::typelist<BlockMatrix<T>>> {
+                        FuncA<T, Policy>, ttg::typelist<BlockMatrix<T>>, Policy> {
   using baseT = typename FuncA::ttT;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
@@ -243,9 +266,10 @@ class FuncA : public TT<Key,
   int base_size;
 
  public:
+  template<typename Policy_ = Policy>
   FuncA(Matrix<T>* adjacency_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
-        int recursive_fan_out, int base_size, const std::string& name)
-      : baseT(name, {"x_ready"}, {"outA", "outB", "outC", "outD", "readyB", "readyC", "result"})
+        int recursive_fan_out, int base_size, const std::string& name, Policy policy)
+      : baseT(name, {"x_ready"}, {"outA", "outB", "outC", "outD", "readyB", "readyC", "result"}, policy)
       , adjacency_matrix_ttg(adjacency_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
@@ -253,10 +277,11 @@ class FuncA : public TT<Key,
       , recursive_fan_out(recursive_fan_out)
       , base_size(base_size) {}
 
+  template<typename Policy_ = Policy>
   FuncA(Matrix<T>* adjacency_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
         int recursive_fan_out, int base_size, const typename baseT::input_edges_type& inedges,
-        const typename baseT::output_edges_type& outedges, const std::string& name)
-      : baseT(inedges, outedges, name, {"x_ready"}, {"outA", "outB", "outC", "outD", "readyB", "readyC", "result"})
+        const typename baseT::output_edges_type& outedges, const std::string& name, Policy policy)
+      : baseT(inedges, outedges, name, {"x_ready"}, {"outA", "outB", "outC", "outD", "readyB", "readyC", "result"}, policy)
       , adjacency_matrix_ttg(adjacency_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
@@ -328,11 +353,11 @@ class FuncA : public TT<Key,
   }
 };
 
-template <typename T>
+template <typename T, typename Policy>
 class FuncB : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                        FuncB<T>, ttg::typelist<BlockMatrix<T>, const BlockMatrix<T>>> {
+                        FuncB<T, Policy>, ttg::typelist<BlockMatrix<T>, const BlockMatrix<T>>, Policy> {
   using baseT = typename FuncB::ttT;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
@@ -343,8 +368,8 @@ class FuncB : public TT<Key,
 
  public:
   FuncB(Matrix<T>* adjacency_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
-        int recursive_fan_out, int base_size, const std::string& name)
-      : baseT(name, {"x_ready", "u_ready"}, {"outA", "outB", "outC", "outD", "readyD", "result"})
+        int recursive_fan_out, int base_size, const std::string& name, Policy policy)
+      : baseT(name, {"x_ready", "u_ready"}, {"outA", "outB", "outC", "outD", "readyD", "result"}, policy)
       , adjacency_matrix_ttg(adjacency_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
@@ -354,8 +379,8 @@ class FuncB : public TT<Key,
 
   FuncB(Matrix<T>* adjacency_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
         int recursive_fan_out, int base_size, const typename baseT::input_edges_type& inedges,
-        const typename baseT::output_edges_type& outedges, const std::string& name)
-      : baseT(inedges, outedges, name, {"x_ready", "u_ready"}, {"outA", "outB", "outC", "outD", "readyD", "result"})
+        const typename baseT::output_edges_type& outedges, const std::string& name, Policy policy)
+      : baseT(inedges, outedges, name, {"x_ready", "u_ready"}, {"outA", "outB", "outC", "outD", "readyD", "result"}, policy)
       , adjacency_matrix_ttg(adjacency_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
@@ -418,11 +443,11 @@ class FuncB : public TT<Key,
   }
 };
 
-template <typename T>
+template <typename T, typename Policy>
 class FuncC : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                        FuncC<T>, ttg::typelist<BlockMatrix<T>, const BlockMatrix<T>>> {
+                        FuncC<T, Policy>, ttg::typelist<BlockMatrix<T>, const BlockMatrix<T>>, Policy> {
   using baseT = typename FuncC::ttT;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
@@ -433,8 +458,8 @@ class FuncC : public TT<Key,
 
  public:
   FuncC(Matrix<T>* adjacency_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
-        int recursive_fan_out, int base_size, const std::string& name)
-      : baseT(name, {"x_ready", "v_ready"}, {"outA", "outB", "outC", "outD", "readyD", "result"})
+        int recursive_fan_out, int base_size, const std::string& name, Policy policy)
+      : baseT(name, {"x_ready", "v_ready"}, {"outA", "outB", "outC", "outD", "readyD", "result"}, policy)
       , adjacency_matrix_ttg(adjacency_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
@@ -444,8 +469,8 @@ class FuncC : public TT<Key,
 
   FuncC(Matrix<T>* adjacency_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
         int recursive_fan_out, int base_size, const typename baseT::input_edges_type& inedges,
-        const typename baseT::output_edges_type& outedges, const std::string& name)
-      : baseT(inedges, outedges, name, {"x_ready", "v_ready"}, {"outA", "outB", "outC", "outD", "readyD", "result"})
+        const typename baseT::output_edges_type& outedges, const std::string& name, Policy policy)
+      : baseT(inedges, outedges, name, {"x_ready", "v_ready"}, {"outA", "outB", "outC", "outD", "readyD", "result"}, policy)
       , adjacency_matrix_ttg(adjacency_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
@@ -507,11 +532,11 @@ class FuncC : public TT<Key,
   }
 };
 
-template <typename T>
+template <typename T, typename Policy>
 class FuncD : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                        FuncD<T>, ttg::typelist<BlockMatrix<T>, const BlockMatrix<T>, const BlockMatrix<T>>> {
+                        FuncD<T, Policy>, ttg::typelist<BlockMatrix<T>, const BlockMatrix<T>, const BlockMatrix<T>>, Policy> {
   using baseT = typename FuncD::ttT;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
@@ -522,8 +547,8 @@ class FuncD : public TT<Key,
 
  public:
   FuncD(Matrix<T>* adjacency_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
-        int recursive_fan_out, int base_size, const std::string& name)
-      : baseT(name, {"x_ready", "v_ready", "u_ready"}, {"outA", "outB", "outC", "outD", "result"})
+        int recursive_fan_out, int base_size, const std::string& name, Policy policy)
+      : baseT(name, {"x_ready", "v_ready", "u_ready"}, {"outA", "outB", "outC", "outD", "result"}, policy)
       , adjacency_matrix_ttg(adjacency_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
@@ -533,8 +558,8 @@ class FuncD : public TT<Key,
 
   FuncD(Matrix<T>* adjacency_matrix_ttg, int problem_size, int blocking_factor, const std::string& kernel_type,
         int recursive_fan_out, int base_size, const typename baseT::input_edges_type& inedges,
-        const typename baseT::output_edges_type& outedges, const std::string& name)
-      : baseT(inedges, outedges, name, {"x_ready", "v_ready", "u_ready"}, {"outA", "outB", "outC", "outD", "result"})
+        const typename baseT::output_edges_type& outedges, const std::string& name, Policy policy)
+      : baseT(inedges, outedges, name, {"x_ready", "v_ready", "u_ready"}, {"outA", "outB", "outC", "outD", "result"}, policy)
       , adjacency_matrix_ttg(adjacency_matrix_ttg)
       , problem_size(problem_size)
       , blocking_factor(blocking_factor)
@@ -578,38 +603,33 @@ class FuncD : public TT<Key,
   }
 };
 
-template <typename T>
+
+template <typename T, typename Policy>
 class FloydWarshall {
   Initiator<T> initiator;
-  FuncA<T> funcA;
-  FuncB<T> funcB;
-  FuncC<T> funcC;
-  FuncD<T> funcD;
-  Finalizer<T> finalizer;
+  FuncA<T, Policy> funcA;
+  FuncB<T, Policy> funcB;
+  FuncC<T, Policy> funcC;
+  FuncD<T, Policy> funcD;
+  Finalizer<T, Policy> finalizer;
   ttg::World world;
 
   // Needed for Initiating the execution in Initiator data member (see the function start())
   int blocking_factor;
 
  public:
-  template<typename Keymap>
   FloydWarshall(Matrix<T>* adjacency_matrix_ttg, Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor,
-                const std::string& kernel_type, int recursive_fan_out, int base_size, T* adjacency_matrix_serial, Keymap&& keymap,
+                const std::string& kernel_type, int recursive_fan_out, int base_size, T* adjacency_matrix_serial, Policy policy,
                 bool verify_results = false)
       : initiator(adjacency_matrix_ttg, "initiator")
-      , funcA(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcA")
-      , funcB(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcB")
-      , funcC(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcC")
-      , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD")
+      , funcA(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcA", policy)
+      , funcB(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcB", policy)
+      , funcC(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcC", policy)
+      , funcD(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcD", policy)
       , finalizer(result_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
-                  "finalizer", adjacency_matrix_serial, verify_results)
+                  "finalizer", adjacency_matrix_serial, policy, verify_results)
       , world(ttg::default_execution_context())
       , blocking_factor(blocking_factor) {
-    funcA.set_keymap(keymap);
-    funcB.set_keymap(keymap);
-    funcC.set_keymap(keymap);
-    funcD.set_keymap(keymap);
-    finalizer.set_keymap(keymap);
     initiator.template out<0>()->connect(funcA.template in<0>());
     initiator.template out<1>()->connect(funcB.template in<0>());
     initiator.template out<2>()->connect(funcC.template in<0>());
@@ -741,6 +761,8 @@ int main(int argc, char** argv) {
     return ((I%P) + (J%Q)*P);
   };
 
+  auto policy = Policy(keymap);
+
   auto predicate = [=](int i, int j){ return keymap(Key{i, j, 0}) == rank; };
 
   Matrix<double>* m = new Matrix<double>(n_brows, n_bcols, block_size, block_size, predicate);
@@ -768,8 +790,8 @@ int main(int argc, char** argv) {
   // Running the ttg version
   std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
   // Calling the blocked implementation of FW-APSP algorithm on ttg runtime
-  FloydWarshall fw_apsp(m, r, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
-                        adjacency_matrix_serial, keymap, verify_results);
+  auto fw_apsp = FloydWarshall(m, r, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size,
+                        adjacency_matrix_serial, policy, verify_results);
   // std::cout << fw_apsp.dot() << std::endl;
   fw_apsp.start();
   fw_apsp.fence();

@@ -120,6 +120,33 @@ namespace tt_i_iv {
   };
 }  // namespace tt_i_iv
 
+// {task_id,data} = {int, int, void}
+namespace tt_i_i_p {
+
+  struct Policy : public ttg::TTPolicyBase<int> {
+
+    Policy() : TTPolicyBase() {}
+
+    int procmap(const int&) const { return 0; }
+
+  };
+
+  class tt : public ttg::TT<int, std::tuple<>, tt, ttg::typelist<const int>, Policy> {
+    using baseT = typename tt::ttT;
+
+   public:
+    tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
+       const std::string &name)
+        : baseT(inedges, outedges, name, {"int", "void"}, {}, Policy()) {}
+
+    static constexpr const bool have_cuda_op = false;
+
+    void op(const int &key, const baseT::input_refs_tuple_type &data, baseT::output_terminals_type &outs) {}
+
+    ~tt() {}
+  };
+}  // namespace tt_i_iv
+
 TEST_CASE("TemplateTask", "[core]") {
   SECTION("constructors") {
     {  // void task id, void data
@@ -156,6 +183,13 @@ TEST_CASE("TemplateTask", "[core]") {
       CHECK_NOTHROW(std::make_unique<tt_i_i::tt>(ttg::edges(in), ttg::edges(), ""));
       CHECK_NOTHROW(
           ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
+    }
+    {  // nonvoid task id, nonvoid data, w/ policies
+      ttg::Edge<int, int> in;
+      CHECK_NOTHROW(std::make_unique<tt_i_i_p::tt>(ttg::edges(in), ttg::edges(), ""));
+      CHECK_NOTHROW(
+          ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges(),
+                       ttg::make_policy<int>([](const int& key){ return 0; })));
     }
   }
 }

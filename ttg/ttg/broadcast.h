@@ -12,6 +12,7 @@
 #include "ttg/tt.h"
 #include "ttg/util/tree.h"
 #include "ttg/world.h"
+#include "ttg/policies.h"
 
 namespace ttg {
 
@@ -34,7 +35,7 @@ namespace ttg {
                         World world = ttg::default_execution_context(), int max_key = -1,
                         Edge<int, Value> inout_l = Edge<int, Value>{}, Edge<int, Value> inout_r = Edge<int, Value>{})
         : baseT(edges(fuse(in, inout_l, inout_r)), edges(inout_l, inout_r, out), "BinaryTreeBroadcast",
-                {"in|inout_l|inout_r"}, {"inout_l", "inout_r", "out"}, world, [](int key) { return key; })
+                {"in|inout_l|inout_r"}, {"inout_l", "inout_r", "out"}, world, ttg::TTPolicyBase<int>([](int key) { return key; }))
         , tree_((max_key == -1 ? world.size() : max_key), root)
         , local_keys_(std::move(local_keys)) {}
 

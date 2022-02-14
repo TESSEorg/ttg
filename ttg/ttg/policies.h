@@ -4,293 +4,8 @@
 
 #include "ttg/base/keymap.h"
 #include "ttg/util/meta.h"
-#include "ttg/world.h"
 
 namespace ttg {
-
-  /**
-   * The default policy for process maps that allows dynamically
-   * setting the mapping function.
-   *
-   * Derive from this class to acquire the default behavior in your
-   * custom policy class.
-   */
-  template<typename Key>
-  struct TTProcmapPolicy {
-
-    using procmap_t = typename ttg::meta::detail::keymap_t<Key>;
-
-    procmap_t m_procmap;
-
-    /**
-     * The process mapping. Defaults to round-robin process mapping.
-     *
-     * This function may not be overriden.
-     *
-     * \sa ttg::detail::default_keymap
-     */
-    int procmap(const Key& key) {
-      return m_procmap(key);
-    }
-
-    virtual void rebind_procmap(ttg::World& world) final {
-      m_procmap = ttg::detail::default_keymap<Key>(world);
-    }
-
-    /**
-     * Dynamically override the default process map by setting the mapping callback.
-     */
-    template<typename ProcMap>
-    int set_procmap(ProcMap&& pm) {
-      m_procmap = std::forward<ProcMap>(pm);
-    }
-
-    /**
-     * Query the dynamic mapping function.
-     */
-    const procmap_t& get_procmap() const {
-      return m_procmap;
-    }
-
-  };
-
-
-  /**
-   * Specialization of \sa ttg::TTProcmapPolicy for key type \c void.
-   */
-  template<>
-  struct TTProcmapPolicy<void> {
-
-    using procmap_t = typename ttg::meta::detail::keymap_t<void>;
-
-    procmap_t m_procmap;
-
-    /**
-     * The process mapping. Defaults to round-robin process mapping.
-     *
-     * This function may not be overriden.
-     *
-     * \sa ttg::detail::default_keymap
-     */
-    int procmap() const {
-      return m_procmap();
-    }
-
-    virtual void rebind_procmap(ttg::World& world) final {
-      m_procmap = ttg::detail::default_keymap<void>(world);
-    }
-
-    /**
-     * Dynamically override the default process map by setting the mapping callback.
-     */
-    template<typename ProcMap>
-    int set_procmap(ProcMap&& pm) {
-      m_procmap = std::forward<ProcMap>(pm);
-    }
-
-    /**
-     * Query the dynamic mapping function.
-     */
-    const procmap_t& get_procmap() const {
-      return m_procmap;
-    }
-  };
-
-
-
-  /**
-   * The default policy for priority maps that allows dynamically
-   * setting the mapping function.
-   *
-   * Derive from this class to acquire the default behavior in your
-   * custom policy class.
-   */
-  template<typename Key>
-  struct TTPriomapPolicy {
-
-    using priomap_t = typename ttg::meta::detail::keymap_t<Key>;
-
-    priomap_t m_priomap;
-
-    /**
-     * The priority mapping. Defaults to priority 0.
-     *
-     * This function may not be overriden.
-     *
-     * \sa ttg::detail::default_keymap
-     */
-    int priomap(const Key& key) const {
-      return m_priomap(key);
-    }
-
-    /**
-     * Dynamically override the default priority map by setting the mapping callback.
-     */
-    template<typename PrioMap>
-    int set_priomap(PrioMap&& pm) {
-      m_priomap = std::forward<PrioMap>(pm);
-    }
-
-    /**
-     * Query the dynamic mapping function.
-     */
-    const priomap_t& get_priomap() const {
-      return m_priomap;
-    }
-  };
-
-  /**
-   * Specialization of \sa ttg::TTPriomapPolicy for key type \c void.
-   */
-  template<>
-  struct TTPriomapPolicy<void> {
-
-    using priomap_t = typename ttg::meta::detail::keymap_t<void>;
-
-    priomap_t m_priomap;
-
-    /**
-     * The priority mapping. Defaults to priority 0.
-     *
-     * This function may not be overriden.
-     *
-     * \sa ttg::detail::default_keymap
-     */
-    int priomap() const {
-      return m_priomap();
-    }
-
-    /**
-     * Dynamically override the default priority map by setting the mapping callback.
-     */
-    template<typename PrioMap>
-    int set_priomap(PrioMap&& pm) {
-      m_priomap = std::forward<PrioMap>(pm);
-    }
-
-    /**
-     * Query the dynamic mapping function.
-     */
-    const priomap_t& get_priomap() const {
-      return m_priomap;
-    }
-  };
-
-
-  /**
-   * The default policy for priority maps that allows dynamically
-   * setting the mapping function.
-   *
-   * Derive from this class to acquire the default behavior in your
-   * custom policy class.
-   */
-  template<typename Key>
-  struct TTInlinePolicy {
-
-    using inlinemap_t = typename ttg::meta::detail::keymap_t<Key>;
-
-    inlinemap_t m_inlinemap = [](){ return 0; };
-
-    /**
-     * The inline mapping. Defaults to no inlining.
-     *
-     * Whether a task can be executed inline, i.e., without dispatching the
-     * task to a scheduler first. The task will be executed in the send or
-     * broadcast call once all inputs have been satisfied. The returned value
-     * denotes the maximum recirsion depth, i.e., how many tasks may be executed
-     * inline consecutively. Zero denotes no inlining. This is the default.
-     *
-     * This function may not be overriden.
-     */
-    int inlinemap(const Key& key) const {
-      return m_inlinemap(key);
-    }
-
-    /**
-     * Dynamically override the default inlining map by setting the mapping callback.
-     */
-    template<typename InlineMap>
-    int set_priomap(InlineMap&& im) {
-      m_inlinemap = std::forward<InlineMap>(im);
-    }
-
-    /**
-     * Query the dynamic mapping function.
-     */
-    const inlinemap_t& get_inlinemap() const {
-      return m_inlinemap;
-    }
-  };
-
-  /**
-   * Specialization of \sa ttg::TTInlinePolicy for key type \c void.
-   */
-  template<>
-  struct TTInlinePolicy<void> {
-
-    using inlinemap_t = typename ttg::meta::detail::keymap_t<void>;
-    inlinemap_t m_inlinemap = [](){ return 0; };
-
-    /**
-     * The inline mapping. Defaults to no inlining.
-     *
-     * This function may not be overriden.
-     *
-     * \sa ttg::detail::default_keymap
-     */
-    virtual int inlinemap() final {
-      return m_inlinemap();
-    }
-
-    /**
-     * Dynamically override the default inlining map by setting the mapping callback.
-     */
-    template<typename InlineMap>
-    int set_priomap(InlineMap&& im) {
-      m_inlinemap = std::forward<InlineMap>(im);
-    }
-
-    /**
-     * Query the dynamic mapping function.
-     */
-    const inlinemap_t& get_inlinemap() {
-      return m_inlinemap;
-    }
-  };
-
-  /**
-   * Policy class used to control aspects of TT execution:
-   *  * Process mapping: maps a key identifying a task to a process to run on.
-   *  * Priority mapping: assigns a priority (positive integer) to a task identified by a key.
-   *                      Higher values increase the task's priority.
-   *  * Inline mapping: whether a task can be executed inline, i.e., without dispatching the
-   *                    task to a scheduler first. The task will be executed in the send or
-   *                    broadcast call. The returned value denotes the maximum recirsion depth,
-   *                    i.e., how many tasks may be executed inline consecutively. Zero denotes
-   *                    no inlining. This is the default.
-   *
-   * Custom policy classes can be created by implementing the \c procmap, \c priomap, and
-   * \c inlinemap functions. Defaults for the various mappings can be obtained by
-   * inheriting from \c TTProcmapPolicy, \c TTPriomapPolicy, or \c TTInlinePolicy.
-   *
-   * This policy is composed of the default policies and may itself act as base class.
-   * If inheriting from \c TTPolicy and the \c priomap, \c procmap, or \c inlinemap are
-   * overriden then TTG will not allow setting the respective dynamic mapping function on a TT.
-   * Inheriting from TTPolicy allows for custom policies to stay forward compatible
-   * by including support for future policy extensions. However, inheriting from
-   * \c TTProcmapPolicy, \c TTPriomapPolicy, \c TTInlinePolicy, or \c TTPolicy
-   * will include the base class infrastructure that may not be needed in the
-   * custom policy implementation.
-   *
-   * \sa ttg::TTProcmapPolicy
-   * \sa ttg::TTPriomapPolicy
-   * \sa ttg::TTInlinePolicy
-   *
-   */
-  template<typename Key>
-  struct TTPolicy
-  : public TTProcmapPolicy<Key>, TTPriomapPolicy<Key>, TTInlinePolicy<Key>
-  { };
 
   namespace detail {
     template<typename MapT>
@@ -369,33 +84,34 @@ namespace ttg {
     template<typename ProcMap_ = ProcMap,
              typename PrioMap_ = PrioMap,
              typename InlineMap_ = InlineMap,
-             typename Enabler = std::enable_if_t<is_default_procmap &&
-                                                 is_default_priomap &&
-                                                 is_default_inlinemap>>
+             typename = std::enable_if_t<detail::is_default_keymap_v<ProcMap_> &&
+                                         detail::is_default_keymap_v<PrioMap_> &&
+                                         detail::is_default_keymap_v<InlineMap_>>>
     TTPolicyBase()
-    : TTPolicyBase(ttg::meta::detail::keymap_t<Key>(ttg::detail::default_keymap<Key>()),
-                   ttg::meta::detail::keymap_t<Key>(ttg::detail::default_priomap<Key>()),
-                   ttg::meta::detail::keymap_t<Key>(ttg::detail::default_inlinemap<Key>()))
+    : TTPolicyBase(ttg::meta::detail::keymap_t<Key>(ttg::detail::default_keymap_impl<Key>()),
+                   ttg::meta::detail::keymap_t<Key>(ttg::detail::default_priomap_impl<Key>()),
+                   ttg::meta::detail::keymap_t<Key>(ttg::detail::default_inlinemap_impl<Key>()))
     { }
 
     template<typename ProcMap_,
              typename PrioMap_ = PrioMap,
              typename InlineMap_ = InlineMap,
-             typename Enabler = std::enable_if_t<is_default_priomap && is_default_inlinemap>>
+             typename = std::enable_if_t<detail::is_default_keymap_v<PrioMap_> &&
+                                         detail::is_default_keymap_v<InlineMap_>>>
     TTPolicyBase(ProcMap_&& procmap)
     : TTPolicyBase(std::forward<ProcMap_>(procmap),
-                   ttg::meta::detail::keymap_t<Key>(ttg::detail::default_priomap<Key>()),
-                   ttg::meta::detail::keymap_t<Key>(ttg::detail::default_inlinemap<Key>()))
+                   ttg::meta::detail::keymap_t<Key>(ttg::detail::default_priomap_impl<Key>()),
+                   ttg::meta::detail::keymap_t<Key>(ttg::detail::default_inlinemap_impl<Key>()))
     { }
 
     template<typename ProcMap_,
              typename PrioMap_,
              typename InlineMap_ = InlineMap,
-             typename Enabler = std::enable_if_t<is_default_inlinemap>>
+             typename = std::enable_if_t<detail::is_default_keymap_v<InlineMap_>>>
     TTPolicyBase(ProcMap_&& procmap, PrioMap_&& priomap)
     : TTPolicyBase(std::forward<ProcMap_>(procmap),
                    std::forward<PrioMap_>(priomap),
-                   ttg::meta::detail::keymap_t<Key>(ttg::detail::default_inlinemap<Key>()))
+                   ttg::meta::detail::keymap_t<Key>(ttg::detail::default_inlinemap_impl<Key>()))
     { }
 
     template<typename ProcMap_, typename PrioMap_, typename InlineMap_>
@@ -411,10 +127,11 @@ namespace ttg {
      * Rebind the default process map to the provided world, if the process map
      * is the default map.
      */
+    template<typename WorldT>
     inline
-    void rebind(ttg::World& world) {
+    void rebind(const WorldT& world) {
       if constexpr (is_default_procmap) {
-        procmap = ttg::detail::default_keymap<Key>(world);
+        procmap = ttg::detail::default_keymap_impl<Key>(world.size());
       }
     }
 
@@ -430,37 +147,6 @@ namespace ttg {
       return inlinemap;
     }
   };
-
-
-  namespace detail {
-    template<typename Key, typename ProcMap, typename PrioMap, typename InlineMap>
-    struct TTPolicyWrapper {
-      ProcMap procmap;
-      PrioMap priomap;
-      InlineMap inlinemap;
-
-      template<typename ProcMap_, typename PrioMap_, typename InlineMap_>
-      TTPolicyWrapper(ProcMap_&& procmap = ttg::detail::default_keymap<Key>(),
-                      PrioMap_&& priomap = ttg::detail::default_priomap<Key>(),
-                      InlineMap_&& im = ttg::detail::default_inlinemap<Key>())
-      : procmap(std::forward<ProcMap_>(procmap)),
-        priomap(std::forward<PrioMap_>(priomap)),
-        inlinemap(std::forward<InlineMap_>(im))
-      { }
-
-      auto get_procmap() {
-        return procmap;
-      }
-
-      auto get_priomap() {
-        return priomap;
-      }
-
-      auto get_inlinemap() {
-        return inlinemap;
-      }
-    };
-  } // namespace detail
 
   /**
    * Helper function to create a TT policy from arbitrary function objects.
@@ -486,6 +172,72 @@ namespace ttg {
   {
     return TTPolicyBase<Key, Args...>(std::forward<Args>(args)...);
   }
+
+
+  namespace detail {
+
+    /**
+     * Generate traits to check policy objects for procmap(), priomap(), and inlinemap() members
+     */
+#define TTG_POLICY_CREATE_CHECK_FOR(_Pol)                                        \
+    /* specialization that does the checking */                                  \
+    template<typename KeyT, typename PolicyT>                                    \
+    struct has_##_Pol {                                                          \
+    private:                                                                     \
+        template<typename T>                                                     \
+        static constexpr auto check(T*)                                          \
+        -> typename                                                              \
+            std::is_same<                                                        \
+                /* policy function take a key and return int */                  \
+                decltype( std::declval<T>(). _Pol ( std::declval<KeyT>() ) ),    \
+                int                                                              \
+            >::type;                                                             \
+        template<typename>                                                       \
+        static constexpr std::false_type check(...);                             \
+        typedef decltype(check<PolicyT>(0)) type;                                \
+    public:                                                                      \
+        static constexpr bool value = type::value;                               \
+    };                                                                           \
+    template<typename PolicyT>                                                   \
+    struct has_##_Pol<void, PolicyT> {                                           \
+    private:                                                                     \
+        template<typename T>                                                     \
+        static constexpr auto check(T*)                                          \
+        -> typename                                                              \
+            std::is_same<                                                        \
+                /* policy function for void simply return int */                 \
+                decltype( std::declval<T>(). _Pol ( ) ),                         \
+                int                                                              \
+            >::type;                                                             \
+        template<typename>                                                       \
+        static constexpr std::false_type check(...);                             \
+        typedef decltype(check<PolicyT>(0)) type;                                \
+    public:                                                                      \
+        static constexpr bool value = type::value;                               \
+    };                                                                           \
+    template<typename KeyT, typename PolicyT>                                    \
+    constexpr const bool has_##_Pol ## _v = has_ ## _Pol<KeyT, PolicyT>::value;
+
+    TTG_POLICY_CREATE_CHECK_FOR(procmap);
+    TTG_POLICY_CREATE_CHECK_FOR(priomap);
+    TTG_POLICY_CREATE_CHECK_FOR(inlinemap);
+
+    /** Whether PolicyT is a valid policy object using KeyT */
+    template<typename KeyT, typename PolicyT>
+    struct is_policy {
+      static constexpr bool value = has_procmap_v<KeyT, PolicyT> &&
+                                    has_priomap_v<KeyT, PolicyT> &&
+                                    has_inlinemap_v<KeyT, PolicyT>;
+    };
+
+    /** Whether PolicyT is a valid policy object using KeyT */
+    template<typename KeyT, typename PolicyT>
+    constexpr const bool is_policy_v = is_policy<KeyT, PolicyT>::value;
+
+    /* sanity base check */
+    static_assert(is_policy_v<int, ttg::TTPolicyBase<int>>);
+  } // namespace detail
+
 
 } // namespace ttg
 
