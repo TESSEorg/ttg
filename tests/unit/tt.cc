@@ -7,7 +7,7 @@
 // {task_id,data} = {void, void}
 namespace tt_v_v {
 
-  class tt : public ttg::TT<void, std::tuple<>, tt, std::tuple<void>> {
+  class tt : public ttg::TT<void, std::tuple<>, tt, ttg::typelist<void>> {
     using baseT = typename tt::ttT;
 
    public:
@@ -26,7 +26,7 @@ namespace tt_v_v {
 // {task_id,data} = {int, void}
 namespace tt_i_v {
 
-  class tt : public ttg::TT<int, std::tuple<>, tt, std::tuple<void>> {
+  class tt : public ttg::TT<int, std::tuple<>, tt, ttg::typelist<void>> {
     using baseT = typename tt::ttT;
 
    public:
@@ -45,7 +45,7 @@ namespace tt_i_v {
 // {task_id,data} = {void, int}
 namespace tt_v_i {
 
-  class tt : public ttg::TT<void, std::tuple<>, tt, std::tuple<const int>> {
+  class tt : public ttg::TT<void, std::tuple<>, tt, ttg::typelist<const int>> {
     using baseT = typename tt::ttT;
 
    public:
@@ -65,7 +65,7 @@ namespace tt_v_i {
 // {task_id,data} = {void, int, void}
 namespace tt_v_iv {
 
-  class tt : public ttg::TT<void, std::tuple<>, tt, std::tuple<const int, void>> {
+  class tt : public ttg::TT<void, std::tuple<>, tt, ttg::typelist<const int, void>> {
     using baseT = typename tt::ttT;
 
    public:
@@ -85,7 +85,7 @@ namespace tt_v_iv {
 // {task_id,data} = {int, int}
 namespace tt_i_i {
 
-  class tt : public ttg::TT<int, std::tuple<>, tt, std::tuple<const int>> {
+  class tt : public ttg::TT<int, std::tuple<>, tt, ttg::typelist<const int>> {
     using baseT = typename tt::ttT;
 
    public:
@@ -104,7 +104,7 @@ namespace tt_i_i {
 // {task_id,data} = {int, int, void}
 namespace tt_i_iv {
 
-  class tt : public ttg::TT<int, std::tuple<>, tt, std::tuple<const int, void>> {
+  class tt : public ttg::TT<int, std::tuple<>, tt, ttg::typelist<const int, void>> {
     using baseT = typename tt::ttT;
 
    public:
