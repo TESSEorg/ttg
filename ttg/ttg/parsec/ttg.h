@@ -2684,28 +2684,40 @@ namespace ttg_parsec {
 
     /// process map setter
     /// Disabled if the used policy does not permit overriding the procmap.
-    template<typename ProcMap, typename Policy = PolicyT,
-             typename Enabler = std::enable_if_t<std::is_assignable_v<decltype(Policy::procmap), ProcMap>, void>>
+    template<typename ProcMap>
     void set_procmap(ProcMap &&km) {
-      policy.procmap = std::forward<ProcMap>(km);
+      if constexpr (std::is_assignable_v<decltype(PolicyT::procmap), ProcMap>) {
+        policy.procmap = std::forward<ProcMap>(km);
+      } else {
+        static_assert(std::is_assignable_v<decltype(PolicyT::procmap), ProcMap>,
+                      "Cannot assign process map of this TT");
+      }
     }
 
     /// priomap setter
     /// Disabled if the used policy does not permit overriding the procmap.
     /// @arg pm a function that maps a key to an integral priority value.
-    template<typename PrioMap, typename Policy = PolicyT,
-             typename Enabler = std::enable_if_t<std::is_assignable_v<typename Policy::priomap_t, PrioMap>, void>>
+    template<typename PrioMap>
     void set_priomap(PrioMap &&pm) {
-      policy.priomap = std::forward<PrioMap>(pm);
+      if constexpr (std::is_assignable_v<decltype(PolicyT::priomap), PrioMap>) {
+        policy.priomap = std::forward<PrioMap>(pm);
+      } else {
+        static_assert(std::is_assignable_v<decltype(PolicyT::priomap), PrioMap>,
+                      "Cannot assign priority map of this TT");
+      }
     }
 
     /// priomap setter
     /// Disabled if the used policy does not permit overriding the procmap.
     /// @arg pm a function that maps a key to an integral priority value.
-    template<typename InlineMap, typename Policy = PolicyT,
-             typename Enabler = std::enable_if_t<std::is_assignable_v<typename Policy::inlinemap_t, InlineMap>, void>>
-    void set_inlinemap(InlineMap &&pm) {
-      policy.inlinemap = std::forward<InlineMap>(pm);
+    template<typename InlineMap>
+    void set_inlinemap(InlineMap &&im) {
+      if constexpr (std::is_assignable_v<decltype(PolicyT::inlinemap), InlineMap>) {
+        policy.inlinemap = std::forward<InlineMap>(im);
+      } else {
+        static_assert(std::is_assignable_v<decltype(PolicyT::inlinemap), InlineMap>,
+                      "Cannot assign inline map of this TT");
+      }
     }
 
     const auto& get_policy() const {
