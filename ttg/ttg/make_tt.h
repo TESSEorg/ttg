@@ -190,7 +190,8 @@ struct CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminalsT, PolicyT, st
 //
 // case 1 (keyT != void): void op(const input_keyT&, std::tuple<input_valuesT&...>&&, std::tuple<output_terminalsT...>&)
 // case 2 (keyT == void): void op(std::tuple<input_valuesT&...>&&, std::tuple<output_terminalsT...>&)
-template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT, typename PolicyT>
+template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT,
+          typename PolicyT, typename = std::enable_if_t<ttg::detail::is_policy_v<keyT, PolicyT>>>
 auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>...> &inedges,
                  const std::tuple<output_edgesT...> &outedges,
                  PolicyT&& policy, const std::string &name = "wrapper",
@@ -244,7 +245,7 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>..
 //
 // input edges can contain at most one control input, and it must be last, if present
 template <typename keyT, typename funcT, typename... input_edge_valuesT, typename... output_edgesT,
-          typename PolicyT>
+          typename PolicyT, typename = std::enable_if_t<ttg::detail::is_policy_v<keyT, PolicyT>>>
 auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
              const std::tuple<output_edgesT...> &outedges, PolicyT&& policy,
              const std::string &name = "wrapper",
