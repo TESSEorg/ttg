@@ -40,6 +40,7 @@ int main(int argc, char** argv) {
     Debugger::set_default_debugger(debugger);
     debugger->set_exec(argv[0]);
     debugger->set_prefix(ttg::default_execution_context().rank());
+    debugger->set_cmd("gdb_xterm");
   }
   ttg::execute();
 #endif
