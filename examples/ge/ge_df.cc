@@ -505,7 +505,7 @@ class FuncD : public TT<Key,
                         std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                    Out<Key, BlockMatrix<T>>>,
                         FuncD<T>, ttg::typelist<BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>, BlockMatrix<T>>> {
-  using baseT = typename FuncD::ttT
+  using baseT = typename FuncD::ttT;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
