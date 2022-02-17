@@ -740,7 +740,7 @@ namespace ttg_parsec {
   }  // namespace detail
 
   template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs, typename PolicyT>
-  class TT : public ttg::TTBase, detail::ParsecTTBase {
+  class TT : public ttg::TTBase, detail::ParsecTTBase, public ttg::detail::TTPolicyWrapper<keyT, PolicyT> {
    private:
     /// preconditions
     static_assert(ttg::detail::is_typelist_v<input_valueTs>, "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
@@ -749,6 +749,8 @@ namespace ttg_parsec {
     static_assert((ttg::meta::none_has_reference_v<input_valueTs>), "Input typelist cannot contain reference types");
     static_assert(ttg::meta::is_none_Void_v<input_valueTs>, "ttg::Void is for internal use only, do not use it");
     static_assert(ttg::detail::is_policy_v<keyT, PolicyT>, "The policy must implement procmap(), priomap(), and inlinemap()");
+
+    using PolicyWrapper = typename ttg::detail::TTPolicyWrapper<keyT, PolicyT>;
 
     parsec_mempool_t mempools;
 
@@ -836,42 +838,14 @@ namespace ttg_parsec {
         make_finalize_argstream_fcts(std::make_index_sequence<numins>{});
 
     ttg::World world;
-    //ttg::meta::detail::keymap_t<keyT> keymap;
-    //ttg::meta::detail::keymap_t<keyT> priomap;
-    PolicyT policy;
 
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<input_tuple_type>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
     std::array<std::size_t, numins> static_stream_goal;
 
-    /** Legacy wrapper */
-    template<typename KeyT = keyT, typename = std::enable_if_t<!std::is_void_v<KeyT>>>
-    inline
-    int keymap(const KeyT& key) const {
-      return policy.procmap(key);
-    }
-
-    template<typename KeyT = keyT, typename = std::enable_if_t<std::is_void_v<KeyT>>>
-    inline
-    int keymap() const {
-      return policy.procmap();
-    }
-
-    /** Legacy wrapper */
-    template<typename KeyT = keyT, typename = std::enable_if_t<!std::is_void_v<KeyT>>>
-    inline
-    int priomap(const KeyT& key) const {
-      return policy.priomap(key);
-    }
-
-    template<typename KeyT = keyT, typename = std::enable_if_t<std::is_void_v<KeyT>>>
-    inline
-    int priomap() const {
-      return policy.priomap();
-    }
-
    public:
+
     ttg::World get_world() const { return world; }
 
    private:
@@ -1091,7 +1065,7 @@ namespace ttg_parsec {
         for (int k = 0; k < num_keys; ++k) {
           keyT key;
           pos = unpack(key, msg->bytes, pos);
-          assert(keymap(key) == rank);
+          assert(this->keymap(key) == rank);
           keylist.push_back(std::move(key));
         }
         // case 1
@@ -1224,11 +1198,11 @@ namespace ttg_parsec {
         auto rank = world.rank();
         keyT key;
         pos = unpack(key, msg->bytes, pos);
-        assert(keymap(key) == rank);
+        assert(this->keymap(key) == rank);
         finalize_argstream<i>(key);
       } else {
         auto rank = world.rank();
-        assert(keymap() == rank);
+        assert(this->keymap() == rank);
         finalize_argstream<i>();
       }
     }
@@ -1243,13 +1217,13 @@ namespace ttg_parsec {
         auto rank = world.rank();
         keyT key;
         pos = unpack(key, msg->bytes, pos);
-        assert(keymap(key) == rank);
+        assert(this->keymap(key) == rank);
         std::size_t argstream_size;
         pos = unpack(argstream_size, msg->bytes, pos);
         set_argstream_size<i>(key, argstream_size);
       } else {
         auto rank = world.rank();
-        assert(keymap() == rank);
+        assert(this->keymap() == rank);
         std::size_t argstream_size;
         pos = unpack(argstream_size, msg->bytes, pos);
         set_argstream_size<i>(argstream_size);
@@ -1295,11 +1269,11 @@ namespace ttg_parsec {
       char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
       int32_t priority;
       if constexpr (!keyT_is_Void) {
-        priority = priomap(key);
+        priority = this->priomap(key);
         /* placement-new the task */
         newtask = new (taskobj) task_t(key, mempool, &this->self, world_impl.taskpool(), this, priority);
       } else {
-        priority = priomap();
+        priority = this->priomap();
         /* placement-new the task */
         newtask = new (taskobj) task_t(mempool, &this->self, world_impl.taskpool(), this, priority);
       }
@@ -1337,7 +1311,7 @@ namespace ttg_parsec {
       parsec_key_t hk = 0;
       if constexpr (!keyT_is_Void) {
         hk = reinterpret_cast<parsec_key_t>(&key);
-        assert(keymap(key) == world.rank());
+        assert(this->keymap(key) == world.rank());
       }
 
       task_t *task;
@@ -1525,9 +1499,9 @@ namespace ttg_parsec {
       int owner;
 
       if constexpr (!ttg::meta::is_void_v<Key>)
-        owner = keymap(key);
+        owner = this->keymap(key);
       else
-        owner = keymap();
+        owner = this->keymap();
       if (owner == world.rank()) {
         if constexpr (!ttg::meta::is_void_v<keyT>)
           set_arg_local<i, keyT, Value>(key, std::forward<Value>(value));
@@ -1631,7 +1605,7 @@ namespace ttg_parsec {
       static_assert(ttg::meta::is_empty_tuple_v<input_refs_tuple_type>,
                     "logic error: set_arg (case 3) called but input_refs_tuple_type is nonempty");
 
-      const auto owner = keymap(key);
+      const auto owner = this->keymap(key);
       auto &world_impl = world.impl();
       if (owner == world.rank()) {
         // create PaRSEC task
@@ -1641,7 +1615,7 @@ namespace ttg_parsec {
         parsec_thread_mempool_t *mempool = get_task_mempool();
         char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
 
-        task = new (taskobj) task_t(key, mempool, &this->self, world_impl.taskpool(), this, priomap(key));
+        task = new (taskobj) task_t(key, mempool, &this->self, world_impl.taskpool(), this, this->priomap(key));
 
         task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
             reinterpret_cast<detail::parsec_static_op_t>(&TT::static_op_noarg<ttg::ExecutionSpace::Host>);
@@ -1674,7 +1648,7 @@ namespace ttg_parsec {
       static_assert(ttg::meta::is_empty_tuple_v<input_refs_tuple_type>,
                     "logic error: set_arg (case 6) called but input_refs_tuple_type is nonempty");
 
-      const auto owner = keymap();
+      const auto owner = this->keymap();
       if (owner == ttg_default_execution_context().rank()) {
         // create PaRSEC task
         // and give it to the scheduler
@@ -1683,7 +1657,7 @@ namespace ttg_parsec {
         parsec_execution_stream_s *es = world_impl.execution_stream();
         parsec_thread_mempool_t *mempool = get_task_mempool();
         task = new (parsec_thread_mempool_allocate(mempool))
-            task_t(mempool, &this->self, world_impl.taskpool(), this, priomap());
+            task_t(mempool, &this->self, world_impl.taskpool(), this, this->priomap());
         task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
             reinterpret_cast<detail::parsec_static_op_t>(&TT::static_op_noarg<ttg::ExecutionSpace::Host>);
         if constexpr (derived_has_cuda_op())
@@ -1722,7 +1696,7 @@ namespace ttg_parsec {
       int rank = world.rank();
 
       bool have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
-                                                       [&](const Key &key) { return keymap(key) != rank; });
+                                                       [&](const Key &key) { return this->keymap(key) != rank; });
 
       if (have_remote) {
         std::vector<Key> keylist_sorted(keylist.begin(), keylist.end());
@@ -1733,8 +1707,8 @@ namespace ttg_parsec {
 
         /* sort the input key list by owner and check whether there are remote keys */
         std::sort(keylist_sorted.begin(), keylist_sorted.end(), [&](const Key &a, const Key &b) mutable {
-          int rank_a = keymap(a);
-          int rank_b = keymap(b);
+          int rank_a = this->keymap(a);
+          int rank_b = this->keymap(b);
           return rank_a < rank_b;
         });
 
@@ -1747,12 +1721,12 @@ namespace ttg_parsec {
         parsec_taskpool_t *tp = world_impl.taskpool();
 
         for (auto it = keylist_sorted.begin(); it < keylist_sorted.end(); /* increment inline */) {
-          auto owner = keymap(*it);
+          auto owner = this->keymap(*it);
           if (owner == rank) {
             /* make sure we don't lose local keys */
             local_begin = it;
             local_end =
-                std::find_if_not(++it, keylist_sorted.end(), [&](const Key &key) { return keymap(key) == rank; });
+                std::find_if_not(++it, keylist_sorted.end(), [&](const Key &key) { return this->keymap(key) == rank; });
             it = local_end;
             continue;
           }
@@ -1764,7 +1738,7 @@ namespace ttg_parsec {
             ++num_keys;
             pos = pack(*it, msg->bytes, pos);
             ++it;
-          } while (it < keylist_sorted.end() && keymap(*it) == owner);
+          } while (it < keylist_sorted.end() && this->keymap(*it) == owner);
           msg->tt_id.num_keys = num_keys;
 
           /* TODO: use RMA to transfer the value */
@@ -1793,7 +1767,7 @@ namespace ttg_parsec {
       auto world = ttg_default_execution_context();
       int rank = world.rank();
       bool have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
-                                                       [&](const Key &key) { return keymap(key) != rank; });
+                                                       [&](const Key &key) { return this->keymap(key) != rank; });
 
       if (have_remote) {
         using decvalueT = std::decay_t<Value>;
@@ -1801,8 +1775,8 @@ namespace ttg_parsec {
         /* sort the input key list by owner and check whether there are remote keys */
         std::vector<Key> keylist_sorted(keylist.begin(), keylist.end());
         std::sort(keylist_sorted.begin(), keylist_sorted.end(), [&](const Key &a, const Key &b) mutable {
-          int rank_a = keymap(a);
-          int rank_b = keymap(b);
+          int rank_a = this->keymap(a);
+          int rank_b = this->keymap(b);
           return rank_a < rank_b;
         });
 
@@ -1845,12 +1819,12 @@ namespace ttg_parsec {
 
         parsec_taskpool_t *tp = world_impl.taskpool();
         for (auto it = keylist_sorted.begin(); it < keylist_sorted.end(); /* increment done inline */) {
-          auto owner = keymap(*it);
+          auto owner = this->keymap(*it);
           if (owner == rank) {
             local_begin = it;
             /* find first non-local key */
             local_end =
-                std::find_if_not(++it, keylist_sorted.end(), [&](const Key &key) { return keymap(key) == rank; });
+                std::find_if_not(++it, keylist_sorted.end(), [&](const Key &key) { return this->keymap(key) == rank; });
             it = local_end;
             continue;
           }
@@ -1863,7 +1837,7 @@ namespace ttg_parsec {
             ++num_keys;
             pos = pack(*it, msg->bytes, pos);
             ++it;
-          } while (it < keylist_sorted.end() && keymap(*it) == owner);
+          } while (it < keylist_sorted.end() && this->keymap(*it) == owner);
           msg->tt_id.num_keys = num_keys;
 
           /* pack the metadata */
@@ -1970,7 +1944,7 @@ namespace ttg_parsec {
       assert(size > 0 && "TT::set_argstream_size(key,size) called with size=0");
 
       // body
-      const auto owner = keymap(key);
+      const auto owner = this->keymap(key);
       if (owner != world.rank()) {
         ttg::trace(world.rank(), ":", get_name(), ":", key, " : forwarding stream size for terminal ", i);
         using msg_t = detail::msg_t;
@@ -2020,7 +1994,7 @@ namespace ttg_parsec {
       assert(size > 0 && "TT::set_argstream_size(key,size) called with size=0");
 
       // body
-      const auto owner = keymap();
+      const auto owner = this->keymap();
       if (owner != world.rank()) {
         ttg::trace(world.rank(), ":", get_name(), " : forwarding stream size for terminal ", i);
         using msg_t = detail::msg_t;
@@ -2067,7 +2041,7 @@ namespace ttg_parsec {
       assert(std::get<i>(input_reducers) && "TT::finalize_argstream called on nonstreaming input terminal");
 
       // body
-      const auto owner = keymap(key);
+      const auto owner = this->keymap(key);
       if (owner != world.rank()) {
         ttg::trace(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
         using msg_t = detail::msg_t;
@@ -2113,7 +2087,7 @@ namespace ttg_parsec {
       assert(std::get<i>(input_reducers) && "TT::finalize_argstream called on nonstreaming input terminal");
 
       // body
-      const auto owner = keymap();
+      const auto owner = this->keymap();
       if (owner != world.rank()) {
         ttg::trace(world.rank(), ":", get_name(), ": forwarding stream finalize for terminal ", i);
         using msg_t = detail::msg_t;
@@ -2346,18 +2320,14 @@ namespace ttg_parsec {
     TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        ttg::World world, policyT&& policy)
         : ttg::TTBase(name, numins, numouts)
+        , PolicyWrapper(world, std::forward<policyT>(policy))
         , world(world)
-        // if using default keymap, rebind to the given world
-        , policy(std::forward<policyT>(policy))
         , static_stream_goal() {
       // Cannot call these in base constructor since terminals not yet constructed
       if (innames.size() != std::tuple_size<input_terminals_type>::value)
         throw std::logic_error("ttg_parsec::OP: #input names != #input terminals");
       if (outnames.size() != std::tuple_size<output_terminalsT>::value)
         throw std::logic_error("ttg_parsec::OP: #output names != #output terminals");
-
-      /* rebind the process map to the provided world */
-      policy.rebind(world);
 
       auto &world_impl = world.impl();
       world_impl.register_op(this);
@@ -2447,18 +2417,21 @@ namespace ttg_parsec {
                              NULL);
     }
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>,
-              typename priomapT = ttg::detail::default_priomap<keyT>,
-              typename policyT = PolicyT,
-              typename = std::enable_if_t<!std::is_same_v<std::decay_t<keymapT>, PolicyT> &&
-                                          std::is_constructible_v<policyT, keymapT, priomapT>>>
+    template <typename policyT = PolicyT,
+              typename = std::enable_if_t<std::is_constructible_v<policyT, ttg::meta::detail::keymap<keyT>>>>
     TT(const std::string &name,
        const std::vector<std::string> &innames,
        const std::vector<std::string> &outnames,
        ttg::World world,
-       keymapT  &&keymap  = keymapT(ttg::default_execution_context()),
-       priomapT &&priomap = priomapT())
-    : TT(name, innames, outnames, world, PolicyT(keymap, priomap))
+       ttg::meta::detail::keymap<keyT> keymap)
+    : TT(name, innames, outnames, world, PolicyT(std::move(keymap)))
+    {}
+
+    TT(const std::string &name,
+       const std::vector<std::string> &innames,
+       const std::vector<std::string> &outnames,
+       ttg::World world)
+    : TT(name, innames, outnames, world, PolicyT())
     {}
 
     template <typename policyT = PolicyT,
@@ -2470,25 +2443,19 @@ namespace ttg_parsec {
         : TT(name, innames, outnames, ttg::default_execution_context(), std::forward<policyT>(policy))
     {}
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>,
-              typename priomapT = ttg::detail::default_priomap<keyT>,
-              typename policyT = PolicyT,
-              typename = std::enable_if_t<!std::is_same_v<std::decay_t<keymapT>, PolicyT> &&
-                                          std::is_constructible_v<policyT, keymapT, priomapT>>>
+    template <typename policyT = PolicyT,
+              typename = std::enable_if_t<std::is_constructible_v<policyT, ttg::meta::detail::keymap<keyT>>>>
     TT(const std::string &name,
        const std::vector<std::string> &innames,
        const std::vector<std::string> &outnames,
-       keymapT  &&keymap  = keymapT(ttg::default_execution_context()),
-       priomapT &&priomap = priomapT())
+       ttg::meta::detail::keymap<keyT> keymap)
     : TT(name, innames, outnames, ttg::default_execution_context(),
-         PolicyT(std::forward<keymapT>(keymap), std::forward<priomapT>(priomap)))
+         PolicyT(std::move(keymap)))
     {}
 
 
     template <typename policyT = PolicyT,
-              typename = std::enable_if_t<std::is_default_constructible_v<policyT> &&
-                                          !std::is_constructible_v<policyT, typename ttg::detail::default_keymap<keyT>,
-                                                                            typename ttg::detail::default_keymap<keyT>>>>
+              typename = std::enable_if_t<std::is_default_constructible_v<policyT>>>
     TT(const std::string &name,
        const std::vector<std::string> &innames,
        const std::vector<std::string> &outnames)
@@ -2510,21 +2477,17 @@ namespace ttg_parsec {
     }
 
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>,
-              typename priomapT = ttg::detail::default_priomap<keyT>,
-              typename policyT = PolicyT,
-              typename = std::enable_if_t<!std::is_same_v<std::decay_t<keymapT>, PolicyT> &&
-                                          std::is_constructible_v<policyT, keymapT, priomapT>>>
+    template <typename policyT = PolicyT,
+              typename = std::enable_if_t<std::is_constructible_v<policyT, ttg::meta::detail::keymap<keyT>>>>
     TT(const input_edges_type &inedges,
        const output_edges_type &outedges,
        const std::string &name,
        const std::vector<std::string> &innames,
        const std::vector<std::string> &outnames,
        ttg::World world,
-       keymapT  &&keymap  = keymapT(ttg::default_execution_context()),
-       priomapT &&priomap = priomapT())
+       ttg::meta::detail::keymap<keyT> keymap)
         : TT(inedges, outedges, name, innames, outnames, world,
-             PolicyT(std::forward<keymapT>(keymap), std::forward<priomapT>(priomap)))
+             PolicyT(std::move(keymap)))
     { }
 
     template <typename policyT = PolicyT,
@@ -2672,56 +2635,6 @@ namespace ttg_parsec {
     void make_executable() override {
       register_static_op_function();
       ttg::TTBase::make_executable();
-    }
-
-    /// keymap setter
-    /// Alias for \c set_procmap
-    /// Disabled if the used policy does not permit overriding the procmap.
-    template<typename Keymap>
-    void set_keymap(Keymap &&km) {
-      set_procmap(std::forward<Keymap>(km));
-    }
-
-    /// process map setter
-    /// Disabled if the used policy does not permit overriding the procmap.
-    template<typename ProcMap>
-    void set_procmap(ProcMap &&km) {
-      if constexpr (std::is_assignable_v<decltype(PolicyT::procmap), ProcMap>) {
-        policy.procmap = std::forward<ProcMap>(km);
-      } else {
-        static_assert(std::is_assignable_v<decltype(PolicyT::procmap), ProcMap>,
-                      "Cannot assign process map of this TT");
-      }
-    }
-
-    /// priomap setter
-    /// Disabled if the used policy does not permit overriding the procmap.
-    /// @arg pm a function that maps a key to an integral priority value.
-    template<typename PrioMap>
-    void set_priomap(PrioMap &&pm) {
-      if constexpr (std::is_assignable_v<decltype(PolicyT::priomap), PrioMap>) {
-        policy.priomap = std::forward<PrioMap>(pm);
-      } else {
-        static_assert(std::is_assignable_v<decltype(PolicyT::priomap), PrioMap>,
-                      "Cannot assign priority map of this TT");
-      }
-    }
-
-    /// priomap setter
-    /// Disabled if the used policy does not permit overriding the procmap.
-    /// @arg pm a function that maps a key to an integral priority value.
-    template<typename InlineMap>
-    void set_inlinemap(InlineMap &&im) {
-      if constexpr (std::is_assignable_v<decltype(PolicyT::inlinemap), InlineMap>) {
-        policy.inlinemap = std::forward<InlineMap>(im);
-      } else {
-        static_assert(std::is_assignable_v<decltype(PolicyT::inlinemap), InlineMap>,
-                      "Cannot assign inline map of this TT");
-      }
-    }
-
-    const auto& get_policy() const {
-      return policy;
     }
 
     // Register the static_op function to associate it to instance_id
