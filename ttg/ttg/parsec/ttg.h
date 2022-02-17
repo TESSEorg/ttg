@@ -531,7 +531,7 @@ namespace ttg_parsec {
 
     inline void release_data_copy(ttg_data_copy_t *copy) {
       if (NULL != copy->push_task) {
-        /* Release the the deferred task.
+        /* Release the deferred task.
          * The copy was mutable and will be mutated by the released task,
          * so simply transfer ownership.
          */
