@@ -190,6 +190,48 @@ TEST_CASE("TemplateTask", "[core]") {
       CHECK_NOTHROW(
           ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges(),
                        ttg::make_policy<int>([](const int& key){ return 0; })));
+
+          auto tt = ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges(),
+                       ttg::make_policy<int>([](const int& key){ return 0; }));
+          auto policy = tt->get_policy();
+    }
+  }
+
+  SECTION("policies") {
+    { // default policy
+      ttg::Edge<int, int> in;
+      auto tt = ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges());
+      auto policy = tt->get_policy();
+      CHECK(tt->procmap(0) == 0);
+      CHECK(tt->get_procmap()(0) == 0);
+      CHECK(policy.procmap(0) == 0);
+    }
+    { // custom procmap
+      ttg::Edge<int, int> in;
+      auto tt = ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges(),
+                             ttg::make_policy<int>([](const int& key){ return 0; }));
+      auto policy = tt->get_policy();
+      CHECK(tt->procmap(1) == 0);
+      CHECK(tt->get_procmap()(1) == 0);
+      CHECK(policy.procmap(1) == 0);
+      tt->set_priomap([](const int&){ return 0; });
+    }
+    { // custom all maps
+      ttg::Edge<int, int> in;
+      auto tt = ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges(),
+                             ttg::make_policy<int>([](const int& key){ return 0; },
+                                                   [](const int& key){ return 0; },
+                                                   [](const int& key){ return 0; }));
+      auto policy = tt->get_policy();
+      CHECK(policy.procmap(1) == 0);
+      CHECK(tt->procmap(1) == 0);
+      CHECK(tt->get_procmap()(1) == 0);
+
+      CHECK(tt->priomap(1) == 0);
+      CHECK(tt->get_priomap()(1) == 0);
+
+      CHECK(tt->inlinemap(1) == 0);
+      CHECK(tt->get_inlinemap()(1) == 0);
     }
   }
 }

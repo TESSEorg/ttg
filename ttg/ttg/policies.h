@@ -82,10 +82,12 @@ namespace ttg {
    * \sa ttg::make_policy
    */
   template<typename Key,
-           typename ProcMap = typename ttg::meta::detail::keymap<Key>,
-           typename PrioMap = typename ttg::meta::detail::keymap<Key>,
-           typename InlineMap = typename ttg::meta::detail::keymap<Key>>
+           typename ProcMap = typename ttg::meta::detail::keymap_t<Key>,
+           typename PrioMap = typename ttg::meta::detail::keymap_t<Key>,
+           typename InlineMap = typename ttg::meta::detail::keymap_t<Key>>
   struct TTPolicyBase {
+
+    using PolicyBaseT = TTPolicyBase<Key, ProcMap, PrioMap, InlineMap>;
 
     using procmap_t = detail::map_type_t<ProcMap>;
     using priomap_t = detail::map_type_t<PrioMap>;
@@ -109,7 +111,8 @@ namespace ttg {
     template<typename ProcMap_,
              typename PrioMap_ = PrioMap,
              typename InlineMap_ = InlineMap,
-             typename = std::enable_if_t<std::is_default_constructible_v<PrioMap_> &&
+             typename = std::enable_if_t<std::is_constructible_v<procmap_t, ProcMap_> &&
+                                         std::is_default_constructible_v<PrioMap_> &&
                                          std::is_default_constructible_v<InlineMap_>>>
     TTPolicyBase(ProcMap_&& procmap)
     : procmap(std::forward<ProcMap_>(procmap))
@@ -133,8 +136,8 @@ namespace ttg {
     , inlinemap(std::forward<InlineMap_>(im))
     { }
 
-    TTPolicyBase(const TTPolicyBase&) = default;
-    TTPolicyBase(TTPolicyBase&&) = default;
+    TTPolicyBase(const PolicyBaseT&) = default;
+    TTPolicyBase(PolicyBaseT&&) = default;
 
   };
 
@@ -211,14 +214,14 @@ namespace ttg {
         if constexpr (procmap_is_std_function) {
           if (!m_policy.procmap) {
             /* create a std::function from the default implementation */
-            return ttg::meta::detail::keymap<Key>(m_default_procmap);
+            return ttg::meta::detail::keymap_t<Key>(m_default_procmap);
           } else {
             /* return the current std::function */
             return m_policy.procmap;
           }
         } else {
           /* wrap whatever the procmap is in a lambda */
-          return ttg::meta::detail::keymap<Key>([=](const Key& key){ return m_policy.procmap(key); });
+          return ttg::meta::detail::keymap_t<Key>([=](const Key& key){ return m_policy.procmap(key); });
         }
       }
 
@@ -230,14 +233,14 @@ namespace ttg {
         if constexpr (priomap_is_std_function) {
           if (!m_policy.priomap) {
             /* create a std::function from the default implementation */
-            return ttg::meta::detail::keymap<Key>(m_default_priomap);
+            return ttg::meta::detail::keymap_t<Key>(m_default_priomap);
           } else {
             /* return the current std::function */
             return m_policy.priomap;
           }
         } else {
           /* wrap whatever the procmap is in a lambda */
-          return ttg::meta::detail::keymap<Key>([=](const Key& key){ return m_policy.priomap(key); });
+          return ttg::meta::detail::keymap_t<Key>([=](const Key& key){ return m_policy.priomap(key); });
         }
       }
 
@@ -245,14 +248,14 @@ namespace ttg {
         if constexpr (inlinemap_is_std_function) {
           if (!m_policy.inlinemap) {
             /* create a std::function from the default implementation */
-            return ttg::meta::detail::keymap<Key>(m_default_inlinemap);
+            return ttg::meta::detail::keymap_t<Key>(m_default_inlinemap);
           } else {
             /* return the current std::function */
             return m_policy.inlinemap;
           }
         } else {
           /* wrap whatever the procmap is in a lambda */
-          return ttg::meta::detail::keymap<Key>([=](const Key& key){ return m_policy.inlinemap(key); });
+          return ttg::meta::detail::keymap_t<Key>([=](const Key& key){ return m_policy.inlinemap(key); });
         }
       }
 
