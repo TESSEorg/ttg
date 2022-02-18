@@ -182,7 +182,7 @@ namespace ttg_madness {
              public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs>> {
 
     static_assert(ttg::detail::is_typelist_v<input_valueTs>, "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
-    using input_tuple_type = typename input_valueTs::tuple_type;
+    using input_tuple_type = ttg::detail::typelist_to_tuple_t<input_valueTs>;
 
    public:
     using ttT = TT;
@@ -226,8 +226,8 @@ namespace ttg_madness {
     using input_refs_full_tuple_type =
         ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<input_tuple_type>>;
 
-    using input_values_tuple_type = ttg::meta::drop_void_t<input_values_full_tuple_type>;
-    using input_refs_tuple_type   = ttg::meta::drop_void_t<input_refs_full_tuple_type>;
+    using input_values_tuple_type = ttg::meta::drop_void_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
+    using input_refs_tuple_type   = ttg::meta::drop_void_t<ttg::meta::add_lvalue_reference_tuple_t<input_tuple_type>>;
     static_assert(!ttg::meta::is_any_void_v<input_values_tuple_type>);
 
     using output_terminals_type = output_terminalsT;

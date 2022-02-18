@@ -745,7 +745,7 @@ namespace ttg_parsec {
    private:
     /// preconditions
     static_assert(ttg::detail::is_typelist_v<input_valueTs>, "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
-    using input_tuple_type = typename input_valueTs::tuple_type;
+    using input_tuple_type = ttg::detail::typelist_to_tuple_t<input_valueTs>;
     static_assert(ttg::meta::is_tuple_v<output_terminalsT>, "Second template argument for ttg::TT must be std::tuple containing the output terminal types");
     static_assert((ttg::meta::none_has_reference_v<input_valueTs>), "Input typelist cannot contain reference types");
     static_assert(ttg::meta::is_none_Void_v<input_valueTs>, "ttg::Void is for internal use only, do not use it");
@@ -780,8 +780,8 @@ namespace ttg_parsec {
     using input_values_full_tuple_type = ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
     using input_refs_full_tuple_type =
         ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<input_tuple_type>>;
-    using input_values_tuple_type = ttg::meta::drop_void_t<input_values_full_tuple_type>;
-    using input_refs_tuple_type   = ttg::meta::drop_void_t<input_refs_full_tuple_type>;
+    using input_values_tuple_type = ttg::meta::drop_void_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
+    using input_refs_tuple_type   = ttg::meta::drop_void_t<ttg::meta::add_lvalue_reference_tuple_t<input_tuple_type>>;
 
     static constexpr int numinvals =
         std::tuple_size_v<input_refs_tuple_type>;  // number of input arguments with values (i.e. omitting the control

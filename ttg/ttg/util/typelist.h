@@ -15,9 +15,7 @@ namespace ttg {
    */
   template<typename... Ts>
   struct typelist
-  {
-    using tuple_type = std::tuple<Ts...>;
-  };
+  { };
 
   namespace detail {
 
