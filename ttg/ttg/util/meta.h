@@ -266,6 +266,56 @@ namespace ttg {
     using drop_void_t = typename drop_void<T>::type;
 
 
+    template<typename T, typename S, typename U>
+    struct replace_nonvoid_helper;
+
+    /* non-void S, replace with U */
+    template<typename... Ts, typename S, typename... Ss, typename U, typename... Us>
+    struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<S, Ss...>, ttg::typelist<U, Us...>> {
+      using type = typename replace_nonvoid_helper<ttg::typelist<Ts..., U>, ttg::typelist<Ss...>, ttg::typelist<Us...>>::type;
+    };
+
+    /* void S, keep */
+    template<typename... Ts, typename... Ss, typename U, typename... Us>
+    struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<void, Ss...>, ttg::typelist<U, Us...>> {
+      using type = typename replace_nonvoid_helper<ttg::typelist<Ts..., void>, ttg::typelist<Ss...>, ttg::typelist<U, Us...>>::type;
+    };
+
+    /* empty S, done */
+    template<typename... Ts, typename... Us>
+    struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<>, ttg::typelist<Us...>> {
+      using type = ttg::typelist<Ts...>;
+    };
+
+    /* empty U, done */
+    template<typename... Ts, typename... Ss>
+    struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<Ss...>, ttg::typelist<>> {
+      using type = ttg::typelist<Ts..., Ss...>;
+    };
+
+    /* empty S and U, done */
+    template<typename... Ts>
+    struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<>, ttg::typelist<>> {
+      using type = ttg::typelist<Ts...>;
+    };
+
+    /* Replace the first min(sizeof...(T), sizeof...(U)) non-void types in T with types in U; U does not contain void */
+    template<typename T, typename U>
+    struct replace_nonvoid;
+
+    template<typename... T, typename... U>
+    struct replace_nonvoid<ttg::typelist<T...>, ttg::typelist<U...>> {
+      using type = typename replace_nonvoid_helper<ttg::typelist<>, ttg::typelist<T...>, ttg::typelist<U...>>::type;
+    };
+
+    template<typename... T, typename... U>
+    struct replace_nonvoid<std::tuple<T...>, std::tuple<U...>> {
+      using type = ttg::detail::typelist_to_tuple_t<typename replace_nonvoid<ttg::typelist<T...>, ttg::typelist<U...>>::type>;
+    };
+
+    template<typename T, typename U>
+    using replace_nonvoid_t = typename replace_nonvoid<T, U>::type;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Tuple-element type conversions
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
