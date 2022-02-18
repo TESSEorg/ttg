@@ -133,6 +133,9 @@ namespace ttg {
     , inlinemap(std::forward<InlineMap_>(im))
     { }
 
+    TTPolicyBase(const TTPolicyBase&) = default;
+    TTPolicyBase(TTPolicyBase&&) = default;
+
   };
 
   namespace detail {

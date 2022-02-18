@@ -46,11 +46,25 @@ class CallableWrapTT : public TT<keyT, output_terminalsT,
         func(std::forward<funcT_>(f)) {}
 
   template <typename funcT_, typename PolicyT_>
+  CallableWrapTT(funcT_ &&f, const input_edges_type &inedges, const output_edges_type &outedges,
+                 const std::string &name, const std::vector<std::string> &innames,
+                 const std::vector<std::string> &outnames)
+      : baseT(inedges, outedges, name, innames, outnames),
+        func(std::forward<funcT_>(f)) {}
+
+  template <typename funcT_, typename PolicyT_>
   CallableWrapTT(funcT_ &&f,
                  PolicyT_&& policy,
                  const std::string &name, const std::vector<std::string> &innames,
                  const std::vector<std::string> &outnames)
       : baseT(name, innames, outnames, std::forward<PolicyT>(policy)),
+        func(std::forward<funcT_>(f)) {}
+
+  template <typename funcT_>
+  CallableWrapTT(funcT_ &&f,
+                 const std::string &name, const std::vector<std::string> &innames,
+                 const std::vector<std::string> &outnames)
+      : baseT(name, innames, outnames),
         func(std::forward<funcT_>(f)) {}
 
   template <typename Key, typename ArgsTuple>

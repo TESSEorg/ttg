@@ -137,7 +137,7 @@ namespace tt_i_i_p {
    public:
     tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
        const std::string &name)
-        : baseT(inedges, outedges, name, {"int", "void"}, {}, Policy()) {}
+        : baseT(inedges, outedges, name, {"int"}, {}, Policy()) {}
 
     static constexpr const bool have_cuda_op = false;
 

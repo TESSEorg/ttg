@@ -2418,12 +2418,12 @@ namespace ttg_parsec {
     }
 
     template <typename policyT = PolicyT,
-              typename = std::enable_if_t<std::is_constructible_v<policyT, ttg::meta::detail::keymap<keyT>>>>
+              typename = std::enable_if_t<std::is_constructible_v<policyT, ttg::meta::detail::keymap_t<keyT>>>>
     TT(const std::string &name,
        const std::vector<std::string> &innames,
        const std::vector<std::string> &outnames,
        ttg::World world,
-       ttg::meta::detail::keymap<keyT> keymap)
+       ttg::meta::detail::keymap_t<keyT> keymap)
     : TT(name, innames, outnames, world, PolicyT(std::move(keymap)))
     {}
 
@@ -2444,11 +2444,11 @@ namespace ttg_parsec {
     {}
 
     template <typename policyT = PolicyT,
-              typename = std::enable_if_t<std::is_constructible_v<policyT, ttg::meta::detail::keymap<keyT>>>>
+              typename = std::enable_if_t<std::is_constructible_v<policyT, ttg::meta::detail::keymap_t<keyT>>>>
     TT(const std::string &name,
        const std::vector<std::string> &innames,
        const std::vector<std::string> &outnames,
-       ttg::meta::detail::keymap<keyT> keymap)
+       ttg::meta::detail::keymap_t<keyT> keymap)
     : TT(name, innames, outnames, ttg::default_execution_context(),
          PolicyT(std::move(keymap)))
     {}
@@ -2478,14 +2478,14 @@ namespace ttg_parsec {
 
 
     template <typename policyT = PolicyT,
-              typename = std::enable_if_t<std::is_constructible_v<policyT, ttg::meta::detail::keymap<keyT>>>>
+              typename = std::enable_if_t<std::is_constructible_v<policyT, ttg::meta::detail::keymap_t<keyT>>>>
     TT(const input_edges_type &inedges,
        const output_edges_type &outedges,
        const std::string &name,
        const std::vector<std::string> &innames,
        const std::vector<std::string> &outnames,
        ttg::World world,
-       ttg::meta::detail::keymap<keyT> keymap)
+       ttg::meta::detail::keymap_t<keyT> keymap)
         : TT(inedges, outedges, name, innames, outnames, world,
              PolicyT(std::move(keymap)))
     { }

@@ -93,7 +93,7 @@ namespace ttg {
       // iterate over keys that map to me ... if keys are equivalent to ranks this can be made simpler
       const auto my_rank = this->get_world().rank();
       for (auto key = 0; key != tree_.size(); ++key) {
-        if (my_rank == this->get_policy().procmap(key)) {
+        if (my_rank == this->procmap(key)) {
           auto keys = tree_.child_keys(key);
           if (keys.first == -1) this->template set_arg<1>(key, Value());
           if (keys.second == -1) this->template set_arg<2>(key, Value());
