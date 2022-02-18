@@ -225,13 +225,10 @@ namespace ttg_madness {
     using input_values_full_tuple_type = ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
     using input_refs_full_tuple_type =
         ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<input_tuple_type>>;
-    using input_values_tuple_type =
-        std::conditional_t<ttg::meta::is_none_void_v<input_valueTs>, input_values_full_tuple_type,
-                           typename ttg::meta::drop_last_n<input_values_full_tuple_type, std::size_t{1}>::type>;
+
+    using input_values_tuple_type = ttg::meta::drop_void_t<input_values_full_tuple_type>;
+    using input_refs_tuple_type   = ttg::meta::drop_void_t<input_refs_full_tuple_type>;
     static_assert(!ttg::meta::is_any_void_v<input_values_tuple_type>);
-    using input_refs_tuple_type =
-        std::conditional_t<ttg::meta::is_none_void_v<input_valueTs>, input_refs_full_tuple_type,
-                           typename ttg::meta::drop_last_n<input_refs_full_tuple_type, std::size_t{1}>::type>;
 
     using output_terminals_type = output_terminalsT;
     using output_edges_type = typename ttg::terminals_to_edges<output_terminalsT>::type;

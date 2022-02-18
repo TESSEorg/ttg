@@ -281,20 +281,15 @@ namespace ttg {
   };
 } // namespace ttg
 
-
-/// An empty class used for pure control flows
-struct Control {};
-std::ostream& operator<<(std::ostream& s, const Control& ctl) {s << "Ctl"; return s;}
-
 template <typename T, size_t K, Dimension NDIM> using rnodeEdge = ttg::Edge<Key<NDIM>, FunctionReconstructedNodeWrap<T,K,NDIM>>;
 template <typename T, size_t K, Dimension NDIM> using cnodeEdge = ttg::Edge<Key<NDIM>, FunctionCompressedNodeWrap<T,K,NDIM>>;
 template <Dimension NDIM> using doubleEdge = ttg::Edge<Key<NDIM>, double>;
-template <Dimension NDIM> using ctlEdge = ttg::Edge<Key<NDIM>, Control>;
+template <Dimension NDIM> using ctlEdge = ttg::Edge<Key<NDIM>, void>;
 
 template <typename T, size_t K, Dimension NDIM> using rnodeOut = ttg::Out<Key<NDIM>, FunctionReconstructedNodeWrap<T,K,NDIM>>;
 template <typename T, size_t K, Dimension NDIM> using cnodeOut = ttg::Out<Key<NDIM>, FunctionCompressedNodeWrap<T,K,NDIM>>;
 template <Dimension NDIM> using doubleOut = ttg::Out<Key<NDIM>, double>;
-template <Dimension NDIM> using ctlOut = ttg::Out<Key<NDIM>, Control>;
+template <Dimension NDIM> using ctlOut = ttg::Out<Key<NDIM>, void>;
 
 std::mutex printer_guard;
 template <typename keyT, typename valueT>
@@ -310,7 +305,7 @@ auto make_printer(const ttg::Edge<keyT, valueT>& in, const char* str = "", const
 
 template <Dimension NDIM>
 auto make_start(const ctlEdge<NDIM>& ctl) {
-    auto func = [](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>>& out) { ttg::send<0>(key, Control(), out); };
+    auto func = [](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>>& out) { ttg::sendk<0>(key, out); };
     return ttg::make_tt<Key<NDIM>>(func, ttg::edges(), edges(ctl), "start", {}, {"control"});
 }
 
@@ -325,7 +320,7 @@ auto make_project(functorT& f,
                   rnodeEdge<T,K,NDIM>& result,
                   const std::string& name = "project") {
 
-    auto F = [f, thresh](const Key<NDIM>& key, const Control& junk, std::tuple<ctlOut<NDIM>, rnodeOut<T,K,NDIM>>& out) {
+    auto F = [f, thresh](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>, rnodeOut<T,K,NDIM>>& out) {
         FunctionReconstructedNodeWrap<T,K,NDIM> node(key); // Our eventual result
         auto& coeffs = node.get().coeffs; // Need to clean up OO design
 
@@ -334,7 +329,7 @@ auto make_project(functorT& f,
             /* TODO: children() returns an iteratable object but broadcast() expects a contiguous memory range.
                      We need to fix broadcast to support any ranges */
             for (auto child : children(key)) bcast_keys.push_back(child);
-            ttg::broadcast<0>(bcast_keys, Control(), out);
+            ttg::broadcastk<0>(bcast_keys, out);
             coeffs = T(1e7); // set to obviously bad value to detect incorrect use
             node.get().is_leaf = false;
         }
@@ -347,7 +342,7 @@ auto make_project(functorT& f,
             if (!node.get().is_leaf) {
                 std::vector<Key<NDIM>> bcast_keys;
                 for (auto child : children(key)) bcast_keys.push_back(child);
-                ttg::broadcast<0>(bcast_keys, Control(), out);
+                ttg::broadcastk<0>(bcast_keys, out);
             }
         }
         ttg::send<1>(key, std::move(node), out); // always produce a result

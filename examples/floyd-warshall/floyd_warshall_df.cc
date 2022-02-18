@@ -92,18 +92,6 @@ namespace std {
   };
 }  // namespace std
 
-// An empty class used for pure control flows
-class Control {
- public:
-  template <typename Archive>
-  void serialize(Archive& ar) {}
-};
-
-std::ostream& operator<<(std::ostream& s, const Control ctl) {
-  s << "Ctl";
-  return s;
-}
-
 template <typename T>
 class Initiator : public TT<int,
                             std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,

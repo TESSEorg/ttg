@@ -165,6 +165,20 @@ namespace ttg {
         detail::broadcast<KeyId+1, I...>(keylists, value, t);
       }
     }
+
+    template <size_t KeyId, size_t i, size_t... I, typename ...RangesT, typename... output_terminalsT>
+    void broadcast(const std::tuple<RangesT...>& keylists, std::tuple<output_terminalsT...> &t) {
+      if constexpr (ttg::meta::is_iterable_v<std::tuple_element_t<KeyId, std::tuple<RangesT...>>>) {
+        if (std::distance(std::begin(std::get<KeyId>(keylists)), std::end(std::get<KeyId>(keylists))) > 0) {
+          std::get<i>(t).broadcast(std::get<KeyId>(keylists));
+        }
+      } else {
+        std::get<i>(t).broadcast(std::get<KeyId>(keylists));
+      }
+      if constexpr(sizeof...(I) > 0) {
+        detail::broadcast<KeyId+1, I...>(keylists, t);
+      }
+    }
   } // namespace detail
 
   template <size_t i, typename rangeT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg::ttg_runtime>
@@ -179,6 +193,18 @@ namespace ttg {
                   "Number of selected output terminals must match the number of keylists!");
     detail::value_copy_handler<Runtime> copy_handler;
     detail::broadcast<0, i, I...>(keylists, copy_handler(std::forward<valueT>(value)), t);
+  }
+
+  template <size_t i, typename rangeT, typename... output_terminalsT, ttg::Runtime Runtime = ttg::ttg_runtime>
+  void broadcastk(const rangeT &keylist, std::tuple<output_terminalsT...> &t) {
+    std::get<i>(t).broadcast(keylist);
+  }
+
+  template <size_t i, size_t... I, typename ...RangesT, typename... output_terminalsT, ttg::Runtime Runtime = ttg::ttg_runtime>
+  void broadcastk(const std::tuple<RangesT...>& keylists, std::tuple<output_terminalsT...> &t) {
+    static_assert(sizeof...(I)+1 == sizeof...(RangesT),
+                  "Number of selected output terminals must match the number of keylists!");
+    detail::broadcast<0, i, I...>(keylists, t);
   }
 
   template <typename keyT, typename output_terminalT>

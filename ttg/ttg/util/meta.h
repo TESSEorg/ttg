@@ -212,6 +212,60 @@ namespace ttg {
     using void_to_Void_t = typename void_to_Void<T>::type;
 
 
+    /* helper class to filter void types from typelists */
+    template<typename T, typename S, typename U>
+    struct drop_void_helper;
+
+    /* forward T */
+    template<typename... Ts, typename T, typename U, typename... Us>
+    struct drop_void_helper<ttg::typelist<Ts...>, T, ttg::typelist<U, Us...>> {
+      using type = typename drop_void_helper<ttg::typelist<Ts..., T>, U, ttg::typelist<Us...>>::type;
+    };
+
+    /* drop T = void */
+    template<typename... Ts, typename U, typename... Us>
+    struct drop_void_helper<ttg::typelist<Ts...>, void, ttg::typelist<U, Us...>> {
+      using type = typename drop_void_helper<ttg::typelist<Ts...>, U, ttg::typelist<Us...>>::type;
+    };
+
+    /* final, last element non-void */
+    template<typename... Ts, typename T>
+    struct drop_void_helper<ttg::typelist<Ts...>, T, ttg::typelist<>> {
+      using type = ttg::typelist<Ts..., T>;
+    };
+
+    /* final, last element void */
+    template<typename... Ts>
+    struct drop_void_helper<ttg::typelist<Ts...>, void, ttg::typelist<>> {
+      using type = ttg::typelist<Ts...>;
+    };
+
+    /* drop all void from a typelist or tuple */
+    template<typename T>
+    struct drop_void;
+
+    /* specialization for ttg::typelist */
+    template<typename T, typename... Ts>
+    struct drop_void<ttg::typelist<T, Ts...>> {
+      using type = typename drop_void_helper<ttg::typelist<>, T, ttg::typelist<Ts...>>::type;
+    };
+
+    /* specialization for empty ttg::typelist */
+    template<>
+    struct drop_void<ttg::typelist<>> {
+      using type = ttg::typelist<>;
+    };
+
+    /* specialization for std::tuple */
+    template<typename... Ts>
+    struct drop_void<std::tuple<Ts...>> {
+      using type = ttg::detail::typelist_to_tuple_t<typename drop_void<ttg::typelist<Ts...>>::type>;
+    };
+
+    template<typename T>
+    using drop_void_t = typename drop_void<T>::type;
+
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Tuple-element type conversions
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

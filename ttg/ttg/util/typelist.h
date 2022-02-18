@@ -32,6 +32,17 @@ namespace ttg {
     template<typename T>
     constexpr bool is_typelist_v = is_typelist<T>::value;
 
+    template<typename T>
+    struct typelist_to_tuple;
+
+    template<typename... T>
+    struct typelist_to_tuple<ttg::typelist<T...>> {
+      using type = std::tuple<T...>;
+    };
+
+    template<typename T>
+    using typelist_to_tuple_t = typename typelist_to_tuple<T>::type;
+
   } // namespace detail
 
 } // namespace ttg

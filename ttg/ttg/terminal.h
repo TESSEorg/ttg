@@ -107,7 +107,7 @@ namespace ttg {
 
     // An optimized implementation will need a separate callback for broadcast
     // with a specific value for rangeT
-    template <typename rangeT, typename Value = valueT>
+    template <typename rangeT, typename Value>
     std::enable_if_t<!meta::is_void_v<Value>,void>
     broadcast(const rangeT &keylist, const Value &value) {
       if (broadcast_callback) {
@@ -127,7 +127,7 @@ namespace ttg {
       }
     }
 
-    template <typename rangeT, typename Value = valueT>
+    template <typename rangeT, typename Value>
     std::enable_if_t<!meta::is_void_v<Value>,void>
     broadcast(const rangeT &keylist, Value &&value) {
       const Value& v = value;
@@ -144,6 +144,26 @@ namespace ttg {
         } else {
           /* got something we cannot iterate over (single element?) so put one element in the span */
           broadcast_callback(ttg::span<const keyT>(&keylist, 1), v);
+        }
+      }
+    }
+
+    template <typename rangeT, typename Value = valueT>
+    std::enable_if_t<meta::is_void_v<Value>,void>
+    broadcast(const rangeT &keylist) {
+      if (broadcast_callback) {
+        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
+          broadcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))));
+        } else {
+          /* got something we cannot iterate over (single element?) so put one element in the span */
+          broadcast_callback(ttg::span<const keyT>(&keylist, 1));
+        }
+      } else {
+        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
+          for (auto&& key : keylist) sendk(key);
+        } else {
+          /* got something we cannot iterate over (single element?) so put one element in the span */
+          broadcast_callback(ttg::span<const keyT>(&keylist, 1));
         }
       }
     }
@@ -332,6 +352,19 @@ namespace ttg {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->broadcast(keylist, value);
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
           static_cast<In<keyT, valueT> *>(successor)->broadcast(keylist, value);
+        }
+      }
+    }
+
+    template<typename rangeT, typename Key = keyT>
+    std::enable_if_t<meta::is_none_void_v<Key> && meta::is_void_v<valueT>,void>
+    broadcast(const rangeT &keylist) {
+      for (auto && successor : successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, void> *>(successor)->broadcast(keylist);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          static_cast<In<keyT, void> *>(successor)->broadcast(keylist);
         }
       }
     }

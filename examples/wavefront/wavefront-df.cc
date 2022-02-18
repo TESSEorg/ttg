@@ -36,9 +36,6 @@ namespace std {
   }
 }  // namespace std
 
-// An empty class used for pure control flows
-struct Control {};
-
 template <typename T>
 inline BlockMatrix<T> stencil_computation(int i, int j, int M, int N, BlockMatrix<T> bm, BlockMatrix<T> left,
                                           BlockMatrix<T> top, BlockMatrix<T> right, BlockMatrix<T> bottom) {
