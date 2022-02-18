@@ -1,4 +1,4 @@
-![Build Status](https://github.com/TESSEorg/ttg/workflows/CMake/badge.svg)
+![Build Status](https://github.com/TESSEorg/ttg/workflows/CMake/badge.sv)
 
 # TTG
 This is the C++ API for the Template Task Graph (TTG) programming model for flowgraph-based composition of high-performance algorithms executable on distributed heterogeneous computer platforms. The TTG API abstracts out the details of the underlying task and data flow runtime; the current realization is implemented using [MADNESS](https://github.com/m-a-d-n-e-s-s/madness) and [PaRSEC](https://bitbucket.org/icldistcomp/parsec.git) runtimes as backends.
@@ -13,6 +13,11 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 
 - To try out TTG in a Docker container, install Docker, then execute `bin/docker-build.sh` and follow instructions in `bin/docker.md`;
 - See [INSTALL.md](https://github.com/TESSEorg/ttg/blob/master/INSTALL.md) to learn how to build and install TTG.
+
+# Running TTG Program 
+- install xterm
+- set cmake "Environment Variable" to TTG_DEBUGGER=gdb_xterm/lldb_xterm based on the type of compiler system hold to run debugger for parallelly executing processes
+- run the ttg program and if it receives any signal the xterm window should pop up to display debugging results 
 
 # Key Concepts of TTG
 

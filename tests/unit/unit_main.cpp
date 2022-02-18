@@ -9,8 +9,6 @@
 #include <ttg.h>
 #endif
 
-#include "ttg/util/bug.h"
-
 int main(int argc, char** argv) {
   Catch::Session session;
 
@@ -33,20 +31,6 @@ int main(int argc, char** argv) {
 
   const auto nranks = ttg::default_execution_context().size();
   std::cout << "ready to run TTG unit tests with " << nranks << " rank" << (nranks > 1 ? "s" : "") << std::endl;
-
-  //if (const auto* ttg_debugger_str = std::getenv("TTG_DEBUGGER"))
-
-  if (auto debugger_cstr = std::getenv("TTG_DEBUGGER"))
-  {
-    using mpqc::Debugger;
-    auto debugger = std::make_shared<Debugger>();
-    Debugger::set_default_debugger(debugger);
-    debugger->set_exec(argv[0]);
-    debugger->set_prefix(ttg::default_execution_context().rank());
-    debugger->set_cmd(debugger_cstr);
-    std::cout<<"Hello............................................................................................................";
-  }
-  
 
   ttg::execute();
 #endif

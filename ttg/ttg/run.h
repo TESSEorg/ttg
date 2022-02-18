@@ -8,6 +8,7 @@
 #include "ttg/fwd.h"
 
 #include "ttg/util/env.h"
+#include "ttg/util/bug.h"
 
 namespace ttg {
 
@@ -23,8 +24,21 @@ namespace ttg {
   ///        ttg::detail::num_threads will be used to determine the default number of compute threads
   template <typename... RestOfArgs>
   inline void initialize(int argc, char **argv, int num_threads, RestOfArgs &&...args) {
+    // if requested by user, create a Debugger object
+    if (auto debugger_cstr = std::getenv("TTG_DEBUGGER")) {
+      using mpqc::Debugger;
+      auto debugger = std::make_shared<Debugger>();
+      Debugger::set_default_debugger(debugger);
+      debugger->set_exec(argv[0]);
+      debugger->set_cmd(debugger_cstr);
+    }
+
     if (num_threads < 1) num_threads = detail::num_threads();
     TTG_IMPL_NS::ttg_initialize(argc, argv, num_threads, std::forward<RestOfArgs>(args)...);
+
+    // finish setting up the Debugger, if needed
+    if (mpqc::Debugger::default_debugger())
+      mpqc::Debugger::default_debugger()->set_prefix(ttg::default_execution_context().rank());
   }
 
   /// Finalizes the TTG runtime
