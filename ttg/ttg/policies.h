@@ -35,15 +35,20 @@ namespace ttg {
 
     /* Some handy trait to check if a type is std::function<X(Y...)> */
     template<typename T>
-    struct is_std_function : std::false_type
+    struct is_std_function_ptr : std::false_type
+    { };
+
+    /** std::function member pointer */
+    template<typename T, typename Ret, typename... Args>
+    struct is_std_function_ptr<std::function<Ret(Args...)> T::*> : std::true_type
     { };
 
     template<typename Ret, typename... Args>
-    struct is_std_function<std::function<Ret(Args...)>> : std::true_type
+    struct is_std_function_ptr<std::function<Ret(Args...)>*> : std::true_type
     { };
 
     template<typename T>
-    constexpr bool is_std_function_v = is_std_function<T>::value;
+    constexpr bool is_std_function_ptr_v = is_std_function_ptr<T>::value;
 
   } // namespace detail
 
@@ -153,15 +158,9 @@ namespace ttg {
       ttg::detail::default_priomap_impl<Key> m_default_priomap;
       ttg::detail::default_inlinemap_impl<Key> m_default_inlinemap;
 
-
-      static constexpr bool procmap_is_std_function = !std::is_member_function_pointer_v<decltype(&TTPolicyImpl::procmap)>
-                                                    && detail::is_std_function_v<decltype(TTPolicyImpl::procmap)>;
-
-      static constexpr bool priomap_is_std_function = !std::is_member_function_pointer_v<decltype(&TTPolicyImpl::priomap)>
-                                                    && detail::is_std_function_v<decltype(TTPolicyImpl::priomap)>;
-
-      static constexpr bool inlinemap_is_std_function = !std::is_member_function_pointer_v<decltype(&TTPolicyImpl::inlinemap)>
-                                                      && detail::is_std_function_v<decltype(TTPolicyImpl::inlinemap)>;
+      static constexpr bool procmap_is_std_function = detail::is_std_function_ptr_v<decltype(&TTPolicyImpl::procmap)>;
+      static constexpr bool priomap_is_std_function = detail::is_std_function_ptr_v<decltype(&TTPolicyImpl::priomap)>;
+      static constexpr bool inlinemap_is_std_function = detail::is_std_function_ptr_v<decltype(&TTPolicyImpl::inlinemap)>;
 
     public:
 
@@ -328,13 +327,9 @@ namespace ttg {
 
       template<typename ProcMap>
       void set_procmap(ProcMap&& pm) {
-        if constexpr (std::is_member_function_pointer_v<decltype(&TTPolicyImpl::procmap)> ||
-                      !std::is_assignable_v<decltype(TTPolicyImpl::procmap), ProcMap>) {
-          static_assert(std::is_assignable_v<decltype(TTPolicyImpl::procmap), ProcMap>,
-                        "Cannot set process map on compile-time policy property!");
-        } else {
-          m_policy.procmap = std::forward<ProcMap>(pm);
-        }
+        static_assert(std::is_assignable_v<decltype(TTPolicyImpl::procmap), ProcMap>,
+                      "Cannot set process map on compile-time policy property!");
+        m_policy.procmap = std::forward<ProcMap>(pm);
       }
 
       template<typename KeyMap>
@@ -344,28 +339,19 @@ namespace ttg {
 
       template<typename PrioMap>
       void set_priomap(PrioMap&& pm) {
-        if constexpr (std::is_member_function_pointer_v<decltype(&TTPolicyImpl::priomap)> ||
-                      !std::is_assignable_v<decltype(TTPolicyImpl::priomap), PrioMap>) {
-          static_assert(std::is_assignable_v<decltype(TTPolicyImpl::priomap), PrioMap>,
-                        "Cannot set process map on compile-time policy property!");
-        } else {
-          m_policy.priomap = std::forward<PrioMap>(pm);
-        }
+        static_assert(std::is_assignable_v<decltype(TTPolicyImpl::priomap), PrioMap>,
+                      "Cannot set process map on compile-time policy property!");
+        m_policy.priomap = std::forward<PrioMap>(pm);
       }
 
       template<typename InlineMap>
       void set_inlinemap(InlineMap&& pm) {
-        if constexpr (std::is_member_function_pointer_v<decltype(&TTPolicyImpl::inlinemap)> ||
-                      !std::is_assignable_v<decltype(TTPolicyImpl::inlinemap), InlineMap>) {
-          static_assert(std::is_assignable_v<decltype(TTPolicyImpl::inlinemap), InlineMap>,
-                        "Cannot set process map on compile-time policy property!");
-        } else {
-          m_policy.inlinemap = std::forward<InlineMap>(pm);
-        }
+        static_assert(std::is_assignable_v<decltype(TTPolicyImpl::inlinemap), InlineMap>,
+                      "Cannot set process map on compile-time policy property!");
+        m_policy.inlinemap = std::forward<InlineMap>(pm);
       }
 
     };
-
   } // namespace detail
 
   /**
