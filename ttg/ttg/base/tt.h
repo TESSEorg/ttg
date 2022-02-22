@@ -58,15 +58,15 @@ namespace ttg {
       term.set(this, i, name, detail::demangled_type_name<typename terminalT::key_type>(),
                detail::demangled_type_name<typename terminalT::value_type>(),
                out ? TerminalBase::Type::Write
-                   : (std::is_const<typename terminalT::value_type>::value ? TerminalBase::Type::Read
-                                                                           : TerminalBase::Type::Consume));
+                   : (std::is_const_v<typename terminalT::value_type> ? TerminalBase::Type::Read
+                                                                      : TerminalBase::Type::Consume));
       (this->*setfunc)(i, &term);
     }
 
     template <bool out, std::size_t... IS, typename terminalsT, typename namesT, typename setfuncT>
     void register_terminals(std::index_sequence<IS...>, terminalsT &terms, const namesT &names,
                             const setfuncT setfunc) {
-      int junk[] = {0, (register_terminal<out, typename std::tuple_element<IS, terminalsT>::type, IS>(
+      int junk[] = {0, (register_terminal<out, std::tuple_element_t<IS, terminalsT>, IS>(
                             std::get<IS>(terms), names[IS], setfunc),
                         0)...};
       junk[0]++;
@@ -75,14 +75,14 @@ namespace ttg {
     // Used by op ... terminalsT will be a tuple of terminals
     template <typename terminalsT, typename namesT>
     void register_input_terminals(terminalsT &terms, const namesT &names) {
-      register_terminals<false>(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, names,
+      register_terminals<false>(std::make_index_sequence<std::tuple_size_v<terminalsT>>{}, terms, names,
                                 &TTBase::set_input);
     }
 
     // Used by op ... terminalsT will be a tuple of terminals
     template <typename terminalsT, typename namesT>
     void register_output_terminals(terminalsT &terms, const namesT &names) {
-      register_terminals<true>(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, names,
+      register_terminals<true>(std::make_index_sequence<std::tuple_size_v<terminalsT>>{}, terms, names,
                                &TTBase::set_output);
     }
 
@@ -96,7 +96,7 @@ namespace ttg {
     // Used by composite TT ... terminalsT will be a tuple of pointers to terminals
     template <typename terminalsT, typename setfuncT>
     void set_terminals(const terminalsT &terms, const setfuncT setfunc) {
-      set_terminals(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, setfunc);
+      set_terminals(std::make_index_sequence<std::tuple_size_v<terminalsT>>{}, terms, setfunc);
     }
 
    private:

@@ -84,9 +84,9 @@ namespace ttg {
   // Fuse edges into one ... all the types have to be the same ... just using
   // valuesT for variadic args
   template <typename keyT, typename... valuesT>
-  auto fuse(const Edge<keyT, valuesT> &... args) {
-    using valueT = typename std::tuple_element<0, std::tuple<valuesT...>>::type;  // grab first type
-    return Edge<keyT, valueT>(args...);  // This will force all valuesT to be the same
+  auto fuse(const Edge<keyT, valuesT> &...args) {
+    using valueT = std::tuple_element_t<0, std::tuple<valuesT...>>;  // grab first type
+    return Edge<keyT, valueT>(args...);                              // This will force all valuesT to be the same
   }
 
   // Make a tuple of Edges ... needs some type checking injected
@@ -173,9 +173,10 @@ namespace ttg {
     std::get<i>(t).broadcast(keylist, copy_handler(std::forward<valueT>(value)));
   }
 
-  template <size_t i, size_t... I, typename ...RangesT, typename valueT, typename... output_terminalsT, ttg::Runtime Runtime = ttg::ttg_runtime>
-  void broadcast(const std::tuple<RangesT...>& keylists, valueT &&value, std::tuple<output_terminalsT...> &t) {
-    static_assert(sizeof...(I)+1 == sizeof...(RangesT),
+  template <size_t i, size_t... I, typename... RangesT, typename valueT, typename... output_terminalsT,
+            ttg::Runtime Runtime = ttg::ttg_runtime>
+  void broadcast(const std::tuple<RangesT...> &keylists, valueT &&value, std::tuple<output_terminalsT...> &t) {
+    static_assert(sizeof...(I) + 1 == sizeof...(RangesT),
                   "Number of selected output terminals must match the number of keylists!");
     detail::value_copy_handler<Runtime> copy_handler;
     detail::broadcast<0, i, I...>(keylists, copy_handler(std::forward<valueT>(value)), t);
