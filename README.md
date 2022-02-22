@@ -14,10 +14,9 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 - To try out TTG in a Docker container, install Docker, then execute `bin/docker-build.sh` and follow instructions in `bin/docker.md`;
 - See [INSTALL.md](https://github.com/TESSEorg/ttg/blob/master/INSTALL.md) to learn how to build and install TTG.
 
-# Running TTG Program 
-- install xterm
-- set cmake "Environment Variable" to TTG_DEBUGGER=gdb_xterm/lldb_xterm based on the type of compiler system hold to run debugger for parallelly executing processes
-- run the ttg program and if it receives any signal the xterm window should pop up to display debugging results 
+# Debugging TTG Program 
+- If xterm already installed then set "Environment Variable" to /TTG_DEBUGGER=gdb_xterm/lldb_xterm based on the type of compiler system hold to run debugger for parallelly executing processes
+- run the ttg program and if it receives any signal the xterm windows should pop up to display debugging results 
 
 # Key Concepts of TTG
 
