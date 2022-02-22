@@ -19,10 +19,10 @@ class CallableWrapTT : public TT<keyT, output_terminalsT,
   using input_edges_type = typename baseT::input_edges_type;
   using output_edges_type = typename baseT::output_edges_type;
 
-  using noref_funcT = typename std::remove_reference_t<funcT>;
-  typename std::conditional<std::is_function<noref_funcT>::value,
-                              typename std::add_pointer<noref_funcT>::type,
-                              noref_funcT>::type func;
+  using noref_funcT = std::remove_reference_t<funcT>;
+  std::conditional_t<std::is_function_v<noref_funcT>,
+                     std::add_pointer_t<noref_funcT>,
+                     noref_funcT> func;
 
   template <typename Key, typename Tuple>
   void call_func(Key &&key, Tuple &&args, output_terminalsT &out) {
@@ -105,11 +105,10 @@ class CallableWrapTTArgs
   using input_edges_type = typename baseT::input_edges_type;
   using output_edges_type = typename baseT::output_edges_type;
 
-  using noref_funcT = typename std::remove_reference_t<funcT>;
-  typename std::conditional<std::is_function<noref_funcT>::value,
-                              typename std::add_pointer<noref_funcT>::type,
-                              noref_funcT>::type func;
-  //std::remove_reference_t<funcT> func;
+  using noref_funcT = std::remove_reference_t<funcT>;
+  std::conditional_t<std::is_function_v<noref_funcT>,
+                     std::add_pointer_t<noref_funcT>,
+                     noref_funcT> func;
 
   template <typename Key, typename Tuple, std::size_t... S>
   void call_func(Key &&key, Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
