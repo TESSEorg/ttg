@@ -8,32 +8,16 @@ namespace detail {
   template<typename FuncT>
   using boost_func_args_t = boost::callable_traits::args_t<FuncT>;
 
-  template<typename T>
-  struct has_wrapper_edge;
-
-  template<typename... EdgeTs>
-  struct has_wrapper_edge<std::tuple<EdgeTs...>> {
-    static constexpr bool value = (EdgeTs::is_wrapper_edge||...);
-  };
-
-  template<>
-  struct has_wrapper_edge<std::tuple<>> {
-    static constexpr bool value = false;
-  };
-
-  template<typename T>
-  constexpr bool has_wrapper_edge_v = has_wrapper_edge<T>::value;
-
   template<typename... FromEdgeTypesT, std::size_t ...I>
   inline auto edge_base_tuple(const std::tuple<FromEdgeTypesT...>& edges, std::index_sequence<I...>) {
     return std::make_tuple(std::get<I>(edges).edge()...);
   }
 
-  template<typename... FromEdgeTypesT>
-  inline decltype(auto) edge_base_tuple(const std::tuple<FromEdgeTypesT...>& edges) {
+  template<typename... EdgeTs>
+  inline decltype(auto) edge_base_tuple(const std::tuple<EdgeTs...>& edges) {
     /* avoid copying edges if there is no wrapper that forces us to create copies */
-    if constexpr (has_wrapper_edge_v<std::tuple<FromEdgeTypesT...>>) {
-      return edge_base_tuple(edges, std::make_index_sequence<sizeof...(FromEdgeTypesT)>{});
+    if constexpr ((EdgeTs::is_wrapper_edge||...)) {
+      return edge_base_tuple(edges, std::make_index_sequence<sizeof...(EdgeTs)>{});
     } else {
       return edges;
     }
