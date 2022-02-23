@@ -7,6 +7,41 @@ namespace detail {
   /* helper type used with std::experimental::is_detected_v */
   template<typename FuncT>
   using boost_func_args_t = boost::callable_traits::args_t<FuncT>;
+
+  template<typename T>
+  struct has_wrapper_edge;
+
+  template<typename... EdgeTs>
+  struct has_wrapper_edge<std::tuple<EdgeTs...>> {
+    static constexpr bool value = (EdgeTs::is_wrapper_edge||...);
+  };
+
+  template<>
+  struct has_wrapper_edge<std::tuple<>> {
+    static constexpr bool value = false;
+  };
+
+  template<typename T>
+  constexpr bool has_wrapper_edge_v = has_wrapper_edge<T>::value;
+
+  template<typename... FromEdgeTypesT, std::size_t ...I>
+  inline auto edge_base_tuple(const std::tuple<FromEdgeTypesT...>& edges, std::index_sequence<I...>) {
+    return std::make_tuple(std::get<I>(edges).edge()...);
+  }
+
+  template<typename... FromEdgeTypesT>
+  inline decltype(auto) edge_base_tuple(const std::tuple<FromEdgeTypesT...>& edges) {
+    /* avoid copying edges if there is no wrapper that forces us to create copies */
+    if constexpr (has_wrapper_edge_v<std::tuple<FromEdgeTypesT...>>) {
+      return edge_base_tuple(edges, std::make_index_sequence<sizeof...(FromEdgeTypesT)>{});
+    } else {
+      return edges;
+    }
+  }
+
+  inline auto edge_base_tuple(const std::tuple<>& empty) {
+    return empty;
+  }
 } // namespace detail
 
 // Class to wrap a callable with signature
@@ -229,7 +264,9 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>..
         std::is_same_v<typename std::tuple_element<num_args - 1, func_args_t>::type, output_terminals_type &>,
         "ttg::make_tt_tpl(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
 
-    return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+    auto input_edges = detail::edge_base_tuple(inedges);
+
+    return std::make_unique<wrapT>(std::forward<funcT>(func), input_edges, outedges, name, innames, outnames);
   } else {
 
     /* We cannot query the generic callable so we have to rely on the provided input edge value types */
@@ -237,7 +274,9 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>..
 
     using wrapT = typename CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminals_type, full_input_args_t>::type;
 
-    return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+    auto input_edges = detail::edge_base_tuple(inedges);
+
+    return std::make_unique<wrapT>(std::forward<funcT>(func), input_edges, outedges, name, innames, outnames);
   }
 }
 
@@ -305,7 +344,9 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
         std::is_same_v<typename std::tuple_element<num_args - 1, func_args_t>::type, output_terminals_type &>,
         "ttg::make_tt(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
 
-    return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+    auto input_edges = detail::edge_base_tuple(inedges);
+
+    return std::make_unique<wrapT>(std::forward<funcT>(func), input_edges, outedges, name, innames, outnames);
 
   } else {
 
@@ -314,7 +355,9 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
 
     using wrapT = typename CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminals_type, full_input_args_t>::type;
 
-    return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+    auto input_edges = detail::edge_base_tuple(inedges);
+
+    return std::make_unique<wrapT>(std::forward<funcT>(func), input_edges, outedges, name, innames, outnames);
   }
 }
 

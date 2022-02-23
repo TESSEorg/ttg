@@ -85,13 +85,20 @@ namespace ttg {
 
     Edge(const std::string name = "anonymous edge") : p(1) { p[0] = std::make_shared<EdgeImpl>(name); }
 
-    template <typename... valuesT>
+    template <typename... valuesT, typename = std::enable_if_t<(std::is_same_v<valuesT, valueT> && ...)>>
     Edge(const Edge<keyT, valuesT> &... edges) : p(0) {
       std::vector<Edge<keyT, valueT>> v = {edges...};
       for (auto &edge : v) {
         p.insert(p.end(), edge.p.begin(), edge.p.end());
       }
     }
+
+    /// whether this is a wrapper edge (it's not)
+    static constexpr bool is_wrapper_edge = false;
+
+    /// returns a reference to itself
+    /// this is used by edge wrappers to return the underlying edge
+    Edge<keyT, valueT> edge() const { return *this; }
 
     /// probes if this is already has at least one input
     bool live() const {
@@ -171,6 +178,11 @@ namespace ttg {
     using output_terminal_type = Out<keyT, value_type>;
 
     Edge(Edge<keyT, valueT>& edge) : m_edge(edge) { }
+
+    Edge<keyT, valueT> edge() const { return m_edge; }
+
+    /// this is a wrapper edge
+    static constexpr bool is_wrapper_edge = true;
 
     /// probes if this is already has at least one input
     bool live() const {
