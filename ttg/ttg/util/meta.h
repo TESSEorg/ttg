@@ -91,16 +91,21 @@ namespace ttg {
     template <typename Tuple>
     using decayed_tuple_t = typename decayed_tuple<Tuple>::type;
 
-    template <typename Tuple1, typename Tuple2>
+    template <typename... TupleTs>
     struct tuple_concat;
 
-    template <typename... Ts, typename... Us>
-    struct tuple_concat<std::tuple<Ts...>, std::tuple<Us...>> {
-      using type = decltype(std::tuple_cat(std::declval<std::tuple<Ts...>>(), std::declval<std::tuple<Us...>>()));
+    template <typename... Ts>
+    struct tuple_concat<std::tuple<Ts...>> {
+      using type = std::tuple<Ts...>;
     };
 
-    template <typename Tuple1, typename Tuple2>
-    using tuple_concat_t = typename tuple_concat<Tuple1, Tuple2>::type;
+    template <typename... Ts, typename... Us, typename... R>
+    struct tuple_concat<std::tuple<Ts...>, std::tuple<Us...>, R...> {
+      using type = typename tuple_concat<decltype(std::tuple_cat(std::declval<std::tuple<Ts...>>(), std::declval<std::tuple<Us...>>())), R...>::type;
+    };
+
+    template <typename... TupleTs>
+    using tuple_concat_t = typename tuple_concat<TupleTs...>::type;
 
     // filtered_tuple<tuple,p>::type returns tuple with types for which the predicate evaluates to true
     template <typename Tuple, template <typename> typename Predicate>

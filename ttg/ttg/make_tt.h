@@ -3,6 +3,12 @@
 #ifndef TTG_MAKE_TT_H
 #define TTG_MAKE_TT_H
 
+namespace detail {
+  /* helper type used with std::experimental::is_detected_v */
+  template<typename FuncT>
+  using boost_func_args_t = boost::callable_traits::args_t<FuncT>;
+} // namespace detail
+
 // Class to wrap a callable with signature
 //
 // case 1 (keyT != void): void op(auto&& key, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&)
@@ -34,8 +40,7 @@ class CallableWrapTT : public TT<keyT, output_terminalsT,
   }
 
   void call_func(output_terminalsT &out) {
-    using func_args_t = std::remove_reference_t<std::tuple_element_t<0, boost::callable_traits::args_t<funcT>>>;
-    func(func_args_t{}, out);
+    func(std::tuple<>(), out);
   }
 
  public:
@@ -110,14 +115,14 @@ class CallableWrapTTArgs
 
   template <typename Key, typename Tuple, std::size_t... S>
   void call_func(Key &&key, Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
-    using func_args_t = boost::callable_traits::args_t<funcT>;
+    using func_args_t = ttg::meta::tuple_concat_t<std::tuple<const Key&>, input_refs_tuple_type, output_edges_type>;
     func(std::forward<Key>(key),
          baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
   }
 
   template <typename Tuple, std::size_t... S>
   void call_func(Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
-    using func_args_t = boost::callable_traits::args_t<funcT>;
+    using func_args_t = ttg::meta::tuple_concat_t<input_refs_tuple_type, output_edges_type>;
     func(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
   }
 
@@ -183,6 +188,10 @@ struct CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<
 
 // Factory function to assist in wrapping a callable with signature
 //
+// If the callable is not generic, its arguments are inspected and the constness is used
+// to determine mutable data. Otherwise, mutability information is taken from the input edge types.
+// See \c ttg::make_const.
+//
 // case 1 (keyT != void): void op(const input_keyT&, std::tuple<input_valuesT&...>&&, std::tuple<output_terminalsT...>&)
 // case 2 (keyT == void): void op(std::tuple<input_valuesT&...>&&, std::tuple<output_terminalsT...>&)
 template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
@@ -194,34 +203,49 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>..
                      std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
   using output_terminals_type = typename ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
 
-  // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
-  // 1. func_args_t = {const input_keyT&, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&}
-  using func_args_t = boost::callable_traits::args_t<funcT>;
-  constexpr const auto num_args = std::tuple_size<func_args_t>::value;
-  constexpr const auto void_key = ttg::meta::is_void_v<keyT>;
-  static_assert(num_args == (void_key ? 2 : 3),
-                "ttg::make_tt_tpl(func, ...): func must take 3 arguments (or 2, if keyT=void)");
-  // 2. input_args_t = {input_valuesT&&...}
-  using input_args_t = std::decay_t<typename std::tuple_element<void_key ? 0 : 1, func_args_t>::type>;
-  using decayed_input_args_t = ttg::meta::decayed_tuple_t<input_args_t>;
-  using wrapT = typename CallableWrapTTUnwrapTuple<funcT, keyT, output_terminals_type, input_args_t>::type;
-  // not sure if we need this level of type checking ...
-  // TODO determine the generic signature of func
-  if constexpr (!void_key) {
+  // try to query boost for the callable arguments and fall back to using the provided edge types
+  if constexpr (std::experimental::is_detected_v<detail::boost_func_args_t, funcT>) {
+    // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
+    // 1. func_args_t = {const input_keyT&, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&}
+    using func_args_t = boost::callable_traits::args_t<funcT>;
+    constexpr const auto num_args = std::tuple_size<func_args_t>::value;
+    constexpr const auto void_key = ttg::meta::is_void_v<keyT>;
+    static_assert(num_args == (void_key ? 2 : 3),
+                  "ttg::make_tt_tpl(func, ...): func must take 3 arguments (or 2, if keyT=void)");
+    // 2. input_args_t = {input_valuesT&&...}
+    using input_args_t = std::decay_t<typename std::tuple_element<void_key ? 0 : 1, func_args_t>::type>;
+    using decayed_input_args_t = ttg::meta::decayed_tuple_t<input_args_t>;
+    using wrapT = typename CallableWrapTTUnwrapTuple<funcT, keyT, output_terminals_type, input_args_t>::type;
+    // not sure if we need this level of type checking ...
+    // TODO determine the generic signature of func
+    if constexpr (!void_key) {
+      static_assert(
+          std::is_same_v<typename std::tuple_element<0, func_args_t>::type, const keyT &>,
+          "ttg::make_tt_tpl(func, inedges, outedges): first argument of func must be const keyT& (unless keyT = void)");
+    }
+    static_assert(std::is_same_v<decayed_input_args_t, std::tuple<input_valuesT...>>,
+                  "ttg::make_tt_tpl(func, inedges, outedges): inedges value types do not match argument types of func");
     static_assert(
-        std::is_same_v<typename std::tuple_element<0, func_args_t>::type, const keyT &>,
-        "ttg::make_tt_tpl(func, inedges, outedges): first argument of func must be const keyT& (unless keyT = void)");
-  }
-  static_assert(std::is_same_v<decayed_input_args_t, std::tuple<input_valuesT...>>,
-                "ttg::make_tt_tpl(func, inedges, outedges): inedges value types do not match argument types of func");
-  static_assert(
-      std::is_same_v<typename std::tuple_element<num_args - 1, func_args_t>::type, output_terminals_type &>,
-      "ttg::make_tt_tpl(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
+        std::is_same_v<typename std::tuple_element<num_args - 1, func_args_t>::type, output_terminals_type &>,
+        "ttg::make_tt_tpl(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
 
-  return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+    return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+  } else {
+
+    /* We cannot query the generic callable so we have to rely on the provided input edge value types */
+    using full_input_args_t = std::tuple<typename ttg::Edge<keyT, input_valuesT>::value_type...>;
+
+    using wrapT = typename CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminals_type, full_input_args_t>::type;
+
+    return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+  }
 }
 
 // Factory function to assist in wrapping a callable with signature
+//
+// If the callable is not generic, its arguments are inspected and the constness is used
+// to determine mutable data. Otherwise, mutability information is taken from the input edge types.
+// See \c ttg::make_const.
 //
 // case 1 (keyT != void): void op(const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)
 // case 2 (keyT == void): void op(input_valuesT&&..., std::tuple<output_terminalsT...>&)
@@ -239,45 +263,59 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
 
   using output_terminals_type = typename ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
 
-  // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
-  // 1. func_args_t = {const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&}
-  using func_args_t = boost::callable_traits::args_t<funcT>;
-  constexpr auto num_args = std::tuple_size<func_args_t>::value;
-  constexpr auto void_key = ttg::meta::is_void_v<keyT>;
+  // try to query boost for the callable arguments and fall back to using the provided edge types
+  if constexpr (std::experimental::is_detected_v<detail::boost_func_args_t, funcT>) {
 
-  using input_values_full_tuple_type = std::tuple<std::decay_t<input_edge_valuesT>...>;
-  // drop all control inputs, only keep data inputs
-  using input_values_tuple_type = ttg::meta::drop_void_t<input_values_full_tuple_type>;
-  // make sure that input_values_tuple_type does not contain void
-  static_assert(!ttg::meta::is_any_void_v<input_values_tuple_type>);
+    using func_args_t = boost::callable_traits::args_t<funcT>;
+    constexpr auto num_args = std::tuple_size<func_args_t>::value;
+    constexpr auto void_key = ttg::meta::is_void_v<keyT>;
 
-  // callable should have num(non-void inputs) + output tuple + key if key is not void
-  static_assert(num_args == (std::tuple_size_v<input_values_tuple_type> + (void_key ? 1 : 2)),
-                "ttg::make_tt(func, inedges): func's # of args != # of inedges");
-  // 2. input_args_t = {input_valuesT&&...}
-  using input_args_t = typename ttg::meta::take_first_n<
-      typename ttg::meta::drop_first_n<func_args_t, std::size_t(void_key ? 0 : 1)>::type,
-      std::tuple_size_v<func_args_t> - (void_key ? 1 : 2)>::type;
-  using decayed_input_args_t = ttg::meta::decayed_tuple_t<input_args_t>;
-  // 3. full_input_args_t = edge-types with non-void types replaced by input_args_t
-  using full_input_args_t = ttg::meta::replace_nonvoid_t<input_values_full_tuple_type, input_args_t>;
-  //using full_input_args_t =
-  //    std::conditional_t<!have_void_datum, input_args_t, ttg::meta::tuple_concat_t<input_args_t, std::tuple<void>>>;
-  using wrapT = typename CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminals_type, full_input_args_t>::type;
-  // not sure if we need this level of type checking ...
-  // TODO determine the generic signature of func
-  if constexpr (!void_key) {
+    // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
+    // 1. func_args_t = {const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&}
+    //using input_values_full_tuple_type = std::tuple<std::decay_t<typename ttg::Edge<keyT, input_edge_valuesT>::value_type>>...>;
+    using input_values_full_tuple_type = ttg::meta::decayed_tuple_t<typename std::tuple<typename ttg::Edge<keyT, input_edge_valuesT>::value_type...>>;
+    // drop all control inputs, only keep data inputs
+    using input_values_tuple_type = ttg::meta::drop_void_t<input_values_full_tuple_type>;
+    // make sure that input_values_tuple_type does not contain void
+    static_assert(!ttg::meta::is_any_void_v<input_values_tuple_type>);
+
+    // callable should have num(non-void inputs) + output tuple + key if key is not void
+    static_assert(num_args == (std::tuple_size_v<input_values_tuple_type> + (void_key ? 1 : 2)),
+                  "ttg::make_tt(func, inedges): func's # of args != # of inedges");
+    // 2. input_args_t = {input_valuesT&&...}
+    using input_args_t = typename ttg::meta::take_first_n<
+        typename ttg::meta::drop_first_n<func_args_t, std::size_t(void_key ? 0 : 1)>::type,
+        std::tuple_size_v<func_args_t> - (void_key ? 1 : 2)>::type;
+    using decayed_input_args_t = ttg::meta::decayed_tuple_t<input_args_t>;
+    // 3. full_input_args_t = edge-types with non-void types replaced by input_args_t
+    using full_input_args_t = ttg::meta::replace_nonvoid_t<input_values_full_tuple_type, input_args_t>;
+    //using full_input_args_t =
+    //    std::conditional_t<!have_void_datum, input_args_t, ttg::meta::tuple_concat_t<input_args_t, std::tuple<void>>>;
+    using wrapT = typename CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminals_type, full_input_args_t>::type;
+    // not sure if we need this level of type checking ...
+    // TODO determine the generic signature of func
+    if constexpr (!void_key) {
+      static_assert(
+          std::is_same_v<typename std::tuple_element<0, func_args_t>::type, const keyT &>,
+          "ttg::make_tt(func, inedges, outedges): first argument of func must be const keyT& (unless keyT = void)");
+    }
+    static_assert(std::is_same_v<decayed_input_args_t, input_values_tuple_type>,
+                  "ttg::make_tt(func, inedges, outedges): inedges value types do not match argument types of func");
     static_assert(
-        std::is_same_v<typename std::tuple_element<0, func_args_t>::type, const keyT &>,
-        "ttg::make_tt(func, inedges, outedges): first argument of func must be const keyT& (unless keyT = void)");
-  }
-  static_assert(std::is_same_v<decayed_input_args_t, input_values_tuple_type>,
-                "ttg::make_tt(func, inedges, outedges): inedges value types do not match argument types of func");
-  static_assert(
-      std::is_same_v<typename std::tuple_element<num_args - 1, func_args_t>::type, output_terminals_type &>,
-      "ttg::make_tt(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
+        std::is_same_v<typename std::tuple_element<num_args - 1, func_args_t>::type, output_terminals_type &>,
+        "ttg::make_tt(func, inedges, outedges): last argument of func must be std::tuple<output_terminals_type>&");
 
-  return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+    return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+
+  } else {
+
+    /* We cannot query the generic callable so we have to rely on the provided input edge value types */
+    using full_input_args_t = std::tuple<typename ttg::Edge<keyT, input_edge_valuesT>::value_type...>;
+
+    using wrapT = typename CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminals_type, full_input_args_t>::type;
+
+    return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+  }
 }
 
 template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>

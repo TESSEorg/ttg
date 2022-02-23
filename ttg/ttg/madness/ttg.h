@@ -42,6 +42,7 @@
 #include <madness/world/world_task_queue.h>
 
 #include <boost/callable_traits.hpp>  // needed for wrap.h
+#include <experimental/type_traits>   // needed for wrap.h
 
 namespace ttg_madness {
 

@@ -101,6 +101,28 @@ namespace tt_i_i {
   };
 }  // namespace tt_i_i
 
+// {task_id,data} = {int, T}; templated op
+namespace tt_i_t {
+
+  class tt : public ttg::TT<int, std::tuple<>, tt, ttg::typelist<const int>> {
+    using baseT = typename tt::ttT;
+
+   public:
+    tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
+       const std::string &name)
+        : baseT(inedges, outedges, name, {"int"}, {}) {}
+
+    static constexpr const bool have_cuda_op = false;
+
+    template<typename InputTupleT, typename OutputTupleT>
+    void op(const int &key, const InputTupleT &data, OutputTupleT &outs) {
+      static_assert(std::is_const_v<std::remove_reference_t<std::tuple_element_t<0, InputTupleT>>>, "Const input type must be const!");
+    }
+
+    ~tt() {}
+  };
+}  // namespace tt_i_i
+
 // {task_id,data} = {int, int, void}
 namespace tt_i_iv {
 
@@ -114,11 +136,12 @@ namespace tt_i_iv {
 
     static constexpr const bool have_cuda_op = false;
 
-    void op(const int &key, const baseT::input_refs_tuple_type &data, baseT::output_terminals_type &outs) {}
+    void op(const int &key, const baseT::input_refs_tuple_type &data, baseT::output_edges_type &outs) {}
 
     ~tt() {}
   };
 }  // namespace tt_i_iv
+
 
 TEST_CASE("TemplateTask", "[core]") {
   SECTION("constructors") {
@@ -156,6 +179,14 @@ TEST_CASE("TemplateTask", "[core]") {
       CHECK_NOTHROW(std::make_unique<tt_i_i::tt>(ttg::edges(in), ttg::edges(), ""));
       CHECK_NOTHROW(
           ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
+    }
+    {  // nonvoid task id, nonvoid data, generic operator
+      ttg::Edge<int, int> in;
+      CHECK_NOTHROW(std::make_unique<tt_i_t::tt>(ttg::edges(in), ttg::edges(), ""));
+      CHECK_NOTHROW(
+          ttg::make_tt([](const int &key, auto &datum, auto &outs) {
+            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const input edge type expected to be const!");
+          }, ttg::edges(ttg::make_const(in)), ttg::edges()));
     }
   }
 }

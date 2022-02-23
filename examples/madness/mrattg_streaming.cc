@@ -294,13 +294,13 @@ template <Dimension NDIM> using ctlOut = ttg::Out<Key<NDIM>, void>;
 std::mutex printer_guard;
 template <typename keyT, typename valueT>
 auto make_printer(const ttg::Edge<keyT, valueT>& in, const char* str = "", const bool doprint=true) {
-    auto func = [str,doprint](const keyT& key, const valueT& value, std::tuple<>& out) {
+    auto func = [str,doprint](const keyT& key, auto& value, auto& out) {
         if (doprint) {
             std::lock_guard<std::mutex> obolus(printer_guard);
             std::cout << str << " (" << key << "," << value << ")" << std::endl;
         }
     };
-    return ttg::make_tt(func, ttg::edges(in), ttg::edges(), "printer", {"input"});
+    return ttg::make_tt(func, ttg::edges(ttg::make_const(in)), ttg::edges(), "printer", {"input"});
 }
 
 template <Dimension NDIM>

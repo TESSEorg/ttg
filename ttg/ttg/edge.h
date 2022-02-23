@@ -149,8 +149,53 @@ namespace ttg {
 
     template<typename keyT, typename valuesT>
     using edges_tuple_t = typename edges_tuple<keyT, valuesT>::type;
+
+    /* Wrapper around a type to mark that type as const in the context of an edge */
+    template<typename T>
+    struct const_wrap_t {
+      using value_type = std::add_const_t<T>;
+    };
   } // namespace detail
 
+
+  /* Slim wrapper around around an edge marked as const using the detail::const_wrap_t */
+  template <typename keyT, typename valueT>
+  class Edge<keyT, detail::const_wrap_t<valueT>> {
+
+  private:
+    Edge<keyT, valueT>& m_edge;
+
+  public:
+    using key_type = keyT;
+    using value_type = typename detail::const_wrap_t<valueT>::value_type;
+    using output_terminal_type = Out<keyT, value_type>;
+
+    Edge(Edge<keyT, valueT>& edge) : m_edge(edge) { }
+
+    /// probes if this is already has at least one input
+    bool live() const {
+      return m_edge.live();
+    }
+
+    void set_in(Out<keyT, valueT> *in) const {
+      m_edge.set_in(in);
+    }
+
+    void set_out(TerminalBase *out) const {
+      m_edge.set_out(out);
+    }
+
+    // pure control edge should be usable to fire off a task
+    template <typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<ttg::meta::is_all_void_v<Key, Value>> fire() const {
+      return m_edge.fire();
+    }
+  };
+
+  template<typename keyT, typename valueT>
+  auto make_const(Edge<keyT, valueT>& edge) {
+    return Edge<keyT, detail::const_wrap_t<valueT>>(edge);
+  }
 
 } // namespace ttg
 

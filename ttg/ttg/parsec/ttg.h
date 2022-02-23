@@ -59,6 +59,8 @@
 #include <cstring>
 
 #include <boost/callable_traits.hpp>  // needed for wrap.h
+#include <experimental/type_traits>   // needed for wrap.h
+
 
 #include "ttg/parsec/ttg_data_copy.h"
 
