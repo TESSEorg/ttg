@@ -84,9 +84,9 @@ namespace ttg {
   // Fuse edges into one ... all the types have to be the same ... just using
   // valuesT for variadic args
   template <typename keyT, typename... valuesT>
-  auto fuse(const Edge<keyT, valuesT> &... args) {
-    using valueT = typename std::tuple_element<0, std::tuple<valuesT...>>::type;  // grab first type
-    return Edge<keyT, valueT>(args...);  // This will force all valuesT to be the same
+  auto fuse(const Edge<keyT, valuesT> &...args) {
+    using valueT = std::tuple_element_t<0, std::tuple<valuesT...>>;  // grab first type
+    return Edge<keyT, valueT>(args...);                              // This will force all valuesT to be the same
   }
 
   // Make a tuple of Edges ... needs some type checking injected

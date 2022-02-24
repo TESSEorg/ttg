@@ -760,13 +760,13 @@ namespace ttg_parsec {
 
     bool alive = true;
 
-    static constexpr int numins = std::tuple_size_v<input_tuple_type>;            // number of input arguments
-    static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs
-    static constexpr int numflows = std::max(numins, numouts);                 // max number of flows
+    static constexpr int numins = std::tuple_size_v<input_tuple_type>;    // number of input arguments
+    static constexpr int numouts = std::tuple_size_v<output_terminalsT>;  // number of outputs
+    static constexpr int numflows = std::max(numins, numouts);            // max number of flows
 
     /// @return true if derivedT::have_cuda_op exists and is defined to true
     static constexpr bool derived_has_cuda_op() {
-      if constexpr (std::experimental::is_detected_v<have_cuda_op_non_type_t, derivedT>) {
+      if constexpr (ttg::meta::is_detected_v<have_cuda_op_non_type_t, derivedT>) {
         return derivedT::have_cuda_op;
       } else {
         return false;
@@ -783,7 +783,7 @@ namespace ttg_parsec {
     using input_refs_full_tuple_type =
         ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<input_tuple_type>>;
     using input_values_tuple_type = ttg::meta::drop_void_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
-    using input_refs_tuple_type   = ttg::meta::drop_void_t<ttg::meta::add_lvalue_reference_tuple_t<input_tuple_type>>;
+    using input_refs_tuple_type = ttg::meta::drop_void_t<ttg::meta::add_lvalue_reference_tuple_t<input_tuple_type>>;
 
     static constexpr int numinvals =
         std::tuple_size_v<input_refs_tuple_type>;  // number of input arguments with values (i.e. omitting the control
@@ -860,8 +860,8 @@ namespace ttg_parsec {
 
     template <std::size_t... IS>
     static input_refs_tuple_type make_tuple_of_ref_from_array(task_t *task, std::index_sequence<IS...>) {
-      return input_refs_tuple_type{static_cast<typename std::tuple_element<IS, input_refs_tuple_type>::type>(
-          *reinterpret_cast<std::remove_reference_t<typename std::tuple_element<IS, input_refs_tuple_type>::type> *>(
+      return input_refs_tuple_type{static_cast<std::tuple_element_t<IS, input_refs_tuple_type>>(
+          *reinterpret_cast<std::remove_reference_t<std::tuple_element_t<IS, input_refs_tuple_type>> *>(
               task->parsec_task.data[IS].data_in->device_private))...};
     }
 
@@ -1049,7 +1049,7 @@ namespace ttg_parsec {
 
     template <std::size_t i>
     void set_arg_from_msg(void *data, std::size_t size) {
-      using valueT = typename std::tuple_element<i, input_terminals_type>::type::value_type;
+      using valueT = typename std::tuple_element_t<i, input_terminals_type>::value_type;
       using msg_t = detail::msg_t;
       msg_t *msg = static_cast<msg_t *>(data);
       if constexpr (!ttg::meta::is_void_v<keyT>) {
@@ -1293,7 +1293,7 @@ namespace ttg_parsec {
     template <std::size_t i, typename Key, typename Value>
     void set_arg_local_impl(const Key &key, Value &&value, ttg_data_copy_t *copy_in = nullptr,
                             parsec_task_t **task_ring = nullptr) {
-      using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
+      using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;
       constexpr const bool input_is_const = std::is_const_v<std::tuple_element_t<i, input_args_type>>;
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<Key>;
@@ -1323,7 +1323,7 @@ namespace ttg_parsec {
           task = create_new_task(key);
           world_impl.increment_created();
           parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
-        } else if (!reducer && numins == (task->in_data_count+1)) {
+        } else if (!reducer && numins == (task->in_data_count + 1)) {
           /* remove while we have the lock */
           parsec_hash_table_nolock_remove(&tasks_table, hk);
           remove_from_hash = false;
@@ -1424,7 +1424,7 @@ namespace ttg_parsec {
        * so we know that the task is ready, no need to do atomic increments here */
       constexpr const bool is_ready = !RemoveFromHash;
       int32_t count;
-      if constexpr(is_ready) {
+      if constexpr (is_ready) {
         count = numins;
       } else {
         count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
@@ -1457,8 +1457,7 @@ namespace ttg_parsec {
           *task_ring = &task->parsec_task;
         } else {
           /* push into the ring */
-          parsec_list_item_ring_push_sorted(&(*task_ring)->super,
-                                            &task->parsec_task.super,
+          parsec_list_item_ring_push_sorted(&(*task_ring)->super, &task->parsec_task.super,
                                             offsetof(parsec_task_t, priority));
         }
       }
@@ -1492,7 +1491,7 @@ namespace ttg_parsec {
     // Used to set the i'th argument
     template <std::size_t i, typename Key, typename Value>
     void set_arg_impl(const Key &key, Value &&value, bool is_move) {
-      using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
+      using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;
       int owner;
 
       if constexpr (!ttg::meta::is_void_v<Key>)
@@ -1760,7 +1759,7 @@ namespace ttg_parsec {
                          ttg::has_split_metadata<std::decay_t<Value>>::value,
                      void>
     splitmd_broadcast_arg(const ttg::span<const Key> &keylist, const Value &value) {
-      using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;
+      using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;
       auto world = ttg_default_execution_context();
       int rank = world.rank();
       bool have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
@@ -2218,9 +2217,10 @@ namespace ttg_parsec {
 
     template <std::size_t... IS>
     void register_input_callbacks(std::index_sequence<IS...>) {
-      int junk[] = {0, (register_input_callback<typename std::tuple_element<IS, input_terminals_type>::type, IS>(
-                            std::get<IS>(input_terminals)),
-                        0)...};
+      int junk[] = {
+          0,
+          (register_input_callback<std::tuple_element_t<IS, input_terminals_type>, IS>(std::get<IS>(input_terminals)),
+           0)...};
       junk[0]++;
     }
 
@@ -2240,9 +2240,8 @@ namespace ttg_parsec {
     void _initialize_flows(std::index_sequence<IS...>, flowsT &&flows) {
       int junk[] = {0,
                     (*(const_cast<std::remove_const_t<decltype(flows[IS]->flow_flags)> *>(&(flows[IS]->flow_flags))) =
-                         (std::is_const<typename std::tuple_element<IS, input_terminals_tupleT>::type>::value
-                              ? PARSEC_FLOW_ACCESS_READ
-                              : PARSEC_FLOW_ACCESS_RW),
+                         (std::is_const_v<std::tuple_element_t<IS, input_terminals_tupleT>> ? PARSEC_FLOW_ACCESS_READ
+                                                                                            : PARSEC_FLOW_ACCESS_RW),
                      0)...};
       junk[0]++;
     }
@@ -2440,8 +2439,8 @@ namespace ttg_parsec {
     TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        keymapT &&keymap = keymapT(ttg::default_execution_context()), priomapT &&priomap = priomapT())
-        : TT(inedges, outedges, name, innames, outnames, ttg::default_execution_context(), std::forward<keymapT>(keymap),
-             std::forward<priomapT>(priomap)) {}
+        : TT(inedges, outedges, name, innames, outnames, ttg::default_execution_context(),
+             std::forward<keymapT>(keymap), std::forward<priomapT>(priomap)) {}
 
     // Destructor checks for unexecuted tasks
     virtual ~TT() { release(); }
@@ -2456,9 +2455,7 @@ namespace ttg_parsec {
       }
     }
 
-    virtual void release() override {
-      do_release();
-    }
+    virtual void release() override { do_release(); }
 
     void do_release() {
       if (!alive) {
@@ -2503,14 +2500,14 @@ namespace ttg_parsec {
     // Returns reference to input terminal i to facilitate connection --- terminal
     // cannot be copied, moved or assigned
     template <std::size_t i>
-    typename std::tuple_element<i, input_terminals_type>::type *in() {
+    std::tuple_element_t<i, input_terminals_type> *in() {
       return &std::get<i>(input_terminals);
     }
 
     // Returns reference to output terminal for purpose of connection --- terminal
     // cannot be copied, moved or assigned
     template <std::size_t i>
-    typename std::tuple_element<i, output_terminalsT>::type *out() {
+    std::tuple_element_t<i, output_terminalsT> *out() {
       return &std::get<i>(output_terminals);
     }
 

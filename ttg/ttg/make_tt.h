@@ -4,8 +4,8 @@
 #define TTG_MAKE_TT_H
 
 namespace detail {
-  /* helper type used with std::experimental::is_detected_v */
-  template<typename FuncT>
+  /* helper type used with is_detected_v */
+  template <typename FuncT>
   using boost_func_args_t = boost::callable_traits::args_t<FuncT>;
 
   template<typename... FromEdgeTypesT, std::size_t ...I>
@@ -173,7 +173,7 @@ class CallableWrapTTArgs
                    void>
   op(Key &&key, ArgsTuple &&args_tuple, output_terminalsT &out) {
     call_func(std::forward<Key>(key), std::forward<ArgsTuple>(args_tuple), out,
-              std::make_index_sequence<std::tuple_size<ArgsTuple>::value>{});
+              std::make_index_sequence<std::tuple_size_v<ArgsTuple>>{});
   };
 
   template <typename ArgsTuple, typename Key = keyT>
@@ -181,7 +181,7 @@ class CallableWrapTTArgs
                        !ttg::meta::is_empty_tuple_v<input_refs_tuple_type> && ttg::meta::is_void_v<Key>,
                    void>
   op(ArgsTuple &&args_tuple, output_terminalsT &out) {
-    call_func(std::forward<ArgsTuple>(args_tuple), out, std::make_index_sequence<std::tuple_size<ArgsTuple>::value>{});
+    call_func(std::forward<ArgsTuple>(args_tuple), out, std::make_index_sequence<std::tuple_size_v<ArgsTuple>>{});
   };
 
   template <typename Key, typename ArgsTuple = input_refs_tuple_type>
@@ -216,23 +216,22 @@ struct CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<
 template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
 auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>...> &inedges,
                  const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
-                 const std::vector<std::string> &innames = std::vector<std::string>(
-                     std::tuple_size<std::tuple<ttg::Edge<keyT, input_valuesT>...>>::value, "input"),
-                 const std::vector<std::string> &outnames =
-                     std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
+                 const std::vector<std::string> &innames = std::vector<std::string>(sizeof...(input_valuesT), "input"),
+                 const std::vector<std::string> &outnames = std::vector<std::string>(sizeof...(output_edgesT),
+                                                                                     "output")) {
   using output_terminals_type = typename ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
 
   // try to query boost for the callable arguments and fall back to using the provided edge types
-  if constexpr (std::experimental::is_detected_v<detail::boost_func_args_t, funcT>) {
+  if constexpr (ttg::meta::is_detected_v<detail::boost_func_args_t, funcT>) {
     // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
     // 1. func_args_t = {const input_keyT&, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&}
     using func_args_t = boost::callable_traits::args_t<funcT>;
-    constexpr const auto num_args = std::tuple_size<func_args_t>::value;
+    constexpr const auto num_args = std::tuple_size_v<func_args_t>;
     constexpr const auto void_key = ttg::meta::is_void_v<keyT>;
     static_assert(num_args == (void_key ? 2 : 3),
                   "ttg::make_tt_tpl(func, ...): func must take 3 arguments (or 2, if keyT=void)");
     // 2. input_args_t = {input_valuesT&&...}
-    using input_args_t = std::decay_t<typename std::tuple_element<void_key ? 0 : 1, func_args_t>::type>;
+    using input_args_t = std::decay_t<std::tuple_element_t<void_key ? 0 : 1, func_args_t>>;
     using decayed_input_args_t = ttg::meta::decayed_tuple_t<input_args_t>;
     using wrapT = typename CallableWrapTTUnwrapTuple<funcT, keyT, output_terminals_type, input_args_t>::type;
     // not sure if we need this level of type checking ...
@@ -277,26 +276,25 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>..
 template <typename keyT, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
 auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
              const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
-             const std::vector<std::string> &innames = std::vector<std::string>(
-                 std::tuple_size<std::tuple<ttg::Edge<keyT, input_edge_valuesT>...>>::value, "input"),
-             const std::vector<std::string> &outnames =
-                 std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
+             const std::vector<std::string> &innames = std::vector<std::string>(sizeof...(input_edge_valuesT), "input"),
+             const std::vector<std::string> &outnames = std::vector<std::string>(sizeof...(output_edgesT), "output")) {
   // ensure input types do not contain Void
   static_assert(ttg::meta::is_none_Void_v<input_edge_valuesT...>, "ttg::Void is for internal use only, do not use it");
 
   using output_terminals_type = typename ttg::edges_to_output_terminals<std::tuple<output_edgesT...>>::type;
 
   // try to query boost for the callable arguments and fall back to using the provided edge types
-  if constexpr (std::experimental::is_detected_v<detail::boost_func_args_t, funcT>) {
-
+  if constexpr (ttg::meta::is_detected_v<detail::boost_func_args_t, funcT>) {
     using func_args_t = boost::callable_traits::args_t<funcT>;
-    constexpr auto num_args = std::tuple_size<func_args_t>::value;
+    constexpr auto num_args = std::tuple_size_v<func_args_t>;
     constexpr auto void_key = ttg::meta::is_void_v<keyT>;
 
     // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
     // 1. func_args_t = {const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&}
-    //using input_values_full_tuple_type = std::tuple<std::decay_t<typename ttg::Edge<keyT, input_edge_valuesT>::value_type>>...>;
-    using input_values_full_tuple_type = ttg::meta::decayed_tuple_t<typename std::tuple<typename ttg::Edge<keyT, input_edge_valuesT>::value_type...>>;
+    // using input_values_full_tuple_type = std::tuple<std::decay_t<typename ttg::Edge<keyT,
+    // input_edge_valuesT>::value_type>>...>;
+    using input_values_full_tuple_type =
+        ttg::meta::decayed_tuple_t<typename std::tuple<typename ttg::Edge<keyT, input_edge_valuesT>::value_type...>>;
     // drop all control inputs, only keep data inputs
     using input_values_tuple_type = ttg::meta::drop_void_t<input_values_full_tuple_type>;
     // make sure that input_values_tuple_type does not contain void
@@ -349,10 +347,8 @@ template <typename keyT, typename funcT, typename... input_valuesT, typename... 
 [[deprecated("use make_tt_tpl instead")]] inline auto wrapt(
     funcT &&func, const std::tuple<ttg::Edge<keyT, input_valuesT>...> &inedges,
     const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
-    const std::vector<std::string> &innames =
-        std::vector<std::string>(std::tuple_size<std::tuple<ttg::Edge<keyT, input_valuesT>...>>::value, "input"),
-    const std::vector<std::string> &outnames =
-        std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
+    const std::vector<std::string> &innames = std::vector<std::string>(sizeof...(input_valuesT), "input"),
+    const std::vector<std::string> &outnames = std::vector<std::string>(sizeof...(output_edgesT), "output")) {
   return make_tt_tpl<keyT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
@@ -360,10 +356,8 @@ template <typename keyT, typename funcT, typename... input_edge_valuesT, typenam
 [[deprecated("use make_tt instead")]] auto wrap(
     funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
     const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
-    const std::vector<std::string> &innames =
-        std::vector<std::string>(std::tuple_size<std::tuple<ttg::Edge<keyT, input_edge_valuesT>...>>::value, "input"),
-    const std::vector<std::string> &outnames =
-        std::vector<std::string>(std::tuple_size<std::tuple<output_edgesT...>>::value, "output")) {
+    const std::vector<std::string> &innames = std::vector<std::string>(sizeof...(input_edge_valuesT), "input"),
+    const std::vector<std::string> &outnames = std::vector<std::string>(sizeof...(output_edgesT), "output")) {
   return make_tt<keyT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 

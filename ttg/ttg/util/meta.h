@@ -85,7 +85,7 @@ namespace ttg {
 
     template <typename... Ts>
     struct decayed_tuple<std::tuple<Ts...>> {
-      using type = std::tuple<typename std::decay<Ts>::type...>;
+      using type = std::tuple<std::decay_t<Ts>...>;
     };
 
     template <typename Tuple>

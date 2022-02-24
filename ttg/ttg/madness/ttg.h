@@ -206,9 +206,8 @@ namespace ttg_madness {
    protected:
     using worldobjT = ::madness::WorldObject<ttT>;
 
-    static constexpr int numins = std::tuple_size_v<input_tuple_type>;                    // number of input arguments
-    static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or
-    // results
+    static constexpr int numins = std::tuple_size_v<input_tuple_type>;    // number of input arguments
+    static constexpr int numouts = std::tuple_size_v<output_terminalsT>;  // number of outputs
 
     // This to support tt fusion
     inline static __thread struct {
@@ -228,7 +227,7 @@ namespace ttg_madness {
         ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<input_tuple_type>>;
 
     using input_values_tuple_type = ttg::meta::drop_void_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
-    using input_refs_tuple_type   = ttg::meta::drop_void_t<ttg::meta::add_lvalue_reference_tuple_t<input_tuple_type>>;
+    using input_refs_tuple_type = ttg::meta::drop_void_t<ttg::meta::add_lvalue_reference_tuple_t<input_tuple_type>>;
     static_assert(!ttg::meta::is_any_void_v<input_values_tuple_type>);
 
     using output_terminals_type = output_terminalsT;
@@ -340,7 +339,7 @@ namespace ttg_madness {
     template <std::size_t i, typename Key, typename Value>
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void> set_arg(const Key &key,
                                                                                                        Value &&value) {
-      using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;  // Should be T or const T
+      using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;  // Should be T or const T
       static_assert(std::is_same_v<std::decay_t<Value>, std::decay_t<valueT>>,
                     "TT::set_arg(key,value) given value of type incompatible with TT");
 
@@ -463,8 +462,8 @@ namespace ttg_madness {
     // case 4
     template <std::size_t i, typename Key = keyT, typename Value>
     std::enable_if_t<ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void> set_arg(Value &&value) {
-      using valueT = typename std::tuple_element<i, input_values_full_tuple_type>::type;  // Should be T or const T
-      static_assert(std::is_same<std::decay_t<Value>, std::decay_t<valueT>>::value,
+      using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;  // Should be T or const T
+      static_assert(std::is_same_v<std::decay_t<Value>, std::decay_t<valueT>>,
                     "TT::set_arg(key,value) given value of type incompatible with TT");
 
       const int owner = keymap();
@@ -860,7 +859,7 @@ namespace ttg_madness {
     // Registers the callback for the i'th input terminal
     template <typename terminalT, std::size_t i>
     void register_input_callback(terminalT &input) {
-      static_assert(std::is_same<keyT, typename terminalT::key_type>::value,
+      static_assert(std::is_same_v<keyT, typename terminalT::key_type>,
                     "TT::register_input_callback(terminalT) -- incompatible terminalT");
       using valueT = std::decay_t<typename terminalT::value_type>;
 
@@ -937,9 +936,10 @@ namespace ttg_madness {
 
     template <std::size_t... IS>
     void register_input_callbacks(std::index_sequence<IS...>) {
-      int junk[] = {0, (register_input_callback<typename std::tuple_element<IS, input_terminals_type>::type, IS>(
-                            std::get<IS>(input_terminals)),
-                        0)...};
+      int junk[] = {
+          0,
+          (register_input_callback<std::tuple_element_t<IS, input_terminals_type>, IS>(std::get<IS>(input_terminals)),
+           0)...};
       junk[0]++;
     }
 
@@ -973,14 +973,14 @@ namespace ttg_madness {
         , worldobjT(world.impl().impl())
         , world(world)
         // if using default keymap, rebind to the given world
-        , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
+        , keymap(std::is_same_v<keymapT, ttg::detail::default_keymap<keyT>>
                      ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
                      : decltype(keymap)(std::forward<keymapT>(keymap_)))
         , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))) {
       // Cannot call these in base constructor since terminals not yet constructed
-      if (innames.size() != std::tuple_size<input_terminals_type>::value) {
+      if (innames.size() != std::tuple_size_v<input_terminals_type>) {
         ttg::print_error(world.rank(), ":", get_name(), "#input_names", innames.size(), "!= #input_terminals",
-                         std::tuple_size<input_terminals_type>::value);
+                         std::tuple_size_v<input_terminals_type>);
         throw this->get_name() + ":madness::ttg::TT: #input names != #input terminals";
       }
       if (outnames.size() != std::tuple_size_v<output_terminalsT>)
@@ -1009,17 +1009,17 @@ namespace ttg_madness {
         , worldobjT(ttg::default_execution_context().impl().impl())
         , world(ttg::default_execution_context())
         // if using default keymap, rebind to the given world
-        , keymap(std::is_same<keymapT, ttg::detail::default_keymap<keyT>>::value
+        , keymap(std::is_same_v<keymapT, ttg::detail::default_keymap<keyT>>
                      ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
                      : decltype(keymap)(std::forward<keymapT>(keymap_)))
         , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))) {
       // Cannot call in base constructor since terminals not yet constructed
-      if (innames.size() != std::tuple_size<input_terminals_type>::value) {
+      if (innames.size() != std::tuple_size_v<input_terminals_type>) {
         ttg::print_error(world.rank(), ":", get_name(), "#input_names", innames.size(), "!= #input_terminals",
-                         std::tuple_size<input_terminals_type>::value);
+                         std::tuple_size_v<input_terminals_type>);
         throw this->get_name() + ":madness::ttg::TT: #input names != #input terminals";
       }
-      if (outnames.size() != std::tuple_size<output_terminalsT>::value)
+      if (outnames.size() != std::tuple_size_v<output_terminalsT>)
         throw this->get_name() + ":madness::ttg::T: #output names != #output terminals";
 
       register_input_terminals(input_terminals, innames);
@@ -1106,13 +1106,13 @@ namespace ttg_madness {
 
     /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned
     template <std::size_t i>
-    typename std::tuple_element<i, input_terminals_type>::type *in() {
+    std::tuple_element_t<i, input_terminals_type> *in() {
       return &std::get<i>(input_terminals);
     }
 
     /// Returns pointer to output terminal for purpose of connection --- terminal cannot be copied, moved or assigned
     template <std::size_t i>
-    typename std::tuple_element<i, output_terminalsT>::type *out() {
+    std::tuple_element_t<i, output_terminalsT> *out() {
       return &std::get<i>(output_terminals);
     }
 
@@ -1121,7 +1121,7 @@ namespace ttg_madness {
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>, void> invoke(
         const Key &key, const input_values_tuple_type &args) {
       TTG_OP_ASSERT_EXECUTABLE();
-      set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, key, args);
+      set_args(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, key, args);
     }
 
     /// Manual injection of a key-free task with all input arguments specified as a tuple
@@ -1129,7 +1129,7 @@ namespace ttg_madness {
     std::enable_if_t<ttg::meta::is_void_v<Key> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>, void> invoke(
         const input_values_tuple_type &args) {
       TTG_OP_ASSERT_EXECUTABLE();
-      set_args(std::make_index_sequence<std::tuple_size<input_values_tuple_type>::value>{}, args);
+      set_args(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, args);
     }
 
     /// Manual injection of a task that has no arguments
