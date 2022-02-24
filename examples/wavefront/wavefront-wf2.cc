@@ -146,8 +146,8 @@ class Matrix {
 };
 
 template <typename T>
-inline void stencil_computation(int i, int j, int M, int N, BlockMatrix<T>& bm, BlockMatrix<T>& left,
-                                BlockMatrix<T>& top, BlockMatrix<T>& right, BlockMatrix<T>& bottom) {
+inline void stencil_computation(int i, int j, int M, int N, BlockMatrix<T>& bm, const BlockMatrix<T>& left,
+                                const BlockMatrix<T>& top, const BlockMatrix<T>& right, const BlockMatrix<T>& bottom) {
   // i==0 -> no top block
   // j==0 -> no left block
   // i==M-1 -> no bottom block
@@ -198,7 +198,7 @@ void wavefront_serial(Matrix<T>* m, int n_brows, int n_bcols) {
 template <typename funcT, typename T>
 auto make_wavefront2(const funcT& func, Matrix<T>* m, Edge<Key, BlockMatrix<T>>& input1,
                      Edge<Key, BlockMatrix<T>>& input2) {
-  auto f = [m, func](const Key& key, BlockMatrix<T>&& bm1, BlockMatrix<T>&& bm2,
+  auto f = [m, func](const Key& key, const BlockMatrix<T>& bm1, const BlockMatrix<T>& bm2,
                      std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
@@ -240,7 +240,7 @@ auto make_wavefront2(const funcT& func, Matrix<T>* m, Edge<Key, BlockMatrix<T>>&
 template <typename funcT, typename T>
 auto make_wavefront(const funcT& func, Matrix<T>* m, Edge<Key, BlockMatrix<T>>& input1,
                     Edge<Key, BlockMatrix<T>>& input2) {
-  auto f = [m, func](const Key& key, BlockMatrix<T>&& bm,
+  auto f = [m, func](const Key& key, BlockMatrix<T>& bm,
                      std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;

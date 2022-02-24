@@ -131,7 +131,7 @@ auto make_sw2(const funcT& func, int block_size, const std::string& a, const std
               Edge<Key, BlockMatrix<T>>& diagedge, Edge<Key, T>& resultedge) {
   auto f =
       [block_size, problem_size, a, b, func](
-          const Key& key, BlockMatrix<T>&& left, BlockMatrix<T>&& top, BlockMatrix<T>&& diag,
+          const Key& key, BlockMatrix<T>& left, const BlockMatrix<T>& top, const BlockMatrix<T>& diag,
           std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, T>>& out) {
         // Getting the block coordinates
         auto [i, j] = key;
@@ -165,7 +165,7 @@ auto make_sw1(const funcT& func, int block_size, const std::string& a, const std
               Edge<Key, BlockMatrix<T>>& leftedge, Edge<Key, BlockMatrix<T>>& topedge,
               Edge<Key, BlockMatrix<T>>& diagedge, Edge<Key, T>& resultedge) {
   auto f = [block_size, problem_size, a, b, func](
-               const Key& key, BlockMatrix<T>&& toporleft,
+               const Key& key, BlockMatrix<T>& toporleft,
                std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                           Out<Key, BlockMatrix<T>>, Out<Key, T>>& out) {
     // Getting the block coordinates
