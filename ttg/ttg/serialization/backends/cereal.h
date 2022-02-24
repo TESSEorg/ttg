@@ -50,10 +50,10 @@ namespace ttg::detail {
   struct is_cereal_array_serializable;
 
   template <typename Archive, typename T>
-  struct is_cereal_array_serializable<Archive, T, std::enable_if_t<!std::is_array<T>::value>> : std::false_type {};
+  struct is_cereal_array_serializable<Archive, T, std::enable_if_t<!std::is_array_v<T>>> : std::false_type {};
 
   template <typename Archive, typename T>
-  struct is_cereal_array_serializable<Archive, T, std::enable_if_t<std::is_array<T>::value>>
+  struct is_cereal_array_serializable<Archive, T, std::enable_if_t<std::is_array_v<T>>>
       : std::bool_constant<is_cereal_serializable_v<Archive, std::remove_extent_t<T>>> {};
 
   template <typename Archive, typename T>

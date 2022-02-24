@@ -19,10 +19,10 @@ namespace ttg {
    public:
     typedef valueT value_type;
     typedef keyT key_type;
-    static_assert(std::is_same<keyT, std::decay_t<keyT>>::value,
+    static_assert(std::is_same_v<keyT, std::decay_t<keyT>>,
                   "In<keyT,valueT> assumes keyT is a non-decayable type");
     // valueT can be T or const T
-    static_assert(std::is_same<std::remove_const_t<valueT>, std::decay_t<valueT>>::value,
+    static_assert(std::is_same_v<std::remove_const_t<valueT>, std::decay_t<valueT>>,
                   "In<keyT,valueT> assumes std::remove_const<T> is a non-decayable type");
     using edge_type = Edge<keyT, valueT>;
     using send_callback_type = meta::detail::send_callback_t<keyT, std::decay_t<valueT>>;
@@ -51,7 +51,7 @@ namespace ttg {
 
    public:
     In()
-    : TerminalBase(std::is_const<valueT>::value ? TerminalBase::Type::Read : TerminalBase::Type::Consume)
+    : TerminalBase(std::is_const_v<valueT> ? TerminalBase::Type::Read : TerminalBase::Type::Consume)
     {}
 
     void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback,
@@ -184,9 +184,9 @@ namespace ttg {
    public:
     typedef valueT value_type;
     typedef keyT key_type;
-    static_assert(std::is_same<keyT, std::decay_t<keyT>>::value,
+    static_assert(std::is_same_v<keyT, std::decay_t<keyT>>,
                   "Out<keyT,valueT> assumes keyT is a non-decayable type");
-    static_assert(std::is_same<valueT, std::decay_t<valueT>>::value,
+    static_assert(std::is_same_v<valueT, std::decay_t<valueT>>,
                   "Out<keyT,valueT> assumes valueT is a non-decayable type");
     typedef Edge<keyT, valueT> edge_type;
     static constexpr bool is_an_output_terminal = true;

@@ -78,9 +78,9 @@ namespace ttg {
     typedef Out<keyT, valueT> output_terminal_type;
     typedef keyT key_type;
     typedef valueT value_type;
-    static_assert(std::is_same<keyT, std::decay_t<keyT>>::value,
+    static_assert(std::is_same_v<keyT, std::decay_t<keyT>>,
                   "Edge<keyT,valueT> assumes keyT is a non-decayable type");
-    static_assert(std::is_same<valueT, std::decay_t<valueT>>::value,
+    static_assert(std::is_same_v<valueT, std::decay_t<valueT>>,
                   "Edge<keyT,valueT> assumes valueT is a non-decayable type");
 
     Edge(const std::string name = "anonymous edge") : p(1) { p[0] = std::make_shared<EdgeImpl>(name); }
