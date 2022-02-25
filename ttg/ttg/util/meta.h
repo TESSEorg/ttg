@@ -381,6 +381,41 @@ namespace ttg {
     template<typename T>
     constexpr bool is_tuple_v = is_tuple<T>::value;
 
+    template<template<class> class Pred, typename TupleT, std::size_t I, std::size_t... Is>
+    struct predicate_index_seq_helper;
+
+    template<template<class> class Pred, typename T, typename... Ts, std::size_t I, std::size_t... Is>
+    struct predicate_index_seq_helper<Pred, std::tuple<T, Ts...>, I, Is...> {
+      using seq = std::conditional_t<Pred<T>::value,
+                                     typename predicate_index_seq_helper<Pred, std::tuple<Ts...>, I+1, Is..., I>::seq,
+                                     typename predicate_index_seq_helper<Pred, std::tuple<Ts...>, I+1, Is...>::seq>;
+    };
+
+    template<template<class> class Pred, std::size_t I, std::size_t... Is>
+    struct predicate_index_seq_helper<Pred, std::tuple<>, I, Is...> {
+      using seq = std::index_sequence<Is...>;
+    };
+
+    template<typename T>
+    struct is_none_void_pred : std::integral_constant<bool, is_none_void_v<T>>
+    { };
+
+    /**
+     * An index sequence of nonvoid types in the tuple TupleT
+     */
+    template<typename TupleT>
+    using nonvoid_index_seq = typename predicate_index_seq_helper<is_none_void_pred, TupleT, 0>::seq;
+
+    template<typename T>
+    struct is_void_pred : std::integral_constant<bool, is_void_v<T>>
+    { };
+
+    /**
+     * An index sequence of void types in the tuple TupleT
+     */
+    template<typename TupleT>
+    using void_index_seq = typename predicate_index_seq_helper<is_void_pred, TupleT, 0>::seq;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // is_empty_tuple
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

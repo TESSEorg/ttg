@@ -453,7 +453,7 @@ namespace ttg_madness {
       }
     }
 
-    // case 2
+    // case 2 and 3
     template <std::size_t i, typename Key, typename Value>
     std::enable_if_t<!ttg::meta::is_void_v<Key> && std::is_void_v<Value>, void> set_arg(const Key &key) {
       set_arg<i>(key, ttg::Void{});
@@ -546,64 +546,55 @@ namespace ttg_madness {
       }
     }
 
-    // case 5
+    // case 5 and 6
     template <std::size_t i, typename Key = keyT, typename Value>
     std::enable_if_t<ttg::meta::is_void_v<Key> && std::is_void_v<Value>, void> set_arg() {
-      // set_arg<i>(ttg::Void{});
-    }
-
-    // case 3
-    template <typename Key = keyT>
-    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> set_arg(const Key &key) {
-      static_assert(ttg::meta::is_empty_tuple_v<input_values_tuple_type>,
-                    "set_arg called without a value but valueT!=void");
-      const int owner = keymap(key);
-
-      if (owner != world.rank()) {
-        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": forwarding no-arg task: ");
-        worldobjT::send(owner, &ttT::set_arg<keyT>, key);
-      } else {
-        accessorT acc;
-        if (cache.insert(acc, key)) acc->second = new TTArgs(this->priomap(key));  // It will be deleted by the task q
-        TTArgs *args = acc->second;
-
-        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
-        args->derived = static_cast<derivedT *>(this);
-        args->key = key;
-
-        world.impl().impl().taskq.add(args);
-        // static_cast<derivedT*>(this)->op(key, std::move(args->t), output_terminals);// runs immediately
-
-        cache.erase(acc);
-      }
-    }
-
-    // case 6
-    template <typename Key = keyT>
-    std::enable_if_t<ttg::meta::is_void_v<Key>, void> set_arg() {
-      static_assert(ttg::meta::is_empty_tuple_v<input_values_tuple_type>,
-                    "set_arg called without a value but valueT!=void");
-      const int owner = keymap();
-
-      if (owner != world.rank()) {
-        ttg::trace(world.rank(), ":", get_name(), " : forwarding no-arg task: ");
-        worldobjT::send(owner, &ttT::set_arg<keyT>);
-      } else {
-        auto task = new TTArgs();  // It will be deleted by the task q
-
-        ttg::trace(world.rank(), ":", get_name(), " : submitting task for op ");
-        task->derived = static_cast<derivedT *>(this);
-
-        world.impl().impl().taskq.add(task);
-      }
+      set_arg<i, ttg::Void, void>(ttg::Void{});
     }
 
     // Used by invoke to set all arguments associated with a task
-    template <typename Key, size_t... IS>
-    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<IS...>, const Key &key,
-                                                                const input_values_tuple_type &args) {
-      int junk[] = {0, (set_arg<IS>(key, TT::get<IS>(args)), 0)...};
+    // Is: index sequence of elements in args
+    // Js: index sequence of input terminals to set
+    template <typename Key, typename... Ts, size_t... Is, size_t... Js>
+    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<Is...>,
+                                                                std::index_sequence<Js...>,
+                                                                const Key &key,
+                                                                const std::tuple<Ts...> &args) {
+      static_assert(sizeof...(Js) == sizeof...(Is));
+      constexpr std::size_t js[] = {Js...};
+      int junk[] = {0, (set_arg<js[Is]>(key, TT::get<Is>(args)), 0)...};
       junk[0]++;
+    }
+
+    // Used by invoke to set all arguments associated with a task
+    // Is: index sequence of input terminals to set
+    template <typename Key, typename... Ts, size_t... Is>
+    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<Is...> is,
+                                                                const Key &key,
+                                                                const std::tuple<Ts...> &args) {
+      set_args(std::index_sequence_for<Ts...>{}, is, key, args);
+    }
+
+
+    // Used by invoke to set all arguments associated with a task
+    // Is: index sequence of elements in args
+    // Js: index sequence of input terminals to set
+    template <typename Key = keyT, typename... Ts, size_t... Is, size_t... Js>
+    std::enable_if_t<ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<Is...>,
+                                                               std::index_sequence<Js...>,
+                                                               const std::tuple<Ts...> &args) {
+      static_assert(sizeof...(Js) == sizeof...(Is));
+      constexpr std::size_t js[] = {Js...};
+      int junk[] = {0, (set_arg<js[Is], void>(TT::get<Is>(args)), 0)...};
+      junk[0]++;
+    }
+
+    // Used by invoke to set all arguments associated with a task
+    // Is: index sequence of input terminals to set
+    template <typename Key = keyT, typename... Ts, size_t... Is>
+    std::enable_if_t<ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<Is...> is,
+                                                               const std::tuple<Ts...> &args) {
+      set_args(std::index_sequence_for<Ts...>{}, is, args);
     }
 
    public:
@@ -891,8 +882,9 @@ namespace ttg_madness {
       }
       //////////////////////////////////////////////////////////////////
       // case 2: nonvoid key, void value, mixed inputs
+      // case 3: nonvoid key, void value, no inputs
       //////////////////////////////////////////////////////////////////
-      else if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type> &&
+      else if constexpr (!ttg::meta::is_void_v<keyT> &&
                          std::is_void_v<valueT>) {
         auto send_callback = [this](const keyT &key) { set_arg<i, keyT, void>(key); };
         auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
@@ -901,35 +893,14 @@ namespace ttg_madness {
       }
       //////////////////////////////////////////////////////////////////
       // case 5: void key, void value, mixed inputs
+      // case 6: void key, void value, no inputs
       //////////////////////////////////////////////////////////////////
       else if constexpr (ttg::meta::is_all_void_v<keyT, valueT> &&
-                         !ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
+                         std::is_void_v<valueT>) {
         auto send_callback = [this]() { set_arg<i, keyT, void>(); };
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
         auto finalize_callback = [this]() { finalize_argstream<i>(); };
         input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
-      }
-      //////////////////////////////////////////////////////////////////
-      // case 3: nonvoid key, void value, no inputs
-      //////////////////////////////////////////////////////////////////
-      else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type> &&
-                         std::is_void_v<valueT>) {
-        auto send_callback = [this](const keyT &key) { set_arg<keyT>(key); };
-        auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
-        auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
-        input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
-      }
-      //////////////////////////////////////////////////////////////////
-      // case 6: void key, void value, no inputs
-      //////////////////////////////////////////////////////////////////
-      else if constexpr (ttg::meta::is_all_void_v<keyT, valueT> &&
-                         ttg::meta::is_empty_tuple_v<input_values_tuple_type> && std::is_void_v<valueT>) {
-        auto send_callback = [this]() { set_arg<keyT>(); };
-        auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
-        auto finalize_callback = [this]() { finalize_argstream<i>(); };
-        input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
-        ttg::trace(world.rank(), ":", get_name(), " : set callbacks for terminal ", input.get_name(),
-                   " assuming void {key,value} and no input");
       } else
         abort();
     }
@@ -1121,7 +1092,11 @@ namespace ttg_madness {
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>, void> invoke(
         const Key &key, const input_values_tuple_type &args) {
       TTG_OP_ASSERT_EXECUTABLE();
-      set_args(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, key, args);
+      /* trigger non-void inputs */
+      set_args(ttg::meta::nonvoid_index_seq<input_tuple_type>{}, key, args);
+      /* trigger void inputs */
+      using void_index_seq = ttg::meta::void_index_seq<input_tuple_type>;
+      set_args(void_index_seq{}, key, ttg::detail::make_void_tuple<void_index_seq::size()>());
     }
 
     /// Manual injection of a key-free task with all input arguments specified as a tuple
@@ -1129,7 +1104,11 @@ namespace ttg_madness {
     std::enable_if_t<ttg::meta::is_void_v<Key> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>, void> invoke(
         const input_values_tuple_type &args) {
       TTG_OP_ASSERT_EXECUTABLE();
-      set_args(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, args);
+      /* trigger non-void inputs */
+      set_args(ttg::meta::nonvoid_index_seq<input_tuple_type>{}, args);
+      /* trigger void inputs */
+      using void_index_seq = ttg::meta::void_index_seq<input_tuple_type>;
+      set_args(void_index_seq{}, ttg::detail::make_void_tuple<void_index_seq::size()>());
     }
 
     /// Manual injection of a task that has no arguments
@@ -1137,14 +1116,18 @@ namespace ttg_madness {
     std::enable_if_t<!ttg::meta::is_void_v<Key> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>, void> invoke(
         const Key &key) {
       TTG_OP_ASSERT_EXECUTABLE();
-      set_arg<Key>(key);
+      /* trigger void inputs */
+      using void_index_seq = ttg::meta::void_index_seq<input_tuple_type>;
+      set_args(void_index_seq{}, key, ttg::detail::make_void_tuple<void_index_seq::size()>());
     }
 
     /// Manual injection of a task that has no key or arguments
     template <typename Key = keyT>
     std::enable_if_t<ttg::meta::is_void_v<Key> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>, void> invoke() {
       TTG_OP_ASSERT_EXECUTABLE();
-      set_arg<Key>();
+      /* trigger void inputs */
+      using void_index_seq = ttg::meta::void_index_seq<input_tuple_type>;
+      set_args(void_index_seq{}, ttg::detail::make_void_tuple<void_index_seq::size()>());
     }
 
     void invoke() override {
