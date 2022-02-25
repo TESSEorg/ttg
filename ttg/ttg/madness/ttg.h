@@ -337,13 +337,18 @@ namespace ttg_madness {
 
     // case 1:
     template <std::size_t i, typename Key, typename Value>
-    std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void> set_arg(const Key &key,
-                                                                                                       Value &&value) {
+    void set_arg(const Key &key, Value &&value) {
       using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;  // Should be T or const T
       static_assert(std::is_same_v<std::decay_t<Value>, std::decay_t<valueT>>,
                     "TT::set_arg(key,value) given value of type incompatible with TT");
 
-      const auto owner = keymap(key);
+      int owner;
+      if constexpr (!ttg::meta::is_void_v<Key>) {
+        owner = keymap(key);
+      } else {
+        owner = keymap();
+      }
+
       if (owner != world.rank()) {
         ttg::trace(world.rank(), ":", get_name(), " : ", key, ": forwarding setting argument : ", i);
         // should be able on the other end to consume value (since it is just a temporary byproduct of serialization)
@@ -354,12 +359,32 @@ namespace ttg_madness {
         // move arguments) and locally
         //      here we know that this will be a remove execution, so we prepare to take rvalues;
         //      send_am will need to separate local and remote paths to deal with this
-        worldobjT::send(owner, &ttT::template set_arg<i, Key, const std::remove_reference_t<Value> &>, key, value);
+        if constexpr (!ttg::meta::is_void_v<Key>) {
+          if constexpr (!ttg::meta::is_void_v<Value>) {
+            worldobjT::send(owner, &ttT::template set_arg<i, Key, const std::remove_reference_t<Value> &>, key, value);
+          } else {
+            worldobjT::send(owner, &ttT::template set_arg<i, Key, void>, key);
+          }
+        } else {
+          if constexpr (!ttg::meta::is_void_v<Value>) {
+            worldobjT::send(owner, &ttT::template set_arg<i, void, const std::remove_reference_t<Value> &>, value);
+          } else {
+            worldobjT::send(owner, &ttT::template set_arg<i, void, void>);
+          }
+        }
       } else {
         ttg::trace(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
 
         accessorT acc;
-        if (cache.insert(acc, key)) acc->second = new TTArgs(this->priomap(key));  // It will be deleted by the task q
+        int prio;
+        if constexpr (!ttg::meta::is_void_v<Key>) {
+          prio = this->priomap(key);
+          if (cache.insert(acc, key)) acc->second = new TTArgs(prio);  // It will be deleted by the task q
+        } else {
+          prio = this->priomap();
+          if (cache.insert(acc, 0)) acc->second = new TTArgs(prio);  // It will be deleted by the task q
+        }
+
         TTArgs *args = acc->second;
 
         if (args->nargs[i] == 0) {
@@ -462,94 +487,13 @@ namespace ttg_madness {
     // case 4
     template <std::size_t i, typename Key = keyT, typename Value>
     std::enable_if_t<ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>, void> set_arg(Value &&value) {
-      using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;  // Should be T or const T
-      static_assert(std::is_same_v<std::decay_t<Value>, std::decay_t<valueT>>,
-                    "TT::set_arg(key,value) given value of type incompatible with TT");
-
-      const int owner = keymap();
-
-      if (owner != world.rank()) {
-        ttg::trace(world.rank(), ":", get_name(), " : forwarding setting argument : ", i);
-        // CAVEAT see comment above in set_arg re:
-        worldobjT::send(owner, &ttT::template set_arg<i, keyT, const std::remove_reference_t<Value> &>, value);
-      } else {
-        ttg::trace(world.rank(), ":", get_name(), " : received value for argument : ", i);
-
-        accessorT acc;
-        if (cache.insert(acc, 0)) acc->second = new TTArgs();  // It will be deleted by the task q
-        TTArgs *args = acc->second;
-
-        if (args->nargs[i] == 0) {
-          ttg::print_error(world.rank(), ":", get_name(), " : error argument is already finalized : ", i);
-          throw std::runtime_error("TT::set_arg called for a finalized stream");
-        }
-
-        const auto &reducer = std::get<i>(input_reducers);
-        if (reducer) {  // is this a streaming input? reduce the received value
-          // N.B. Right now reductions are done eagerly, without spawning tasks
-          //      this means we must lock
-          args->lock();
-          ttg::trace(world.rank(), ":", get_name(), " : reducing value into argument : ", i);
-
-          bool initialize_not_reduce = false;
-          if (args->nargs[i] == std::numeric_limits<std::int64_t>::max()) {
-            // initialize the value, if needed, upon receipt of the first datum
-            if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
-              initialize_not_reduce = true;
-            }
-
-            // now have a value, reset nargs
-            if (args->stream_size[i] != 0) {
-              assert(args->stream_size[i] <= static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max()));
-              args->nargs[i] = args->stream_size[i];
-            } else if (static_streamsize[i] != 0) {
-              assert(static_streamsize[i] <= static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max()));
-              args->stream_size[i] = static_streamsize[i];
-              args->nargs[i] = static_streamsize[i];
-            } else {
-              args->nargs[i] = 0;
-            }
-          }
-
-          if constexpr (!ttg::meta::is_void_v<valueT>) {
-            // once Future<>::operator= semantics is cleaned up will avoid Future<>::get()
-            if (initialize_not_reduce)
-              this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
-            else
-              reducer(this->get<i, std::decay_t<valueT> &>(args->input_values), value);
-          } else {  // call anyway in case it has side effects
-            reducer();
-          }
-
-          // update the counter
-          args->nargs[i]--;
-
-          // is this the last message?
-          if (args->nargs[i] == 0) args->counter--;
-
-          args->unlock();
-        } else {  // this is a nonstreaming input => set the value
-          this->get<i, std::decay_t<valueT> &>(args->input_values) = std::forward<Value>(value);
-          args->nargs[i] = 0;
-          args->counter--;
-        }
-
-        // ready to run the task?
-        if (args->counter == 0) {
-          ttg::trace(world.rank(), ":", get_name(), " : submitting task for op ");
-          args->derived = static_cast<derivedT *>(this);
-
-          world.impl().impl().taskq.add(args);
-
-          cache.erase(acc);
-        }
-      }
+      return set_arg<i>(ttg::Void{}, std::forward<Value>(value));
     }
 
     // case 5 and 6
     template <std::size_t i, typename Key = keyT, typename Value>
     std::enable_if_t<ttg::meta::is_void_v<Key> && std::is_void_v<Value>, void> set_arg() {
-      set_arg<i, ttg::Void, void>(ttg::Void{});
+      set_arg<i, ttg::Void, ttg::Void>(ttg::Void{}, ttg::Void{});
     }
 
     // Used by invoke to set all arguments associated with a task
