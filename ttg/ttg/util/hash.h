@@ -54,6 +54,7 @@ namespace ttg {
     template <>
     struct hash<void, void> {
       auto operator()() const { return detail::FNVhasher::initial_value(); }
+      auto operator()(const ttg::Void&) const { return operator()(); }
     };
 
     /// instantiation of hash for integral types smaller or equal to size_t
