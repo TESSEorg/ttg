@@ -954,25 +954,14 @@ namespace ttg_parsec {
       derivedT *obj = reinterpret_cast<derivedT *>(bop);
       switch (hd->fn_id) {
         case msg_header_t::MSG_SET_ARG: {
-          if (-1 != hd->param_id) {
+          if (0 <= hd->param_id) {
             assert(hd->param_id >= 0);
             assert(hd->param_id < obj->set_arg_from_msg_fcts.size());
             auto member = obj->set_arg_from_msg_fcts[hd->param_id];
             (obj->*member)(data, size);
           } else {
-            if constexpr (ttg::meta::is_empty_tuple_v<input_refs_tuple_type>) {
-              if constexpr (ttg::meta::is_void_v<keyT>) {
-                obj->template set_arg<keyT>();
-              } else {
-                using msg_t = detail::msg_t;
-                msg_t *msg = static_cast<msg_t *>(data);
-                keyT key;
-                obj->unpack(key, static_cast<void *>(msg->bytes), 0);
-                obj->template set_arg<keyT>(key);
-              }
-            } else {
-              abort();
-            }
+            // there is no good reason to have negative param ids
+            abort();
           }
           break;
         }
@@ -1472,6 +1461,7 @@ namespace ttg_parsec {
       set_arg_impl<i>(ttg::Void{}, ttg::Void{});
     }
 
+    // case 3
     template <std::size_t i, typename Key>
     std::enable_if_t<!ttg::meta::is_void_v<Key>, void> set_arg(const Key &key) {
       set_arg_impl<i>(key, ttg::Void{});
@@ -1510,71 +1500,73 @@ namespace ttg_parsec {
         pos = pack(key, msg->bytes, pos);
         msg->tt_id.num_keys = 1;
       }
-      if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
-        // std::cout << "set_arg_from_msg unpacking from offset " << sizeof(keyT) << std::endl;
-        pos = pack(value, msg->bytes, pos);
-      } else {
-        ttg_data_copy_t *copy;
-        copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
-        if (nullptr == copy) {
-          // We need to create a copy for this data, as it does not exist yet.
-          copy = detail::create_new_datacopy(std::forward<Value>(value));
-        }
-        copy = detail::register_data_copy<decvalueT>(copy, nullptr, true);
+      if constexpr (ttg::meta::is_void_v<decvalueT>) {
+        if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
+          // std::cout << "set_arg_from_msg unpacking from offset " << sizeof(keyT) << std::endl;
+          pos = pack(value, msg->bytes, pos);
+        } else {
+          ttg_data_copy_t *copy;
+          copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
+          if (nullptr == copy) {
+            // We need to create a copy for this data, as it does not exist yet.
+            copy = detail::create_new_datacopy(std::forward<Value>(value));
+          }
+          copy = detail::register_data_copy<decvalueT>(copy, nullptr, true);
 
-        ttg::SplitMetadataDescriptor<decvalueT> descr;
-        auto metadata = descr.get_metadata(value);
-        size_t metadata_size = sizeof(metadata);
-        /* pack the metadata */
-        std::memcpy(msg->bytes + pos, &metadata, metadata_size);
-        pos += metadata_size;
-        /* pack the local rank */
-        int rank = world.rank();
-        std::memcpy(msg->bytes + pos, &rank, sizeof(rank));
-        pos += sizeof(rank);
+          ttg::SplitMetadataDescriptor<decvalueT> descr;
+          auto metadata = descr.get_metadata(value);
+          size_t metadata_size = sizeof(metadata);
+          /* pack the metadata */
+          std::memcpy(msg->bytes + pos, &metadata, metadata_size);
+          pos += metadata_size;
+          /* pack the local rank */
+          int rank = world.rank();
+          std::memcpy(msg->bytes + pos, &rank, sizeof(rank));
+          pos += sizeof(rank);
 
-        auto iovecs = descr.get_data(*static_cast<decvalueT *>(copy->device_private));
+          auto iovecs = descr.get_data(*static_cast<decvalueT *>(copy->device_private));
 
-        int32_t num_iovs = std::distance(std::begin(iovecs), std::end(iovecs));
-        std::memcpy(msg->bytes + pos, &num_iovs, sizeof(num_iovs));
-        pos += sizeof(num_iovs);
+          int32_t num_iovs = std::distance(std::begin(iovecs), std::end(iovecs));
+          std::memcpy(msg->bytes + pos, &num_iovs, sizeof(num_iovs));
+          pos += sizeof(num_iovs);
 
-        /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
-         * raw function pointer instead of a preregistered AM tag, so play that game.
-         * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
-        parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
-        std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
-        pos += sizeof(cbtag);
+          /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
+          * raw function pointer instead of a preregistered AM tag, so play that game.
+          * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
+          parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
+          std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
+          pos += sizeof(cbtag);
 
-        /**
-         * register the generic iovecs and pack the registration handles
-         * memory layout: [<lreg_size, lreg, release_cb_ptr>, ...]
-         */
-        for (auto &&iov : iovecs) {
-          parsec_ce_mem_reg_handle_t lreg;
-          size_t lreg_size;
-          /* TODO: only register once when we can broadcast the data! */
-          parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
-                                 iov.num_bytes, &lreg, &lreg_size);
-          auto lreg_ptr = std::shared_ptr<void>{lreg, [](void *ptr) {
-                                                  parsec_ce_mem_reg_handle_t memreg = (parsec_ce_mem_reg_handle_t)ptr;
-                                                  parsec_ce.mem_unregister(&memreg);
-                                                }};
-          int32_t lreg_size_i = lreg_size;
-          std::memcpy(msg->bytes + pos, &lreg_size_i, sizeof(lreg_size_i));
-          pos += sizeof(lreg_size_i);
-          std::memcpy(msg->bytes + pos, lreg, lreg_size_i);
-          pos += lreg_size_i;
-          /* TODO: can we avoid the extra indirection of going through std::function? */
-          std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
-            /* shared_ptr of value and registration captured by value so resetting
-             * them here will eventually release the memory/registration */
-            detail::release_data_copy(copy);
-            lreg_ptr.reset();
-          });
-          std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
-          std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
-          pos += sizeof(fn_ptr);
+          /**
+          * register the generic iovecs and pack the registration handles
+          * memory layout: [<lreg_size, lreg, release_cb_ptr>, ...]
+          */
+          for (auto &&iov : iovecs) {
+            parsec_ce_mem_reg_handle_t lreg;
+            size_t lreg_size;
+            /* TODO: only register once when we can broadcast the data! */
+            parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
+                                  iov.num_bytes, &lreg, &lreg_size);
+            auto lreg_ptr = std::shared_ptr<void>{lreg, [](void *ptr) {
+                                                    parsec_ce_mem_reg_handle_t memreg = (parsec_ce_mem_reg_handle_t)ptr;
+                                                    parsec_ce.mem_unregister(&memreg);
+                                                  }};
+            int32_t lreg_size_i = lreg_size;
+            std::memcpy(msg->bytes + pos, &lreg_size_i, sizeof(lreg_size_i));
+            pos += sizeof(lreg_size_i);
+            std::memcpy(msg->bytes + pos, lreg, lreg_size_i);
+            pos += lreg_size_i;
+            /* TODO: can we avoid the extra indirection of going through std::function? */
+            std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
+              /* shared_ptr of value and registration captured by value so resetting
+              * them here will eventually release the memory/registration */
+              detail::release_data_copy(copy);
+              lreg_ptr.reset();
+            });
+            std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
+            std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
+            pos += sizeof(fn_ptr);
+          }
         }
       }
       parsec_taskpool_t *tp = world_impl.taskpool();
@@ -1583,49 +1575,6 @@ namespace ttg_parsec {
       // std::cout << "Sending AM with " << msg->op_id.num_keys << " keys " << std::endl;
       parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
                         sizeof(msg_header_t) + pos);
-    }
-
-    // case 3
-    template <typename Key = keyT>
-    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> set_arg(const Key &key) {
-      static_assert(ttg::meta::is_empty_tuple_v<input_refs_tuple_type>,
-                    "logic error: set_arg (case 3) called but input_refs_tuple_type is nonempty");
-
-      const auto owner = keymap(key);
-      auto &world_impl = world.impl();
-      if (owner == world.rank()) {
-        // create PaRSEC task
-        // and give it to the scheduler
-        task_t *task;
-        parsec_execution_stream_s *es = world_impl.execution_stream();
-        parsec_thread_mempool_t *mempool = get_task_mempool();
-        char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
-
-        task = new (taskobj) task_t(key, mempool, &this->self, world_impl.taskpool(), this, priomap(key));
-
-        task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)] =
-            reinterpret_cast<detail::parsec_static_op_t>(&TT::static_op_noarg<ttg::ExecutionSpace::Host>);
-        if constexpr (derived_has_cuda_op())
-          task->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)] =
-              reinterpret_cast<detail::parsec_static_op_t>(&TT::static_op_noarg<ttg::ExecutionSpace::CUDA>);
-        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": creating task");
-        world_impl.increment_created();
-        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": submitting task for op ");
-        __parsec_schedule(es, &task->parsec_task, 0);
-      } else {
-        using msg_t = detail::msg_t;
-        // We pass -1 to signal that we just need to call set_arg(key) on the other end
-        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
-                                                             msg_header_t::MSG_SET_ARG, -1, 1);
-
-        uint64_t pos = 0;
-        pos = pack(key, msg->bytes, pos);
-        parsec_taskpool_t *tp = world_impl.taskpool();
-        tp->tdm.module->outgoing_message_start(tp, owner, NULL);
-        tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-        parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-                          sizeof(msg_header_t) + pos);
-      }
     }
 
     template <int i, typename Iterator, typename Value>
