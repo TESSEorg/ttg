@@ -184,6 +184,10 @@ namespace ttg_madness {
 
     static_assert(ttg::detail::is_typelist_v<input_valueTs>, "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
     using input_tuple_type = ttg::detail::typelist_to_tuple_t<input_valueTs>;
+    // create a virtual control input if the input list is empty, to be used in invoke()
+    using actual_input_tuple_type = std::conditional_t<!ttg::detail::typelist_is_empty_v<input_valueTs>,
+                                                        ttg::detail::typelist_to_tuple_t<input_valueTs>,
+                                                        std::tuple<void>>;
 
    public:
     using ttT = TT;
@@ -195,10 +199,10 @@ namespace ttg_madness {
     ttg::meta::detail::keymap_t<keyT> keymap;
     ttg::meta::detail::keymap_t<keyT> priomap;
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
-    ttg::meta::detail::input_reducers_t<input_tuple_type>
+    ttg::meta::detail::input_reducers_t<actual_input_tuple_type>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
 
-    std::array<std::size_t, std::tuple_size_v<input_tuple_type>> static_streamsize;
+    std::array<std::size_t, std::tuple_size_v<actual_input_tuple_type>> static_streamsize;
 
    public:
     ttg::World get_world() const { return world; }
@@ -206,7 +210,8 @@ namespace ttg_madness {
    protected:
     using worldobjT = ::madness::WorldObject<ttT>;
 
-    static constexpr int numins = std::tuple_size_v<input_tuple_type>;    // number of input arguments
+    static constexpr int numinedges = std::tuple_size_v<input_tuple_type>;    // number of input edges
+    static constexpr int numins = std::tuple_size_v<actual_input_tuple_type>; // number of input arguments
     static constexpr int numouts = std::tuple_size_v<output_terminalsT>;  // number of outputs
 
     // This to support tt fusion
@@ -222,9 +227,9 @@ namespace ttg_madness {
     static_assert(ttg::meta::is_none_void_v<input_valueTs> || ttg::meta::is_last_void_v<input_valueTs>,
                   "at most one void input can be handled, and it must come last");
     // if have data inputs and (always last) control input, convert last input to Void to make logic easier
-    using input_values_full_tuple_type = ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
+    using input_values_full_tuple_type = ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<actual_input_tuple_type>>;
     using input_refs_full_tuple_type =
-        ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<input_tuple_type>>;
+        ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<actual_input_tuple_type>>;
 
     using input_values_tuple_type = ttg::meta::drop_void_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
     using input_refs_tuple_type = ttg::meta::drop_void_t<ttg::meta::add_lvalue_reference_tuple_t<input_tuple_type>>;
@@ -870,8 +875,8 @@ namespace ttg_madness {
 
     template <std::size_t... IS, typename outedgesT>
     void connect_my_outputs_to_outgoing_edge_inputs(std::index_sequence<IS...>, outedgesT &outedges) {
-      static_assert(sizeof...(IS) == std::tuple_size_v<output_terminalsT>);
-      static_assert(std::tuple_size_v<outedgesT> == std::tuple_size_v<output_terminalsT>);
+      static_assert(sizeof...(IS) == numouts);
+      static_assert(std::tuple_size_v<outedgesT> == numouts);
       int junk[] = {0, (std::get<IS>(outedges).set_in(&std::get<IS>(output_terminals)), 0)...};
       junk[0]++;
       ttg::trace(world.rank(), ":", get_name(), " : connected ", sizeof...(IS), " TT outputs to ", sizeof...(IS),
@@ -883,7 +888,7 @@ namespace ttg_madness {
               typename priomapT = ttg::detail::default_priomap<keyT>>
     TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
-        : ttg::TTBase(name, numins, numouts)
+        : ttg::TTBase(name, numinedges, numouts)
         , static_streamsize()
         , worldobjT(world.impl().impl())
         , world(world)
@@ -893,18 +898,18 @@ namespace ttg_madness {
                      : decltype(keymap)(std::forward<keymapT>(keymap_)))
         , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))) {
       // Cannot call these in base constructor since terminals not yet constructed
-      if (innames.size() != std::tuple_size_v<input_terminals_type>) {
+      if (innames.size() != numinedges) {
         ttg::print_error(world.rank(), ":", get_name(), "#input_names", innames.size(), "!= #input_terminals",
-                         std::tuple_size_v<input_terminals_type>);
+                         numinedges);
         throw this->get_name() + ":madness::ttg::TT: #input names != #input terminals";
       }
-      if (outnames.size() != std::tuple_size_v<output_terminalsT>)
+      if (outnames.size() != numouts)
         throw this->get_name() + ":madness::ttg::TT: #output names != #output terminals";
 
       register_input_terminals(input_terminals, innames);
       register_output_terminals(output_terminals, outnames);
 
-      register_input_callbacks(std::make_index_sequence<numins>{});
+      register_input_callbacks(std::make_index_sequence<numinedges>{});
     }
 
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
@@ -919,7 +924,7 @@ namespace ttg_madness {
     TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ttg::World world,
        keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
-        : ttg::TTBase(name, numins, numouts)
+        : ttg::TTBase(name, numinedges, numouts)
         , static_streamsize()
         , worldobjT(ttg::default_execution_context().impl().impl())
         , world(ttg::default_execution_context())
@@ -929,20 +934,20 @@ namespace ttg_madness {
                      : decltype(keymap)(std::forward<keymapT>(keymap_)))
         , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))) {
       // Cannot call in base constructor since terminals not yet constructed
-      if (innames.size() != std::tuple_size_v<input_terminals_type>) {
+      if (innames.size() != numinedges) {
         ttg::print_error(world.rank(), ":", get_name(), "#input_names", innames.size(), "!= #input_terminals",
-                         std::tuple_size_v<input_terminals_type>);
+                         numinedges);
         throw this->get_name() + ":madness::ttg::TT: #input names != #input terminals";
       }
-      if (outnames.size() != std::tuple_size_v<output_terminalsT>)
+      if (outnames.size() != numouts)
         throw this->get_name() + ":madness::ttg::T: #output names != #output terminals";
 
       register_input_terminals(input_terminals, innames);
       register_output_terminals(output_terminals, outnames);
 
-      register_input_callbacks(std::make_index_sequence<numins>{});
+      register_input_callbacks(std::make_index_sequence<numinedges>{});
 
-      connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numins>{}, inedges);
+      connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numinedges>{}, inedges);
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
     }
 
@@ -1037,9 +1042,9 @@ namespace ttg_madness {
         const Key &key, const input_values_tuple_type &args) {
       TTG_OP_ASSERT_EXECUTABLE();
       /* trigger non-void inputs */
-      set_args(ttg::meta::nonvoid_index_seq<input_tuple_type>{}, key, args);
+      set_args(ttg::meta::nonvoid_index_seq<actual_input_tuple_type>{}, key, args);
       /* trigger void inputs */
-      using void_index_seq = ttg::meta::void_index_seq<input_tuple_type>;
+      using void_index_seq = ttg::meta::void_index_seq<actual_input_tuple_type>;
       set_args(void_index_seq{}, key, ttg::detail::make_void_tuple<void_index_seq::size()>());
     }
 
@@ -1049,9 +1054,9 @@ namespace ttg_madness {
         const input_values_tuple_type &args) {
       TTG_OP_ASSERT_EXECUTABLE();
       /* trigger non-void inputs */
-      set_args(ttg::meta::nonvoid_index_seq<input_tuple_type>{}, args);
+      set_args(ttg::meta::nonvoid_index_seq<actual_input_tuple_type>{}, args);
       /* trigger void inputs */
-      using void_index_seq = ttg::meta::void_index_seq<input_tuple_type>;
+      using void_index_seq = ttg::meta::void_index_seq<actual_input_tuple_type>;
       set_args(void_index_seq{}, ttg::detail::make_void_tuple<void_index_seq::size()>());
     }
 
@@ -1061,7 +1066,7 @@ namespace ttg_madness {
         const Key &key) {
       TTG_OP_ASSERT_EXECUTABLE();
       /* trigger void inputs */
-      using void_index_seq = ttg::meta::void_index_seq<input_tuple_type>;
+      using void_index_seq = ttg::meta::void_index_seq<actual_input_tuple_type>;
       set_args(void_index_seq{}, key, ttg::detail::make_void_tuple<void_index_seq::size()>());
     }
 
@@ -1070,7 +1075,7 @@ namespace ttg_madness {
     std::enable_if_t<ttg::meta::is_void_v<Key> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>, void> invoke() {
       TTG_OP_ASSERT_EXECUTABLE();
       /* trigger void inputs */
-      using void_index_seq = ttg::meta::void_index_seq<input_tuple_type>;
+      using void_index_seq = ttg::meta::void_index_seq<actual_input_tuple_type>;
       set_args(void_index_seq{}, ttg::detail::make_void_tuple<void_index_seq::size()>());
     }
 
