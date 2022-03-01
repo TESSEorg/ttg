@@ -15,7 +15,8 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 - See [INSTALL.md](https://github.com/TESSEorg/ttg/blob/master/INSTALL.md) to learn how to build and install TTG.
 
 # Debugging TTG Program 
-- If xterm already installed then set "Environment Variable" to /TTG_DEBUGGER=gdb_xterm/lldb_xterm based on the type of compiler system hold to run debugger for parallelly executing processes
+- If an X11 server is running (check if environment variable `DISPLAY` is set), then set environment variable `TTG_DEBUGGER` to {`gdb_xterm`,`lldb_xterm`} to launch {`gdb`,`lldb`} upon receiving a signal like `SIGSEGV` or `SIGABRT` (one `xterm` window per rank will be created);
+- If an X11 server is not running the set `TTG_DEBUGGER` to empty value; upon receiving a signal the program will print instructions for how to attach a debugger to a running process from another terminal. 
 - run the ttg program and if it receives any signal the xterm windows should pop up to display debugging results 
 
 # Key Concepts of TTG
