@@ -46,8 +46,7 @@ namespace ttg {
 
       EdgeImpl() : name(""), outs(), ins() {}
 
-      EdgeImpl(const std::string &name, bool is_pull = false) : name(name),
-                is_pull_edge(is_pull), outs(), ins() {}
+      EdgeImpl(const std::string &name) : name(name), outs(), ins() {}
 
       EdgeImpl(const std::string &name, bool is_pull, ttg::detail::ContainerWrapper<keyT, valueT> &c) :
         name(name),
@@ -110,9 +109,7 @@ namespace ttg {
     static_assert(std::is_same_v<valueT, std::decay_t<valueT>>,
                   "Edge<keyT,valueT> assumes valueT is a non-decayable type");
 
-    Edge(const std::string name = "anonymous edge", bool is_pull = false) : p(1) {
-      p[0] = std::make_shared<EdgeImpl>(name, is_pull);
-    }
+    Edge(const std::string name = "anonymous edge") : p(1) { p[0] = std::make_shared<EdgeImpl>(name); }
 
     Edge(const std::string name, bool is_pull, ttg::detail::ContainerWrapper<keyT, valueT> c)
       : p(1) {

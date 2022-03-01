@@ -155,6 +155,9 @@ namespace ttg {
       return value;
     }
 
+    //Sets lazy pulling on.
+    //Lazy pulling delays invoking pull terminals until all inputs from push terminals for a task have arrived.
+    //Default is false.
     static bool set_lazy_pull(bool value) {
       std::swap(ttg::detail::op_base_lazy_pull_accessor(), value);
       return value;
@@ -184,7 +187,7 @@ namespace ttg {
         }
       }
     }
-    
+
     bool set_lazy_pull_instance(bool value) {
       std::swap(lazy_pull_instance, value);
       return value;

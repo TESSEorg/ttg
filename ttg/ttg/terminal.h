@@ -40,7 +40,6 @@ namespace ttg {
                                                   else
                                                     {
                                                       auto k = mapper(key);
-                                                      using key_type = typename T::key_type;
                                                       //at method returns a const ref to the item.
                                                       return t.at(k);
                                                     }
@@ -49,20 +48,7 @@ namespace ttg {
                                                     auto idx = mapper(key); //Mapper to map task ID to index of the data structure.
                                                     return keymap(idx);
                                                   })
-        {
-         //Validate mapper and keymap function arguments
-         using mapper_args_t = boost::callable_traits::args_t<mapperT>;
-         constexpr auto num_args = std::tuple_size<mapper_args_t>::value;
-         static_assert(num_args == 1);
-         static_assert(std::is_same_v<typename std::tuple_element<0, mapper_args_t>::type, const keyT &>,
-                       "argument of Mapper must be const keyT& (unless keyT = void)");
-         using km_args_t = boost::callable_traits::args_t<keymapT>;
-         using mapper_ret_type = boost::callable_traits::return_type_t<mapperT>;
-         constexpr auto num_km_args = std::tuple_size<km_args_t>::value;
-         static_assert(num_km_args == 1);
-         static_assert(std::is_same_v<std::remove_reference_t<typename std::tuple_element<0, km_args_t>::type>, mapper_ret_type>,
-                       "argument of Keymap must be the return type of the Mapper.");
-        }
+        {}
     };
 
     template <typename valueT> struct ContainerWrapper<void, valueT> {
