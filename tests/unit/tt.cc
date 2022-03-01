@@ -4,6 +4,8 @@
 
 #include <memory>
 
+#include "ttg/util/meta/callable.h"
+
 // {task_id,data} = {void, void}
 namespace tt_v_v {
 
@@ -114,14 +116,15 @@ namespace tt_i_t {
 
     static constexpr const bool have_cuda_op = false;
 
-    template<typename InputTupleT, typename OutputTupleT>
+    template <typename InputTupleT, typename OutputTupleT>
     void op(const int &key, const InputTupleT &data, OutputTupleT &outs) {
-      static_assert(std::is_const_v<std::remove_reference_t<std::tuple_element_t<0, InputTupleT>>>, "Const input type must be const!");
+      static_assert(std::is_const_v<std::remove_reference_t<std::tuple_element_t<0, InputTupleT>>>,
+                    "Const input type must be const!");
     }
 
     ~tt() {}
   };
-}  // namespace tt_i_i
+}  // namespace tt_i_t
 
 // {task_id,data} = {int, int, void}
 namespace tt_i_iv {
@@ -141,7 +144,6 @@ namespace tt_i_iv {
     ~tt() {}
   };
 }  // namespace tt_i_iv
-
 
 TEST_CASE("TemplateTask", "[core]") {
   SECTION("constructors") {
@@ -183,30 +185,59 @@ TEST_CASE("TemplateTask", "[core]") {
     {  // nonvoid task id, nonvoid data, generic operator
       ttg::Edge<int, int> in;
       CHECK_NOTHROW(std::make_unique<tt_i_t::tt>(ttg::edges(in), ttg::edges(), ""));
-      CHECK_NOTHROW(
-          ttg::make_tt([](const int &key, auto &datum, auto &outs) {
-            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const input edge type expected to be const!");
-          }, ttg::edges(ttg::make_const(in)), ttg::edges()));
-      CHECK_NOTHROW(
-          ttg::make_tt([](const int &key, const auto &datum, auto &outs) {
-            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const input edge type expected to be const!");
-          }, ttg::edges(ttg::make_const(in)), ttg::edges()));
-      CHECK_NOTHROW(
-          ttg::make_tt([](const int &key, auto &&datum, auto &outs) {
-            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const input edge type expected to be const!");
-          }, ttg::edges(ttg::make_const(in)), ttg::edges()));
-      CHECK_NOTHROW(
-          ttg::make_tt([](const int &key, auto &datum, auto &outs) {
+
+      // same, but using generic lambdas
+      auto func0 = [](auto key, auto &&datum, std::tuple<> &outs) {};
+      static_assert(std::is_invocable<decltype(func0), int, int &&, std::tuple<> &>::value);
+      static_assert(ttg::meta::is_invocable_typelist_v<decltype(func0), ttg::typelist<int, int &&, std::tuple<> &>>);
+      static_assert(
+          ttg::meta::is_invocable_typelist_v<decltype(func0), ttg::typelist<int, const int &, std::tuple<> &>>);
+      static_assert(std::is_same_v<decltype(compute_arg_binding_types(
+                                       func0, ttg::typelist<ttg::typelist<int>, ttg::typelist<int &&, const int &>,
+                                                            ttg::typelist<const std::tuple<> &>>{})),
+                                   ttg::typelist<>>);
+      static_assert(std::is_same_v<decltype(compute_arg_binding_types(
+                                       func0, ttg::typelist<ttg::typelist<int>, ttg::typelist<int &&, const int &>,
+                                                            ttg::typelist<std::tuple<> &>>{})),
+                                   ttg::typelist<int, int &&, std::tuple<> &>>);
+      static_assert(std::is_same_v<decltype(compute_arg_binding_types(
+                                       func0, ttg::typelist<ttg::typelist<int>, ttg::typelist<const int &, int &&>,
+                                                            ttg::typelist<std::tuple<> &>>{})),
+                                   ttg::typelist<int, const int &, std::tuple<> &>>);
+
+      CHECK_NOTHROW(ttg::make_tt(
+          [](const int &key, auto &datum, auto &outs) {
+            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>,
+                          "Const input edge type expected to be const!");
+          },
+          ttg::edges(ttg::make_const(in)), ttg::edges()));
+      CHECK_NOTHROW(ttg::make_tt(
+          [](const int &key, const auto &datum, auto &outs) {
+            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>,
+                          "Const input edge type expected to be const!");
+          },
+          ttg::edges(ttg::make_const(in)), ttg::edges()));
+      CHECK_NOTHROW(ttg::make_tt(
+          [](const int &key, auto &&datum, auto &outs) {
+            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>,
+                          "Const input edge type expected to be const!");
+          },
+          ttg::edges(ttg::make_const(in)), ttg::edges()));
+      CHECK_NOTHROW(ttg::make_tt(
+          [](const int &key, auto &datum, auto &outs) {
             static_assert(!std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Nonconst datum expected");
-          }, ttg::edges(in), ttg::edges()));
-      CHECK_NOTHROW(
-          ttg::make_tt([](const int &key, const auto &datum, auto &outs) {
+          },
+          ttg::edges(in), ttg::edges()));
+      CHECK_NOTHROW(ttg::make_tt(
+          [](const int &key, const auto &datum, auto &outs) {
             static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
-          }, ttg::edges(in), ttg::edges()));
-      CHECK_NOTHROW(
-          ttg::make_tt([](const int &key, auto &&datum, auto &outs) {
+          },
+          ttg::edges(in), ttg::edges()));
+      CHECK_NOTHROW(ttg::make_tt(
+          [](const int &key, auto &&datum, auto &outs) {
             static_assert(!std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Nonconst datum expected");
-          }, ttg::edges(in), ttg::edges()));
+          },
+          ttg::edges(in), ttg::edges()));
     }
   }
 }

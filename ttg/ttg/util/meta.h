@@ -101,7 +101,8 @@ namespace ttg {
 
     template <typename... Ts, typename... Us, typename... R>
     struct tuple_concat<std::tuple<Ts...>, std::tuple<Us...>, R...> {
-      using type = typename tuple_concat<decltype(std::tuple_cat(std::declval<std::tuple<Ts...>>(), std::declval<std::tuple<Us...>>())), R...>::type;
+      using type = typename tuple_concat<
+          decltype(std::tuple_cat(std::declval<std::tuple<Ts...>>(), std::declval<std::tuple<Us...>>())), R...>::type;
     };
 
     template <typename... TupleTs>
@@ -216,109 +217,110 @@ namespace ttg {
     template <typename T>
     using void_to_Void_t = typename void_to_Void<T>::type;
 
-
     /* helper class to filter void types from typelists */
-    template<typename T, typename S, typename U>
+    template <typename T, typename S, typename U>
     struct drop_void_helper;
 
     /* forward T */
-    template<typename... Ts, typename T, typename U, typename... Us>
+    template <typename... Ts, typename T, typename U, typename... Us>
     struct drop_void_helper<ttg::typelist<Ts...>, T, ttg::typelist<U, Us...>> {
       using type = typename drop_void_helper<ttg::typelist<Ts..., T>, U, ttg::typelist<Us...>>::type;
     };
 
     /* drop T = void */
-    template<typename... Ts, typename U, typename... Us>
+    template <typename... Ts, typename U, typename... Us>
     struct drop_void_helper<ttg::typelist<Ts...>, void, ttg::typelist<U, Us...>> {
       using type = typename drop_void_helper<ttg::typelist<Ts...>, U, ttg::typelist<Us...>>::type;
     };
 
     /* final, last element non-void */
-    template<typename... Ts, typename T>
+    template <typename... Ts, typename T>
     struct drop_void_helper<ttg::typelist<Ts...>, T, ttg::typelist<>> {
       using type = ttg::typelist<Ts..., T>;
     };
 
     /* final, last element void */
-    template<typename... Ts>
+    template <typename... Ts>
     struct drop_void_helper<ttg::typelist<Ts...>, void, ttg::typelist<>> {
       using type = ttg::typelist<Ts...>;
     };
 
     /* drop all void from a typelist or tuple */
-    template<typename T>
+    template <typename T>
     struct drop_void;
 
     /* specialization for ttg::typelist */
-    template<typename T, typename... Ts>
+    template <typename T, typename... Ts>
     struct drop_void<ttg::typelist<T, Ts...>> {
       using type = typename drop_void_helper<ttg::typelist<>, T, ttg::typelist<Ts...>>::type;
     };
 
     /* specialization for empty ttg::typelist */
-    template<>
+    template <>
     struct drop_void<ttg::typelist<>> {
       using type = ttg::typelist<>;
     };
 
     /* specialization for std::tuple */
-    template<typename... Ts>
+    template <typename... Ts>
     struct drop_void<std::tuple<Ts...>> {
-      using type = ttg::detail::typelist_to_tuple_t<typename drop_void<ttg::typelist<Ts...>>::type>;
+      using type = ttg::meta::typelist_to_tuple_t<typename drop_void<ttg::typelist<Ts...>>::type>;
     };
 
-    template<typename T>
+    template <typename T>
     using drop_void_t = typename drop_void<T>::type;
 
-
-    template<typename T, typename S, typename U>
+    template <typename T, typename S, typename U>
     struct replace_nonvoid_helper;
 
     /* non-void S, replace with U */
-    template<typename... Ts, typename S, typename... Ss, typename U, typename... Us>
+    template <typename... Ts, typename S, typename... Ss, typename U, typename... Us>
     struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<S, Ss...>, ttg::typelist<U, Us...>> {
-      using type = typename replace_nonvoid_helper<ttg::typelist<Ts..., U>, ttg::typelist<Ss...>, ttg::typelist<Us...>>::type;
+      using type =
+          typename replace_nonvoid_helper<ttg::typelist<Ts..., U>, ttg::typelist<Ss...>, ttg::typelist<Us...>>::type;
     };
 
     /* void S, keep */
-    template<typename... Ts, typename... Ss, typename U, typename... Us>
+    template <typename... Ts, typename... Ss, typename U, typename... Us>
     struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<void, Ss...>, ttg::typelist<U, Us...>> {
-      using type = typename replace_nonvoid_helper<ttg::typelist<Ts..., void>, ttg::typelist<Ss...>, ttg::typelist<U, Us...>>::type;
+      using type = typename replace_nonvoid_helper<ttg::typelist<Ts..., void>, ttg::typelist<Ss...>,
+                                                   ttg::typelist<U, Us...>>::type;
     };
 
     /* empty S, done */
-    template<typename... Ts, typename... Us>
+    template <typename... Ts, typename... Us>
     struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<>, ttg::typelist<Us...>> {
       using type = ttg::typelist<Ts...>;
     };
 
     /* empty U, done */
-    template<typename... Ts, typename... Ss>
+    template <typename... Ts, typename... Ss>
     struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<Ss...>, ttg::typelist<>> {
       using type = ttg::typelist<Ts..., Ss...>;
     };
 
     /* empty S and U, done */
-    template<typename... Ts>
+    template <typename... Ts>
     struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<>, ttg::typelist<>> {
       using type = ttg::typelist<Ts...>;
     };
 
     /* Replace the first min(sizeof...(T), sizeof...(U)) non-void types in T with types in U; U does not contain void */
-    template<typename T, typename U>
+    template <typename T, typename U>
     struct replace_nonvoid;
 
-    template<typename... T, typename... U>
+    template <typename... T, typename... U>
     struct replace_nonvoid<ttg::typelist<T...>, ttg::typelist<U...>> {
       using type = typename replace_nonvoid_helper<ttg::typelist<>, ttg::typelist<T...>, ttg::typelist<U...>>::type;
     };
 
-    template<typename... T, typename... U>
+    template <typename... T, typename... U>
     struct replace_nonvoid<std::tuple<T...>, std::tuple<U...>> {
-      using type = ttg::detail::typelist_to_tuple_t<typename replace_nonvoid<ttg::typelist<T...>, ttg::typelist<U...>>::type>;
+      using type =
+          ttg::meta::typelist_to_tuple_t<typename replace_nonvoid<ttg::typelist<T...>, ttg::typelist<U...>>::type>;
     };
 
-    template<typename T, typename U>
+    template <typename T, typename U>
     using replace_nonvoid_t = typename replace_nonvoid<T, U>::type;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -347,73 +349,65 @@ namespace ttg {
     template <typename tupleT>
     using add_lvalue_reference_tuple_t = typename add_lvalue_reference_tuple<tupleT>::type;
 
-    template<typename T, typename... Ts>
-    struct none_has_reference
-    {
+    template <typename T, typename... Ts>
+    struct none_has_reference {
       static constexpr bool value = !std::is_reference_v<T> && none_has_reference<Ts...>::value;
     };
 
-    template<typename T>
-    struct none_has_reference<T>
-    {
+    template <typename T>
+    struct none_has_reference<T> {
       static constexpr bool value = !std::is_reference_v<T>;
     };
 
-    template<typename... T>
-    struct none_has_reference<ttg::typelist<T...>> : none_has_reference<T...>
-    { };
+    template <typename... T>
+    struct none_has_reference<ttg::typelist<T...>> : none_has_reference<T...> {};
 
-    template<>
-    struct none_has_reference<ttg::typelist<>> : std::true_type
-    { };
+    template <>
+    struct none_has_reference<ttg::typelist<>> : std::true_type {};
 
-    template<typename... T>
+    template <typename... T>
     constexpr bool none_has_reference_v = none_has_reference<T...>::value;
 
-    template<typename T>
-    struct is_tuple : std::integral_constant<bool, false>
-    { };
+    template <typename T>
+    struct is_tuple : std::integral_constant<bool, false> {};
 
-    template<typename... Ts>
-    struct is_tuple<std::tuple<Ts...>> : std::integral_constant<bool, true>
-    { };
+    template <typename... Ts>
+    struct is_tuple<std::tuple<Ts...>> : std::integral_constant<bool, true> {};
 
-    template<typename T>
+    template <typename T>
     constexpr bool is_tuple_v = is_tuple<T>::value;
 
-    template<template<class> class Pred, typename TupleT, std::size_t I, std::size_t... Is>
+    template <template <class> class Pred, typename TupleT, std::size_t I, std::size_t... Is>
     struct predicate_index_seq_helper;
 
-    template<template<class> class Pred, typename T, typename... Ts, std::size_t I, std::size_t... Is>
+    template <template <class> class Pred, typename T, typename... Ts, std::size_t I, std::size_t... Is>
     struct predicate_index_seq_helper<Pred, std::tuple<T, Ts...>, I, Is...> {
       using seq = std::conditional_t<Pred<T>::value,
-                                     typename predicate_index_seq_helper<Pred, std::tuple<Ts...>, I+1, Is..., I>::seq,
-                                     typename predicate_index_seq_helper<Pred, std::tuple<Ts...>, I+1, Is...>::seq>;
+                                     typename predicate_index_seq_helper<Pred, std::tuple<Ts...>, I + 1, Is..., I>::seq,
+                                     typename predicate_index_seq_helper<Pred, std::tuple<Ts...>, I + 1, Is...>::seq>;
     };
 
-    template<template<class> class Pred, std::size_t I, std::size_t... Is>
+    template <template <class> class Pred, std::size_t I, std::size_t... Is>
     struct predicate_index_seq_helper<Pred, std::tuple<>, I, Is...> {
       using seq = std::index_sequence<Is...>;
     };
 
-    template<typename T>
-    struct is_none_void_pred : std::integral_constant<bool, is_none_void_v<T>>
-    { };
+    template <typename T>
+    struct is_none_void_pred : std::integral_constant<bool, is_none_void_v<T>> {};
 
     /**
      * An index sequence of nonvoid types in the tuple TupleT
      */
-    template<typename TupleT>
+    template <typename TupleT>
     using nonvoid_index_seq = typename predicate_index_seq_helper<is_none_void_pred, TupleT, 0>::seq;
 
-    template<typename T>
-    struct is_void_pred : std::integral_constant<bool, is_void_v<T>>
-    { };
+    template <typename T>
+    struct is_void_pred : std::integral_constant<bool, is_void_v<T>> {};
 
     /**
      * An index sequence of void types in the tuple TupleT
      */
-    template<typename TupleT>
+    template <typename TupleT>
     using void_index_seq = typename predicate_index_seq_helper<is_void_pred, TupleT, 0>::seq;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -672,14 +666,21 @@ namespace ttg {
 
     // this gets used only when we can call std::begin() and std::end() on that type
     template <typename T>
-    struct is_iterable<T, std::void_t<decltype(std::begin(std::declval<T>())),
-                                      decltype(std::end(std::declval<T>()))
-                                    >
-                      > : std::true_type {};
+    struct is_iterable<T, std::void_t<decltype(std::begin(std::declval<T>())), decltype(std::end(std::declval<T>()))>>
+        : std::true_type {};
 
     template <typename T>
     constexpr bool is_iterable_v = is_iterable<T>::value;
-  } // namespace meta
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // check whether a Callable is invocable with the arguments given as a typelist
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <typename Callable, typename Typelist>
+    constexpr bool is_invocable_typelist_v = false;
+    template <typename Callable, typename... Args>
+    constexpr bool is_invocable_typelist_v<Callable, ttg::typelist<Args...>> = std::is_invocable_v<Callable, Args...>;
+
+  }  // namespace meta
 }  // namespace ttg
 
 #endif  // TTG_UTIL_META_H

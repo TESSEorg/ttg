@@ -175,19 +175,18 @@ namespace ttg_madness {
   /// \tparam keyT a Key type
   /// \tparam output_terminalsT
   /// \tparam derivedT
-  /// \tparam input_valueTs ttg::typelist of *value* types (no references; pointers are OK) encoding the types of input values
+  /// \tparam input_valueTs ttg::typelist of *value* types (no references; pointers are OK) encoding the types of input
+  /// values
   ///         flowing into this TT; a const type indicates nonmutating (read-only) use, nonconst type
   ///         indicates mutating use (e.g. the corresponding input can be used as scratch, moved-from, etc.)
   template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs>
-  class TT : public ttg::TTBase,
-             public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs>> {
-
-    static_assert(ttg::detail::is_typelist_v<input_valueTs>, "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
-    using input_tuple_type = ttg::detail::typelist_to_tuple_t<input_valueTs>;
+  class TT : public ttg::TTBase, public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs>> {
+    static_assert(ttg::meta::is_typelist_v<input_valueTs>,
+                  "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
+    using input_tuple_type = ttg::meta::typelist_to_tuple_t<input_valueTs>;
     // create a virtual control input if the input list is empty, to be used in invoke()
-    using actual_input_tuple_type = std::conditional_t<!ttg::detail::typelist_is_empty_v<input_valueTs>,
-                                                        ttg::detail::typelist_to_tuple_t<input_valueTs>,
-                                                        std::tuple<void>>;
+    using actual_input_tuple_type = std::conditional_t<!ttg::meta::typelist_is_empty_v<input_valueTs>,
+                                                       ttg::meta::typelist_to_tuple_t<input_valueTs>, std::tuple<void>>;
 
    public:
     using ttT = TT;
@@ -210,9 +209,9 @@ namespace ttg_madness {
    protected:
     using worldobjT = ::madness::WorldObject<ttT>;
 
-    static constexpr int numinedges = std::tuple_size_v<input_tuple_type>;    // number of input edges
-    static constexpr int numins = std::tuple_size_v<actual_input_tuple_type>; // number of input arguments
-    static constexpr int numouts = std::tuple_size_v<output_terminalsT>;  // number of outputs
+    static constexpr int numinedges = std::tuple_size_v<input_tuple_type>;     // number of input edges
+    static constexpr int numins = std::tuple_size_v<actual_input_tuple_type>;  // number of input arguments
+    static constexpr int numouts = std::tuple_size_v<output_terminalsT>;       // number of outputs
 
     // This to support tt fusion
     inline static __thread struct {
@@ -227,7 +226,8 @@ namespace ttg_madness {
     static_assert(ttg::meta::is_none_void_v<input_valueTs> || ttg::meta::is_last_void_v<input_valueTs>,
                   "at most one void input can be handled, and it must come last");
     // if have data inputs and (always last) control input, convert last input to Void to make logic easier
-    using input_values_full_tuple_type = ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<actual_input_tuple_type>>;
+    using input_values_full_tuple_type =
+        ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<actual_input_tuple_type>>;
     using input_refs_full_tuple_type =
         ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<actual_input_tuple_type>>;
 
@@ -505,10 +505,8 @@ namespace ttg_madness {
     // Is: index sequence of elements in args
     // Js: index sequence of input terminals to set
     template <typename Key, typename... Ts, size_t... Is, size_t... Js>
-    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<Is...>,
-                                                                std::index_sequence<Js...>,
-                                                                const Key &key,
-                                                                const std::tuple<Ts...> &args) {
+    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<Is...>, std::index_sequence<Js...>,
+                                                                const Key &key, const std::tuple<Ts...> &args) {
       static_assert(sizeof...(Js) == sizeof...(Is));
       constexpr std::size_t js[] = {Js...};
       int junk[] = {0, (set_arg<js[Is]>(key, TT::get<Is>(args)), 0)...};
@@ -518,19 +516,16 @@ namespace ttg_madness {
     // Used by invoke to set all arguments associated with a task
     // Is: index sequence of input terminals to set
     template <typename Key, typename... Ts, size_t... Is>
-    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<Is...> is,
-                                                                const Key &key,
+    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<Is...> is, const Key &key,
                                                                 const std::tuple<Ts...> &args) {
       set_args(std::index_sequence_for<Ts...>{}, is, key, args);
     }
-
 
     // Used by invoke to set all arguments associated with a task
     // Is: index sequence of elements in args
     // Js: index sequence of input terminals to set
     template <typename Key = keyT, typename... Ts, size_t... Is, size_t... Js>
-    std::enable_if_t<ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<Is...>,
-                                                               std::index_sequence<Js...>,
+    std::enable_if_t<ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<Is...>, std::index_sequence<Js...>,
                                                                const std::tuple<Ts...> &args) {
       static_assert(sizeof...(Js) == sizeof...(Is));
       constexpr std::size_t js[] = {Js...};
@@ -833,8 +828,7 @@ namespace ttg_madness {
       // case 2: nonvoid key, void value, mixed inputs
       // case 3: nonvoid key, void value, no inputs
       //////////////////////////////////////////////////////////////////
-      else if constexpr (!ttg::meta::is_void_v<keyT> &&
-                         std::is_void_v<valueT>) {
+      else if constexpr (!ttg::meta::is_void_v<keyT> && std::is_void_v<valueT>) {
         auto send_callback = [this](const keyT &key) { set_arg<i, keyT, void>(key); };
         auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
         auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
@@ -844,8 +838,7 @@ namespace ttg_madness {
       // case 5: void key, void value, mixed inputs
       // case 6: void key, void value, no inputs
       //////////////////////////////////////////////////////////////////
-      else if constexpr (ttg::meta::is_all_void_v<keyT, valueT> &&
-                         std::is_void_v<valueT>) {
+      else if constexpr (ttg::meta::is_all_void_v<keyT, valueT> && std::is_void_v<valueT>) {
         auto send_callback = [this]() { set_arg<i, keyT, void>(); };
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
         auto finalize_callback = [this]() { finalize_argstream<i>(); };
@@ -903,8 +896,7 @@ namespace ttg_madness {
                          numinedges);
         throw this->get_name() + ":madness::ttg::TT: #input names != #input terminals";
       }
-      if (outnames.size() != numouts)
-        throw this->get_name() + ":madness::ttg::TT: #output names != #output terminals";
+      if (outnames.size() != numouts) throw this->get_name() + ":madness::ttg::TT: #output names != #output terminals";
 
       register_input_terminals(input_terminals, innames);
       register_output_terminals(output_terminals, outnames);
@@ -939,8 +931,7 @@ namespace ttg_madness {
                          numinedges);
         throw this->get_name() + ":madness::ttg::TT: #input names != #input terminals";
       }
-      if (outnames.size() != numouts)
-        throw this->get_name() + ":madness::ttg::T: #output names != #output terminals";
+      if (outnames.size() != numouts) throw this->get_name() + ":madness::ttg::T: #output names != #output terminals";
 
       register_input_terminals(input_terminals, innames);
       register_output_terminals(output_terminals, outnames);

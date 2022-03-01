@@ -20,11 +20,11 @@
 #include "ttg/runtimes.h"
 #include "ttg/terminal.h"
 #include "ttg/tt.h"
+#include "ttg/util/env.h"
 #include "ttg/util/hash.h"
 #include "ttg/util/meta.h"
 #include "ttg/util/print.h"
 #include "ttg/util/trace.h"
-#include "ttg/util/env.h"
 #include "ttg/util/typelist.h"
 
 #include "ttg/serialization/data_descriptor.h"
@@ -60,7 +60,6 @@
 
 #include <boost/callable_traits.hpp>  // needed for wrap.h
 #include <experimental/type_traits>   // needed for wrap.h
-
 
 #include "ttg/parsec/ttg_data_copy.h"
 
@@ -162,12 +161,9 @@ namespace ttg_parsec {
       return comm_rank;
     }
 
-
    public:
     static constexpr const int PARSEC_TTG_MAX_AM_SIZE = 1024 * 1024;
-    WorldImpl(int *argc, char **argv[], int ncores)
-    : WorldImplBase(query_comm_size(), query_comm_rank())
-    {
+    WorldImpl(int *argc, char **argv[], int ncores) : WorldImplBase(query_comm_size(), query_comm_rank()) {
       ttg::detail::register_world(*this);
       ctx = parsec_init(ncores, argc, argv);
       es = ctx->virtual_processes[0]->execution_streams[0];
@@ -746,13 +742,14 @@ namespace ttg_parsec {
   class TT : public ttg::TTBase, detail::ParsecTTBase {
    private:
     /// preconditions
-    static_assert(ttg::detail::is_typelist_v<input_valueTs>, "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
+    static_assert(ttg::meta::is_typelist_v<input_valueTs>,
+                  "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
     // create a virtual control input if the input list is empty, to be used in invoke()
-    using actual_input_tuple_type = std::conditional_t<!ttg::detail::typelist_is_empty_v<input_valueTs>,
-                                                        ttg::detail::typelist_to_tuple_t<input_valueTs>,
-                                                        std::tuple<void>>;
-    using input_tuple_type = ttg::detail::typelist_to_tuple_t<input_valueTs>;
-    static_assert(ttg::meta::is_tuple_v<output_terminalsT>, "Second template argument for ttg::TT must be std::tuple containing the output terminal types");
+    using actual_input_tuple_type = std::conditional_t<!ttg::meta::typelist_is_empty_v<input_valueTs>,
+                                                       ttg::meta::typelist_to_tuple_t<input_valueTs>, std::tuple<void>>;
+    using input_tuple_type = ttg::meta::typelist_to_tuple_t<input_valueTs>;
+    static_assert(ttg::meta::is_tuple_v<output_terminalsT>,
+                  "Second template argument for ttg::TT must be std::tuple containing the output terminal types");
     static_assert((ttg::meta::none_has_reference_v<input_valueTs>), "Input typelist cannot contain reference types");
     static_assert(ttg::meta::is_none_Void_v<input_valueTs>, "ttg::Void is for internal use only, do not use it");
 
@@ -764,10 +761,10 @@ namespace ttg_parsec {
 
     bool alive = true;
 
-    static constexpr int numinedges = std::tuple_size_v<input_tuple_type>;    // number of input edges
-    static constexpr int numins = std::tuple_size_v<actual_input_tuple_type>; // number of input arguments
-    static constexpr int numouts = std::tuple_size_v<output_terminalsT>;  // number of outputs
-    static constexpr int numflows = std::max(numins, numouts);            // max number of flows
+    static constexpr int numinedges = std::tuple_size_v<input_tuple_type>;     // number of input edges
+    static constexpr int numins = std::tuple_size_v<actual_input_tuple_type>;  // number of input arguments
+    static constexpr int numouts = std::tuple_size_v<output_terminalsT>;       // number of outputs
+    static constexpr int numflows = std::max(numins, numouts);                 // max number of flows
 
     /// @return true if derivedT::have_cuda_op exists and is defined to true
     static constexpr bool derived_has_cuda_op() {
@@ -784,7 +781,8 @@ namespace ttg_parsec {
     using input_args_type = actual_input_tuple_type;
     using input_edges_type = ttg::detail::edges_tuple_t<keyT, ttg::meta::decayed_tuple_t<input_tuple_type>>;
     // if have data inputs and (always last) control input, convert last input to Void to make logic easier
-    using input_values_full_tuple_type = ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<actual_input_tuple_type>>;
+    using input_values_full_tuple_type =
+        ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<actual_input_tuple_type>>;
     using input_refs_full_tuple_type =
         ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<actual_input_tuple_type>>;
     using input_values_tuple_type = ttg::meta::drop_void_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
@@ -1146,23 +1144,20 @@ namespace ttg_parsec {
             }
           }
           // case 2 and 3
-        } else if constexpr (!ttg::meta::is_void_v<keyT> &&
-                             std::is_void_v<valueT>) {
+        } else if constexpr (!ttg::meta::is_void_v<keyT> && std::is_void_v<valueT>) {
           for (auto &&key : keylist) {
             set_arg<i, keyT, ttg::Void>(key, ttg::Void{});
           }
         }
         // case 4
-      } else if constexpr (ttg::meta::is_void_v<keyT> &&
-                           !std::is_void_v<valueT>) {
+      } else if constexpr (ttg::meta::is_void_v<keyT> && !std::is_void_v<valueT>) {
         using decvalueT = std::decay_t<valueT>;
         decvalueT val;
         /* TODO: handle split-metadata case as with non-void keys */
         unpack(val, msg->bytes, 0);
         set_arg<i, keyT, valueT>(std::move(val));
         // case 5 and 6
-      } else if constexpr (ttg::meta::is_void_v<keyT> &&
-                           std::is_void_v<valueT>) {
+      } else if constexpr (ttg::meta::is_void_v<keyT> && std::is_void_v<valueT>) {
         set_arg<i, keyT, ttg::Void>(ttg::Void{});
       } else {
         abort();
@@ -1471,7 +1466,6 @@ namespace ttg_parsec {
       set_arg_impl<i>(key, ttg::Void{});
     }
 
-
     // Used to set the i'th argument
     template <std::size_t i, typename Key, typename Value>
     void set_arg_impl(const Key &key, Value &&value) {
@@ -1534,22 +1528,22 @@ namespace ttg_parsec {
           pos += sizeof(num_iovs);
 
           /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
-          * raw function pointer instead of a preregistered AM tag, so play that game.
-          * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
+           * raw function pointer instead of a preregistered AM tag, so play that game.
+           * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
           parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
           std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
           pos += sizeof(cbtag);
 
           /**
-          * register the generic iovecs and pack the registration handles
-          * memory layout: [<lreg_size, lreg, release_cb_ptr>, ...]
-          */
+           * register the generic iovecs and pack the registration handles
+           * memory layout: [<lreg_size, lreg, release_cb_ptr>, ...]
+           */
           for (auto &&iov : iovecs) {
             parsec_ce_mem_reg_handle_t lreg;
             size_t lreg_size;
             /* TODO: only register once when we can broadcast the data! */
             parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
-                                  iov.num_bytes, &lreg, &lreg_size);
+                                   iov.num_bytes, &lreg, &lreg_size);
             auto lreg_ptr = std::shared_ptr<void>{lreg, [](void *ptr) {
                                                     parsec_ce_mem_reg_handle_t memreg = (parsec_ce_mem_reg_handle_t)ptr;
                                                     parsec_ce.mem_unregister(&memreg);
@@ -1562,7 +1556,7 @@ namespace ttg_parsec {
             /* TODO: can we avoid the extra indirection of going through std::function? */
             std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
               /* shared_ptr of value and registration captured by value so resetting
-              * them here will eventually release the memory/registration */
+               * them here will eventually release the memory/registration */
               detail::release_data_copy(copy);
               lreg_ptr.reset();
             });
@@ -1815,8 +1809,7 @@ namespace ttg_parsec {
     // Js: index sequence of input terminals to set
     template <typename Key, typename... Ts, size_t... Is, size_t... Js>
     std::enable_if_t<ttg::meta::is_none_void_v<Key>, void> set_args(std::index_sequence<Is...>,
-                                                                    std::index_sequence<Js...>,
-                                                                    const Key &key,
+                                                                    std::index_sequence<Js...>, const Key &key,
                                                                     const std::tuple<Ts...> &args) {
       static_assert(sizeof...(Js) == sizeof...(Is));
       constexpr size_t js[] = {Js...};
@@ -1827,8 +1820,7 @@ namespace ttg_parsec {
     // Used by invoke to set all arguments associated with a task
     // Is: index sequence of input terminals to set
     template <typename Key, typename... Ts, size_t... Is>
-    std::enable_if_t<ttg::meta::is_none_void_v<Key>, void> set_args(std::index_sequence<Is...> is,
-                                                                    const Key &key,
+    std::enable_if_t<ttg::meta::is_none_void_v<Key>, void> set_args(std::index_sequence<Is...> is, const Key &key,
                                                                     const std::tuple<Ts...> &args) {
       set_args(std::index_sequence_for<Ts...>{}, is, key, args);
     }
@@ -1837,8 +1829,7 @@ namespace ttg_parsec {
     // Is: index sequence of elements in args
     // Js: index sequence of input terminals to set
     template <typename Key = keyT, typename... Ts, size_t... Is, size_t... Js>
-    std::enable_if_t<ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<Is...>,
-                                                               std::index_sequence<Js...>,
+    std::enable_if_t<ttg::meta::is_void_v<Key>, void> set_args(std::index_sequence<Is...>, std::index_sequence<Js...>,
                                                                const std::tuple<Ts...> &args) {
       static_assert(sizeof...(Js) == sizeof...(Is));
       constexpr size_t js[] = {Js...};
@@ -2084,8 +2075,7 @@ namespace ttg_parsec {
       //////////////////////////////////////////////////////////////////
       // case 1: nonvoid key, nonvoid value
       //////////////////////////////////////////////////////////////////
-      if constexpr (!ttg::meta::is_void_v<keyT> &&
-                    !std::is_void_v<valueT>) {
+      if constexpr (!ttg::meta::is_void_v<keyT> && !std::is_void_v<valueT>) {
         auto move_callback = [this](const keyT &key, valueT &&value) {
           set_arg<i, keyT, valueT>(key, std::forward<valueT>(value));
         };
@@ -2106,8 +2096,7 @@ namespace ttg_parsec {
       //////////////////////////////////////////////////////////////////
       // case 2: nonvoid key, void value, mixed inputs
       //////////////////////////////////////////////////////////////////
-      else if constexpr (!ttg::meta::is_void_v<keyT> &&
-                         std::is_void_v<valueT>) {
+      else if constexpr (!ttg::meta::is_void_v<keyT> && std::is_void_v<valueT>) {
         auto send_callback = [this](const keyT &key) { set_arg<i, keyT, ttg::Void>(key, ttg::Void{}); };
         auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
         auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
@@ -2120,8 +2109,7 @@ namespace ttg_parsec {
       //////////////////////////////////////////////////////////////////
       // case 4: void key, nonvoid value
       //////////////////////////////////////////////////////////////////
-      else if constexpr (ttg::meta::is_void_v<keyT> &&
-                         !std::is_void_v<valueT>) {
+      else if constexpr (ttg::meta::is_void_v<keyT> && !std::is_void_v<valueT>) {
         auto move_callback = [this](valueT &&value) { set_arg<i, keyT, valueT>(std::forward<valueT>(value)); };
         auto send_callback = [this](const valueT &value) { set_arg<i, keyT, const valueT &>(value); };
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
@@ -2131,8 +2119,7 @@ namespace ttg_parsec {
       //////////////////////////////////////////////////////////////////
       // case 5: void key, void value, mixed inputs
       //////////////////////////////////////////////////////////////////
-      else if constexpr (ttg::meta::is_void_v<keyT> &&
-                         std::is_void_v<valueT>) {
+      else if constexpr (ttg::meta::is_void_v<keyT> && std::is_void_v<valueT>) {
         auto send_callback = [this]() { set_arg<i, keyT, ttg::Void>(ttg::Void{}); };
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
         auto finalize_callback = [this]() { finalize_argstream<i>(); };
@@ -2256,15 +2243,13 @@ namespace ttg_parsec {
         , priomap(decltype(keymap)(std::forward<priomapT>(priomap_)))
         , static_stream_goal() {
       // Cannot call these in base constructor since terminals not yet constructed
-      if (innames.size() != numinedges)
-        throw std::logic_error("ttg_parsec::TT: #input names != #input terminals");
-      if (outnames.size() != numouts)
-        throw std::logic_error("ttg_parsec::TT: #output names != #output terminals");
+      if (innames.size() != numinedges) throw std::logic_error("ttg_parsec::TT: #input names != #input terminals");
+      if (outnames.size() != numouts) throw std::logic_error("ttg_parsec::TT: #output names != #output terminals");
 
       auto &world_impl = world.impl();
       world_impl.register_op(this);
 
-      if constexpr(numinedges == numins) {
+      if constexpr (numinedges == numins) {
         register_input_terminals(input_terminals, innames);
       } else {
         // create a name for the virtual control input
@@ -2418,7 +2403,6 @@ namespace ttg_parsec {
       world.impl().deregister_op(this);
     }
 
-
     static constexpr const ttg::Runtime runtime = ttg::Runtime::PaRSEC;
 
     template <std::size_t i, typename Reducer>
@@ -2492,8 +2476,7 @@ namespace ttg_parsec {
 
     // overrides TTBase::invoke()
     void invoke() override {
-      if constexpr (ttg::meta::is_void_v<keyT> &&
-                    ttg::meta::is_empty_tuple_v<input_values_tuple_type>)
+      if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>)
         invoke<keyT>();
       else
         TTBase::invoke();
