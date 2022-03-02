@@ -33,7 +33,7 @@ namespace ttg {
         //Store a pointer to the user's container in std::any, no copies
         ContainerWrapper(T &t, mapperT &&mapper,
                          keymapT &&keymap) : get([&t,&mapper](keyT const &key) {
-                                                  if constexpr (!std::is_class_v<T> && std::is_function_v<T>) {
+                                                   if constexpr (!std::is_class_v<T> && std::is_invocable_v<T, keyT>) {
                                                       auto k = mapper(key);
                                                       return t(k); //Call the user-defined lambda function.
                                                     }
