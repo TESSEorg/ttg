@@ -10,6 +10,10 @@
 #include "../blockmatrix.h"
 #include "ttg.h"
 
+#include "ttg/serialization.h"
+#include "ttg/serialization/std/pair.h"
+#include "ttg/serialization/std/vector.h"
+
 /* TODO: Get rid of using statement */
 using namespace ttg;
 #include <madness/world/world.h>
@@ -25,6 +29,14 @@ using namespace ttg;
 */
 
 using Key = std::pair<int, int>;
+
+namespace std {
+  std::ostream& operator<<(std::ostream& out, Key const& k) {
+    out << "Key(" << k.first << ", " << k.second << ")";
+    return out;
+  }
+}  // namespace std
+
 
 // An empty class used for pure control flows
 struct Control {};
