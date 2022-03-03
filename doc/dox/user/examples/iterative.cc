@@ -1,33 +1,12 @@
-#include <madness/world/world.h>
 #include <ttg.h>
+#include <ttg/serialization/std/pair.h>
 
 const double threshold = 100.0;
-
-struct Key2 {
-  int k = 0, i = 0;
-  madness::hashT hash_val;
-
-  Key2() { rehash(); }
-  Key2(int k, int i) : k(k), i(i) { rehash(); }
-
-  madness::hashT hash() const { return hash_val; }
-  void rehash() { hash_val = (static_cast<madness::hashT>(k) << 32) ^ (static_cast<madness::hashT>(i)); }
-
-  // Equality test
-  bool operator==(const Key2 &b) const { return k == b.k && i == b.i; }
-
-  // Inequality test
-  bool operator!=(const Key2 &b) const { return !((*this) == b); }
-
-  template <typename Archive>
-  void serialize(Archive &ar) {
-    ar &madness::archive::wrap((unsigned char *)this, sizeof(*this));
-  }
-};
+using Key2 = std::pair<int, int>;
 
 namespace std {
   std::ostream &operator<<(std::ostream &os, const Key2 &key) {
-    os << "{" << key.k << ", " << key.i << "}";
+    os << "{" << std::get<0>(key) << ", " << std::get<1>(key) << "}";
     return os;
   }
 }  // namespace std
@@ -40,12 +19,12 @@ static void a(const int &k, const double &input, std::tuple<ttg::Out<Key2, doubl
 
 static void b(const Key2 &key, const double &input, std::tuple<ttg::Out<int, double>, ttg::Out<int, double>> &out) {
   ttg::print("Called task B(", key, ") with input data ", input);
-  if (key.i == 0)
+  if (std::get<1>(key) == 0)
     /**! \link ttg::send() */
-    ttg::send/**! \endlink */<0>(key.k, input + 1.0, out);
+    ttg::send/**! \endlink */<0>(std::get<0>(key), input + 1.0, out);
   else
     /**! \link ttg::send() */
-    ttg::send/**! \endlink */<1>(key.k, input + 1.0, out);
+    ttg::send/**! \endlink */<1>(std::get<0>(key), input + 1.0, out);
 }
 
 static void c(const int &k, const double &b0, const double &b1, std::tuple<ttg::Out<int, double>> &out) {

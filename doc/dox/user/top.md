@@ -6,6 +6,7 @@
 * [Your First TTG Program](#firstprog)
 * [Compiling Your First TTG Program](#compiling)
 * [Data-Dependent Program](#datadependent)
+* [Streaming Terminals](#streamingterminals)
 
 ## <a name="firstprog">Your First TTG Program</a>
 
@@ -201,8 +202,8 @@ First, because each task in the DAG needs to be uniquely identified, and there
 are potentially many tasks of type A or C, tasks of these kinds now need to 
 get an identifier. Second, tasks of type B are not only identified by 0 or 1, but
 also need another identifier that denotes to which task of A or C it is
-connected. We extend the identifier type of B to a `Key2` to do this
-simply.
+connected. We extend the identifier type of B to `Key2`, which is a `std::pair<int, int>`
+to do this simply.
 
 Second, the function that implements the task for C needs to decide dynamically
 if it continues iterating or not. This is done by conditionally calling `ttg::send`
@@ -213,30 +214,19 @@ task is discovered, and the whole operation will complete.
 \skip #include
 \until #include <ttg.h>
 
-The inclusion of the `madness/world/world.h` file is necessary to use the MADNESS
-serialization mechanism. For the sake of simplicity, we use the same serialization
-mechanism for both the PaRSEC and the MADNESS backends.
+The inclusion of the `ttg/serialization/std/pair.h` file is necessary to import
+the serialization mechanisms for the task identifiers of tasks of type A or C. 
 
 \skip const
 \until const
 
 We define the threshold as a globally visible constant.
 
-\skip struct
+\skip using
 \until // namespace std
 
-As the key type of the tasks of type B is compound, no default serialization,
-hashing, and printout are provided, and the user code needs to provide these
-capabilities.
-
-We define the key type as a simple structure with two integers, and provide
-hashing capabilities in `hash()` and `rehash()`, comparators in `operator==`
-and `operator!=`, and a MADNESS serialization in `serialize`. For debugging
-and tracing purposes, we also extend the `std::operator<<` to printout an
-object of type `Key2`
-
-Once the key type is fully defined, we can modify the simple program to
-reflect the new Template Task Graph:
+We define the key type as a `std::pair<int, int>`, and extend the `std::operator<<` 
+to printout an object of type `Key2`
 
 \skip static
 \until }
@@ -284,3 +274,108 @@ input value for each input that A now defines.
 \until }
 
 \ref iterative.cc "Full iterative diamond example"
+
+## <a name="streamingterminals">Streaming Terminals</a>
+
+Now, consider that for a given k, there can be a large amount of tasks
+of type B, and that the number of such tasks depends on some computation.
+This means that the input of tasks of type C is not fixed, but variable.
+
+To express such construct, it is possible to do it by building a sub-DAG
+of tasks that combine the outputs of the different tasks of class B before
+passing the combination to task C.
+
+TTG provides a more synthetic construct to do so easily: the streaming
+terminals.
+
+\dotfile reducing.dot "DAG of the iterative diamond of arbitary width"
+
+The begining of the program remains identical to the iterative
+case above: we still use a `std::pair<int, int>` that we alias as
+`Key2` to define the task identifiers of tasks of class B, and we
+use the standard serialization provided by TTG for those.
+
+\dontinclude reducing.cc
+\skip #include
+\until // namespace std
+
+The code for tasks of type A will be inlined as a lambda function,
+because it needs to access other parts of the DAG that need to be
+defined before. The code for tasks of type B becomes simpler: 
+we always send the updated input that tasks of type B receive
+to the single input terminal of tasks of task C, so we don't need to
+differentiate between the keys to decide on which output terminal
+to provide the data.
+
+\skip static
+\until }
+
+Tasks of type C have been simplified too: they now take a single
+input, and it's the input terminal that will do the sum operation.
+
+\skip static
+\until }
+\until }
+\until }
+
+The main program that builds the DAG starts similarly to the
+simple iterative diamond example. Edge types have been simplified,
+because there is less unique edges (but edges of type `C_A` will
+be extended to include the streaming capability).
+
+\skip main
+\until C_A
+
+Tasks of type C are defined first, because we need to expose those
+to the code of tasks of type A.
+
+\skip auto
+\until wc
+
+Now, we define the input reducer function to apply to the input
+terminal 0 of tasks of type C. The `set_input_reducer` function
+takes two references to elements of the appropriate type, `a` and `b`.
+The operation goal is to aggregate the values as they are sent
+to the input terminal. The first time a data is sent to this
+input terminal, it is copied onto the current aggregated value.
+Every other data sent to the same input terminal (and for the same
+destination task) is reduced into the aggregator value via this
+lambda. `a` is a reference to the (mutable) aggregator value, while
+`b` is a reference to the (constant) value to add.
+
+Here, the function we define simply adds the value of `b` to `a`.
+
+\skip set_input_reducer
+\until set_input_reducer
+
+We can now define the tasks of type A. Instead of passing the
+function to call, we define it in a lambda expression, which allows
+us to capture the TT of type C (`wc`). The prototype of this lambda
+is the one expected for tasks of the A. After displaying its name,
+the task calls `set_argstream_size` on the first input (`<0>`) of `wc`.
+This function takes two arguments: a task identifier (`k`), and the
+number of elements that are expected as input of the streaming terminal
+`<0>`. That counter can be data depndent, in this case we set it to
+`k+1`.
+
+\skip wa
+\until set_argstream_size
+
+The task can then create as many tasks of type B as is needed, 
+and since each task of type B will output their value into the
+streaming terminal of the corresponding C, we instantiate `k+1`
+tasks of type B by sending them input data.
+
+The other parameters are the usual parameters of `ttg::make_tt`.
+
+\skip for
+\until ttg::edges
+
+Tasks of type B are created according to the new prototype,
+and the rest of the code is unchanged.
+
+\skip auto
+\until EXIT_SUCCESS
+\until }
+
+\ref reducing.cc "Full iterative diamond of arbitrary width example"
