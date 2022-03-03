@@ -911,12 +911,14 @@ namespace ttg_parsec {
                                      const Key &key) {
       using msg_t = detail::msg_t;
       auto &world_impl = world.impl();
-      std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+      parsec_taskpool_t *tp = world_impl.taskpool();
+      std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), tp->taskpool_id,
                                                             msg_header_t::MSG_GET_FROM_PULL, i, 1);
       /* pack the key */
       size_t pos = 0;
       pos = pack(key, msg->bytes, pos);
-      msg->tt_id.num_keys = 1;
+      tp->tdm.module->outgoing_message_start(tp, owner, NULL);
+      tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
       parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
                         sizeof(msg_header_t) + pos);
     }
