@@ -1012,6 +1012,7 @@ namespace ttg_madness {
 
       connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numins>{}, inedges);
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
+      //DO NOT MOVE THIS - information about the number of pull terminals is only available after connecting the edges.
       register_input_callbacks(std::make_index_sequence<numins>{});
     }
 
