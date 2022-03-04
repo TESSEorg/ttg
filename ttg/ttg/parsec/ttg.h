@@ -1294,8 +1294,6 @@ namespace ttg_parsec {
         keyT key;
         pos = unpack(key, msg->bytes, pos);
         set_arg<i>(key, (in.container).get(key));
-      } else {
-        set_arg<i>((in.container).get());
       }
     }
 
@@ -1467,8 +1465,10 @@ namespace ttg_parsec {
         release_task(task, task_ring);
       }
       /* if not pulling lazily, pull the data here */
-      if (get_pull_data) {
-        invoke_pull_terminals(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, task->key, task);
+      if constexpr (!ttg::meta::is_void_v<keyT>) {
+        if (get_pull_data) {
+          invoke_pull_terminals(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, task->key, task);
+        }
       }
     }
 
@@ -1510,9 +1510,11 @@ namespace ttg_parsec {
           parsec_list_item_ring_push_sorted(&(*task_ring)->super, &task->parsec_task.super,
                                             offsetof(parsec_task_t, priority));
         }
-      } else if ((baseobj->num_pullins + count == numins) && baseobj->is_lazy_pull()) {
-        /* lazily pull the pull terminal data */
-        baseobj->invoke_pull_terminals(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, task->key, task);
+      } else if constexpr (!ttg::meta::is_void_v<keyT>) {
+        if ((baseobj->num_pullins + count == numins) && baseobj->is_lazy_pull()) {
+          /* lazily pull the pull terminal data */
+          baseobj->invoke_pull_terminals(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, task->key, task);
+        }
       }
     }
 

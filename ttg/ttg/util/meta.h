@@ -826,21 +826,6 @@ namespace ttg {
       template <typename... valueTs>
       using input_reducers_t = typename input_reducers<valueTs...>::type;
 
-      //Callback type for pull Ops.
-      template<typename Key, typename Enabler = void>
-      struct invoke_callback;
-
-      template<typename Key>
-      struct invoke_callback<Key, std::enable_if_t<!is_void_v<Key>>>
-      {
-        using type = std::function<void(Key const&)>;
-      };
-      template<typename Key>
-      struct invoke_callback<Key, std::enable_if_t<is_void_v<Key>>> {
-        using type = std::function<void()>;
-      };
-      template <typename Key> using invoke_callback_t = typename invoke_callback<Key>::type;
-
     }  // namespace detail
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
