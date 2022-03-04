@@ -50,9 +50,7 @@ int main(int argc, char **argv) {
   auto wb(ttg::make_tt(b, ttg::edges(A_B), ttg::edges(B_C0, B_C1), "B", {"from A"}, {"to 1st input of C", "to 2nd input of C"}));
   auto wc(ttg::make_tt(c, ttg::edges(B_C0, B_C1), ttg::edges(C_A), "C", {"From B", "From B"}, {"to A"}));
 
-  wa->make_executable();
-  wb->make_executable();
-  wc->make_executable();
+  ttg::make_graph_executable(wa);
 
   if (wa->get_world().rank() == 0) wa->invoke(0, 0.0);
 

@@ -113,11 +113,11 @@ for the input terminals, and the list of names for the output terminals.
 These TTs and the edges define the template task graph that will then be
 instantiated as a DAG of tasks by the execution.
 
-\skip make_executable
+\skip make_graph_executable
 \until invoke
 
 Before executing the first tasks, the template task graph must be made executable
-by calling `ttg::TTBase::make_executable()` on each TT of the graph. This computes
+by calling `ttg::make_graph_executable()` on each source TT of the graph. This signals to the runtime system that all edges that connect TTs are defined, computes
 internal state necessary to track all dependencies, and registers active message
 handles for each template task type.
 
@@ -265,7 +265,7 @@ in the function itself, this has no impact on this part of the code).
 The `ttg::make_tt` calls are also updated to reflect the new task prototypes, and include
 the edge from C(k) to A(k+1).
 
-\skip make_executable
+\skip make_graph_executable
 \until invoke
 
 When invoking A(0, 0.0), one needs to provide the key for the task and the

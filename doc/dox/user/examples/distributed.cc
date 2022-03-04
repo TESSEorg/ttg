@@ -53,9 +53,7 @@ int main(int argc, char **argv) {
   wb->set_keymap([&](const Key2 &k) { return std::get<1>(k) % wb->get_world().size(); });
   wc->set_keymap([&](const int &k) { return 0; });
 
-  wa->make_executable();
-  wb->make_executable();
-  wc->make_executable();
+  ttg::make_graph_executable(wa);
 
   if (wa->get_world().rank() == 0) wa->invoke(0, 0.0);
 

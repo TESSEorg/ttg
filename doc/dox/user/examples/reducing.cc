@@ -49,9 +49,7 @@ int main(int argc, char **argv) {
 
   auto wb(ttg::make_tt(b, ttg::edges(A_B), ttg::edges(B_C), "B", {"from A"}, {"to C"}));
 
-  wa->make_executable();
-  wb->make_executable();
-  wc->make_executable();
+  ttg::make_graph_executable(wa);
 
   if (wa->get_world().rank() == 0) wa->invoke(0, 0.0);
 
