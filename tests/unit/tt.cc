@@ -187,23 +187,29 @@ TEST_CASE("TemplateTask", "[core]") {
       CHECK_NOTHROW(std::make_unique<tt_i_t::tt>(ttg::edges(in), ttg::edges(), ""));
 
       // same, but using generic lambdas
-      auto func0 = [](auto key, auto &&datum, std::tuple<> &outs) {};
-      static_assert(std::is_invocable<decltype(func0), int, int &&, std::tuple<> &>::value);
-      static_assert(ttg::meta::is_invocable_typelist_v<decltype(func0), ttg::typelist<int, int &&, std::tuple<> &>>);
+
+      // testing generic lambda intrspection
+      auto func0 = [](auto key, auto &&datum0, auto &datum1, const auto &datum2, auto datum3, auto &outs) {};
+      static_assert(std::is_invocable<decltype(func0), int, const float &, const float &, const float &, const float &,
+                                      std::tuple<> &>::value);
+      // error: auto& does not bind to T&&
+      // static_assert(std::is_invocable<decltype(func0), int, float&&, float&&, float&&, float&&, std::tuple<>
+      // &>::value);
+      static_assert(ttg::meta::is_invocable_typelist_v<
+                    decltype(func0), ttg::typelist<int, float &&, const float &, float &&, float &&, std::tuple<> &>>);
+      static_assert(std::is_same_v<
+                    decltype(compute_arg_binding_types(
+                        func0, ttg::typelist<ttg::typelist<int>, ttg::typelist<float &&, const float &>,
+                                             ttg::typelist<float &&>, ttg::typelist<float &&, const float &>,
+                                             ttg::typelist<float &&, const float &>, ttg::typelist<std::tuple<> &>>{})),
+                    ttg::typelist<>>);
       static_assert(
-          ttg::meta::is_invocable_typelist_v<decltype(func0), ttg::typelist<int, const int &, std::tuple<> &>>);
-      static_assert(std::is_same_v<decltype(compute_arg_binding_types(
-                                       func0, ttg::typelist<ttg::typelist<int>, ttg::typelist<int &&, const int &>,
-                                                            ttg::typelist<const std::tuple<> &>>{})),
-                                   ttg::typelist<>>);
-      static_assert(std::is_same_v<decltype(compute_arg_binding_types(
-                                       func0, ttg::typelist<ttg::typelist<int>, ttg::typelist<int &&, const int &>,
-                                                            ttg::typelist<std::tuple<> &>>{})),
-                                   ttg::typelist<int, int &&, std::tuple<> &>>);
-      static_assert(std::is_same_v<decltype(compute_arg_binding_types(
-                                       func0, ttg::typelist<ttg::typelist<int>, ttg::typelist<const int &, int &&>,
-                                                            ttg::typelist<std::tuple<> &>>{})),
-                                   ttg::typelist<int, const int &, std::tuple<> &>>);
+          std::is_same_v<
+              decltype(compute_arg_binding_types(
+                  func0, ttg::typelist<ttg::typelist<int>, ttg::typelist<float &&, const float &>,
+                                       ttg::typelist<float &&, const float &>, ttg::typelist<float &&, const float &>,
+                                       ttg::typelist<float &&, const float &>, ttg::typelist<std::tuple<> &>>{})),
+              ttg::typelist<int, float &&, const float &, float &&, float &&, std::tuple<> &>>);
 
       CHECK_NOTHROW(ttg::make_tt(
           [](const int &key, auto &datum, auto &outs) {
