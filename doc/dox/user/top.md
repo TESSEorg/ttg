@@ -7,6 +7,7 @@
 * [Compiling Your First TTG Program](#compiling)
 * [Data-Dependent Program](#datadependent)
 * [Streaming Terminals](#streamingterminals)
+* [Distributed Computing](#distributedcomputing)
 
 ## <a name="firstprog">Your First TTG Program</a>
 
@@ -116,7 +117,7 @@ instantiated as a DAG of tasks by the execution.
 \until invoke
 
 Before executing the first tasks, the template task graph must be made executable
-by calling `ttg::TTBase::make_executable()` on each source task of the graph. This computes
+by calling `ttg::TTBase::make_executable()` on each TT of the graph. This computes
 internal state necessary to track all dependencies, and registers active message
 handles for each template task type.
 
@@ -379,3 +380,26 @@ and the rest of the code is unchanged.
 \until }
 
 \ref reducing.cc "Full iterative diamond of arbitrary width example"
+
+## <a name="distributedcomputing">Distributed Computing</a>
+
+Any TTG program is a parallel application. In the current backends,
+TTG applications are also MPI applications. Tasks are distributed
+between the MPI ranks following a process keymap. The default
+process keymap hashes the task identifiers and distributes the
+hashes in a round-robin way. The user can control the task distribution
+by setting a user-defined keymap for Task Templates.
+
+In the iterative diamond of arbitrary width, we can easily provide
+a suitable keymap by pinning tasks of type A and C (which are the
+first and last task of each diamond) onto the rank 0, while distributing
+the tasks of type B between the ranks using the second element in
+the key of those tasks.
+
+This gives the code below, almost identical to the previous example,
+except for the keymap definition, and displaying on which rank each
+task executes.
+
+\include distributed.cc
+
+\ref distributed.cc "Full iterative diamond of arbitrary width example with user-defined keymap"
