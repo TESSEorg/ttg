@@ -32,7 +32,7 @@ namespace ttg {
                                                           ContainerWrapper>{}, bool> = true>
         //Store a pointer to the user's container in std::any, no copies
         ContainerWrapper(T &t, mapperT &&mapper,
-                         keymapT &&keymap) : get([&t,&mapper](keyT const &key) {
+                         keymapT &&keymap) : get([&t,mapper = std::forward<mapperT>(mapper)](keyT const &key) {
                                                    if constexpr (!std::is_class_v<T> && std::is_invocable_v<T, keyT>) {
                                                       auto k = mapper(key);
                                                       return t(k); //Call the user-defined lambda function.
@@ -44,7 +44,7 @@ namespace ttg {
                                                       return t.at(k);
                                                     }
                                                 }),
-                                            owner([&t, &mapper, &keymap](keyT const &key) {
+                                            owner([&t, mapper = std::forward<mapperT>(mapper), keymap = std::forward<keymapT>(keymap)](keyT const &key) {
                                                     auto idx = mapper(key); //Mapper to map task ID to index of the data structure.
                                                     return keymap(idx);
                                                   })
@@ -52,23 +52,23 @@ namespace ttg {
     };
 
     template <typename valueT> struct ContainerWrapper<void, valueT> {
-      std::function<std::nullptr_t ()> get = nullptr;
-      std::function<bool ()> owner = nullptr;
+      std::function<valueT ()> get = nullptr;
+      std::function<size_t ()> owner = nullptr;
     };
 
     template <typename keyT> struct ContainerWrapper<keyT, void> {
       std::function<std::nullptr_t (keyT const& key)> get = nullptr;
-      std::function<bool (keyT const& key)> owner = nullptr;
+      std::function<size_t (keyT const& key)> owner = nullptr;
     };
 
     template <typename valueT> struct ContainerWrapper<ttg::Void, valueT> {
-      std::function<std::nullptr_t ()> get = nullptr;
-      std::function<bool ()> owner = nullptr;
+      std::function<valueT ()> get = nullptr;
+      std::function<size_t ()> owner = nullptr;
     };
 
     template <> struct ContainerWrapper<void, void> {
       std::function<std::nullptr_t ()> get = nullptr;
-      std::function<bool ()> owner = nullptr;
+      std::function<size_t ()> owner = nullptr;
     };
   } //namespace detail
 
@@ -430,19 +430,6 @@ namespace ttg {
     }
     const auto& successors() const {
       return get_connections();
-    }
-
-    template <typename Key = keyT, typename Value = valueT>
-    std::enable_if_t<meta::is_none_void_v<Key,Value> && std::is_same_v<Value,std::remove_reference_t<Value>>,void>
-    send_to(const Key &key, Value &&value, std::size_t i)
-    {
-      //std::cout << "send_to called for successor " << i << " " << get_name() << "\n";
-      TerminalBase *successor = successors().at(i);
-      if (successor->get_type() == TerminalBase::Type::Read) {
-        static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
-      } else if (successor->get_type() == TerminalBase::Type::Consume) {
-        static_cast<In<keyT, valueT> *>(successor)->send(key, value);
-      }
     }
 
     template<typename Key = keyT, typename Value = valueT>
