@@ -454,7 +454,7 @@ auto make_dispatcher(ttg::Edge<Key2, MatrixTile<T>>& input,
     ttg::send<3>(Key3{key.I, key.J, 0}, std::move(tile), out);
   };
 
-  return ttg::make_tt(f, ttg::edges(input), ttg::edges(syrk_potrf, gemm_trsm, syrk_syrk, gemm_gemm), "POTRF Dispatch");
+  return ttg::make_tt(f, ttg::edges(input), ttg::edges(syrk_potrf, gemm_trsm, syrk_syrk, gemm_gemm), "POTRF Dispatch", {"Input"}, {"POTRF", "TRSM", "SYRK", "GEMM"});
 }
 
 auto make_potrf_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&input, ttg::Edge<Key2, MatrixTile<double>>&output ) {
