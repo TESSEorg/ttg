@@ -240,7 +240,7 @@ auto make_wavefront2(const funcT& func, Matrix<T>* m, Edge<Key, BlockMatrix<T>>&
 template <typename funcT, typename T>
 auto make_wavefront(const funcT& func, Matrix<T>* m, Edge<Key, BlockMatrix<T>>& input1,
                     Edge<Key, BlockMatrix<T>>& input2) {
-  auto f = [m, func](const Key& key, BlockMatrix<T>& bm,
+  auto f = [m, func](const Key& key, const BlockMatrix<T>& bm,
                      std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
@@ -278,7 +278,8 @@ auto make_wavefront(const funcT& func, Matrix<T>* m, Edge<Key, BlockMatrix<T>>& 
   };
 
   Edge<Key, BlockMatrix<T>> recur("recur");
-  return make_tt(f, edges(recur), edges(recur, input1, input2), "wavefront", {"control"}, {"recur", "output1", "output2"});
+  return make_tt(f, edges(recur), edges(recur, input1, input2), "wavefront", {"control"},
+                 {"recur", "output1", "output2"});
 }
 
 int main(int argc, char** argv) {

@@ -292,7 +292,8 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   using func_args_t =
       ttg::meta::typelist_to_tuple_t<decltype(compute_arg_binding_types(func, candidate_func_args_t{}))>;
 
-  static_assert(!std::is_same_v<func_args_t, std::tuple<>>,
+  constexpr auto DETECTED_HOW_TO_INVOKE_FUNC = !std::is_same_v<func_args_t, std::tuple<>>;
+  static_assert(DETECTED_HOW_TO_INVOKE_FUNC,
                 "ttd::make_tt(func, inedges, ...): could not detect how to invoke func, either the signature of func "
                 "is faulty, or inedges does match the expected list of types, or both");
 
