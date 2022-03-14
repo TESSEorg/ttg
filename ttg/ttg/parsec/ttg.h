@@ -23,6 +23,7 @@
 #include "ttg/util/env.h"
 #include "ttg/util/hash.h"
 #include "ttg/util/meta.h"
+#include "ttg/util/meta/callable.h"
 #include "ttg/util/print.h"
 #include "ttg/util/trace.h"
 #include "ttg/util/typelist.h"
@@ -57,9 +58,6 @@
 #include <parsec/scheduling.h>
 #include <cstdlib>
 #include <cstring>
-
-#include <boost/callable_traits.hpp>  // needed for wrap.h
-#include <experimental/type_traits>   // needed for wrap.h
 
 #include "ttg/parsec/ttg_data_copy.h"
 
@@ -784,9 +782,9 @@ namespace ttg_parsec {
     using input_values_full_tuple_type =
         ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<actual_input_tuple_type>>;
     using input_refs_full_tuple_type =
-        ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<actual_input_tuple_type>>;
+        ttg::meta::add_glvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<actual_input_tuple_type>>;
     using input_values_tuple_type = ttg::meta::drop_void_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
-    using input_refs_tuple_type = ttg::meta::drop_void_t<ttg::meta::add_lvalue_reference_tuple_t<input_tuple_type>>;
+    using input_refs_tuple_type = ttg::meta::drop_void_t<ttg::meta::add_glvalue_reference_tuple_t<input_tuple_type>>;
 
     static constexpr int numinvals =
         std::tuple_size_v<input_refs_tuple_type>;  // number of input arguments with values (i.e. omitting the control

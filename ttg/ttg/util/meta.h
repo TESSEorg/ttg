@@ -349,6 +349,18 @@ namespace ttg {
     template <typename tupleT>
     using add_lvalue_reference_tuple_t = typename add_lvalue_reference_tuple<tupleT>::type;
 
+    template <typename T>
+    struct add_glvalue_reference_tuple;
+
+    template <typename... Ts>
+    struct add_glvalue_reference_tuple<std::tuple<Ts...>> {
+      using type = std::tuple<std::conditional_t<std::is_const_v<Ts>, std::add_lvalue_reference_t<Ts>,
+                                                 std::add_rvalue_reference_t<std::remove_const_t<Ts>>>...>;
+    };
+
+    template <typename tupleT>
+    using add_glvalue_reference_tuple_t = typename add_glvalue_reference_tuple<tupleT>::type;
+
     template <typename T, typename... Ts>
     struct none_has_reference {
       static constexpr bool value = !std::is_reference_v<T> && none_has_reference<Ts...>::value;

@@ -60,18 +60,8 @@ set(ttg-sources
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
     )
 # optional dependencies
-if (TARGET Boost::boost)  # use found Boost headers instead of embedded Boost.CallableTraits
+if (TARGET Boost::boost)
   list(APPEND ttg-deps Boost::boost)
-else (TARGET Boost::boost)
-  list(APPEND ttg-incs ttg/external/boost/v1.77.0)
-  # install the embedded boost
-  file(GLOB EMBEDDED_BOOST_FILES "ttg/external/boost/v1.77.0/boost/callable_traits/*.hpp")
-  list(APPEND EMBEDDED_BOOST_FILES "${CMAKE_CURRENT_SOURCE_DIR}/ttg/external/boost/v1.77.0/boost/callable_traits.hpp")
-  foreach ( file ${EMBEDDED_BOOST_FILES} )
-    file(RELATIVE_PATH _rel_file_path "${PROJECT_SOURCE_DIR}/ttg" "${file}")
-    get_filename_component( dir "${_rel_file_path}" DIRECTORY )
-    install( FILES ${file} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${dir}" COMPONENT ${_library})
-  endforeach()
 endif (TARGET Boost::boost)
 if (TARGET TTG_Libunwind)
   list(APPEND ttg-deps TTG_Libunwind)

@@ -20,6 +20,7 @@
 #include "ttg/util/hash.h"
 #include "ttg/util/macro.h"
 #include "ttg/util/meta.h"
+#include "ttg/util/meta/callable.h"
 #include "ttg/util/void.h"
 #include "ttg/world.h"
 
@@ -40,9 +41,6 @@
 #include <madness/world/worldtypes.h>
 
 #include <madness/world/world_task_queue.h>
-
-#include <boost/callable_traits.hpp>  // needed for wrap.h
-#include <experimental/type_traits>   // needed for wrap.h
 
 namespace ttg_madness {
 
@@ -229,10 +227,10 @@ namespace ttg_madness {
     using input_values_full_tuple_type =
         ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<actual_input_tuple_type>>;
     using input_refs_full_tuple_type =
-        ttg::meta::add_lvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<actual_input_tuple_type>>;
+        ttg::meta::add_glvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<actual_input_tuple_type>>;
 
     using input_values_tuple_type = ttg::meta::drop_void_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
-    using input_refs_tuple_type = ttg::meta::drop_void_t<ttg::meta::add_lvalue_reference_tuple_t<input_tuple_type>>;
+    using input_refs_tuple_type = ttg::meta::drop_void_t<ttg::meta::add_glvalue_reference_tuple_t<input_tuple_type>>;
     static_assert(!ttg::meta::is_any_void_v<input_values_tuple_type>);
 
     using output_terminals_type = output_terminalsT;

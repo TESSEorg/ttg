@@ -188,7 +188,7 @@ TEST_CASE("TemplateTask", "[core]") {
 
       // same, but using generic lambdas
 
-      // testing generic lambda intrspection
+      // testing generic lambda introspection
       auto func0 = [](auto key, auto &&datum0, auto &datum1, const auto &datum2, auto datum3, auto &outs) {};
       static_assert(std::is_invocable<decltype(func0), int, const float &, const float &, const float &, const float &,
                                       std::tuple<> &>::value);
@@ -231,16 +231,19 @@ TEST_CASE("TemplateTask", "[core]") {
           ttg::edges(ttg::make_const(in)), ttg::edges()));
       CHECK_NOTHROW(ttg::make_tt(
           [](const int &key, auto &datum, auto &outs) {
-            static_assert(!std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Nonconst datum expected");
+            static_assert(std::is_lvalue_reference_v<decltype(datum)>, "Lvalue datum expected");
+            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
           },
           ttg::edges(in), ttg::edges()));
       CHECK_NOTHROW(ttg::make_tt(
           [](const int &key, const auto &datum, auto &outs) {
+            static_assert(std::is_lvalue_reference_v<decltype(datum)>, "Lvalue datum expected");
             static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
           },
           ttg::edges(in), ttg::edges()));
       CHECK_NOTHROW(ttg::make_tt(
           [](const int &key, auto &&datum, auto &outs) {
+            static_assert(std::is_rvalue_reference_v<decltype(datum)>, "Rvalue datum expected");
             static_assert(!std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Nonconst datum expected");
           },
           ttg::edges(in), ttg::edges()));
