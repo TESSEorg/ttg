@@ -1248,7 +1248,7 @@ static double compute_gflops(const std::vector<std::vector<long>> &a_r2c, const 
       if (k > b_r2c.size()) continue;
       for (auto jj = 0; jj < b_r2c[k].size(); jj++) {
         auto j = b_r2c[k][jj];
-        flops += mTiles[i] * nTiles[j] * kTiles[k];
+        flops += static_cast<long>(mTiles[i]) * nTiles[j] * kTiles[k];
       }
     }
   }
