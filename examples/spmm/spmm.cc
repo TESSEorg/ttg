@@ -1245,10 +1245,11 @@ static double compute_gflops(const std::vector<std::vector<long>> &a_r2c, const 
   for (auto i = 0; i < a_r2c.size(); i++) {
     for (auto kk = 0; kk < a_r2c[i].size(); kk++) {
       auto k = a_r2c[i][kk];
-      if (k > b_r2c.size()) continue;
+      if (k > b_r2c.size())
+        continue;
       for (auto jj = 0; jj < b_r2c[k].size(); jj++) {
         auto j = b_r2c[k][jj];
-        flops += mTiles[i] * nTiles[j] * kTiles[k];
+        flops += static_cast<long>(mTiles[i]) * nTiles[j] * kTiles[k];
       }
     }
   }
