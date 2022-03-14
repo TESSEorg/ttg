@@ -165,7 +165,7 @@ namespace ttg {
   } // namespace detail
 
 
-  /* Slim wrapper around around an edge marked as const using the detail::const_wrap_t */
+  /* Slim wrapper around an edge marked as const using the detail::const_wrap_t */
   template <typename keyT, typename valueT>
   class Edge<keyT, detail::const_wrap_t<valueT>> {
 
