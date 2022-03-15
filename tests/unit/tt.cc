@@ -213,24 +213,6 @@ TEST_CASE("TemplateTask", "[core]") {
 
       CHECK_NOTHROW(ttg::make_tt(
           [](const int &key, auto &datum, auto &outs) {
-            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>,
-                          "Const input edge type expected to be const!");
-          },
-          ttg::edges(ttg::make_const(in)), ttg::edges()));
-      CHECK_NOTHROW(ttg::make_tt(
-          [](const int &key, const auto &datum, auto &outs) {
-            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>,
-                          "Const input edge type expected to be const!");
-          },
-          ttg::edges(ttg::make_const(in)), ttg::edges()));
-      CHECK_NOTHROW(ttg::make_tt(
-          [](const int &key, auto &&datum, auto &outs) {
-            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>,
-                          "Const input edge type expected to be const!");
-          },
-          ttg::edges(ttg::make_const(in)), ttg::edges()));
-      CHECK_NOTHROW(ttg::make_tt(
-          [](const int &key, auto &datum, auto &outs) {
             static_assert(std::is_lvalue_reference_v<decltype(datum)>, "Lvalue datum expected");
             static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
           },

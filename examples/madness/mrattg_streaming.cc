@@ -300,7 +300,7 @@ auto make_printer(const ttg::Edge<keyT, valueT>& in, const char* str = "", const
             std::cout << str << " (" << key << "," << value << ")" << std::endl;
         }
     };
-    return ttg::make_tt(func, ttg::edges(ttg::make_const(in)), ttg::edges(), "printer", {"input"});
+    return ttg::make_tt(func, ttg::edges(in), ttg::edges(), "printer", {"input"});
 }
 
 template <Dimension NDIM>
