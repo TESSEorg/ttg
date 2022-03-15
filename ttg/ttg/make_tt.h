@@ -195,14 +195,24 @@ struct CallableWrapTTArgsUnwrapTuple<funcT, keyT, output_terminalsT, std::tuple<
   using type = CallableWrapTTArgs<funcT, keyT, output_terminalsT, std::remove_reference_t<input_valuesT>...>;
 };
 
-// Factory function to assist in wrapping a callable with signature
-//
-// If the callable is not generic, its arguments are inspected and the constness is used
-// to determine mutable data. Otherwise, mutability information is taken from the input edge types.
-// See \c ttg::make_const.
-//
-// case 1 (keyT != void): void op(const input_keyT&, std::tuple<input_valuesT&...>&&, std::tuple<output_terminalsT...>&)
-// case 2 (keyT == void): void op(std::tuple<input_valuesT&...>&&, std::tuple<output_terminalsT...>&)
+/// @brief Factory function to assist in wrapping a callable with signature
+///
+/// @tparam keyT a task ID type
+/// @tparam funcT a callable type
+/// @tparam input_edge_valuesT a pack of types of input data
+/// @tparam output_edgesT a pack of types of output edges
+/// @param[in] func a callable object; if `ttg::meta::is_void_v<keyT>==true`, the signature
+///         must be `void(const std::tuple<input_valuesT&...>&, std::tuple<output_terminalsT...>&)`,
+///         else `void(const keyT&, const std::tuple<input_valuesT&...>&, std::tuple<output_terminalsT...>&)`
+/// @param[in] inedges a tuple of input edges
+/// @param[in] outedges a tuple of output edges
+/// @param[in] name a string label for the resulting TT
+/// @param[in] name a string label for the resulting TT
+/// @param[in] innames string labels for the respective input terminals of the resulting TT
+/// @param[in] outnames string labels for the respective output terminals of the resulting TT
+///
+/// @internal To be able to handle generic callables the input edges are used to determine the trial set of
+/// argument types.
 template <typename keyT, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
 auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
                  const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
