@@ -74,29 +74,6 @@ namespace ttg {
     template <typename T>
     struct typelist_is_not_empty : std::bool_constant<typelist_is_not_empty_v<T>> {};
 
-    /// filters out elements of a typelist that do not satisfy the predicate
-    template <typename T, template <typename...> typename Pred>
-    struct filter;
-
-    template <typename FilteredTypelist, template <typename...> typename Pred, typename... ToBeFilteredTs>
-    struct filter_impl;
-
-    template <typename... FilteredTs, template <typename...> typename Pred>
-    struct filter_impl<typelist<FilteredTs...>, Pred> {
-      using type = typelist<FilteredTs...>;
-    };
-
-    template <typename... FilteredTs, template <typename...> typename Pred, typename U, typename... RestOfUs>
-    struct filter_impl<typelist<FilteredTs...>, Pred, U, RestOfUs...>
-        : std::conditional_t<Pred<U>::value, filter_impl<typelist<FilteredTs..., U>, Pred, RestOfUs...>,
-                             filter_impl<typelist<FilteredTs...>, Pred, RestOfUs...>> {};
-
-    template <typename... Ts, template <typename...> typename Pred>
-    struct filter<typelist<Ts...>, Pred> : filter_impl<typelist<>, Pred, Ts...> {};
-
-    template <typename T, template <typename...> typename Pred>
-    using filter_t = typename filter<T, Pred>::type;
-
   }  // namespace meta
 
   // typelist is user-centric API

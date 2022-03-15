@@ -23,6 +23,10 @@ namespace ttg {
     template <typename T>
     using remove_cvr_t = std::remove_cv_t<std::remove_reference_t<T>>;
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // tuple manipulations
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     template <typename Tuple, std::size_t N, typename Enabler = void>
     struct drop_first_n;
 
@@ -149,6 +153,15 @@ namespace ttg {
     template <typename T>
     constexpr bool is_void_v = is_Void_v<T> || std::is_void_v<T>;
 
+    template <typename T>
+    struct is_void : std::bool_constant<is_void_v<T>> {};
+
+    template <typename T>
+    constexpr bool is_nonvoid_v = !is_void_v<T>;
+
+    template <typename T>
+    struct is_nonvoid : std::bool_constant<is_nonvoid_v<T>> {};
+
     template <typename... Ts>
     constexpr bool is_all_void_v = (is_void_v<Ts> && ...);
 
@@ -217,55 +230,45 @@ namespace ttg {
     template <typename T>
     using void_to_Void_t = typename void_to_Void<T>::type;
 
-    /* helper class to filter void types from typelists */
-    template <typename T, typename S, typename U>
-    struct drop_void_helper;
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // typelist metafunctions
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /* forward T */
-    template <typename... Ts, typename T, typename U, typename... Us>
-    struct drop_void_helper<ttg::typelist<Ts...>, T, ttg::typelist<U, Us...>> {
-      using type = typename drop_void_helper<ttg::typelist<Ts..., T>, U, ttg::typelist<Us...>>::type;
+    /// filters out elements of a typelist that do not satisfy the predicate
+    template <typename T, template <typename...> typename Pred>
+    struct filter;
+
+    template <typename FilteredTypelist, template <typename...> typename Pred, typename... ToBeFilteredTs>
+    struct filter_impl;
+
+    template <typename... FilteredTs, template <typename...> typename Pred>
+    struct filter_impl<typelist<FilteredTs...>, Pred> {
+      using type = typelist<FilteredTs...>;
+    };
+    template <typename... FilteredTs, template <typename...> typename Pred>
+    struct filter_impl<std::tuple<FilteredTs...>, Pred> {
+      using type = std::tuple<FilteredTs...>;
     };
 
-    /* drop T = void */
-    template <typename... Ts, typename U, typename... Us>
-    struct drop_void_helper<ttg::typelist<Ts...>, void, ttg::typelist<U, Us...>> {
-      using type = typename drop_void_helper<ttg::typelist<Ts...>, U, ttg::typelist<Us...>>::type;
-    };
+    template <typename... FilteredTs, template <typename...> typename Pred, typename U, typename... RestOfUs>
+    struct filter_impl<typelist<FilteredTs...>, Pred, U, RestOfUs...>
+        : std::conditional_t<Pred<U>::value, filter_impl<typelist<FilteredTs..., U>, Pred, RestOfUs...>,
+                             filter_impl<typelist<FilteredTs...>, Pred, RestOfUs...>> {};
+    template <typename... FilteredTs, template <typename...> typename Pred, typename U, typename... RestOfUs>
+    struct filter_impl<std::tuple<FilteredTs...>, Pred, U, RestOfUs...>
+        : std::conditional_t<Pred<U>::value, filter_impl<std::tuple<FilteredTs..., U>, Pred, RestOfUs...>,
+                             filter_impl<std::tuple<FilteredTs...>, Pred, RestOfUs...>> {};
 
-    /* final, last element non-void */
-    template <typename... Ts, typename T>
-    struct drop_void_helper<ttg::typelist<Ts...>, T, ttg::typelist<>> {
-      using type = ttg::typelist<Ts..., T>;
-    };
+    template <typename... Ts, template <typename...> typename Pred>
+    struct filter<typelist<Ts...>, Pred> : filter_impl<typelist<>, Pred, Ts...> {};
+    template <typename... Ts, template <typename...> typename Pred>
+    struct filter<std::tuple<Ts...>, Pred> : filter_impl<std::tuple<>, Pred, Ts...> {};
 
-    /* final, last element void */
-    template <typename... Ts>
-    struct drop_void_helper<ttg::typelist<Ts...>, void, ttg::typelist<>> {
-      using type = ttg::typelist<Ts...>;
-    };
+    template <typename T, template <typename...> typename Pred>
+    using filter_t = typename filter<T, Pred>::type;
 
-    /* drop all void from a typelist or tuple */
     template <typename T>
-    struct drop_void;
-
-    /* specialization for ttg::typelist */
-    template <typename T, typename... Ts>
-    struct drop_void<ttg::typelist<T, Ts...>> {
-      using type = typename drop_void_helper<ttg::typelist<>, T, ttg::typelist<Ts...>>::type;
-    };
-
-    /* specialization for empty ttg::typelist */
-    template <>
-    struct drop_void<ttg::typelist<>> {
-      using type = ttg::typelist<>;
-    };
-
-    /* specialization for std::tuple */
-    template <typename... Ts>
-    struct drop_void<std::tuple<Ts...>> {
-      using type = ttg::meta::typelist_to_tuple_t<typename drop_void<ttg::typelist<Ts...>>::type>;
-    };
+    using drop_void = filter<T, is_nonvoid>;
 
     template <typename T>
     using drop_void_t = typename drop_void<T>::type;
