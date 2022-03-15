@@ -296,21 +296,8 @@ std::ostream& operator<<(std::ostream&s, const Node& node) {
     return s;
 }
 
-// An empty class used for pure control flows
-class Control {
-public:
-   template <typename Archive>
-   void serialize(Archive& ar) {}
-
-};
-
-std::ostream& operator<<(std::ostream&s, const Control& ctl) {
-    s << "Ctl";
-    return s;
-}
-
-class Printer : public TT<Key, std::tuple<>, Printer, Node> {
-    using baseT = TT<Key, std::tuple<>, Printer, Node>;
+class Printer : public TT<Key, std::tuple<>, Printer, ttg::typelist<Node>> {
+    using baseT = typename Printer::ttT;
 public:
     Printer(const std::string& name) : baseT(name, {"input"}, {}) {}
 
@@ -325,76 +312,77 @@ public:
 };
 
 
-class GaxpyOp : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, GaxpyOp, Node, Node> {
-	using baseT =  TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, GaxpyOp, Node, Node>;
+class GaxpyOp : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, GaxpyOp, ttg::typelist<Node, Node>> {
+  using baseT =  typename GaxpyOp::ttT;
 
-	double alpha;
-	double beta;
+  double alpha;
+  double beta;
 
 public:
-	GaxpyOp(const double &alpha, const double &beta, const std::string &name)
-	: baseT(name, {"input_op1", "input_op2"}, {"iterator_op1", "result", "iterator_op2"}), alpha(alpha), beta(beta) {}
+  GaxpyOp(const double &alpha, const double &beta, const std::string &name)
+  : baseT(name, {"input_op1", "input_op2"}, {"iterator_op1", "result", "iterator_op2"}), alpha(alpha), beta(beta) {}
 
-	GaxpyOp(const double &alpha, const double &beta, const typename baseT::input_edges_type& inedges, const typename baseT::output_edges_type& outedges, const std::string& name)
-	: baseT(inedges, outedges, name, {"input_op1", "input_op2"}, {"iterator_op1", "result", "iterator_op2"}), alpha(alpha), beta(beta) {}
+  GaxpyOp(const double &alpha, const double &beta, const typename baseT::input_edges_type& inedges, const typename baseT::output_edges_type& outedges, const std::string& name)
+  : baseT(inedges, outedges, name, {"input_op1", "input_op2"}, {"iterator_op1", "result", "iterator_op2"}), alpha(alpha), beta(beta) {}
 
-	~GaxpyOp() {std::cout << "GaxpyOp destructor\n";}
+  ~GaxpyOp() {std::cout << "GaxpyOp destructor\n";}
 
-	void op(const Key &key, const std::tuple<Node, Node> &t, baseT::output_terminals_type &out) {
-		const Node &left = std::get<0>(t);
-		const Node &right = std::get<1>(t);
+  void op(const Key &key, const std::tuple<Node, Node> &t, baseT::output_terminals_type &out) {
+    const Node &left = std::get<0>(t);
+    const Node &right = std::get<1>(t);
 
-		Vector tempD(left.d);
-		tempD.gaxpy(alpha, right.d, beta);
+    Vector tempD(left.d);
+    tempD.gaxpy(alpha, right.d, beta);
 
-		Vector tempS;
-		if (key.n == 0 && key.l == 0) {
-			tempS = left.s;
-			tempS.gaxpy(alpha, right.s, beta);
-		}
+    Vector tempS;
+    if (key.n == 0 && key.l == 0) {
+      tempS = left.s;
+      tempS.gaxpy(alpha, right.s, beta);
+    }
 
-		::send<1>(key, Node(key, tempS, tempD, left.has_children || right.has_children), out);
+    ::send<1>(key, Node(key, tempS, tempD, left.has_children || right.has_children), out);
 
-		if (left.has_children && !right.has_children) {
-			::send<2>(key.left_child(), Node(key, Vector(), Vector(k), false), out);
-			::send<2>(key.right_child(), Node(key, Vector(), Vector(k), false), out);
-		}
+    if (left.has_children && !right.has_children) {
+      ::send<2>(key.left_child(), Node(key, Vector(), Vector(k), false), out);
+      ::send<2>(key.right_child(), Node(key, Vector(), Vector(k), false), out);
+    }
 
-		if (right.has_children && !left.has_children) {
-			::send<0>(key.left_child(), Node(key, Vector(), Vector(k), false), out);
-			::send<0>(key.right_child(), Node(key, Vector(), Vector(k), false), out);
-		}
-	}
+    if (right.has_children && !left.has_children) {
+      ::send<0>(key.left_child(), Node(key, Vector(), Vector(k), false), out);
+      ::send<0>(key.right_child(), Node(key, Vector(), Vector(k), false), out);
+    }
+  }
 
 };
 
 
-class BinaryOp : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, BinaryOp, Node, Node> {
-	using baseT =   TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, BinaryOp, Node, Node>;
+class BinaryOp : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>,
+                           BinaryOp, ttg::typelist<Node, Node>> {
+  using baseT = typename BinaryOp::ttT;
 
-   using funcT = Vector (*)(const Vector &, const Vector&);
-   funcT func;
+  using funcT = Vector (*)(const Vector &, const Vector&);
+  funcT func;
 
-   Vector unfilter(const Vector &inputVector, int k, const Matrix * hg) const {
-      Vector inputVector_copy(inputVector);
-      Vector vector_d(2 * k);
-      vector_d.set_slice_from_another_vector(0, k, inputVector);
-      Vector vector_s2 = (vector_d * (*hg));
-      return vector_s2;
-   }
+  Vector unfilter(const Vector &inputVector, int k, const Matrix * hg) const {
+    Vector inputVector_copy(inputVector);
+    Vector vector_d(2 * k);
+    vector_d.set_slice_from_another_vector(0, k, inputVector);
+    Vector vector_s2 = (vector_d * (*hg));
+    return vector_s2;
+  }
 
 
 public:
-   BinaryOp(const funcT &func, const std::string &name)
-	: baseT(name, {"input_a", "input_b"}, {"iterator_a", "result", "iterator_b"})
-	, func(func)
-	{}
+  BinaryOp(const funcT &func, const std::string &name)
+  : baseT(name, {"input_a", "input_b"}, {"iterator_a", "result", "iterator_b"})
+  , func(func)
+  {}
 
-   BinaryOp(const funcT &func, const typename baseT::input_edges_type& inedges, const typename baseT::output_edges_type& outedges, const std::string& name)
-        : baseT(inedges, outedges, name, {"input_a", "input_b"}, {"iterator_a", "result", "iterator_b"})
-	, func(func) {}
+  BinaryOp(const funcT &func, const typename baseT::input_edges_type& inedges, const typename baseT::output_edges_type& outedges, const std::string& name)
+  : baseT(inedges, outedges, name, {"input_a", "input_b"}, {"iterator_a", "result", "iterator_b"})
+  , func(func) {}
 
-	~BinaryOp() {std::cout << "Binary Op destructor\n";}
+  ~BinaryOp() {std::cout << "Binary Op destructor\n";}
 
    void op(const Key &key, const std::tuple<Node, Node> &t, baseT::output_terminals_type &out) {
       Node left = std::get<0>(t);
@@ -430,8 +418,9 @@ public:
 };
 
 
-class Diff_prologue : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Diff_prologue, Node> {
-   using baseT =  	     TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Diff_prologue, Node>;
+class Diff_prologue : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>,
+                                Diff_prologue, ttg::typelist<Node>> {
+   using baseT = typename Diff_prologue::ttT;
 
 public:
 
@@ -452,8 +441,9 @@ public:
    }
 };
 
-class Diff_doIt : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Diff_doIt, Node, Node, Node> {
-   using baseT =         TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Diff_doIt, Node, Node, Node>;
+class Diff_doIt : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>,
+                            Diff_doIt, ttg::typelist<Node, Node, Node>> {
+   using baseT = typename Diff_doIt::ttT;
 
    Vector unfilter(const Vector &inputVector, int k, const Matrix * hg) const {
       Vector inputVector_copy(inputVector);
@@ -530,8 +520,9 @@ public:
 };
 
 
-class Compress_prologue : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Compress_prologue, Node> {
-   using baseT = 		 TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Compress_prologue, Node>;
+class Compress_prologue : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>,
+                                    Compress_prologue, ttg::typelist<Node>> {
+   using baseT = typename Compress_prologue::ttT;
 
 public:
    Compress_prologue(const std::string &name)
@@ -564,8 +555,9 @@ public:
 
 };
 
-class Compress_doIt : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Compress_doIt, Node, Node> {
-   using baseT = 	     TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>, Compress_doIt, Node, Node>;
+class Compress_doIt : public TT<Key, std::tuple<Out<Key, Node>, Out<Key, Node>, Out<Key, Node>>,
+                                Compress_doIt, ttg::typelist<Node, Node>> {
+   using baseT = typename Compress_doIt::ttT;
 
 public:
    Compress_doIt(const std::string &name)
@@ -607,8 +599,9 @@ public:
 };
 
 
-class Reconstruct_prologue : public TT<Key, std::tuple<Out<Key, Vector>>, Reconstruct_prologue, Node> {
-   using baseT = 		    TT<Key, std::tuple<Out<Key, Vector>>, Reconstruct_prologue, Node>;
+class Reconstruct_prologue : public TT<Key, std::tuple<Out<Key, Vector>>,
+                                       Reconstruct_prologue, ttg::typelist<Node>> {
+   using baseT = typename Reconstruct_prologue::ttT;
 
 public:
    Reconstruct_prologue(const std::string &name)
@@ -633,8 +626,9 @@ public:
 };
 
 
-class Reconstruct_doIt : public TT<Key, std::tuple<Out<Key, Vector>, Out<Key, Node>>, Reconstruct_doIt, Vector, Node> {
-   using baseT = TT<Key, std::tuple<Out<Key, Vector>, Out<Key, Node>>, Reconstruct_doIt, Vector, Node>;
+class Reconstruct_doIt : public TT<Key, std::tuple<Out<Key, Vector>, Out<Key, Node>>,
+                                   Reconstruct_doIt, ttg::typelist<Vector, Node>> {
+   using baseT = typename Reconstruct_doIt::ttT;
 
 public:
    Reconstruct_doIt(const std::string &name)
@@ -672,8 +666,9 @@ public:
 };
 
 
-class Project : public  TT<Key, std::tuple<Out<Key,Control>, Out<Key,Node>>, Project, Control> {
-    using baseT = 	TT<Key, std::tuple<Out<Key,Control>, Out<Key,Node>>, Project, Control>;
+class Project : public  TT<Key, std::tuple<Out<Key,void>, Out<Key,Node>>,
+                           Project, ttg::typelist<void>> {
+    using baseT = typename Project::ttT;
 
  public:
     using funcT = double(*)(double);
@@ -681,79 +676,76 @@ class Project : public  TT<Key, std::tuple<Out<Key,Control>, Out<Key,Node>>, Pro
     Project(const funcT& func, const std::string& name) : baseT(name, {"input"}, {"recurse","result"}), f(func) {}
 
     Project(const funcT& func, const typename baseT::input_edges_type& inedges,
-    		const typename baseT::output_edges_type& outedges, const std::string& name)
+            const typename baseT::output_edges_type& outedges, const std::string& name)
         : baseT(inedges, outedges, name, {"input"}, {"result", "recurse"}), f(func) {}
 
-	~Project() {std::cout << "Project destructor\n";}
+    ~Project() {std::cout << "Project destructor\n";}
 
-    void op(const Key& key, const std::tuple<Control>& t, baseT::output_terminals_type& out) {
+    void op(const Key& key, baseT::output_terminals_type& out) {
 
-                Vector s0 = sValues(key.n + 1, 2 * key.l);
-		Vector s1 = sValues(key.n + 1, 2 * key.l + 1);
+      Vector s0 = sValues(key.n + 1, 2 * key.l);
+      Vector s1 = sValues(key.n + 1, 2 * key.l + 1);
 
-		Vector s(s0 | s1);
-		Vector d(s * (*hgT));
+      Vector s(s0 | s1);
+      Vector d(s * (*hgT));
 
-		/* if the error is less than the threshhold or we have reached max_level */
-		if (d.normf(k, 2*k) < thresh ||  key.n >= max_level - 1) {
-			::send<1>(key, Node(key, Vector(), Vector(), true), out);
-			::send<1>(Key(key.n+1, 2 * key.l), Node(key, s0, Vector(), false), out);
-			::send<1>(Key(key.n+1, 2 * key.l + 1), Node(key, s1, Vector(), false), out);
-		}
-		else {
-			::send<0>(key.left_child(), Control(), out);
-			::send<0>(key.right_child(), Control(), out);
-			::send<1>(key, Node(key, Vector(), Vector(), true), out);
-		}
+      /* if the error is less than the threshhold or we have reached max_level */
+      if (d.normf(k, 2*k) < thresh ||  key.n >= max_level - 1) {
+        ::send<1>(key, Node(key, Vector(), Vector(), true), out);
+        ::send<1>(Key(key.n+1, 2 * key.l), Node(key, s0, Vector(), false), out);
+        ::send<1>(Key(key.n+1, 2 * key.l + 1), Node(key, s1, Vector(), false), out);
+      }
+      else {
+        ::sendk<0>(key.left_child(), out);
+        ::sendk<0>(key.right_child(), out);
+        ::send<1>(key, Node(key, Vector(), Vector(), true), out);
+      }
     }
 
 private:
-	funcT f;
-	Vector sValues(int nInput, unsigned long lInput) const {
+  funcT f;
+  Vector sValues(int nInput, unsigned long lInput) const {
+    Vector s(k);
+    Vector & quad_x_ref = *quad_x;
+    Matrix & quad_phiw_ref = *quad_phiw;
 
+    double h = pow(0.5, nInput);
+    double scale = sqrt(h);
+    for (int mu = 0; mu < quad_npt; ++mu) {
+      double x = (lInput + quad_x_ref[mu]) * h;
+      double fValue = f(x); // = (func.f)(x);
 
-	    Vector s(k);
-	    Vector & quad_x_ref = *quad_x;
-	    Matrix & quad_phiw_ref = *quad_phiw;
+      for (int i = 0; i < (k); ++i) {
+        s[i] = s[i] + (scale * fValue * (quad_phiw_ref.get_item(mu, i))); // (quad_phiw_ref[mu])[i]);
+      }
+    }
 
-	    double h = pow(0.5, nInput);
-	    double scale = sqrt(h);
-	    for (int mu = 0; mu < quad_npt; ++mu) {
-	      double x = (lInput + quad_x_ref[mu]) * h;
-	      double fValue = f(x); // = (func.f)(x);
-
-	      for (int i = 0; i < (k); ++i) {
-	        s[i] = s[i] + (scale * fValue * (quad_phiw_ref.get_item(mu, i))); // (quad_phiw_ref[mu])[i]);
-	      }
-	    }
-
-	    return s;
-	}
+    return s;
+  }
 
 };
 
-class Producer : public TT<Key, std::tuple<Out<Key, Control>>, Producer> {
-	using baseT = 		TT<Key, std::tuple<Out<Key, Control>>, Producer>;
+class Producer : public TT<Key, std::tuple<Out<Key, void>>, Producer> {
+  using baseT = typename Producer::ttT;
 
 public:
-	Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
-	Producer(const typename baseT::output_edges_type &outedges, const std::string &name)
-		: baseT(edges(), outedges, name, {}, {"output"}) {}
+  Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
+  Producer(const typename baseT::output_edges_type &outedges, const std::string &name)
+    : baseT(edges(), outedges, name, {}, {"output"}) {}
 
-	~Producer() {std::cout << "Producer destructor\n";}
+  ~Producer() {std::cout << "Producer destructor\n";}
 
-    //void op(const Key &key, const std::tuple<>& t, baseT::output_terminals_type &out) {
-	void op(const Key &key, baseT::output_terminals_type &out) {
-		Key root(0, 0);
-		//std::cout << "Produced the root node whose key is " << root << std::endl;
-		::send<0>(root, Control(), out);
-	}
+  void op(const Key &key, baseT::output_terminals_type &out) {
+    Key root(0, 0);
+    //std::cout << "Produced the root node whose key is " << root << std::endl;
+    ::sendk<0>(root, out);
+  }
 };
 
 
 // EXAMPLE 1
 class Everything : public TT<Key, std::tuple<>, Everything> {
-  using baseT = TT<Key, std::tuple<>, Everything>;
+  using baseT = typename Everything::ttT;
 
   Producer producer;
   Project project;
@@ -772,14 +764,14 @@ class Everything : public TT<Key, std::tuple<>, Everything> {
     project.out<1>()->connect(printer.in<0>());
     project.out<0>()->connect(project.in<0>());
 
-		if (!make_graph_executable(&producer)) throw "should be connected";
-		fence();
-	}
+    if (!make_graph_executable(&producer)) throw "should be connected";
+    fence();
+  }
 
-	void print() {}//{Print()(&producer);}
-	std::string dot() {return Dot()(&producer);}
-	void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
-	void fence() { ttg_fence(world); }
+  void print() {}//{Print()(&producer);}
+  std::string dot() {return Dot()(&producer);}
+  void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
+  void fence() { ttg_fence(world); }
 };
 
 
@@ -807,36 +799,36 @@ class Everything_comp_rec_test {
        , minusOp(&sub, "minusOp")
        , printer("Printer")
        , world(ttg::default_execution_context()) {
-     producer.out<0>()->connect(project.in<0>());
-     project.out<0>()->connect(project.in<0>());
-     project.out<1>()->connect(compress_prologue.in<0>());
+    producer.out<0>()->connect(project.in<0>());
+    project.out<0>()->connect(project.in<0>());
+    project.out<1>()->connect(compress_prologue.in<0>());
 
-     project.out<1>()->connect(minusOp.in<1>());
+    project.out<1>()->connect(minusOp.in<1>());
 
-     compress_prologue.out<0>()->connect(compress_doIt.in<0>());
-     compress_prologue.out<2>()->connect(compress_doIt.in<1>());
+    compress_prologue.out<0>()->connect(compress_doIt.in<0>());
+    compress_prologue.out<2>()->connect(compress_doIt.in<1>());
 
-     compress_doIt.out<0>()->connect(compress_doIt.in<0>());
-      compress_doIt.out<2>()->connect(compress_doIt.in<1>());
+    compress_doIt.out<0>()->connect(compress_doIt.in<0>());
+    compress_doIt.out<2>()->connect(compress_doIt.in<1>());
 
-      compress_prologue.out<1>()->connect(reconstruct_prologue.in<0>());
-      compress_doIt.out<1>()->connect(reconstruct_prologue.in<0>());
+    compress_prologue.out<1>()->connect(reconstruct_prologue.in<0>());
+    compress_doIt.out<1>()->connect(reconstruct_prologue.in<0>());
 
-      compress_prologue.out<1>()->connect(reconstruct_doIt.in<1>());
+    compress_prologue.out<1>()->connect(reconstruct_doIt.in<1>());
 
-      reconstruct_prologue.out<0>()->connect(reconstruct_doIt.in<0>());
-      compress_doIt.out<1>()->connect(reconstruct_doIt.in<1>());
+    reconstruct_prologue.out<0>()->connect(reconstruct_doIt.in<0>());
+    compress_doIt.out<1>()->connect(reconstruct_doIt.in<1>());
 
-      reconstruct_doIt.out<0>()->connect(reconstruct_doIt.in<0>());
-      reconstruct_doIt.out<1>()->connect(minusOp.in<0>());
+    reconstruct_doIt.out<0>()->connect(reconstruct_doIt.in<0>());
+    reconstruct_doIt.out<1>()->connect(minusOp.in<0>());
 
-      minusOp.out<0>()->connect(minusOp.in<0>());
-      minusOp.out<2>()->connect(minusOp.in<1>());
+    minusOp.out<0>()->connect(minusOp.in<0>());
+    minusOp.out<2>()->connect(minusOp.in<1>());
 
-      minusOp.out<1>()->connect(printer.in<0>());
+    minusOp.out<1>()->connect(printer.in<0>());
 
-      if (!make_graph_executable(&producer)) throw "should be connected";
-      fence();
+    if (!make_graph_executable(&producer)) throw "should be connected";
+    fence();
 
    }
 
@@ -872,36 +864,36 @@ public:
      , addOp(&add, "(A multiply B) add C")
      , printer("Printer")
      , world(ttg::default_execution_context()) {
-   producer.out<0>()->connect(project_funcA.in<0>());
-   producer.out<0>()->connect(project_funcB.in<0>());
-   producer.out<0>()->connect(project_funcC.in<0>());
+    producer.out<0>()->connect(project_funcA.in<0>());
+    producer.out<0>()->connect(project_funcB.in<0>());
+    producer.out<0>()->connect(project_funcC.in<0>());
 
-   project_funcA.out<0>()->connect(project_funcA.in<0>());
-   project_funcA.out<1>()->connect(multOp.in<0>());
+    project_funcA.out<0>()->connect(project_funcA.in<0>());
+    project_funcA.out<1>()->connect(multOp.in<0>());
 
-   project_funcB.out<0>()->connect(project_funcB.in<0>());
-   project_funcB.out<1>()->connect(multOp.in<1>());
+    project_funcB.out<0>()->connect(project_funcB.in<0>());
+    project_funcB.out<1>()->connect(multOp.in<1>());
 
-   multOp.out<0>()->connect(multOp.in<0>());
-      multOp.out<2>()->connect(multOp.in<1>());
-      multOp.out<1>()->connect(addOp.in<0>());
+    multOp.out<0>()->connect(multOp.in<0>());
+    multOp.out<2>()->connect(multOp.in<1>());
+    multOp.out<1>()->connect(addOp.in<0>());
 
-      project_funcC.out<0>()->connect(project_funcC.in<0>());
-      project_funcC.out<1>()->connect(addOp.in<1>());
+    project_funcC.out<0>()->connect(project_funcC.in<0>());
+    project_funcC.out<1>()->connect(addOp.in<1>());
 
-      addOp.out<0>()->connect(addOp.in<0>());
-      addOp.out<2>()->connect(addOp.in<1>());
-      addOp.out<1>()->connect(printer.in<0>());
+    addOp.out<0>()->connect(addOp.in<0>());
+    addOp.out<2>()->connect(addOp.in<1>());
+    addOp.out<1>()->connect(printer.in<0>());
 
-      if (!make_graph_executable(&producer)) throw "should be connected";
-      fence();
-   }
+    if (!make_graph_executable(&producer)) throw "should be connected";
+    fence();
+  }
 
 
-   void print() {}//{Print()(&producer);}
-   std::string dot() {return Dot()(&producer);}
-   void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
-   void fence() { ttg_fence(world); }
+  void print() {}//{Print()(&producer);}
+  std::string dot() {return Dot()(&producer);}
+  void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
+  void fence() { ttg_fence(world); }
 };
 
 
@@ -927,36 +919,36 @@ class Everything_compress {
        , reconstruct_doIt("Reconstruct_doIt")
        , printer("Printer")
        , world(ttg::default_execution_context()) {
-     producer.out<0>()->connect(project.in<0>());
+    producer.out<0>()->connect(project.in<0>());
 
-     project.out<0>()->connect(project.in<0>());
-     project.out<1>()->connect(compress_prologue.in<0>());
+    project.out<0>()->connect(project.in<0>());
+    project.out<1>()->connect(compress_prologue.in<0>());
 
-     compress_prologue.out<0>()->connect(compress_doIt.in<0>());
-     compress_prologue.out<2>()->connect(compress_doIt.in<1>());
+    compress_prologue.out<0>()->connect(compress_doIt.in<0>());
+    compress_prologue.out<2>()->connect(compress_doIt.in<1>());
 
-     compress_prologue.out<1>()->connect(reconstruct_prologue.in<0>());
-     compress_prologue.out<1>()->connect(reconstruct_doIt.in<1>());
+    compress_prologue.out<1>()->connect(reconstruct_prologue.in<0>());
+    compress_prologue.out<1>()->connect(reconstruct_doIt.in<1>());
 
-      compress_doIt.out<0>()->connect(compress_doIt.in<0>());
-      compress_doIt.out<2>()->connect(compress_doIt.in<1>());
-      compress_doIt.out<1>()->connect(reconstruct_prologue.in<0>());
-      compress_doIt.out<1>()->connect(reconstruct_doIt.in<1>());
+    compress_doIt.out<0>()->connect(compress_doIt.in<0>());
+    compress_doIt.out<2>()->connect(compress_doIt.in<1>());
+    compress_doIt.out<1>()->connect(reconstruct_prologue.in<0>());
+    compress_doIt.out<1>()->connect(reconstruct_doIt.in<1>());
 
-      reconstruct_prologue.out<0>()->connect(reconstruct_doIt.in<0>());
-      reconstruct_doIt.out<0>()->connect(reconstruct_doIt.in<0>());
+    reconstruct_prologue.out<0>()->connect(reconstruct_doIt.in<0>());
+    reconstruct_doIt.out<0>()->connect(reconstruct_doIt.in<0>());
 
-      reconstruct_doIt.out<1>()->connect(printer.in<0>());
+    reconstruct_doIt.out<1>()->connect(printer.in<0>());
 
-      if (!make_graph_executable(&producer)) throw "should be connected";
-      fence();
+    if (!make_graph_executable(&producer)) throw "should be connected";
+    fence();
 
-   }
+  }
 
-   void print() {}//{Print()(&producer);}
-   std::string dot() {return Dot()(&producer);}
-   void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
-   void fence() { ttg_fence(world); }
+  void print() {}//{Print()(&producer);}
+  std::string dot() {return Dot()(&producer);}
+  void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
+  void fence() { ttg_fence(world); }
 };
 
 // EXAMPLE 7
@@ -994,55 +986,55 @@ class Everything_gaxpy_test2 {
        , reconstruct_doIt("reconstruct_doIt")
        , printer("printer")
        , world(ttg::default_execution_context()) {
-     producer.out<0>()->connect(project_funcA1.in<0>());
-     producer.out<0>()->connect(project_funcA2.in<0>());
+    producer.out<0>()->connect(project_funcA1.in<0>());
+    producer.out<0>()->connect(project_funcA2.in<0>());
 
-     project_funcA1.out<0>()->connect(project_funcA1.in<0>());
-     project_funcA2.out<0>()->connect(project_funcA2.in<0>());
+    project_funcA1.out<0>()->connect(project_funcA1.in<0>());
+    project_funcA2.out<0>()->connect(project_funcA2.in<0>());
 
-     project_funcA1.out<1>()->connect(compress_prologue_funcA1.in<0>());
-     project_funcA2.out<1>()->connect(compress_prologue_funcA2.in<0>());
+    project_funcA1.out<1>()->connect(compress_prologue_funcA1.in<0>());
+    project_funcA2.out<1>()->connect(compress_prologue_funcA2.in<0>());
 
-     compress_prologue_funcA1.out<0>()->connect(compress_doIt_funcA1.in<0>());
-      compress_prologue_funcA1.out<2>()->connect(compress_doIt_funcA1.in<1>());
-      compress_doIt_funcA1.out<0>()->connect(compress_doIt_funcA1.in<0>());
-      compress_doIt_funcA1.out<2>()->connect(compress_doIt_funcA1.in<1>());
+    compress_prologue_funcA1.out<0>()->connect(compress_doIt_funcA1.in<0>());
+    compress_prologue_funcA1.out<2>()->connect(compress_doIt_funcA1.in<1>());
+    compress_doIt_funcA1.out<0>()->connect(compress_doIt_funcA1.in<0>());
+    compress_doIt_funcA1.out<2>()->connect(compress_doIt_funcA1.in<1>());
 
-      compress_prologue_funcA2.out<0>()->connect(compress_doIt_funcA2.in<0>());
-      compress_prologue_funcA2.out<2>()->connect(compress_doIt_funcA2.in<1>());
-      compress_doIt_funcA2.out<0>()->connect(compress_doIt_funcA2.in<0>());
-      compress_doIt_funcA2.out<2>()->connect(compress_doIt_funcA2.in<1>());
+    compress_prologue_funcA2.out<0>()->connect(compress_doIt_funcA2.in<0>());
+    compress_prologue_funcA2.out<2>()->connect(compress_doIt_funcA2.in<1>());
+    compress_doIt_funcA2.out<0>()->connect(compress_doIt_funcA2.in<0>());
+    compress_doIt_funcA2.out<2>()->connect(compress_doIt_funcA2.in<1>());
 
-      compress_prologue_funcA1.out<1>()->connect(gaxpyOp.in<0>());
-      compress_prologue_funcA2.out<1>()->connect(gaxpyOp.in<1>());
+    compress_prologue_funcA1.out<1>()->connect(gaxpyOp.in<0>());
+    compress_prologue_funcA2.out<1>()->connect(gaxpyOp.in<1>());
 
-      compress_doIt_funcA1.out<1>()->connect(gaxpyOp.in<0>());
-      compress_doIt_funcA2.out<1>()->connect(gaxpyOp.in<1>());
+    compress_doIt_funcA1.out<1>()->connect(gaxpyOp.in<0>());
+    compress_doIt_funcA2.out<1>()->connect(gaxpyOp.in<1>());
 
-      gaxpyOp.out<0>()->connect(gaxpyOp.in<0>());
-      gaxpyOp.out<2>()->connect(gaxpyOp.in<1>());
+    gaxpyOp.out<0>()->connect(gaxpyOp.in<0>());
+    gaxpyOp.out<2>()->connect(gaxpyOp.in<1>());
 
-      gaxpyOp.out<1>()->connect(reconstruct_prologue.in<0>());
-      gaxpyOp.out<1>()->connect(reconstruct_doIt.in<1>());
-
-
-      reconstruct_prologue.out<0>()->connect(reconstruct_doIt.in<0>());
-      reconstruct_doIt.out<0>()->connect(reconstruct_doIt.in<0>());
-      reconstruct_doIt.out<1>()->connect(printer.in<0>());
+    gaxpyOp.out<1>()->connect(reconstruct_prologue.in<0>());
+    gaxpyOp.out<1>()->connect(reconstruct_doIt.in<1>());
 
 
-      // EXAMPLE 9  --> DIRECTLY CONNECTING THE RESULT OF GAXPY TO PRINTER
-      //gaxpyOp.out<1>()->connect(printer.in<0>());
+    reconstruct_prologue.out<0>()->connect(reconstruct_doIt.in<0>());
+    reconstruct_doIt.out<0>()->connect(reconstruct_doIt.in<0>());
+    reconstruct_doIt.out<1>()->connect(printer.in<0>());
 
-      if (!make_graph_executable(&producer)) throw "should be connected";
-      fence();
 
-   }
+    // EXAMPLE 9  --> DIRECTLY CONNECTING THE RESULT OF GAXPY TO PRINTER
+    //gaxpyOp.out<1>()->connect(printer.in<0>());
 
-   void print() {}//{Print()(&producer);}
-   std::string dot() {return Dot()(&producer);}
-   void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
-   void fence() { ttg_fence(world); }
+    if (!make_graph_executable(&producer)) throw "should be connected";
+    fence();
+
+  }
+
+  void print() {}//{Print()(&producer);}
+  std::string dot() {return Dot()(&producer);}
+  void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
+  void fence() { ttg_fence(world); }
 
 };
 
@@ -1090,64 +1082,64 @@ class Everything_gaxpy_test3 {
        , reconstruct_doIt("reconstruct_doIt")
        , printer("printer")
        , world(ttg::default_execution_context()) {
-     producer.out<0>()->connect(project_funcA.in<0>());
-     producer.out<0>()->connect(project_funcB.in<0>());
+    producer.out<0>()->connect(project_funcA.in<0>());
+    producer.out<0>()->connect(project_funcB.in<0>());
 
-     project_funcA.out<0>()->connect(project_funcA.in<0>());
-     project_funcB.out<0>()->connect(project_funcB.in<0>());
+    project_funcA.out<0>()->connect(project_funcA.in<0>());
+    project_funcB.out<0>()->connect(project_funcB.in<0>());
 
-     project_funcA.out<1>()->connect(minusOp.in<0>());
-     minusOp.out<0>()->connect(minusOp.in<0>());
-     project_funcB.out<1>()->connect(minusOp.in<1>());
-     minusOp.out<2>()->connect(minusOp.in<1>());
+    project_funcA.out<1>()->connect(minusOp.in<0>());
+    minusOp.out<0>()->connect(minusOp.in<0>());
+    project_funcB.out<1>()->connect(minusOp.in<1>());
+    minusOp.out<2>()->connect(minusOp.in<1>());
 
-	project_funcA.out<1>()->connect(compress_prologueA.in<0>());
-	project_funcB.out<1>()->connect(compress_prologueB.in<0>());
+    project_funcA.out<1>()->connect(compress_prologueA.in<0>());
+    project_funcB.out<1>()->connect(compress_prologueB.in<0>());
 
-	minusOp.out<1>()->connect(compress_prologue.in<0>());
+    minusOp.out<1>()->connect(compress_prologue.in<0>());
 
-	compress_prologueA.out<0>()->connect(compress_doItA.in<0>());
-	compress_prologueA.out<2>()->connect(compress_doItA.in<1>());
+    compress_prologueA.out<0>()->connect(compress_doItA.in<0>());
+    compress_prologueA.out<2>()->connect(compress_doItA.in<1>());
 
-	compress_prologueB.out<0>()->connect(compress_doItB.in<0>());
-        compress_prologueB.out<2>()->connect(compress_doItB.in<1>());
+    compress_prologueB.out<0>()->connect(compress_doItB.in<0>());
+          compress_prologueB.out<2>()->connect(compress_doItB.in<1>());
 
-	compress_doItA.out<0>()->connect(compress_doItA.in<0>());
-	compress_doItA.out<2>()->connect(compress_doItA.in<1>());
+    compress_doItA.out<0>()->connect(compress_doItA.in<0>());
+    compress_doItA.out<2>()->connect(compress_doItA.in<1>());
 
-	compress_doItB.out<0>()->connect(compress_doItB.in<0>());
-        compress_doItB.out<2>()->connect(compress_doItB.in<1>());
+    compress_doItB.out<0>()->connect(compress_doItB.in<0>());
+          compress_doItB.out<2>()->connect(compress_doItB.in<1>());
 
-	compress_prologueA.out<1>()->connect(gaxpyOp_minus2.in<0>());
-	compress_prologueB.out<1>()->connect(gaxpyOp_minus2.in<1>());
+    compress_prologueA.out<1>()->connect(gaxpyOp_minus2.in<0>());
+    compress_prologueB.out<1>()->connect(gaxpyOp_minus2.in<1>());
 
-	compress_doItA.out<1>()->connect(gaxpyOp_minus2.in<0>());
-	compress_doItB.out<1>()->connect(gaxpyOp_minus2.in<1>());
+    compress_doItA.out<1>()->connect(gaxpyOp_minus2.in<0>());
+    compress_doItB.out<1>()->connect(gaxpyOp_minus2.in<1>());
 
-	gaxpyOp_minus2.out<0>()->connect(gaxpyOp_minus2.in<0>());
-	gaxpyOp_minus2.out<2>()->connect(gaxpyOp_minus2.in<1>());
+    gaxpyOp_minus2.out<0>()->connect(gaxpyOp_minus2.in<0>());
+    gaxpyOp_minus2.out<2>()->connect(gaxpyOp_minus2.in<1>());
 
-	gaxpyOp_minus2.out<1>()->connect(gaxpyOp_minus.in<1>());
+    gaxpyOp_minus2.out<1>()->connect(gaxpyOp_minus.in<1>());
 
-	compress_prologue.out<0>()->connect(compress_doIt.in<0>());
-	compress_prologue.out<2>()->connect(compress_doIt.in<1>());
+    compress_prologue.out<0>()->connect(compress_doIt.in<0>());
+    compress_prologue.out<2>()->connect(compress_doIt.in<1>());
 
-	compress_prologue.out<1>()->connect(gaxpyOp_minus.in<0>());
-	compress_doIt.out<1>()->connect(gaxpyOp_minus.in<0>());
+    compress_prologue.out<1>()->connect(gaxpyOp_minus.in<0>());
+    compress_doIt.out<1>()->connect(gaxpyOp_minus.in<0>());
 
-	compress_doIt.out<0>()->connect(compress_doIt.in<0>());
-	compress_doIt.out<2>()->connect(compress_doIt.in<1>());
+    compress_doIt.out<0>()->connect(compress_doIt.in<0>());
+    compress_doIt.out<2>()->connect(compress_doIt.in<1>());
 
-	gaxpyOp_minus.out<0>()->connect(gaxpyOp_minus.in<0>());
-	gaxpyOp_minus.out<2>()->connect(gaxpyOp_minus.in<1>());
+    gaxpyOp_minus.out<0>()->connect(gaxpyOp_minus.in<0>());
+    gaxpyOp_minus.out<2>()->connect(gaxpyOp_minus.in<1>());
 
-	gaxpyOp_minus.out<1>()->connect(reconstruct_prologue.in<0>());
-	gaxpyOp_minus.out<1>()->connect(reconstruct_doIt.in<1>());
+    gaxpyOp_minus.out<1>()->connect(reconstruct_prologue.in<0>());
+    gaxpyOp_minus.out<1>()->connect(reconstruct_doIt.in<1>());
 
-	reconstruct_prologue.out<0>()->connect(reconstruct_doIt.in<0>());
-	reconstruct_doIt.out<0>()->connect(reconstruct_doIt.in<0>());
+    reconstruct_prologue.out<0>()->connect(reconstruct_doIt.in<0>());
+    reconstruct_doIt.out<0>()->connect(reconstruct_doIt.in<0>());
 
-	reconstruct_doIt.out<1>()->connect(printer.in<0>());
+    reconstruct_doIt.out<1>()->connect(printer.in<0>());
 
     if (!make_graph_executable(&producer)) throw "should be connected";
     fence();
@@ -1164,98 +1156,98 @@ class Everything_gaxpy_test3 {
 
 // EXAMPLE 5
 class Everything_gaxpy_test {
-	Producer producer;
-	Project project_funcA;
-	Project project_funcB;
+    Producer producer;
+    Project project_funcA;
+    Project project_funcB;
 
-	Compress_prologue compress_prologue_funcA;
-	Compress_doIt compress_doIt_funcA;
+    Compress_prologue compress_prologue_funcA;
+    Compress_doIt compress_doIt_funcA;
 
-	Compress_prologue compress_prologue_funcB;
-	Compress_doIt compress_doIt_funcB;
+    Compress_prologue compress_prologue_funcB;
+    Compress_doIt compress_doIt_funcB;
 
-        GaxpyOp gaxpyOp;
+    GaxpyOp gaxpyOp;
 
-        Reconstruct_prologue reconstruct_prologue;
-        Reconstruct_doIt reconstruct_doIt;
+    Reconstruct_prologue reconstruct_prologue;
+    Reconstruct_doIt reconstruct_doIt;
 
-        BinaryOp minusOp;
-        BinaryOp subOp;
+    BinaryOp minusOp;
+    BinaryOp subOp;
 
-        Printer printer;
+    Printer printer;
 
-        ttg::World world;
+    ttg::World world;
 
-       public:
-        Everything_gaxpy_test()
-            : producer("producer")
-            , project_funcA(&funcA, "project_funcA")
-            , project_funcB(&funcB, "project_funcB")
-            , compress_prologue_funcA("compress_prologue_funcA")
-            , compress_doIt_funcA("compress_doIt_funcA")
-            , compress_prologue_funcB("compress_prologue_funcB")
-            , compress_doIt_funcB("compress_doIt_funcB")
-            , gaxpyOp(1.0, -1.0, "gaxpyOp")
-            , reconstruct_prologue("reconstruct_prologue")
-            , reconstruct_doIt("reconstruct_doIt")
-            , minusOp(&sub, "minusOp")
-            , subOp(&sub, "subOp")
-            , printer("printer")
-            , world(ttg::default_execution_context()) {
-		producer.out<0>()->connect(project_funcA.in<0>());
-		producer.out<0>()->connect(project_funcB.in<0>());
+    public:
+    Everything_gaxpy_test()
+        : producer("producer")
+        , project_funcA(&funcA, "project_funcA")
+        , project_funcB(&funcB, "project_funcB")
+        , compress_prologue_funcA("compress_prologue_funcA")
+        , compress_doIt_funcA("compress_doIt_funcA")
+        , compress_prologue_funcB("compress_prologue_funcB")
+        , compress_doIt_funcB("compress_doIt_funcB")
+        , gaxpyOp(1.0, -1.0, "gaxpyOp")
+        , reconstruct_prologue("reconstruct_prologue")
+        , reconstruct_doIt("reconstruct_doIt")
+        , minusOp(&sub, "minusOp")
+        , subOp(&sub, "subOp")
+        , printer("printer")
+        , world(ttg::default_execution_context()) {
+      producer.out<0>()->connect(project_funcA.in<0>());
+      producer.out<0>()->connect(project_funcB.in<0>());
 
-		project_funcA.out<0>()->connect(project_funcA.in<0>());
-		project_funcB.out<0>()->connect(project_funcB.in<0>());
+      project_funcA.out<0>()->connect(project_funcA.in<0>());
+      project_funcB.out<0>()->connect(project_funcB.in<0>());
 
-		project_funcA.out<1>()->connect(compress_prologue_funcA.in<0>());
-		project_funcB.out<1>()->connect(compress_prologue_funcB.in<0>());
+      project_funcA.out<1>()->connect(compress_prologue_funcA.in<0>());
+      project_funcB.out<1>()->connect(compress_prologue_funcB.in<0>());
 
-		project_funcA.out<1>()->connect(minusOp.in<0>());
-		project_funcB.out<1>()->connect(minusOp.in<1>());
+      project_funcA.out<1>()->connect(minusOp.in<0>());
+      project_funcB.out<1>()->connect(minusOp.in<1>());
 
-		minusOp.out<0>()->connect(minusOp.in<0>());
-		minusOp.out<2>()->connect(minusOp.in<1>());
+      minusOp.out<0>()->connect(minusOp.in<0>());
+      minusOp.out<2>()->connect(minusOp.in<1>());
 
-		compress_prologue_funcA.out<0>()->connect(compress_doIt_funcA.in<0>());
-		compress_prologue_funcB.out<0>()->connect(compress_doIt_funcB.in<0>());
+      compress_prologue_funcA.out<0>()->connect(compress_doIt_funcA.in<0>());
+      compress_prologue_funcB.out<0>()->connect(compress_doIt_funcB.in<0>());
 
-		compress_prologue_funcA.out<2>()->connect(compress_doIt_funcA.in<1>());
-		compress_prologue_funcB.out<2>()->connect(compress_doIt_funcB.in<1>());
+      compress_prologue_funcA.out<2>()->connect(compress_doIt_funcA.in<1>());
+      compress_prologue_funcB.out<2>()->connect(compress_doIt_funcB.in<1>());
 
-		compress_doIt_funcA.out<0>()->connect(compress_doIt_funcA.in<0>());
-		compress_doIt_funcA.out<2>()->connect(compress_doIt_funcA.in<1>());
+      compress_doIt_funcA.out<0>()->connect(compress_doIt_funcA.in<0>());
+      compress_doIt_funcA.out<2>()->connect(compress_doIt_funcA.in<1>());
 
-		compress_doIt_funcB.out<0>()->connect(compress_doIt_funcB.in<0>());
-		compress_doIt_funcB.out<2>()->connect(compress_doIt_funcB.in<1>());
+      compress_doIt_funcB.out<0>()->connect(compress_doIt_funcB.in<0>());
+      compress_doIt_funcB.out<2>()->connect(compress_doIt_funcB.in<1>());
 
-		compress_prologue_funcA.out<1>()->connect(gaxpyOp.in<0>());
-		compress_prologue_funcB.out<1>()->connect(gaxpyOp.in<1>());
+      compress_prologue_funcA.out<1>()->connect(gaxpyOp.in<0>());
+      compress_prologue_funcB.out<1>()->connect(gaxpyOp.in<1>());
 
-		compress_doIt_funcA.out<1>()->connect(gaxpyOp.in<0>());
-		compress_doIt_funcB.out<1>()->connect(gaxpyOp.in<1>());
+      compress_doIt_funcA.out<1>()->connect(gaxpyOp.in<0>());
+      compress_doIt_funcB.out<1>()->connect(gaxpyOp.in<1>());
 
-		gaxpyOp.out<0>()->connect(gaxpyOp.in<0>());
-		gaxpyOp.out<2>()->connect(gaxpyOp.in<1>());
+      gaxpyOp.out<0>()->connect(gaxpyOp.in<0>());
+      gaxpyOp.out<2>()->connect(gaxpyOp.in<1>());
 
-		gaxpyOp.out<1>()->connect(reconstruct_prologue.in<0>());
-		gaxpyOp.out<1>()->connect(reconstruct_doIt.in<1>());
+      gaxpyOp.out<1>()->connect(reconstruct_prologue.in<0>());
+      gaxpyOp.out<1>()->connect(reconstruct_doIt.in<1>());
 
 
-		reconstruct_prologue.out<0>()->connect(reconstruct_doIt.in<0>());
-		reconstruct_doIt.out<0>()->connect(reconstruct_doIt.in<0>());
+      reconstruct_prologue.out<0>()->connect(reconstruct_doIt.in<0>());
+      reconstruct_doIt.out<0>()->connect(reconstruct_doIt.in<0>());
 
-		reconstruct_doIt.out<1>()->connect(subOp.in<0>());
-		//reconstruct_doIt.out<1>()->connect(subOp.in<1>());
+      reconstruct_doIt.out<1>()->connect(subOp.in<0>());
+      //reconstruct_doIt.out<1>()->connect(subOp.in<1>());
 
-		subOp.out<0>()->connect(subOp.in<0>());
+      subOp.out<0>()->connect(subOp.in<0>());
 
-		subOp.out<2>()->connect(subOp.in<1>());
+      subOp.out<2>()->connect(subOp.in<1>());
 
-		minusOp.out<1>()->connect(subOp.in<1>());
-		//minusOp.out<1>()->connect(subOp.in<0>());
+      minusOp.out<1>()->connect(subOp.in<1>());
+      //minusOp.out<1>()->connect(subOp.in<0>());
 
-		subOp.out<1>()->connect(printer.in<0>());
+      subOp.out<1>()->connect(printer.in<0>());
 
       if (!make_graph_executable(&producer)) throw "should be connected";
       fence();
@@ -1271,69 +1263,69 @@ class Everything_gaxpy_test {
 
 // EXAMPLE 4
 class Everything_diff {
-   Producer producer;
-   Project project;
-   Diff_prologue diff_prologue;
-   Diff_doIt diff_doIt;
-   Printer printer;
+  Producer producer;
+  Project project;
+  Diff_prologue diff_prologue;
+  Diff_doIt diff_doIt;
+  Printer printer;
 
-   ttg::World world;
+  ttg::World world;
 
-  public:
-   Everything_diff()
+public:
+  Everything_diff()
        : producer("producer")
        , project(&funcD, "Project_funcD")
        , diff_prologue("Diff_prologue")
        , diff_doIt("Diff_doIt")
        , printer("Printer")
        , world(ttg::default_execution_context()) {
-     producer.out<0>()->connect(project.in<0>());
+    producer.out<0>()->connect(project.in<0>());
 
-     project.out<0>()->connect(project.in<0>());
-     project.out<1>()->connect(diff_prologue.in<0>());
+    project.out<0>()->connect(project.in<0>());
+    project.out<1>()->connect(diff_prologue.in<0>());
 
-     diff_prologue.out<0>()->connect(diff_doIt.in<0>());
-     diff_prologue.out<1>()->connect(diff_doIt.in<1>());
-     diff_prologue.out<2>()->connect(diff_doIt.in<2>());
+    diff_prologue.out<0>()->connect(diff_doIt.in<0>());
+    diff_prologue.out<1>()->connect(diff_doIt.in<1>());
+    diff_prologue.out<2>()->connect(diff_doIt.in<2>());
 
-     diff_doIt.out<0>()->connect(diff_doIt.in<0>());
-      diff_doIt.out<1>()->connect(diff_doIt.in<1>());
-      diff_doIt.out<2>()->connect(diff_doIt.in<2>());
+    diff_doIt.out<0>()->connect(diff_doIt.in<0>());
+    diff_doIt.out<1>()->connect(diff_doIt.in<1>());
+    diff_doIt.out<2>()->connect(diff_doIt.in<2>());
 
-      diff_doIt.out<3>()->connect(printer.in<0>());
+    diff_doIt.out<3>()->connect(printer.in<0>());
 
-      if (!make_graph_executable(&producer)) throw "should be connected";
-      fence();
-   }
+    if (!make_graph_executable(&producer)) throw "should be connected";
+    fence();
+  }
 
 
-   void print() {}//{Print()(&producer);}
-   std::string dot() {return Dot()(&producer);}
-   void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
-   void fence() { ttg_fence(world); }
+  void print() {}//{Print()(&producer);}
+  std::string dot() {return Dot()(&producer);}
+  void start() {if (world.rank() == 0) producer.invoke(Key(0, 0));}
+  void fence() { ttg_fence(world); }
 };
 
 
 // EXAMPLE 5
 class Everything_diff_test {
 
-   Edge<Key, Node> inter, l, c, r, op1, op2, out, r3, r4;
-   Edge<Key, Control> p1, p2, r1, r2;
+  Edge<Key, Node> inter, l, c, r, op1, op2, out, r3, r4;
+  Edge<Key, void> p1, p2, r1, r2;
 
 
-   Producer producer;
-   Project project_funcD;
-   Project project_funcDD;
-   Diff_prologue diff_prologue;
-   Diff_doIt diff_doIt;
-   BinaryOp minusOp;
-   Printer printer;
-   ttg::World world;
+  Producer producer;
+  Project project_funcD;
+  Project project_funcDD;
+  Diff_prologue diff_prologue;
+  Diff_doIt diff_doIt;
+  BinaryOp minusOp;
+  Printer printer;
+  ttg::World world;
 
    //Edge<Key, Node> p1, p2, inter, l, c, r, op1, op2, out;
 
 public:
- Everything_diff_test()
+  Everything_diff_test()
      : producer(edges(fuse(p1, p2)), "producer")
      , project_funcD(&funcD, edges(fuse(r1, p1)), edges(r1, inter), "Project_funcD")
      , project_funcDD(&funcDD, edges(fuse(r2, p2)), edges(r2, op2), "Project_funcDD")
@@ -1342,7 +1334,7 @@ public:
      , minusOp(&sub, edges(fuse(op1, r3), fuse(op2, r4)), edges(r3, out, r4), "diff_funcD sub funcDD")
      , printer(edges(out), "Printer")
      , world(ttg::default_execution_context()) {
-   fence();
+  fence();
  }
 
  void print() {}//{Print()(&producer);}

@@ -56,20 +56,15 @@ struct KeyProcMap {
 //     }
 // };
 
-
-/// An empty class used for pure control flows
-struct Control {};
-std::ostream& operator<<(std::ostream& s, const Control& ctl) {s << "Ctl"; return s;}
-
 template <typename T, size_t K, Dimension NDIM> using rnodeEdge = ttg::Edge<Key<NDIM>, FunctionReconstructedNode<T,K,NDIM>>;
 template <typename T, size_t K, Dimension NDIM> using cnodeEdge = ttg::Edge<Key<NDIM>, FunctionCompressedNode<T,K,NDIM>>;
 template <Dimension NDIM> using doubleEdge = ttg::Edge<Key<NDIM>, double>;
-template <Dimension NDIM> using ctlEdge = ttg::Edge<Key<NDIM>, Control>;
+template <Dimension NDIM> using ctlEdge = ttg::Edge<Key<NDIM>, void>;
 
 template <typename T, size_t K, Dimension NDIM> using rnodeOut = ttg::Out<Key<NDIM>, FunctionReconstructedNode<T,K,NDIM>>;
 template <typename T, size_t K, Dimension NDIM> using cnodeOut = ttg::Out<Key<NDIM>, FunctionCompressedNode<T,K,NDIM>>;
 template <Dimension NDIM> using doubleOut = ttg::Out<Key<NDIM>, double>;
-template <Dimension NDIM> using ctlOut = ttg::Out<Key<NDIM>, Control>;
+template <Dimension NDIM> using ctlOut = ttg::Out<Key<NDIM>, void>;
 
 std::mutex printer_guard;
 template <typename keyT, typename valueT>
@@ -85,7 +80,7 @@ auto make_printer(const ttg::Edge<keyT, valueT>& in, const char* str = "", const
 
 template <Dimension NDIM>
 auto make_start(const ctlEdge<NDIM>& ctl) {
-    auto func = [](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>>& out) { ttg::send<0>(key, Control(), out); };
+    auto func = [](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>>& out) { ttg::sendk<0>(key, out); };
     return ttg::make_tt<Key<NDIM>>(func, ttg::edges(), edges(ctl), "start", {}, {"control"});
 }
 
@@ -100,12 +95,12 @@ auto make_project(functorT& f,
                   rnodeEdge<T,K,NDIM>& result,
                   const std::string& name = "project") {
 
-    auto F = [f, thresh](const Key<NDIM>& key, Control&& junk, std::tuple<ctlOut<NDIM>, rnodeOut<T,K,NDIM>>& out) {
+    auto F = [f, thresh](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>, rnodeOut<T,K,NDIM>>& out) {
         FunctionReconstructedNode<T,K,NDIM> node(key); // Our eventual result
         auto& coeffs = node.coeffs; // Need to clean up OO design
 
         if (key.level() < initial_level(f)) {
-            for (auto child : children(key)) ttg::send<0>(child, Control(), out);
+            for (auto child : children(key)) ttg::sendk<0>(child, out);
             coeffs = T(1e7); // set to obviously bad value to detect incorrect use
             node.is_leaf = false;
         }
@@ -116,7 +111,7 @@ auto make_project(functorT& f,
         else {
             node.is_leaf = fcoeffs<functorT,T,K>(f, key, thresh, coeffs); // cannot deduce K
             if (!node.is_leaf) {
-                for (auto child : children(key)) ttg::send<0>(child,Control(),out); // should be broadcast ?
+                for (auto child : children(key)) ttg::sendk<0>(child,out); // should be broadcast ?
             }
         }
         ttg::send<1>(key, node, out); // always produce a result

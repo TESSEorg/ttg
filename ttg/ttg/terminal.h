@@ -19,8 +19,7 @@ namespace ttg {
    public:
     typedef valueT value_type;
     typedef keyT key_type;
-    static_assert(std::is_same_v<keyT, std::decay_t<keyT>>,
-                  "In<keyT,valueT> assumes keyT is a non-decayable type");
+    static_assert(std::is_same_v<keyT, std::decay_t<keyT>>, "In<keyT,valueT> assumes keyT is a non-decayable type");
     // valueT can be T or const T
     static_assert(std::is_same_v<std::remove_const_t<valueT>, std::decay_t<valueT>>,
                   "In<keyT,valueT> assumes std::remove_const<T> is a non-decayable type");
@@ -50,9 +49,7 @@ namespace ttg {
     }
 
    public:
-    In()
-    : TerminalBase(std::is_const_v<valueT> ? TerminalBase::Type::Read : TerminalBase::Type::Consume)
-    {}
+    In() : TerminalBase(std::is_const_v<valueT> ? TerminalBase::Type::Read : TerminalBase::Type::Consume) {}
 
     void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback,
                       const broadcast_callback_type &bcast_callback = broadcast_callback_type{},
@@ -107,7 +104,7 @@ namespace ttg {
 
     // An optimized implementation will need a separate callback for broadcast
     // with a specific value for rangeT
-    template <typename rangeT, typename Value = valueT>
+    template <typename rangeT, typename Value>
     std::enable_if_t<!meta::is_void_v<Value>,void>
     broadcast(const rangeT &keylist, const Value &value) {
       if (broadcast_callback) {
@@ -127,7 +124,7 @@ namespace ttg {
       }
     }
 
-    template <typename rangeT, typename Value = valueT>
+    template <typename rangeT, typename Value>
     std::enable_if_t<!meta::is_void_v<Value>,void>
     broadcast(const rangeT &keylist, Value &&value) {
       const Value& v = value;
@@ -144,6 +141,26 @@ namespace ttg {
         } else {
           /* got something we cannot iterate over (single element?) so put one element in the span */
           broadcast_callback(ttg::span<const keyT>(&keylist, 1), v);
+        }
+      }
+    }
+
+    template <typename rangeT, typename Value = valueT>
+    std::enable_if_t<meta::is_void_v<Value>,void>
+    broadcast(const rangeT &keylist) {
+      if (broadcast_callback) {
+        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
+          broadcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))));
+        } else {
+          /* got something we cannot iterate over (single element?) so put one element in the span */
+          broadcast_callback(ttg::span<const keyT>(&keylist, 1));
+        }
+      } else {
+        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
+          for (auto&& key : keylist) sendk(key);
+        } else {
+          /* got something we cannot iterate over (single element?) so put one element in the span */
+          broadcast_callback(ttg::span<const keyT>(&keylist, 1));
         }
       }
     }
@@ -178,14 +195,28 @@ namespace ttg {
     }
   };
 
+  namespace detail {
+    template<typename keyT, typename... valuesT>
+    struct input_terminals_tuple {
+      using type = std::tuple<ttg::In<keyT, valuesT>...>;
+    };
+
+    template<typename keyT, typename... valuesT>
+    struct input_terminals_tuple<keyT, std::tuple<valuesT...>> {
+      using type = std::tuple<ttg::In<keyT, valuesT>...>;
+    };
+
+    template<typename keyT, typename... valuesT>
+    using input_terminals_tuple_t = typename input_terminals_tuple<keyT, valuesT...>::type;
+  } // namespace detail
+
   // Output terminal
   template <typename keyT = void, typename valueT = void>
   class Out : public TerminalBase {
    public:
     typedef valueT value_type;
     typedef keyT key_type;
-    static_assert(std::is_same_v<keyT, std::decay_t<keyT>>,
-                  "Out<keyT,valueT> assumes keyT is a non-decayable type");
+    static_assert(std::is_same_v<keyT, std::decay_t<keyT>>, "Out<keyT,valueT> assumes keyT is a non-decayable type");
     static_assert(std::is_same_v<valueT, std::decay_t<valueT>>,
                   "Out<keyT,valueT> assumes valueT is a non-decayable type");
     typedef Edge<keyT, valueT> edge_type;
@@ -317,6 +348,19 @@ namespace ttg {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->broadcast(keylist, value);
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
           static_cast<In<keyT, valueT> *>(successor)->broadcast(keylist, value);
+        }
+      }
+    }
+
+    template<typename rangeT, typename Key = keyT>
+    std::enable_if_t<meta::is_none_void_v<Key> && meta::is_void_v<valueT>,void>
+    broadcast(const rangeT &keylist) {
+      for (auto && successor : successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, void> *>(successor)->broadcast(keylist);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          static_cast<In<keyT, void> *>(successor)->broadcast(keylist);
         }
       }
     }

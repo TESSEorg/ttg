@@ -75,18 +75,6 @@ namespace std {
   };
 }  // namespace std
 
-// An empty class used for pure control flows
-class Control {
- public:
-  template <typename Archive>
-  void serialize(Archive& ar) {}
-};
-
-std::ostream& operator<<(std::ostream& s, const Control& ctl) {
-  s << "Ctl";
-  return s;
-}
-
 struct Integer {
   int value;
   std::size_t hash_val;
@@ -128,10 +116,9 @@ std::ostream& operator<<(std::ostream& s, const Integer& intVal) {
 }
 
 class Initiator
-    : public TT<Integer, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>,
+    : public TT<Integer, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>,
                 Initiator> {
-  using baseT =
-      TT<Integer, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, Initiator>;
+  using baseT = typename Initiator::ttT;
 
  public:
   Initiator(const std::string& name) : baseT(name, {}, {"outA", "outB", "outC", "outD"}) {}
@@ -147,21 +134,21 @@ class Initiator
     for (int i = 0; i < iterations.value; ++i) {
       for (int j = 0; j < iterations.value; ++j) {
         if (i == 0 && j == 0) {  // A function call
-          ::send<0>(Key(std::make_pair(std::make_pair(i, j), 0)), Control(), out);
+          ::sendk<0>(Key(std::make_pair(std::make_pair(i, j), 0)), out);
         } else if (i == 0) {  // B function call
-          ::send<1>(Key(std::make_pair(std::make_pair(i, j), 0)), Control(), out);
+          ::sendk<1>(Key(std::make_pair(std::make_pair(i, j), 0)), out);
         } else if (j == 0) {  // C function call
-          ::send<2>(Key(std::make_pair(std::make_pair(i, j), 0)), Control(), out);
+          ::sendk<2>(Key(std::make_pair(std::make_pair(i, j), 0)), out);
         } else {  // D function call
-          ::send<3>(Key(std::make_pair(std::make_pair(i, j), 0)), Control(), out);
+          ::sendk<3>(Key(std::make_pair(std::make_pair(i, j), 0)), out);
         }
       }
     }
   }
 };
 
-class FuncA : public TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, FuncA, Control> {
-  using baseT = TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, FuncA, Control>;
+class FuncA : public TT<Key, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>>, FuncA, ttg::typelist<void>> {
+  using baseT = typename FuncA::ttT;
   double* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -191,7 +178,7 @@ class FuncA : public TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
       , recursive_fan_out(recursive_fan_out)
       , base_size(base_size) {}
 
-  void op(const Key& key, const std::tuple<Control>& t, baseT::output_terminals_type& out) {
+  void op(const Key& key, baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
@@ -226,22 +213,22 @@ class FuncA : public TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
     // Making u_ready/v_ready for all the B/C function calls in the CURRENT iteration
     for (int l = K + 1; l < blocking_factor; ++l) {
       // B calls
-      ::send<0>(Key(std::make_pair(std::make_pair(I, l), K)), Control(), out);
+      ::sendk<0>(Key(std::make_pair(std::make_pair(I, l), K)), out);
       // C calls
-      ::send<1>(Key(std::make_pair(std::make_pair(l, J), K)), Control(), out);
+      ::sendk<1>(Key(std::make_pair(std::make_pair(l, J), K)), out);
     }
     // Making w_ready for all the D function calls in the CURRENT iteration
     for (int i = K + 1; i < blocking_factor; ++i) {
       for (int j = K + 1; j < blocking_factor; ++j) {
         // D calls
-        ::send<2>(Key(std::make_pair(std::make_pair(i, j), K)), Control(), out);
+        ::sendk<2>(Key(std::make_pair(std::make_pair(i, j), K)), out);
       }
     }
   }
 };
 
-class FuncB : public TT<Key, std::tuple<Out<Key, Control>>, FuncB, Control, Control> {
-  using baseT = TT<Key, std::tuple<Out<Key, Control>>, FuncB, Control, Control>;
+class FuncB : public TT<Key, std::tuple<Out<Key, void>>, FuncB, ttg::typelist<void, void>> {
+  using baseT = typename FuncB::ttT;
   double* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -271,7 +258,7 @@ class FuncB : public TT<Key, std::tuple<Out<Key, Control>>, FuncB, Control, Cont
       , recursive_fan_out(recursive_fan_out)
       , base_size(base_size) {}
 
-  void op(const Key& key, const std::tuple<Control, Control>& t, baseT::output_terminals_type& out) {
+  void op(const Key& key, baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
@@ -307,13 +294,13 @@ class FuncB : public TT<Key, std::tuple<Out<Key, Control>>, FuncB, Control, Cont
 
     // Making v_ready for all the D function calls in the CURRENT iteration
     for (int i = K + 1; i < blocking_factor; ++i) {
-      ::send<0>(Key(std::make_pair(std::make_pair(i, J), K)), Control(), out);
+      ::sendk<0>(Key(std::make_pair(std::make_pair(i, J), K)), out);
     }
   }
 };
 
-class FuncC : public TT<Key, std::tuple<Out<Key, Control>>, FuncC, Control, Control> {
-  using baseT = TT<Key, std::tuple<Out<Key, Control>>, FuncC, Control, Control>;
+class FuncC : public TT<Key, std::tuple<Out<Key, void>>, FuncC, ttg::typelist<void, void>> {
+  using baseT = typename FuncC::ttT;
   double* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -343,7 +330,7 @@ class FuncC : public TT<Key, std::tuple<Out<Key, Control>>, FuncC, Control, Cont
       , recursive_fan_out(recursive_fan_out)
       , base_size(base_size) {}
 
-  void op(const Key& key, const std::tuple<Control, Control>& t, baseT::output_terminals_type& out) {
+  void op(const Key& key, baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
@@ -379,15 +366,14 @@ class FuncC : public TT<Key, std::tuple<Out<Key, Control>>, FuncC, Control, Cont
 
     // Making u_ready for all the D function calls in the CURRENT iteration
     for (int j = K + 1; j < blocking_factor; ++j) {
-      ::send<0>(Key(std::make_pair(std::make_pair(I, j), K)), Control(), out);
+      ::sendk<0>(Key(std::make_pair(std::make_pair(I, j), K)), out);
     }
   }
 };
 
-class FuncD : public TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>,
-                        FuncD, Control, Control, Control, Control> {
-  using baseT = TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>, FuncD,
-                   Control, Control, Control, Control>;
+class FuncD : public TT<Key, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>,
+                        FuncD, ttg::typelist<void, void, void, void>> {
+  using baseT = typename FuncD::ttT;
   double* adjacency_matrix_ttg;
   int problem_size;
   int blocking_factor;
@@ -417,7 +403,7 @@ class FuncD : public TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
       , recursive_fan_out(recursive_fan_out)
       , base_size(base_size) {}
 
-  void op(const Key& key, const std::tuple<Control, Control, Control, Control>& t, baseT::output_terminals_type& out) {
+  void op(const Key& key, baseT::output_terminals_type& out) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
     int K = key.execution_info.second;
@@ -456,13 +442,13 @@ class FuncD : public TT<Key, std::tuple<Out<Key, Control>, Out<Key, Control>, Ou
     // making x_ready for the computation on the SAME block in the NEXT iteration
     if (K < (blocking_factor - 1)) {   // if there is a NEXT iteration
       if (I == K + 1 && J == K + 1) {  // in the next iteration, we have A function call
-        ::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), Control(), out);
+        ::sendk<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), out);
       } else if (I == K + 1) {  // in the next iteration, we have B function call
-        ::send<1>(Key(std::make_pair(std::make_pair(I, J), K + 1)), Control(), out);
+        ::sendk<1>(Key(std::make_pair(std::make_pair(I, J), K + 1)), out);
       } else if (J == K + 1) {  // in the next iteration, we have C function call
-        ::send<2>(Key(std::make_pair(std::make_pair(I, J), K + 1)), Control(), out);
+        ::sendk<2>(Key(std::make_pair(std::make_pair(I, J), K + 1)), out);
       } else {  // in the next iteration, we have D function call
-        ::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), Control(), out);
+        ::sendk<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), out);
       }
     }
   }

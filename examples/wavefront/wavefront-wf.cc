@@ -29,9 +29,6 @@ namespace std {
   }
 }  // namespace std
 
-// An empty class used for pure control flows
-struct Control {};
-
 // initialize the matrix
 inline void init_matrix() {
   matrix = std::shared_ptr<double>(new double[M * N], [](double* p) { delete[] p; });
@@ -95,10 +92,10 @@ void wavefront_serial() {
 
 // Method to generate  wavefront tasks with two inputs.
 template <typename funcT>
-auto make_wavefront2(std::shared_ptr<double> m, const funcT& func, Edge<Key, Control>& input1,
-                     Edge<Key, Control>& input2) {
-  auto f = [m, func](const Key& key, const Control& ctl1, const Control& ctl2,
-                     std::tuple<Out<Key, Control>, Out<Key, Control>>& out) {
+auto make_wavefront2(std::shared_ptr<double> m, const funcT& func, Edge<Key, void>& input1,
+                     Edge<Key, void>& input2) {
+  auto f = [m, func](const Key& key,
+                     std::tuple<Out<Key, void>, Out<Key, void>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
     int next_j = j + 1;
@@ -107,16 +104,16 @@ auto make_wavefront2(std::shared_ptr<double> m, const funcT& func, Edge<Key, Con
 
     if (next_i < MB) {
       if (j == 0)
-        send<0>(Key(next_i, j), ctl1, out);
+        sendk<0>(Key(next_i, j), out);
       else
-        send<0>(Key(next_i, j), ctl1, out);
+        sendk<0>(Key(next_i, j), out);
     }
 
     if (next_j < NB) {
       if (i == 0)
-        send<0>(Key(i, next_j), ctl1, out);
+        sendk<0>(Key(i, next_j), out);
       else
-        send<1>(Key(i, next_j), ctl1, out);
+        sendk<1>(Key(i, next_j), out);
     }
   };
 
@@ -126,10 +123,10 @@ auto make_wavefront2(std::shared_ptr<double> m, const funcT& func, Edge<Key, Con
 
 // Method to generate wavefront task with single input.
 template <typename funcT>
-auto make_wavefront(std::shared_ptr<double> m, const funcT& func, Edge<Key, Control>& input1,
-                    Edge<Key, Control>& input2) {
-  auto f = [m, func](const Key& key, const Control& ctl,
-                     std::tuple<Out<Key, Control>, Out<Key, Control>, Out<Key, Control>>& out) {
+auto make_wavefront(std::shared_ptr<double> m, const funcT& func, Edge<Key, void>& input1,
+                    Edge<Key, void>& input2) {
+  auto f = [m, func](const Key& key,
+                     std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
     int next_j = j + 1;
@@ -138,19 +135,19 @@ auto make_wavefront(std::shared_ptr<double> m, const funcT& func, Edge<Key, Cont
 
     if (next_i < MB) {
       if (j == 0)  // Single predecessor
-        send<0>(Key(next_i, j), ctl, out);
+        sendk<0>(Key(next_i, j), out);
       else  // Two predecessors
-        send<1>(Key(next_i, j), ctl, out);
+        sendk<1>(Key(next_i, j), out);
     }
     if (next_j < NB) {
       if (i == 0)  // Single predecessor
-        send<0>(Key(i, next_j), ctl, out);
+        sendk<0>(Key(i, next_j), out);
       else  // Two predecessors
-        send<2>(Key(i, next_j), ctl, out);
+        sendk<2>(Key(i, next_j), out);
     }
   };
 
-  Edge<Key, Control> recur("recur");
+  Edge<Key, void> recur("recur");
   return make_tt(f, edges(recur), edges(recur, input1, input2), "wavefront", {"control"}, {"recur", "output1", "output2"});
 }
 
@@ -168,7 +165,7 @@ int main(int argc, char** argv) {
 
   init_matrix();
 
-  Edge<Key, Control> parent1("parent1"), parent2("parent2");
+  Edge<Key, void> parent1("parent1"), parent2("parent2");
   std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
 
   auto s = make_wavefront(matrix, stencil_computation, parent1, parent2);
@@ -185,10 +182,7 @@ int main(int argc, char** argv) {
     // std::cout << "==== end dot ====\n";
 
     beg = std::chrono::high_resolution_clock::now();
-    Control c;
-    s->in<0>()->send(Key(0, 0), c);
-    // This doesn't work!
-    // s->send<0>(Key(0,0), Control());
+    s->in<0>()->sendk(Key(0, 0));
   }
 
   execute();

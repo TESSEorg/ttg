@@ -145,12 +145,9 @@ class Matrix {
   void serialize(Archive& ar) {}
 };
 
-// An empty class used for pure control flows
-struct Control {};
-
 template <typename T>
-inline void stencil_computation(int i, int j, int M, int N, BlockMatrix<T>& bm, BlockMatrix<T>& left,
-                                BlockMatrix<T>& top, BlockMatrix<T>& right, BlockMatrix<T>& bottom) {
+inline void stencil_computation(int i, int j, int M, int N, BlockMatrix<T>& bm, const BlockMatrix<T>& left,
+                                const BlockMatrix<T>& top, const BlockMatrix<T>& right, const BlockMatrix<T>& bottom) {
   // i==0 -> no top block
   // j==0 -> no left block
   // i==M-1 -> no bottom block
@@ -201,7 +198,7 @@ void wavefront_serial(Matrix<T>* m, int n_brows, int n_bcols) {
 template <typename funcT, typename T>
 auto make_wavefront2(const funcT& func, Matrix<T>* m, Edge<Key, BlockMatrix<T>>& input1,
                      Edge<Key, BlockMatrix<T>>& input2) {
-  auto f = [m, func](const Key& key, BlockMatrix<T>&& bm1, BlockMatrix<T>&& bm2,
+  auto f = [m, func](const Key& key, const BlockMatrix<T>& bm1, const BlockMatrix<T>& bm2,
                      std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
@@ -243,7 +240,7 @@ auto make_wavefront2(const funcT& func, Matrix<T>* m, Edge<Key, BlockMatrix<T>>&
 template <typename funcT, typename T>
 auto make_wavefront(const funcT& func, Matrix<T>* m, Edge<Key, BlockMatrix<T>>& input1,
                     Edge<Key, BlockMatrix<T>>& input2) {
-  auto f = [m, func](const Key& key, BlockMatrix<T>&& bm,
+  auto f = [m, func](const Key& key, const BlockMatrix<T>& bm,
                      std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
@@ -281,7 +278,8 @@ auto make_wavefront(const funcT& func, Matrix<T>* m, Edge<Key, BlockMatrix<T>>& 
   };
 
   Edge<Key, BlockMatrix<T>> recur("recur");
-  return make_tt(f, edges(recur), edges(recur, input1, input2), "wavefront", {"control"}, {"recur", "output1", "output2"});
+  return make_tt(f, edges(recur), edges(recur, input1, input2), "wavefront", {"control"},
+                 {"recur", "output1", "output2"});
 }
 
 int main(int argc, char** argv) {
@@ -320,8 +318,6 @@ int main(int argc, char** argv) {
 
     beg = std::chrono::high_resolution_clock::now();
     s->in<0>()->send(Key(0, 0), (*m)(0, 0));
-    // This doesn't work!
-    // s->send<0>(Key(0,0), Control());
   }
 
   execute();

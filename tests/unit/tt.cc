@@ -4,11 +4,13 @@
 
 #include <memory>
 
+#include "ttg/util/meta/callable.h"
+
 // {task_id,data} = {void, void}
 namespace tt_v_v {
 
-  class tt : public ttg::TT<void, std::tuple<>, tt, void> {
-    using baseT = ttg::TT<void, std::tuple<>, tt, void>;
+  class tt : public ttg::TT<void, std::tuple<>, tt, ttg::typelist<void>> {
+    using baseT = typename tt::ttT;
 
    public:
     tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
@@ -26,8 +28,8 @@ namespace tt_v_v {
 // {task_id,data} = {int, void}
 namespace tt_i_v {
 
-  class tt : public ttg::TT<int, std::tuple<>, tt, void> {
-    using baseT = ttg::TT<int, std::tuple<>, tt, void>;
+  class tt : public ttg::TT<int, std::tuple<>, tt, ttg::typelist<void>> {
+    using baseT = typename tt::ttT;
 
    public:
     tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
@@ -45,8 +47,8 @@ namespace tt_i_v {
 // {task_id,data} = {void, int}
 namespace tt_v_i {
 
-  class tt : public ttg::TT<void, std::tuple<>, tt, const int> {
-    using baseT = ttg::TT<void, std::tuple<>, tt, const int>;
+  class tt : public ttg::TT<void, std::tuple<>, tt, ttg::typelist<const int>> {
+    using baseT = typename tt::ttT;
 
    public:
     tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
@@ -65,8 +67,8 @@ namespace tt_v_i {
 // {task_id,data} = {void, int, void}
 namespace tt_v_iv {
 
-  class tt : public ttg::TT<void, std::tuple<>, tt, const int, void> {
-    using baseT = ttg::TT<void, std::tuple<>, tt, const int, void>;
+  class tt : public ttg::TT<void, std::tuple<>, tt, ttg::typelist<const int, void>> {
+    using baseT = typename tt::ttT;
 
    public:
     tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
@@ -85,8 +87,8 @@ namespace tt_v_iv {
 // {task_id,data} = {int, int}
 namespace tt_i_i {
 
-  class tt : public ttg::TT<int, std::tuple<>, tt, const int> {
-    using baseT = ttg::TT<int, std::tuple<>, tt, const int>;
+  class tt : public ttg::TT<int, std::tuple<>, tt, ttg::typelist<const int>> {
+    using baseT = typename tt::ttT;
 
    public:
     tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
@@ -101,11 +103,34 @@ namespace tt_i_i {
   };
 }  // namespace tt_i_i
 
+// {task_id,data} = {int, T}; templated op
+namespace tt_i_t {
+
+  class tt : public ttg::TT<int, std::tuple<>, tt, ttg::typelist<const int>> {
+    using baseT = typename tt::ttT;
+
+   public:
+    tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
+       const std::string &name)
+        : baseT(inedges, outedges, name, {"int"}, {}) {}
+
+    static constexpr const bool have_cuda_op = false;
+
+    template <typename InputTupleT, typename OutputTupleT>
+    void op(const int &key, const InputTupleT &data, OutputTupleT &outs) {
+      static_assert(std::is_const_v<std::remove_reference_t<std::tuple_element_t<0, InputTupleT>>>,
+                    "Const input type must be const!");
+    }
+
+    ~tt() {}
+  };
+}  // namespace tt_i_t
+
 // {task_id,data} = {int, int, void}
 namespace tt_i_iv {
 
-  class tt : public ttg::TT<int, std::tuple<>, tt, const int, void> {
-    using baseT = ttg::TT<int, std::tuple<>, tt, const int, void>;
+  class tt : public ttg::TT<int, std::tuple<>, tt, ttg::typelist<const int, void>> {
+    using baseT = typename tt::ttT;
 
    public:
     tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
@@ -114,7 +139,7 @@ namespace tt_i_iv {
 
     static constexpr const bool have_cuda_op = false;
 
-    void op(const int &key, const baseT::input_refs_tuple_type &data, baseT::output_terminals_type &outs) {}
+    void op(const int &key, const baseT::input_refs_tuple_type &data, baseT::output_edges_type &outs) {}
 
     ~tt() {}
   };
@@ -156,6 +181,54 @@ TEST_CASE("TemplateTask", "[core]") {
       CHECK_NOTHROW(std::make_unique<tt_i_i::tt>(ttg::edges(in), ttg::edges(), ""));
       CHECK_NOTHROW(
           ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
+    }
+    {  // nonvoid task id, nonvoid data, generic operator
+      ttg::Edge<int, int> in;
+      CHECK_NOTHROW(std::make_unique<tt_i_t::tt>(ttg::edges(in), ttg::edges(), ""));
+
+      // same, but using generic lambdas
+
+      // testing generic lambda introspection
+      auto func0 = [](auto key, auto &&datum0, auto &datum1, const auto &datum2, auto datum3, auto &outs) {};
+      static_assert(std::is_invocable<decltype(func0), int, const float &, const float &, const float &, const float &,
+                                      std::tuple<> &>::value);
+      // error: auto& does not bind to T&&
+      // static_assert(std::is_invocable<decltype(func0), int, float&&, float&&, float&&, float&&, std::tuple<>
+      // &>::value);
+      static_assert(ttg::meta::is_invocable_typelist_v<
+                    decltype(func0), ttg::typelist<int, float &&, const float &, float &&, float &&, std::tuple<> &>>);
+      static_assert(std::is_same_v<
+                    decltype(compute_arg_binding_types(
+                        func0, ttg::typelist<ttg::typelist<int>, ttg::typelist<float &&, const float &>,
+                                             ttg::typelist<float &&>, ttg::typelist<float &&, const float &>,
+                                             ttg::typelist<float &&, const float &>, ttg::typelist<std::tuple<> &>>{})),
+                    ttg::typelist<>>);
+      static_assert(
+          std::is_same_v<
+              decltype(compute_arg_binding_types(
+                  func0, ttg::typelist<ttg::typelist<int>, ttg::typelist<float &&, const float &>,
+                                       ttg::typelist<float &&, const float &>, ttg::typelist<float &&, const float &>,
+                                       ttg::typelist<float &&, const float &>, ttg::typelist<std::tuple<> &>>{})),
+              ttg::typelist<int, float &&, const float &, float &&, float &&, std::tuple<> &>>);
+
+      CHECK_NOTHROW(ttg::make_tt(
+          [](const int &key, auto &datum, auto &outs) {
+            static_assert(std::is_lvalue_reference_v<decltype(datum)>, "Lvalue datum expected");
+            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
+          },
+          ttg::edges(in), ttg::edges()));
+      CHECK_NOTHROW(ttg::make_tt(
+          [](const int &key, const auto &datum, auto &outs) {
+            static_assert(std::is_lvalue_reference_v<decltype(datum)>, "Lvalue datum expected");
+            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
+          },
+          ttg::edges(in), ttg::edges()));
+      CHECK_NOTHROW(ttg::make_tt(
+          [](const int &key, auto &&datum, auto &outs) {
+            static_assert(std::is_rvalue_reference_v<decltype(datum)>, "Rvalue datum expected");
+            static_assert(!std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Nonconst datum expected");
+          },
+          ttg::edges(in), ttg::edges()));
     }
   }
 }

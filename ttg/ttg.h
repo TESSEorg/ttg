@@ -10,6 +10,7 @@
 #include "ttg/util/print.h"
 #include "ttg/util/trace.h"
 #include "ttg/util/void.h"
+#include "ttg/util/typelist.h"
 
 #include "ttg/base/keymap.h"
 #include "ttg/base/terminal.h"

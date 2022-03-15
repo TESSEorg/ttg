@@ -193,9 +193,9 @@ namespace ttg {
 
     // compute shape of an existing SpMatrix on rank 0
     template <typename Blk = blk_t>
-    class ReadShape : public TT<void, std::tuple<Out<void, Shape>>, ReadShape<Blk>, void> {
+    class ReadShape : public TT<void, std::tuple<Out<void, Shape>>, ReadShape<Blk>, ttg::typelist<void>> {
      public:
-      using baseT = TT<void, std::tuple<Out<void, Shape>>, ReadShape<Blk>, void>;
+      using baseT = typename ReadShape::ttT;
       static constexpr const int owner = 0;  // where data resides
 
       ReadShape(const char *label, const SpMatrix<Blk> &matrix, Edge<void, void> &in, Edge<void, Shape> &out)
@@ -218,7 +218,7 @@ namespace ttg {
     // - this could be generalized to read efficiently from a distributed data structure
     // Use Read_SpMatrix if need to read all data from a data structure localized on 1 process
     template <typename Blk = blk_t>
-    class Read : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, void> {
+    class Read : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, ttg::typelist<void>> {
      public:
       using baseT = TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, void>;
       static constexpr const int owner = 0;  // where data resides
@@ -243,9 +243,9 @@ namespace ttg {
     // since SpMatrix supports random inserts there is no need to commit the shape into the matrix, other than get the
     // dimensions
     template <typename Blk = blk_t>
-    class WriteShape : public TT<void, std::tuple<Out<void, Shape>>, WriteShape<Blk>, Shape> {
+    class WriteShape : public TT<void, std::tuple<Out<void, Shape>>, WriteShape<Blk>, ttg::typelist<Shape>> {
      public:
-      using baseT = TT<void, std::tuple<Out<void, Shape>>, WriteShape<Blk>, Shape>;
+      using baseT = typename WriteShape::ttT;
       static constexpr const int owner = 0;  // where data resides
 
       WriteShape(const char *label, SpMatrix<Blk> &matrix, Edge<void, Shape> &in, Edge<void, Shape> &out)
@@ -267,9 +267,9 @@ namespace ttg {
 
     // flow (move?) data into an existing SpMatrix on rank 0
     template <typename Blk = blk_t>
-    class Write : public TT<Key<2>, std::tuple<>, Write<Blk>, Blk, void> {
+    class Write : public TT<Key<2>, std::tuple<>, Write<Blk>, Blk, ttg::typelist<void>> {
      public:
-      using baseT = TT<Key<2>, std::tuple<>, Write<Blk>, Blk, void>;
+      using baseT = typename Write::ttT;
 
       Write(const char *label, SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &data_in, Edge<Key<2>, void> &ctl_in)
           : baseT(edges(data_in, ctl_in), edges(), std::string("write_spmatrix(") + label + ")",
@@ -315,9 +315,9 @@ namespace ttg {
     };
 
     // ShapeAdd adds two Shape objects
-    class ShapeAdd : public TT<void, std::tuple<Out<void, Shape>>, ShapeAdd, Shape, Shape> {
+    class ShapeAdd : public TT<void, std::tuple<Out<void, Shape>>, ShapeAdd, ttg::typelist<Shape, Shape>> {
      public:
-      using baseT = TT<void, std::tuple<Out<void, Shape>>, ShapeAdd, Shape, Shape>;
+      using baseT = typename ShapeAdd::ttT;
       static constexpr const int owner = 0;  // where data resides
 
       ShapeAdd(Edge<void, Shape> &in1, Edge<void, Shape> &in2, Edge<void, Shape> &out)
@@ -330,9 +330,9 @@ namespace ttg {
     };
 
     // pushes all blocks given by the shape
-    class Push : public TT<void, std::tuple<Out<Key<2>, void>>, Push, Shape> {
+    class Push : public TT<void, std::tuple<Out<Key<2>, void>>, Push, ttg::typelist<Shape>> {
      public:
-      using baseT = TT<void, std::tuple<Out<Key<2>, void>>, Push, Shape>;
+      using baseT = typename Push::ttT;
       static constexpr const int owner = 0;  // where data resides
 
       Push(const char *label, Edge<void, Shape> &in, Edge<Key<2>, void> &out)
