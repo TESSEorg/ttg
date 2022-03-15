@@ -210,6 +210,15 @@ TEST_CASE("TemplateTask", "[core]") {
                                        ttg::typelist<float &&, const float &>, ttg::typelist<float &&, const float &>,
                                        ttg::typelist<float &&, const float &>, ttg::typelist<std::tuple<> &>>{})),
               ttg::typelist<int, float &&, const float &, float &&, float &&, std::tuple<> &>>);
+      // voids are skipped
+      static_assert(
+          std::is_same_v<
+              decltype(compute_arg_binding_types(
+                  func0, ttg::typelist<ttg::typelist<int>, ttg::typelist<void>, ttg::typelist<float &&, const float &>,
+                                       ttg::typelist<float &&, const float &>, ttg::typelist<float &&, const float &>,
+                                       ttg::typelist<float &&, const float &>, ttg::typelist<void, std::tuple<> &>,
+                                       ttg::typelist<void>>{})),
+              ttg::typelist<int, void, float &&, const float &, float &&, float &&, std::tuple<> &, void>>);
 
       CHECK_NOTHROW(ttg::make_tt(
           [](const int &key, auto &datum, auto &outs) {

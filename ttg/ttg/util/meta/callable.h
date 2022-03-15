@@ -39,7 +39,7 @@ namespace ttg::meta {
     } else {
       constexpr auto idx = ordinal2index(Ordinal, extents);
       auto args = typelist<std::tuple_element_t<idx[ArgIdx], std::tuple_element_t<ArgIdx, arg_typelists_t>>...>{};
-      if constexpr (is_invocable_typelist_v<Func, decltype(args)>) {
+      if constexpr (is_invocable_typelist_v<Func, drop_void_t<decltype(args)>>) {
         return args;
       } else {
         return compute_arg_binding_types_impl<Ordinal + 1>(func, argument_type_lists, arg_idx);
@@ -61,7 +61,7 @@ namespace ttg::meta {
     } else {
       constexpr auto idx = ordinal2index(Ordinal, extents);
       auto args = typelist<std::tuple_element_t<idx[ArgIdx], std::tuple_element_t<ArgIdx, arg_typelists_t>>...>{};
-      if constexpr (is_invocable_typelist_r_v<ReturnType, Func, decltype(args)>) {
+      if constexpr (is_invocable_typelist_r_v<ReturnType, Func, drop_void_t<decltype(args)>>) {
         return args;
       } else {
         return compute_arg_binding_types_r_impl<Ordinal + 1, ReturnType>(func, argument_type_lists, arg_idx);
@@ -72,7 +72,7 @@ namespace ttg::meta {
   /// @tparam Func a callable type
   /// @tparam Typelists a pack of typelists encoding how each argument can be invoked
   /// @param func a reference to callable of type @p Func
-  /// @param argument_type_lists a list of possible types to try for each argument
+  /// @param argument_type_lists a list of possible types to try for each argument; can contain `void`
   /// @return a ttg::typelist encoding the first invocable combination of argument types discovered by
   ///         row-major iteration
   template <typename Func, typename... Typelists>
@@ -85,7 +85,7 @@ namespace ttg::meta {
   /// @tparam Func a callable type
   /// @tparam Typelists a pack of typelists encoding how each argument can be invoked
   /// @param func a reference to callable of type @p Func
-  /// @param argument_type_lists a list of possible types to try for each argument
+  /// @param argument_type_lists a list of possible types to try for each argument; can contain `void`
   /// @return a ttg::typelist encoding the first invocable combination of argument types discovered by
   ///         row-major iteration
   template <typename ReturnType, typename Func, typename... Typelists>
