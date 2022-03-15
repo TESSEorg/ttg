@@ -27,50 +27,6 @@ namespace ttg {
     // tuple manipulations
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    template <typename Tuple, std::size_t N, typename Enabler = void>
-    struct drop_first_n;
-
-    template <typename... Ts>
-    struct drop_first_n<std::tuple<Ts...>, std::size_t(0)> {
-      using type = std::tuple<Ts...>;
-    };
-
-    template <typename T, typename... Ts, std::size_t N>
-    struct drop_first_n<std::tuple<T, Ts...>, N, std::enable_if_t<N != 0>> {
-      using type = typename drop_first_n<std::tuple<Ts...>, N - 1>::type;
-    };
-
-    template <typename ResultTuple, typename InputTuple, std::size_t N, typename Enabler = void>
-    struct take_first_n_helper;
-
-    template <typename... Ts, typename... Us>
-    struct take_first_n_helper<std::tuple<Ts...>, std::tuple<Us...>, std::size_t(0)> {
-      using type = std::tuple<Ts...>;
-    };
-
-    template <typename... Ts, typename U, typename... Us, std::size_t N>
-    struct take_first_n_helper<std::tuple<Ts...>, std::tuple<U, Us...>, N, std::enable_if_t<N != 0>> {
-      using type = typename take_first_n_helper<std::tuple<Ts..., U>, std::tuple<Us...>, N - 1>::type;
-    };
-
-    template <typename Tuple, std::size_t N>
-    struct take_first_n {
-      using type = typename take_first_n_helper<std::tuple<>, Tuple, N>::type;
-    };
-
-    template <typename Tuple, std::size_t N, typename Enabler = void>
-    struct drop_last_n;
-
-    template <typename... Ts, std::size_t N>
-    struct drop_last_n<std::tuple<Ts...>, N, std::enable_if_t<N <= sizeof...(Ts)>> {
-      using type = typename take_first_n<std::tuple<Ts...>, (sizeof...(Ts) - N)>::type;
-    };
-
-    template <typename... Ts, std::size_t N>
-    struct drop_last_n<std::tuple<Ts...>, N, std::enable_if_t<!(N <= sizeof...(Ts))>> {
-      using type = std::tuple<>;
-    };
-
     // tuple<Ts...> -> tuple<std::remove_reference_t<Ts>...>
     template <typename T, typename Enabler = void>
     struct nonref_tuple;
@@ -82,18 +38,6 @@ namespace ttg {
 
     template <typename Tuple>
     using nonref_tuple_t = typename nonref_tuple<Tuple>::type;
-
-    // tuple<Ts...> -> tuple<std::decay_t<Ts>...>
-    template <typename T, typename Enabler = void>
-    struct decayed_tuple;
-
-    template <typename... Ts>
-    struct decayed_tuple<std::tuple<Ts...>> {
-      using type = std::tuple<std::decay_t<Ts>...>;
-    };
-
-    template <typename Tuple>
-    using decayed_tuple_t = typename decayed_tuple<Tuple>::type;
 
     template <typename... TupleTs>
     struct tuple_concat;
@@ -233,6 +177,103 @@ namespace ttg {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // typelist metafunctions
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /// drops N elements from the front
+    template <typename Typelist, std::size_t N, typename Enabler = void>
+    struct drop_first_n;
+
+    template <typename... Ts>
+    struct drop_first_n<std::tuple<Ts...>, std::size_t(0)> {
+      using type = std::tuple<Ts...>;
+    };
+
+    template <typename... Ts>
+    struct drop_first_n<typelist<Ts...>, std::size_t(0)> {
+      using type = typelist<Ts...>;
+    };
+
+    template <typename T, typename... Ts, std::size_t N>
+    struct drop_first_n<std::tuple<T, Ts...>, N, std::enable_if_t<N != 0>> {
+      using type = typename drop_first_n<std::tuple<Ts...>, N - 1>::type;
+    };
+
+    template <typename T, typename... Ts, std::size_t N>
+    struct drop_first_n<typelist<T, Ts...>, N, std::enable_if_t<N != 0>> {
+      using type = typename drop_first_n<typelist<Ts...>, N - 1>::type;
+    };
+
+    /// take first N elements of a type list
+    template <typename Typelist, std::size_t N>
+    struct take_first_n;
+
+    template <typename ResultTuple, typename InputTuple, std::size_t N, typename Enabler = void>
+    struct take_first_n_helper;
+
+    template <typename... Ts, typename... Us>
+    struct take_first_n_helper<std::tuple<Ts...>, std::tuple<Us...>, std::size_t(0)> {
+      using type = std::tuple<Ts...>;
+    };
+    template <typename... Ts, typename... Us>
+    struct take_first_n_helper<typelist<Ts...>, typelist<Us...>, std::size_t(0)> {
+      using type = typelist<Ts...>;
+    };
+
+    template <typename... Ts, typename U, typename... Us, std::size_t N>
+    struct take_first_n_helper<std::tuple<Ts...>, std::tuple<U, Us...>, N, std::enable_if_t<N != 0>> {
+      using type = typename take_first_n_helper<std::tuple<Ts..., U>, std::tuple<Us...>, N - 1>::type;
+    };
+    template <typename... Ts, typename U, typename... Us, std::size_t N>
+    struct take_first_n_helper<typelist<Ts...>, typelist<U, Us...>, N, std::enable_if_t<N != 0>> {
+      using type = typename take_first_n_helper<typelist<Ts..., U>, typelist<Us...>, N - 1>::type;
+    };
+
+    template <typename... Ts, std::size_t N>
+    struct take_first_n<std::tuple<Ts...>, N> {
+      using type = typename take_first_n_helper<std::tuple<>, std::tuple<Ts...>, N>::type;
+    };
+
+    template <typename... Ts, std::size_t N>
+    struct take_first_n<typelist<Ts...>, N> {
+      using type = typename take_first_n_helper<typelist<>, typelist<Ts...>, N>::type;
+    };
+
+    /// drops N trailing elements from a typelist
+    template <typename Typelist, std::size_t N, typename Enabler = void>
+    struct drop_last_n;
+
+    template <typename... Ts, std::size_t N>
+    struct drop_last_n<std::tuple<Ts...>, N, std::enable_if_t<N <= sizeof...(Ts)>> {
+      using type = typename take_first_n<std::tuple<Ts...>, (sizeof...(Ts) - N)>::type;
+    };
+    template <typename... Ts, std::size_t N>
+    struct drop_last_n<typelist<Ts...>, N, std::enable_if_t<N <= sizeof...(Ts)>> {
+      using type = typename take_first_n<typelist<Ts...>, (sizeof...(Ts) - N)>::type;
+    };
+
+    template <typename... Ts, std::size_t N>
+    struct drop_last_n<std::tuple<Ts...>, N, std::enable_if_t<!(N <= sizeof...(Ts))>> {
+      using type = std::tuple<>;
+    };
+    template <typename... Ts, std::size_t N>
+    struct drop_last_n<typelist<Ts...>, N, std::enable_if_t<!(N <= sizeof...(Ts))>> {
+      using type = typelist<>;
+    };
+
+    /// converts a type list to a type list of decayed types, e.g. tuple<Ts...> -> tuple<std::decay_t<Ts>...>
+    template <typename T, typename Enabler = void>
+    struct decayed_typelist;
+
+    template <typename... Ts>
+    struct decayed_typelist<std::tuple<Ts...>> {
+      using type = std::tuple<std::decay_t<Ts>...>;
+    };
+    template <typename... Ts>
+    struct decayed_typelist<typelist<Ts...>> {
+      using type = typelist<std::decay_t<Ts>...>;
+    };
+
+    template <typename Tuple>
+    using decayed_typelist_t = typename decayed_typelist<Tuple>::type;
 
     /// filters out elements of a typelist that do not satisfy the predicate
     template <typename T, template <typename...> typename Pred>
