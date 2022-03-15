@@ -230,8 +230,8 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
   using candidate_func_args_t = ttg::meta::filter_t<gross_candidate_func_args_t, ttg::meta::typelist_is_not_empty>;
 
   // list argument types with which func can be invoked
-  using func_args_t =
-      ttg::meta::typelist_to_tuple_t<decltype(compute_arg_binding_types(func, candidate_func_args_t{}))>;
+  using func_args_t = ttg::meta::typelist_to_tuple_t<decltype(ttg::meta::compute_arg_binding_types_r<void>(
+      func, candidate_func_args_t{}))>;
 
   static_assert(!std::is_same_v<func_args_t, std::tuple<>>,
                 "ttd::make_tt(func, inedges, ...): could not detect how to invoke func, either the signature of func "
@@ -254,16 +254,24 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
   return std::make_unique<wrapT>(std::forward<funcT>(func), input_edges, outedges, name, innames, outnames);
 }
 
-// Factory function to assist in wrapping a callable with signature
-//
-// If the callable is not generic, its arguments are inspected and the constness is used
-// to determine mutable data. Otherwise, mutability information is taken from the input edge types.
-// See \c ttg::make_const.
-//
-// case 1 (keyT != void): void op(const input_keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)
-// case 2 (keyT == void): void op(input_valuesT&&..., std::tuple<output_terminalsT...>&)
-//
-// input edges can contain at most one control input, and it must be last, if present
+/// @brief Factory function to assist in wrapping a callable with signature
+///
+/// @tparam keyT a task ID type
+/// @tparam funcT a callable type
+/// @tparam input_edge_valuesT a pack of types of input data
+/// @tparam output_edgesT a pack of types of output edges
+/// @param[in] func a callable object; if `ttg::meta::is_void_v<keyT>==true`, the signature
+///         must be `void(input_valuesT&&..., std::tuple<output_terminalsT...>&)`,
+///         else `void(const keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)`
+/// @param[in] inedges a tuple of input edges
+/// @param[in] outedges a tuple of output edges
+/// @param[in] name a string label for the resulting TT
+/// @param[in] name a string label for the resulting TT
+/// @param[in] innames string labels for the respective input terminals of the resulting TT
+/// @param[in] outnames string labels for the respective output terminals of the resulting TT
+///
+/// @internal To be able to handle generic callables the input edges are used to determine the trial set of
+/// argument types.
 template <typename keyT, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
 auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
              const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
@@ -289,8 +297,8 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   using candidate_func_args_t = ttg::meta::filter_t<gross_candidate_func_args_t, ttg::meta::typelist_is_not_empty>;
 
   // list argument types with which func can be invoked
-  using func_args_t =
-      ttg::meta::typelist_to_tuple_t<decltype(compute_arg_binding_types(func, candidate_func_args_t{}))>;
+  using func_args_t = ttg::meta::typelist_to_tuple_t<decltype(ttg::meta::compute_arg_binding_types_r<void>(
+      func, candidate_func_args_t{}))>;
 
   constexpr auto DETECTED_HOW_TO_INVOKE_FUNC = !std::is_same_v<func_args_t, std::tuple<>>;
   static_assert(DETECTED_HOW_TO_INVOKE_FUNC,

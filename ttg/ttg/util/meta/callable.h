@@ -47,6 +47,28 @@ namespace ttg::meta {
     }
   }
 
+  template <std::size_t Ordinal, typename ReturnType, typename Func, typename... Typelists, std::size_t... ArgIdx>
+  auto compute_arg_binding_types_r_impl(Func& func, typelist<Typelists...> argument_type_lists,
+                                        std::index_sequence<ArgIdx...> arg_idx = {}) {
+    using arg_typelists_t = typelist<Typelists...>;
+    constexpr auto Order = sizeof...(Typelists);
+    constexpr std::array<std::size_t, Order> extents = {
+        std::tuple_size_v<std::tuple_element_t<ArgIdx, arg_typelists_t>>...};
+    constexpr auto tensor_size = (extents[ArgIdx] * ...);
+    static_assert(tensor_size >= Ordinal);
+    if constexpr (tensor_size == Ordinal) {
+      return typelist<>{};
+    } else {
+      constexpr auto idx = ordinal2index(Ordinal, extents);
+      auto args = typelist<std::tuple_element_t<idx[ArgIdx], std::tuple_element_t<ArgIdx, arg_typelists_t>>...>{};
+      if constexpr (is_invocable_typelist_r_v<ReturnType, Func, decltype(args)>) {
+        return args;
+      } else {
+        return compute_arg_binding_types_r_impl<Ordinal + 1, ReturnType>(func, argument_type_lists, arg_idx);
+      }
+    }
+  }
+
   /// @tparam Func a callable type
   /// @tparam Typelists a pack of typelists encoding how each argument can be invoked
   /// @param func a reference to callable of type @p Func
@@ -57,6 +79,19 @@ namespace ttg::meta {
   auto compute_arg_binding_types(Func& func, typelist<Typelists...> argument_type_lists) {
     return compute_arg_binding_types_impl<0>(func, argument_type_lists,
                                              std::make_index_sequence<sizeof...(Typelists)>{});
+  }
+
+  /// @tparam ReturnType a type expected to be returned by @p Func
+  /// @tparam Func a callable type
+  /// @tparam Typelists a pack of typelists encoding how each argument can be invoked
+  /// @param func a reference to callable of type @p Func
+  /// @param argument_type_lists a list of possible types to try for each argument
+  /// @return a ttg::typelist encoding the first invocable combination of argument types discovered by
+  ///         row-major iteration
+  template <typename ReturnType, typename Func, typename... Typelists>
+  auto compute_arg_binding_types_r(Func& func, typelist<Typelists...> argument_type_lists) {
+    return compute_arg_binding_types_r_impl<0, ReturnType>(func, argument_type_lists,
+                                                           std::make_index_sequence<sizeof...(Typelists)>{});
   }
 
   /// @tparam T a non-reference type

@@ -694,6 +694,11 @@ namespace ttg {
     constexpr bool is_invocable_typelist_v = false;
     template <typename Callable, typename... Args>
     constexpr bool is_invocable_typelist_v<Callable, ttg::typelist<Args...>> = std::is_invocable_v<Callable, Args...>;
+    template <typename ReturnType, typename Callable, typename Typelist>
+    constexpr bool is_invocable_typelist_r_v = false;
+    template <typename ReturnType, typename Callable, typename... Args>
+    constexpr bool is_invocable_typelist_r_v<ReturnType, Callable, ttg::typelist<Args...>> =
+        std::is_invocable_r_v<ReturnType, Callable, Args...>;
 
   }  // namespace meta
 }  // namespace ttg
