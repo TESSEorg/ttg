@@ -164,21 +164,23 @@ class Everything2 {
 };
 
 class Everything3 {
-  static void p(const std::tuple<> &, std::tuple<Out<keyT, int>> &out) {
+  static void p(const std::tuple<> &) {
     ttg::print("produced ", 0);
-    send<0>(0, int(0), out);
+    // N.B.: send(0, 0, int(0)) will produce a runtime error since it will try to cast 0th TerminalBase* to Out<int,
+    // int>, but p was attached to Out<keyT, int>
+    send(0, keyT{0}, int(0));
   }
 
-  static void a(const keyT &key, const std::tuple<const int &> &t, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, const std::tuple<const int &> &t) {
     const auto value = std::get<0>(t);
     if (value >= 100) {
-      sendv<0>(value, out);
+      sendv(0, value);
     } else {
-      send<1>(key + 1, value + 1, out);
+      send(1, key + 1, value + 1);
     }
   }
 
-  static void c(const std::tuple<const int &> &t, std::tuple<> &out) { ttg::print("consumed ", std::get<0>(t)); }
+  static void c(const std::tuple<const int &> &t) { ttg::print("consumed ", std::get<0>(t)); }
 
   // !!!! Edges must be constructed before classes that use them
   Edge<keyT, int> P2A, A2A;
