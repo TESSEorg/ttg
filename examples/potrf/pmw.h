@@ -94,9 +94,29 @@ public:
     return pm->super.mt;
   }
 
+  /** Number of rows in tile */
+  int rows_in_tile(void) const {
+    return pm->super.mb;
+  }
+
+  /** Number of rows in the matrix */
+  int rows_in_matrix(void) const {
+    return pm->super.m;
+  }
+
   /** Number of tiled columns **/
   int cols(void) const {
     return pm->super.nt;
+  }
+
+  /** Number of columns in tile */
+  int cols_in_tile(void) const {
+    return pm->super.nb;
+  }
+
+  /** Number of columns in the matrix */
+  int cols_in_matrix(void) const {
+    return pm->super.n;
   }
 
   /* The rank storing the tile at {row, col} */

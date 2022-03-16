@@ -20,6 +20,7 @@
 #include <madness/world/world.h>
 
 #include "pmw.h"
+#include "core_plgsy.h"
 
 #ifdef USE_DPLASMA
 #include <dplasma.h>
@@ -434,7 +435,7 @@ auto make_dispatcher(ttg::Edge<Key2, MatrixTile<T>>& input,
                      ttg::Edge<Key3, MatrixTile<T>>& to_gemm)
 {
   auto f = [=](const Key2& key,
-               MatrixTile<T>&tile,
+               const MatrixTile<T>&tile,
                std::tuple<ttg::Out<Key1, MatrixTile<T>>,
                           ttg::Out<Key2, MatrixTile<T>>,
                           ttg::Out<Key2, MatrixTile<T>>,
@@ -574,25 +575,36 @@ auto make_result_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&res
 }
 
 template <typename T>
-auto make_plgsy(MatrixT<T>& A, unsigned long random_seed, ttg::Edge<Key2, void>& input, ttg::Edge<Key2, MatrixTile<T>>& output) {
+auto make_plgsy(MatrixT<T>& A, unsigned long bump, unsigned long random_seed, ttg::Edge<Key2, void>& input, ttg::Edge<Key2, MatrixTile<T>>& output) {
   auto f = [=](const Key2& key, std::tuple< ttg::Out<Key2, MatrixTile<T>> >& out) {
     /* write back any tiles that are not in the matrix already */
     const int I = key.I;
     const int J = key.J;
     std::cout << "Running PLGSY( " << key << ") on rank " << A.rank_of(key.I, key.J) << std::endl;
     assert(A.is_local(I, J));
+
+    T *a = A(I, J).data();
+    int tempmm, tempnn, ldam;
+
+    tempmm = (I==A.rows()-1) ? A.rows_in_matrix()-I*A.rows_in_tile() : A.rows_in_tile();
+    tempnn = (J==A.cols()-1) ? A.cols_in_matrix()-J*A.cols_in_tile() : A.cols_in_tile();
+    ldam   = A.rows_in_tile();
+
+    CORE_plgsy((double)bump, tempmm, tempnn, a, ldam,
+               A.rows_in_matrix(), I*A.rows_in_tile(), J*A.cols_in_tile(), random_seed);
+
     ttg::send<0>(key, std::move(A(I, J)), out);
   };
 
   return ttg::make_tt(f, ttg::edges(input), ttg::edges(output), "PLGSY", {"startup"}, {"output"});
 }
 
-auto make_plgsy_ttg(MatrixT<double> &A, unsigned long random_seed, ttg::Edge<Key2, void>& startup, ttg::Edge<Key2, MatrixTile<double>>&result) {
+auto make_plgsy_ttg(MatrixT<double> &A, unsigned long bump, unsigned long random_seed, ttg::Edge<Key2, void>& startup, ttg::Edge<Key2, MatrixTile<double>>&result) {
   auto keymap2 = [&](const Key2& key) {
     //std::cout << "Key " << key << " is at rank " << A.rank_of(key.I, key.J) << std::endl;
     return A.rank_of(key.I, key.J);
   };
-  auto plgsy_tt = make_plgsy(A, random_seed, startup, result);
+  auto plgsy_tt = make_plgsy(A, bump, random_seed, startup, result);
   plgsy_tt->set_keymap(keymap2);
 
   std::vector<std::unique_ptr<ttg::TTBase>> ops(1);
@@ -705,7 +717,7 @@ int main(int argc, char **argv)
                 (parsec_tiled_matrix_dc_t *)&dcA, random_seed);
   auto init_tt  = make_matrix_reader_tt(A, startup, topotrf);
 #else
-  auto plgsy_ttg = make_plgsy_ttg(A, random_seed, startup, topotrf);
+  auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, topotrf);
 #endif // USE_DPLASMA
 
   auto potrf_ttg = make_potrf_ttg(A, topotrf, result);
