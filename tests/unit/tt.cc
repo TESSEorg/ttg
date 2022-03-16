@@ -184,6 +184,7 @@ TEST_CASE("TemplateTask", "[core]") {
     }
     {  // nonvoid task id, nonvoid data, generic operator
       ttg::Edge<int, int> in;
+      ttg::Edge<int, int> out;
       CHECK_NOTHROW(std::make_unique<tt_i_t::tt>(ttg::edges(in), ttg::edges(), ""));
 
       // same, but using generic lambdas
@@ -236,6 +237,15 @@ TEST_CASE("TemplateTask", "[core]") {
           [](const int &key, auto &&datum, auto &outs) {
             static_assert(std::is_rvalue_reference_v<decltype(datum)>, "Rvalue datum expected");
             static_assert(!std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Nonconst datum expected");
+          },
+          ttg::edges(in), ttg::edges()));
+
+      // and without an output terminal
+      CHECK_NOTHROW(ttg::make_tt(
+          [](const int &key, auto &datum) {
+            static_assert(std::is_lvalue_reference_v<decltype(datum)>, "Lvalue datum expected");
+            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
+            ttg::send(0, std::decay_t<decltype(key)>{}, std::decay_t<decltype(datum)>{});
           },
           ttg::edges(in), ttg::edges()));
     }

@@ -250,6 +250,10 @@ namespace ttg_madness {
     input_terminals_type input_terminals;
     output_terminalsT output_terminals;
 
+   protected:
+    const auto &get_output_terminals() const { return output_terminals; }
+
+   private:
     struct TTArgs : ::madness::TaskInterface {
      private:
       using TaskInterface = ::madness::TaskInterface;

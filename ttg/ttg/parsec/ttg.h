@@ -811,6 +811,10 @@ namespace ttg_parsec {
     input_terminals_type input_terminals;
     output_terminalsT output_terminals;
 
+   protected:
+    const auto &get_output_terminals() const { return output_terminals; }
+
+   private:
     template <std::size_t... IS>
     static constexpr auto make_set_args_fcts(std::index_sequence<IS...>) {
       using resultT = decltype(set_arg_from_msg_fcts);
