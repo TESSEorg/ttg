@@ -210,20 +210,21 @@ class Everything3 {
 };
 
 class Everything4 {
-  static void p(std::tuple<Out<keyT, int>> &out) {
+  static void p() {
     ttg::print("produced ", 0);
-    send<0>(0, 0, out);
+    // send(0, 0, 0);  //! deduces int for key, but must be keyT
+    send(0, keyT{0}, 0);
   }
 
-  static void a(const keyT &key, const int &value, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, const int &value) {
     if (value >= 100) {
-      sendv<0>(value, out);
+      sendv(0, value);
     } else {
-      send<1>(key + 1, value + 1, out);
+      send(1, key + 1, value + 1);
     }
   }
 
-  static void c(const int &value, std::tuple<> &out) { ttg::print("consumed ", value); }
+  static void c(const int &value) { ttg::print("consumed ", value); }
 
   // !!!! Edges must be constructed before classes that use them
   Edge<keyT, int> P2A, A2A;
