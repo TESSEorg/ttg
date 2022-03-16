@@ -269,7 +269,10 @@ namespace ttg_parsec {
 
     virtual void final_task() override {
 #ifdef TTG_USE_USER_TERMDET
-      taskpool()->tdm.module->taskpool_set_nb_tasks(taskpool(), 0);
+      if(parsec_taskpool_started) {
+        taskpool()->tdm.module->taskpool_set_nb_tasks(taskpool(), 0);
+        parsec_taskpool_started = false;
+      }
 #endif  // TTG_USE_USER_TERMDET
     }
 
@@ -660,6 +663,10 @@ namespace ttg_parsec {
     ttg::detail::set_default_world(std::move(world));
   }
   inline void ttg_finalize() {
+    // We need to notify the current taskpool of termination if we are in user termination detection mode
+    // or the parsec_context_wait() in destroy_worlds() will never complete
+    if(0 == ttg::default_execution_context().rank()) 
+      ttg::default_execution_context().impl().final_task();
     ttg::detail::set_default_world(ttg::World{});  // reset the default world
     ttg::detail::destroy_worlds<ttg_parsec::WorldImpl>();
     MPI_Finalize();
