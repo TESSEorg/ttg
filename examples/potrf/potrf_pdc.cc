@@ -435,7 +435,7 @@ auto make_dispatcher(ttg::Edge<Key2, MatrixTile<T>>& input,
                      ttg::Edge<Key3, MatrixTile<T>>& to_gemm)
 {
   auto f = [=](const Key2& key,
-               const MatrixTile<T>&tile,
+               MatrixTile<T>&&tile,
                std::tuple<ttg::Out<Key1, MatrixTile<T>>,
                           ttg::Out<Key2, MatrixTile<T>>,
                           ttg::Out<Key2, MatrixTile<T>>,
