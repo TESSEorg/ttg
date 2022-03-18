@@ -39,6 +39,25 @@ namespace ttg {
       }
     };
 
+    template<typename keyT, typename valueT>
+    inline auto get_dyanmic_terminal(size_t i, const char* func) {
+#ifndef NDEBUG
+      auto *base_terminal_ptr = TTBase::get_outputs_tls_ptr()->at(i);
+      auto *terminal_ptr = dynamic_cast<Out<keyT, std::decay_t<valueT>> *>(base_terminal_ptr);
+      if (terminal_ptr == nullptr) {
+        std::stringstream ss;
+        ss << func << ": invalid type of ith output terminal, most likely due to mismatch between its type "
+                      "and the type of key/value; make sure that the arguments to send() match the types encoded in the output "
+                      "terminals, or pass the output terminal tuple to the task function explicitly";
+        throw std::runtime_error(ss.str());
+      }
+#else
+      auto *base_terminal_ptr = TTBase::get_outputs_tls_ptr()->operator[](i);
+      auto *terminal_ptr = static_cast<Out<keyT, std::decay_t<valueT>> *>(base_terminal_ptr);
+#endif
+      return terminal_ptr;
+    }
+
   }  // namespace detail
 
   /// applies @c make_executable method to every op in the graph
@@ -133,19 +152,7 @@ namespace ttg {
   std::enable_if_t<meta::is_none_void_v<keyT, std::decay_t<valueT>>, void> send(size_t i, const keyT &key,
                                                                                 valueT &&value) {
     detail::value_copy_handler<Runtime> copy_handler;
-#ifndef NDEBUG
-    auto *base_terminal_ptr = TTBase::get_outputs_tls_ptr()->at(i);
-    auto *terminal_ptr = dynamic_cast<Out<keyT, std::decay_t<valueT>> *>(base_terminal_ptr);
-    if (terminal_ptr == nullptr) {
-      throw std::runtime_error(
-          "ttg::send(i, key, value): invalid type of ith output terminal, most likely due to mismatch between its type "
-          "and the type of key/value; make sure that the arguments to send() match the types encoded in the output "
-          "terminals, or pass the output terminal tuple to the task function explicitly");
-    }
-#else
-    auto *base_terminal_ptr = TTBase::get_outputs_tls_ptr()->operator[](i);
-    auto *terminal_ptr = static_cast<Out<keyT, std::decay_t<valueT>> *>(base_terminal_ptr);
-#endif
+    auto *terminal_ptr = detail::get_dyanmic_terminal<keyT, valueT>(i, "ttg::send(i, key, value)");
     terminal_ptr->send(key, copy_handler(std::forward<valueT>(value)));
   }
 
@@ -159,19 +166,7 @@ namespace ttg {
 
   template <typename keyT>
   std::enable_if_t<!meta::is_void_v<keyT>, void> sendk(std::size_t i, const keyT &key) {
-#ifndef NDEBUG
-    auto *base_terminal_ptr = TTBase::get_outputs_tls_ptr()->at(i);
-    auto *terminal_ptr = dynamic_cast<Out<keyT, void> *>(base_terminal_ptr);
-    if (terminal_ptr == nullptr) {
-      throw std::runtime_error(
-          "ttg::sendk(i, key): invalid type of ith output terminal, most likely due to mismatch between its type and "
-          "the type of key; make sure that the arguments to sendk() match the types encoded in the output terminals, "
-          "or pass the output terminal tuple to the task function explicitly");
-    }
-#else
-    auto *base_terminal_ptr = TTBase::get_outputs_tls_ptr()->operator[](i);
-    auto *terminal_ptr = static_cast<Out<keyT, void> *>(base_terminal_ptr);
-#endif
+    auto *terminal_ptr = detail::get_dyanmic_terminal<keyT, void>(i, "ttg::sendk(i, key)");
     terminal_ptr->sendk(key);
   }
 
@@ -186,19 +181,7 @@ namespace ttg {
   template <typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   std::enable_if_t<!meta::is_void_v<valueT>, void> sendv(std::size_t i, valueT &&value) {
     detail::value_copy_handler<Runtime> copy_handler;
-#ifndef NDEBUG
-    auto *base_terminal_ptr = TTBase::get_outputs_tls_ptr()->at(i);
-    auto *terminal_ptr = dynamic_cast<Out<void, std::decay_t<valueT>> *>(base_terminal_ptr);
-    if (terminal_ptr == nullptr) {
-      throw std::runtime_error(
-          "ttg::sendv(i, value): invalid type of ith output terminal, most likely due to mismatch between its type and "
-          "the type of value; make sure that the arguments to sendv() match the types encoded in the output terminals, "
-          "or pass the output terminal tuple to the task function explicitly");
-    }
-#else
-    auto *base_terminal_ptr = TTBase::get_outputs_tls_ptr()->operator[](i);
-    auto *terminal_ptr = static_cast<Out<void, std::decay_t<valueT>> *>(base_terminal_ptr);
-#endif
+    auto *terminal_ptr = detail::get_dyanmic_terminal<void, valueT>(i, "ttg::sendv(i, value)");
     terminal_ptr->sendv(copy_handler(std::forward<valueT>(value)));
   }
 
@@ -208,18 +191,7 @@ namespace ttg {
   }
 
   inline void send(std::size_t i) {
-#ifndef NDEBUG
-    auto *base_terminal_ptr = TTBase::get_outputs_tls_ptr()->at(i);
-    auto *terminal_ptr = dynamic_cast<Out<void, void> *>(base_terminal_ptr);
-    if (terminal_ptr == nullptr) {
-      throw std::runtime_error(
-          "ttg::send(i): invalid type of ith output terminal due to internal TTG runtime error; try passing the output "
-          "terminal tuple to the task function explicitly");
-    }
-#else
-    auto *base_terminal_ptr = TTBase::get_outputs_tls_ptr()->operator[](i);
-    auto *terminal_ptr = static_cast<Out<void, void> *>(base_terminal_ptr);
-#endif
+    auto *terminal_ptr = detail::get_dyanmic_terminal<void, void>(i, "ttg::send(i)");
     terminal_ptr->send();
   }
 
