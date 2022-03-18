@@ -40,10 +40,10 @@ namespace ttg {
     };
 
     template<typename keyT, typename valueT>
-    inline auto get_dyanmic_terminal(size_t i, const char* func) {
+    inline auto get_dynamic_terminal(size_t i, const char* func) {
 #ifndef NDEBUG
       auto *base_terminal_ptr = TTBase::get_outputs_tls_ptr()->at(i);
-      auto *terminal_ptr = dynamic_cast<Out<keyT, std::decay_t<valueT>> *>(base_terminal_ptr);
+      auto *terminal_ptr = dynamic_cast<Out<std::decay_t<keyT>, std::decay_t<valueT>> *>(base_terminal_ptr);
       if (terminal_ptr == nullptr) {
         std::stringstream ss;
         ss << func << ": invalid type of ith output terminal, most likely due to mismatch between its type "
@@ -53,7 +53,7 @@ namespace ttg {
       }
 #else
       auto *base_terminal_ptr = TTBase::get_outputs_tls_ptr()->operator[](i);
-      auto *terminal_ptr = static_cast<Out<keyT, std::decay_t<valueT>> *>(base_terminal_ptr);
+      auto *terminal_ptr = static_cast<Out<std::decay_t<keyT>, std::decay_t<valueT>> *>(base_terminal_ptr);
 #endif
       return terminal_ptr;
     }
@@ -152,7 +152,7 @@ namespace ttg {
   std::enable_if_t<meta::is_none_void_v<keyT, std::decay_t<valueT>>, void> send(size_t i, const keyT &key,
                                                                                 valueT &&value) {
     detail::value_copy_handler<Runtime> copy_handler;
-    auto *terminal_ptr = detail::get_dyanmic_terminal<keyT, valueT>(i, "ttg::send(i, key, value)");
+    auto *terminal_ptr = detail::get_dynamic_terminal<keyT, valueT>(i, "ttg::send(i, key, value)");
     terminal_ptr->send(key, copy_handler(std::forward<valueT>(value)));
   }
 
@@ -166,7 +166,7 @@ namespace ttg {
 
   template <typename keyT>
   std::enable_if_t<!meta::is_void_v<keyT>, void> sendk(std::size_t i, const keyT &key) {
-    auto *terminal_ptr = detail::get_dyanmic_terminal<keyT, void>(i, "ttg::sendk(i, key)");
+    auto *terminal_ptr = detail::get_dynamic_terminal<keyT, void>(i, "ttg::sendk(i, key)");
     terminal_ptr->sendk(key);
   }
 
@@ -181,7 +181,7 @@ namespace ttg {
   template <typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   std::enable_if_t<!meta::is_void_v<valueT>, void> sendv(std::size_t i, valueT &&value) {
     detail::value_copy_handler<Runtime> copy_handler;
-    auto *terminal_ptr = detail::get_dyanmic_terminal<void, valueT>(i, "ttg::sendv(i, value)");
+    auto *terminal_ptr = detail::get_dynamic_terminal<void, valueT>(i, "ttg::sendv(i, value)");
     terminal_ptr->sendv(copy_handler(std::forward<valueT>(value)));
   }
 
@@ -191,7 +191,7 @@ namespace ttg {
   }
 
   inline void send(std::size_t i) {
-    auto *terminal_ptr = detail::get_dyanmic_terminal<void, void>(i, "ttg::send(i)");
+    auto *terminal_ptr = detail::get_dynamic_terminal<void, void>(i, "ttg::send(i)");
     terminal_ptr->send();
   }
 
