@@ -90,6 +90,7 @@ namespace ttg {
     // is_any_void_v
     // is_last_void_v
     // void_to_Void_t
+    // is_any_nonconst_lvalue_reference_v
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <typename T>
     constexpr bool is_Void_v = std::is_same_v<std::decay_t<T>, Void>;
@@ -173,6 +174,19 @@ namespace ttg {
     };
     template <typename T>
     using void_to_Void_t = typename void_to_Void<T>::type;
+
+    template <typename T>
+    constexpr bool is_nonconst_lvalue_reference_v =
+        std::is_lvalue_reference_v<T> && !std::is_const_v<std::remove_reference_t<T>>;
+
+    template <typename... Ts>
+    constexpr bool is_any_nonconst_lvalue_reference_v = (is_nonconst_lvalue_reference_v<Ts> || ...);
+
+    template <typename... Ts>
+    constexpr bool is_any_nonconst_lvalue_reference_v<ttg::typelist<Ts...>> = is_any_nonconst_lvalue_reference_v<Ts...>;
+
+    template <typename... Ts>
+    constexpr bool is_any_nonconst_lvalue_reference_v<std::tuple<Ts...>> = is_any_nonconst_lvalue_reference_v<Ts...>;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // typelist metafunctions

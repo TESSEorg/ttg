@@ -166,6 +166,8 @@ class Everything2 {
 class Everything3 {
   static void p(const std::tuple<> &) {
     ttg::print("produced ", 0);
+    // N.B.: send(0, 0, int(0)) will produce a runtime error since it will try to cast 0th TerminalBase* to
+    // Out<int, int>, but p was attached to Out<keyT, int>
     send(0, keyT{0}, int(0));
   }
 

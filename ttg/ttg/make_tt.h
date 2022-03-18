@@ -332,7 +332,14 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
                 "tuple of output terminals)");
 
   // 2. input_args_t = {input_valuesT&&...}
-  using input_args_t = std::decay_t<std::tuple_element_t<void_key ? 0 : 1, func_args_t>>;
+  using nondecayed_input_args_t = std::tuple_element_t<void_key ? 0 : 1, func_args_t>;
+  constexpr auto NO_ARGUMENTS_PASSED_AS_NONCONST_LVALUE_REF =
+      !ttg::meta::is_any_nonconst_lvalue_reference_v<nondecayed_input_args_t>;
+  static_assert(
+      NO_ARGUMENTS_PASSED_AS_NONCONST_LVALUE_REF,
+      "ttg::make_tt_tpl(func, inedges, outedges): one or more arguments to func can only be passed by nonconst lvalue "
+      "ref; this is illegal, should only pass arguments as const lavlue ref or (nonconst) rvalue ref");
+  using input_args_t = std::decay_t<nondecayed_input_args_t>;
   using decayed_input_args_t = ttg::meta::decayed_typelist_t<input_args_t>;
   using wrapT =
       typename CallableWrapTTUnwrapTypelist<funcT, have_outterm_tuple, keyT, output_terminals_type, input_args_t>::type;
@@ -404,6 +411,12 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   using input_args_t = typename ttg::meta::take_first_n<
       typename ttg::meta::drop_first_n<func_args_t, std::size_t(void_key ? 0 : 1)>::type,
       std::tuple_size_v<func_args_t> - (void_key ? 0 : 1) - (have_outterm_tuple ? 1 : 0)>::type;
+  constexpr auto NO_ARGUMENTS_PASSED_AS_NONCONST_LVALUE_REF =
+      !ttg::meta::is_any_nonconst_lvalue_reference_v<input_args_t>;
+  static_assert(
+      NO_ARGUMENTS_PASSED_AS_NONCONST_LVALUE_REF,
+      "ttg::make_tt_tpl(func, inedges, outedges): one or more arguments to func can only be passed by nonconst lvalue "
+      "ref; this is illegal, should only pass arguments as const lavlue ref or (nonconst) rvalue ref");
   using decayed_input_args_t = ttg::meta::decayed_typelist_t<input_args_t>;
   // 3. full_input_args_t = edge-types with non-void types replaced by input_args_t
   using full_input_args_t = ttg::meta::replace_nonvoid_t<input_edge_value_types, input_args_t>;
