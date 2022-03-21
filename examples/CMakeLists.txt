@@ -31,10 +31,10 @@ add_ttg_executable(fw-apsp floyd-warshall/floyd_warshall.cc LINK_LIBRARIES MADwo
 
 
 if(TARGET DPLASMA::dplasma)
-  add_ttg_executable(potrf potrf/potrf_pdc.cc LINK_LIBRARIES lapackpp DPLASMA::dplasma MADworld)
+  add_ttg_executable(testing_dpotrf potrf/testing_dpotrf.cc LINK_LIBRARIES lapackpp DPLASMA::dplasma MADworld)
   target_compile_definitions(potrf PRIVATE USE_DPLASMA=1)
 else(TARGET DPLSAMA::dplasma)
-  add_ttg_executable(potrf potrf/potrf_pdc.cc LINK_LIBRARIES lapackpp MADworld)
+  add_ttg_executable(testing_dpotrf potrf/testing_dpotrf.cc LINK_LIBRARIES lapackpp MADworld)
 endif(TARGET DPLASMA::dplasma)
 
 

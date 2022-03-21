@@ -1,3 +1,5 @@
+#pragma once
+
 /**
  *
  * @file core_dplgsy.c

@@ -1,5 +1,4 @@
-#ifndef PMW_INCLUDED_
-#define PMW_INCLUDED_
+#pragma once
 
 #include <parsec.h>
 #include <parsec/data_internal.h>
@@ -138,4 +137,5 @@ public:
 
 };
 
-#endif
+template<typename ValueT>
+using MatrixT = PaRSECMatrixWrapper<sym_two_dim_block_cyclic_t, ValueT>;
