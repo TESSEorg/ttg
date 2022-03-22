@@ -1,8 +1,8 @@
 //#define TTG_USE_PARSEC 1
 
 #ifdef TTG_USE_PARSEC
-// tell TTG/PARSEC that we know what we are doing (TM)
-#define TTG_USE_USER_TERMDET 1
+// Use the dynamic termination detection by default
+#undef TTG_USE_USER_TERMDET
 #endif // TTG_USE_PARSEC
 
 #define USE_PARSEC_PROF_API 0
