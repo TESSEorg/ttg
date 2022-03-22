@@ -156,6 +156,12 @@ namespace ttg {
     terminal_ptr->send(key, copy_handler(std::forward<valueT>(value)));
   }
 
+  template <size_t i, typename keyT, typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
+  inline std::enable_if_t<meta::is_none_void_v<keyT, std::decay_t<valueT>>, void> send(const keyT &key,
+                                                                                       valueT &&value) {
+    send(i, key, std::forward<valueT>(value));
+  }
+
   template <size_t i, typename keyT,
             typename... out_keysT,
             typename... out_valuesT>
@@ -168,6 +174,11 @@ namespace ttg {
   inline std::enable_if_t<!meta::is_void_v<keyT>, void> sendk(std::size_t i, const keyT &key) {
     auto *terminal_ptr = detail::get_out_terminal<keyT, void>(i, "ttg::sendk(i, key)");
     terminal_ptr->sendk(key);
+  }
+
+  template <size_t i, typename keyT>
+  inline std::enable_if_t<!meta::is_void_v<keyT>, void> sendk(const keyT &key) {
+    sendk(i, key);
   }
 
   template <size_t i, typename valueT, typename... out_keysT, typename... out_valuesT,
@@ -185,6 +196,11 @@ namespace ttg {
     terminal_ptr->sendv(copy_handler(std::forward<valueT>(value)));
   }
 
+  template <size_t i, typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
+  inline std::enable_if_t<!meta::is_void_v<std::decay_t<valueT>>, void> sendv(valueT &&value) {
+    sendv(i, std::forward<valueT>(value));
+  }
+
   template <size_t i, typename... out_keysT, typename... out_valuesT>
   inline void send(std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
     std::get<i>(t).send();
@@ -193,6 +209,11 @@ namespace ttg {
   inline void send(std::size_t i) {
     auto *terminal_ptr = detail::get_out_terminal<void, void>(i, "ttg::send(i)");
     terminal_ptr->send();
+  }
+
+  template <size_t i>
+  inline void send() {
+    send(i);
   }
 
   namespace detail {
@@ -275,16 +296,22 @@ namespace ttg {
     std::get<i>(t).broadcast(keylist, copy_handler(std::forward<valueT>(value)));
   }
 
-  template <size_t i, typename rangeT, typename valueT,
+  template <typename rangeT, typename valueT,
             typename... out_keysT, typename... out_valuesT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
-  inline void broadcast(const rangeT &keylist, valueT &&value) {
+  inline void broadcast(std::size_t i, const rangeT &keylist, valueT &&value) {
     detail::value_copy_handler<Runtime> copy_handler;
     using key_t = decltype(*std::begin(keylist));
     auto *terminal_ptr = detail::get_out_terminal<key_t, valueT>(i, "ttg::broadcast(keylist, value)");
     terminal_ptr->broadcast(keylist, copy_handler(std::forward<valueT>(value)));
   }
 
+  template <size_t i, typename rangeT, typename valueT,
+            typename... out_keysT, typename... out_valuesT,
+            ttg::Runtime Runtime = ttg::ttg_runtime>
+  inline void broadcast(const rangeT &keylist, valueT &&value) {
+    broadcast(i, keylist, std::forward<valueT>(value));
+  }
 
   template <size_t i, size_t... I, typename... RangesT, typename valueT,
             typename... out_keysT, typename... out_valuesT,
@@ -313,11 +340,16 @@ namespace ttg {
     std::get<i>(t).broadcast(keylist);
   }
 
-  template <size_t i, typename rangeT, ttg::Runtime Runtime = ttg::ttg_runtime>
-  inline void broadcastk(const rangeT &keylist) {
+  template <typename rangeT, ttg::Runtime Runtime = ttg::ttg_runtime>
+  inline void broadcastk(std::size_t i, const rangeT &keylist) {
     using key_t = decltype(*std::begin(keylist));
     auto *terminal_ptr = detail::get_out_terminal<key_t, void>(i, "ttg::broadcastk(keylist)");
     terminal_ptr->broadcast(keylist);
+  }
+
+  template <size_t i, typename rangeT, ttg::Runtime Runtime = ttg::ttg_runtime>
+  inline void broadcastk(const rangeT &keylist) {
+    broadcastk(i, keylist);
   }
 
   template <size_t i, size_t... I, typename... RangesT,

@@ -214,15 +214,21 @@ class Everything3 {
 class Everything4 {
   static void p() {
     ttg::print("produced ", 0);
-    // send(0, 0, 0);  //! deduces int for key, but must be keyT
-    send(0, keyT{0}, 0);
+    // send<0>(0, 0); // error, deduces int for key, but must be keyT
+    send<0>(keyT{0}, 0);
+    // also ok:
+    if (false) send(0, keyT{0}, 0);
   }
 
   static void a(const keyT &key, const int &value) {
     if (value >= 100) {
-      sendv(0, value);
+      sendv<0>(value);
+      // also ok:
+      if (false) sendv(0, value);
     } else {
       send(1, key + 1, value + 1);
+      // also ok:
+      if (false) send<1>(key + 1, value + 1);
     }
   }
 
