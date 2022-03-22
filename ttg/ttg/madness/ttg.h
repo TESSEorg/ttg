@@ -119,7 +119,7 @@ namespace ttg_madness {
   template <typename... RestOfArgs>
   inline void ttg_initialize(int argc, char **argv, int num_threads, RestOfArgs &&...) {
     if (num_threads < 1) num_threads = ttg::detail::num_threads();
-    ::madness::World &madworld = ::madness::initialize(argc, argv, num_threads);
+    ::madness::World &madworld = ::madness::initialize(argc, argv, num_threads, /* quiet = */ true);
     auto *world_ptr = new ttg_madness::WorldImpl{madworld};
     std::shared_ptr<ttg::base::WorldImplBase> world_sptr{static_cast<ttg::base::WorldImplBase *>(world_ptr)};
     ttg::World world{std::move(world_sptr)};
