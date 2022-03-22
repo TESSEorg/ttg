@@ -10,6 +10,8 @@
 namespace ttg {
   /// Prints the graph to a std::string in the format understood by GraphViz's dot program
   class Dot : private detail::Traverse {
+    bool disable_type=true;
+
     std::stringstream buf;
 
     // Insert backslash before characters that dot is interpreting
@@ -41,9 +43,18 @@ namespace ttg {
       for (auto in : tt->get_inputs()) {
         if (in) {
           if (count != in->get_index()) throw "ttg::Dot: lost count of ins";
+          if(disable_type)
+          {
+            buf << " <in" << count << ">"
+                << " " << escape(in->get_key_type_str()) << " "
+                << escape(in->get_name());
+          }
+          else
+          {
+          buf << " <in" << count << ">";
           buf << " <in" << count << ">"
               << " " << escape("<" + in->get_key_type_str() + "," + in->get_value_type_str() + ">") << " "
-              << escape(in->get_name());
+              << escape(in->get_name());}
         } else {
           buf << " <in" << count << ">"
               << " unknown ";
@@ -61,9 +72,17 @@ namespace ttg {
       for (auto out : tt->get_outputs()) {
         if (out) {
           if (count != out->get_index()) throw "ttg::Dot: lost count of outs";
+          if(disable_type)
+          {
+            buf << " <out" << count << ">"
+                << " " << escape(out->get_key_type_str()) << " "
+                << out->get_name();
+          }
+          else
+          {
           buf << " <out" << count << ">"
               << " " << escape("<" + out->get_key_type_str() + "," + out->get_value_type_str() + ">") << " "
-              << out->get_name();
+              << out->get_name();}
         } else {
           buf << " <out" << count << ">"
               << " unknown ";
