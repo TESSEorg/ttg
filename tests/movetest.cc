@@ -42,8 +42,8 @@ class Value {
   ~Value() {}
 };
 
-class A : public TT<int, std::tuple<Out<int, Value>>, A, Value> {
-  using baseT = TT<int, std::tuple<Out<int, Value>>, A, Value>;
+class A : public TT<int, std::tuple<Out<int, Value>>, A, ttg::typelist<Value>> {
+  using baseT = A::ttT;
 
  public:
   A(const std::string& name) : baseT(name, {"input"}, {"result"}) {}
@@ -58,8 +58,8 @@ class A : public TT<int, std::tuple<Out<int, Value>>, A, Value> {
   ~A() { std::cout << " A destructor\n"; }
 };
 
-class Printer : public TT<int, std::tuple<>, Printer, Value> {
-  using baseT = TT<int, std::tuple<>, Printer, Value>;
+class Printer : public TT<int, std::tuple<>, Printer, ttg::typelist<Value>> {
+  using baseT = Printer::ttT;
 
  public:
   Printer() : baseT("printer", {"input"}, {}) {}

@@ -54,7 +54,7 @@ TEST_CASE("Fibonacci", "[fib][core]") {
           ttg::edges(F2F), ttg::edges(F2F, F2P));
       auto print_op = ttg::make_tt(
           [reference_result](const int &value, std::tuple<> &out) {
-            ::ttg::print("sum of Fibonacci numbers up to ", N, " = ", value);
+            ttg::print("sum of Fibonacci numbers up to ", N, " = ", value);
             CHECK(value == reference_result);
           },
           ttg::edges(F2P), ttg::edges());
@@ -78,19 +78,19 @@ TEST_CASE("Fibonacci", "[fib][core]") {
           const auto &[F_n_plus_1, F_n] = F_np1_n;
           if (F_n_plus_1 < N) {
             const auto F_n_plus_2 = F_n_plus_1 + F_n;
-            ::ttg::print("sent ", F_n_plus_1, " to fib reducer");
+            ttg::print("sent ", F_n_plus_1, " to fib reducer");
             ttg::sendv<1>(F_n_plus_1, outs);
             ttg::send<0>(n + 1, std::make_pair(F_n_plus_2, F_n_plus_1), outs);
           } else {
             // how many messages the reducer should expect to receive
             ttg::set_size<1>(n, outs);
-            ::ttg::print("fib reducer will expect ", n, " messages");
+            ttg::print("fib reducer will expect ", n, " messages");
           }
         },
         ttg::edges(F2F), ttg::edges(F2F, F2P));
     auto print_op = ttg::make_tt(
         [reference_result](const int &value, std::tuple<> &out) {
-          ::ttg::print("sum of Fibonacci numbers up to ", N, " = ", value);
+          ttg::print("sum of Fibonacci numbers up to ", N, " = ", value);
           CHECK(value == reference_result);
         },
         ttg::edges(F2P), ttg::edges());
@@ -98,7 +98,7 @@ TEST_CASE("Fibonacci", "[fib][core]") {
     fib_op->set_keymap([=](const auto &key) { return nranks - 1; });
     fib_op->set_trace_instance(true);
     print_op->set_input_reducer<0>([](int &a, const int &b) {
-      ::ttg::print("fib reducer: current value = ", a, ", incremented by ", b, " set to ", a + b);
+      ttg::print("fib reducer: current value = ", a, ", incremented by ", b, " set to ", a + b);
       a = a + b;
     });
     make_graph_executable(fib_op);

@@ -12,8 +12,8 @@ using keyT = uint64_t;
 
 #include "ttg.h"
 
-class A : public TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int> {
-  using baseT = TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const int>;
+class A : public TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, ttg::typelist<const int>> {
+  using baseT = typename A::ttT;
 
  public:
   A(const std::string &name) : baseT(name, {"inputA"}, {"resultA", "iterateA"}) {}
@@ -50,7 +50,7 @@ class A : public TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, const i
 };
 
 class Producer : public TT<void, std::tuple<Out<keyT, int>>, Producer> {
-  using baseT = TT<void, std::tuple<Out<keyT, int>>, Producer>;
+  using baseT = typename Producer::ttT;
 
  public:
   Producer(const std::string &name) : baseT(name, {}, {"output"}) {}
@@ -66,8 +66,8 @@ class Producer : public TT<void, std::tuple<Out<keyT, int>>, Producer> {
   ~Producer() { std::cout << " Producer destructor\n"; }
 };
 
-class Consumer : public TT<void, std::tuple<>, Consumer, const int> {
-  using baseT = TT<void, std::tuple<>, Consumer, const int>;
+class Consumer : public TT<void, std::tuple<>, Consumer, ttg::typelist<const int>> {
+  using baseT = typename Consumer::ttT;
 
  public:
   Consumer(const std::string &name) : baseT(name, {"input"}, {}) {}
@@ -164,21 +164,23 @@ class Everything2 {
 };
 
 class Everything3 {
-  static void p(const std::tuple<> &, std::tuple<Out<keyT, int>> &out) {
+  static void p(const std::tuple<> &) {
     ttg::print("produced ", 0);
-    send<0>(0, int(0), out);
+    // N.B.: send(0, 0, int(0)) will produce a runtime error since it will try to cast 0th TerminalBase* to
+    // Out<int, int>, but p was attached to Out<keyT, int>
+    send(0, keyT{0}, int(0));
   }
 
-  static void a(const keyT &key, const std::tuple<const int &> &t, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, const std::tuple<const int &> &t) {
     const auto value = std::get<0>(t);
     if (value >= 100) {
-      sendv<0>(value, out);
+      sendv(0, value);
     } else {
-      send<1>(key + 1, value + 1, out);
+      send(1, key + 1, value + 1);
     }
   }
 
-  static void c(const std::tuple<const int &> &t, std::tuple<> &out) { ttg::print("consumed ", std::get<0>(t)); }
+  static void c(const std::tuple<const int &> &t) { ttg::print("consumed ", std::get<0>(t)); }
 
   // !!!! Edges must be constructed before classes that use them
   Edge<keyT, int> P2A, A2A;
@@ -210,20 +212,27 @@ class Everything3 {
 };
 
 class Everything4 {
-  static void p(std::tuple<Out<keyT, int>> &out) {
+  static void p() {
     ttg::print("produced ", 0);
-    send<0>(0, 0, out);
+    // send<0>(0, 0); // error, deduces int for key, but must be keyT
+    send<0>(keyT{0}, 0);
+    // also ok:
+    if (false) send(0, keyT{0}, 0);
   }
 
-  static void a(const keyT &key, const int &value, std::tuple<Out<void, int>, Out<keyT, int>> &out) {
+  static void a(const keyT &key, const int &value) {
     if (value >= 100) {
-      sendv<0>(value, out);
+      sendv<0>(value);
+      // also ok:
+      if (false) sendv(0, value);
     } else {
-      send<1>(key + 1, value + 1, out);
+      send(1, key + 1, value + 1);
+      // also ok:
+      if (false) send<1>(key + 1, value + 1);
     }
   }
 
-  static void c(const int &value, std::tuple<> &out) { ttg::print("consumed ", value); }
+  static void c(const int &value) { ttg::print("consumed ", value); }
 
   // !!!! Edges must be constructed before classes that use them
   Edge<keyT, int> P2A, A2A;

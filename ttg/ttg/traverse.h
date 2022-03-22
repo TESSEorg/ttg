@@ -131,13 +131,13 @@ namespace ttg {
   class Traverse : private detail::Traverse {
    public:
     static_assert(
-        std::is_void<meta::void_t<decltype(std::declval<TTVisitor>()(std::declval<TTBase *>()))>>::value,
+        std::is_void_v<meta::void_t<decltype(std::declval<TTVisitor>()(std::declval<TTBase *>()))>>,
         "Traverse<TTVisitor,...>: TTVisitor(TTBase *op) must be a valid expression");
     static_assert(
-        std::is_void<meta::void_t<decltype(std::declval<InVisitor>()(std::declval<TerminalBase *>()))>>::value,
+        std::is_void_v<meta::void_t<decltype(std::declval<InVisitor>()(std::declval<TerminalBase *>()))>>,
         "Traverse<,InVisitor,>: InVisitor(TerminalBase *op) must be a valid expression");
     static_assert(
-        std::is_void<meta::void_t<decltype(std::declval<OutVisitor>()(std::declval<TerminalBase *>()))>>::value,
+        std::is_void_v<meta::void_t<decltype(std::declval<OutVisitor>()(std::declval<TerminalBase *>()))>>,
         "Traverse<...,OutVisitor>: OutVisitor(TerminalBase *op) must be a valid expression");
 
     template <typename TTVisitor_ = detail::Traverse::null_visitor<TTBase>,
