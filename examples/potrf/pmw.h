@@ -34,6 +34,82 @@ struct Key2 {
   }
 };
 
+struct Key1 {
+  // ((I, J), K) where (I, J) is the tile coordiante and K is the iteration number
+  int K = 0;
+  madness::hashT hash_val;
+
+  Key1() { rehash(); }
+  Key1(int K) : K(K){ rehash(); }
+
+  madness::hashT hash() const { return hash_val; }
+  void rehash() {
+    hash_val = K;
+  }
+
+  // Equality test
+  bool operator==(const Key1& b) const { return K == b.K; }
+
+  // Inequality test
+  bool operator!=(const Key1& b) const { return !((*this) == b); }
+
+  template <typename Archive>
+  void serialize(Archive& ar) {
+    ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
+  }
+};
+
+struct Key3 {
+  // ((I, J), K) where (I, J) is the tile coordiante and K is the iteration number
+  int I = 0, J = 0, K = 0;
+  madness::hashT hash_val;
+
+  Key3() { rehash(); }
+  Key3(int I, int J, int K) : I(I), J(J), K(K) { rehash(); }
+
+  madness::hashT hash() const { return hash_val; }
+  void rehash() {
+    hash_val = (static_cast<madness::hashT>(I) << 48)
+             ^ (static_cast<madness::hashT>(J) << 32)
+             ^ (K << 16);
+  }
+
+  // Equality test
+  bool operator==(const Key3& b) const { return I == b.I && J == b.J && K == b.K; }
+
+  // Inequality test
+  bool operator!=(const Key3& b) const { return !((*this) == b); }
+
+  template <typename Archive>
+  void serialize(Archive& ar) {
+    ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
+  }
+};
+
+namespace std {
+  // specialize std::hash for Key
+
+  template <>
+  struct hash<Key1> {
+    std::size_t operator()(const Key1& s) const noexcept { return s.hash(); }
+  };
+
+  template <>
+  struct hash<Key3> {
+    std::size_t operator()(const Key3& s) const noexcept { return s.hash(); }
+  };
+
+  std::ostream& operator<<(std::ostream& s, const Key1& key) {
+    s << "Key(" << key.K << ")";
+    return s;
+  }
+
+  std::ostream& operator<<(std::ostream& s, const Key3& key) {
+    s << "Key(" << key.I << "," << key.J << "," << key.K << ")";
+    return s;
+  }
+}  // namespace std
+
 
 namespace std {
   // specialize std::hash for Key

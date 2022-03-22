@@ -13,6 +13,7 @@
 #include <madness/world/world.h>
 
 #include "pmw.h"
+#include "tracing.h"
 #include "plgsy.h"
 #include "potrf.h"
 #include "result.h"
@@ -20,8 +21,6 @@
 #ifdef USE_DPLASMA
 #include <dplasma.h>
 #endif
-
-#include <parsec/profiling.h>
 
 int main(int argc, char **argv)
 {

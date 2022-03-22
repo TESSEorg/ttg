@@ -3,111 +3,19 @@
 #include <ttg.h>
 // needed for madness::hashT and xterm_debug
 #include <madness/world/world.h>
+#include "pmw.h"
 #include "lapack.hh"
-
-struct Key1 {
-  // ((I, J), K) where (I, J) is the tile coordiante and K is the iteration number
-  int K = 0;
-  madness::hashT hash_val;
-
-  Key1() { rehash(); }
-  Key1(int K) : K(K){ rehash(); }
-
-  madness::hashT hash() const { return hash_val; }
-  void rehash() {
-    hash_val = K;
-  }
-
-  // Equality test
-  bool operator==(const Key1& b) const { return K == b.K; }
-
-  // Inequality test
-  bool operator!=(const Key1& b) const { return !((*this) == b); }
-
-  template <typename Archive>
-  void serialize(Archive& ar) {
-    ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
-  }
-};
-
-struct Key3 {
-  // ((I, J), K) where (I, J) is the tile coordiante and K is the iteration number
-  int I = 0, J = 0, K = 0;
-  madness::hashT hash_val;
-
-  Key3() { rehash(); }
-  Key3(int I, int J, int K) : I(I), J(J), K(K) { rehash(); }
-
-  madness::hashT hash() const { return hash_val; }
-  void rehash() {
-    hash_val = (static_cast<madness::hashT>(I) << 48)
-             ^ (static_cast<madness::hashT>(J) << 32)
-             ^ (K << 16);
-  }
-
-  // Equality test
-  bool operator==(const Key3& b) const { return I == b.I && J == b.J && K == b.K; }
-
-  // Inequality test
-  bool operator!=(const Key3& b) const { return !((*this) == b); }
-
-  template <typename Archive>
-  void serialize(Archive& ar) {
-    ar& madness::archive::wrap((unsigned char*)this, sizeof(*this));
-  }
-};
-
-namespace std {
-  // specialize std::hash for Key
-
-  template <>
-  struct hash<Key1> {
-    std::size_t operator()(const Key1& s) const noexcept { return s.hash(); }
-  };
-
-  template <>
-  struct hash<Key3> {
-    std::size_t operator()(const Key3& s) const noexcept { return s.hash(); }
-  };
-
-  std::ostream& operator<<(std::ostream& s, const Key1& key) {
-    s << "Key(" << key.K << ")";
-    return s;
-  }
-
-  std::ostream& operator<<(std::ostream& s, const Key3& key) {
-    s << "Key(" << key.I << "," << key.J << "," << key.K << ")";
-    return s;
-  }
-}  // namespace std
-
-
-static void
-dplasma_dprint_tile( int m, int n,
-                     const parsec_tiled_matrix_dc_t* descA,
-                     const double *M );
 
 /* FLOP macros taken from DPLASMA */
 #define FMULS_POTRF(__n) ((double)(__n) * (((1. / 6.) * (double)(__n) + 0.5) * (double)(__n) + (1. / 3.)))
 #define FADDS_POTRF(__n) ((double)(__n) * (((1. / 6.) * (double)(__n)      ) * (double)(__n) - (1. / 6.)))
 #define FLOPS_DPOTRF(__n) (     FMULS_POTRF((__n)) +       FADDS_POTRF((__n)) )
 
-static thread_local parsec_profiling_stream_t *prof = nullptr;
 static int event_trsm_startkey, event_trsm_endkey;
 static int event_syrk_startkey, event_syrk_endkey;
 static int event_potrf_startkey, event_potrf_endkey;
-static bool profiling_enabled = false;
 #define EVENT_B_INFO_CONVERTER "I{int};J{int}"
 #define EVENT_PO_INFO_CONVERTER "I{int}"
-
-static void init_prof_thread()
-{
-#if USE_PARSEC_PROF_API
-  if (nullptr == prof) {
-    prof = parsec_profiling_stream_init(4096, "PaRSEC thread");
-  }
-#endif // USE_PARSEC_PROF_API
-}
 
 /**
  * Wrapper around parsec_profiling_trace_flags to enable/disable at will
