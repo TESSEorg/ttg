@@ -25,6 +25,6 @@ macro(add_ttg_test_executable _executable _ranksrange _cmdline_args)
         set_tests_properties(ttg/test/${_executable}/run-np-${p}
                 PROPERTIES FIXTURES_REQUIRED TTG_TEST_${_executable}_FIXTURE
                 WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
-                ENVIRONMENT MAD_NUM_THREADS=2)
+                ENVIRONMENT TTG_NUM_THREADS=2)
     endforeach(p)
 endmacro()

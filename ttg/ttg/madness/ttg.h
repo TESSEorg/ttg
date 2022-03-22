@@ -119,7 +119,7 @@ namespace ttg_madness {
   template <typename... RestOfArgs>
   inline void ttg_initialize(int argc, char **argv, int num_threads, RestOfArgs &&...) {
     if (num_threads < 1) num_threads = ttg::detail::num_threads();
-    ::madness::World &madworld = ::madness::initialize(argc, argv, num_threads);
+    ::madness::World &madworld = ::madness::initialize(argc, argv, num_threads, /* quiet = */ true);
     auto *world_ptr = new ttg_madness::WorldImpl{madworld};
     std::shared_ptr<ttg::base::WorldImplBase> world_sptr{static_cast<ttg::base::WorldImplBase *>(world_ptr)};
     ttg::World world{std::move(world_sptr)};
@@ -219,17 +219,17 @@ namespace ttg_madness {
 
    public:
     using input_terminals_type = ttg::detail::input_terminals_tuple_t<keyT, input_tuple_type>;
-    using input_edges_type = ttg::detail::edges_tuple_t<keyT, ttg::meta::decayed_tuple_t<input_tuple_type>>;
+    using input_edges_type = ttg::detail::edges_tuple_t<keyT, ttg::meta::decayed_typelist_t<input_tuple_type>>;
     static_assert(ttg::meta::is_none_Void_v<input_valueTs>, "ttg::Void is for internal use only, do not use it");
     static_assert(ttg::meta::is_none_void_v<input_valueTs> || ttg::meta::is_last_void_v<input_valueTs>,
                   "at most one void input can be handled, and it must come last");
     // if have data inputs and (always last) control input, convert last input to Void to make logic easier
     using input_values_full_tuple_type =
-        ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<actual_input_tuple_type>>;
+        ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_typelist_t<actual_input_tuple_type>>;
     using input_refs_full_tuple_type =
         ttg::meta::add_glvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<actual_input_tuple_type>>;
 
-    using input_values_tuple_type = ttg::meta::drop_void_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
+    using input_values_tuple_type = ttg::meta::drop_void_t<ttg::meta::decayed_typelist_t<input_tuple_type>>;
     using input_refs_tuple_type = ttg::meta::drop_void_t<ttg::meta::add_glvalue_reference_tuple_t<input_tuple_type>>;
     static_assert(!ttg::meta::is_any_void_v<input_values_tuple_type>);
 
@@ -250,6 +250,10 @@ namespace ttg_madness {
     input_terminals_type input_terminals;
     output_terminalsT output_terminals;
 
+   protected:
+    const auto &get_output_terminals() const { return output_terminals; }
+
+   private:
     struct TTArgs : ::madness::TaskInterface {
      private:
       using TaskInterface = ::madness::TaskInterface;

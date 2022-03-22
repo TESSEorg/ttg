@@ -777,13 +777,13 @@ namespace ttg_parsec {
     using ttT = TT;
     using input_terminals_type = ttg::detail::input_terminals_tuple_t<keyT, input_tuple_type>;
     using input_args_type = actual_input_tuple_type;
-    using input_edges_type = ttg::detail::edges_tuple_t<keyT, ttg::meta::decayed_tuple_t<input_tuple_type>>;
+    using input_edges_type = ttg::detail::edges_tuple_t<keyT, ttg::meta::decayed_typelist_t<input_tuple_type>>;
     // if have data inputs and (always last) control input, convert last input to Void to make logic easier
     using input_values_full_tuple_type =
-        ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_tuple_t<actual_input_tuple_type>>;
+        ttg::meta::void_to_Void_tuple_t<ttg::meta::decayed_typelist_t<actual_input_tuple_type>>;
     using input_refs_full_tuple_type =
         ttg::meta::add_glvalue_reference_tuple_t<ttg::meta::void_to_Void_tuple_t<actual_input_tuple_type>>;
-    using input_values_tuple_type = ttg::meta::drop_void_t<ttg::meta::decayed_tuple_t<input_tuple_type>>;
+    using input_values_tuple_type = ttg::meta::drop_void_t<ttg::meta::decayed_typelist_t<input_tuple_type>>;
     using input_refs_tuple_type = ttg::meta::drop_void_t<ttg::meta::add_glvalue_reference_tuple_t<input_tuple_type>>;
 
     static constexpr int numinvals =
@@ -811,6 +811,10 @@ namespace ttg_parsec {
     input_terminals_type input_terminals;
     output_terminalsT output_terminals;
 
+   protected:
+    const auto &get_output_terminals() const { return output_terminals; }
+
+   private:
     template <std::size_t... IS>
     static constexpr auto make_set_args_fcts(std::index_sequence<IS...>) {
       using resultT = decltype(set_arg_from_msg_fcts);

@@ -3,10 +3,10 @@
 
 #include <cstdint>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <optional>
 
 #include "ttg/base/terminal.h"
 #include "ttg/util/demangle.h"
@@ -66,9 +66,9 @@ namespace ttg {
     template <bool out, std::size_t... IS, typename terminalsT, typename namesT, typename setfuncT>
     void register_terminals(std::index_sequence<IS...>, terminalsT &terms, const namesT &names,
                             const setfuncT setfunc) {
-      int junk[] = {0, (register_terminal<out, std::tuple_element_t<IS, terminalsT>, IS>(
-                            std::get<IS>(terms), names[IS], setfunc),
-                        0)...};
+      int junk[] = {
+          0, (register_terminal<out, std::tuple_element_t<IS, terminalsT>, IS>(std::get<IS>(terms), names[IS], setfunc),
+              0)...};
       junk[0]++;
     }
 
@@ -124,6 +124,12 @@ namespace ttg {
     TTBase(const std::string &name, size_t numins, size_t numouts)
         : instance_id(next_instance_id()), name(name), inputs(numins), outputs(numouts) {}
 
+    static const std::vector<TerminalBase *> *&outputs_tls_ptr_accessor() {
+      static thread_local const std::vector<TerminalBase *> *outputs_tls_ptr = nullptr;
+      return outputs_tls_ptr;
+    }
+    void set_outputs_tls_ptr() { outputs_tls_ptr_accessor() = &this->outputs; }
+
    public:
     virtual ~TTBase() = default;
 
@@ -136,16 +142,14 @@ namespace ttg {
     /// Sets trace for all operations to value and returns previous setting.
     /// This has no effect unless `trace_enabled()==true`
     static bool set_trace_all(bool value) {
-      if constexpr (trace_enabled())
-        std::swap(ttg::detail::tt_base_trace_accessor(), value);
+      if constexpr (trace_enabled()) std::swap(ttg::detail::tt_base_trace_accessor(), value);
       return value;
     }
 
     /// Sets trace for just this instance to value and returns previous setting.
     /// This has no effect unless `trace_enabled()==true`
     bool set_trace_instance(bool value) {
-      if constexpr (trace_enabled())
-        std::swap(trace_instance, value);
+      if constexpr (trace_enabled()) std::swap(trace_instance, value);
       return value;
     }
 
@@ -159,7 +163,7 @@ namespace ttg {
 
     /// Like ttg::trace(), but only produces tracing output if `this->tracing()==true`
     template <typename T, typename... Ts>
-    inline void trace(const T &t, const Ts &... ts) {
+    inline void trace(const T &t, const Ts &...ts) {
       if constexpr (trace_enabled()) {
         if (this->tracing()) {
           log(t, ts...);
@@ -185,6 +189,9 @@ namespace ttg {
 
     /// Returns the vector of output terminals
     const std::vector<TerminalBase *> &get_outputs() const { return outputs; }
+
+    /// Returns this thread's pointer to the vector of output terminals
+    static const std::vector<TerminalBase *> *get_outputs_tls_ptr() { return outputs_tls_ptr_accessor(); }
 
     /// Returns a pointer to the i'th input terminal
     ttg::TerminalBase *in(size_t i) {
