@@ -40,14 +40,14 @@ namespace ttg {
     };
 
     template<typename keyT, typename valueT>
-    inline auto get_dynamic_terminal(size_t i, const char* func) {
+    inline auto get_out_terminal(size_t i, const char* func) {
 #ifndef NDEBUG
       auto *base_terminal_ptr = TTBase::get_outputs_tls_ptr()->at(i);
       auto *terminal_ptr = dynamic_cast<Out<std::decay_t<keyT>, std::decay_t<valueT>> *>(base_terminal_ptr);
       if (terminal_ptr == nullptr) {
         std::stringstream ss;
         ss << func << ": invalid type of ith output terminal, most likely due to mismatch between its type "
-                      "and the type of key/value; make sure that the arguments to send() match the types encoded in the output "
+                      "and the type of key/value; make sure that the arguments to " << func << "() match the types encoded in the output "
                       "terminals, or pass the output terminal tuple to the task function explicitly";
         throw std::runtime_error(ss.str());
       }
@@ -152,7 +152,7 @@ namespace ttg {
   inline std::enable_if_t<meta::is_none_void_v<keyT, std::decay_t<valueT>>, void> send(size_t i, const keyT &key,
                                                                                        valueT &&value) {
     detail::value_copy_handler<Runtime> copy_handler;
-    auto *terminal_ptr = detail::get_dynamic_terminal<keyT, valueT>(i, "ttg::send(i, key, value)");
+    auto *terminal_ptr = detail::get_out_terminal<keyT, valueT>(i, "ttg::send(i, key, value)");
     terminal_ptr->send(key, copy_handler(std::forward<valueT>(value)));
   }
 
@@ -166,22 +166,22 @@ namespace ttg {
 
   template <typename keyT>
   inline std::enable_if_t<!meta::is_void_v<keyT>, void> sendk(std::size_t i, const keyT &key) {
-    auto *terminal_ptr = detail::get_dynamic_terminal<keyT, void>(i, "ttg::sendk(i, key)");
+    auto *terminal_ptr = detail::get_out_terminal<keyT, void>(i, "ttg::sendk(i, key)");
     terminal_ptr->sendk(key);
   }
 
   template <size_t i, typename valueT, typename... out_keysT, typename... out_valuesT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
-  inline std::enable_if_t<!meta::is_void_v<valueT>, void>
+  inline std::enable_if_t<!meta::is_void_v<std::decay_t<valueT>>, void>
   sendv(valueT &&value, std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     std::get<i>(t).sendv(copy_handler(std::forward<valueT>(value)));
   }
 
   template <typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
-  inline std::enable_if_t<!meta::is_void_v<valueT>, void> sendv(std::size_t i, valueT &&value) {
+  inline std::enable_if_t<!meta::is_void_v<std::decay_t<valueT>>, void> sendv(std::size_t i, valueT &&value) {
     detail::value_copy_handler<Runtime> copy_handler;
-    auto *terminal_ptr = detail::get_dynamic_terminal<void, valueT>(i, "ttg::sendv(i, value)");
+    auto *terminal_ptr = detail::get_out_terminal<void, valueT>(i, "ttg::sendv(i, value)");
     terminal_ptr->sendv(copy_handler(std::forward<valueT>(value)));
   }
 
@@ -191,7 +191,7 @@ namespace ttg {
   }
 
   inline void send(std::size_t i) {
-    auto *terminal_ptr = detail::get_dynamic_terminal<void, void>(i, "ttg::send(i)");
+    auto *terminal_ptr = detail::get_out_terminal<void, void>(i, "ttg::send(i)");
     terminal_ptr->send();
   }
 
@@ -217,12 +217,12 @@ namespace ttg {
       if constexpr (ttg::meta::is_iterable_v<std::tuple_element_t<KeyId, std::tuple<RangesT...>>>) {
         if (std::distance(std::begin(std::get<KeyId>(keylists)), std::end(std::get<KeyId>(keylists))) > 0) {
           using key_t = decltype(*std::begin(std::get<KeyId>(keylists)));
-          auto *terminal_ptr = detail::get_dynamic_terminal<key_t, valueT>(i, "ttg::broadcast(keylists, value)");
+          auto *terminal_ptr = detail::get_out_terminal<key_t, valueT>(i, "ttg::broadcast(keylists, value)");
           terminal_ptr->broadcast(std::get<KeyId>(keylists), value);
         }
       } else {
         using key_t = decltype(std::get<KeyId>(keylists));
-        auto *terminal_ptr = detail::get_dynamic_terminal<key_t, valueT>(i, "ttg::broadcast(keylists, value)");
+        auto *terminal_ptr = detail::get_out_terminal<key_t, valueT>(i, "ttg::broadcast(keylists, value)");
         terminal_ptr->broadcast(std::get<KeyId>(keylists), value);
       }
       if constexpr (sizeof...(I) > 0) {
@@ -252,12 +252,12 @@ namespace ttg {
       if constexpr (ttg::meta::is_iterable_v<std::tuple_element_t<KeyId, std::tuple<RangesT...>>>) {
         if (std::distance(std::begin(std::get<KeyId>(keylists)), std::end(std::get<KeyId>(keylists))) > 0) {
           using key_t = decltype(*std::begin(std::get<KeyId>(keylists)));
-          auto *terminal_ptr = detail::get_dynamic_terminal<key_t, void>(i, "ttg::broadcast(keylists)");
+          auto *terminal_ptr = detail::get_out_terminal<key_t, void>(i, "ttg::broadcast(keylists)");
           terminal_ptr->broadcast(std::get<KeyId>(keylists));
         }
       } else {
         using key_t = decltype(std::get<KeyId>(keylists));
-        auto *terminal_ptr = detail::get_dynamic_terminal<key_t, void>(i, "ttg::broadcast(keylists)");
+        auto *terminal_ptr = detail::get_out_terminal<key_t, void>(i, "ttg::broadcast(keylists)");
         terminal_ptr->broadcast(std::get<KeyId>(keylists));
       }
       if constexpr (sizeof...(I) > 0) {
@@ -281,7 +281,7 @@ namespace ttg {
   inline void broadcast(const rangeT &keylist, valueT &&value) {
     detail::value_copy_handler<Runtime> copy_handler;
     using key_t = decltype(*std::begin(keylist));
-    auto *terminal_ptr = detail::get_dynamic_terminal<key_t, valueT>(i, "ttg::broadcast(keylist, value)");
+    auto *terminal_ptr = detail::get_out_terminal<key_t, valueT>(i, "ttg::broadcast(keylist, value)");
     terminal_ptr->broadcast(keylist, copy_handler(std::forward<valueT>(value)));
   }
 
@@ -316,7 +316,7 @@ namespace ttg {
   template <size_t i, typename rangeT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline void broadcastk(const rangeT &keylist) {
     using key_t = decltype(*std::begin(keylist));
-    auto *terminal_ptr = detail::get_dynamic_terminal<key_t, void>(i, "ttg::broadcastk(keylist)");
+    auto *terminal_ptr = detail::get_out_terminal<key_t, void>(i, "ttg::broadcastk(keylist)");
     terminal_ptr->broadcast(keylist);
   }
 
