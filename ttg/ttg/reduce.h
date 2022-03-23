@@ -28,10 +28,9 @@ namespace ttg {
   template <typename Value, typename BinaryOp, typename OutKey>
   class BinaryTreeReduce
       : public TT<int, std::tuple<Out<int, Value>, Out<int, Value>, Out<int, Value>, Out<OutKey, Value>>,
-                  BinaryTreeReduce<Value, BinaryOp, OutKey>, Value, Value, Value> {
+                  BinaryTreeReduce<Value, BinaryOp, OutKey>, ttg::typelist<Value, Value, Value>> {
    public:
-    using baseT = TT<int, std::tuple<Out<int, Value>, Out<int, Value>, Out<int, Value>, Out<OutKey, Value>>,
-                     BinaryTreeReduce<Value, BinaryOp, OutKey>, Value, Value, Value>;
+    using baseT = typename BinaryTreeReduce::ttT;
 
     BinaryTreeReduce(Edge<int, Value> &in, Edge<OutKey, Value> &out, int root = 0, OutKey dest_key = OutKey(),
                      BinaryOp op = BinaryOp{}, World world = ttg::default_execution_context(), int max_key = -1,

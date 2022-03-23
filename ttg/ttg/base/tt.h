@@ -3,10 +3,10 @@
 
 #include <cstdint>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <optional>
 
 #include "ttg/base/terminal.h"
 #include "ttg/util/demangle.h"
@@ -58,31 +58,31 @@ namespace ttg {
       term.set(this, i, name, detail::demangled_type_name<typename terminalT::key_type>(),
                detail::demangled_type_name<typename terminalT::value_type>(),
                out ? TerminalBase::Type::Write
-                   : (std::is_const<typename terminalT::value_type>::value ? TerminalBase::Type::Read
-                                                                           : TerminalBase::Type::Consume));
+                   : (std::is_const_v<typename terminalT::value_type> ? TerminalBase::Type::Read
+                                                                      : TerminalBase::Type::Consume));
       (this->*setfunc)(i, &term);
     }
 
     template <bool out, std::size_t... IS, typename terminalsT, typename namesT, typename setfuncT>
     void register_terminals(std::index_sequence<IS...>, terminalsT &terms, const namesT &names,
                             const setfuncT setfunc) {
-      int junk[] = {0, (register_terminal<out, typename std::tuple_element<IS, terminalsT>::type, IS>(
-                            std::get<IS>(terms), names[IS], setfunc),
-                        0)...};
+      int junk[] = {
+          0, (register_terminal<out, std::tuple_element_t<IS, terminalsT>, IS>(std::get<IS>(terms), names[IS], setfunc),
+              0)...};
       junk[0]++;
     }
 
     // Used by op ... terminalsT will be a tuple of terminals
     template <typename terminalsT, typename namesT>
     void register_input_terminals(terminalsT &terms, const namesT &names) {
-      register_terminals<false>(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, names,
+      register_terminals<false>(std::make_index_sequence<std::tuple_size_v<terminalsT>>{}, terms, names,
                                 &TTBase::set_input);
     }
 
     // Used by op ... terminalsT will be a tuple of terminals
     template <typename terminalsT, typename namesT>
     void register_output_terminals(terminalsT &terms, const namesT &names) {
-      register_terminals<true>(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, names,
+      register_terminals<true>(std::make_index_sequence<std::tuple_size_v<terminalsT>>{}, terms, names,
                                &TTBase::set_output);
     }
 
@@ -96,7 +96,7 @@ namespace ttg {
     // Used by composite TT ... terminalsT will be a tuple of pointers to terminals
     template <typename terminalsT, typename setfuncT>
     void set_terminals(const terminalsT &terms, const setfuncT setfunc) {
-      set_terminals(std::make_index_sequence<std::tuple_size<terminalsT>::value>{}, terms, setfunc);
+      set_terminals(std::make_index_sequence<std::tuple_size_v<terminalsT>>{}, terms, setfunc);
     }
 
    private:
@@ -124,6 +124,12 @@ namespace ttg {
     TTBase(const std::string &name, size_t numins, size_t numouts)
         : instance_id(next_instance_id()), name(name), inputs(numins), outputs(numouts) {}
 
+    static const std::vector<TerminalBase *> *&outputs_tls_ptr_accessor() {
+      static thread_local const std::vector<TerminalBase *> *outputs_tls_ptr = nullptr;
+      return outputs_tls_ptr;
+    }
+    void set_outputs_tls_ptr() { outputs_tls_ptr_accessor() = &this->outputs; }
+
    public:
     virtual ~TTBase() = default;
 
@@ -136,16 +142,14 @@ namespace ttg {
     /// Sets trace for all operations to value and returns previous setting.
     /// This has no effect unless `trace_enabled()==true`
     static bool set_trace_all(bool value) {
-      if constexpr (trace_enabled())
-        std::swap(ttg::detail::tt_base_trace_accessor(), value);
+      if constexpr (trace_enabled()) std::swap(ttg::detail::tt_base_trace_accessor(), value);
       return value;
     }
 
     /// Sets trace for just this instance to value and returns previous setting.
     /// This has no effect unless `trace_enabled()==true`
     bool set_trace_instance(bool value) {
-      if constexpr (trace_enabled())
-        std::swap(trace_instance, value);
+      if constexpr (trace_enabled()) std::swap(trace_instance, value);
       return value;
     }
 
@@ -159,7 +163,7 @@ namespace ttg {
 
     /// Like ttg::trace(), but only produces tracing output if `this->tracing()==true`
     template <typename T, typename... Ts>
-    inline void trace(const T &t, const Ts &... ts) {
+    inline void trace(const T &t, const Ts &...ts) {
       if constexpr (trace_enabled()) {
         if (this->tracing()) {
           log(t, ts...);
@@ -185,6 +189,9 @@ namespace ttg {
 
     /// Returns the vector of output terminals
     const std::vector<TerminalBase *> &get_outputs() const { return outputs; }
+
+    /// Returns this thread's pointer to the vector of output terminals
+    static const std::vector<TerminalBase *> *get_outputs_tls_ptr() { return outputs_tls_ptr_accessor(); }
 
     /// Returns a pointer to the i'th input terminal
     ttg::TerminalBase *in(size_t i) {

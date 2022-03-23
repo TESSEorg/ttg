@@ -20,8 +20,8 @@ namespace ttg {
   template <typename input_terminalsT, typename output_terminalsT>
   class TTG : public TTBase {
    public:
-    static constexpr int numins = std::tuple_size<input_terminalsT>::value;    // number of input arguments
-    static constexpr int numouts = std::tuple_size<output_terminalsT>::value;  // number of outputs or results
+    static constexpr int numins = std::tuple_size_v<input_terminalsT>;    // number of input arguments
+    static constexpr int numouts = std::tuple_size_v<output_terminalsT>;  // number of outputs or results
 
     using input_terminals_type = input_terminalsT;
     using output_terminals_type = output_terminalsT;
@@ -150,7 +150,7 @@ namespace ttg {
 
     /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned
     template <std::size_t i>
-    typename std::tuple_element<i, input_terminals_type>::type *in() {
+    std::tuple_element_t<i, input_terminals_type> *in() {
       static_assert(i==0);
       return &std::get<i>(input_terminals);
     }

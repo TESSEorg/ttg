@@ -36,9 +36,6 @@ namespace std {
   }
 }  // namespace std
 
-// An empty class used for pure control flows
-struct Control {};
-
 template <typename T>
 inline BlockMatrix<T> stencil_computation(int i, int j, int M, int N, BlockMatrix<T> bm, BlockMatrix<T> left,
                                           BlockMatrix<T> top, BlockMatrix<T> right, BlockMatrix<T> bottom) {
@@ -84,8 +81,8 @@ auto make_wavefront2(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
                      Edge<Key, BlockMatrix<T>>& left, Edge<Key, BlockMatrix<T>>& top,
                      Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right, Edge<Key, BlockMatrix<T>>& result) {
   auto f = [MB, NB, func](
-               const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& left, BlockMatrix<T>&& top,
-               std::vector<BlockMatrix<T>>&& bottom_right,
+               const Key& key, const BlockMatrix<T>& input, const BlockMatrix<T>& left, const BlockMatrix<T>& top,
+               const std::vector<BlockMatrix<T>>& bottom_right,
                std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
@@ -124,9 +121,7 @@ auto initiator(Matrix<T>* m, Edge<Key, BlockMatrix<T>>& out0, Edge<Key, BlockMat
                Edge<Key, BlockMatrix<T>>& out2, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right0,
                Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right1,
                Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right2) {
-  auto f = [m](const Key& key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
-                                          Out<Key, std::vector<BlockMatrix<T>>>, Out<Key, std::vector<BlockMatrix<T>>>,
-                                          Out<Key, std::vector<BlockMatrix<T>>>>& out) {
+  auto f = [m](const Key& key, auto& out) {
     for (int i = 0; i < m->rows(); i++) {
       for (int j = 0; j < m->cols(); j++) {
         std::vector<BlockMatrix<T>> v;
@@ -178,7 +173,7 @@ auto make_wavefront0(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
                      Edge<Key, BlockMatrix<T>>& toporleft, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right,
                      // Edge<Key, BlockMatrix<T>>& right,
                      Edge<Key, BlockMatrix<T>>& result) {
-  auto f = [func, MB, NB](const Key& key, BlockMatrix<T>&& input, std::vector<BlockMatrix<T>>&& bottom_right,
+  auto f = [func, MB, NB](const Key& key, const BlockMatrix<T>& input, const std::vector<BlockMatrix<T>>& bottom_right,
                           std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
@@ -203,8 +198,8 @@ auto make_wavefront1(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
                      Edge<Key, BlockMatrix<T>>& toporleft, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right,
                      Edge<Key, BlockMatrix<T>>& output1, Edge<Key, BlockMatrix<T>>& output2,
                      Edge<Key, BlockMatrix<T>>& result) {
-  auto f = [MB, NB, func](const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& previous,
-                          std::vector<BlockMatrix<T>>&& bottom_right,
+  auto f = [MB, NB, func](const Key& key, const BlockMatrix<T>& input, const BlockMatrix<T>& previous,
+                          const std::vector<BlockMatrix<T>>& bottom_right,
                           std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                      Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
@@ -249,7 +244,7 @@ auto make_wavefront1(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
 
 template <typename T>
 auto make_result(Matrix<T>* r, const Edge<Key, BlockMatrix<T>>& result) {
-  auto f = [r](const Key& key, BlockMatrix<T>&& bm, std::tuple<>& out) {
+  auto f = [r](const Key& key, const BlockMatrix<T>& bm, std::tuple<>& out) {
     auto [i, j] = key;
     if (bm(i, j) != (*r)(i, j)) {
       std::cout << "ERROR in block (" << i << "," << j << ")\n";

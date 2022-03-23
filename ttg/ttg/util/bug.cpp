@@ -252,6 +252,12 @@ void Debugger::debug(const char *reason) {
       }
     }
   }
+  else {  // empty command = wait for the user to attach manually
+    std::cout << prefix_ << ": waiting for the user to attach a debugger to process " << getpid() << " ... " << endl;
+    debugger_ready_ = 0;
+    while (!debugger_ready_)
+      ;
+  }
 }
 
 void Debugger::got_signal(int sig) {

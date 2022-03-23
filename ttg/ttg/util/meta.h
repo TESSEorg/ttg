@@ -5,6 +5,7 @@
 #include <type_traits>
 
 #include "ttg/util/span.h"
+#include "ttg/util/typelist.h"
 
 namespace ttg {
 
@@ -22,49 +23,9 @@ namespace ttg {
     template <typename T>
     using remove_cvr_t = std::remove_cv_t<std::remove_reference_t<T>>;
 
-    template <typename Tuple, std::size_t N, typename Enabler = void>
-    struct drop_first_n;
-
-    template <typename... Ts>
-    struct drop_first_n<std::tuple<Ts...>, std::size_t(0)> {
-      using type = std::tuple<Ts...>;
-    };
-
-    template <typename T, typename... Ts, std::size_t N>
-    struct drop_first_n<std::tuple<T, Ts...>, N, std::enable_if_t<N != 0>> {
-      using type = typename drop_first_n<std::tuple<Ts...>, N - 1>::type;
-    };
-
-    template <typename ResultTuple, typename InputTuple, std::size_t N, typename Enabler = void>
-    struct take_first_n_helper;
-
-    template <typename... Ts, typename... Us>
-    struct take_first_n_helper<std::tuple<Ts...>, std::tuple<Us...>, std::size_t(0)> {
-      using type = std::tuple<Ts...>;
-    };
-
-    template <typename... Ts, typename U, typename... Us, std::size_t N>
-    struct take_first_n_helper<std::tuple<Ts...>, std::tuple<U, Us...>, N, std::enable_if_t<N != 0>> {
-      using type = typename take_first_n_helper<std::tuple<Ts..., U>, std::tuple<Us...>, N - 1>::type;
-    };
-
-    template <typename Tuple, std::size_t N>
-    struct take_first_n {
-      using type = typename take_first_n_helper<std::tuple<>, Tuple, N>::type;
-    };
-
-    template <typename Tuple, std::size_t N, typename Enabler = void>
-    struct drop_last_n;
-
-    template <typename... Ts, std::size_t N>
-    struct drop_last_n<std::tuple<Ts...>, N, std::enable_if_t<N <= sizeof...(Ts)>> {
-      using type = typename take_first_n<std::tuple<Ts...>, (sizeof...(Ts) - N)>::type;
-    };
-
-    template <typename... Ts, std::size_t N>
-    struct drop_last_n<std::tuple<Ts...>, N, std::enable_if_t<!(N <= sizeof...(Ts))>> {
-      using type = std::tuple<>;
-    };
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // tuple manipulations
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // tuple<Ts...> -> tuple<std::remove_reference_t<Ts>...>
     template <typename T, typename Enabler = void>
@@ -78,28 +39,22 @@ namespace ttg {
     template <typename Tuple>
     using nonref_tuple_t = typename nonref_tuple<Tuple>::type;
 
-    // tuple<Ts...> -> tuple<std::decay_t<Ts>...>
-    template <typename T, typename Enabler = void>
-    struct decayed_tuple;
-
-    template <typename... Ts>
-    struct decayed_tuple<std::tuple<Ts...>> {
-      using type = std::tuple<typename std::decay<Ts>::type...>;
-    };
-
-    template <typename Tuple>
-    using decayed_tuple_t = typename decayed_tuple<Tuple>::type;
-
-    template <typename Tuple1, typename Tuple2>
+    template <typename... TupleTs>
     struct tuple_concat;
 
-    template <typename... Ts, typename... Us>
-    struct tuple_concat<std::tuple<Ts...>, std::tuple<Us...>> {
-      using type = decltype(std::tuple_cat(std::declval<std::tuple<Ts...>>(), std::declval<std::tuple<Us...>>()));
+    template <typename... Ts>
+    struct tuple_concat<std::tuple<Ts...>> {
+      using type = std::tuple<Ts...>;
     };
 
-    template <typename Tuple1, typename Tuple2>
-    using tuple_concat_t = typename tuple_concat<Tuple1, Tuple2>::type;
+    template <typename... Ts, typename... Us, typename... R>
+    struct tuple_concat<std::tuple<Ts...>, std::tuple<Us...>, R...> {
+      using type = typename tuple_concat<
+          decltype(std::tuple_cat(std::declval<std::tuple<Ts...>>(), std::declval<std::tuple<Us...>>())), R...>::type;
+    };
+
+    template <typename... TupleTs>
+    using tuple_concat_t = typename tuple_concat<TupleTs...>::type;
 
     // filtered_tuple<tuple,p>::type returns tuple with types for which the predicate evaluates to true
     template <typename Tuple, template <typename> typename Predicate>
@@ -135,6 +90,7 @@ namespace ttg {
     // is_any_void_v
     // is_last_void_v
     // void_to_Void_t
+    // is_any_nonconst_lvalue_reference_v
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <typename T>
     constexpr bool is_Void_v = std::is_same_v<std::decay_t<T>, Void>;
@@ -142,23 +98,50 @@ namespace ttg {
     template <typename T>
     constexpr bool is_void_v = is_Void_v<T> || std::is_void_v<T>;
 
+    template <typename T>
+    struct is_void : std::bool_constant<is_void_v<T>> {};
+
+    template <typename T>
+    constexpr bool is_nonvoid_v = !is_void_v<T>;
+
+    template <typename T>
+    struct is_nonvoid : std::bool_constant<is_nonvoid_v<T>> {};
+
     template <typename... Ts>
     constexpr bool is_all_void_v = (is_void_v<Ts> && ...);
+
+    template <typename... Ts>
+    constexpr bool is_all_void_v<ttg::typelist<Ts...>> = is_all_void_v<Ts...>;
+
+    template <typename... Ts>
+    constexpr bool is_all_Void_v = (is_Void_v<Ts> && ...);
+
+    template <typename... Ts>
+    constexpr bool is_all_Void_v<ttg::typelist<Ts...>> = is_all_Void_v<Ts...>;
 
     template <typename... Ts>
     constexpr bool is_any_void_v = (is_void_v<Ts> || ...);
 
     template <typename... Ts>
-    constexpr bool is_any_void_v<std::tuple<Ts...>> = (is_void_v<Ts> || ...);
+    constexpr bool is_any_void_v<ttg::typelist<Ts...>> = is_all_void_v<Ts...>;
 
     template <typename... Ts>
     constexpr bool is_any_Void_v = (is_Void_v<Ts> || ...);
 
     template <typename... Ts>
+    constexpr bool is_any_Void_v<ttg::typelist<Ts...>> = is_any_Void_v<Ts...>;
+
+    template <typename... Ts>
     constexpr bool is_none_void_v = !is_any_void_v<Ts...>;
 
     template <typename... Ts>
+    constexpr bool is_none_void_v<ttg::typelist<Ts...>> = is_none_void_v<Ts...>;
+
+    template <typename... Ts>
     constexpr bool is_none_Void_v = !is_any_Void_v<Ts...>;
+
+    template <typename... Ts>
+    constexpr bool is_none_Void_v<ttg::typelist<Ts...>> = is_none_Void_v<Ts...>;
 
     template <typename... Ts>
     struct is_last_void;
@@ -173,6 +156,12 @@ namespace ttg {
     struct is_last_void<T1, Ts...> : public is_last_void<Ts...> {};
 
     template <typename... Ts>
+    struct is_last_void<std::tuple<Ts...>> : public is_last_void<Ts...> {};
+
+    template <typename... Ts>
+    struct is_last_void<ttg::typelist<Ts...>> : public is_last_void<Ts...> {};
+
+    template <typename... Ts>
     constexpr bool is_last_void_v = is_last_void<Ts...>::value;
 
     template <typename T>
@@ -185,6 +174,311 @@ namespace ttg {
     };
     template <typename T>
     using void_to_Void_t = typename void_to_Void<T>::type;
+
+    template <typename T>
+    constexpr bool is_nonconst_lvalue_reference_v =
+        std::is_lvalue_reference_v<T> && !std::is_const_v<std::remove_reference_t<T>>;
+
+    template <typename... Ts>
+    constexpr bool is_any_nonconst_lvalue_reference_v = (is_nonconst_lvalue_reference_v<Ts> || ...);
+
+    template <typename... Ts>
+    constexpr bool is_any_nonconst_lvalue_reference_v<ttg::typelist<Ts...>> = is_any_nonconst_lvalue_reference_v<Ts...>;
+
+    template <typename... Ts>
+    constexpr bool is_any_nonconst_lvalue_reference_v<std::tuple<Ts...>> = is_any_nonconst_lvalue_reference_v<Ts...>;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // typelist metafunctions
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /// drops N elements from the front
+    template <typename Typelist, std::size_t N, typename Enabler = void>
+    struct drop_first_n;
+
+    template <typename... Ts>
+    struct drop_first_n<std::tuple<Ts...>, std::size_t(0)> {
+      using type = std::tuple<Ts...>;
+    };
+
+    template <typename... Ts>
+    struct drop_first_n<typelist<Ts...>, std::size_t(0)> {
+      using type = typelist<Ts...>;
+    };
+
+    template <typename T, typename... Ts, std::size_t N>
+    struct drop_first_n<std::tuple<T, Ts...>, N, std::enable_if_t<N != 0>> {
+      using type = typename drop_first_n<std::tuple<Ts...>, N - 1>::type;
+    };
+
+    template <typename T, typename... Ts, std::size_t N>
+    struct drop_first_n<typelist<T, Ts...>, N, std::enable_if_t<N != 0>> {
+      using type = typename drop_first_n<typelist<Ts...>, N - 1>::type;
+    };
+
+    /// take first N elements of a type list
+    template <typename Typelist, std::size_t N>
+    struct take_first_n;
+
+    template <typename ResultTuple, typename InputTuple, std::size_t N, typename Enabler = void>
+    struct take_first_n_helper;
+
+    template <typename... Ts, typename... Us>
+    struct take_first_n_helper<std::tuple<Ts...>, std::tuple<Us...>, std::size_t(0)> {
+      using type = std::tuple<Ts...>;
+    };
+    template <typename... Ts, typename... Us>
+    struct take_first_n_helper<typelist<Ts...>, typelist<Us...>, std::size_t(0)> {
+      using type = typelist<Ts...>;
+    };
+
+    template <typename... Ts, typename U, typename... Us, std::size_t N>
+    struct take_first_n_helper<std::tuple<Ts...>, std::tuple<U, Us...>, N, std::enable_if_t<N != 0>> {
+      using type = typename take_first_n_helper<std::tuple<Ts..., U>, std::tuple<Us...>, N - 1>::type;
+    };
+    template <typename... Ts, typename U, typename... Us, std::size_t N>
+    struct take_first_n_helper<typelist<Ts...>, typelist<U, Us...>, N, std::enable_if_t<N != 0>> {
+      using type = typename take_first_n_helper<typelist<Ts..., U>, typelist<Us...>, N - 1>::type;
+    };
+
+    template <typename... Ts, std::size_t N>
+    struct take_first_n<std::tuple<Ts...>, N> {
+      using type = typename take_first_n_helper<std::tuple<>, std::tuple<Ts...>, N>::type;
+    };
+
+    template <typename... Ts, std::size_t N>
+    struct take_first_n<typelist<Ts...>, N> {
+      using type = typename take_first_n_helper<typelist<>, typelist<Ts...>, N>::type;
+    };
+
+    /// drops N trailing elements from a typelist
+    template <typename Typelist, std::size_t N, typename Enabler = void>
+    struct drop_last_n;
+
+    template <typename... Ts, std::size_t N>
+    struct drop_last_n<std::tuple<Ts...>, N, std::enable_if_t<N <= sizeof...(Ts)>> {
+      using type = typename take_first_n<std::tuple<Ts...>, (sizeof...(Ts) - N)>::type;
+    };
+    template <typename... Ts, std::size_t N>
+    struct drop_last_n<typelist<Ts...>, N, std::enable_if_t<N <= sizeof...(Ts)>> {
+      using type = typename take_first_n<typelist<Ts...>, (sizeof...(Ts) - N)>::type;
+    };
+
+    template <typename... Ts, std::size_t N>
+    struct drop_last_n<std::tuple<Ts...>, N, std::enable_if_t<!(N <= sizeof...(Ts))>> {
+      using type = std::tuple<>;
+    };
+    template <typename... Ts, std::size_t N>
+    struct drop_last_n<typelist<Ts...>, N, std::enable_if_t<!(N <= sizeof...(Ts))>> {
+      using type = typelist<>;
+    };
+
+    /// converts a type list to a type list of decayed types, e.g. tuple<Ts...> -> tuple<std::decay_t<Ts>...>
+    template <typename T, typename Enabler = void>
+    struct decayed_typelist;
+
+    template <typename... Ts>
+    struct decayed_typelist<std::tuple<Ts...>> {
+      using type = std::tuple<std::decay_t<Ts>...>;
+    };
+    template <typename... Ts>
+    struct decayed_typelist<typelist<Ts...>> {
+      using type = typelist<std::decay_t<Ts>...>;
+    };
+
+    template <typename Tuple>
+    using decayed_typelist_t = typename decayed_typelist<Tuple>::type;
+
+    /// filters out elements of a typelist that do not satisfy the predicate
+    template <typename T, template <typename...> typename Pred>
+    struct filter;
+
+    template <typename FilteredTypelist, template <typename...> typename Pred, typename... ToBeFilteredTs>
+    struct filter_impl;
+
+    template <typename... FilteredTs, template <typename...> typename Pred>
+    struct filter_impl<typelist<FilteredTs...>, Pred> {
+      using type = typelist<FilteredTs...>;
+    };
+    template <typename... FilteredTs, template <typename...> typename Pred>
+    struct filter_impl<std::tuple<FilteredTs...>, Pred> {
+      using type = std::tuple<FilteredTs...>;
+    };
+
+    template <typename... FilteredTs, template <typename...> typename Pred, typename U, typename... RestOfUs>
+    struct filter_impl<typelist<FilteredTs...>, Pred, U, RestOfUs...>
+        : std::conditional_t<Pred<U>::value, filter_impl<typelist<FilteredTs..., U>, Pred, RestOfUs...>,
+                             filter_impl<typelist<FilteredTs...>, Pred, RestOfUs...>> {};
+    template <typename... FilteredTs, template <typename...> typename Pred, typename U, typename... RestOfUs>
+    struct filter_impl<std::tuple<FilteredTs...>, Pred, U, RestOfUs...>
+        : std::conditional_t<Pred<U>::value, filter_impl<std::tuple<FilteredTs..., U>, Pred, RestOfUs...>,
+                             filter_impl<std::tuple<FilteredTs...>, Pred, RestOfUs...>> {};
+
+    template <typename... Ts, template <typename...> typename Pred>
+    struct filter<typelist<Ts...>, Pred> : filter_impl<typelist<>, Pred, Ts...> {};
+    template <typename... Ts, template <typename...> typename Pred>
+    struct filter<std::tuple<Ts...>, Pred> : filter_impl<std::tuple<>, Pred, Ts...> {};
+
+    template <typename T, template <typename...> typename Pred>
+    using filter_t = typename filter<T, Pred>::type;
+
+    template <typename T>
+    using drop_void = filter<T, is_nonvoid>;
+
+    template <typename T>
+    using drop_void_t = typename drop_void<T>::type;
+
+    template <typename T, typename S, typename U>
+    struct replace_nonvoid_helper;
+
+    /* non-void S, replace with U */
+    template <typename... Ts, typename S, typename... Ss, typename U, typename... Us>
+    struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<S, Ss...>, ttg::typelist<U, Us...>> {
+      using type =
+          typename replace_nonvoid_helper<ttg::typelist<Ts..., U>, ttg::typelist<Ss...>, ttg::typelist<Us...>>::type;
+    };
+
+    /* void S, keep */
+    template <typename... Ts, typename... Ss, typename U, typename... Us>
+    struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<void, Ss...>, ttg::typelist<U, Us...>> {
+      using type = typename replace_nonvoid_helper<ttg::typelist<Ts..., void>, ttg::typelist<Ss...>,
+                                                   ttg::typelist<U, Us...>>::type;
+    };
+
+    /* empty S, done */
+    template <typename... Ts, typename... Us>
+    struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<>, ttg::typelist<Us...>> {
+      using type = ttg::typelist<Ts...>;
+    };
+
+    /* empty U, done */
+    template <typename... Ts, typename... Ss>
+    struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<Ss...>, ttg::typelist<>> {
+      using type = ttg::typelist<Ts..., Ss...>;
+    };
+
+    /* empty S and U, done */
+    template <typename... Ts>
+    struct replace_nonvoid_helper<ttg::typelist<Ts...>, ttg::typelist<>, ttg::typelist<>> {
+      using type = ttg::typelist<Ts...>;
+    };
+
+    /* Replace the first min(sizeof...(T), sizeof...(U)) non-void types in T with types in U; U does not contain void */
+    template <typename T, typename U>
+    struct replace_nonvoid;
+
+    template <typename... T, typename... U>
+    struct replace_nonvoid<ttg::typelist<T...>, ttg::typelist<U...>> {
+      using type = typename replace_nonvoid_helper<ttg::typelist<>, ttg::typelist<T...>, ttg::typelist<U...>>::type;
+    };
+
+    template <typename... T, typename... U>
+    struct replace_nonvoid<std::tuple<T...>, std::tuple<U...>> {
+      using type =
+          ttg::meta::typelist_to_tuple_t<typename replace_nonvoid<ttg::typelist<T...>, ttg::typelist<U...>>::type>;
+    };
+
+    template <typename T, typename U>
+    using replace_nonvoid_t = typename replace_nonvoid<T, U>::type;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Tuple-element type conversions
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    template <typename T>
+    struct void_to_Void_tuple;
+
+    template <typename... Ts>
+    struct void_to_Void_tuple<std::tuple<Ts...>> {
+      using type = std::tuple<void_to_Void_t<Ts>...>;
+    };
+
+    template <typename tupleT>
+    using void_to_Void_tuple_t = typename void_to_Void_tuple<std::decay_t<tupleT>>::type;
+
+    template <typename T>
+    struct add_lvalue_reference_tuple;
+
+    template <typename... Ts>
+    struct add_lvalue_reference_tuple<std::tuple<Ts...>> {
+      using type = std::tuple<std::add_lvalue_reference_t<Ts>...>;
+    };
+
+    template <typename tupleT>
+    using add_lvalue_reference_tuple_t = typename add_lvalue_reference_tuple<tupleT>::type;
+
+    template <typename T>
+    struct add_glvalue_reference_tuple;
+
+    template <typename... Ts>
+    struct add_glvalue_reference_tuple<std::tuple<Ts...>> {
+      using type = std::tuple<std::conditional_t<std::is_const_v<Ts>, std::add_lvalue_reference_t<Ts>,
+                                                 std::add_rvalue_reference_t<std::remove_const_t<Ts>>>...>;
+    };
+
+    template <typename tupleT>
+    using add_glvalue_reference_tuple_t = typename add_glvalue_reference_tuple<tupleT>::type;
+
+    template <typename T, typename... Ts>
+    struct none_has_reference {
+      static constexpr bool value = !std::is_reference_v<T> && none_has_reference<Ts...>::value;
+    };
+
+    template <typename T>
+    struct none_has_reference<T> {
+      static constexpr bool value = !std::is_reference_v<T>;
+    };
+
+    template <typename... T>
+    struct none_has_reference<ttg::typelist<T...>> : none_has_reference<T...> {};
+
+    template <>
+    struct none_has_reference<ttg::typelist<>> : std::true_type {};
+
+    template <typename... T>
+    constexpr bool none_has_reference_v = none_has_reference<T...>::value;
+
+    template <typename T>
+    struct is_tuple : std::integral_constant<bool, false> {};
+
+    template <typename... Ts>
+    struct is_tuple<std::tuple<Ts...>> : std::integral_constant<bool, true> {};
+
+    template <typename T>
+    constexpr bool is_tuple_v = is_tuple<T>::value;
+
+    template <template <class> class Pred, typename TupleT, std::size_t I, std::size_t... Is>
+    struct predicate_index_seq_helper;
+
+    template <template <class> class Pred, typename T, typename... Ts, std::size_t I, std::size_t... Is>
+    struct predicate_index_seq_helper<Pred, std::tuple<T, Ts...>, I, Is...> {
+      using seq = std::conditional_t<Pred<T>::value,
+                                     typename predicate_index_seq_helper<Pred, std::tuple<Ts...>, I + 1, Is..., I>::seq,
+                                     typename predicate_index_seq_helper<Pred, std::tuple<Ts...>, I + 1, Is...>::seq>;
+    };
+
+    template <template <class> class Pred, std::size_t I, std::size_t... Is>
+    struct predicate_index_seq_helper<Pred, std::tuple<>, I, Is...> {
+      using seq = std::index_sequence<Is...>;
+    };
+
+    template <typename T>
+    struct is_none_void_pred : std::integral_constant<bool, is_none_void_v<T>> {};
+
+    /**
+     * An index sequence of nonvoid types in the tuple TupleT
+     */
+    template <typename TupleT>
+    using nonvoid_index_seq = typename predicate_index_seq_helper<is_none_void_pred, TupleT, 0>::seq;
+
+    template <typename T>
+    struct is_void_pred : std::integral_constant<bool, is_void_v<T>> {};
+
+    /**
+     * An index sequence of void types in the tuple TupleT
+     */
+    template <typename TupleT>
+    using void_index_seq = typename predicate_index_seq_helper<is_void_pred, TupleT, 0>::seq;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // is_empty_tuple
@@ -425,6 +719,10 @@ namespace ttg {
         using type = std::tuple<typename input_reducer_type<valueTs>::type...>;
       };
       template <typename... valueTs>
+      struct input_reducers<std::tuple<valueTs...>> {
+        using type = std::tuple<typename input_reducer_type<valueTs>::type...>;
+      };
+      template <typename... valueTs>
       using input_reducers_t = typename input_reducers<valueTs...>::type;
 
     }  // namespace detail
@@ -438,14 +736,26 @@ namespace ttg {
 
     // this gets used only when we can call std::begin() and std::end() on that type
     template <typename T>
-    struct is_iterable<T, std::void_t<decltype(std::begin(std::declval<T>())),
-                                      decltype(std::end(std::declval<T>()))
-                                    >
-                      > : std::true_type {};
+    struct is_iterable<T, std::void_t<decltype(std::begin(std::declval<T>())), decltype(std::end(std::declval<T>()))>>
+        : std::true_type {};
 
     template <typename T>
     constexpr bool is_iterable_v = is_iterable<T>::value;
-  } // namespace meta
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // check whether a Callable is invocable with the arguments given as a typelist
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <typename Callable, typename Typelist>
+    constexpr bool is_invocable_typelist_v = false;
+    template <typename Callable, typename... Args>
+    constexpr bool is_invocable_typelist_v<Callable, ttg::typelist<Args...>> = std::is_invocable_v<Callable, Args...>;
+    template <typename ReturnType, typename Callable, typename Typelist>
+    constexpr bool is_invocable_typelist_r_v = false;
+    template <typename ReturnType, typename Callable, typename... Args>
+    constexpr bool is_invocable_typelist_r_v<ReturnType, Callable, ttg::typelist<Args...>> =
+        std::is_invocable_r_v<ReturnType, Callable, Args...>;
+
+  }  // namespace meta
 }  // namespace ttg
 
 #endif  // TTG_UTIL_META_H

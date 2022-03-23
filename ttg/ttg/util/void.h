@@ -24,6 +24,21 @@ namespace ttg {
   static_assert(meta::is_empty_tuple_v<std::tuple<>>,"ouch");
   static_assert(meta::is_empty_tuple_v<std::tuple<Void>>,"ouch");
 
+  namespace detail {
+
+    template<std::size_t... Is>
+    auto make_void_tuple(std::index_sequence<Is...>) {
+      auto g = [](int i){ return Void{}; };
+      return std::make_tuple(g(Is)...);
+    }
+
+    template<std::size_t N>
+    auto make_void_tuple() {
+      return make_void_tuple(std::make_index_sequence<N>{});
+    }
+
+  } // namespace detail
+
 }  // namespace ttg
 
 namespace std {
