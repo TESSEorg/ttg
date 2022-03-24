@@ -1,8 +1,7 @@
 #ifndef TTG_FUNC_H
 #define TTG_FUNC_H
 
-#include <memory>
-#include <tuple>
+#include "ttg/fwd.h"
 
 #include "ttg/edge.h"
 #include "ttg/impl_selector.h"
@@ -96,9 +95,6 @@ namespace ttg {
         std::forward<TTBasePtrs>(tts)...);
   }
 
-  template <typename keyT, typename valueT>
-  class Edge;  // Forward decl.
-
   /// \brief Connect output terminal to successor input terminal
   /// \param out The output terminal.
   /// \param in The input terminal.
@@ -150,7 +146,7 @@ namespace ttg {
   }
 
   /// \brief Make a tuple of Edges to pass to \sa ttg::make_tt.
-  /// \param args: variable argumetn list of Edges
+  /// \param args: variable argument list of Edges
   /// \return A tuple of Edges.
   /// \note All Edges must have the same prototype.
   template <typename... inedgesT>
