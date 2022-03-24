@@ -12,29 +12,16 @@
 namespace ttg {
 
   namespace detail {
-
-    /* Wrapper allowing implementations to provide copies of data the user
+    /** Wrapper allowing implementations to provide copies of data the user
      * passed to send and broadcast. The value returned by operator() will
-     * be passed to all terminals. By default, the user-provided copy is
-     * returned.
+     * be passed to all terminals. By default, the given reference is (perfectly) forwarded.
      * Implementations may provide specializations using the ttg::Runtime tag.
-     * TODO: can we avoid the three overloads?
      */
     template <ttg::Runtime Runtime>
     struct value_copy_handler {
       template <typename Value>
-      inline constexpr Value &&operator()(Value &&value) const {
+      inline constexpr decltype(auto) operator()(Value &&value) const {
         return std::forward<Value>(value);
-      }
-
-      template <typename Value>
-      inline constexpr const Value &operator()(const Value &value) const {
-        return value;
-      }
-
-      template <typename Value>
-      inline constexpr Value &operator()(Value &value) const {
-        return value;
       }
     };
 
