@@ -154,31 +154,52 @@ namespace ttg {
     return std::make_tuple(std::forward<inedgesT>(args)...);
   }
 
-  /// \brief Output a task identifier and value on a given output terminal
-  /// \tparam <i> The output terminal index on which key and value are output
-  /// \param[in] key: the key that identifies the task receiving the value
-  /// \param[in] value: the value to propagate through this terminal
-  /// \param[in] out: the tuple of output  terminals
+  // clang-format off
+  /// \brief Sends a task id and a value to the given output terminal
+  /// \param[in] key: the id of the task(s) receiving the value
+  /// \param[in] value: the value to send to the receiving task(s)
+  /// \param[in] out: the output terminal
+  // clang-format on
   template <typename keyT, typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline void send(const keyT &key, valueT &&value, ttg::Out<keyT, valueT> &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     t.send(key, copy_handler(std::forward<valueT>(value)));
   }
 
+  // clang-format off
+  /// \brief Sends a task id (without an accompanying value) to the given output terminal
+  /// \param[in] key: the id of the task(s) receiving the value
+  /// \param[in] out: the output terminal
+  // clang-format on
   template <typename keyT>
   inline void sendk(const keyT &key, ttg::Out<keyT, void> &t) {
     t.sendk(key);
   }
 
-  // TODO if sendk is removed, rename to send
+  // clang-format off
+  /// \brief Sends a value (without an accompanying task id) to the given output terminal
+  /// \param[in] value: the value to send to the receiving task(s)
+  /// \param[in] out: the output terminal
+  // clang-format on
   template <typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline void sendv(valueT &&value, ttg::Out<void, valueT> &t) {
     detail::value_copy_handler<Runtime> copy_handler;
     t.sendv(copy_handler(std::forward<valueT>(value)));
   }
 
+  // clang-format off
+  /// \brief Sends a control message (message without an accompanying task id or a value) to the given output terminal
+  /// \param[in] out: the output terminal
+  // clang-format on
   inline void send(ttg::Out<void, void> &t) { t.send(); }
 
+  // clang-format off
+  /// \brief Sends a task id and a value to the template tasks attached to the output terminal selected in the explicitly given terminal tuple \p t
+  /// \tparam <i> Identifies which output terminal in \p t to select for sending
+  /// \param[in] key: the id of the task(s) receiving the value
+  /// \param[in] value: the value to send to the receiving task(s)
+  /// \param[in] out: a tuple of output terminals (typically, this is the output terminal of the template task where this is invoked)
+  // clang-format on
   template <size_t i, typename keyT, typename valueT, typename... out_keysT, typename... out_valuesT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
   inline std::enable_if_t<meta::is_none_void_v<keyT, std::decay_t<valueT>>, void> send(
@@ -187,6 +208,12 @@ namespace ttg {
     std::get<i>(t).send(key, copy_handler(std::forward<valueT>(value)));
   }
 
+  // clang-format off
+  /// \brief Sends a task id and a value to the template tasks attached to the output terminal of this template task
+  /// \param[in] i Identifies which output terminal of this template task to select for sending
+  /// \param[in] key: the id of the task(s) receiving the value
+  /// \param[in] value: the value to send to the receiving task(s)
+  // clang-format on
   template <typename keyT, typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline std::enable_if_t<meta::is_none_void_v<keyT, std::decay_t<valueT>>, void> send(size_t i, const keyT &key,
                                                                                        valueT &&value) {
@@ -195,29 +222,59 @@ namespace ttg {
     terminal_ptr->send(key, copy_handler(std::forward<valueT>(value)));
   }
 
+  // clang-format off
+  /// \brief Sends a task id and a value to the template tasks attached to the output terminal of this template task
+  /// \note this is provided to support `send<i>` with and without explicitly-passed terminal tuple
+  /// \tparam <i> Identifies which output terminal of this template task to select for sending
+  /// \param[in] key: the id of the task(s) receiving the value
+  /// \param[in] value: the value to send to the receiving task(s)
+  // clang-format on
   template <size_t i, typename keyT, typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline std::enable_if_t<meta::is_none_void_v<keyT, std::decay_t<valueT>>, void> send(const keyT &key,
                                                                                        valueT &&value) {
     send(i, key, std::forward<valueT>(value));
   }
 
+  // clang-format off
+  /// \brief Sends a task id (without an accompanying value) to the template tasks attached to the output terminal selected in the explicitly given terminal tuple \p t
+  /// \tparam <i> Identifies which output terminal in \p t to select for sending
+  /// \param[in] key: the id of the task(s) receiving the value
+  /// \param[in] out: a tuple of output terminals (typically, this is the output terminal of the template task where this is invoked)
+  // clang-format on
   template <size_t i, typename keyT, typename... out_keysT, typename... out_valuesT>
   inline std::enable_if_t<!meta::is_void_v<keyT>, void> sendk(const keyT &key,
                                                               std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
     std::get<i>(t).sendk(key);
   }
 
+  // clang-format off
+  /// \brief Sends a task id (without an accompanying value) to the template tasks attached to the output terminal of this template task
+  /// \param[in] i Identifies which output terminal of this template task to select for sending
+  /// \param[in] key: the id of the task(s) receiving the value
+  // clang-format on
   template <typename keyT>
   inline std::enable_if_t<!meta::is_void_v<keyT>, void> sendk(std::size_t i, const keyT &key) {
     auto *terminal_ptr = detail::get_out_terminal<keyT, void>(i, "ttg::sendk(i, key)");
     terminal_ptr->sendk(key);
   }
 
+  // clang-format off
+  /// \brief Sends a task id (without an accompanying value) to the template tasks attached to the output terminal of this template task
+  /// \note this is provided to support `sendk<i>` with and without explicitly-passed terminal tuple
+  /// \tparam <i> Identifies which output terminal of this template task to select for sending
+  /// \param[in] key: the id of the task(s) receiving the value
+  // clang-format on
   template <size_t i, typename keyT>
   inline std::enable_if_t<!meta::is_void_v<keyT>, void> sendk(const keyT &key) {
     sendk(i, key);
   }
 
+  // clang-format off
+  /// \brief Sends a value (without an accompanying task id) to the template tasks attached to the output terminal selected in the explicitly given terminal tuple \p t
+  /// \tparam <i> Identifies which output terminal in \p t to select for sending
+  /// \param[in] value: the value to send to the receiving task(s)
+  /// \param[in] out: a tuple of output terminals (typically, this is the output terminal of the template task where this is invoked)
+  // clang-format on
   template <size_t i, typename valueT, typename... out_keysT, typename... out_valuesT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
   inline std::enable_if_t<!meta::is_void_v<std::decay_t<valueT>>, void> sendv(
@@ -226,6 +283,11 @@ namespace ttg {
     std::get<i>(t).sendv(copy_handler(std::forward<valueT>(value)));
   }
 
+  // clang-format off
+  /// \brief Sends a value (without an accompanying task id) to the template tasks attached to the output terminal of this template task
+  /// \param[in] i Identifies which output terminal of this template task to select for sending
+  /// \param[in] value: the value to send to the receiving task(s)
+  // clang-format on
   template <typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline std::enable_if_t<!meta::is_void_v<std::decay_t<valueT>>, void> sendv(std::size_t i, valueT &&value) {
     detail::value_copy_handler<Runtime> copy_handler;
@@ -233,21 +295,41 @@ namespace ttg {
     terminal_ptr->sendv(copy_handler(std::forward<valueT>(value)));
   }
 
+  // clang-format off
+  /// \brief Sends a value (without an accompanying task id) to the template tasks attached to the output terminal of this template task
+  /// \note this is provided to support `sendv<i>` with and without explicitly-passed terminal tuple
+  /// \tparam <i> Identifies which output terminal of this template task to select for sending
+  /// \param[in] value: the value to send to the receiving task(s)
+  // clang-format on
   template <size_t i, typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline std::enable_if_t<!meta::is_void_v<std::decay_t<valueT>>, void> sendv(valueT &&value) {
     sendv(i, std::forward<valueT>(value));
   }
 
+  // clang-format off
+  /// \brief Sends a control message (message without an accompanying task id or a value) to the template tasks attached to the output terminal selected in the explicitly given terminal tuple \p t
+  /// \tparam <i> Identifies which output terminal in \p t to select for sending
+  /// \param[in] out: a tuple of output terminals (typically, this is the output terminal of the template task where this is invoked)
+  // clang-format on
   template <size_t i, typename... out_keysT, typename... out_valuesT>
   inline void send(std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
     std::get<i>(t).send();
   }
 
+  // clang-format off
+  /// \brief Sends a control message (message without an accompanying task id or a value) to the template tasks attached to the output terminal of this template task
+  /// \param[in] i Identifies which output terminal of this template task to select for sending
+  // clang-format on
   inline void send(std::size_t i) {
     auto *terminal_ptr = detail::get_out_terminal<void, void>(i, "ttg::send(i)");
     terminal_ptr->send();
   }
 
+  // clang-format off
+  /// \brief Sends a control message (message without an accompanying task id or a value) to the template tasks attached to the output terminal of this template task
+  /// \note this is provided to support `send<i>` with and without explicitly-passed terminal tuple
+  /// \tparam <i> Identifies which output terminal of this template task to select for sending
+  // clang-format on
   template <size_t i>
   inline void send() {
     send(i);
