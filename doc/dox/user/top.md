@@ -1,6 +1,6 @@
-# <a name="userguide">Template Task Graph User Guide</a>{#userguide}
+# Template Task Graph User Guide {#userguide}
 
-## <a name="toc">Contents</a>
+## Contents {#toc}
 
 * [Building and Installing TTG](https://github.com/TESSEorg/ttg/blob/master/INSTALL.md)
 * [Your First TTG Program](#firstprog)
@@ -9,7 +9,7 @@
 * [Streaming Terminals](#streamingterminals)
 * [Distributed Computing](#distributedcomputing)
 
-## <a name="firstprog">Your First TTG Program</a>
+## Your First TTG Program {#firstprog}
 
 The following code creates four tasks, one of type A, two of type B
 (B(0) and B(1)), and one of type C, and ensures that A runs before
@@ -140,7 +140,7 @@ And finally, we can shut down the ttg library and return from the application.
 
 \ref simple.cc "Full first example"
 
-## <a name="compiling">Compiling Your First TTG Program</a>
+## Compiling Your First TTG Program {#compiling}
 
 The recommended way to compile a TTG program is to use CMake.
 
@@ -184,7 +184,7 @@ It is then sufficient to tell CMake that the executable depends on the
 corresponding TTG target to add the appropriate include path and link
 commands.
 
-## <a name="datadependent">Data Dependent Program</a>
+## Data Dependent Program {#datadependent}
 
 We now extend the first example to illustrate a data-dependent application
 behavior. Consider now that the tasks of type C can dynamically decide to
@@ -276,7 +276,7 @@ input value for each input that A now defines.
 
 \ref iterative.cc "Full iterative diamond example"
 
-## <a name="streamingterminals">Streaming Terminals</a>
+## Streaming Terminals {#streamingterminals}
 
 Now, consider that for a given k, there can be a large amount of tasks
 of type B, and that the number of such tasks depends on some computation.
@@ -381,7 +381,7 @@ and the rest of the code is unchanged.
 
 \ref reducing.cc "Full iterative diamond of arbitrary width example"
 
-## <a name="distributedcomputing">Distributed Computing</a>
+## Distributed Computing {#distributedcomputing}
 
 Any TTG program is a parallel application. In the current backends,
 TTG applications are also MPI applications. Tasks are distributed
