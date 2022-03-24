@@ -559,6 +559,42 @@ namespace ttg {
     constexpr bool is_detected_convertible_v = is_detected_convertible<To, TT, Args...>::value;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // traits for pointer to callabels (pointer to std::function, pointer to member function)
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    template<typename T>
+    struct is_std_function_ptr : std::false_type
+    { };
+
+    /** std::function member pointer */
+    template<typename T, typename Ret, typename... Args>
+    struct is_std_function_ptr<std::function<Ret(Args...)> T::*> : std::true_type
+    { };
+
+    template<typename Ret, typename... Args>
+    struct is_std_function_ptr<std::function<Ret(Args...)>*> : std::true_type
+    { };
+
+    template<typename T>
+    constexpr bool is_std_function_ptr_v = is_std_function_ptr<T>::value;
+
+    template<typename T>
+    struct is_member_fn_ptr : std::false_type
+    { };
+
+    template<typename R, typename Class, typename ...Args>
+    struct is_member_fn_ptr<R(Class::*)(Args...)> : std::true_type
+    { };
+
+    template<typename R, typename Class, typename ...Args>
+    struct is_member_fn_ptr<R(Class::*)(Args...)const> : std::true_type
+    { };
+
+    template<typename T>
+    constexpr bool is_member_fn_ptr_v = is_member_fn_ptr<T>::value;
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // type_printer useful to print types in metaprograms
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -3,12 +3,15 @@
 
 #include "ttg/fwd.h"
 #include "ttg/util/typelist.h"
+#include "ttg/policies.h"
 
 #include <future>
 
 namespace ttg_parsec {
 
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs = ttg::typelist<>>
+  template <typename keyT, typename output_terminalsT, typename derivedT,
+            typename input_valueTs = ttg::typelist<>,
+            typename policiesT = ttg::TTPolicyBase<keyT>>
   class TT;
 
   /// \internal the OG name
