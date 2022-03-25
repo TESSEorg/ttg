@@ -2240,8 +2240,8 @@ namespace ttg_parsec {
       }
     }
 
-    static uint64_t make_key(const parsec_taskpool_t *tp, const parsec_assignment_t *as) {
-        return *(const uintptr_t*)as;
+    static parsec_key_t make_key(const parsec_taskpool_t *tp, const parsec_assignment_t *as) {
+        return (parsec_key_t)(*(uintptr_t*)as);
     }
 
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
