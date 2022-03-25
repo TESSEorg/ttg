@@ -56,6 +56,9 @@
 #include <parsec/parsec_comm_engine.h>
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
+#if defined(PARSEC_PROF_TRACE)
+#include <parsec/profiling.h>
+#endif
 #include <cstdlib>
 #include <cstring>
 
@@ -161,7 +164,12 @@ namespace ttg_parsec {
 
    public:
     static constexpr const int PARSEC_TTG_MAX_AM_SIZE = 1024 * 1024;
-    WorldImpl(int *argc, char **argv[], int ncores) : WorldImplBase(query_comm_size(), query_comm_rank()) {
+    WorldImpl(int *argc, char **argv[], int ncores) : WorldImplBase(query_comm_size(), query_comm_rank())
+#if defined(PARSEC_PROF_TRACE) 
+       , profiling_array_occupied(0)
+       , profiling_array_size(0)
+#endif
+    {
       ttg::detail::register_world(*this);
       ctx = parsec_init(ncores, argc, argv);
       es = ctx->virtual_processes[0]->execution_streams[0];
@@ -178,6 +186,7 @@ namespace ttg_parsec {
       tpool->taskpool_id = -1;
       tpool->update_nb_runtime_task = parsec_add_fetch_runtime_task;
       tpool->taskpool_type = PARSEC_TASKPOOL_TYPE_TTG;
+      tpool->taskpool_name = "TTG Taskpool";
       parsec_taskpool_reserve_id(tpool);
 
 #ifdef TTG_USE_USER_TERMDET
@@ -273,6 +282,21 @@ namespace ttg_parsec {
 #endif  // TTG_USE_USER_TERMDET
     }
 
+    template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs = ttg::typelist<>>
+    void register_new_tt(const TT<keyT, output_terminalsT, derivedT, input_valueTs> *t) {
+#if defined(PARSEC_PROF_TRACE)
+      if(profiling_array_occupied+2 >= profiling_array_size) {
+        profiling_array_size += 64;
+        tpool->profiling_array = (int*)realloc((void*)tpool->profiling_array, profiling_array_size * sizeof(int));
+      }
+      parsec_profiling_add_dictionary_keyword(t->get_name().c_str(), "fill:000000", 0, NULL,
+                                              (int*)&tpool->profiling_array[profiling_array_occupied],
+                                              (int*)&tpool->profiling_array[profiling_array_occupied+1]);
+      profiling_array_occupied += 2;
+#endif
+      tpool->nb_task_classes++;
+    }
+
    protected:
     virtual void fence_impl(void) override {
       int rank = this->rank();
@@ -302,6 +326,10 @@ namespace ttg_parsec {
     parsec_execution_stream_t *es = nullptr;
     parsec_taskpool_t *tpool = nullptr;
     bool parsec_taskpool_started = false;
+#if defined(PARSEC_PROF_TRACE)
+    std::size_t profiling_array_size;
+    std::size_t profiling_array_occupied;
+#endif
   };
 
   namespace detail {
@@ -331,6 +359,9 @@ namespace ttg_parsec {
         PARSEC_LIST_ITEM_SINGLETON(&this->parsec_task);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
+        // We save the address of this task in the locals, so we can lookup the task from its locals
+        // This is mostly used in make_key, called by the profiling.
+        *(uintptr_t*)parsec_task.locals = (uintptr_t)this;
       }
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
@@ -343,6 +374,9 @@ namespace ttg_parsec {
         parsec_task.taskpool = taskpool;
         parsec_task.priority = priority;
         parsec_task.chore_id = 0;
+        // We save the address of this task in the locals, so we can lookup the task from its locals
+        // This is mostly used in make_key, called by the profiling.
+        *(uintptr_t*)parsec_task.locals = (uintptr_t)this;
       }
     };
 
@@ -2206,6 +2240,10 @@ namespace ttg_parsec {
       }
     }
 
+    static uint64_t make_key(const parsec_taskpool_t *tp, const parsec_assignment_t *as) {
+        return *(const uintptr_t*)as;
+    }
+
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
 
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *t) {
@@ -2266,6 +2304,10 @@ namespace ttg_parsec {
       self.nb_parameters = 0;
       self.nb_locals = 0;
       self.nb_flows = numflows;
+
+      self.make_key = make_key;
+      self.key_functions = &tasks_hash_fcts;
+      world_impl.register_new_tt(this);
 
       //    function_id_to_instance[self.task_class_id] = this;
 
