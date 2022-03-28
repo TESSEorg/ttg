@@ -18,6 +18,7 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 
 ## TL;DR: A "Hello, World" TTG Program
 
+`helloworld.cpp`
 ```cpp
 #include <ttg.h>
 
@@ -36,8 +37,7 @@ int main(int argc, char *argv[]) {
 }
 ```
 
-Build:
-- create a `CMakeLists.txt`:
+`CMakeLists.txt`
 ~~~~~~~~~~~~~{.cmake}
 cmake_minimum_required(VERSION 3.19)
 project(TTG-HW CXX)
@@ -53,12 +53,17 @@ add_executable(hw-parsec helloworld.cpp)
 target_link_libraries(hw-parsec PRIVATE ttg-parsec)
 target_compile_definitions(hw-parsec PRIVATE TTG_USE_PARSEC=1)
 ~~~~~~~~~~~~~
-- configure + build:
+
+Configure + build:
 ```shell
-> cmake -S . -B build && cmake --build build --target helloworld-parsec
+> cmake -S . -B build && cmake --build build --target hw-parsec
 ```
 
-## Programming Model
+## "Hello, World!" Walkthrough
+
+Although it does not involve any useful flow of computation and/or data, the above "Hello, World!" TTG program introduces several key TTG concepts and illustrates what you need to do to write a complete TTG program. So let's walk through it.
+
+### Programming Model
 
 The basic model of computation is built around a Template Task Graph (TTGs). A TTG consists of one or more connected Template Task (TT) objects. Each message that travels between TTs consist of a (potentially void) task ID and (optional) datum. A TT creates a task for a given task ID when its every input terminal receives a message with that task ID. The task body can send data to zero or more of the output terminals defined for the corresponding TT.
 
@@ -70,9 +75,11 @@ Before proceeding further, let's refine the few concepts used to define the prog
 - `TemplateTask` (aka `TT`): This is a _template_ for creating tasks. Task template creates a task associated with a given `TaskId` when every input terminal received messages for the given `TaskId`.
 - `Edge`: A connection between an input terminal and an output terminal. N.B. Concept `Edge` denotes a 1-to-1 connection and exists to be able to think of TTGs as graphs ("data flows between TTs' terminals via Edges"); do not confuse with the TTG C++ class `Edge` which behaves like a hyperedge by composing 1-to-many and many-to-1 connections between terminals.
 
-## Minimal TTG Program
+Due to its simplicity only template tasks appear in the "Hello, World!" program.
 
-Although it does not involve any useful flow of computation and/or data, the above "Hello, World!" TTG program illustrates what you need to do to write a complete TTG program, namely:
+## Structure of a Minimal TTG Program
+
+Every TTG program must:
 - select the TTG backend,
 - initialize the TTG runtime,
 - construct a TTG by declaring its constituent nodes,
@@ -141,7 +148,48 @@ Before exiting `main()` the TTG runtime should be finalized:
   ttg::finalize();
 ```
 
-## Task Graph Visualization
+## Beyond "Hello, World!"
+
+Since "Hello, World!" consists of a single task it does not demonstrate either how to control scheduling of multiple tasks or enable data flow between tasks. Let's use computation of _n_th Fibonacci number as a simple example that is often used ([OpenMP](https://www.openmp.org/wp-content/uploads/openmp-examples-5.1.pdf), [TBB](https://github.com/oneapi-src/oneTBB/blob/master/examples/test_all/fibonacci/fibonacci.cpp)) of how to convert an imperative algorithm in a task-based form. Although the example lacks opportunity for parallelism, the point here is not performance but its simplicity.
+
+### Example: _n_th Fibonacci Number
+
+`nth-fibonacci.cpp`
+```cpp
+#include <ttg.h>
+
+int main(int argc, char *argv[]) {
+  ttg::initialize(argc, argv);
+
+  const int64_t N = 20;
+  ttg::Edge<int64_t, int64_t> f2f_nm1, f2f_nm2;
+  ttg::Edge<void, int64_t> f2p;
+  auto fib = ttg::make_tt(
+      [](int64_t n, int64_t F_nm1, int64_t F_nm2) {
+        auto F_n = F_nm1 + F_nm2;
+        if (n < N) {
+          ttg::send<0>(n + 1, F_n);
+          ttg::send<1>(n + 1, F_nm1);
+        } else
+          ttg::sendv<2>(F_n);
+      },
+      ttg::edges(f2f_nm1, f2f_nm2), ttg::edges(f2f_nm1, f2f_nm2, f2p));
+  auto print = ttg::make_tt([](int64_t F_N) { std::cout << N << "th Fibonacci number is " << F_N << std::endl; },
+                            ttg::edges(f2p));
+
+  ttg::make_graph_executable(fib);
+  ttg::execute();
+  if (ttg::get_default_world().rank() == 0) fib->invoke(2, std::tuple<int64_t, int64_t>(1, 0));
+  ttg::fence();
+
+  ttg::finalize();
+  return 0;
+}
+```
+
+## Debugging TTG Programs
+
+### Task Graph Visualization
 
 The task graph can be dumped into a DOT format using the below code in the main program after connecting the graph. [GraphViz](https://www.graphviz.org/) tools can be used to visualize the task graph.
 
@@ -149,7 +197,7 @@ The task graph can be dumped into a DOT format using the below code in the main 
 std::cout << ttg::Dot()(tt.get()) << std::endl;
 ```
 
-## Debugging TTG Program
+### Launching Debugger
 - If an X11 server is running (check if environment variable `DISPLAY` is set), then set environment variable `TTG_DEBUGGER` to {`gdb_xterm`,`lldb_xterm`} to launch {`gdb`,`lldb`} upon receiving a signal like `SIGSEGV` or `SIGABRT` (one `xterm` window per rank will be created);
 - If an X11 server is not running the set `TTG_DEBUGGER` to empty value; upon receiving a signal the program will print instructions for how to attach a debugger to a running process from another terminal.
 - run the ttg program and if it receives any signal the xterm windows should pop up to display debugging results
