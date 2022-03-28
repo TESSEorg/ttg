@@ -225,15 +225,22 @@ from the upward flow of data (task evaluation,
 
 ## Debugging TTG Programs
 
-### Task Graph Visualization
+### TTG Visualization
 
-The task graph can be dumped into a DOT format using the below code in the main program after connecting the graph. [GraphViz](https://www.graphviz.org/) tools can be used to visualize the task graph.
+TTGs can be exported in [the DOT format](https://en.wikipedia.org/wiki/DOT_(graph_description_language)) as follows:
 
 ```cpp
 std::cout << ttg::Dot()(tt.get()) << std::endl;
 ```
 
-### Launching Debugger
+Use [GraphViz](https://www.graphviz.org/) to visualize the resulting graph.
+
+### Task Graph Visualization
+
+Exporting the DAG of tasks resulting from execution of a TTG will be possible as soon as [PR 227](https://github.com/TESSEorg/ttg/pull/227) has been merged.
+
+### Launching a Debugger
+To simplify debugging of multirank TTG programs it is possible to automate the process as follows:
 - If an X11 server is running (check if environment variable `DISPLAY` is set), then set environment variable `TTG_DEBUGGER` to {`gdb_xterm`,`lldb_xterm`} to launch {`gdb`,`lldb`} upon receiving a signal like `SIGSEGV` or `SIGABRT` (one `xterm` window per rank will be created);
 - If an X11 server is not running the set `TTG_DEBUGGER` to empty value; upon receiving a signal the program will print instructions for how to attach a debugger to a running process from another terminal.
 - run the ttg program and if it receives any signal the xterm windows should pop up to display debugging results
