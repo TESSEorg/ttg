@@ -150,7 +150,14 @@ Before exiting `main()` the TTG runtime should be finalized:
 
 ## Beyond "Hello, World!"
 
-Since "Hello, World!" consists of a single task it does not demonstrate either how to control scheduling of multiple tasks or enable data flow between tasks. Let's use computation of `N`th Fibonacci number as a simple example that is often used ([OpenMP](https://www.openmp.org/wp-content/uploads/openmp-examples-5.1.pdf), [TBB](https://github.com/oneapi-src/oneTBB/blob/master/examples/test_all/fibonacci/fibonacci.cpp)) of how to convert an imperative algorithm in a task-based form. Although the example lacks opportunity for parallelism, the point here is not performance but its simplicity.
+Since "Hello, World!" consists of a single task it does not demonstrate either how to control scheduling of
+multiple tasks or enable data flow between tasks. Let's use computation of `N`th Fibonacci number as
+a simple example of a recursive task-based computation that is often used
+([OpenMP](https://www.openmp.org/wp-content/uploads/openmp-examples-5.1.pdf),
+[TBB](https://github.com/oneapi-src/oneTBB/blob/master/examples/test_all/fibonacci/fibonacci.cpp),
+[Legion](https://legion.stanford.edu/tutorial/tasks_and_futures.html),
+[Cilk](https://cilk.mit.edu/programming/)) to illustrate basic features of task-based programming models.
+Although the example lacks opportunity for parallelism,  the point here is not performance but its simplicity.
 
 ### Example: `N`th Fibonacci Number
 
