@@ -14,29 +14,86 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 - To try out TTG in a Docker container, install Docker, then execute `bin/docker-build.sh` and follow instructions in `bin/docker.md`;
 - See [INSTALL.md](https://github.com/TESSEorg/ttg/blob/master/INSTALL.md) to learn how to build and install TTG.
 
-# Debugging TTG Program 
-- If an X11 server is running (check if environment variable `DISPLAY` is set), then set environment variable `TTG_DEBUGGER` to {`gdb_xterm`,`lldb_xterm`} to launch {`gdb`,`lldb`} upon receiving a signal like `SIGSEGV` or `SIGABRT` (one `xterm` window per rank will be created);
-- If an X11 server is not running the set `TTG_DEBUGGER` to empty value; upon receiving a signal the program will print instructions for how to attach a debugger to a running process from another terminal. 
-- run the ttg program and if it receives any signal the xterm windows should pop up to display debugging results 
+# A Short Intro to TTG
 
-# Key Concepts of TTG
+## TL;DR: A "Hello, World" TTG Program
 
-- `TaskId` (aka `Key`): A unique identifier for each task. It should be hashable. For example, if computing a matrix multiplicaion, TaskId could be a triplet of integers identifying the tiles being operated upon.
-- `Terminal`: Input and output arguments are exposed by the runtime as terminals. Input terminal is a single assignment variable and is used by the runtime to determine when arguments of a task are available. An input terminal is programmable. For example, it could perform a reduction operation.
-- `Edge`: An output terminal is connected to the input terminal using edges. Multiple edges can connect to an input terminal enabling data to come from multiple sources and an output terminal might connect to multiple successors implying a broadcast operation.
-- `TemplateTask` (aka `TT`): This is a _template_ for creating tasks; its member function `op` defined the body of the task. It is typically created by wrapping a user-defined callable (free function or a lambda) with informal signature `void(TaskId, Arg0, Arg1, ..., OutputTerminals)` with `make_tt`. Task template is used to create a task for a given `TaskId` when all input data for the given `TaskId` have been received.
+```cpp
+#include <ttg.h>
 
-# How to write a simple TTG program?
+int main(int argc, char *argv[]) {
+  ttg::initialize(argc, argv);
 
-1. Select the default TTG backend and include the required header files. To select the default backend define one (and only one) of the following macros, best via the command-line argument to the compiler or as an explicit `#define` statement:
-    - `TTG_USE_PARSEC`: selects the PaRSEC backend as the default;
-    - `TTG_USE_MADNESS`: selects the MADNESS backend as the default (expert-use only).
+  auto tt = ttg::make_tt([]() { std::cout << "Hello, World!"; });
 
-    For simple programs it is sufficient to include the top-level header file:
+  ttg::make_graph_executable(tt);
+  ttg::execute();
+  if (ttg::get_default_world().rank() == 0) tt->invoke();
+  ttg::fence();
+
+  ttg::finalize();
+  return 0;
+}
+```
+
+Build:
+- create a `CMakeLists.txt`:
+~~~~~~~~~~~~~{.cmake}
+cmake_minimum_required(VERSION 3.19)
+project(TTG-HW CXX)
+
+find_package(ttg) # check if TTG is already available
+if (NOT TARGET ttg-parsec) # else build from source
+  include(FetchContent)
+  FetchContent_Declare(ttg GIT_REPOSITORY https://github.com/TESSEorg/ttg.git)
+  FetchContent_MakeAvailable( ttg )
+endif()
+
+add_executable(hw-parsec helloworld.cpp)
+target_link_libraries(hw-parsec PRIVATE ttg-parsec)
+target_compile_definitions(hw-parsec PRIVATE TTG_USE_PARSEC=1)
+~~~~~~~~~~~~~
+- configure + build:
+```shell
+> cmake -S . -B build && cmake --build build --target helloworld-parsec
+```
+
+## Programming Model
+
+The basic model of computation is built around a Template Task Graph (TTGs). A TTG consists of one or more connected Template Task (TT) objects. Each message that travels between TTs consist of a (potentially void) task ID and (optional) datum. A TT creates a task for a given task ID when its every input terminal receives a message with that task ID. The task body can send data to zero or more of the output terminals defined for the corresponding TT.
+
+Thus, task creation is a byproduct of messages traveling through one or more TTGs. What makes the model powerful is the ability to encode large DAGs of tasks compactly.
+
+Before proceeding further, let's refine the few concepts used to define the programming model above:
+- `TaskId` (aka `Key`): A unique identifier for each task. It must be hashable.
+- `Terminal`: A port for receiving (input)  and sending (output) messages. Each message consists of a (potentially void) `TaskId` and an (optional) datum. Terminals are strongly-typed. An {in,out}put terminal can be connected to one or more {out,in}put terminal (as long as the `TaskId` and datum types match). Input terminals are programmable (e.g., incoming messages can be optionally reduced).
+- `TemplateTask` (aka `TT`): This is a _template_ for creating tasks. Task template creates a task associated with a given `TaskId` when every input terminal received messages for the given `TaskId`.
+- `Edge`: A connection between an input terminal and an output terminal. N.B. Concept `Edge` denotes a 1-to-1 connection and exists to be able to think of TTGs as graphs ("data flows between TTs' terminals via Edges"); do not confuse with the TTG C++ class `Edge` which behaves like a hyperedge by composing 1-to-many and many-to-1 connections between terminals.
+
+## Minimal TTG Program
+
+Although it does not involve any useful flow of computation and/or data, the above "Hello, World!" TTG program illustrates what you need to do to write a complete TTG program, namely:
+- select the TTG backend,
+- initialize the TTG runtime,
+- construct a TTG by declaring its constituent nodes,
+- make TTG executable and kickstart the execution by sending a control or data message to the TTG,
+- shut down the runtime
+
+Let's go over each of these steps using the "Hello, World!" example.
+
+### Select the TTG Backend
+
+TTG C++ implementation is currently supported by 2 backends providing task scheduling, data transfer, and resource management.
+While it is possible to use specific TTG backend explicitly, by using the appropriate namespaces, it is recommended to write backend-neutral programs that can be specialized to a particular backend as follows.
+1. By defining one (and only one) of the following macros, via the command-line argument to the compiler (recommended) or as an explicit `#define` statement in the source code:
+   - `TTG_USE_PARSEC`: selects the PaRSEC backend as the default;
+   - `TTG_USE_MADNESS`: selects the MADNESS backend as the default (expert-use only).
+
+   Following the definition of this macro it is safe to include the top-level TTG header file:
 ```cpp
 #include <ttg.h>
 ```
-    It is also possible to hardwire the backend selection by including the corresponding backend-specific header directly; there is no need to `#include` the top-level TTG header or to define the backend selection macros:
+2. By including the corresponding backend-specific header directly:
     - to use PaRSEC backend only, add:
 ```cpp
 #include <ttg/parsec/ttg.h>
@@ -46,107 +103,56 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 #include <ttg/madness/ttg.h>
 ```
 
-2. Define a TaskId (Key) class which represents a unique identifier for each task and which is hashable.
+  This approach does not require inclusion of the top-level TTG header or definition of a backend selection macro.
 
-3. Define a factory that returns a TemplateTask for every function that runs the computation. Below factory function returns a TemplateTask for recursively exploring the wavefronts of the Smith Waterman algorithm. The code adopts several common design motifs of a TTG program. Complete implementation of the algorithm can be found in the [examples](examples/) directory.
+### Initialize
 
-   ```cpp
-   template <typename funcT, typename T>
-   auto make_sw1(const funcT& func, int block_size, const std::string &a, const std::string &b,
-                 int problem_size, ttg::Edge<Key, BlockMatrix<T>>& leftedge, ttg::Edge<Key, BlockMatrix<T>>& topedge,
-                 ttg::Edge<Key, BlockMatrix<T>>& diagedge, ttg::Edge<Key, T>& resultedge) {
-      auto f = [block_size, problem_size, a, b, func](const Key& key, BlockMatrix<T>&& toporleft,
-                  std::tuple<ttg::Out<Key, BlockMatrix<T>>, ttg::Out<Key, BlockMatrix<T>>,
-                  ttg::Out<Key, BlockMatrix<T>>, ttg::Out<Key, BlockMatrix<T>>, ttg::Out<Key, T>>& out) {
-        // Getting the block coordinates
-        auto[i, j] = key;
-        int next_i = i + 1;
-        int next_j = j + 1;
-        int num_blocks = problem_size / block_size;
+To initialize TTG runtime invoke `ttg::initialize(argc, argv)`; there are several overloads of this function that also accept other optional parameters, such as the number of threads in the main thread pool, the MPI communicator for execution, etc.
 
-        BlockMatrix<T> X(block_size, block_size);
-        if (i == 0 && j == 0) {
-          //No top, left or diagonal blocks
-          X = sw_iterative(i, j, X, X, X, X, block_size, a, b, problem_size);
-        }
-        else if (i == 0) {
-          //Only left block, single dependency
-          X = sw_iterative(i, j, X, toporleft, X, X, block_size, a, b, problem_size);
-        }
-        else if (j == 0) {
-          //Only top block, single dependency
-          X = sw_iterative(i, j, X, X, toporleft, X, block_size, a, b, problem_size);
-        }
+## Specify a TTG
 
-        //std::cout << X << std::endl;
-        if (next_i < num_blocks) {
-          //std::cout << "left " << next_i << " " << j << std::endl;
-          if (j == 0)  // send top block for next block computation
-            ttg::send<0>(Key(next_i, j), X, out);
-          else  // send top block for next block computation
-            ttg::send<2>(Key(next_i, j), X, out);
-        }
-        if (next_j < num_blocks) {
-          if (i == 0)  // send left block for next block computation
-            ttg::send<0>(Key(i, next_j), X, out);
-          else  // // send left block for next block computation
-            ttg::send<1>(Key(i, next_j), X, out);
-        }
-        if (next_i < num_blocks && next_j < num_blocks) {
-          ttg::send<3>(Key(next_i, next_j), X, out); //send diagonal block for next block computation
-        }
-  
-        if (i == num_blocks - 1 && j == num_blocks - 1)
-          ttg::send<4>(Key(i,j), X(block_size-1, block_size-1), out);
-      };
+To make a TTG create and connect one or more TTs. The simplest TTG consists of a single TT.
 
-      ttg::Edge<Key, BlockMatrix<T>> recur("recur");
-      return ttg::make_tt(f, ttg::edges(recur), ttg::edges(recur, leftedge, topedge, diagedge, resultedge), "sw1", {"recur"},
-                          {"recur", "leftedge", "topedge", "diagedge", "resultedge"});
-   }
-   ```
+The "Hello, World!" example contains a single TT that executes a single task (hence, task ID can be omitted, i.e., void) that does not take and produce any data. The easiest way to make such a TT  is by wrapping a callable (e.g., a lambda) with `ttg::make_tt`:
+```c++
+  auto tt = ttg::make_tt([]() { std::cout << "Hello, World!"; });
+```
 
-4. Define the edges and verify that the graph is connected in the main program.
+## Execute TTG
 
-   ```cpp
-   ttg::initialize(argc, argv, -1);
+To execute a TTG we must make it executable (this will declare the TTG complete). To execute the TTG its root TT must receive at least one message; since in this case the task does not receive either task ID or data the message is empty (i.e., void):
+```c++
+  ttg::make_graph_executable(tt);
+  ttg::execute();
+  if (ttg::get_default_world().rank() == 0)
+      tt->invoke();
+```
+Note that we must ensure that only one such message must be generated. Since TTG execution uses the Single Program Multiple Data (SPMD) model,
+when launching the TTG program as multiple processes only the first process (rank) gets to send the message.
 
-   ttg::Edge<Key, BlockMatrix<int>> leftedge, topedge, diagedge;
-   ttg::Edge<Key, int> resultedge;
-   auto s = make_sw1(sw_iterative<int>, block_size, a, b, problem_size, leftedge, topedge,
-                     diagedge, resultedge);
-   auto s1 = make_sw2(sw_iterative<int>, block_size, a, b, problem_size, leftedge, topedge,
-                     diagedge, resultedge);
-   auto r = make_result(verify, val1, resultedge);
+## Finalize TTG
+Since TTG program is executed asynchronously, we must ensure that all tasks are finished:
+```c++
+  ttg::fence();
+```
 
-   auto connected = ttg::make_graph_executable(s.get());
-   assert(connected);
-   std::cout << "Graph is connected.\n";
-   ```
-
-5. Execute the graph.
-
-   ```cpp
-   if (ttg::default_execution_context().rank() == 0)
-     s->in<0>()->send(Key(0,0), BlockMatrix<int>());
-
-   ttg::execute();
-   ttg::fence();
-   ```
+Before exiting `main()` the TTG runtime should be finalized:
+```c++
+  ttg::finalize();
+```
 
 ## Task Graph Visualization
 
 The task graph can be dumped into a DOT format using the below code in the main program after connecting the graph. [GraphViz](https://www.graphviz.org/) tools can be used to visualize the task graph.
 
 ```cpp
-std::cout << "==== begin dot ====\n";
-std::cout << ttg::Dot()(s.get()) << std::endl;
-std::cout << "==== end dot ====\n";
+std::cout << ttg::Dot()(tt.get()) << std::endl;
 ```
 
-Below is a TTG graph generated by Smith Waterman algorithm. Each operation/TemplateTask factory is denoted by a rectangle with input terminals on the top and output terminals listed on the bottom part of the rectangle.
-
-![](doc/images/sw-df.png)
+## Debugging TTG Program
+- If an X11 server is running (check if environment variable `DISPLAY` is set), then set environment variable `TTG_DEBUGGER` to {`gdb_xterm`,`lldb_xterm`} to launch {`gdb`,`lldb`} upon receiving a signal like `SIGSEGV` or `SIGABRT` (one `xterm` window per rank will be created);
+- If an X11 server is not running the set `TTG_DEBUGGER` to empty value; upon receiving a signal the program will print instructions for how to attach a debugger to a running process from another terminal.
+- run the ttg program and if it receives any signal the xterm windows should pop up to display debugging results
 
 # TTG reference documentation
 TTG API documentation is available for the following versions:
