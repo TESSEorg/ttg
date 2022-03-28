@@ -245,6 +245,12 @@ To simplify debugging of multirank TTG programs it is possible to automate the p
 - If an X11 server is not running the set `TTG_DEBUGGER` to empty value; upon receiving a signal the program will print instructions for how to attach a debugger to a running process from another terminal.
 - run the ttg program and if it receives any signal the xterm windows should pop up to display debugging results
 
+# TTG performance
+
+Competitive performance of TTG for several paradigmatic scientific applications on shared- and distributed-memory machines (CPU only)
+will be discussed in [manuscript ``Generalized Flow-Graph Programming Using Template Task-Graphs: Initial Implementation and Assessment''](https://www.ipdps.org/ipdps2022/2022-accepted-papers.html) to be presented at [IPDPS'22](https://www.ipdps.org/ipdps2022/).
+Stay tuned!
+
 # TTG reference documentation
 TTG API documentation is available for the following versions:
 - [master branch](https://tesseorg.github.io/ttg/dox-master) .
