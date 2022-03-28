@@ -289,9 +289,9 @@ struct CallableWrapTTArgsAsTypelist<funcT, funcT_receives_outterm_tuple, keyT, o
 ///
 /// @internal To be able to handle generic callables the input edges are used to determine the trial set of
 /// argument types.
-template <typename keyT, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
-auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
-                 const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
+template <typename keyT = void, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
+auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges = std::tuple<>{},
+                 const std::tuple<output_edgesT...> &outedges = std::tuple<>{}, const std::string &name = "wrapper",
                  const std::vector<std::string> &innames = std::vector<std::string>(sizeof...(input_edge_valuesT),
                                                                                     "input"),
                  const std::vector<std::string> &outnames = std::vector<std::string>(sizeof...(output_edgesT),
@@ -369,9 +369,9 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
 ///
 /// @internal To be able to handle generic callables the input edges are used to determine the trial set of
 /// argument types.
-template <typename keyT, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
-auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
-             const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
+template <typename keyT = void, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
+auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges = std::tuple<>{},
+             const std::tuple<output_edgesT...> &outedges = std::tuple<>{}, const std::string &name = "wrapper",
              const std::vector<std::string> &innames = std::vector<std::string>(sizeof...(input_edge_valuesT), "input"),
              const std::vector<std::string> &outnames = std::vector<std::string>(sizeof...(output_edgesT), "output")) {
   // ensure input types do not contain Void
