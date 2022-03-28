@@ -10,6 +10,8 @@ $ cmake --build ttg/build --target install
 
 # prerequisites
 
+TTG is only supported on POSIX systems.
+
 ## mandatory prerequisites
 - [CMake](https://cmake.org/), version 3.14 or higher
 - C++ compiler with support for the [C++17 standard](http://www.iso.org/standard/68564.html), or a more recent standard. This includes the following compilers:
