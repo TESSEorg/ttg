@@ -7,7 +7,7 @@ This is the C++ API for the Template Task Graph (TTG) programming model for flow
 
 - TTG marries the idea of flowgraph programming models with the key innovations in the PARSEC runtime for compact specification of DAGs (PTG).
 - TTG can be used to efficiently compose and execute irregular computation patterns which are poorly served by the current programming and execution models.
-- TTG has strong support for distributed hybrid architectures for running modern scientific algorithms efficiently on current and near-future supercomputers. 
+- TTG has strong support for distributed hybrid architectures for running modern scientific algorithms efficiently on current and near-future supercomputers.
 
 # Installation
 
@@ -121,14 +121,14 @@ To initialize TTG runtime invoke `ttg::initialize(argc, argv)`; there are severa
 To make a TTG create and connect one or more TTs. The simplest TTG consists of a single TT.
 
 The "Hello, World!" example contains a single TT that executes a single task (hence, task ID can be omitted, i.e., void) that does not take and produce any data. The easiest way to make such a TT  is by wrapping a callable (e.g., a lambda) with `ttg::make_tt`:
-```c++
+```cpp
   auto tt = ttg::make_tt([]() { std::cout << "Hello, World!"; });
 ```
 
 ## Execute TTG
 
 To execute a TTG we must make it executable (this will declare the TTG complete). To execute the TTG its root TT must receive at least one message; since in this case the task does not receive either task ID or data the message is empty (i.e., void):
-```c++
+```cpp
   ttg::make_graph_executable(tt);
   ttg::execute();
   if (ttg::get_default_world().rank() == 0)
@@ -139,20 +139,24 @@ when launching the TTG program as multiple processes only the first process (ran
 
 ## Finalize TTG
 Since TTG program is executed asynchronously, we must ensure that all tasks are finished:
-```c++
+```cpp
   ttg::fence();
 ```
 
 Before exiting `main()` the TTG runtime should be finalized:
-```c++
+```cpp
   ttg::finalize();
 ```
 
 ## Beyond "Hello, World!"
 
-Since "Hello, World!" consists of a single task it does not demonstrate either how to control scheduling of multiple tasks or enable data flow between tasks. Let's use computation of _n_th Fibonacci number as a simple example that is often used ([OpenMP](https://www.openmp.org/wp-content/uploads/openmp-examples-5.1.pdf), [TBB](https://github.com/oneapi-src/oneTBB/blob/master/examples/test_all/fibonacci/fibonacci.cpp)) of how to convert an imperative algorithm in a task-based form. Although the example lacks opportunity for parallelism, the point here is not performance but its simplicity.
+Since "Hello, World!" consists of a single task it does not demonstrate either how to control scheduling of multiple tasks or enable data flow between tasks. Let's use computation of `N`th Fibonacci number as a simple example that is often used ([OpenMP](https://www.openmp.org/wp-content/uploads/openmp-examples-5.1.pdf), [TBB](https://github.com/oneapi-src/oneTBB/blob/master/examples/test_all/fibonacci/fibonacci.cpp)) of how to convert an imperative algorithm in a task-based form. Although the example lacks opportunity for parallelism, the point here is not performance but its simplicity.
 
-### Example: _n_th Fibonacci Number
+### Example: `N`th Fibonacci Number
+
+This example illustrates how to compute a particular element of the Fibonacci sequence
+defined by recurrence
+<img src="https://latex.codecogs.com/svg.image?F_N&space;=&space;F_{N-1}&space;&plus;&space;F_{N-2},&space;\quad&space;F_0=0,&space;\quad&space;F_1=1" title="https://latex.codecogs.com/svg.image?F_N = F_{N-1} + F_{N-2}, \quad F_0=0, \quad F_1=1" />.
 
 `nth-fibonacci.cpp`
 ```cpp
@@ -165,7 +169,7 @@ int main(int argc, char *argv[]) {
   ttg::Edge<int64_t, int64_t> f2f_nm1, f2f_nm2;
   ttg::Edge<void, int64_t> f2p;
   auto fib = ttg::make_tt(
-      [](int64_t n, int64_t F_nm1, int64_t F_nm2) {
+      [=](int64_t n, int64_t F_nm1, int64_t F_nm2) {
         auto F_n = F_nm1 + F_nm2;
         if (n < N) {
           ttg::send<0>(n + 1, F_n);
@@ -179,13 +183,26 @@ int main(int argc, char *argv[]) {
 
   ttg::make_graph_executable(fib);
   ttg::execute();
-  if (ttg::get_default_world().rank() == 0) fib->invoke(2, std::tuple<int64_t, int64_t>(1, 0));
+  if (ttg::rank() == 0) fib->invoke(2, 1, 0);
   ttg::fence();
 
   ttg::finalize();
   return 0;
 }
 ```
+
+The TTG consists of 2 TTs, one (`fib`) that implements the Fibonacci recurrence and another (`print`) that prints the result to
+`std::cout`:
+- `fib` computes <img src="https://render.githubusercontent.com/render/math?math=F_{n}"> from <img src="https://render.githubusercontent.com/render/math?math=F_{n-1}"> and <img src="https://render.githubusercontent.com/render/math?math=F_{n-2}">
+  and either sends <img src="https://render.githubusercontent.com/render/math?math=F_{n}"> and <img src="https://render.githubusercontent.com/render/math?math=F_{n-1}"> to the next (`n+1`)
+  instance of `fib`, or, if `n==N`, sends <img src="https://render.githubusercontent.com/render/math?math=F_{n}"> to `print`. Thus `fib`
+  needs 2 input terminals and 3 output terminals (for better efficiency instead of
+  sending individual  Fibonacci numbers, each over an individual edge, it is better to send
+  a pair of Fibonacci numbers over a single edge).
+- `print` receives a single unannotated datum and produces no data, so it needs a single input terminal and no output terminals.
+
+Execution of the program starts by explicitly instantiating `fib` for `n=2`.
+In total 20 tasks will be executed: 19 instances of `fib` with `n=2..20` and the single instance of `print`.
 
 ## Debugging TTG Programs
 
