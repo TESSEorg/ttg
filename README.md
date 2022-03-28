@@ -211,6 +211,18 @@ The TTG consists of 2 TTs, one (`fib`) that implements the Fibonacci recurrence 
 Execution of the program starts by explicitly instantiating `fib` for `n=2`.
 In total 20 tasks will be executed: 19 instances of `fib` with `n=2..20` and the single instance of `print`.
 
+Note that unlike typical task-based implementations in the literature which construct tasks _recursively_,
+i.e., the task for
+computing <img src="https://render.githubusercontent.com/render/math?math=F_{n}">
+is created before the task computing <img src="https://render.githubusercontent.com/render/math?math=F_{n-1}">,
+the TTG implementation constructs the tasks in the order of increasing `n`. This is because
+parametric dataflow of TTG naturally expresses inductive (push) computation patterns rather than
+recursive (pull) computation patterns. However, it is easy to implement proper recursion by
+separating the downward flow of control (task creation,
+<img src="https://render.githubusercontent.com/render/math?math=F_{n} \to F_{n-1},F_{n-2}">)
+from the upward flow of data (task evaluation,
+<img src="https://render.githubusercontent.com/render/math?math=F_{n-1},F_{n-2} \to F_{n}">).
+
 ## Debugging TTG Programs
 
 ### Task Graph Visualization
