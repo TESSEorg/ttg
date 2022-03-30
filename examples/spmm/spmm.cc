@@ -1446,8 +1446,8 @@ int main(int argc, char **argv) {
       SpMM<> a_times_b(eA, eB, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
                        mTiles, nTiles, kTiles, keymap);
       TTGUNUSED(a_times_b);
-
-      if (default_execution_context().rank() == 0) std::cout << Dot{}(&a, &b) << std::endl;
+      /// calling the Dot constructor with 'true' argument disables the type
+      if (default_execution_context().rank() == 0) std::cout << Dot{/*disable_type=*/ true}(&control) << std::endl;
 
       // ready to run!
       auto connected = make_graph_executable(&control);
