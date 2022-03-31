@@ -56,7 +56,10 @@ int main(int argc, char **argv)
 
   ttg::initialize(argc, argv, nthreads);
 
+  ttg::profile_on();
+
   auto world = ttg::default_execution_context();
+  world.impl().start_tracing_dag_of_tasks("potrf");
 
 #if USE_PARSEC_PROF_API
   if (nullptr != prof_filename) {
@@ -153,6 +156,8 @@ int main(int argc, char **argv)
     std::cout << "TTG Execution Time (milliseconds) : "
               << elapsed / 1E3 << " : Flops " << (FLOPS_DPOTRF(N)) << " " << (FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
   }
+
+  world.impl().stop_tracing_dag_of_tasks();
 
 #ifdef USE_DPLASMA
   if( check ) {

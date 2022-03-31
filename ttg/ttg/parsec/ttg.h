@@ -58,9 +58,15 @@
 #include <parsec/scheduling.h>
 #if defined(PARSEC_PROF_TRACE)
 #include <parsec/profiling.h>
+#if defined(PARSEC_PROF_GRAPHER)
+#include <parsec/parsec_prof_grapher.h>
+#endif
 #endif
 #include <cstdlib>
 #include <cstring>
+
+/* This needs to come after parsec.h to know if parsec has PROF_TRACE and variants */
+#include "ttg/util/profile.h"
 
 #include "ttg/parsec/ttg_data_copy.h"
 
@@ -90,6 +96,11 @@ namespace ttg_parsec {
   };
 
   namespace detail {
+
+    static uint64_t next_task_id() {
+      static int64_t id = 0;
+      return (uint64_t)parsec_atomic_fetch_inc_int64(&id);
+    }
 
     static int static_unpack_msg(parsec_comm_engine_t *ce, uint64_t tag, void *data, long unsigned int size,
                                  int src_rank, void *obj) {
@@ -149,6 +160,7 @@ namespace ttg_parsec {
     static constexpr const int _PARSEC_TTG_RMA_TAG = 11;  // This TAG should be 'allocated' at the PaRSEC level
 
     ttg::Edge<> m_ctl_edge;
+    bool _dag_profiling;
 
     int query_comm_size() {
       int comm_size;
@@ -169,6 +181,7 @@ namespace ttg_parsec {
        , profiling_array_occupied(0)
        , profiling_array_size(0)
 #endif
+       , _dag_profiling(false)
     {
       ttg::detail::register_world(*this);
       ctx = parsec_init(ncores, argc, argv);
@@ -276,6 +289,32 @@ namespace ttg_parsec {
     void increment_inflight_msg() { taskpool()->tdm.module->taskpool_addto_nb_pa(taskpool(), 1); }
     void decrement_inflight_msg() { taskpool()->tdm.module->taskpool_addto_nb_pa(taskpool(), -1); }
 
+    bool dag_profiling() { return _dag_profiling; }
+
+    void start_tracing_dag_of_tasks(const char *filename) {
+#if defined(PARSEC_PROF_GRAPHER)
+      if(!_dag_profiling) {
+        size_t len = strlen(filename)+32;
+        char ext_filename[len];
+        snprintf(ext_filename, len, "%s-%d.dot", filename, rank());
+        parsec_prof_grapher_init(ctx, ext_filename);
+        _dag_profiling = true;
+      }
+#else
+      ttg::print("Error: requested to create '", filename, "' to create a DAG of tasks,\n"
+                 "but PaRSEC does not support graphing options. Reconfigure with PARSEC_PROF_GRAPHER=ON\n");
+#endif
+    }
+
+    void stop_tracing_dag_of_tasks() {
+#if defined(PARSEC_PROF_GRAPHER)
+      if(_dag_profiling) {
+        parsec_prof_grapher_fini();
+        _dag_profiling = false;
+      }
+#endif
+    }
+
     virtual void final_task() override {
 #ifdef TTG_USE_USER_TERMDET
       if(parsec_taskpool_started) {
@@ -338,6 +377,39 @@ namespace ttg_parsec {
   namespace detail {
     typedef void (*parsec_static_op_t)(void *);  // static_op will be cast to this type
 
+    const parsec_symbol_t parsec_taskclass_param0 = { 
+      .flags = PARSEC_SYMBOL_IS_STANDALONE|PARSEC_SYMBOL_IS_GLOBAL,
+      .name = "IDX0",
+      .context_index = 0,
+      .min = nullptr,
+      .max = nullptr,
+      .expr_inc = nullptr,
+      .cst_inc = 0 };
+    const parsec_symbol_t parsec_taskclass_param1 = { 
+      .flags = PARSEC_SYMBOL_IS_STANDALONE|PARSEC_SYMBOL_IS_GLOBAL,
+      .name = "IDX1",
+      .context_index = 1,
+      .min = nullptr,
+      .max = nullptr,
+      .expr_inc = nullptr,
+      .cst_inc = 0 };
+    const parsec_symbol_t parsec_taskclass_local2 = { 
+      .flags = PARSEC_SYMBOL_IS_STANDALONE|PARSEC_SYMBOL_IS_GLOBAL,
+      .name = "KEY0",
+      .context_index = 2,
+      .min = nullptr,
+      .max = nullptr,
+      .expr_inc = nullptr,
+      .cst_inc = 0 };
+    const parsec_symbol_t parsec_taskclass_local3 = { 
+      .flags = PARSEC_SYMBOL_IS_STANDALONE|PARSEC_SYMBOL_IS_GLOBAL,
+      .name = "KEY1",
+      .context_index = 3,
+      .min = nullptr,
+      .max = nullptr,
+      .expr_inc = nullptr,
+      .cst_inc = 0 };
+
     struct parsec_ttg_task_base_t {
       parsec_task_t parsec_task;
       int32_t in_data_count = 0;  //< number of satisfied inputs
@@ -362,9 +434,11 @@ namespace ttg_parsec {
         PARSEC_LIST_ITEM_SINGLETON(&this->parsec_task);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
-        // We save the address of this task in the locals, so we can lookup the task from its locals
-        // This is mostly used in make_key, called by the profiling.
-        *(uintptr_t*)parsec_task.locals = (uintptr_t)this;
+        // We save the process-local identifier of this task in the locals, so we can lookup the task from its locals
+        // This is only used by profiling (trace of DAG), and uses process-level atomics, so we protect this call
+        if( ttg::profiling() ) {
+          *(uintptr_t*)(&parsec_task.locals[0]) = ttg_parsec::detail::next_task_id();
+        }
       }
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
@@ -377,9 +451,11 @@ namespace ttg_parsec {
         parsec_task.taskpool = taskpool;
         parsec_task.priority = priority;
         parsec_task.chore_id = 0;
-        // We save the address of this task in the locals, so we can lookup the task from its locals
-        // This is mostly used in make_key, called by the profiling.
-        *(uintptr_t*)parsec_task.locals = (uintptr_t)this;
+        // We save the process-local identifier of this task in the locals, so we can lookup the task from its locals
+        // This is only used by profiling (trace of DAG), and uses process-level atomics, so we protect this call
+        if( ttg::profiling() ) {
+          *(uintptr_t*)(&parsec_task.locals[0]) = ttg_parsec::detail::next_task_id();
+        }
       }
     };
 
@@ -399,6 +475,9 @@ namespace ttg_parsec {
         for (int i = 0; i < NumStreams; ++i) {
           parsec_task.data[i].data_in = nullptr;
         }
+
+        // We store the address of the key in locals[2] and locals[3]
+        *(uintptr_t*)&(parsec_task.locals[2]) = 0; //there is no key
       }
 
       parsec_ttg_task_t(Key key, parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
@@ -409,6 +488,9 @@ namespace ttg_parsec {
         for (int i = 0; i < NumStreams; ++i) {
           parsec_task.data[i].data_in = nullptr;
         }
+
+        // We store the address of the key in locals[2] and locals[3]
+        *(uintptr_t*)&(parsec_task.locals[2]) = reinterpret_cast<uintptr_t>(&this->key);
       }
 
       parsec_key_t pkey() { return reinterpret_cast<parsec_key_t>(&key); }
@@ -457,6 +539,20 @@ namespace ttg_parsec {
         }
       }
       return res;
+    }
+
+    inline int find_index_of_copy_in_task(parsec_ttg_task_base_t *task, const void *ptr) {
+      int i = -1;
+      if (task == nullptr || ptr == nullptr) {
+        return i;
+      }
+      for (i = 0; i < task->data_count; ++i) {
+        auto copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
+        if (NULL != copy && copy->device_private == ptr) {
+          return i;
+        }
+      }
+      return -1;
     }
 
     inline bool add_copy_to_task(ttg_data_copy_t *copy, parsec_ttg_task_base_t *task) {
@@ -1050,6 +1146,9 @@ namespace ttg_parsec {
       /* set the received value as the dummy's only data */
       dummy->parsec_task.data[0].data_in = copy;
 
+      /* We received the task on this world, so it's using the same taskpool */
+      dummy->parsec_task.taskpool = world.impl().taskpool();
+
       /* save the current task and set the dummy task */
       auto parsec_ttg_caller_save = parsec_ttg_caller;
       parsec_ttg_caller = dummy;
@@ -1338,6 +1437,7 @@ namespace ttg_parsec {
       auto &reducer = std::get<i>(input_reducers);
       bool release = false;
       bool remove_from_hash = true;
+      bool discover_task = true;
       /* If we have only one input and no reducer on that input we can skip the hash table */
       if (numins > 1 || reducer) {
         parsec_hash_table_lock_bucket(&tasks_table, hk);
@@ -1345,17 +1445,50 @@ namespace ttg_parsec {
           task = create_new_task(key);
           world_impl.increment_created();
           parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
-        } else if (!reducer && numins == (task->in_data_count + 1)) {
-          /* remove while we have the lock */
-          parsec_hash_table_nolock_remove(&tasks_table, hk);
-          remove_from_hash = false;
-          release = true;
+          if( world_impl.dag_profiling() ) {
+#if defined(PARSEC_PROF_GRAPHER)
+            parsec_prof_grapher_task(&task->parsec_task, world_impl.execution_stream()->th_id, 0, *(uintptr_t*)&(task->parsec_task.locals[0]));
+#endif
+          }
+        } else {
+          discover_task =  false;
+          if (!reducer && numins == (task->in_data_count + 1)) {
+            /* remove while we have the lock */
+            parsec_hash_table_nolock_remove(&tasks_table, hk);
+            remove_from_hash = false;
+            release = true;
+          }
         }
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
       } else {
         task = create_new_task(key);
         world_impl.increment_created();
         remove_from_hash = false;
+        if( world_impl.dag_profiling() ) {
+#if defined(PARSEC_PROF_GRAPHER)
+          parsec_prof_grapher_task(&task->parsec_task, world_impl.execution_stream()->th_id, 0, *(uintptr_t*)&(task->parsec_task.locals[0]));
+#endif
+        }
+      }
+
+      if( world_impl.dag_profiling() ) {
+#if defined(PARSEC_PROF_GRAPHER)
+        if(NULL != parsec_ttg_caller) {
+          int orig_index = detail::find_index_of_copy_in_task(parsec_ttg_caller, &value);
+          char orig_str[32];
+          char dest_str[32];
+          if(orig_index >= 0)
+            snprintf(orig_str, 32, "%d", orig_index);
+          else
+            orig_str[0] = '\0';
+          snprintf(dest_str, 32, "%lu", i);
+          parsec_flow_t orig{ .name = orig_str, .sym_type = PARSEC_SYM_INOUT, .flow_flags = PARSEC_FLOW_ACCESS_RW,
+                              .flow_index = 0, .flow_datatype_mask = ~0 };
+          parsec_flow_t dest{ .name = dest_str, .sym_type = PARSEC_SYM_INOUT, .flow_flags = PARSEC_FLOW_ACCESS_RW,
+                              .flow_index = 0, .flow_datatype_mask = ~0 };
+          parsec_prof_grapher_dep(&parsec_ttg_caller->parsec_task, &task->parsec_task, discover_task ? 1 : 0, &orig, &dest);
+        }
+#endif
       }
 
       if (reducer) {  // is this a streaming input? reduce the received value
@@ -1943,6 +2076,11 @@ namespace ttg_parsec {
           task = create_new_task(key);
           world.impl().increment_created();
           parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
+          if( world.impl().dag_profiling() ) {
+#if defined(PARSEC_PROF_GRAPHER)
+            parsec_prof_grapher_task(&task->parsec_task, world.impl().execution_stream()->th_id, 0, *(uintptr_t*)&(task->parsec_task.locals[0]));
+#endif
+          }
         }
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
@@ -1992,6 +2130,11 @@ namespace ttg_parsec {
           task = create_new_task(ttg::Void{});
           world.impl().increment_created();
           parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
+          if( world.impl().dag_profiling() ) {
+#if defined(PARSEC_PROF_GRAPHER)
+            parsec_prof_grapher_task(&task->parsec_task, world.impl().execution_stream()->th_id, 0, *(uintptr_t*)&(task->parsec_task.locals[0]));
+#endif
+          }
         }
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
@@ -2252,7 +2395,28 @@ namespace ttg_parsec {
     }
 
     static uint64_t make_key(const parsec_taskpool_t *tp, const parsec_assignment_t *as) {
-        return *(const uintptr_t*)as;
+        if(ttg::profiling())
+          return *(const uintptr_t*)as;
+        assert(0 /* make_key() called while the profiling was disabled */);
+        return 0;
+    }
+
+    static char *parsec_ttg_task_snprintf(char *buffer, size_t buffer_size, const parsec_task_t *t) {
+      if(buffer_size == 0)
+        return buffer;
+
+      if constexpr (ttg::meta::is_void_v<keyT>) {
+        snprintf(buffer, buffer_size, "%s()", t->task_class->name);
+      }  else {
+        // First 2 locals are used to store the task unique id;
+        // Second 2 locals are used to store the address of the key
+        keyT *key = *(keyT**)&(t->locals[2]);
+        std::stringstream ss;
+        ss << *key;
+
+        snprintf(buffer, buffer_size, "%s(%s)", t->task_class->name, ss.str().c_str());
+      }
+      return buffer;
     }
 
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
@@ -2310,14 +2474,30 @@ namespace ttg_parsec {
 
       memset(&self, 0, sizeof(parsec_task_class_t));
 
-      self.name = get_name().c_str();
+      self.name = strdup(get_name().c_str());
       self.task_class_id = get_instance_id();
       self.nb_parameters = 0;
       self.nb_locals = 0;
       self.nb_flows = numflows;
 
+      if( ttg::profiling() ) {
+        // first two ints are the unique number for the task.
+        self.nb_parameters = 2; // 2x int32_t of parameters, since the task ID is on 64 bits
+        // second two ints will be used to store the address of the key, when known
+        self.nb_locals     = 4; // 2x int32_t of parameters, since the task ID is on 64 bits
+
+        // If we have parameters and locals, we need to define the corresponding dereference arrays
+        self.params[0] = &detail::parsec_taskclass_param0;
+        self.params[1] = &detail::parsec_taskclass_param1;
+
+        self.locals[0] = &detail::parsec_taskclass_param0;
+        self.locals[1] = &detail::parsec_taskclass_param1;
+        self.locals[2] = &detail::parsec_taskclass_local2;
+        self.locals[3] = &detail::parsec_taskclass_local3;
+      }
       self.make_key = make_key;
       self.key_functions = &tasks_hash_fcts;
+      self.task_snprintf = parsec_ttg_task_snprintf;
       world_impl.register_new_tt(this);
 
       //    function_id_to_instance[self.task_class_id] = this;
