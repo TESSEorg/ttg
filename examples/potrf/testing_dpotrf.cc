@@ -30,7 +30,7 @@ int main(int argc, char **argv)
   int N = 5*NB;
   int M = N;
   int check = 0;
-  int nthreads = 1;
+  int nthreads = -1;
   const char* prof_filename = nullptr;
 
   if (argc > 1) {
