@@ -11,9 +11,9 @@ auto make_result(MatrixT<T>& A, ttg::Edge<Key2, MatrixTile<T>>& result) {
     /* write back any tiles that are not in the matrix already */
     const int I = key.I;
     const int J = key.J;
-    std::cout << "Running RESULT( " << key << ") on rank " << A.rank_of(key.I, key.J) << std::endl;
+    if(ttg::tracing()) ttg::print("RESULT( ", key, ") on rank ", A.rank_of(key.I, key.J));
     if (A(I, J).data() != tile.data()) {
-      //std::cout << "Writing back tile {" << I << ", " << J << "} " << std::endl;
+      //if(ttg::tracing()) ttg::print("Writing back tile {" << I << ", " << J << "} " << std::endl;
       std::copy_n(tile.data(), tile.rows()*tile.cols(), A(I, J).data());
     }
 #ifdef TTG_USE_USER_TERMDET
@@ -28,7 +28,6 @@ auto make_result(MatrixT<T>& A, ttg::Edge<Key2, MatrixTile<T>>& result) {
 
 auto make_result_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&result) {
   auto keymap2 = [&](const Key2& key) {
-    //std::cout << "Key " << key << " is at rank " << A.rank_of(key.I, key.J) << std::endl;
     return A.rank_of(key.I, key.J);
   };
   auto result_tt = make_result(A, result);

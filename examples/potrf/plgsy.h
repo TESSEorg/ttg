@@ -12,7 +12,7 @@ auto make_plgsy(MatrixT<T>& A, unsigned long bump, unsigned long random_seed, tt
     /* write back any tiles that are not in the matrix already */
     const int I = key.I;
     const int J = key.J;
-    std::cout << "Running PLGSY( " << key << ") on rank " << A.rank_of(key.I, key.J) << std::endl;
+    if(ttg::tracing()) ttg::print("PLGSY( ", key, ") on rank ", A.rank_of(key.I, key.J));
     assert(A.is_local(I, J));
 
     T *a = A(I, J).data();
@@ -33,7 +33,6 @@ auto make_plgsy(MatrixT<T>& A, unsigned long bump, unsigned long random_seed, tt
 
 auto make_plgsy_ttg(MatrixT<double> &A, unsigned long bump, unsigned long random_seed, ttg::Edge<Key2, void>& startup, ttg::Edge<Key2, MatrixTile<double>>&result) {
   auto keymap2 = [&](const Key2& key) {
-    //std::cout << "Key " << key << " is at rank " << A.rank_of(key.I, key.J) << std::endl;
     return A.rank_of(key.I, key.J);
   };
   auto plgsy_tt = make_plgsy(A, bump, random_seed, startup, result);

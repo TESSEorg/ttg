@@ -30,7 +30,7 @@ auto make_trtri(const MatrixT<T>& A,
                std::tuple<ttg::Out<Key2, MatrixTile<T>>>& out){
     const int K = key.K;
 
-    std::cout << "TRTRI " << key << std::endl;
+    if(ttg::tracing()) ttg::print("TRTRI(", key, ")");
     
     int info = lapack::trtri(lapack::Uplo::Lower, diag, tile_kk.rows(), tile_kk.data(), tile_kk.rows());
     assert(0 == info);
@@ -59,7 +59,7 @@ auto make_trsml(const MatrixT<T>& A,
     auto mb = tile_kn.rows();
     assert(tile_kk.rows() == mb);
 
-    std::cout << "TRSML " << key << std::endl;
+    if(ttg::tracing()) ttg::print("TRSML(", key, ")");
 
     blas::trsm(blas::Layout::ColMajor,
                blas::Side::Left,
@@ -102,7 +102,7 @@ auto make_trsmr(const MatrixT<T>& A,
     auto mb = tile_mk.rows();
     assert(tile_kk.rows() == mb);
 
-    std::cout << "TRSMR " << key << std::endl;
+    if(ttg::tracing()) ttg::print("TRSMR(", key, ")");
 
     blas::trsm(blas::Layout::ColMajor,
                blas::Side::Right,
@@ -171,7 +171,7 @@ auto make_gemm(const MatrixT<T>& A,
     assert(input_B.rows() == mb);
     assert(input_C.rows() == mb);
 
-    std::cout << "GEMM " << key << std::endl;
+    if(ttg::tracing()) ttg::print("GEMM(", key, ")");
 
     blas::gemm(blas::Layout::ColMajor,
                blas::Op::NoTrans,
@@ -224,23 +224,23 @@ auto make_dispatcher(const MatrixT<T>& A,
                           ttg::Out<Key2, MatrixTile<T>>,
                           ttg::Out<Key2, MatrixTile<T>>,
                           ttg::Out<Key2, MatrixTile<T>>>& out){
-    std::cout << "TRTRI_Dispatch called with " << key << std::endl;
+    if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ")");
     if(key.I == key.J) {
       std::vector<Key2> keylist_trsml;
       std::vector<Key2> keylist_trsmr;
-      std::cout << "TRTRI_Dispatch(" << key << ") sending to TRTRI(" << Key1{key.I} << ")" << std::endl;
+      if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ") sending to TRTRI(", Key1{key.I}, ")");
       
       if(key.I < A.rows()) {
           keylist_trsmr.reserve(A.rows()-key.I+1);
           for(int k = key.I+1; k < A.rows(); k++) {
-              std::cout << "TRTRI_Dispatch(" << key << ") sending to input_kk of TRSMR(" << Key2{key.I, k} << ")" << std::endl;
+              if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ") sending to input_kk of TRSMR(", Key2{key.I, k}, ")");
               keylist_trsmr.push_back(Key2{key.I, k});
           }
       }
       if(key.I > 0) {
           keylist_trsml.reserve(key.I-1);
           for(int k = 0; k < key.I; k++) {
-              std::cout << "TRTRI_Dispatch(" << key << ") sending to input_kk of TRSML(" << Key2{key.I, k} << ")" << std::endl;
+              if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ") sending to input_kk of TRSML(", Key2{key.I, k}, ")");
               keylist_trsml.push_back(Key2{key.I, k});
           }
       }
@@ -248,7 +248,7 @@ auto make_dispatcher(const MatrixT<T>& A,
       return;
     }
 
-    std::cout << "TRTRI_Dispatch(" << key << ") sending to input_mk of TRSM_R(" << Key2{key.J, key.I} << ")" << std::endl;
+    if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ") sending to input_mk of TRSM_R(", Key2{key.J, key.I}, ")");
     ttg::send<3>(Key2{key.J, key.I}, std::move(tile), out);
   };
 
@@ -257,21 +257,17 @@ auto make_dispatcher(const MatrixT<T>& A,
 
 auto make_trtri_ttg(MatrixT<double> &A, lapack::Diag diag, ttg::Edge<Key2, MatrixTile<double>>&input, ttg::Edge<Key2, MatrixTile<double>>&output ) {
   auto keymap1 = [&](const Key1& key) {
-    //std::cout << "Key " << key << " is at rank " << A.rank_of(key.I, key.J) << std::endl;
     return A.rank_of(key.K, key.K);
   };
 
   auto keymap2a = [&](const Key2& key) {
-    //std::cout << "Key " << key << " is at rank " << A.rank_of(key.I, key.J) << std::endl;
     return A.rank_of(key.I, key.J);
   };
   auto keymap2b = [&](const Key2& key) {
-    //std::cout << "Key " << key << " is at rank " << A.rank_of(key.J, key.I) << std::endl;
     return A.rank_of(key.J, key.I);
   };
 
   auto keymap3 = [&](const Key3& key) {
-    //std::cout << "Key " << key << " is at rank " << A.rank_of(key.J, key.K) << std::endl;
     return A.rank_of(key.J, key.K);
   };
 

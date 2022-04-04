@@ -74,7 +74,7 @@ int main(int argc, char **argv)
   dcA.mat = parsec_data_allocate((size_t)dcA.super.nb_local_tiles *
                                  (size_t)dcA.super.bsiz *
                                  (size_t)parsec_datadist_getsizeoftype(dcA.super.mtype));
-  parsec_data_collection_set_key((parsec_data_collection_t*)&dcA, "Matrix A");
+  parsec_data_collection_set_key((parsec_data_collection_t*)&dcA, (char*)"Matrix A");
 
   ttg::Edge<Key2, void> startup("startup");
   ttg::Edge<Key2, MatrixTile<double>> topotrf("To POTRF");

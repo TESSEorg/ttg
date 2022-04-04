@@ -29,15 +29,16 @@ auto make_lauum(const MatrixT<T>& A,
                std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out){
     const int K = key.K;
 
-    std::cout << "LAUUM " << key << std::endl;
-    
+    if(ttg::tracing()) ttg::print("LAUUM(", key, ")");
+
     lapack::lauum(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.rows());
-    
+
     /* send the tile to output */
     if(K < A.rows()-1) {
-        std::cout << "LAUUM(" << key << ") sending to SYRK(" << Key2{K+1, K} << ")" << std::endl;
+        if(ttg::tracing()) ttg::print("LAUUM(", key, ") sending to SYRK(", Key2{K+1, K}, ")");
         ttg::send<0>(Key2{K+1, K}, std::move(tile_kk), out);
     } else if (K == A.rows()-1) {
+        if(ttg::tracing()) ttg::print("LAUUM(", key, ") sending to output(", Key2{K, K}, ")");
         ttg::send<1>(Key2{K, K}, std::move(tile_kk), out);
     }
   };
@@ -62,7 +63,7 @@ auto make_trmm(const MatrixT<T>& A,
     auto mb = tile_kn.rows();
     assert(tile_kk.rows() == mb);
 
-    std::cout << "TRMM " << key << std::endl;
+    if(ttg::tracing()) ttg::print("TRMM(", key, ")");
 
     blas::trmm(blas::Layout::ColMajor,
                blas::Side::Left,
@@ -74,7 +75,7 @@ auto make_trmm(const MatrixT<T>& A,
                tile_kn.data(), mb);
 
     if(K < A.rows()-1) {
-      std::cout << "TRMM(" << key << ") sending to C of GEMM(" << Key3{K+1, N, K} << ")" << std::endl;
+      if(ttg::tracing()) ttg::print("TRMM(", key, ") sending to C of GEMM(", Key3{K+1, N, K}, ")");
       ttg::send<0>(Key3{K+1, N, K}, std::move(tile_kn), out);
     } else if(K == A.rows()-1) {
       /* send the tile to output */
@@ -105,7 +106,7 @@ auto make_syrk(const MatrixT<T>& A,
     auto mb = tile_kn.rows();
     assert(tile_nn.rows() == mb);
 
-    std::cout << "SYRK " << key << std::endl;
+    if(ttg::tracing()) ttg::print("SYRK(", key, ")");
 
     blas::syrk(blas::Layout::ColMajor,
                lapack::Uplo::Lower,
@@ -115,7 +116,7 @@ auto make_syrk(const MatrixT<T>& A,
                1.0, tile_nn.data(), mb);
 
     if(K < A.rows()-1) {
-        std::cout << "SYRK(" << key << ") sending to nn of SYRK(" << Key2{K+1, N} << ")" << std::endl;
+        if(ttg::tracing()) ttg::print("SYRK(", key, ") sending to nn of SYRK(", Key2{K+1, N}, ")");
         ttg::send<0>(Key2{K+1, N}, tile_kn, out);
     } else if(K == A.rows()-1) {
         ttg::send<1>(Key2{N, N}, tile_kn, out);
@@ -149,7 +150,7 @@ auto make_gemm(const MatrixT<T>& A,
     assert(input_B.rows() == mb);
     assert(input_C.rows() == mb);
 
-    std::cout << "GEMM " << key << std::endl;
+    if(ttg::tracing()) ttg::print("GEMM(", key, ")");
 
     blas::gemm(blas::Layout::ColMajor,
                blas::Op::Trans,
@@ -160,7 +161,7 @@ auto make_gemm(const MatrixT<T>& A,
                1.0, input_C.data(), mb);
 
     if(K < A.rows()-1) {
-        std::cout << "GEMM(" << key << ") sending to C of GEMM(" << Key3{K+1, N, M} << ")" << std::endl;
+        if(ttg::tracing()) ttg::print("GEMM(", key, ") sending to C of GEMM(", Key3{K+1, N, M}, ")");
         ttg::send<0>(Key3{K+1, N, M}, std::move(input_C), out);
     } else if(K == A.rows()-1) {
         ttg::send<1>(Key2{M, N}, std::move(input_C), out);
@@ -190,7 +191,7 @@ auto make_dispatcher(const MatrixT<T>& A,
                           ttg::Out<Key2, MatrixTile<T>>,
                           ttg::Out<Key3, MatrixTile<T>>,
                           ttg::Out<Key3, MatrixTile<T>>>& out) {
-    std::cout << "LAUUM_dispatch called with " << key << std::endl;
+    if(ttg::tracing()) ttg::print("LAUUM_dispatch(", key, ")");
     std::vector<Key1> keylist_lauum;
     std::vector<Key2> keylist_syrk;
     std::vector<Key2> keylist_trmm_A;
@@ -199,28 +200,28 @@ auto make_dispatcher(const MatrixT<T>& A,
     std::vector<Key3> keylist_gemm_B;
 
     if(key.I == key.J) {
-        std::cout << "LAUUM_Dispatch(" << key << ") sending to LAUUM(" << Key1{key.I} << ")" << std::endl;
+        if(ttg::tracing()) ttg::print("LAUUM_Dispatch(", key, ") sending to LAUUM(", Key1{key.I}, ")");
         keylist_lauum.reserve(1);
         keylist_lauum.push_back(Key1{key.I});
         if(key.I > 0) {
             keylist_trmm_A.reserve(key.J);
             for(int n = 0; n < key.J; n++) {
-                std::cout << "LAUUM_Dispatch(" << key << ") sending to kn of TRMM(" << Key2{key.J, n} << ")" << std::endl;
+                if(ttg::tracing()) ttg::print("LAUUM_Dispatch(", key, ") sending to kn of TRMM(", Key2{key.J, n}, ")");
                 keylist_trmm_A.push_back(Key2{key.J, n});
             }
         }
     } 
     if(key.I > key.J) {
         keylist_syrk.reserve(1);
-        std::cout << "LAUUM_Dispatch(" << key << ") sending to SYRK(" << key << ")" << std::endl;
+        if(ttg::tracing()) ttg::print("LAUUM_Dispatch(", key, ") sending to SYRK(", key, ")");
         keylist_syrk.push_back(key);
         keylist_trmm_B.reserve(1);
-        std::cout << "LAUUM_Dispatch(" << key << ") sending to nn of TRMM(" << key << ")" << std::endl;
+        if(ttg::tracing()) ttg::print("LAUUM_Dispatch(", key, ") sending to nn of TRMM(", key, ")");
         keylist_trmm_B.push_back(key);
         if(key.J > 0) {
             keylist_gemm_A.reserve(key.J);
             for(int n = 0; n < key.J; n++) {
-                std::cout << "LAUUM_Dispatch(" << key << ") sending to A of GEMM(" << Key3{key.I, n, key.J} << ")" << std::endl;
+                if(ttg::tracing()) ttg::print("LAUUM_Dispatch(", key, ") sending to A of GEMM(", Key3{key.I, n, key.J}, ")");
                 keylist_gemm_A.push_back(Key3{key.I, n, key.J});      
             }
         }
@@ -228,7 +229,7 @@ auto make_dispatcher(const MatrixT<T>& A,
     if(key.I > key.J + 1) {
         keylist_gemm_B.reserve(key.I - key.J + 1);
         for(int n = key.J+1; n < key.I; n++) {
-            std::cout << "LAUUM_Dispatch(" << key << ") sending to B of GEMM(" << Key3{key.I, key.J, n} << ")" << std::endl;
+            if(ttg::tracing()) ttg::print("LAUUM_Dispatch(", key, ") sending to B of GEMM(", Key3{key.I, key.J, n}, ")");
             keylist_gemm_B.push_back(Key3{key.I, key.J, n});
         }
     }
@@ -241,21 +242,21 @@ auto make_dispatcher(const MatrixT<T>& A,
 
 auto make_lauum_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&input, ttg::Edge<Key2, MatrixTile<double>>&output ) {
   auto keymap1 = [&](const Key1& key) {
-    //std::cout << "Key " << key << " is at rank " << A.rank_of(key.K, key.K) << std::endl;
+    //if(ttg::tracing()) ttg::print("Key ", key, " is at rank ", A.rank_of(key.K, key.K));
     return A.rank_of(key.K, key.K);
   };
 
   auto keymap2a = [&](const Key2& key) {
-    //std::cout << "Key " << key << " is at rank " << A.rank_of(key.I, key.J) << std::endl;
+    //if(ttg::tracing()) ttg::print("Key ", key, " is at rank ", A.rank_of(key.I, key.J));
     return A.rank_of(key.I, key.J);
   };
   auto keymap2b = [&](const Key2& key) {
-    //std::cout << "Key " << key << " is at rank " << A.rank_of(key.J, key.J) << std::endl;
+    //if(ttg::tracing()) ttg::print("Key ", key, " is at rank ", A.rank_of(key.J, key.J));
     return A.rank_of(key.J, key.J);
   };
 
   auto keymap3 = [&](const Key3& key) {
-    //std::cout << "Key " << key << " is at rank " << A.rank_of(key.K, key.J) << std::endl;
+    //if(ttg::tracing()) ttg::print("Key ", key, " is at rank ", A.rank_of(key.K, key.J));
     return A.rank_of(key.K, key.J);
   };
 
