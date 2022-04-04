@@ -2395,8 +2395,10 @@ namespace ttg_parsec {
     }
 
     static uint64_t make_key(const parsec_taskpool_t *tp, const parsec_assignment_t *as) {
-        if(ttg::profiling())
-          return *(const uintptr_t*)as;
+        if(ttg::profiling()) {
+          // Key is stored in locals[2] and locals[3]...
+          return *(const uintptr_t*)&(as[2]);
+        }
         assert(0 /* make_key() called while the profiling was disabled */);
         return 0;
     }

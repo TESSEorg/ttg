@@ -117,8 +117,7 @@ auto make_trsmr(const MatrixT<T>& A,
                 ttg::Edge<Key3, MatrixTile<T>>& to_gemm_A,
                 ttg::Edge<Key3, MatrixTile<T>>& to_gemm_B,
                 ttg::Edge<Key3, MatrixTile<T>>& to_gemm_C,
-                ttg::Edge<Key2, MatrixTile<T>>& to_trsml_kn,
-                ttg::Edge<Key2, MatrixTile<T>>& output_result)
+                ttg::Edge<Key2, MatrixTile<T>>& to_trsml_kn)
 {
   auto f = [=](const Key2& key,
                const MatrixTile<T>& tile_kk,
@@ -126,8 +125,7 @@ auto make_trsmr(const MatrixT<T>& A,
                std::tuple<ttg::Out<Key3, MatrixTile<T>>, // gemm_A 
                           ttg::Out<Key3, MatrixTile<T>>, // gemm_B
                           ttg::Out<Key3, MatrixTile<T>>, // gemm_C
-                          ttg::Out<Key2, MatrixTile<T>>, // trsml_kn
-                          ttg::Out<Key2, MatrixTile<T>>  // result
+                          ttg::Out<Key2, MatrixTile<T>>  // trsml_kn
                          >& out){
     const int K = key.I;
     const int M = key.J;
@@ -174,12 +172,12 @@ auto make_trsmr(const MatrixT<T>& A,
         keylist_kn_trsml.push_back(Key2{K+1, K});
     }
 
-    ttg::broadcast<0, 1, 2, 3, 4>(std::make_tuple(keylist_A_gemm, keylist_B_gemm, keylist_C_gemm, keylist_kn_trsml, Key2{M, K}),
+    ttg::broadcast<0, 1, 2, 3>(std::make_tuple(keylist_A_gemm, keylist_B_gemm, keylist_C_gemm, keylist_kn_trsml),
                                   std::move(tile_mk), out);
   };
   return ttg::make_tt(f, ttg::edges(input_kk, input_mk), 
-                         ttg::edges(to_gemm_A, to_gemm_B, to_gemm_C, to_trsml_kn, output_result), "TRSMR", 
-                      {"tile_kk", "tile_mk"}, {"GEMM_A", "GEMM_B", "GEMM_C", "TRSML_kn", "output_result"});
+                         ttg::edges(to_gemm_A, to_gemm_B, to_gemm_C, to_trsml_kn), "TRSMR", 
+                      {"tile_kk", "tile_mk"}, {"GEMM_A", "GEMM_B", "GEMM_C", "TRSML_kn"});
 }
 
 template <typename T>
@@ -343,7 +341,7 @@ auto make_trtri_ttg(MatrixT<double> &A, lapack::Diag diag, ttg::Edge<Key2, Matri
 
   auto tt_trsmr = make_trsmr(A, diag, disp_trsmr_kk, disp_trsmr_mk, 
                              trsmr_gemm_A, trsmr_gemm_B, trsmr_gemm_C,
-                             trsmr_trsml, output);
+                             trsmr_trsml);
   tt_trsmr->set_keymap(keymap2b);
 
   gemm_B = ttg::fuse(trsmr_gemm_B, gemm_gemm_B);
