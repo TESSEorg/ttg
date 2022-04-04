@@ -91,7 +91,7 @@ int main(int argc, char **argv)
     for(int i = 0; i < A.rows(); i++) {
       for(int j = 0; j <= i && j < A.cols(); j++) {
         if(A.is_local(i, j)) {
-          ttg::print("init(", Key2{i, j}, ")");
+          if(ttg::tracing()) ttg::print("init(", Key2{i, j}, ")");
           ttg::sendk<0>(Key2{i, j}, out);
         }
       }
