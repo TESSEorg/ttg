@@ -185,6 +185,13 @@ namespace ttg_parsec {
     {
       ttg::detail::register_world(*this);
       ctx = parsec_init(ncores, argc, argv);
+
+#if defined(PARSEC_PROF_TRACE)
+      if(parsec_profile_enabled) {
+        ttg::profile_on();
+      }
+#endif
+
       es = ctx->virtual_processes[0]->execution_streams[0];
 
       parsec_ce.tag_register(_PARSEC_TTG_TAG, &detail::static_unpack_msg, this, PARSEC_TTG_MAX_AM_SIZE);

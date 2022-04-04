@@ -9,9 +9,9 @@
 namespace potrf {
 
 /* FLOP macros taken from DPLASMA */
-#define FMULS_POTRF(__n) ((double)(__n) * (((1. / 6.) * (double)(__n) + 0.5) * (double)(__n) + (1. / 3.)))
-#define FADDS_POTRF(__n) ((double)(__n) * (((1. / 6.) * (double)(__n)      ) * (double)(__n) - (1. / 6.)))
-#define FLOPS_DPOTRF(__n) (     FMULS_POTRF((__n)) +       FADDS_POTRF((__n)) )
+double FMULS_POTRF(double __n) { return (__n * (((1. / 6.) * __n + 0.5) * __n + (1. / 3.))); }
+double FADDS_POTRF(double __n) { return (__n * (((1. / 6.) * __n      ) * __n - (1. / 6.))); }
+double FLOPS_DPOTRF(double __n) { return FMULS_POTRF(__n) + FADDS_POTRF(__n); }
 
 template <typename T>
 auto make_potrf(MatrixT<T>& A,

@@ -11,10 +11,10 @@
 
 namespace potri {
 
-/* FLOP macros taken from DPLASMA */
-#define FMULS_POTRI(__n) ((double)(__n) * (((1. / 6.) * (double)(__n) + 0.5) * (double)(__n) + (1. / 3.)))
-#define FADDS_POTRI(__n) ((double)(__n) * (((1. / 6.) * (double)(__n)      ) * (double)(__n) - (1. / 6.)))
-#define FLOPS_DPOTRI(__n) (     FMULS_POTRI((__n)) +       FADDS_POTRI((__n)) )
+/* FLOP macros taken from DPLASMA */ 
+double FMULS_POTRI(double __n) { return ( __n * ((2. / 3.) + __n * ((1. / 3.) * __n + 1. )) ); }
+double FADDS_POTRI(double __n) { return ( __n * ((1. / 6.) + __n * ((1. / 3.) * __n - 0.5)) ); }
+double FLOPS_DPOTRI(double __n) { return FMULS_POTRI(__n) + FADDS_POTRI(__n); }
 
 auto make_potri_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&input, ttg::Edge<Key2, MatrixTile<double>>&output ) {
   ttg::Edge<Key2, MatrixTile<double>> trtri_to_lauum("trtri_to_lauum");

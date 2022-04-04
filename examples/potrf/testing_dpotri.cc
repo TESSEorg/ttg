@@ -20,6 +20,21 @@
 #include <dplasma.h>
 #endif
 
+char* getCmdOption(char ** begin, char ** end, const std::string & option)
+{
+    char ** itr = std::find(begin, end, option);
+    if (itr != end && ++itr != end)
+    {
+        return *itr;
+    }
+    return nullptr;
+}
+
+bool cmdOptionExists(char** begin, char** end, const std::string& option)
+{
+    return std::find(begin, end, option) != end;
+}
+
 int main(int argc, char **argv)
 {
 
@@ -30,25 +45,22 @@ int main(int argc, char **argv)
   int check = 0;
   int nthreads = -1;
   const char* prof_filename = nullptr;
+  char *opt = nullptr;
 
-  if (argc > 1) {
-    N = M = atoi(argv[1]);
+  if( (opt = getCmdOption(argv+1, argv+argc, "-N")) != nullptr ) {
+    N = M = atoi(opt);
   }
 
-  if (argc > 2) {
-    NB = atoi(argv[2]);
+  if( (opt = getCmdOption(argv+1, argv+argc, "-t")) != nullptr ) {
+    NB = atoi(opt);
   }
 
-  if (argc > 3) {
-    check = atoi(argv[3]);
+  if( (opt = getCmdOption(argv+1, argv+argc, "-c")) != nullptr ) {
+    nthreads = atoi(opt);
   }
 
-  if (argc > 4) {
-    nthreads = atoi(argv[4]);
-  }
-
-  if (argc > 5) {
-    prof_filename = argv[5];
+  if( (opt = getCmdOption(argv+1, argv+argc, "-dag")) != nullptr ) {
+    prof_filename = opt;
   }
 
   ttg::initialize(argc, argv, nthreads);
@@ -133,7 +145,7 @@ int main(int argc, char **argv)
     auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
     end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "
-              << elapsed / 1E3 << " : Flops " << (FLOPS_DPOTRF(N)) << " " << (FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+              << elapsed / 1E3 << " : Flops " << (potri::FLOPS_DPOTRI(N)) << " " << (potri::FLOPS_DPOTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
   }
 
   world.impl().stop_tracing_dag_of_tasks();

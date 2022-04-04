@@ -129,7 +129,7 @@ int main(int argc, char **argv)
     auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
     end = std::chrono::high_resolution_clock::now();
     std::cout << "TTG Execution Time (milliseconds) : "
-              << elapsed / 1E3 << " : Flops " << (FLOPS_DPOTRF(N)) << " " << (FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+              << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
   }
 
   world.impl().stop_tracing_dag_of_tasks();
