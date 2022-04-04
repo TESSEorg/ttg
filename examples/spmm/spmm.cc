@@ -1247,10 +1247,11 @@ static double compute_gflops(const std::vector<std::vector<long>> &a_r2c, const 
   for (auto i = 0; i < a_r2c.size(); i++) {
     for (auto kk = 0; kk < a_r2c[i].size(); kk++) {
       auto k = a_r2c[i][kk];
-      if (k > b_r2c.size()) continue;
+      if (k > b_r2c.size())
+        continue;
       for (auto jj = 0; jj < b_r2c[k].size(); jj++) {
         auto j = b_r2c[k][jj];
-        flops += mTiles[i] * nTiles[j] * kTiles[k];
+        flops += static_cast<long>(mTiles[i]) * nTiles[j] * kTiles[k];
       }
     }
   }
@@ -1445,8 +1446,8 @@ int main(int argc, char **argv) {
       SpMM<> a_times_b(eA, eB, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
                        mTiles, nTiles, kTiles, keymap);
       TTGUNUSED(a_times_b);
-
-      if (default_execution_context().rank() == 0) std::cout << Dot{}(&a, &b) << std::endl;
+      /// calling the Dot constructor with 'true' argument disables the type
+      if (default_execution_context().rank() == 0) std::cout << Dot{/*disable_type=*/ true}(&control) << std::endl;
 
       // ready to run!
       auto connected = make_graph_executable(&control);
