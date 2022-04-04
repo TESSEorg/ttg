@@ -13,7 +13,8 @@ namespace ttg {
     bool disable_type;
 
    public:
-    /// Creating constructor to receive arguments for 'disable_type'
+    /// \param[in] disable_type disable_type controls whether to embed types into the DOT output;
+    ///            set to `true` to reduce the amount of the output
     Dot(bool disable_type = false) : disable_type(disable_type){};
 
    private:
