@@ -3,6 +3,7 @@
 #ifndef TTG_MAKE_TT_H
 #define TTG_MAKE_TT_H
 
+#if 0
 namespace detail {
 
   template <typename... FromEdgeTypesT, std::size_t... I>
@@ -22,6 +23,7 @@ namespace detail {
 
   inline auto edge_base_tuple(const std::tuple<> &empty) { return empty; }
 }  // namespace detail
+#endif // 0
 
 // Class to wrap a callable with signature
 //
@@ -346,9 +348,9 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
   static_assert(std::is_same_v<decayed_input_args_t, std::tuple<input_edge_valuesT...>>,
                 "ttg::make_tt_tpl(func, inedges, outedges): inedges value types do not match argument types of func");
 
-  auto input_edges = detail::edge_base_tuple(inedges);
+  //auto input_edges = detail::edge_base_tuple(inedges);
 
-  return std::make_unique<wrapT>(std::forward<funcT>(func), input_edges, outedges, name, innames, outnames);
+  return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
 /// @brief Factory function to assist in wrapping a callable with signature
@@ -423,9 +425,9 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   using wrapT = typename CallableWrapTTArgsAsTypelist<funcT, have_outterm_tuple, keyT, output_terminals_type,
                                                       full_input_args_t>::type;
 
-  auto input_edges = detail::edge_base_tuple(inedges);
+  //auto input_edges = detail::edge_base_tuple(inedges);
 
-  return std::make_unique<wrapT>(std::forward<funcT>(func), input_edges, outedges, name, innames, outnames);
+  return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
 template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
