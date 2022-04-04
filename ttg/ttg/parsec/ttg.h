@@ -199,7 +199,7 @@ namespace ttg_parsec {
       tpool->taskpool_id = -1;
       tpool->update_nb_runtime_task = parsec_add_fetch_runtime_task;
       tpool->taskpool_type = PARSEC_TASKPOOL_TYPE_TTG;
-      tpool->taskpool_name = "TTG Taskpool";
+      tpool->taskpool_name = (char*)"TTG Taskpool";
       parsec_taskpool_reserve_id(tpool);
 
 #ifdef TTG_USE_USER_TERMDET

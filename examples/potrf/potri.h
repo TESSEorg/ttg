@@ -9,6 +9,8 @@
 #include "trtri.h"
 #include "lauum.h"
 
+namespace potri {
+
 /* FLOP macros taken from DPLASMA */
 #define FMULS_POTRI(__n) ((double)(__n) * (((1. / 6.) * (double)(__n) + 0.5) * (double)(__n) + (1. / 3.)))
 #define FADDS_POTRI(__n) ((double)(__n) * (((1. / 6.) * (double)(__n)      ) * (double)(__n) - (1. / 6.)))
@@ -28,3 +30,5 @@ auto make_potri_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&inpu
 
   return make_ttg(std::move(ops), ins, outs, "POTRI TTG");
 }
+
+};

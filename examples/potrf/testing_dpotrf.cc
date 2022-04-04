@@ -5,15 +5,12 @@
 #undef TTG_USE_USER_TERMDET
 #endif // TTG_USE_PARSEC
 
-#define USE_PARSEC_PROF_API 0
-
 #include <ttg.h>
 
 // needed for madness::hashT and xterm_debug
 #include <madness/world/world.h>
 
 #include "pmw.h"
-#include "tracing.h"
 #include "plgsy.h"
 #include "potrf.h"
 #include "result.h"
@@ -51,37 +48,15 @@ int main(int argc, char **argv)
 
   if (argc > 5) {
     prof_filename = argv[5];
-    profiling_enabled = true;
   }
 
   ttg::initialize(argc, argv, nthreads);
 
-  ttg::profile_on();
-
   auto world = ttg::default_execution_context();
-  world.impl().start_tracing_dag_of_tasks("potrf");
-
-#if USE_PARSEC_PROF_API
-  if (nullptr != prof_filename) {
-    parsec_profiling_init();
-
-    parsec_profiling_dbp_start( prof_filename, "Cholesky Factorization" );
-
-    parsec_profiling_add_dictionary_keyword("TRSM", "#0000FF",
-                                            sizeof(int)*2, EVENT_B_INFO_CONVERTER,
-                                            &event_trsm_startkey, &event_trsm_endkey);
-
-    parsec_profiling_add_dictionary_keyword("SYRK", "#00FF00",
-                                            sizeof(int)*2, EVENT_B_INFO_CONVERTER,
-                                            &event_syrk_startkey, &event_syrk_endkey);
-
-    parsec_profiling_add_dictionary_keyword("POTRF", "#FF0000",
-                                            sizeof(int)*1, EVENT_PO_INFO_CONVERTER,
-                                            &event_potrf_startkey, &event_potrf_endkey);
-    parsec_profiling_start();
-    profiling_enabled = true;
+  if(nullptr != prof_filename) {
+    ttg::profile_on();
+    world.impl().start_tracing_dag_of_tasks(prof_filename);
   }
-#endif // USE_PARSEC_PROF_API
 
   int P = std::sqrt(world.size());
   int Q = (world.size() + P - 1)/P;
@@ -129,7 +104,7 @@ int main(int argc, char **argv)
   auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, topotrf);
 #endif // USE_DPLASMA
 
-  auto potrf_ttg = make_potrf_ttg(A, topotrf, result);
+  auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, result);
   auto result_ttg = make_result_ttg(A, result);
 
   auto connected = make_graph_executable(init_tt.get());
@@ -224,14 +199,6 @@ int main(int argc, char **argv)
   /* cleanup allocated matrix before shutting down PaRSEC */
   parsec_data_free(dcA.mat); dcA.mat = NULL;
   parsec_tiled_matrix_dc_destroy( (parsec_tiled_matrix_dc_t*)&dcA);
-
-#if USE_PARSEC_PROF_API
-  /** Finalize profiling */
-  if (profiling_enabled) {
-    parsec_profiling_dbp_dump();
-    parsec_profiling_fini();
-  }
-#endif // USE_PARSEC_PROF_API
 
   ttg::finalize();
   return 0;

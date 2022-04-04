@@ -6,33 +6,12 @@
 #include "pmw.h"
 #include "lapack.hh"
 
+namespace potrf {
+
 /* FLOP macros taken from DPLASMA */
 #define FMULS_POTRF(__n) ((double)(__n) * (((1. / 6.) * (double)(__n) + 0.5) * (double)(__n) + (1. / 3.)))
 #define FADDS_POTRF(__n) ((double)(__n) * (((1. / 6.) * (double)(__n)      ) * (double)(__n) - (1. / 6.)))
 #define FLOPS_DPOTRF(__n) (     FMULS_POTRF((__n)) +       FADDS_POTRF((__n)) )
-
-static int event_trsm_startkey, event_trsm_endkey;
-static int event_syrk_startkey, event_syrk_endkey;
-static int event_potrf_startkey, event_potrf_endkey;
-#define EVENT_B_INFO_CONVERTER "I{int};J{int}"
-#define EVENT_PO_INFO_CONVERTER "I{int}"
-
-/**
- * Wrapper around parsec_profiling_trace_flags to enable/disable at will
- */
-int potrf_parsec_profiling_trace_flags(parsec_profiling_stream_t* context, int key,
-                                       uint64_t event_id, uint32_t taskpool_id,
-                                       const void *info, uint16_t flags )
-{
-  int rc = 0;
-#if USE_PARSEC_PROF_API
-  if (profiling_enabled) {
-    init_prof_thread();
-    rc = parsec_profiling_trace_flags(context, key, event_id, taskpool_id, info, flags);
-  }
-#endif // USE_PARSEC_PROF_API
-  return rc;
-}
 
 template <typename T>
 auto make_potrf(MatrixT<T>& A,
@@ -48,12 +27,8 @@ auto make_potrf(MatrixT<T>& A,
     const int K = key.K;
 
     std::cout << "POTRF " << key << std::endl;
-    potrf_parsec_profiling_trace_flags(prof, event_potrf_startkey, K, PROFILE_OBJECT_ID_NULL,
-                                       &key, PARSEC_PROFILING_EVENT_HAS_INFO);
 
     lapack::potrf(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.rows());
-
-    potrf_parsec_profiling_trace_flags(prof, event_potrf_endkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     /* send the tile to outputs */
     std::vector<Key2> keylist;
@@ -97,15 +72,8 @@ auto make_trsm(MatrixT<T>& A,
 
     auto m = tile_mk.rows();
 
-#ifdef PRINT_TILES
-    std::cout << "TRSM BEFORE: kk" << std::endl;
-    dplasma_dprint_tile(I, J, &A.parsec()->super, tile_kk.data());
-    std::cout << "TRSM BEFORE: mk" << std::endl;
-    dplasma_dprint_tile(I, J, &A.parsec()->super, tile_mk.data());
-#endif // PRINT_TILES
+    std::cout << "TRSM(" << key << ")" << std::endl;
 
-    potrf_parsec_profiling_trace_flags(prof, event_trsm_startkey, J, PROFILE_OBJECT_ID_NULL,
-                                       &key, PARSEC_PROFILING_EVENT_HAS_INFO);
     blas::trsm(blas::Layout::ColMajor,
                blas::Side::Right,
                lapack::Uplo::Lower,
@@ -115,40 +83,23 @@ auto make_trsm(MatrixT<T>& A,
                tile_kk.data(), m,
                tile_mk.data(), m);
 
-    potrf_parsec_profiling_trace_flags(prof, event_trsm_endkey, J, PROFILE_OBJECT_ID_NULL, NULL, 0);
-
-#ifdef PRINT_TILES
-    std::cout << "TRSM AFTER: kk" << std::endl;
-    dplasma_dprint_tile(I, J, &A.parsec()->super, tile_kk.data());
-    std::cout << "TRSM AFTER: mk" << std::endl;
-    dplasma_dprint_tile(I, J, &A.parsec()->super, tile_mk.data());
-#endif // PRINT_TILES
-
-    std::cout << "TRSM(" << key << ")" << std::endl;
-
     std::vector<Key3> keylist_row;
     keylist_row.reserve(I-J-1);
     std::vector<Key3> keylist_col;
     keylist_col.reserve(A.rows()-I-1);
 
-    /* tile is done */
-    //ttg::send<0>(key, std::move(tile_mk), out);
-
     /* send tile to syrk on diagonal */
     std::cout << "TRSM(" << key << "): sending output to syrk(" << Key2{I, K} << ")" << std::endl;
-    //ttg::send<1>(Key2{I, K}, tile_mk, out);
 
     /* send the tile to all gemms across in row i */
     for (int n = J+1; n < I; ++n) {
       std::cout << "TRSM(" << key << "): sending output to gemm( " << Key3{I, n, K} << ")" << std::endl;
-      //ttg::send<2>(Key(I, n, K), tile_mk, out);
       keylist_row.push_back(Key3(I, n, K));
     }
 
     /* send the tile to all gemms down in column i */
     for (int m = I+1; m < A.rows(); ++m) {
       std::cout << "TRSM(" << key << "): sending output to gemm( " << Key3{m, I, K} << ")" << std::endl;
-      //ttg::send<3>(Key(m, I, K), tile_mk, out);
       keylist_col.push_back(Key3(m, I, K));
     }
 
@@ -186,17 +137,7 @@ auto make_syrk(MatrixT<T>& A,
 
     auto m = tile_mk.rows();
 
-#ifdef PRINT_TILES
-    std::cout << "SYRK BEFORE: mk" << std::endl;
-    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mk.data());
-    std::cout << "SYRK BEFORE: mk" << std::endl;
-    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mm.data());
-#endif // PRINT_TILES
-
     std::cout << "SYRK " << key << std::endl;
-
-    potrf_parsec_profiling_trace_flags(prof, event_syrk_startkey, I, PROFILE_OBJECT_ID_NULL,
-                                       &key, PARSEC_PROFILING_EVENT_HAS_INFO);
 
     blas::syrk(blas::Layout::ColMajor,
                lapack::Uplo::Lower,
@@ -204,16 +145,6 @@ auto make_syrk(MatrixT<T>& A,
                tile_mk.rows(), m, -1.0,
                tile_mk.data(), m, 1.0,
                tile_mm.data(), m);
-
-    potrf_parsec_profiling_trace_flags(prof, event_syrk_endkey, I, PROFILE_OBJECT_ID_NULL, NULL, 0);
-
-#ifdef PRINT_TILES
-    std::cout << "SYRK AFTER: mk" << std::endl;
-    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mk.data());
-    std::cout << "SYRK AFTER: nk" << std::endl;
-    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mm.data());
-    std::cout << "SYRK(" << key << ")" << std::endl;
-#endif // PRINT_TILES
 
     if (I == K+1) {
       /* send the tile to potrf */
@@ -252,7 +183,6 @@ auto make_gemm(MatrixT<T>& A,
     const int J = key.J;
     const int K = key.K;
     assert(I != J && I > K && J > K);
-    std::cout << "GEMM called with " << key << std::endl;
 
     /* No support for different tile sizes yet */
     assert(tile_nk.rows() == tile_mk.rows() && tile_nk.rows() == tile_nm.rows());
@@ -260,16 +190,7 @@ auto make_gemm(MatrixT<T>& A,
 
     auto m = tile_nk.rows();
 
-#ifdef PRINT_TILES
-    std::cout << "GEMM BEFORE: nk" << std::endl;
-    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_nk.data());
-    std::cout << "GEMM BEFORE: mk" << std::endl;
-    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mk.data());
-    std::cout << "GEMM BEFORE: nm" << std::endl;
-    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_nm.data());
-#endif // PRINT_TILES
-
-    //std::cout << "GEMM " << key << std::endl;
+    std::cout << "GEMM(" << key << ")" << std::endl;
 
     blas::gemm(blas::Layout::ColMajor,
                blas::Op::NoTrans,
@@ -279,17 +200,6 @@ auto make_gemm(MatrixT<T>& A,
                tile_mk.data(), m, 1.0,
                tile_nm.data(), m);
 
-#ifdef PRINT_TILES
-    std::cout << "GEMM AFTER: nk" << std::endl;
-    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_nk.data());
-    std::cout << "GEMM AFTER: mk" << std::endl;
-    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_mk.data());
-    std::cout << "GEMM AFTER: nm" << std::endl;
-    dplasma_dprint_tile(I, I, &A.parsec()->super, tile_nm.data());
-    std::cout << "GEMM(" << key << ")" << std::endl;
-#endif // PRINT_TILES
-
-    /* send the tile to output */
     if (J == K+1) {
       /* send the tile to trsm */
       std::cout << "GEMM(" << key << "): sending output to TRSM(" << Key2{I, J} << ")" << std::endl;
@@ -417,3 +327,5 @@ auto make_potrf_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&inpu
 
   return make_ttg(std::move(ops), ins, outs, "POTRF TTG");
 }
+
+};

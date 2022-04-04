@@ -18,29 +18,6 @@ double FMULS_DLAUUM(double __n) { return 0.0; }
 double FADDS_DLAUUM(double __n) { return 0.0; }
 double FLOPS_DLAUUM(double __n) { return      FMULS_DLAUUM(__n) +       FADDS_DLAUUM(__n); }
 
-static int event_lauum_syrk_startkey, event_lauum_syrk_endkey;
-static int event_lauum_gemm_startkey, event_lauum_gemm_endkey;
-static int event_lauum_trmm_startkey, event_lauum_trmm_endkey;
-static int event_lauum_lauum_startkey, event_lauum_lauum_endkey;
-#define EVENT_LAUUM_INFO_CONVERTER "I{int}"
-
-/**
- * Wrapper around parsec_profiling_trace_flags to enable/disable at will
- */
-int lauum_parsec_profiling_trace_flags(parsec_profiling_stream_t* context, int key,
-                                       uint64_t event_id, uint32_t taskpool_id,
-                                       const void *info, uint16_t flags )
-{
-  int rc = 0;
-#if USE_PARSEC_PROF_API
-  if (profiling_enabled) {
-    init_prof_thread();
-    rc = parsec_profiling_trace_flags(context, key, event_id, taskpool_id, info, flags);
-  }
-#endif // USE_PARSEC_PROF_API
-  return rc;
-}
-
 template <typename T>
 auto make_lauum(const MatrixT<T>& A,
                 ttg::Edge<Key1, MatrixTile<T>>& input_disp, // from the dispatcher
@@ -53,14 +30,9 @@ auto make_lauum(const MatrixT<T>& A,
     const int K = key.K;
 
     std::cout << "LAUUM " << key << std::endl;
-    lauum_parsec_profiling_trace_flags(prof, event_lauum_lauum_startkey, K, PROFILE_OBJECT_ID_NULL,
-                                       &key, PARSEC_PROFILING_EVENT_HAS_INFO);
-
     
     lapack::lauum(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.rows());
     
-    lauum_parsec_profiling_trace_flags(prof, event_lauum_lauum_endkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
-
     /* send the tile to output */
     if(K < A.rows()-1) {
         std::cout << "LAUUM(" << key << ") sending to SYRK(" << Key2{K+1, K} << ")" << std::endl;
@@ -91,7 +63,6 @@ auto make_trmm(const MatrixT<T>& A,
     assert(tile_kk.rows() == mb);
 
     std::cout << "TRMM " << key << std::endl;
-    lauum_parsec_profiling_trace_flags(prof, event_lauum_trmm_startkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     blas::trmm(blas::Layout::ColMajor,
                blas::Side::Left,
@@ -101,8 +72,6 @@ auto make_trmm(const MatrixT<T>& A,
                mb, mb, 1.0,
                tile_kk.data(), mb,
                tile_kn.data(), mb);
-
-    lauum_parsec_profiling_trace_flags(prof, event_lauum_trmm_endkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     if(K < A.rows()-1) {
       std::cout << "TRMM(" << key << ") sending to C of GEMM(" << Key3{K+1, N, K} << ")" << std::endl;
@@ -137,7 +106,6 @@ auto make_syrk(const MatrixT<T>& A,
     assert(tile_nn.rows() == mb);
 
     std::cout << "SYRK " << key << std::endl;
-    lauum_parsec_profiling_trace_flags(prof, event_lauum_trmm_startkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     blas::syrk(blas::Layout::ColMajor,
                lapack::Uplo::Lower,
@@ -145,8 +113,6 @@ auto make_syrk(const MatrixT<T>& A,
                mb, mb, 
                1.0, tile_kn.data(), mb,
                1.0, tile_nn.data(), mb);
-
-    lauum_parsec_profiling_trace_flags(prof, event_lauum_trmm_endkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     if(K < A.rows()-1) {
         std::cout << "SYRK(" << key << ") sending to nn of SYRK(" << Key2{K+1, N} << ")" << std::endl;
@@ -184,7 +150,6 @@ auto make_gemm(const MatrixT<T>& A,
     assert(input_C.rows() == mb);
 
     std::cout << "GEMM " << key << std::endl;
-    lauum_parsec_profiling_trace_flags(prof, event_lauum_gemm_startkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     blas::gemm(blas::Layout::ColMajor,
                blas::Op::Trans,
@@ -193,8 +158,6 @@ auto make_gemm(const MatrixT<T>& A,
                1.0, input_A.data(), mb,
                     input_B.data(), mb, 
                1.0, input_C.data(), mb);
-
-    lauum_parsec_profiling_trace_flags(prof, event_lauum_gemm_endkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     if(K < A.rows()-1) {
         std::cout << "GEMM(" << key << ") sending to C of GEMM(" << Key3{K+1, N, M} << ")" << std::endl;

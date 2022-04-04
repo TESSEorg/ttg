@@ -19,29 +19,6 @@ double FMULS_DTRTRI(double __n) { return __n * (__n * ( 1./6. * __n + 0.5 ) + 1.
 double FADDS_DTRTRI(double __n) { return __n * (__n * ( 1./6. * __n - 0.5 ) + 1./3.); }
 double FLOPS_DTRTRI(double __n) { return      FMULS_DTRTRI(__n) +       FADDS_DTRTRI(__n); }
 
-static int event_trtri_trsmr_startkey, event_trtri_trsmr_endkey;
-static int event_trtri_gemm_startkey, event_trtri_gemm_endkey;
-static int event_trtri_trsml_startkey, event_trtri_trsml_endkey;
-static int event_trtri_trtri_startkey, event_trtri_trtri_endkey;
-#define EVENT_TRTRI_INFO_CONVERTER "I{int}"
-
-/**
- * Wrapper around parsec_profiling_trace_flags to enable/disable at will
- */
-int trtri_parsec_profiling_trace_flags(parsec_profiling_stream_t* context, int key,
-                                       uint64_t event_id, uint32_t taskpool_id,
-                                       const void *info, uint16_t flags )
-{
-  int rc = 0;
-#if USE_PARSEC_PROF_API
-  if (profiling_enabled) {
-    init_prof_thread();
-    rc = parsec_profiling_trace_flags(context, key, event_id, taskpool_id, info, flags);
-  }
-#endif // USE_PARSEC_PROF_API
-  return rc;
-}
-
 template <typename T>
 auto make_trtri(const MatrixT<T>& A,
                 lapack::Diag diag,
@@ -54,14 +31,9 @@ auto make_trtri(const MatrixT<T>& A,
     const int K = key.K;
 
     std::cout << "TRTRI " << key << std::endl;
-    trtri_parsec_profiling_trace_flags(prof, event_trtri_trtri_startkey, K, PROFILE_OBJECT_ID_NULL,
-                                       &key, PARSEC_PROFILING_EVENT_HAS_INFO);
-
     
     int info = lapack::trtri(lapack::Uplo::Lower, diag, tile_kk.rows(), tile_kk.data(), tile_kk.rows());
     assert(0 == info);
-
-    trtri_parsec_profiling_trace_flags(prof, event_trtri_trtri_endkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     /* send the tile to output */
     ttg::send<0>(Key2{K, K}, std::move(tile_kk), out);
@@ -88,7 +60,6 @@ auto make_trsml(const MatrixT<T>& A,
     assert(tile_kk.rows() == mb);
 
     std::cout << "TRSML " << key << std::endl;
-    trtri_parsec_profiling_trace_flags(prof, event_trtri_trsml_startkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     blas::trsm(blas::Layout::ColMajor,
                blas::Side::Left,
@@ -98,8 +69,6 @@ auto make_trsml(const MatrixT<T>& A,
                mb, mb, 1.0,
                tile_kk.data(), mb,
                tile_kn.data(), mb);
-
-    trtri_parsec_profiling_trace_flags(prof, event_trtri_trsml_endkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     /* send the tile to output */
     ttg::send<0>(Key2{K, N}, std::move(tile_kn), out);
@@ -134,7 +103,6 @@ auto make_trsmr(const MatrixT<T>& A,
     assert(tile_kk.rows() == mb);
 
     std::cout << "TRSMR " << key << std::endl;
-    trtri_parsec_profiling_trace_flags(prof, event_trtri_trsmr_startkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     blas::trsm(blas::Layout::ColMajor,
                blas::Side::Right,
@@ -144,8 +112,6 @@ auto make_trsmr(const MatrixT<T>& A,
                mb, mb, -1.0,
                tile_kk.data(), mb,
                tile_mk.data(), mb);
-
-    trtri_parsec_profiling_trace_flags(prof, event_trtri_trsmr_endkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     std::vector<Key3> keylist_A_gemm;
     std::vector<Key3> keylist_B_gemm;
@@ -206,7 +172,6 @@ auto make_gemm(const MatrixT<T>& A,
     assert(input_C.rows() == mb);
 
     std::cout << "GEMM " << key << std::endl;
-    trtri_parsec_profiling_trace_flags(prof, event_trtri_gemm_startkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     blas::gemm(blas::Layout::ColMajor,
                blas::Op::NoTrans,
@@ -215,8 +180,6 @@ auto make_gemm(const MatrixT<T>& A,
                1.0, input_A.data(), mb,
                     input_B.data(), mb, 
                1.0, input_C.data(), mb);
-
-    trtri_parsec_profiling_trace_flags(prof, event_trtri_gemm_endkey, K, PROFILE_OBJECT_ID_NULL, NULL, 0);
 
     std::vector<Key3> keylist_B_gemm;
     std::vector<Key3> keylist_C_gemm;

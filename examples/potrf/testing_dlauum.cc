@@ -5,15 +5,12 @@
 #undef TTG_USE_USER_TERMDET
 #endif // TTG_USE_PARSEC
 
-#define USE_PARSEC_PROF_API 0
-
 #include <ttg.h>
 
 // needed for madness::hashT and xterm_debug
 #include <madness/world/world.h>
 
 #include "pmw.h"
-#include "tracing.h"
 #include "plgsy.h"
 #include "lauum.h"
 #include "result.h"
@@ -50,24 +47,16 @@ int main(int argc, char **argv)
 
   if (argc > 5) {
     prof_filename = argv[5];
-    profiling_enabled = true;
   }
 
   ttg::initialize(argc, argv, nthreads);
 
   auto world = ttg::default_execution_context();
 
-#if USE_PARSEC_PROF_API
-  if (nullptr != prof_filename) {
-    parsec_profiling_init();
-
-    parsec_profiling_dbp_start( prof_filename, "Cholesky Factorization" );
-    #error change how this is done
-
-    parsec_profiling_start();
-    profiling_enabled = true;
+  if( prof_filename != nullptr ) {
+    ttg::profile_on();
+    world.impl().start_tracing_dag_of_tasks(prof_filename);
   }
-#endif // USE_PARSEC_PROF_API
 
   int P = std::sqrt(world.size());
   int Q = (world.size() + P - 1)/P;
@@ -148,13 +137,7 @@ int main(int argc, char **argv)
   parsec_data_free(dcA.mat); dcA.mat = NULL;
   parsec_tiled_matrix_dc_destroy( (parsec_tiled_matrix_dc_t*)&dcA);
 
-#if USE_PARSEC_PROF_API
-  /** Finalize profiling */
-  if (profiling_enabled) {
-    parsec_profiling_dbp_dump();
-    parsec_profiling_fini();
-  }
-#endif // USE_PARSEC_PROF_API
+  world.impl().stop_tracing_dag_of_tasks();
 
   ttg::finalize();
   return 0;

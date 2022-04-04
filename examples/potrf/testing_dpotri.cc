@@ -5,15 +5,12 @@
 #undef TTG_USE_USER_TERMDET
 #endif // TTG_USE_PARSEC
 
-#define USE_PARSEC_PROF_API 0
-
 #include <ttg.h>
 
 // needed for madness::hashT and xterm_debug
 #include <madness/world/world.h>
 
 #include "pmw.h"
-#include "tracing.h"
 #include "plgsy.h"
 #include "potrf.h"
 #include "potri.h"
@@ -52,15 +49,16 @@ int main(int argc, char **argv)
 
   if (argc > 5) {
     prof_filename = argv[5];
-    profiling_enabled = true;
   }
 
   ttg::initialize(argc, argv, nthreads);
 
-  ttg::profile_on();
-
   auto world = ttg::default_execution_context();
-  world.impl().start_tracing_dag_of_tasks("potri");
+  
+  if(nullptr != prof_filename) {
+    ttg::profile_on();
+    world.impl().start_tracing_dag_of_tasks(prof_filename);
+  }
 
   int P = std::sqrt(world.size());
   int Q = (world.size() + P - 1)/P;
@@ -109,8 +107,8 @@ int main(int argc, char **argv)
   auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, topotrf);
 #endif // USE_DPLASMA
 
-  auto potrf_ttg = make_potrf_ttg(A, topotrf, topotri);
-  auto potri_ttg = make_potri_ttg(A, topotri, result);
+  auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, topotri);
+  auto potri_ttg = potri::make_potri_ttg(A, topotri, result);
   auto result_ttg = make_result_ttg(A, result);
 
   auto connected = make_graph_executable(init_tt.get());
