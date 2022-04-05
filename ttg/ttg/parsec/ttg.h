@@ -178,7 +178,6 @@ namespace ttg_parsec {
     static constexpr const int PARSEC_TTG_MAX_AM_SIZE = 1024 * 1024;
     WorldImpl(int *argc, char **argv[], int ncores) : WorldImplBase(query_comm_size(), query_comm_rank())
 #if defined(PARSEC_PROF_TRACE) 
-       , profiling_array_occupied(0)
        , profiling_array_size(0)
 #endif
        , _dag_profiling(false)
@@ -332,21 +331,32 @@ namespace ttg_parsec {
     }
 
     template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs = ttg::typelist<>>
-    void register_new_tt(const TT<keyT, output_terminalsT, derivedT, input_valueTs> *t) {
+    void register_tt_profiling(const TT<keyT, output_terminalsT, derivedT, input_valueTs> *t) {
 #if defined(PARSEC_PROF_TRACE)
-      if(profiling_array_occupied+2 >= profiling_array_size) {
-        profiling_array_size += 64;
-        tpool->profiling_array = (int*)realloc((void*)tpool->profiling_array, profiling_array_size * sizeof(int));
+      if(2*t->get_instance_id() >= profiling_array_size) {
+        profiling_array_size = 64 * ((2*t->get_instance_id() + 63)/64 + 1);
+        tpool->profiling_array = (int*)realloc((void*)tpool->profiling_array, 
+                                                profiling_array_size * sizeof(int));
       }
-      parsec_profiling_add_dictionary_keyword(t->get_name().c_str(), "fill:000000", 0, NULL,
-                                              (int*)&tpool->profiling_array[profiling_array_occupied],
-                                              (int*)&tpool->profiling_array[profiling_array_occupied+1]);
-      profiling_array_occupied += 2;
+      std::stringstream ss;
+      build_composite_name_rec(t->ttg_ptr(), ss);
+      ss << t->get_name();
+      parsec_profiling_add_dictionary_keyword(ss.str().c_str(), "fill:000000", 0, NULL,
+                                              (int*)&tpool->profiling_array[2*t->get_instance_id()],
+                                              (int*)&tpool->profiling_array[2*t->get_instance_id()+1]);
 #endif
-      tpool->nb_task_classes++;
     }
 
    protected:
+#if defined(PARSEC_PROF_TRACE)
+    void build_composite_name_rec(const ttg::TTBase *t, std::stringstream &ss) {
+      if(nullptr == t)
+        return;
+      build_composite_name_rec(t->ttg_ptr(), ss);
+      ss << t->get_name() << "::";
+    }
+#endif
+
     virtual void fence_impl(void) override {
       int rank = this->rank();
       if (!parsec_taskpool_started) {
@@ -377,7 +387,6 @@ namespace ttg_parsec {
     bool parsec_taskpool_started = false;
 #if defined(PARSEC_PROF_TRACE)
     std::size_t profiling_array_size;
-    std::size_t profiling_array_occupied;
 #endif
   };
 
@@ -2507,8 +2516,8 @@ namespace ttg_parsec {
       self.make_key = make_key;
       self.key_functions = &tasks_hash_fcts;
       self.task_snprintf = parsec_ttg_task_snprintf;
-      world_impl.register_new_tt(this);
 
+      world_impl.taskpool()->nb_task_classes++;
       //    function_id_to_instance[self.task_class_id] = this;
 
       if constexpr (derived_has_cuda_op()) {
@@ -2724,6 +2733,7 @@ namespace ttg_parsec {
 
    public:
     void make_executable() override {
+      world.impl().register_tt_profiling(this);
       register_static_op_function();
       ttg::TTBase::make_executable();
     }
