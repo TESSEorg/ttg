@@ -244,7 +244,7 @@ auto make_dispatcher(const MatrixT<T>& A,
               keylist_trsml.push_back(Key2{key.I, k});
           }
       }
-      ttg::broadcast<0, 1, 2>(std::make_tuple(Key1{key.I}, keylist_trsml, keylist_trsmr), std::move(tile), out);
+      ttg::broadcast<0, 1, 2>(std::make_tuple(Key1{key.I}, std::move(keylist_trsml), std::move(keylist_trsmr)), std::move(tile), out);
       return;
     }
 

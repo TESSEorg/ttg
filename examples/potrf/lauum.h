@@ -233,7 +233,7 @@ auto make_dispatcher(const MatrixT<T>& A,
             keylist_gemm_B.push_back(Key3{key.I, key.J, n});
         }
     }
-    ttg::broadcast<0, 1, 2, 3, 4, 5>(std::make_tuple(keylist_lauum, keylist_syrk, keylist_trmm_A, keylist_trmm_B, keylist_gemm_A, keylist_gemm_B), std::move(tile), out);
+    ttg::broadcast<0, 1, 2, 3, 4, 5>(std::make_tuple(std::move(keylist_lauum), std::move(keylist_syrk), std::move(keylist_trmm_A), std::move(keylist_trmm_B), std::move(keylist_gemm_A), std::move(keylist_gemm_B)), std::move(tile), out);
   };
 
   return ttg::make_tt(f, ttg::edges(input), ttg::edges(to_lauum, to_syrk, to_trmm_A, to_trmm_B, to_gemm_A, to_gemm_B), 
