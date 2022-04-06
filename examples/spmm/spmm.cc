@@ -224,10 +224,10 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, ttg:
 
   void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
     std::lock_guard<std::mutex> lock(mtx_);
-    ttg::trace("rank =", default_execution_context().rank(), "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
-               "spmm.cc Write_SpMatrix wrote {", key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ",
-               static_cast<void *>(&matrix_), " with mutex @", static_cast<void *>(&mtx_), " for object @",
-               static_cast<void *>(this));
+    ttg::trace("rank =", default_execution_context().rank(),
+               "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.cc Write_SpMatrix wrote {",
+               key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
+               " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
     values_.emplace_back(key[0], key[1], baseT::template get<0>(elem));
   }
 
@@ -292,19 +292,20 @@ class SpMM {
 
     LocalBcastA(Edge<Key<3>, Blk> &a, Edge<Key<3>, Blk> &a_ijk,
                 const std::vector<std::vector<long>> &b_rowidx_to_colidx, Keymap keymap)
-        : baseT(edges(a), edges(a_ijk), "SpMM::local_bcast_a", {"a_ik"}, {"a_ijk"},
+        : baseT(edges(a), edges(a_ijk), "SpMM::local_bcast_a", {"a_ikp"}, {"a_ijk"},
                 [](const Key<3> &key) { return key[2]; })
         , b_rowidx_to_colidx_(b_rowidx_to_colidx)
         , keymap_(keymap) {}
 
-    void op(const Key<3> &key, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, Blk>> &a_ijk) {
+    void op(const Key<3> &key, typename baseT::input_values_tuple_type &&a_ikp, std::tuple<Out<Key<3>, Blk>> &a_ijk) {
       const auto i = key[0];
       const auto k = key[1];
+      const auto p = key[2];
       auto world = default_execution_context();
       assert(key[2] == world.rank());
-      ttg::trace("LocalBcastA(", i, ", ", k, ")");
+      ttg::trace("LocalBcastA(", i, ", ", k, ", ", p, ")");
       if (k >= b_rowidx_to_colidx_.size()) return;
-      // broadcast a_ik to all existing {i,j,k}
+      // broadcast a_ikp to all existing {i,j,k}
       std::vector<Key<3>> ijk_keys;
       for (auto &j : b_rowidx_to_colidx_[k]) {
         ttg::trace("Broadcasting A[", i, "][", k, "] to j=", j);
@@ -312,7 +313,7 @@ class SpMM {
           ijk_keys.emplace_back(Key<3>({i, j, k}));
         }
       }
-      ::broadcast<0>(ijk_keys, baseT::template get<0>(a_ik), a_ijk);
+      ::broadcast<0>(ijk_keys, baseT::template get<0>(a_ikp), a_ijk);
     }
 
    private:
@@ -362,19 +363,20 @@ class SpMM {
 
     LocalBcastB(Edge<Key<3>, Blk> &b, Edge<Key<3>, Blk> &b_ijk,
                 const std::vector<std::vector<long>> &a_colidx_to_rowidx, Keymap keymap)
-        : baseT(edges(b), edges(b_ijk), "SpMM::local_bcast_b", {"b_kj"}, {"b_ijk"},
+        : baseT(edges(b), edges(b_ijk), "SpMM::local_bcast_b", {"b_kjp"}, {"b_ijk"},
                 [](const Key<3> &key) { return key[2]; })
         , a_colidx_to_rowidx_(a_colidx_to_rowidx)
         , keymap_(keymap) {}
 
-    void op(const Key<3> &key, typename baseT::input_values_tuple_type &&b_kj, std::tuple<Out<Key<3>, Blk>> &b_ijk) {
+    void op(const Key<3> &key, typename baseT::input_values_tuple_type &&b_kjp, std::tuple<Out<Key<3>, Blk>> &b_ijk) {
       const auto k = key[0];
       const auto j = key[1];
+      const auto p = key[2];
       auto world = default_execution_context();
       assert(key[2] == world.rank());
-      ttg::trace("BcastB(", k, ", ", j, ")");
+      ttg::trace("BcastB(", k, ", ", j, ", ", p, ")");
       if (k >= a_colidx_to_rowidx_.size()) return;
-      // broadcast b_kj to *jk
+      // broadcast b_kjp to *jk
       std::vector<Key<3>> ijk_keys;
       for (auto &i : a_colidx_to_rowidx_[k]) {
         ttg::trace("Broadcasting B[", k, "][", j, "] to i=", i);
@@ -382,7 +384,7 @@ class SpMM {
           ijk_keys.emplace_back(Key<3>({i, j, k}));
         }
       }
-      ::broadcast<0>(ijk_keys, baseT::template get<0>(b_kj), b_ijk);
+      ::broadcast<0>(ijk_keys, baseT::template get<0>(b_kjp), b_ijk);
     }
 
    private:
@@ -395,16 +397,16 @@ class SpMM {
    public:
     using baseT = typename BcastB::ttT;
 
-    BcastB(Edge<Key<2>, Blk> &b, Edge<Key<3>, Blk> &b_kjp, const std::vector<std::vector<long>> &a_colidx_to_rowidx,
+    BcastB(Edge<Key<2>, Blk> &b, Edge<Key<3>, Blk> &b_kj, const std::vector<std::vector<long>> &a_colidx_to_rowidx,
            Keymap keymap)
-        : baseT(edges(b), edges(b_kjp), "SpMM::bcast_b", {"b_kjp"}, {"b_ijk"}, keymap)
+        : baseT(edges(b), edges(b_kj), "SpMM::bcast_b", {"b_kj"}, {"b_kjp"}, keymap)
         , a_colidx_to_rowidx_(a_colidx_to_rowidx) {}
 
     void op(const Key<2> &key, typename baseT::input_values_tuple_type &&b_kj, std::tuple<Out<Key<3>, Blk>> &b_kjp) {
       const auto k = key[0];
       const auto j = key[1];
       // broadcast b_kj to *jk
-      std::vector<Key<3>> kjp_keys;
+      std::vector<Key<3>> kj_keys;
       ttg::trace("BcastB(", k, ", ", j, ")");
       if (k >= a_colidx_to_rowidx_.size()) return;
       auto world = default_execution_context();
@@ -413,11 +415,11 @@ class SpMM {
         long proc = baseT::get_keymap()(Key<2>({i, j}));
         if (!procmap[proc]) {
           ttg::trace("Broadcasting A[", k, "][", j, "] to proc ", proc);
-          kjp_keys.emplace_back(Key<3>({k, j, proc}));
+          kj_keys.emplace_back(Key<3>({k, j, proc}));
           procmap[proc] = true;
         }
       }
-      ::broadcast<0>(kjp_keys, baseT::template get<0>(b_kj), b_kjp);
+      ::broadcast<0>(kj_keys, baseT::template get<0>(b_kj), b_kjp);
     }
 
    private:
@@ -425,9 +427,8 @@ class SpMM {
   };  // class BcastA
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
-  class MultiplyAdd
-      : public TT<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>,
-                  MultiplyAdd, ttg::typelist<const Blk, const Blk, Blk>> {
+  class MultiplyAdd : public TT<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd,
+                                ttg::typelist<const Blk, const Blk, Blk>> {
    public:
     using baseT = typename MultiplyAdd::ttT;
 
@@ -1247,8 +1248,7 @@ static double compute_gflops(const std::vector<std::vector<long>> &a_r2c, const 
   for (auto i = 0; i < a_r2c.size(); i++) {
     for (auto kk = 0; kk < a_r2c[i].size(); kk++) {
       auto k = a_r2c[i][kk];
-      if (k > b_r2c.size())
-        continue;
+      if (k > b_r2c.size()) continue;
       for (auto jj = 0; jj < b_r2c[k].size(); jj++) {
         auto j = b_r2c[k][jj];
         flops += static_cast<long>(mTiles[i]) * nTiles[j] * kTiles[k];
@@ -1447,7 +1447,8 @@ int main(int argc, char **argv) {
                        mTiles, nTiles, kTiles, keymap);
       TTGUNUSED(a_times_b);
       /// calling the Dot constructor with 'true' argument disables the type
-      if (default_execution_context().rank() == 0) std::cout << Dot{/*disable_type=*/ true}(&control) << std::endl;
+
+      if (default_execution_context().rank() == 0) std::cout << Dot{/*disable_type=*/true}(&control) << std::endl;
 
       // ready to run!
       auto connected = make_graph_executable(&control);
