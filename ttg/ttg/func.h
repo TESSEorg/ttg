@@ -238,7 +238,7 @@ namespace ttg {
     inline void broadcast(const std::tuple<RangesT...> &keylists, valueT &&value,
                           std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
       if constexpr (ttg::meta::is_iterable_v<std::tuple_element_t<KeyId, std::tuple<RangesT...>>>) {
-        if (std::distance(std::begin(std::get<KeyId>(keylists)), std::end(std::get<KeyId>(keylists))) > 0) {
+        if (std::begin(std::get<KeyId>(keylists)) != std::end(std::get<KeyId>(keylists))) {
           std::get<i>(t).broadcast(std::get<KeyId>(keylists), value);
         }
       } else {
@@ -252,7 +252,7 @@ namespace ttg {
     template <size_t KeyId, size_t i, size_t... I, typename... RangesT, typename valueT>
     inline void broadcast(const std::tuple<RangesT...> &keylists, valueT &&value) {
       if constexpr (ttg::meta::is_iterable_v<std::tuple_element_t<KeyId, std::tuple<RangesT...>>>) {
-        if (std::distance(std::begin(std::get<KeyId>(keylists)), std::end(std::get<KeyId>(keylists))) > 0) {
+        if (std::begin(std::get<KeyId>(keylists)) != std::end(std::get<KeyId>(keylists))) {
           using key_t = decltype(*std::begin(std::get<KeyId>(keylists)));
           auto *terminal_ptr = detail::get_out_terminal<key_t, valueT>(i, "ttg::broadcast(keylists, value)");
           terminal_ptr->broadcast(std::get<KeyId>(keylists), value);
@@ -270,7 +270,7 @@ namespace ttg {
     template <size_t KeyId, size_t i, size_t... I, typename... RangesT, typename... out_keysT, typename... out_valuesT>
     inline void broadcast(const std::tuple<RangesT...> &keylists, std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
       if constexpr (ttg::meta::is_iterable_v<std::tuple_element_t<KeyId, std::tuple<RangesT...>>>) {
-        if (std::distance(std::begin(std::get<KeyId>(keylists)), std::end(std::get<KeyId>(keylists))) > 0) {
+        if (std::begin(std::get<KeyId>(keylists)) != std::end(std::get<KeyId>(keylists))) {
           std::get<i>(t).broadcast(std::get<KeyId>(keylists));
         }
       } else {
@@ -284,7 +284,7 @@ namespace ttg {
     template <size_t KeyId, size_t i, size_t... I, typename... RangesT>
     inline void broadcast(const std::tuple<RangesT...> &keylists) {
       if constexpr (ttg::meta::is_iterable_v<std::tuple_element_t<KeyId, std::tuple<RangesT...>>>) {
-        if (std::distance(std::begin(std::get<KeyId>(keylists)), std::end(std::get<KeyId>(keylists))) > 0) {
+        if (std::begin(std::get<KeyId>(keylists)) != std::end(std::get<KeyId>(keylists))) {
           using key_t = decltype(*std::begin(std::get<KeyId>(keylists)));
           auto *terminal_ptr = detail::get_out_terminal<key_t, void>(i, "ttg::broadcast(keylists)");
           terminal_ptr->broadcast(std::get<KeyId>(keylists));

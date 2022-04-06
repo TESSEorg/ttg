@@ -20,6 +20,7 @@
 #include "ttg/runtimes.h"
 #include "ttg/terminal.h"
 #include "ttg/tt.h"
+#include "ttg/util/bits.h"
 #include "ttg/util/env.h"
 #include "ttg/util/hash.h"
 #include "ttg/util/meta.h"
@@ -79,8 +80,8 @@ namespace ttg_parsec {
 
   struct msg_header_t {
     typedef enum { MSG_SET_ARG = 0, MSG_SET_ARGSTREAM_SIZE = 1, MSG_FINALIZE_ARGSTREAM_SIZE = 2 } fn_id_t;
+    uint64_t tt_id;
     uint32_t taskpool_id;
-    uint64_t op_id;
     fn_id_t fn_id;
     int32_t param_id;
     int num_keys;
@@ -93,12 +94,12 @@ namespace ttg_parsec {
       static_set_arg_fct_type static_set_arg_fct;
       parsec_taskpool_t *tp = NULL;
       msg_header_t *msg = static_cast<msg_header_t *>(data);
-      uint64_t op_id = msg->op_id;
+      uint64_t tt_id = msg->tt_id;
       tp = parsec_taskpool_lookup(msg->taskpool_id);
       assert(NULL != tp);
       static_map_mutex.lock();
       try {
-        auto op_pair = static_id_to_op_map.at(op_id);
+        auto op_pair = static_id_to_op_map.at(tt_id);
         static_map_mutex.unlock();
         tp->tdm.module->incoming_message_start(tp, src_rank, NULL, NULL, 0, NULL);
         static_set_arg_fct = op_pair.first;
@@ -110,8 +111,8 @@ namespace ttg_parsec {
         assert(data_cpy != 0);
         memcpy(data_cpy, data, size);
         ttg::trace("ttg_parsec(", ttg_default_execution_context().rank(), ") Delaying delivery of message (", src_rank,
-                   ", ", op_id, ", ", data_cpy, ", ", size, ")");
-        delayed_unpack_actions.insert(std::make_pair(op_id, std::make_tuple(src_rank, data_cpy, size)));
+                   ", ", tt_id, ", ", data_cpy, ", ", size, ")");
+        delayed_unpack_actions.insert(std::make_pair(tt_id, std::make_tuple(src_rank, data_cpy, size)));
         static_map_mutex.unlock();
         return 1;
       }
@@ -500,14 +501,15 @@ namespace ttg_parsec {
                                                      .key_hash = parsec_hash_table_generic_64bits_key_hash};
 
     template <typename KeyT, typename ActivationCallbackT>
-    class rma_delayed_activate {
+    class rma_delayed_activate_keylist {
       std::vector<KeyT> _keylist;
       std::atomic<int> _outstanding_transfers;
       ActivationCallbackT _cb;
       ttg_data_copy_t *_copy;
 
      public:
-      rma_delayed_activate(std::vector<KeyT> &&key, ttg_data_copy_t *copy, int num_transfers, ActivationCallbackT cb)
+      rma_delayed_activate_keylist(std::vector<KeyT> &&key, ttg_data_copy_t *copy,
+                                   int num_transfers, ActivationCallbackT cb)
           : _keylist(std::move(key)), _outstanding_transfers(num_transfers), _cb(cb), _copy(copy) {}
 
       bool complete_transfer(void) {
@@ -519,6 +521,51 @@ namespace ttg_parsec {
         return false;
       }
     };
+
+    template <typename KeyT, typename ActivationCallbackT>
+    class rma_delayed_activate_keyranges {
+      std::vector<ttg::detail::LinearKeyRange<KeyT>> _keyranges;
+      std::atomic<int> _outstanding_transfers;
+      ActivationCallbackT _cb;
+      ttg_data_copy_t *_copy;
+
+     public:
+      rma_delayed_activate_keyranges(std::vector<ttg::detail::LinearKeyRange<KeyT>> &&ranges, ttg_data_copy_t *copy,
+                                    int num_transfers, ActivationCallbackT cb)
+          : _keyranges(std::move(ranges)), _outstanding_transfers(num_transfers), _cb(cb), _copy(copy) {}
+
+      bool complete_transfer(void) {
+        int left = --_outstanding_transfers;
+        if (0 == left) {
+          _cb(_keyranges, _copy);
+          return true;
+        }
+        return false;
+      }
+    };
+
+    template <typename KeyT, typename ActivationCallbackT>
+    class rma_delayed_activate_keyrange {
+      ttg::detail::LinearKeyRange<KeyT> _keyrange;
+      std::atomic<int> _outstanding_transfers;
+      ActivationCallbackT _cb;
+      ttg_data_copy_t *_copy;
+
+     public:
+      rma_delayed_activate_keyrange(ttg::detail::LinearKeyRange<KeyT> &range, ttg_data_copy_t *copy,
+                                    int num_transfers, ActivationCallbackT cb)
+          : _keyrange(range), _outstanding_transfers(num_transfers), _cb(cb), _copy(copy) {}
+
+      bool complete_transfer(void) {
+        int left = --_outstanding_transfers;
+        if (0 == left) {
+          _cb(_keyrange, _copy);
+          return true;
+        }
+        return false;
+      }
+    };
+
 
     template <typename ActivationT>
     static int get_complete_cb(parsec_comm_engine_t *comm_engine, parsec_ce_mem_reg_handle_t lreg, ptrdiff_t ldispl,
@@ -732,7 +779,7 @@ namespace ttg_parsec {
 
       msg_t() = default;
       msg_t(uint64_t tt_id, uint32_t taskpool_id, msg_header_t::fn_id_t fn_id, int32_t param_id, int num_keys = 1)
-          : tt_id{taskpool_id, tt_id, fn_id, param_id, num_keys} {}
+          : tt_id{tt_id, taskpool_id, fn_id, param_id, num_keys} {}
     };
   }  // namespace detail
 
@@ -997,8 +1044,9 @@ namespace ttg_parsec {
       return &mempools.thread_mempools[index];
     }
 
-    template <size_t i, typename valueT>
-    void set_arg_from_msg_keylist(ttg::span<keyT> &&keylist, ttg_data_copy_t *copy) {
+    template <size_t i, bool HasNonLocalKeys, typename valueT, typename Iterator>
+    void set_arg_from_msg_keylist(Iterator&& begin, Iterator&& end,
+                                  ttg_data_copy_t *copy) {
       /* create a dummy task that holds the copy, which can be reused by others */
       task_t *dummy;
       parsec_execution_stream_s *es = world.impl().execution_stream();
@@ -1015,8 +1063,11 @@ namespace ttg_parsec {
 
       /* iterate over the keys and have them use the copy we made */
       parsec_task_t *task_ring = nullptr;
-      for (auto &&key : keylist) {
-        set_arg_local_impl<i>(key, *reinterpret_cast<valueT *>(copy->device_private), copy, &task_ring);
+      for (auto it = begin; it != end; ++it) {
+        if constexpr (HasNonLocalKeys) {
+          if (keymap(*it) != world.rank()) continue;
+        }
+        set_arg_local_impl<i>(*it, *reinterpret_cast<valueT *>(copy->device_private), copy, &task_ring);
       }
 
       if (nullptr != task_ring) {
@@ -1027,9 +1078,42 @@ namespace ttg_parsec {
       /* restore the previous task */
       parsec_ttg_caller = parsec_ttg_caller_save;
 
+      /* don't take the copy away from the caller */
+      dummy->parsec_task.data[0].data_in = nullptr;
       /* release the dummy task */
       complete_task_and_release(es, &dummy->parsec_task);
       parsec_thread_mempool_free(mempool, &dummy->parsec_task);
+    }
+
+    inline auto extract_keylist_from_msg(detail::msg_t *msg, uint64_t& pos) {
+      std::vector<keyT> keylist;
+      int num_keys = msg->tt_id.num_keys;
+      keylist.reserve(num_keys);
+      auto rank = world.rank();
+      for (int k = 0; k < num_keys; ++k) {
+        keyT key;
+        pos = unpack(key, msg->bytes, pos);
+        assert(keymap(key) == rank);
+        keylist.push_back(std::move(key));
+      }
+      return keylist;
+    }
+
+    inline auto extract_keyrange_from_msg(detail::msg_t *msg, uint64_t& pos) {
+      ttg::detail::LinearKeyRange<keyT> range;
+      pos = unpack(range, msg->bytes, pos);
+      return range;
+    }
+
+    inline auto extract_keyranges_from_msg(detail::msg_t *msg, uint64_t& pos) {
+      int num_ranges = -msg->tt_id.num_keys;
+      std::vector<ttg::detail::LinearKeyRange<keyT>> ranges(num_ranges);
+      for (int i = 0; i < num_ranges; ++i) {
+        ttg::detail::LinearKeyRange<keyT> range;
+        pos = unpack(range, msg->bytes, pos);
+        ranges.push_back(std::move(range));
+      }
+      return ranges;
     }
 
     // there are 6 types of set_arg:
@@ -1049,15 +1133,17 @@ namespace ttg_parsec {
       if constexpr (!ttg::meta::is_void_v<keyT>) {
         /* unpack the keys */
         uint64_t pos = 0;
+        /* we can have either a list of keys, a single range, or a list of ranges */
         std::vector<keyT> keylist;
+        std::vector<ttg::detail::LinearKeyRange<keyT>> keyranges;
+        ttg::detail::LinearKeyRange<keyT> keyrange;
         int num_keys = msg->tt_id.num_keys;
-        keylist.reserve(num_keys);
-        auto rank = world.rank();
-        for (int k = 0; k < num_keys; ++k) {
-          keyT key;
-          pos = unpack(key, msg->bytes, pos);
-          assert(keymap(key) == rank);
-          keylist.push_back(std::move(key));
+        if (num_keys >= 0) {
+          keylist = extract_keylist_from_msg(msg, pos);
+        } else if (num_keys == -1) {
+          keyrange = extract_keyrange_from_msg(msg, pos);
+        } else {
+          keyranges = extract_keyranges_from_msg(msg, pos);
         }
         // case 1
         if constexpr (!ttg::meta::is_void_v<valueT>) {
@@ -1065,9 +1151,20 @@ namespace ttg_parsec {
           if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
             ttg_data_copy_t *copy = detail::create_new_datacopy(decvalueT{});
             unpack(*static_cast<decvalueT *>(copy->device_private), msg->bytes, pos);
-
-            set_arg_from_msg_keylist<i, decvalueT>(ttg::span<keyT>(&keylist[0], num_keys), copy);
+            if (num_keys >= 0) {
+              set_arg_from_msg_keylist<i, false, decvalueT>(keylist.begin(), keylist.end(), copy);
+              detail::release_data_copy(copy);
+            } else if (num_keys == -1) {
+              set_arg_from_msg_keylist<i, true, decvalueT>(keyrange.begin(), keyrange.end(), copy);
+              detail::release_data_copy(copy);
+            } else {
+              for (const auto& range : keyranges) {
+                set_arg_from_msg_keylist<i, true, decvalueT>(range.begin(), range.end(), copy);
+              }
+              detail::release_data_copy(copy);
+            }
           } else {
+
             /* unpack the header and start the RMA transfers */
             ttg::SplitMetadataDescriptor<decvalueT> descr;
             using metadata_t = decltype(descr.get_metadata(std::declval<decvalueT>()));
@@ -1093,22 +1190,66 @@ namespace ttg_parsec {
             ttg_data_copy_t *copy = detail::create_new_datacopy(descr.create_from_metadata(metadata));
             /* nothing else to do if the object is empty */
             if (0 == num_iovecs) {
-              set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
+              if (num_keys >= 0) {
+                set_arg_from_msg_keylist<i, false, decvalueT>(keylist.begin(), keylist.end(), copy);
+                detail::release_data_copy(copy);
+              } else if (num_keys == -1) {
+                set_arg_from_msg_keylist<i, true, decvalueT>(keyrange.begin(), keyrange.end(), copy);
+                detail::release_data_copy(copy);
+              } else {
+                for (const auto& range : keyranges) {
+                  set_arg_from_msg_keylist<i, true, decvalueT>(range.begin(), range.end(), copy);
+                }
+                detail::release_data_copy(copy);
+              }
             } else {
               /* extract the callback tag */
               parsec_ce_tag_t cbtag;
               std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
               pos += sizeof(cbtag);
 
-              /* create the value from the metadata */
-              auto activation = new detail::rma_delayed_activate(
-                  std::move(keylist), copy, num_iovecs, [this](std::vector<keyT> &&keylist, ttg_data_copy_t *copy) {
-                    set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
-                    this->world.impl().decrement_inflight_msg();
-                  });
-              auto &val = *static_cast<decvalueT *>(copy->device_private);
+              /* pick the right activation callback */
+              void* activation_ptr;
+              parsec_ce_onesided_callback_t cb;
+              if (num_keys >= 0) {
+                auto activation = new detail::rma_delayed_activate_keylist(
+                    std::move(keylist), copy, num_iovecs,
+                    [this](std::vector<keyT> &&keylist, ttg_data_copy_t *copy) {
+                      set_arg_from_msg_keylist<i, false, decvalueT>(keylist.begin(), keylist.end(), copy);
+                      detail::release_data_copy(copy);
+                      this->world.impl().decrement_inflight_msg();
+                    });
+                activation_ptr = activation;
+                using ActivationT = std::decay_t<decltype(*activation)>;
+                cb = &detail::get_complete_cb<ActivationT>;
+              } else if (num_keys == -1) {
+                auto activation = new detail::rma_delayed_activate_keyrange(
+                    keyrange, copy, num_iovecs,
+                    [this](ttg::detail::LinearKeyRange<keyT> &keyrange, ttg_data_copy_t *copy) {
+                      set_arg_from_msg_keylist<i, true, decvalueT>(keyrange.begin(), keyrange.end(), copy);
+                      detail::release_data_copy(copy);
+                      this->world.impl().decrement_inflight_msg();
+                    });
+                activation_ptr = activation;
+                using ActivationT = std::decay_t<decltype(*activation)>;
+                cb = &detail::get_complete_cb<ActivationT>;
+              } else {
+                auto activation = new detail::rma_delayed_activate_keyranges(
+                    std::move(keyranges), copy, num_iovecs,
+                    [this](std::vector<ttg::detail::LinearKeyRange<keyT>> &keyranges, ttg_data_copy_t *copy) {
+                      for (const auto& range : keyranges) {
+                        set_arg_from_msg_keylist<i, true, decvalueT>(range.begin(), range.end(), copy);
+                      }
+                      detail::release_data_copy(copy);
+                      this->world.impl().decrement_inflight_msg();
+                    });
+                activation_ptr = activation;
+                using ActivationT = std::decay_t<decltype(*activation)>;
+                cb = &detail::get_complete_cb<ActivationT>;
+              }
 
-              using ActivationT = std::decay_t<decltype(*activation)>;
+              /* create the value from the metadata */
+              auto &val = *static_cast<decvalueT *>(copy->device_private);
 
               int nv = 0;
               /* process payload iovecs */
@@ -1136,7 +1277,7 @@ namespace ttg_parsec {
                 world.impl().increment_inflight_msg();
                 /* TODO: PaRSEC should treat the remote callback as a tag, not a function pointer! */
                 parsec_ce.get(&parsec_ce, lreg, 0, rreg, 0, iov.num_bytes, remote,
-                              &detail::get_complete_cb<ActivationT>, activation,
+                              cb, activation_ptr,
                               /*world.impl().parsec_ttg_rma_tag()*/
                               cbtag, &fn_ptr, sizeof(std::intptr_t));
               }
@@ -1147,8 +1288,20 @@ namespace ttg_parsec {
           }
           // case 2 and 3
         } else if constexpr (!ttg::meta::is_void_v<keyT> && std::is_void_v<valueT>) {
-          for (auto &&key : keylist) {
-            set_arg<i, keyT, ttg::Void>(key, ttg::Void{});
+          if (num_keys >= 0) {
+            for (auto &&key : keylist) {
+              set_arg<i, keyT, ttg::Void>(key, ttg::Void{});
+            }
+          } else if (num_keys == -1) {
+            for (const auto &key : keyrange) {
+              set_arg<i, keyT, ttg::Void>(key, ttg::Void{});
+            }
+          } else {
+            for (const auto& range : keyranges) {
+              for (const auto &key : range) {
+                set_arg<i, keyT, ttg::Void>(key, ttg::Void{});
+              }
+            }
           }
         }
         // case 4
@@ -1571,12 +1724,11 @@ namespace ttg_parsec {
       parsec_taskpool_t *tp = world_impl.taskpool();
       tp->tdm.module->outgoing_message_start(tp, owner, NULL);
       tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
-      // std::cout << "Sending AM with " << msg->op_id.num_keys << " keys " << std::endl;
       parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
                         sizeof(msg_header_t) + pos);
     }
 
-    template <int i, typename Iterator, typename Value>
+    template <int i, bool HasNonLocalKeys, typename Iterator, typename Value>
     void broadcast_arg_local(Iterator &&begin, Iterator &&end, const Value &value) {
       parsec_task_t *task_ring = nullptr;
       ttg_data_copy_t *copy = nullptr;
@@ -1585,6 +1737,9 @@ namespace ttg_parsec {
       }
 
       for (auto it = begin; it != end; ++it) {
+        if constexpr (HasNonLocalKeys) {
+          if (keymap(*it) != world.rank()) continue;
+        }
         set_arg_local_impl<i>(*it, value, copy, &task_ring);
       }
       /* submit all ready tasks at once */
@@ -1657,10 +1812,132 @@ namespace ttg_parsec {
                             sizeof(msg_header_t) + pos);
         }
         /* handle local keys */
-        broadcast_arg_local<i>(local_begin, local_end, value);
+        broadcast_arg_local<i, false>(local_begin, local_end, value);
       } else {
         /* only local keys */
-        broadcast_arg_local<i>(keylist.begin(), keylist.end(), value);
+        broadcast_arg_local<i, false>(keylist.begin(), keylist.end(), value);
+      }
+    }
+
+
+    template <std::size_t i, typename Key, typename Value>
+    std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>> &&
+                         !ttg::has_split_metadata<std::decay_t<Value>>::value,
+                     void>
+    rangecast_arg(const ttg::span<const ttg::detail::LinearKeyRange<Key>> &ranges, const Value &value) {
+      auto world = ttg_default_execution_context();
+      int rank = world.rank();
+
+      auto rankset = ttg::bitset(world.size());
+      /* flag every rank for which we have a key */
+      for (const auto& range : ranges) {
+        for (const auto& key : range) {
+          rankset.set(keymap(key));
+        }
+      }
+      bool have_remote = rankset.popcnt() > 1 || (rankset.popcnt() == 1 && !rankset.get(rank));
+
+      if (have_remote) {
+
+        size_t pos = 0;
+        using msg_t = detail::msg_t;
+        auto &world_impl = world.impl();
+        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                                             msg_header_t::MSG_SET_ARG, i);
+
+        parsec_taskpool_t *tp = world_impl.taskpool();
+
+        for (int owner = 0; owner < world.size(); ++owner) {
+          if (rank == owner || !rankset[owner]) continue;
+
+          /* pack the key range */
+          int num_ranges = 0;
+          for (const auto& range : ranges) {
+            pos = pack(range, msg->bytes, pos);
+            ++num_ranges;
+          }
+          msg->tt_id.num_keys = -num_ranges; // mark as ranges
+
+          /* TODO: use RMA to transfer large values */
+          pos = pack(value, msg->bytes, pos);
+
+          /* Send the message */
+          tp->tdm.module->outgoing_message_start(tp, owner, NULL);
+          tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
+          parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
+                            sizeof(msg_header_t) + pos);
+        }
+        /* handle local keys */
+        if (rankset[rank]) {
+          for (const auto& range : ranges) {
+            broadcast_arg_local<i, true>(range.begin(), range.end(), value);
+          }
+        }
+      } else {
+        /* only local keys */
+        for (const auto& range : ranges) {
+          broadcast_arg_local<i, false>(range.begin(), range.end(), value);
+        }
+      }
+    }
+
+
+    template<typename Value, typename SMDValue>
+    inline
+    auto splitmd_get_iovs(const Value &value,
+                          ttg::SplitMetadataDescriptor<SMDValue> &descr) {
+      auto iovs = descr.get_data(*const_cast<Value *>(&value));
+      int32_t num_iovs = std::distance(std::begin(iovs), std::end(iovs));
+      std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs;
+      memregs.reserve(num_iovs);
+
+      /* register all iovs so the registration can be reused */
+      for (auto &&iov : iovs) {
+        parsec_ce_mem_reg_handle_t lreg;
+        size_t lreg_size;
+        parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
+                                iov.num_bytes, &lreg, &lreg_size);
+        /* TODO: use a static function for deregistration here? */
+        memregs.push_back(std::make_pair(static_cast<int32_t>(lreg_size),
+                                          /* TODO: this assumes that parsec_ce_mem_reg_handle_t is void* */
+                                          std::shared_ptr<void>{lreg, [](void *ptr) {
+                                                                  parsec_ce_mem_reg_handle_t memreg =
+                                                                      (parsec_ce_mem_reg_handle_t)ptr;
+                                                                  parsec_ce.mem_unregister(&memreg);
+                                                                }}));
+      }
+      return memregs;
+    }
+
+    /**
+     * pack the registration handles
+     * memory layout: [<lreg_size, lreg, lreg_fn>, ...]
+     */
+    template<typename valueT>
+    inline
+    void splitmd_pack_reghandles(std::vector<std::pair<int32_t, std::shared_ptr<void>>>& memregs,
+                                 ttg_data_copy_t *copy, detail::msg_t* msg, uint64_t& pos) {
+
+      for (auto &&memreg : memregs) {
+        int32_t lreg_size;
+        std::shared_ptr<void> lreg_ptr;
+        std::tie(lreg_size, lreg_ptr) = memreg;
+        std::memcpy(msg->bytes + pos, &lreg_size, sizeof(lreg_size));
+        pos += sizeof(lreg_size);
+        std::memcpy(msg->bytes + pos, lreg_ptr.get(), lreg_size);
+        pos += lreg_size;
+        /* create a function that will be invoked upon RMA completion at the target */
+        std::shared_ptr<void> lreg_ptr_v = lreg_ptr;
+        /* mark another reader on the copy */
+        std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
+          /* shared_ptr of value and registration captured by value so resetting
+            * them here will eventually release the memory/registration */
+          detail::release_data_copy(copy);
+          lreg_ptr_v.reset();
+        });
+        std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
+        std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
+        pos += sizeof(fn_ptr);
       }
     }
 
@@ -1691,26 +1968,8 @@ namespace ttg_parsec {
         auto local_end = keylist_sorted.end();
 
         ttg::SplitMetadataDescriptor<decvalueT> descr;
-        auto iovs = descr.get_data(*const_cast<decvalueT *>(&value));
-        int32_t num_iovs = std::distance(std::begin(iovs), std::end(iovs));
-        std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs;
-        memregs.reserve(num_iovs);
-
-        /* register all iovs so the registration can be reused */
-        for (auto &&iov : iovs) {
-          parsec_ce_mem_reg_handle_t lreg;
-          size_t lreg_size;
-          parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
-                                 iov.num_bytes, &lreg, &lreg_size);
-          /* TODO: use a static function for deregistration here? */
-          memregs.push_back(std::make_pair(static_cast<int32_t>(lreg_size),
-                                           /* TODO: this assumes that parsec_ce_mem_reg_handle_t is void* */
-                                           std::shared_ptr<void>{lreg, [](void *ptr) {
-                                                                   parsec_ce_mem_reg_handle_t memreg =
-                                                                       (parsec_ce_mem_reg_handle_t)ptr;
-                                                                   parsec_ce.mem_unregister(&memreg);
-                                                                 }}));
-        }
+        std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs = splitmd_get_iovs(value, descr);
+        int32_t num_iovs = memregs.size();
 
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
@@ -1763,47 +2022,105 @@ namespace ttg_parsec {
           parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
           std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
           pos += sizeof(cbtag);
-
-          /**
-           * pack the registration handles
-           * memory layout: [<lreg_size, lreg, lreg_fn>, ...]
-           */
-          int idx = 0;
-          for (auto &&iov : iovs) {
-            // auto [lreg_size, lreg_ptr] = memregs[idx];
-            int32_t lreg_size;
-            std::shared_ptr<void> lreg_ptr;
-            std::tie(lreg_size, lreg_ptr) = memregs[idx];
-            std::memcpy(msg->bytes + pos, &lreg_size, sizeof(lreg_size));
-            pos += sizeof(lreg_size);
-            std::memcpy(msg->bytes + pos, lreg_ptr.get(), lreg_size);
-            pos += lreg_size;
-            /* create a function that will be invoked upon RMA completion at the target */
-            std::shared_ptr<void> lreg_ptr_v = lreg_ptr;
-            /* mark another reader on the copy */
-            copy = detail::register_data_copy<valueT>(copy, nullptr, true);
-            std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
-              /* shared_ptr of value and registration captured by value so resetting
-               * them here will eventually release the memory/registration */
-              detail::release_data_copy(copy);
-              lreg_ptr_v.reset();
-            });
-            std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
-            std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
-            pos += sizeof(fn_ptr);
-            ++idx;
-          }
+          copy = detail::register_data_copy<valueT>(copy, nullptr, true);
+          splitmd_pack_reghandles<valueT>(memregs, copy, msg.get(), pos);
           tp->tdm.module->outgoing_message_start(tp, owner, NULL);
           tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
           parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
                             sizeof(msg_header_t) + pos);
         }
         /* handle local keys */
-        broadcast_arg_local<i>(local_begin, local_end, value);
+        broadcast_arg_local<i, false>(local_begin, local_end, value);
       } else {
         /* handle local keys */
-        broadcast_arg_local<i>(keylist.begin(), keylist.end(), value);
+        broadcast_arg_local<i, false>(keylist.begin(), keylist.end(), value);
       }
+    }
+
+    template <std::size_t i, typename Key, typename Value>
+    std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>> &&
+                         ttg::has_split_metadata<std::decay_t<Value>>::value,
+                     void>
+    splitmd_rangecast_arg(const ttg::span<const ttg::detail::LinearKeyRange<Key>> &ranges, const Value &value) {
+      using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;
+      auto world = ttg_default_execution_context();
+      int rank = world.rank();
+      auto rankset = ttg::bitset(world.size());
+      /* flag every rank for which we have a key */
+      for (const auto& range : ranges) {
+        for (const auto& key : range) {
+          rankset.set(keymap(key));
+        }
+      }
+      bool have_remote = rankset.popcnt() > 1 || (rankset.popcnt() == 1 && !rankset[rank]);
+
+      if (have_remote) {
+        using decvalueT = std::decay_t<Value>;
+
+        ttg::SplitMetadataDescriptor<decvalueT> descr;
+        std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs = splitmd_get_iovs(value, descr);
+        int32_t num_iovs = memregs.size();
+
+        using msg_t = detail::msg_t;
+        auto &world_impl = world.impl();
+        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                                             msg_header_t::MSG_SET_ARG, i);
+        auto metadata = descr.get_metadata(value);
+        size_t metadata_size = sizeof(metadata);
+
+        ttg_data_copy_t *copy;
+        copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
+        assert(nullptr != copy);
+
+        parsec_taskpool_t *tp = world_impl.taskpool();
+        size_t pos = 0;
+        for (int owner = 0; owner < world.size(); ++owner) {
+          if (rank == owner || !rankset[owner]) continue;
+
+          int num_ranges = 0;
+          for (const auto& range : ranges) {
+            /* pack the key range objects */
+            pos = pack(range, msg->bytes, pos);
+            ++num_ranges;
+          }
+          msg->tt_id.num_keys = -num_ranges; // mark as keyrange
+
+          /* pack the metadata */
+          std::memcpy(msg->bytes + pos, &metadata, metadata_size);
+          pos += metadata_size;
+          /* pack the local rank */
+          int rank = world.rank();
+          std::memcpy(msg->bytes + pos, &rank, sizeof(rank));
+          pos += sizeof(rank);
+          /* pack the number of iovecs */
+          std::memcpy(msg->bytes + pos, &num_iovs, sizeof(num_iovs));
+          pos += sizeof(num_iovs);
+
+          /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
+           * raw function pointer instead of a preregistered AM tag, so play that game.
+           * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
+          parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
+          std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
+          pos += sizeof(cbtag);
+          copy = detail::register_data_copy<valueT>(copy, nullptr, true);
+          splitmd_pack_reghandles<valueT>(memregs, copy, msg.get(), pos);
+          tp->tdm.module->outgoing_message_start(tp, owner, NULL);
+          tp->tdm.module->outgoing_message_pack(tp, owner, NULL, NULL, 0);
+          parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
+                            sizeof(msg_header_t) + pos);
+        }
+        /* handle local keys */
+        if (rankset[world.rank()]) {
+          for (const auto& range : ranges) {
+            broadcast_arg_local<i, true>(range.begin(), range.end(), value);
+          }
+        }
+      } else {
+        for (const auto& range : ranges) {
+          broadcast_arg_local<i, false>(range.begin(), range.end(), value);
+        }
+      }
+
     }
 
     // Used by invoke to set all arguments associated with a task
@@ -2091,9 +2408,17 @@ namespace ttg_parsec {
             broadcast_arg<i, keyT, valueT>(keylist, value);
           }
         };
+        auto rangecast_callback = [this](const ttg::span<const ttg::detail::LinearKeyRange<keyT>> &keylist,
+                                         const valueT &value) {
+          if constexpr (ttg::has_split_metadata<std::decay_t<valueT>>::value) {
+            splitmd_rangecast_arg<i, keyT, valueT>(keylist, value);
+          } else {
+            rangecast_arg<i, keyT, valueT>(keylist, value);
+          }
+        };
         auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
         auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
-        input.set_callback(send_callback, move_callback, broadcast_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, move_callback, broadcast_callback, setsize_callback, finalize_callback, rangecast_callback);
       }
       //////////////////////////////////////////////////////////////////
       // case 2: nonvoid key, void value, mixed inputs
