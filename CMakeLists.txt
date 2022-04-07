@@ -39,7 +39,6 @@ set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
 ########################################
 option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" ON)
 option(TTG_EXAMPLES "Whether to build examples" OFF)
-option(TTG_DOC_EXAMPLES "Whether to build the documentation examples" OFF)
 
 option(TTG_FETCH_BOOST "Whether to fetch+build Boost, if missing" OFF)
 option(TTG_ENABLE_TRACE "Whether to enable ttg::trace() output" OFF)
@@ -126,9 +125,6 @@ endif(BUILD_TESTING)
 if (TTG_EXAMPLES)
   add_subdirectory(examples)
 endif(TTG_EXAMPLES)
-if (TTG_DOC_EXAMPLES)
-  add_subdirectory(doc/dox/user/examples)
-endif(TTG_DOC_EXAMPLES)
 add_subdirectory(doc)
 
 # Create the version file
