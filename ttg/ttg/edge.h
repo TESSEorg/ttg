@@ -13,8 +13,12 @@
 
 namespace ttg {
 
-  /// An object of the Edge class represents the connection between an Output terminal and
-  /// an input terminal, and can carry data between terminals.
+  /// @brief Edge is used to connect In and Out terminals
+  ///
+  /// Edge objects can connect in a type-safe way
+  /// one or more Out terminals to an In terminal
+  /// or one Out terminal to one or more In terminals.
+  ///
   /// \tparam <keyT> type of the destination task identifiers (keys)
   /// \tparam <valueT> type of the data carried by the Edge.
   template <typename keyT, typename valueT>

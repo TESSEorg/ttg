@@ -14,6 +14,8 @@
 
 namespace ttg {
 
+  /// \brief Base type for input terminals receiving messages annotated by task IDs of type `keyT`
+  /// \tparam <keyT> a task ID type (can be `void`)
   template <typename keyT = void>
   class InTerminalBase : public TerminalBase {
    public:
@@ -70,10 +72,10 @@ namespace ttg {
     }
   };
 
-  /// Input Terminal
-  /// \tparam <keyT> Type of task identifier (should be the same type as the task idenfitier for the TT that holds
-  ///                this Input Terminal
-  /// \tparam <valueT> Type of data that serves as input for this terminal
+  /// An input terminal for receiving messages annotated by task IDs of type `KeyT` and values of type `valueT`
+  /// \tparam <keyT> a task ID type (can be `void`)
+  /// \tparam <valueT> a data type (can be `void`); a const `valueT` indicates that the incoming data is passed by
+  ///         const reference
   template <typename keyT = void, typename valueT = void>
   class In : public InTerminalBase<keyT> {
    public:
@@ -231,6 +233,7 @@ namespace ttg {
     }
   };
 
+  /// detects whether a given type is an input terminal type
   template <typename T>
   inline constexpr bool is_input_terminal_v = false;
   template <typename keyT>
@@ -255,6 +258,8 @@ namespace ttg {
     using input_terminals_tuple_t = typename input_terminals_tuple<keyT, valuesT...>::type;
   }  // namespace detail
 
+  /// A base type for output terminals that send messages annotated by task IDs of type `KeyT`
+  /// \tparam <keyT> a task ID type (can be `void`)
   template <typename keyT = void>
   class OutTerminalBase : public TerminalBase {
    public:
@@ -308,7 +313,9 @@ namespace ttg {
     }
   };
 
-  /// Output terminal
+  /// An output terminal for sending messages annotated by task IDs of type `KeyT` and values of type `valueT`
+  /// \tparam <keyT> a task ID type (can be `void`)
+  /// \tparam <valueT> a data type (can be `void`)
   template <typename keyT = void, typename valueT = void>
   class Out : public OutTerminalBase<keyT> {
    public:
@@ -456,6 +463,7 @@ namespace ttg {
     }
   };
 
+  /// detects whether a given type is an output terminal type
   template <typename T>
   inline constexpr bool is_output_terminal_v = false;
   template <typename keyT>
