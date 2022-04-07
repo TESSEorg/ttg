@@ -3,26 +3,6 @@
 #ifndef TTG_MAKE_TT_H
 #define TTG_MAKE_TT_H
 
-namespace detail {
-
-  template <typename... FromEdgeTypesT, std::size_t... I>
-  inline auto edge_base_tuple(const std::tuple<FromEdgeTypesT...> &edges, std::index_sequence<I...>) {
-    return std::make_tuple(std::get<I>(edges).edge()...);
-  }
-
-  template <typename... EdgeTs>
-  inline decltype(auto) edge_base_tuple(const std::tuple<EdgeTs...> &edges) {
-    /* avoid copying edges if there is no wrapper that forces us to create copies */
-    if constexpr ((EdgeTs::is_wrapper_edge || ...)) {
-      return edge_base_tuple(edges, std::make_index_sequence<sizeof...(EdgeTs)>{});
-    } else {
-      return edges;
-    }
-  }
-
-  inline auto edge_base_tuple(const std::tuple<> &empty) { return empty; }
-}  // namespace detail
-
 // Class to wrap a callable with signature
 //
 // case 1 (keyT != void): void op(auto&& key, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&)
@@ -346,9 +326,7 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
   static_assert(std::is_same_v<decayed_input_args_t, std::tuple<input_edge_valuesT...>>,
                 "ttg::make_tt_tpl(func, inedges, outedges): inedges value types do not match argument types of func");
 
-  auto input_edges = detail::edge_base_tuple(inedges);
-
-  return std::make_unique<wrapT>(std::forward<funcT>(func), input_edges, outedges, name, innames, outnames);
+  return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
 /// @brief Factory function to assist in wrapping a callable with signature
@@ -423,9 +401,7 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   using wrapT = typename CallableWrapTTArgsAsTypelist<funcT, have_outterm_tuple, keyT, output_terminals_type,
                                                       full_input_args_t>::type;
 
-  auto input_edges = detail::edge_base_tuple(inedges);
-
-  return std::make_unique<wrapT>(std::forward<funcT>(func), input_edges, outedges, name, innames, outnames);
+  return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
 template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>

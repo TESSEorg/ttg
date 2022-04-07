@@ -103,9 +103,6 @@ namespace ttg {
       }
     }
 
-    /// whether this is a wrapper edge (it's not)
-    static constexpr bool is_wrapper_edge = false;
-
     /// returns a reference to itself
     /// this is used by edge wrappers to return the underlying edge
     Edge<keyT, valueT> edge() const { return *this; }
