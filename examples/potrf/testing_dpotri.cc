@@ -68,8 +68,8 @@ int main(int argc, char **argv)
   auto world = ttg::default_execution_context();
   
   if(nullptr != prof_filename) {
-    ttg::profile_on();
-    world.impl().start_tracing_dag_of_tasks(prof_filename);
+    world.profile_on();
+    world.dag_on(prof_filename);
   }
 
   int P = std::sqrt(world.size());
@@ -148,7 +148,8 @@ int main(int argc, char **argv)
               << elapsed / 1E3 << " : Flops " << (potri::FLOPS_DPOTRI(N)) << " " << (potri::FLOPS_DPOTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
   }
 
-  world.impl().stop_tracing_dag_of_tasks();
+  world.dag_off();
+  world.profile_off();
 
   //delete A;
   /* cleanup allocated matrix before shutting down PaRSEC */

@@ -19,6 +19,21 @@
 #include <dplasma.h>
 #endif
 
+char* getCmdOption(char ** begin, char ** end, const std::string & option)
+{
+    char ** itr = std::find(begin, end, option);
+    if (itr != end && ++itr != end)
+    {
+        return *itr;
+    }
+    return nullptr;
+}
+
+bool cmdOptionExists(char** begin, char** end, const std::string& option)
+{
+    return std::find(begin, end, option) != end;
+}
+
 int main(int argc, char **argv)
 {
 
@@ -29,33 +44,30 @@ int main(int argc, char **argv)
   int check = 0;
   int nthreads = -1;
   const char* prof_filename = nullptr;
+  char *opt = nullptr;
 
-  if (argc > 1) {
-    N = M = atoi(argv[1]);
+  if( (opt = getCmdOption(argv+1, argv+argc, "-N")) != nullptr ) {
+    N = M = atoi(opt);
   }
 
-  if (argc > 2) {
-    NB = atoi(argv[2]);
+  if( (opt = getCmdOption(argv+1, argv+argc, "-t")) != nullptr ) {
+    NB = atoi(opt);
   }
 
-  if (argc > 3) {
-    check = atoi(argv[3]);
+  if( (opt = getCmdOption(argv+1, argv+argc, "-c")) != nullptr ) {
+    nthreads = atoi(opt);
   }
 
-  if (argc > 4) {
-    nthreads = atoi(argv[4]);
-  }
-
-  if (argc > 5) {
-    prof_filename = argv[5];
+  if( (opt = getCmdOption(argv+1, argv+argc, "-dag")) != nullptr ) {
+    prof_filename = opt;
   }
 
   ttg::initialize(argc, argv, nthreads);
 
   auto world = ttg::default_execution_context();
   if(nullptr != prof_filename) {
-    ttg::profile_on();
-    world.impl().start_tracing_dag_of_tasks(prof_filename);
+    world.profile_on();
+    world.dag_on(prof_filename);
   }
 
   int P = std::sqrt(world.size());
@@ -132,7 +144,7 @@ int main(int argc, char **argv)
               << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
   }
 
-  world.impl().stop_tracing_dag_of_tasks();
+  world.dag_off();
 
 #ifdef USE_DPLASMA
   if( check ) {
@@ -199,6 +211,8 @@ int main(int argc, char **argv)
   /* cleanup allocated matrix before shutting down PaRSEC */
   parsec_data_free(dcA.mat); dcA.mat = NULL;
   parsec_tiled_matrix_dc_destroy( (parsec_tiled_matrix_dc_t*)&dcA);
+
+  world.profile_off();
 
   ttg::finalize();
   return 0;

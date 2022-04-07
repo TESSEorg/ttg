@@ -154,6 +154,12 @@ namespace ttg {
       bool is_valid(void) const { return m_is_valid; }
 
       virtual void final_task() {}
+
+      virtual void profile_off() { };
+      virtual void profile_on() { };
+      virtual void dag_on(const std::string &filename) { };
+      virtual void dag_off() { };
+
     };
 
     /**
@@ -213,6 +219,12 @@ namespace ttg {
         assert(is_valid());
         return *reinterpret_cast<WorldImplT*>(m_impl.get());
       }
+
+      void profile_off() { m_impl->profile_off(); };
+      void profile_on() { m_impl->profile_on(); };
+      void dag_on(const std::string &filename) { m_impl->dag_on(filename); };
+      void dag_off() { m_impl->dag_off(); };
+
     };
 
   }  // namespace base

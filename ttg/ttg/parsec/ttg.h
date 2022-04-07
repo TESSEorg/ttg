@@ -313,12 +313,12 @@ namespace ttg_parsec {
 
     bool dag_profiling() { return _dag_profiling; }
 
-    void start_tracing_dag_of_tasks(const char *filename) {
+    virtual void dag_on(const std::string &filename) override {
 #if defined(PARSEC_PROF_GRAPHER)
       if(!_dag_profiling) {
-        size_t len = strlen(filename)+32;
+        size_t len = strlen(filename.c_str())+32;
         char ext_filename[len];
-        snprintf(ext_filename, len, "%s-%d.dot", filename, rank());
+        snprintf(ext_filename, len, "%s-%d.dot", filename.c_str(), rank());
         parsec_prof_grapher_init(ctx, ext_filename);
         _dag_profiling = true;
       }
@@ -328,7 +328,7 @@ namespace ttg_parsec {
 #endif
     }
 
-    void stop_tracing_dag_of_tasks() {
+    virtual void dag_off() override {
 #if defined(PARSEC_PROF_GRAPHER)
       if(_dag_profiling) {
         parsec_prof_grapher_fini();
@@ -336,6 +336,9 @@ namespace ttg_parsec {
       }
 #endif
     }
+
+    virtual void profile_off() override { ttg::profile_off(); };
+    virtual void profile_on() override { ttg::profile_on(); };
 
     virtual void final_task() override {
 #ifdef TTG_USE_USER_TERMDET
