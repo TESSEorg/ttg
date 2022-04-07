@@ -36,6 +36,7 @@ set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/func.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/fwd.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/impl_selector.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/keyrange.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/tt.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/reduce.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/run.h

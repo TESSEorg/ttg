@@ -38,28 +38,37 @@ using namespace ttg;
 
 struct Key {
   // ((I, J), K) where (I, J) is the tile coordinate and K is the iteration number
-  std::pair<std::pair<int, int>, int> execution_info;
+  //std::pair<std::pair<int, int>, int> execution_info;
+  int I = 0, J = 0, K = 0;
 
   bool operator==(const Key& b) const {
     if (this == &b) return true;
-    return execution_info.first.first == b.execution_info.first.first &&
-           execution_info.first.second == b.execution_info.first.second &&
-           execution_info.second == b.execution_info.second;
+    return I == b.I &&
+           J == b.J &&
+           K == b.K;
+  }
+
+  Key& operator+=(const Key& b) {
+    I += b.I;
+    J += b.J;
+    K += b.K;
+    rehash();
+    return *this;
   }
 
   bool operator!=(const Key& b) const { return !((*this) == b); }
 
   madness::hashT hash_val;
 
-  Key() : execution_info(std::make_pair(std::make_pair(0, 0), 0)) { rehash(); }
-  Key(const std::pair<std::pair<int, int>, int>& e) : execution_info(e) { rehash(); }
-  Key(int e_f_f, int e_f_s, int e_s) : execution_info(std::make_pair(std::make_pair(e_f_f, e_f_s), e_s)) { rehash(); }
+  Key() { rehash(); }
+  //Key(const std::pair<std::pair<int, int>, int>& e) : execution_info(e) { rehash(); }
+  Key(int e_f_f, int e_f_s, int e_s) : I(e_f_f), J(e_f_s), K(e_s) { rehash(); }
 
   madness::hashT hash() const { return hash_val; }
   void rehash() {
     std::hash<int> int_hasher;
-    hash_val = int_hasher(execution_info.first.first) * 2654435769 + int_hasher(execution_info.first.second) * 40503 +
-               int_hasher(execution_info.second);
+    hash_val = int_hasher(I) * 2654435769 + int_hasher(J) * 40503 +
+               int_hasher(K);
   }
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
@@ -72,14 +81,16 @@ struct Key {
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
   template <typename Archive>
   void serialize(Archive& ar, const unsigned int) {
-    ar& execution_info;
+    ar& I;
+    ar& J;
+    ar& K;
     if constexpr (ttg::detail::is_boost_input_archive_v<Archive>) rehash();
   }
 #endif
 
   friend std::ostream& operator<<(std::ostream& out, Key const& k) {
-    out << "Key((" << k.execution_info.first.first << "," << k.execution_info.first.second << "),"
-        << k.execution_info.second << ")";
+    out << "Key(" << k.I << "," << k.J << ","
+        << k.K << ")";
     return out;
   }
 };
@@ -126,13 +137,13 @@ class Initiator : public TT<int,
                   {
                     auto [i, j] = kv.first;
                     if (i == 0 && j == 0) {  // A function call
-                      ::send<0>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
+                      ::send<0>(Key(i, j, 0), kv.second, out);
                     } else if (i == 0) {  // B function call
-                      ::send<1>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
+                      ::send<1>(Key(i, j, 0), kv.second, out);
                     } else if (j == 0) {  // C function call
-                      ::send<2>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
+                      ::send<2>(Key(i, j, 0), kv.second, out);
                     } else {  // D function call
-                      ::send<3>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
+                      ::send<3>(Key(i, j, 0), kv.second, out);
                     }
                   });
   }
@@ -177,8 +188,8 @@ class Finalizer : public TT<Key, std::tuple<>, Finalizer<T>, ttg::typelist<Block
 
   // BlockMatrix<T> &&in -- use direct arguments
   void op(const Key& key, const std::tuple<BlockMatrix<T>>&& t, typename baseT::output_terminals_type& out) {
-    int I = key.execution_info.first.first;
-    int J = key.execution_info.first.second;
+    int I = key.I;
+    int J = key.J;
     int block_size = problem_size / blocking_factor;
 
     BlockMatrix<T> bm = get<0>(t);
@@ -253,9 +264,9 @@ class FuncA : public TT<Key,
       , base_size(base_size) {}
 
   void op(const Key& key, const std::tuple<BlockMatrix<T>>& t, typename baseT::output_terminals_type& out) {
-    int I = key.execution_info.first.first;
-    int J = key.execution_info.first.second;
-    int K = key.execution_info.second;
+    int I = key.I;
+    int J = key.J;
+    int K = key.K;
 
     BlockMatrix<T> m_ij;
     // Executing the update
@@ -264,53 +275,35 @@ class FuncA : public TT<Key,
       m_ij = floyd_iterative_kernel(problem_size / blocking_factor, (get<0>(t)), (get<0>(t)), (get<0>(t)));
       // cout << "A[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
     }
-
     // Making u_ready/v_ready for all the B/C function calls in the CURRENT iteration
-    std::tuple<std::array<Key, 1>, std::vector<Key>, std::vector<Key>> bcast_keys;
-    for (int l = 0; l < blocking_factor; ++l) {
-      if (l != K) {
-        /*if (K == 0) {
-          // B calls - x_ready
-          ::send<1>(Key(std::make_pair(std::make_pair(I, l), K)), (*adjacency_matrix_ttg)(I,l), out);
-          // C calls - x_ready
-          ::send<2>(Key(std::make_pair(std::make_pair(l, J), K)), (*adjacency_matrix_ttg)(l,J), out);
-        }*/
-        // B calls
-        // cout << "Send " << I << " " << l << " " << K << endl;
-        //::send<4>(Key(std::make_pair(std::make_pair(I, l), K)), m_ij, out);
-        std::get<1>(bcast_keys).emplace_back(I, l, K);
+    /* create 2 ranges: 1) (I, l, K) with l = 0..K-1; 2) (I, l, K) with l = K+1..blocking_factor */
+    auto range1_low = ttg::make_keyrange(Key(I, 0, K), Key(I, K, K), Key(0, 1, 0));
+    auto range1_up  = ttg::make_keyrange(Key(I, K+1, K), Key(I, blocking_factor, K), Key(0, 1, 0));
 
-        // C calls
-        // cout << "Send " << l << " " << J << " " << K << endl;
-        //::send<5>(Key(std::make_pair(std::make_pair(l, J), K)), m_ij, out);
-        std::get<2>(bcast_keys).emplace_back(l, J, K);
-      }
-    }
+    /* create 2 ranges: 1) (l, J, K) with l = 0..K-1; 2) (l, J, K) with l = K+1..blocking_factor */
+    auto range2_low = ttg::make_keyrange(Key(0, J, K), Key(K, J, K), Key(1, 0, 0));
+    auto range2_up  = ttg::make_keyrange(Key(K+1, J, K), Key(blocking_factor, J, K), Key(1, 0, 0));
 
     // making x_ready for the computation on the SAME block in the NEXT iteration
     if (K < (blocking_factor - 1)) {   // if there is a NEXT iteration
-      std::get<0>(bcast_keys)[0] = {I, J, K+1};
+      Key key0 = {I, J, K+1};
+      auto bcast_keys = std::make_tuple(key0,
+                                        std::array<decltype(range1_low), 2>{{range1_low, range1_up}},
+                                        std::array<decltype(range2_low), 2>{{range2_low, range2_up}});
       if (I == K + 1 && J == K + 1) {  // in the next iteration, we have A function call
-                                       // cout << "Send " << I << " " << J << " " << K << endl;
-        //::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
         ::broadcast<0, 4, 5>(bcast_keys, std::move(m_ij), out);
       } else if (I == K + 1) {  // in the next iteration, we have B function call
-                                // cout << "Send " << I << " " << J << " " << K << endl;
-        //::send<1>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
         ::broadcast<1, 4, 5>(bcast_keys, std::move(m_ij), out);
       } else if (J == K + 1) {  // in the next iteration, we have C function call
-                                // cout << "Send " << I << " " << J << " " << K << endl;
-        //::send<2>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
         ::broadcast<2, 4, 5>(bcast_keys, std::move(m_ij), out);
       } else {  // in the next iteration, we have D function call
-                // cout << "Send " << I << " " << J << " " << K << endl;
-        //::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
         ::broadcast<3, 4, 5>(bcast_keys, std::move(m_ij), out);
       }
     } else {
-      std::get<0>(bcast_keys)[0] = {I, J, K};
-      // cout << "A[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
-      //::send<6>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
+      Key key0 = {I, J, K};
+      auto bcast_keys = std::make_tuple(key0,
+                                        std::array<decltype(range1_low), 2>{{range1_low, range1_up}},
+                                        std::array<decltype(range2_low), 2>{{range2_low, range2_up}});
       ::broadcast<6, 4, 5>(bcast_keys, std::move(m_ij), out);
     }
   }
@@ -353,9 +346,9 @@ class FuncB : public TT<Key,
 
   void op(const Key& key, const std::tuple<BlockMatrix<T>, const BlockMatrix<T>>& t,
           typename baseT::output_terminals_type& out) {
-    int I = key.execution_info.first.first;
-    int J = key.execution_info.first.second;
-    int K = key.execution_info.second;
+    int I = key.I;
+    int J = key.J;
+    int K = key.K;
 
     BlockMatrix<T> m_ij;
     // Executing the update
@@ -366,20 +359,14 @@ class FuncB : public TT<Key,
     }
 
     // Making v_ready for all the D function calls in the CURRENT iteration
-    std::tuple<std::array<Key, 1>, std::vector<Key>> bcast_keys;
-    for (int i = 0; i < blocking_factor; ++i) {
-      if (i != I) {
-        // if (K == 0)
-        //::send<3>(Key(std::make_pair(std::make_pair(i, J), K)), (*adjacency_matrix_ttg)(i,J), out);
-        // cout << "Send " << i << " " << J << " " << K << endl;
-        //::send<4>(Key(std::make_pair(std::make_pair(i, J), K)), m_ij, out);
-        std::get<1>(bcast_keys).emplace_back(i, J, K);
-      }
-    }
+    /* create 2 ranges: 1) (I, l, K) with l = 0..K-1; 2) (I, l, K) with l = K+1..blocking_factor */
+    auto range1_low = ttg::make_keyrange(Key(0,   J, K), Key(I, J, K), Key(1, 0, 0));
+    auto range1_up  = ttg::make_keyrange(Key(I+1, J, K), Key(blocking_factor, J, K), Key(1, 0, 0));
 
     // making x_ready for the computation on the SAME block in the NEXT iteration
     if (K < (blocking_factor - 1)) {   // if there is a NEXT iteration
-      std::get<0>(bcast_keys)[0] = {I, J, K+1};
+      Key key0 = {I, J, K+1};
+      auto bcast_keys = std::make_tuple(key0, std::array<decltype(range1_low), 2>{{range1_low, range1_up}});
       if (I == K + 1 && J == K + 1) {  // in the next iteration, we have A function call
                                        // cout << "Send " << I << " " << J << " " << K << endl;
         //::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
@@ -398,7 +385,8 @@ class FuncB : public TT<Key,
         ::broadcast<3, 4>(bcast_keys, std::move(m_ij), out);
       }
     } else {
-      std::get<0>(bcast_keys)[0] = {I, J, K};
+      Key key0 = {I, J, K};
+      auto bcast_keys = std::make_tuple(key0, std::array<decltype(range1_low), 2>{{range1_low, range1_up}});
       // cout << "B[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
       //::send<5>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
       ::broadcast<5, 4>(bcast_keys, std::move(m_ij), out);
@@ -443,9 +431,9 @@ class FuncC : public TT<Key,
 
   void op(const Key& key, const std::tuple<BlockMatrix<T>, BlockMatrix<T>>& t,
           typename baseT::output_terminals_type& out) {
-    int I = key.execution_info.first.first;
-    int J = key.execution_info.first.second;
-    int K = key.execution_info.second;
+    int I = key.I;
+    int J = key.J;
+    int K = key.K;
 
     BlockMatrix<T> m_ij;
     // Executing the update
@@ -456,40 +444,26 @@ class FuncC : public TT<Key,
     }
 
     // Making u_ready for all the D function calls in the CURRENT iteration
-    std::tuple<std::array<Key, 1>, std::vector<Key>> bcast_keys;
-    for (int j = 0; j < blocking_factor; ++j) {
-      if (j != J) {
-        //::send<4>(Key(std::make_pair(std::make_pair(I, j), K)), (*adjacency_matrix_ttg)(I,j), out);
-        // cout << "Send " << I << " " << j << " " << K << endl;
-        //::send<4>(Key(std::make_pair(std::make_pair(I, j), K)), m_ij, out);
-        std::get<1>(bcast_keys).emplace_back(I, j, K);
-      }
-    }
+    auto range1_low = ttg::make_keyrange(Key(I, 0, K), Key(I, J, K), Key(0, 1, 0));
+    auto range1_up  = ttg::make_keyrange(Key(I, J+1, K), Key(I, blocking_factor, K), Key(0, 1, 0));
 
     // making x_ready for the computation on the SAME block in the NEXT iteration
     if (K < (blocking_factor - 1)) {   // if there is a NEXT iteration
-      std::get<0>(bcast_keys)[0] = {I, J, K+1};
+      Key key0 = {I, J, K+1};
+      auto bcast_keys = std::make_tuple(key0, std::array<decltype(range1_low), 2>{{range1_low, range1_up}});
       if (I == K + 1 && J == K + 1) {  // in the next iteration, we have A function call
-                                       // cout << "Send " << I << " " << J << " " << K << endl;
-        //::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
         ::broadcast<0, 4>(bcast_keys, std::move(m_ij), out);
       } else if (I == K + 1) {  // in the next iteration, we have B function call
-                                // cout << "Send " << I << " " << J << " " << K << endl;
-        //::send<1>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
         ::broadcast<1, 4>(bcast_keys, std::move(m_ij), out);
       } else if (J == K + 1) {  // in the next iteration, we have C function call
-                                // cout << "Send " << I << " " << J << " " << K << endl;
-        //::send<2>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
         ::broadcast<2, 4>(bcast_keys, std::move(m_ij), out);
       } else {  // in the next iteration, we have D function call
-                // cout << "Send " << I << " " << J << " " << K << endl;
-        //::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
         ::broadcast<3, 4>(bcast_keys, std::move(m_ij), out);
       }
     } else {
       // cout << "C[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
-      //::send<5>(Key(std::make_pair(std::make_pair(I, J), K)), m_ij, out);
-      std::get<0>(bcast_keys)[0] = {I, J, K};
+      Key key0 = {I, J, K};
+      auto bcast_keys = std::make_tuple(key0, std::array<decltype(range1_low), 2>{{range1_low, range1_up}});
       ::broadcast<5, 4>(bcast_keys, std::move(m_ij), out);
     }
   }
@@ -532,9 +506,9 @@ class FuncD : public TT<Key,
 
   void op(const Key& key, const std::tuple<BlockMatrix<T>, const BlockMatrix<T>, const BlockMatrix<T>>& t,
           typename baseT::output_terminals_type& out) {
-    int I = key.execution_info.first.first;
-    int J = key.execution_info.first.second;
-    int K = key.execution_info.second;
+    int I = key.I;
+    int J = key.J;
+    int K = key.K;
 
     BlockMatrix<T> m_ij;
     // Executing the update
@@ -548,20 +522,20 @@ class FuncD : public TT<Key,
     if (K < (blocking_factor - 1)) {   // if there is a NEXT iteration
       if (I == K + 1 && J == K + 1) {  // in the next iteration, we have A function call
                                        // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), std::move(m_ij), out);
+        ::send<0>(Key(I, J, K + 1), std::move(m_ij), out);
       } else if (I == K + 1) {  // in the next iteration, we have B function call
                                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<1>(Key(std::make_pair(std::make_pair(I, J), K + 1)), std::move(m_ij), out);
+        ::send<1>(Key(I, J, K + 1), std::move(m_ij), out);
       } else if (J == K + 1) {  // in the next iteration, we have C function call
                                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<2>(Key(std::make_pair(std::make_pair(I, J), K + 1)), std::move(m_ij), out);
+        ::send<2>(Key(I, J, K + 1), std::move(m_ij), out);
       } else {  // in the next iteration, we have D function call
                 // cout << "Send " << I << " " << J << " " << K << endl;
-        ::send<3>(Key(std::make_pair(std::make_pair(I, J), K + 1)), std::move(m_ij), out);
+        ::send<3>(Key(I, J, K + 1), std::move(m_ij), out);
       }
     } else {
       // cout << "D[" << I << "," << J << "," << K <<  "]: " << m_ij << endl;
-      ::send<4>(Key(std::make_pair(std::make_pair(I, J), K)), std::move(m_ij), out);
+      ::send<4>(Key(I, J, K), std::move(m_ij), out);
     }
   }
 };
@@ -724,8 +698,8 @@ int main(int argc, char** argv) {
   int P  = std::sqrt(world.size());
   int Q  = world.size() / P;
   auto keymap = [=](const Key &key) {
-    int I = key.execution_info.first.first;
-    int J = key.execution_info.first.second;
+    int I = key.I;
+    int J = key.J;
     return ((I%P) + (J%Q)*P);
   };
 

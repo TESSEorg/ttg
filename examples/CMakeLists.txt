@@ -4,6 +4,8 @@ add_ttg_executable(test test/test.cc)
 add_ttg_executable(t9 t9/t9.cc)
 add_ttg_executable(t9-streaming t9/t9_streaming.cc)
 
+add_ttg_executable(keyranges keyranges.cc)
+
 # sparse matmul
 if (TARGET eigen3)
     # MADworld used for MADNESS serialization

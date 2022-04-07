@@ -11,6 +11,11 @@ namespace ttg {
 
   class Void;
 
+  namespace detail {
+    template<typename Key>
+    struct LinearKeyRange;
+  } // namespace detail
+
   namespace meta {
 
 #if __cplusplus >= 201703L
@@ -650,6 +655,31 @@ namespace ttg {
       template <typename Key, typename Value>
       using broadcast_callback_t = typename broadcast_callback<Key, Value>::type;
 
+
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // rangecast_callback_t<key,value> = std::function<void(const key&, value&&>, protected against void key or value
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      template <typename Key, typename Value, typename Enabler = void>
+      struct rangecast_callback;
+      template <typename Key, typename Value>
+      struct rangecast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
+        using type = std::function<void(const ttg::span<const ttg::detail::LinearKeyRange<Key>> &, const Value &)>;
+      };
+      template <typename Key, typename Value>
+      struct rangecast_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
+        using type = std::function<void(const ttg::span<const ttg::detail::LinearKeyRange<Key>> &)>;
+      };
+      template <typename Key, typename Value>
+      struct rangecast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
+        using type = std::function<void(const Value &)>;
+      };
+      template <typename Key, typename Value>
+      struct rangecast_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
+        using type = std::function<void()>;
+      };
+      template <typename Key, typename Value>
+      using rangecast_callback_t = typename rangecast_callback<Key, Value>::type;
+
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       // setsize_callback_t<key> = std::function<void(const keyT &, std::size_t)> protected against void key
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -743,6 +773,21 @@ namespace ttg {
     constexpr bool is_iterable_v = is_iterable<T>::value;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // check whether a type is iterable yielding a specified value type
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <typename T, typename U, typename = void>
+    struct is_iterable_of : std::false_type {};
+
+    // this gets used only when we can call std::begin() and std::end() on that type
+    template <typename T, typename U>
+    struct is_iterable_of<T, U, std::enable_if_t<std::is_same_v<U, std::decay_t<decltype(*std::begin(std::declval<T>()))>>
+                                                  && std::is_same_v<U, std::decay_t<decltype(*std::end(std::declval<T>()))>>>>
+        : std::true_type {};
+
+    template <typename T, typename U>
+    constexpr bool is_iterable_of_v = is_iterable_of<T, U>::value;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // check whether a Callable is invocable with the arguments given as a typelist
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <typename Callable, typename Typelist>
@@ -754,6 +799,89 @@ namespace ttg {
     template <typename ReturnType, typename Callable, typename... Args>
     constexpr bool is_invocable_typelist_r_v<ReturnType, Callable, ttg::typelist<Args...>> =
         std::is_invocable_r_v<ReturnType, Callable, Args...>;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // check whether a type has operator++ defined
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template<typename T, typename = void>
+    struct has_pre_increment : std::false_type
+    { };
+
+    template<typename T>
+    struct has_pre_increment<T, std::void_t<decltype(++(std::declval<T>()))>>
+    : std::true_type
+    { };
+
+    template<typename T>
+    constexpr bool has_pre_increment_v = has_pre_increment<T>::value;
+
+    template<typename T, typename = void>
+    struct has_post_increment : std::false_type
+    { };
+
+    template<typename T>
+    struct has_post_increment<T, std::void_t<decltype((std::declval<T>())++)>>
+    : std::true_type
+    { };
+
+    template<typename T>
+    constexpr bool has_post_increment_v = has_post_increment<T>::value;
+
+    template<typename T>
+    constexpr bool has_increment_v = has_pre_increment<T>::value || has_post_increment<T>::value;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // check whether a type has operator- and operator+ defined
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template<typename T, typename U = T, typename = void>
+    struct has_difference : std::false_type
+    { };
+
+    template<typename T, typename U>
+    struct has_difference<T, U, std::void_t<decltype((std::declval<T>()) - (std::declval<U>()))>>
+    : std::true_type
+    { };
+
+    template<typename T, typename U = T>
+    constexpr bool has_difference_v = has_difference<T, U>::value;
+
+    template<typename T, typename U = T, typename = void>
+    struct has_addition : std::false_type
+    { };
+
+    template<typename T, typename U>
+    struct has_addition<T, U, std::void_t<decltype((std::declval<T>()) + (std::declval<U>()))>>
+    : std::true_type
+    { };
+
+    template<typename T, typename U = T>
+    constexpr bool has_addition_v = has_addition<T, U>::value;
+
+    template<typename T, typename U = T, typename = void>
+    struct has_compound_addition : std::false_type
+    { };
+
+    template<typename T, typename U>
+    struct has_compound_addition<T, U, std::void_t<decltype((std::declval<T>()) += (std::declval<U>()))>>
+    : std::true_type
+    { };
+
+    template<typename T, typename U = T>
+    constexpr bool has_compound_addition_v = has_compound_addition<T, U>::value;
+
+    /* Check if a type is comparable with itself.
+     * TODO: use of C++20 is_comparable once it's available */
+    template<typename T, typename = void>
+    struct is_comparable : std::false_type
+    { };
+
+    template<typename T>
+    struct is_comparable<T, std::void_t<decltype((std::declval<T>()) == (std::declval<T>()))>>
+    : std::true_type
+    { };
+
+    template<typename T>
+    constexpr bool is_comparable_v = is_comparable<T>::value;
 
   }  // namespace meta
 }  // namespace ttg

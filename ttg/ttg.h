@@ -17,6 +17,7 @@
 #include "ttg/base/world.h"
 #include "ttg/broadcast.h"
 #include "ttg/func.h"
+#include "ttg/keyrange.h"
 #include "ttg/reduce.h"
 #include "ttg/traverse.h"
 #include "ttg/tt.h"

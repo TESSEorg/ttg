@@ -7,6 +7,7 @@
 
 #include "ttg/base/terminal.h"
 #include "ttg/fwd.h"
+#include "ttg/keyrange.h"
 #include "ttg/util/demangle.h"
 #include "ttg/util/meta.h"
 #include "ttg/util/trace.h"
@@ -85,6 +86,7 @@ namespace ttg {
     using send_callback_type = meta::detail::send_callback_t<keyT, std::decay_t<valueT>>;
     using move_callback_type = meta::detail::move_callback_t<keyT, std::decay_t<valueT>>;
     using broadcast_callback_type = meta::detail::broadcast_callback_t<keyT, std::decay_t<valueT>>;
+    using rangecast_callback_type = meta::detail::rangecast_callback_t<keyT, std::decay_t<valueT>>;
     using setsize_callback_type = typename base_type::setsize_callback_type;
     using finalize_callback_type = typename base_type::finalize_callback_type;
     static constexpr bool is_an_input_terminal = true;
@@ -93,6 +95,7 @@ namespace ttg {
     send_callback_type send_callback;
     move_callback_type move_callback;
     broadcast_callback_type broadcast_callback;
+    rangecast_callback_type rangecast_callback;
 
     // No moving, copying, assigning permitted
     In(In &&other) = delete;
@@ -110,10 +113,12 @@ namespace ttg {
     void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback,
                       const broadcast_callback_type &bcast_callback = broadcast_callback_type{},
                       const setsize_callback_type &setsize_callback = setsize_callback_type{},
-                      const finalize_callback_type &finalize_callback = finalize_callback_type{}) {
+                      const finalize_callback_type &finalize_callback = finalize_callback_type{},
+                      const rangecast_callback_type &rangecast_callback = rangecast_callback_type{}) {
       this->send_callback = send_callback;
       this->move_callback = move_callback;
       this->broadcast_callback = bcast_callback;
+      this->rangecast_callback = rangecast_callback;
       base_type::set_callback(setsize_callback, finalize_callback);
     }
 
@@ -157,7 +162,9 @@ namespace ttg {
     // An optimized implementation will need a separate callback for broadcast
     // with a specific value for rangeT
     template <typename rangeT, typename Value>
-    std::enable_if_t<!meta::is_void_v<Value>, void> broadcast(const rangeT &keylist, const Value &value) {
+    std::enable_if_t<!meta::is_void_v<Value> &&
+                     !meta::is_iterable_of_v<rangeT, ttg::detail::LinearKeyRange<key_type>>, void>
+    broadcast(const rangeT &keylist, const Value &value) {
       if (broadcast_callback) {
         if constexpr (ttg::meta::is_iterable_v<rangeT>) {
           broadcast_callback(ttg::span(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))),
@@ -176,29 +183,10 @@ namespace ttg {
       }
     }
 
-    template <typename rangeT, typename Value>
-    std::enable_if_t<!meta::is_void_v<Value>, void> broadcast(const rangeT &keylist, Value &&value) {
-      const Value &v = value;
-      if (broadcast_callback) {
-        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
-          broadcast_callback(
-              ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))), v);
-        } else {
-          /* got something we cannot iterate over (single element?) so put one element in the span */
-          broadcast_callback(ttg::span<const keyT>(&keylist, 1), v);
-        }
-      } else {
-        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
-          for (auto &&key : keylist) send(key, v);
-        } else {
-          /* got something we cannot iterate over (single element?) so put one element in the span */
-          broadcast_callback(ttg::span<const keyT>(&keylist, 1), v);
-        }
-      }
-    }
-
     template <typename rangeT, typename Value = valueT>
-    std::enable_if_t<meta::is_void_v<Value>, void> broadcast(const rangeT &keylist) {
+    std::enable_if_t<meta::is_void_v<Value> &&
+                     !meta::is_iterable_of_v<rangeT, ttg::detail::LinearKeyRange<key_type>>, void>
+    broadcast(const rangeT &keylist) {
       if (broadcast_callback) {
         if constexpr (ttg::meta::is_iterable_v<rangeT>) {
           broadcast_callback(
@@ -216,6 +204,55 @@ namespace ttg {
         }
       }
     }
+
+    /**
+     * Overload for key ranges
+     */
+    template <typename Value>
+    std::enable_if_t<!meta::is_void_v<Value>, void> broadcast(const ttg::detail::LinearKeyRange<key_type> &range, const Value &value) {
+      if (rangecast_callback) {
+        rangecast_callback(ttg::span(range, 1), value);
+      } else {
+        for (const auto &key : range) send(key, value);
+      }
+    }
+
+    template <typename rangeT, typename Value = valueT>
+    std::enable_if_t<meta::is_void_v<Value>, void> broadcast(const ttg::detail::LinearKeyRange<key_type> &range) {
+      if (rangecast_callback) {
+        rangecast_callback(ttg::span(range, 1));
+      } else {
+        for (const auto &key : range) sendk(key);
+      }
+    }
+
+    template <typename rangeT, typename Value>
+    std::enable_if_t<!meta::is_void_v<Value> &&
+                     meta::is_iterable_of_v<rangeT, ttg::detail::LinearKeyRange<key_type>>, void>
+    broadcast(const rangeT &rangelist, const Value &value) {
+      if (rangecast_callback) {
+        rangecast_callback(ttg::span(&(*std::begin(rangelist)), std::distance(std::begin(rangelist), std::end(rangelist))),
+                           value);
+      } else {
+        for (const auto& range : rangelist)
+          for (const auto &key : range)
+            send(key, value);
+      }
+    }
+
+    template <typename rangeT, typename Value>
+    std::enable_if_t<meta::is_void_v<Value> &&
+                     meta::is_iterable_of_v<rangeT, ttg::detail::LinearKeyRange<key_type>>, void>
+    broadcast(const rangeT &rangelist) {
+      if (rangecast_callback) {
+        rangecast_callback(ttg::span(&(*std::begin(rangelist)), std::distance(std::begin(rangelist), std::end(rangelist))));
+      } else {
+        for (const auto& range : rangelist)
+          for (const auto &key : range)
+            sendk(key);
+      }
+    }
+
   };
 
   template <typename T>
