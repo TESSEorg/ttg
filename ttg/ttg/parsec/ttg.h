@@ -34,6 +34,7 @@
 
 #include <array>
 #include <cassert>
+#include <cstring>
 #include <experimental/type_traits>
 #include <functional>
 #include <future>
@@ -46,6 +47,7 @@
 #include <string>
 #include <tuple>
 #include <vector>
+#include <algorithm>
 
 #include <parsec.h>
 #include <parsec/class/parsec_hash_table.h>
@@ -58,6 +60,7 @@
 #include <parsec/scheduling.h>
 #if defined(PARSEC_PROF_TRACE)
 #include <parsec/profiling.h>
+#define PARSEC_TTG_PROFILE_BACKEND 1
 #if defined(PARSEC_PROF_GRAPHER)
 #include <parsec/parsec_prof_grapher.h>
 #endif
@@ -175,6 +178,11 @@ namespace ttg_parsec {
     }
 
    public:
+#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
+    int parsec_ttg_profile_backend_set_arg_start, parsec_ttg_profile_backend_set_arg_end;
+    int parsec_ttg_profile_backend_bcast_arg_start, parsec_ttg_profile_backend_bcast_arg_end;
+#endif
+
     static constexpr const int PARSEC_TTG_MAX_AM_SIZE = 1024 * 1024;
     WorldImpl(int *argc, char **argv[], int ncores) : WorldImplBase(query_comm_size(), query_comm_rank())
 #if defined(PARSEC_PROF_TRACE) 
@@ -188,6 +196,14 @@ namespace ttg_parsec {
 #if defined(PARSEC_PROF_TRACE)
       if(parsec_profile_enabled) {
         ttg::profile_on();
+#if defined(PARSEC_TTG_PROFILE_BACKEND)
+        parsec_profiling_add_dictionary_keyword("PARSEC_TTG_SET_ARG_IMPL", "fill:000000", 0, NULL,
+                                                (int*)&parsec_ttg_profile_backend_set_arg_start,
+                                                (int*)&parsec_ttg_profile_backend_set_arg_end);
+        parsec_profiling_add_dictionary_keyword("PARSEC_TTG_BCAST_ARG_IMPL", "fill:000000", 0, NULL,
+                                                (int*)&parsec_ttg_profile_backend_bcast_arg_start,
+                                                (int*)&parsec_ttg_profile_backend_bcast_arg_end);
+#endif
       }
 #endif
 
@@ -333,17 +349,10 @@ namespace ttg_parsec {
     template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs = ttg::typelist<>>
     void register_tt_profiling(const TT<keyT, output_terminalsT, derivedT, input_valueTs> *t) {
 #if defined(PARSEC_PROF_TRACE)
-      if(2*t->get_instance_id() >= profiling_array_size) {
-        profiling_array_size = 64 * ((2*t->get_instance_id() + 63)/64 + 1);
-        tpool->profiling_array = (int*)realloc((void*)tpool->profiling_array, 
-                                                profiling_array_size * sizeof(int));
-      }
       std::stringstream ss;
       build_composite_name_rec(t->ttg_ptr(), ss);
       ss << t->get_name();
-      parsec_profiling_add_dictionary_keyword(ss.str().c_str(), "fill:000000", 0, NULL,
-                                              (int*)&tpool->profiling_array[2*t->get_instance_id()],
-                                              (int*)&tpool->profiling_array[2*t->get_instance_id()+1]);
+      register_new_profiling_event(ss.str().c_str(), t->get_instance_id());
 #endif
     }
 
@@ -354,6 +363,22 @@ namespace ttg_parsec {
         return;
       build_composite_name_rec(t->ttg_ptr(), ss);
       ss << t->get_name() << "::";
+    }
+
+    void register_new_profiling_event(const char *name, int position) {
+      if(2*position >= profiling_array_size) {
+        size_t new_profiling_array_size = 64 * ((2*position + 63)/64 + 1);
+        tpool->profiling_array = (int*)realloc((void*)tpool->profiling_array, 
+                                                new_profiling_array_size * sizeof(int));
+        memset((void*)&tpool->profiling_array[profiling_array_size], 0, sizeof(int)*(new_profiling_array_size - profiling_array_size));
+        profiling_array_size = new_profiling_array_size;
+      }
+     
+      assert(0 == tpool->profiling_array[2*position]);
+      assert(0 == tpool->profiling_array[2*position+1]);
+      parsec_profiling_add_dictionary_keyword(name, "fill:000000", 0, NULL,
+                                              (int*)&tpool->profiling_array[2*position],
+                                              (int*)&tpool->profiling_array[2*position+1]);
     }
 #endif
 
@@ -1663,6 +1688,12 @@ namespace ttg_parsec {
     void set_arg_impl(const Key &key, Value &&value) {
       int owner;
 
+#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
+      if(ttg::profiling()) {
+        parsec_profiling_ts_trace(world.impl().parsec_ttg_profile_backend_set_arg_start, 0, 0, NULL);
+      }
+#endif
+
       if constexpr (!ttg::meta::is_void_v<Key>)
         owner = keymap(key);
       else
@@ -1672,6 +1703,11 @@ namespace ttg_parsec {
           set_arg_local<i, keyT, Value>(key, std::forward<Value>(value));
         else
           set_arg_local<i, keyT, Value>(std::forward<Value>(value));
+#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
+          if(ttg::profiling()) {
+            parsec_profiling_ts_trace(world.impl().parsec_ttg_profile_backend_set_arg_end, 0, 0, NULL);
+          }
+#endif          
         return;
       }
       // the target task is remote. Pack the information and send it to
@@ -1764,10 +1800,20 @@ namespace ttg_parsec {
       // std::cout << "Sending AM with " << msg->op_id.num_keys << " keys " << std::endl;
       parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
                         sizeof(msg_header_t) + pos);
+#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
+      if(ttg::profiling()) {
+        parsec_profiling_ts_trace(world.impl().parsec_ttg_profile_backend_set_arg_end, 0, 0, NULL);
+      }
+#endif
     }
 
     template <int i, typename Iterator, typename Value>
     void broadcast_arg_local(Iterator &&begin, Iterator &&end, const Value &value) {
+#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
+      if(ttg::profiling()) {
+        parsec_profiling_ts_trace(world.impl().parsec_ttg_profile_backend_bcast_arg_start, 0, 0, NULL);
+      }
+#endif
       parsec_task_t *task_ring = nullptr;
       ttg_data_copy_t *copy = nullptr;
       if (nullptr != parsec_ttg_caller) {
@@ -1781,6 +1827,11 @@ namespace ttg_parsec {
       if (nullptr != task_ring) {
         __parsec_schedule(world.impl().execution_stream(), task_ring, 0);
       }
+#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
+      if(ttg::profiling()) {
+        parsec_profiling_ts_trace(world.impl().parsec_ttg_profile_backend_set_arg_end, 0, 0, NULL);
+      }
+#endif
     }
 
     template <std::size_t i, typename Key, typename Value>
@@ -2517,7 +2568,7 @@ namespace ttg_parsec {
       self.key_functions = &tasks_hash_fcts;
       self.task_snprintf = parsec_ttg_task_snprintf;
 
-      world_impl.taskpool()->nb_task_classes++;
+      world_impl.taskpool()->nb_task_classes = std::max(world_impl.taskpool()->nb_task_classes, static_cast<decltype(world_impl.taskpool()->nb_task_classes)>(self.task_class_id+1));
       //    function_id_to_instance[self.task_class_id] = this;
 
       if constexpr (derived_has_cuda_op()) {
