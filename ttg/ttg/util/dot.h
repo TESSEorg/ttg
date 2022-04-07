@@ -1,9 +1,9 @@
 #ifndef TTG_UTIL_DOT_H
 #define TTG_UTIL_DOT_H
 
-#include <string>
 #include <sstream>
 #include <map>
+#include <string>
 
 #include "ttg/base/terminal.h"
 #include "ttg/traverse.h"
@@ -15,6 +15,12 @@ namespace ttg {
     std::map<const TTBase*, std::stringstream> tt_nodes;
     std::multimap<const TTBase *, const TTBase *> ttg_hierarchy;
     int cluster_cnt;
+    bool disable_type;
+
+   public:
+    /// \param[in] disable_type disable_type controls whether to embed types into the DOT output;
+    ///            set to `true` to reduce the amount of the output
+    Dot(bool disable_type = false) : disable_type(disable_type){};
 
     // Insert backslash before characters that dot is interpreting
     std::string escape(const std::string &in) {
@@ -57,16 +63,22 @@ namespace ttg {
       build_ttg_hierarchy(ttc);
       if(!tt->is_ttg()) {
         std::stringstream ttss;
-        ttss <<  "        " << ttnm << " [shape=record,style=filled,fillcolor=gray90,label=\"{";
+        
+        ttss << "        " << ttnm << " [shape=record,style=filled,fillcolor=gray90,label=\"{";
 
         size_t count = 0;
         if (tt->get_inputs().size() > 0) ttss << "{";
         for (auto in : tt->get_inputs()) {
           if (in) {
             if (count != in->get_index()) throw "ttg::Dot: lost count of ins";
-            ttss << " <in" << count << ">"
-                 << " " << escape("<" + in->get_key_type_str() + "," + in->get_value_type_str() + ">") << " "
-                 << escape(in->get_name());
+            if (disable_type) {
+              ttss << " <in" << count << ">"
+                   << " " << escape(in->get_key_type_str()) << " " << escape(in->get_name());
+            } else {
+              ttss << " <in" << count << ">"
+                   << " " << escape("<" + in->get_key_type_str() + "," + in->get_value_type_str() + ">") << " "
+                   << escape(in->get_name());
+           }
           } else {
             ttss << " <in" << count << ">"
                  << " unknown ";
@@ -84,9 +96,14 @@ namespace ttg {
         for (auto out : tt->get_outputs()) {
           if (out) {
             if (count != out->get_index()) throw "ttg::Dot: lost count of outs";
-            ttss << " <out" << count << ">"
-                 << " " << escape("<" + out->get_key_type_str() + "," + out->get_value_type_str() + ">") << " "
-                 << out->get_name();
+            if (disable_type) {
+              ttss << " <out" << count << ">"
+                   << " " << escape(out->get_key_type_str()) << " " << out->get_name();
+            } else {
+              ttss << " <out" << count << ">"
+                   << " " << escape("<" + out->get_key_type_str() + "," + out->get_value_type_str() + ">") << " "
+                   << out->get_name();
+            }
           } else {
             ttss << " <out" << count << ">"
                  << " unknown ";
@@ -184,5 +201,5 @@ namespace ttg {
       return result;
     }
   };
-} // namespace ttg
-#endif // TTG_UTIL_DOT_H
+}  // namespace ttg
+#endif  // TTG_UTIL_DOT_H
