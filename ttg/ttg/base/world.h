@@ -155,10 +155,13 @@ namespace ttg {
 
       virtual void final_task() {}
 
-      virtual void profile_off() { };
-      virtual void profile_on() { };
-      virtual void dag_on(const std::string &filename) { };
-      virtual void dag_off() { };
+      virtual void profile_on() { }
+      virtual void profile_off() { }
+      virtual bool profiling() { return false; }
+
+      virtual void dag_on(const std::string &filename) { }
+      virtual void dag_off() { }
+      virtual bool dag_profiling() { return false; }
 
     };
 
@@ -220,10 +223,13 @@ namespace ttg {
         return *reinterpret_cast<WorldImplT*>(m_impl.get());
       }
 
-      void profile_off() { m_impl->profile_off(); };
-      void profile_on() { m_impl->profile_on(); };
-      void dag_on(const std::string &filename) { m_impl->dag_on(filename); };
-      void dag_off() { m_impl->dag_off(); };
+      void profile_on() { m_impl->profile_on(); }
+      void profile_off() { m_impl->profile_off(); }
+      bool profiling() { return m_impl->profiling(); }
+
+      void dag_on(const std::string &filename) { m_impl->dag_on(filename); }
+      void dag_off() { m_impl->dag_off(); }
+      bool dag_profiling() { return m_impl->dag_profiling(); }
 
     };
 
