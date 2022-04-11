@@ -71,7 +71,7 @@ namespace ttg_parsec {
       ttg_data_copy_t()
       {
         /* TODO: do we need this construction? */
-        //PARSEC_OBJ_CONSTRUCT(this, parsec_data_copy_t);
+        PARSEC_OBJ_CONSTRUCT(this, parsec_data_copy_t);
         this->readers = 1;
         this->push_task = nullptr;
       }
