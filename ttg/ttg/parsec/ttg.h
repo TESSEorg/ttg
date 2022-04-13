@@ -587,7 +587,7 @@ namespace ttg_parsec {
         readers = copy_in->increment_readers();
       }
 
-      if (readers < 0) {
+      if (readers == copy_in->mutable_tag) {
         /* someone is going to write into this copy -> we need to make a copy */
         copy_res = NULL;
         if (readonly) {
@@ -639,8 +639,8 @@ namespace ttg_parsec {
               break;
             }
           }
-          deferred_op->release_task();
           copy_in->push_task = nullptr;
+          deferred_op->release_task();
           copy_in->reset_readers();            // set the copy back to being read-only
           copy_in->increment_readers<false>(); // register as reader
           copy_res = copy_in;                  // return the copy we were passed
@@ -1308,7 +1308,7 @@ namespace ttg_parsec {
       task_t *task;
       auto &world_impl = world.impl();
       auto &reducer = std::get<i>(input_reducers);
-      bool release = false;
+      bool release = true;
       bool remove_from_hash = true;
       /* If we have only one input and no reducer on that input we can skip the hash table */
       if (numins > 1 || reducer) {
@@ -1321,14 +1321,12 @@ namespace ttg_parsec {
           /* remove while we have the lock */
           parsec_hash_table_nolock_remove(&tasks_table, hk);
           remove_from_hash = false;
-          release = true;
         }
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
       } else {
         task = create_new_task(key);
         world_impl.increment_created();
         remove_from_hash = false;
-        release = true;
       }
 
       if (reducer) {  // is this a streaming input? reduce the received value
@@ -1341,11 +1339,9 @@ namespace ttg_parsec {
           detail::ttg_data_copy_t *copy = nullptr;
           if (nullptr == (copy = static_cast<detail::ttg_data_copy_t *>(task->parsec_task.data[i].data_in))) {
             using decay_valueT = std::decay_t<valueT>;
-            if (nullptr == copy_in) {
-              copy = detail::create_new_datacopy(std::forward<Value>(value));
-            } else {
-              copy = detail::register_data_copy<valueT>(copy_in, task, input_is_const);
-            }
+            /* For now, we always create a copy because we cannot rely on the task_release
+             * mechanism (it would release the task, not the reduction value). */
+            copy = detail::create_new_datacopy(std::forward<Value>(value));
             task->parsec_task.data[i].data_in = copy;
           } else {
             reducer(*reinterpret_cast<std::decay_t<valueT> *>(copy->device_private), value);
@@ -1384,8 +1380,6 @@ namespace ttg_parsec {
            * make a copy of the original data */
           release = (copy->push_task == nullptr);
           task->parsec_task.data[i].data_in = copy;
-        } else {
-          release = true;
         }
       }
       task->remove_from_hash = remove_from_hash;
