@@ -305,10 +305,10 @@ namespace ttg_parsec {
       } size_goal_t;
 
       /* Poor-mans virtual function
-       * We cannot use virtual inheritance because we need offsetof
-       * for the mempool and scheduling.
+       * We cannot use virtual inheritance or private visibility because we
+       * need offsetof for the mempool and scheduling.
        */
-      release_task_fn* release_task_up = nullptr;
+      release_task_fn* release_task_cb = nullptr;
       bool remove_from_hash = true;
 
       /*
@@ -316,7 +316,7 @@ namespace ttg_parsec {
       */
     //public:
       void release_task() {
-        release_task_up(this);
+        release_task_cb(this);
       }
 
      protected:
@@ -333,8 +333,9 @@ namespace ttg_parsec {
       }
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
-                             parsec_taskpool_t *taskpool, int32_t priority, int data_count, release_task_fn *release_fn)
-          : data_count(data_count), release_task_up(release_fn) {
+                             parsec_taskpool_t *taskpool, int32_t priority, int data_count,
+                             release_task_fn *release_fn)
+          : data_count(data_count), release_task_cb(release_fn) {
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
@@ -362,9 +363,11 @@ namespace ttg_parsec {
         }
       }
 
-      parsec_ttg_task_t(const key_type& key, parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
-                        parsec_taskpool_t *taskpool, TT *tt_ptr, int32_t priority)
-          : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority, num_streams, &release_task)
+      parsec_ttg_task_t(const key_type& key, parsec_thread_mempool_t *mempool,
+                        parsec_task_class_t *task_class, parsec_taskpool_t *taskpool,
+                        TT *tt_ptr, int32_t priority)
+          : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
+                                   num_streams, &release_task)
           , tt(tt_ptr), key(key) {
         tt_ht_item.key = pkey();
 
@@ -397,9 +400,10 @@ namespace ttg_parsec {
         }
       }
 
-      parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class, parsec_taskpool_t *taskpool,
-                        TT *tt_ptr, int32_t priority)
-          : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority, num_streams, &release_task)
+      parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
+                        parsec_taskpool_t *taskpool, TT *tt_ptr, int32_t priority)
+          : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
+                                   num_streams, &release_task)
           , tt(tt_ptr) {
         tt_ht_item.key = pkey();
 
