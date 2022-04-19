@@ -786,7 +786,8 @@ namespace ttg {
     { };
 
     template<typename EdgeT>
-    struct edge_has_aggregator_factory<EdgeT, std::enable_if_t<std::is_invocable_v<decltype(std::declval<EdgeT>().aggregator_factory())>>>
+    struct edge_has_aggregator_factory<EdgeT, std::enable_if_t<std::is_invocable_v<decltype(std::declval<EdgeT>().aggregator_factory()),
+                                                                                   typename EdgeT::key_type>>>
     : std::true_type
     { };
 

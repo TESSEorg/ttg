@@ -291,7 +291,9 @@ TEST_CASE("TemplateTask", "[core]") {
 
               for (const auto& v : datum)
               { }
-            }, ttg::edges(ttg::make_aggregator(in)), ttg::edges()));
+            },
+            ttg::edges(ttg::make_aggregator(in, [](const int&){ return 1; })),
+            ttg::edges()));
     }
   }
 }

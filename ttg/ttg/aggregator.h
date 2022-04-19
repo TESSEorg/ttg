@@ -155,9 +155,43 @@ namespace ttg {
     template<typename T>
     constexpr bool is_aggregator_v = is_aggregator<T>::value;
 
+    template<typename KeyT, typename AggregatorT, typename TargetFn>
+    struct AggregatorFactory {
+      using aggregator_type = AggregatorT;
+      using key_type = KeyT;
+
+      AggregatorFactory() : m_targetfn([](){ return aggregator_type::undef_target; })
+      { }
+
+      AggregatorFactory(TargetFn fn) : m_targetfn(std::forward<TargetFn>(fn))
+      { }
+
+      auto operator()(const key_type& key) const {
+        return aggregator_type(m_targetfn(key));
+      }
+
+    private:
+      TargetFn m_targetfn;
+    };
+
+
+    struct AggregatorTargetProvider {
+
+      AggregatorTargetProvider(std::size_t target = Aggregator<int>::undef_target)
+      : m_target(target)
+      { }
+
+      template<typename T>
+      auto operator()(const T&) {
+        return m_target;
+      }
+    private:
+      std::size_t m_target;
+    };
+
   } // namespace detail
 
-  /* Overload of ttg::Edge with Aggregator value type */
+  /* Overload of ttg::Edge with AggregatorFactory value type */
   template<typename KeyT, typename ValueT>
   class Edge<KeyT, Aggregator<ValueT>>
   {
@@ -166,6 +200,7 @@ namespace ttg {
     /* the underlying edge type */
     using edge_type = ttg::Edge<KeyT, ValueT>;
     using aggregator_type = Aggregator<ValueT>;
+    using aggregator_factory_type = std::function<aggregator_type(const KeyT&)>;
 
     using output_terminal_type = ttg::Out<KeyT, ValueT>;
     using key_type = KeyT;
@@ -173,27 +208,21 @@ namespace ttg {
 
     Edge(edge_type& edge)
     : m_edge(edge)
+    , m_aggregator_factory([](const KeyT&){ return aggregator_type(); })
     { }
 
-    Edge(edge_type& edge, typename aggregator_type::size_type target)
-    : m_edge(edge), m_target(target)
+    template<typename AggregatorFactory>
+    Edge(edge_type& edge, AggregatorFactory&& aggregator_factory)
+    : m_edge(edge), m_aggregator_factory([=](const KeyT& key){ return aggregator_factory(key); })
     { }
-
 
     /* Return reference to the underlying edge */
     edge_type& edge() const {
       return m_edge;
     }
 
-    /* Return a new aggregator instance */
-    aggregator_type aggregator() const {
-      return aggregator_type(m_target);
-    }
-
     auto aggregator_factory() const {
-      return [=](){
-        return aggregator_type(m_target);
-      };
+      return m_aggregator_factory;
     }
 
     /// probes if this is already has at least one input
@@ -220,7 +249,7 @@ namespace ttg {
 
   private:
     edge_type& m_edge;
-    typename aggregator_type::size_type m_target = aggregator_type::undef_target;
+    aggregator_factory_type m_aggregator_factory;
   };
 
   /// overload for remove_wrapper to expose the underlying value type
@@ -231,19 +260,31 @@ namespace ttg {
     };
   } // namespace meta
 
-  template<typename KeyT, typename ValueT>
-  Edge<KeyT, Aggregator<ValueT>>
-  make_aggregator(ttg::Edge<KeyT, ValueT>& inedge)
+  template<typename EdgeT, typename TargetFn>
+  auto make_aggregator(EdgeT&& inedge,
+                       TargetFn&& targetfn)
   {
-    return Edge<KeyT, Aggregator<ValueT>>(inedge);
+    using value_type = typename EdgeT::value_type;
+    using key_type   = typename EdgeT::key_type;
+    using fact = typename detail::AggregatorFactory<key_type, Aggregator<value_type>, TargetFn>;
+    return Edge<key_type, Aggregator<value_type>>(inedge, fact(std::forward<TargetFn>(targetfn)));
   }
 
-  template<typename KeyT, typename ValueT>
-  auto make_aggregator(ttg::Edge<KeyT, ValueT>& inedge,
-                       typename Aggregator<ValueT>::size_type target)
+  template<typename EdgeT>
+  auto make_aggregator(EdgeT&& inedge,
+                       size_t target)
   {
-    return Edge<KeyT, Aggregator<ValueT>>(inedge, target);
+    return make_aggregator(inedge, typename detail::AggregatorTargetProvider(target));
   }
+
+  template<typename EdgeT>
+  auto make_aggregator(EdgeT&& inedge)
+  {
+    using value_type = typename EdgeT::value_type;
+    using key_type   = typename EdgeT::key_type;
+    return Edge<key_type, Aggregator<value_type>>(inedge);
+  }
+
 
 } // namespace ttg
 

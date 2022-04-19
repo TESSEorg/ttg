@@ -1351,7 +1351,7 @@ namespace ttg_parsec {
         ttg_data_copy_t *agg_copy;
         if (nullptr == (agg_copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in))) {
           /* create a new aggregator */
-          agg_copy = detail::create_new_datacopy(std::get<i>(aggregator_factories)());
+          agg_copy = detail::create_new_datacopy(std::get<i>(aggregator_factories)(key));
           task->parsec_task.data[i].data_in = agg_copy;
         }
         agg = reinterpret_cast<aggregator_t *>(agg_copy->device_private);
