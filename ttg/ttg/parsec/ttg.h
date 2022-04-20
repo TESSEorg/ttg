@@ -1261,6 +1261,38 @@ namespace ttg_parsec {
       set_arg_local_impl<i>(ttg::Void{}, *valueptr);
     }
 
+    template<std::size_t I, std::size_t ...Is>
+    void setup_aggregators(task_t *t, std::index_sequence<I, Is...>) {
+
+      using valueT = std::tuple_element_t<I, input_values_full_tuple_type>;
+      constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
+      constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
+      auto is_aggregator_check =
+        [&](){
+          if constexpr (valueT_is_Void) return false;
+          else return ttg::detail::is_aggregator_v<typename std::tuple_element_t<I, input_edges_type>::value_type>; };
+      constexpr bool is_aggregator = is_aggregator_check();
+      if constexpr (is_aggregator) {
+        /* create a new aggregator and put it in */
+        using aggregator_t = typename std::tuple_element_t<I, input_edges_type>::value_type;
+        ttg_data_copy_t *agg_copy;
+        aggregator_t agg = std::get<I>(aggregator_factories)(t->key);
+        size_t target = agg.target();
+        agg_copy = detail::create_new_datacopy(std::move(agg));
+        t->parsec_task.data[I].data_in = agg_copy;
+        if (target == 0) {
+          /* there won't be any data coming in, so release that dependency immediately */
+          ++t->in_data_count;
+        } else {
+          t->stream[I].goal = target;
+        }
+      }
+      // recurse to the next input
+      if constexpr (sizeof...(Is) > 0) {
+        setup_aggregators(t, std::index_sequence<Is...>());
+      }
+    }
+
     template <typename Key>
     task_t *create_new_task(const Key &key) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
@@ -1288,6 +1320,8 @@ namespace ttg_parsec {
       for (int i = 0; i < static_stream_goal.size(); ++i) {
         newtask->stream[i].goal = static_stream_goal[i];
       }
+
+      setup_aggregators(newtask, std::make_index_sequence<numins>());
 
       ttg::trace(world.rank(), ":", get_name(), " : ", key, ": creating task");
       return newtask;
@@ -1318,8 +1352,11 @@ namespace ttg_parsec {
       task_t *task;
       auto &world_impl = world.impl();
       auto &reducer = std::get<i>(input_reducers);
-      constexpr bool is_aggregator = ttg::detail::is_aggregator_v<
-                                        typename std::tuple_element_t<i, input_edges_type>::value_type>;
+      auto is_aggregator_check =
+        [&](){
+          if constexpr (valueT_is_Void) return false;
+          else return ttg::detail::is_aggregator_v<typename std::tuple_element_t<i, input_edges_type>::value_type>; };
+      constexpr bool is_aggregator = is_aggregator_check();
       bool release = false;
       bool remove_from_hash = true;
       bool use_hash_table = is_aggregator || (numins > 1) || reducer;
@@ -1330,7 +1367,7 @@ namespace ttg_parsec {
           task = create_new_task(key);
           world_impl.increment_created();
           parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
-        } else if (!reducer && numins == (task->in_data_count + 1)) {
+        } else if (!reducer && !is_aggregator && numins == (task->in_data_count + 1)) {
           /* remove while we have the lock */
           parsec_hash_table_nolock_remove(&tasks_table, hk);
           remove_from_hash = false;
@@ -1342,18 +1379,15 @@ namespace ttg_parsec {
         remove_from_hash = false;
       }
 
-      if constexpr (is_aggregator) {
+      /* TODO: fix the case of void keys and value! */
+      if constexpr (is_aggregator && !keyT_is_Void && !valueT_is_Void) {
 
         /* we use the lock to ensure mutual exclusion when inserting into the aggregator */
 
         using aggregator_t = typename std::tuple_element_t<i, input_edges_type>::value_type;
         aggregator_t* agg;
-        ttg_data_copy_t *agg_copy;
-        if (nullptr == (agg_copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in))) {
-          /* create a new aggregator */
-          agg_copy = detail::create_new_datacopy(std::get<i>(aggregator_factories)(key));
-          task->parsec_task.data[i].data_in = agg_copy;
-        }
+        ttg_data_copy_t *agg_copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
+        assert(agg_copy != nullptr);
         agg = reinterpret_cast<aggregator_t *>(agg_copy->device_private);
 
         ttg_data_copy_t *copy;
@@ -1365,13 +1399,9 @@ namespace ttg_parsec {
         }
         /* put the value into the aggregator */
         agg->add_value(*reinterpret_cast<std::decay_t<Value> *>(copy->device_private));
-        if (agg->has_target()) {
-          /* the target has a fixed target size set */
-          release = (agg->size() == agg->target());
-        } else {
-          /* fall back to the stream size */
-          release = (agg->size() == task->stream[i].goal);
-        }
+        assert(agg->size() <= agg->target());
+        assert(agg->size() <= task->stream[i].goal);
+        release = (agg->size() == task->stream[i].goal);
 
         /* release the hash table bucket */
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
