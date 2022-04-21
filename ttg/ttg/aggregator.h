@@ -264,8 +264,8 @@ namespace ttg {
   auto make_aggregator(EdgeT&& inedge,
                        TargetFn&& targetfn)
   {
-    using value_type = typename EdgeT::value_type;
-    using key_type   = typename EdgeT::key_type;
+    using value_type = typename std::decay_t<EdgeT>::value_type;
+    using key_type   = typename std::decay_t<EdgeT>::key_type;
     using fact = typename detail::AggregatorFactory<key_type, Aggregator<value_type>, TargetFn>;
     return Edge<key_type, Aggregator<value_type>>(inedge, fact(std::forward<TargetFn>(targetfn)));
   }
@@ -280,8 +280,8 @@ namespace ttg {
   template<typename EdgeT>
   auto make_aggregator(EdgeT&& inedge)
   {
-    using value_type = typename EdgeT::value_type;
-    using key_type   = typename EdgeT::key_type;
+    using value_type = typename std::decay_t<EdgeT>::value_type;
+    using key_type   = typename std::decay_t<EdgeT>::key_type;
     return Edge<key_type, Aggregator<value_type>>(inedge);
   }
 
