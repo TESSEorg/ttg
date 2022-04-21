@@ -294,6 +294,17 @@ TEST_CASE("TemplateTask", "[core]") {
             },
             ttg::edges(ttg::make_aggregator(in, [](const int&){ return 1; })),
             ttg::edges()));
+      CHECK_NOTHROW(
+          ttg::make_tt(
+            [](const int &key, ttg::Aggregator<int> &&datum, std::tuple<> &outs) {
+              for (auto&& v : datum)
+              { }
+
+              for (const auto& v : datum)
+              { }
+            },
+            ttg::edges(ttg::make_aggregator(in, 1<<2)),
+            ttg::edges()));
     }
   }
 }

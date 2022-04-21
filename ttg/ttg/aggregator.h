@@ -182,7 +182,7 @@ namespace ttg {
       { }
 
       template<typename T>
-      auto operator()(const T&) {
+      auto operator()(const T&) const {
         return m_target;
       }
     private:
@@ -260,7 +260,7 @@ namespace ttg {
     };
   } // namespace meta
 
-  template<typename EdgeT, typename TargetFn>
+  template<typename EdgeT, typename TargetFn, typename = std::enable_if_t<std::is_invocable_v<TargetFn, const typename std::decay_t<EdgeT>::key_type>>>
   auto make_aggregator(EdgeT&& inedge,
                        TargetFn&& targetfn)
   {
