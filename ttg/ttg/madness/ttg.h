@@ -338,22 +338,45 @@ namespace ttg_madness {
     template <typename terminalT, std::size_t i, typename Key>
     void invoke_pull_terminal(terminalT &in, const Key &key, TTArgs *args) {
       if (in.is_pull_terminal) {
-        auto owner = in.container.owner(key);
+        int owner;
+        if constexpr (!ttg::meta::is_void_v<Key>) {
+            owner = in.container.owner(key);
+          } else {
+          owner = in.container.owner();
+        }
+
         if (owner != world.rank()) {
           get_terminal_data<i, Key>(owner, key);
         } else {
-          auto value = (in.container).get(key);
-          if (args->nargs[i] == 0) {
-            ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
-                               ": error argument is already finalized : ", i);
-            throw std::runtime_error("Op::set_arg called for a finalized stream");
-          }
+          if constexpr (!ttg::meta::is_void_v<Key>) {
+            auto value = (in.container).get(key);
+            if (args->nargs[i] == 0) {
+              ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
+                                 ": error argument is already finalized : ", i);
+              throw std::runtime_error("Op::set_arg called for a finalized stream");
+            }
 
-          if (typeid(value) != typeid(std::nullptr_t) && i < std::tuple_size_v<input_values_tuple_type>) {
-            this->get<i, std::decay_t<decltype(value)> &>(args->input_values) =
-              std::forward<decltype(value)>(value);
-            args->nargs[i] = 0;
-            args->counter--;
+            if (typeid(value) != typeid(std::nullptr_t) && i < std::tuple_size_v<input_values_tuple_type>) {
+              this->get<i, std::decay_t<decltype(value)> &>(args->input_values) =
+                std::forward<decltype(value)>(value);
+              args->nargs[i] = 0;
+              args->counter--;
+            }
+          }
+          else {
+            auto value = (in.container).get();
+            if (args->nargs[i] == 0) {
+              ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
+                                 ": error argument is already finalized : ", i);
+              throw std::runtime_error("Op::set_arg called for a finalized stream");
+            }
+
+            if (typeid(value) != typeid(std::nullptr_t) && i < std::tuple_size_v<input_values_tuple_type>) {
+              this->get<i, std::decay_t<decltype(value)> &>(args->input_values) =
+                std::forward<decltype(value)>(value);
+              args->nargs[i] = 0;
+              args->counter--;
+            }
           }
         }
       }
@@ -367,9 +390,16 @@ namespace ttg_madness {
       }
       else {
         auto &in = std::get<i>(input_terminals);
-        auto value = (in.container).get(key);
-        worldobjT::send(keymap(key), &ttT::template set_arg<i, Key,
-                        const std::remove_reference_t<decltype(value)>&>, key, value);
+        if constexpr (!ttg::meta::is_void_v<Key>) {
+          auto value = (in.container).get(key);
+          worldobjT::send(keymap(key), &ttT::template set_arg<i, Key,
+                          const std::remove_reference_t<decltype(value)>&>, key, value);
+        }
+        else {
+          auto value = (in.container).get();
+          worldobjT::send(keymap(), &ttT::template set_arg<i, void,
+                          const std::remove_reference_t<decltype(value)> &>, value);
+        }
       }
     }
 

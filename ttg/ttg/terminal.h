@@ -421,7 +421,7 @@ namespace ttg {
 #endif
       this->connect_base(in);
       //If I am a pull terminal, add me as (in)'s predecessor
-      if (is_pull_terminal)
+      if (this->is_pull_terminal)
         in->connect_pull(this);
     }
 

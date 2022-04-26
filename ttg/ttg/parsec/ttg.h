@@ -1486,7 +1486,8 @@ namespace ttg_parsec {
         count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
         assert(count <= self.dependencies_goal);
       }
-      auto &world_impl = tt.world.impl();
+
+      auto &world_impl = world.impl();
       ttT *baseobj = (ttT *)task->object_ptr;
 
       if (count == numins) {

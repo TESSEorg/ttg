@@ -154,7 +154,7 @@ auto make_wavefront0(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
                      Edge<Key, BlockMatrix<T>>& toporleft, Edge<Key, BlockMatrix<T>>& toporleftLR,
                      Edge<Key, BlockMatrix<T>>& toporleftLB, Edge<Key, BlockMatrix<T>>& bottom0,
                      Edge<Key, BlockMatrix<T>>& right0, Edge<Key, BlockMatrix<T>>& result) {
-  auto f = [func, MB, NB](const Key& key, BlockMatrix<T>& input, BlockMatrix<T>& bottom0, BlockMatrix<T>& right0,
+  auto f = [func, MB, NB](const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& bottom0, BlockMatrix<T>&& right0,
                           std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                      Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
