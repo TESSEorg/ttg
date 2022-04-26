@@ -81,8 +81,8 @@ auto make_wavefront2(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
                      Edge<Key, BlockMatrix<T>>& left, Edge<Key, BlockMatrix<T>>& top,
                      Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right, Edge<Key, BlockMatrix<T>>& result) {
   auto f = [MB, NB, func](
-               const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& left, BlockMatrix<T>&& top,
-               std::vector<BlockMatrix<T>>&& bottom_right,
+               const Key& key, const BlockMatrix<T>& input, const BlockMatrix<T>& left, const BlockMatrix<T>& top,
+               const std::vector<BlockMatrix<T>>& bottom_right,
                std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
@@ -175,7 +175,7 @@ auto make_wavefront0(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
                      Edge<Key, BlockMatrix<T>>& toporleft, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right,
                      // Edge<Key, BlockMatrix<T>>& right,
                      Edge<Key, BlockMatrix<T>>& result) {
-  auto f = [func, MB, NB](const Key& key, BlockMatrix<T>&& input, std::vector<BlockMatrix<T>>&& bottom_right,
+  auto f = [func, MB, NB](const Key& key, const BlockMatrix<T>& input, const std::vector<BlockMatrix<T>>& bottom_right,
                           std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
@@ -200,8 +200,8 @@ auto make_wavefront1(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
                      Edge<Key, BlockMatrix<T>>& toporleft, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right,
                      Edge<Key, BlockMatrix<T>>& output1, Edge<Key, BlockMatrix<T>>& output2,
                      Edge<Key, BlockMatrix<T>>& result) {
-  auto f = [MB, NB, func](const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& previous,
-                          std::vector<BlockMatrix<T>>&& bottom_right,
+  auto f = [MB, NB, func](const Key& key, const BlockMatrix<T>& input, const BlockMatrix<T>& previous,
+                          const std::vector<BlockMatrix<T>>& bottom_right,
                           std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                      Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;

@@ -425,16 +425,9 @@ namespace ttg {
         in->connect_pull(this);
     }
 
-    auto nsuccessors() const {
-      return get_connections().size();
-    }
-    const auto& successors() const {
-      return get_connections();
-    }
-
     template<typename Key = keyT, typename Value = valueT>
     std::enable_if_t<meta::is_none_void_v<Key,Value>,void> send(const Key &key, const Value &value) {
-      for (auto && successor : successors()) {
+      for (auto && successor : this->successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);

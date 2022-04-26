@@ -865,8 +865,8 @@ namespace ttg_parsec {
       using resultT = decltype(get_from_pull_msg_fcts);
       return resultT{{&TT::get_from_pull_msg<IS>...}};
     }
-    constexpr static std::array<void (TT::*)(void *, std::size_t), numins> get_from_pull_msg_fcts =
-        make_get_from_pull_fcts(std::make_index_sequence<numins>{});
+    constexpr static std::array<void (TT::*)(void *, std::size_t), numinedges> get_from_pull_msg_fcts =
+        make_get_from_pull_fcts(std::make_index_sequence<numinedges>{});
 
     ttg::World world;
     ttg::meta::detail::keymap_t<keyT> keymap;
@@ -1042,21 +1042,21 @@ namespace ttg_parsec {
           assert(hd->param_id >= 0);
           assert(hd->param_id < obj->set_argstream_size_from_msg_fcts.size());
           auto member = obj->set_argstream_size_from_msg_fcts[hd->param_id];
-          std::invoke(member, obj, data, size);
+          (obj->*member)(data, size);
           break;
         }
         case msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE: {
           assert(hd->param_id >= 0);
           assert(hd->param_id < obj->finalize_argstream_from_msg_fcts.size());
           auto member = obj->finalize_argstream_from_msg_fcts[hd->param_id];
-          std::invoke(member, obj, data, size);
+          (obj->*member)(data, size);
           break;
         }
         case msg_header_t::MSG_GET_FROM_PULL: {
           assert(hd->param_id >= 0);
           assert(hd->param_id < obj->get_from_pull_msg_fcts.size());
           auto member = obj->get_from_pull_msg_fcts[hd->param_id];
-          std::invoke(member, obj, data, size);
+          (obj->*member)(data, size);
           break;
         }
         default:
@@ -1488,7 +1488,7 @@ namespace ttg_parsec {
       }
 
       auto &world_impl = world.impl();
-      ttT *baseobj = (ttT *)task->object_ptr;
+      ttT *baseobj = task->tt;
 
       if (count == numins) {
         parsec_execution_stream_t *es = world_impl.execution_stream();
@@ -2430,7 +2430,9 @@ namespace ttg_parsec {
       connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numinedges>{}, inedges);
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
       //DO NOT MOVE THIS - information about the number of pull terminals is only available after connecting the edges.
-      register_input_callbacks(std::make_index_sequence<numins>{});
+      if constexpr (numinedges > 0) {
+        register_input_callbacks(std::make_index_sequence<numinedges>{});
+      }
     }
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>

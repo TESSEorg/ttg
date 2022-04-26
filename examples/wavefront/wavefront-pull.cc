@@ -154,7 +154,7 @@ auto make_wavefront0(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
                      Edge<Key, BlockMatrix<T>>& toporleft, Edge<Key, BlockMatrix<T>>& toporleftLR,
                      Edge<Key, BlockMatrix<T>>& toporleftLB, Edge<Key, BlockMatrix<T>>& bottom0,
                      Edge<Key, BlockMatrix<T>>& right0, Edge<Key, BlockMatrix<T>>& result) {
-  auto f = [func, MB, NB](const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& bottom0, BlockMatrix<T>&& right0,
+  auto f = [func, MB, NB](const Key& key, const BlockMatrix<T>& input, const BlockMatrix<T>& bottom0, const BlockMatrix<T>& right0,
                           std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                      Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
@@ -188,8 +188,8 @@ auto make_wavefront1(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
                      Edge<Key, BlockMatrix<T>>& output2, Edge<Key, BlockMatrix<T>>& output1R,
                      Edge<Key, BlockMatrix<T>>& output1B, Edge<Key, BlockMatrix<T>>& result) {
   auto f = [MB, NB, func](
-               const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& previous, BlockMatrix<T>&& bottom0,
-               BlockMatrix<T>&& right0,
+               const Key& key, const BlockMatrix<T>& input, const BlockMatrix<T>& previous, const BlockMatrix<T>& bottom0,
+               const BlockMatrix<T>& right0,
                std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                           Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
@@ -240,7 +240,7 @@ auto make_wavefront1R(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T
                       Edge<Key, BlockMatrix<T>>& output12R, Edge<Key, BlockMatrix<T>>& outputLR,
                       Edge<Key, BlockMatrix<T>>& right0, Edge<Key, BlockMatrix<T>>& result) {
   auto f = [MB, NB, func](
-               const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& top, BlockMatrix<T>&& right0,
+               const Key& key, const BlockMatrix<T>& input, const BlockMatrix<T>& top, const BlockMatrix<T>& right0,
                std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_j = j + 1;
@@ -270,7 +270,7 @@ auto make_wavefront1B(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T
                       Edge<Key, BlockMatrix<T>>& output12B, Edge<Key, BlockMatrix<T>>& outputLB,
                       Edge<Key, BlockMatrix<T>>& bottom0, Edge<Key, BlockMatrix<T>>& result) {
   auto f = [MB, NB, func](
-               const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& left, BlockMatrix<T>&& bottom0,
+               const Key& key, const BlockMatrix<T>& input, const BlockMatrix<T>& left, const BlockMatrix<T>& bottom0,
                std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
@@ -301,8 +301,8 @@ auto make_wavefront2BR(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<
                        Edge<Key, BlockMatrix<T>>& bottom0, Edge<Key, BlockMatrix<T>>& right0,
                        Edge<Key, BlockMatrix<T>>& output2R, Edge<Key, BlockMatrix<T>>& output2B,
                        Edge<Key, BlockMatrix<T>>& result) {
-  auto f = [MB, NB, func](const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& left, BlockMatrix<T>&& top,
-                          BlockMatrix<T>&& bottom0, BlockMatrix<T>&& right0,
+  auto f = [MB, NB, func](const Key& key, const BlockMatrix<T>& input, const BlockMatrix<T>& left, const BlockMatrix<T>& top,
+                          const BlockMatrix<T>& bottom0, const BlockMatrix<T>& right0,
                           std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
                                      Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
@@ -338,10 +338,9 @@ auto make_wavefront2R(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T
                       Edge<Key, BlockMatrix<T>>& output12R, Edge<Key, BlockMatrix<T>>& output2R,
                       Edge<Key, BlockMatrix<T>>& right0, Edge<Key, BlockMatrix<T>>& output2LL,
                       Edge<Key, BlockMatrix<T>>& result) {
-  auto f = [MB, NB, func](
-               const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& left, BlockMatrix<T>&& top,
-               BlockMatrix<T>&& right0,
-               std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
+  auto f = [MB, NB, func](const Key& key, const BlockMatrix<T>& input, const BlockMatrix<T>& left, const BlockMatrix<T>& top,
+                          const BlockMatrix<T>& right0,
+                          std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_j = j + 1;
     if (i != MB - 1) std::cout << "Error in 2R, should only be triggered for last row\n";
@@ -370,8 +369,8 @@ auto make_wavefront2B(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T
                       Edge<Key, BlockMatrix<T>>& bottom0, Edge<Key, BlockMatrix<T>>& output2TL,
                       Edge<Key, BlockMatrix<T>>& result) {
   auto f = [MB, NB, func](
-               const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& left, BlockMatrix<T>&& top,
-               BlockMatrix<T>&& bottom0,
+               const Key& key, const BlockMatrix<T>& input, const BlockMatrix<T>& left, const BlockMatrix<T>& top,
+               const BlockMatrix<T>& bottom0,
                std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
@@ -400,7 +399,7 @@ auto make_wavefront2L(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T
                       Edge<Key, BlockMatrix<T>>& output12R, Edge<Key, BlockMatrix<T>>& output12B,
                       Edge<Key, BlockMatrix<T>>& output2TL, Edge<Key, BlockMatrix<T>>& output2LL,
                       Edge<Key, BlockMatrix<T>>& result) {
-  auto f = [MB, NB, func](const Key& key, BlockMatrix<T>&& input, BlockMatrix<T>&& left, BlockMatrix<T>&& top,
+  auto f = [MB, NB, func](const Key& key, const BlockMatrix<T>& input, const BlockMatrix<T>& left, const BlockMatrix<T>& top,
                           std::tuple<Out<Key, BlockMatrix<T>>>& out) {
     auto [i, j] = key;
     if (i != MB - 1 && j != NB - 1) std::cout << "Error in 2L, should only be triggered for last corner block\n";

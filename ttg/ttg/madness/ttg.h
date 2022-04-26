@@ -1040,10 +1040,10 @@ namespace ttg_madness {
       register_input_terminals(input_terminals, innames);
       register_output_terminals(output_terminals, outnames);
 
-      connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numins>{}, inedges);
+      connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numinedges>{}, inedges);
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
       //DO NOT MOVE THIS - information about the number of pull terminals is only available after connecting the edges.
-      register_input_callbacks(std::make_index_sequence<numins>{});
+      register_input_callbacks(std::make_index_sequence<numinedges>{});
     }
 
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
