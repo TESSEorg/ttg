@@ -14,6 +14,7 @@
 #include "ttg/base/tt.h"
 #include "ttg/func.h"
 #include "ttg/runtimes.h"
+#include "ttg/policies.h"
 #include "ttg/tt.h"
 #include "ttg/util/bug.h"
 #include "ttg/util/env.h"
@@ -177,14 +178,19 @@ namespace ttg_madness {
   /// values
   ///         flowing into this TT; a const type indicates nonmutating (read-only) use, nonconst type
   ///         indicates mutating use (e.g. the corresponding input can be used as scratch, moved-from, etc.)
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs>
-  class TT : public ttg::TTBase, public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs>> {
+  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs, typename policyT>
+  class TT
+  : public ttg::TTBase
+  , public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs, policyT>>
+  , public ttg::detail::TTPolicyWrapper<keyT, policyT> {
     static_assert(ttg::meta::is_typelist_v<input_valueTs>,
                   "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
     using input_tuple_type = ttg::meta::typelist_to_tuple_t<input_valueTs>;
     // create a virtual control input if the input list is empty, to be used in invoke()
     using actual_input_tuple_type = std::conditional_t<!ttg::meta::typelist_is_empty_v<input_valueTs>,
                                                        ttg::meta::typelist_to_tuple_t<input_valueTs>, std::tuple<void>>;
+
+    using PolicyWrapper = typename ttg::detail::TTPolicyWrapper<keyT, policyT>;
 
    public:
     using ttT = TT;
@@ -193,8 +199,6 @@ namespace ttg_madness {
 
    private:
     ttg::World world;
-    ttg::meta::detail::keymap_t<keyT> keymap;
-    ttg::meta::detail::keymap_t<keyT> priomap;
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<actual_input_tuple_type>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
@@ -351,9 +355,9 @@ namespace ttg_madness {
 
       int owner;
       if constexpr (!ttg::meta::is_void_v<Key>) {
-        owner = keymap(key);
+        owner = this->keymap(key);
       } else {
-        owner = keymap();
+        owner = this->keymap();
       }
 
       if (owner != world.rank()) {
@@ -553,7 +557,7 @@ namespace ttg_madness {
       assert(size > 0 && "TT::set_argstream_size(size) called with size=0");
 
       // body
-      const auto owner = keymap();
+      const auto owner = this->keymap();
       if (owner != world.rank()) {
         ttg::trace(world.rank(), ":", get_name(), " : forwarding stream size for terminal ", i);
         worldobjT::send(owner, &ttT::template set_argstream_size<i, true>, size);
@@ -633,7 +637,7 @@ namespace ttg_madness {
       assert(size > 0 && "TT::set_argstream_size(key,size) called with size=0");
 
       // body
-      const auto owner = keymap(key);
+      const auto owner = this->keymap(key);
       if (owner != world.rank()) {
         ttg::trace(world.rank(), ":", get_name(), " : ", key, ": forwarding stream size for terminal ", i);
         worldobjT::send(owner, &ttT::template set_argstream_size<i>, key, size);
@@ -688,7 +692,7 @@ namespace ttg_madness {
       assert(std::get<i>(input_reducers) && "TT::finalize_argstream called on nonstreaming input terminal");
 
       // body
-      const auto owner = keymap(key);
+      const auto owner = this->keymap(key);
       if (owner != world.rank()) {
         ttg::trace(world.rank(), ":", get_name(), " : ", key, ": forwarding stream finalize for terminal ", i);
         worldobjT::send(owner, &ttT::template finalize_argstream<i>, key);
@@ -737,7 +741,7 @@ namespace ttg_madness {
       assert(std::get<i>(input_reducers) && "TT::finalize_argstream called on nonstreaming input terminal");
 
       // body
-      const int owner = keymap();
+      const int owner = this->keymap();
       if (owner != world.rank()) {
         ttg::trace(world.rank(), ":", get_name(), " : forwarding stream finalize for terminal ", i);
         worldobjT::send(owner, &ttT::template finalize_argstream<i, true>);
@@ -879,19 +883,15 @@ namespace ttg_madness {
     }
 
    public:
-    template <typename keymapT = ttg::detail::default_keymap<keyT>,
-              typename priomapT = ttg::detail::default_priomap<keyT>>
+
+    template <typename policyT_ = policyT>
     TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
+       ttg::World world, policyT_&& policy)
         : ttg::TTBase(name, numinedges, numouts)
+        , PolicyWrapper(world, std::forward<policyT_>(policy))
         , static_streamsize()
         , worldobjT(world.impl().impl())
-        , world(world)
-        // if using default keymap, rebind to the given world
-        , keymap(std::is_same_v<keymapT, ttg::detail::default_keymap<keyT>>
-                     ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
-                     : decltype(keymap)(std::forward<keymapT>(keymap_)))
-        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))) {
+        , world(world) {
       // Cannot call these in base constructor since terminals not yet constructed
       if (innames.size() != numinedges) {
         ttg::print_error(world.rank(), ":", get_name(), "#input_names", innames.size(), "!= #input_terminals",
@@ -906,27 +906,52 @@ namespace ttg_madness {
       register_input_callbacks(std::make_index_sequence<numinedges>{});
     }
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>,
-              typename priomapT = ttg::detail::default_priomap<keyT>>
+    template <typename policyT_ = policyT,
+              typename = std::enable_if_t<std::is_same_v<std::decay_t<policyT_>, policyT>>>
     TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::default_execution_context()), priomapT &&priomap = priomapT())
-        : TT(name, innames, outnames, ttg::default_execution_context(), std::forward<keymapT>(keymap),
-             std::forward<priomapT>(priomap)) {}
+       policyT_&& policy)
+        : TT(name, innames, outnames, ttg::default_execution_context(), std::forward<policyT_>(policy))
+    {}
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>,
-              typename priomapT = ttg::detail::default_priomap<keyT>>
+    template <typename policyT_ = policyT,
+              typename = std::enable_if_t<std::is_default_constructible_v<policyT_>>>
+    TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
+        : TT(name, innames, outnames, ttg::default_execution_context(), policyT())
+    {}
+
+    template <typename policyT_ = policyT,
+              typename = std::enable_if_t<std::is_constructible_v<policyT_, ttg::meta::detail::keymap_t<keyT>>>>
+    TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
+       ttg::meta::detail::keymap_t<keyT> keymap)
+        : TT(name, innames, outnames, ttg::default_execution_context(),
+             policyT(std::move(keymap))) {}
+
+    template <typename policyT_ = policyT,
+              typename = std::enable_if_t<std::is_constructible_v<policyT_, ttg::meta::detail::keymap_t<keyT>>>>
     TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ttg::World world,
-       keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
+       ttg::meta::detail::keymap_t<keyT> keymap)
+    : TT(inedges, outedges, name, innames, outnames, world,
+         policyT(std::move(keymap)))
+    { }
+
+    template <typename policyT_ = policyT,
+              typename = std::enable_if_t<std::is_same_v<std::decay_t<policyT_>, policyT>>>
+    TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
+       const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
+       policyT_&& policy)
+    : TT(inedges, outedges, name, innames, outnames, ttg::default_execution_context(), std::forward<policyT_>(policy))
+    { }
+
+    template <typename policyT_ = policyT>
+    TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
+       const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ttg::World world,
+       policyT_&& policy)
         : ttg::TTBase(name, numinedges, numouts)
+        , PolicyWrapper(world, std::forward<policyT_>(policy))
         , static_streamsize()
         , worldobjT(ttg::default_execution_context().impl().impl())
-        , world(ttg::default_execution_context())
-        // if using default keymap, rebind to the given world
-        , keymap(std::is_same_v<keymapT, ttg::detail::default_keymap<keyT>>
-                     ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
-                     : decltype(keymap)(std::forward<keymapT>(keymap_)))
-        , priomap(decltype(keymap)(std::forward<priomapT>(priomap_))) {
+        , world(ttg::default_execution_context()) {
       // Cannot call in base constructor since terminals not yet constructed
       if (innames.size() != numinedges) {
         ttg::print_error(world.rank(), ":", get_name(), "#input_names", innames.size(), "!= #input_terminals",
@@ -944,13 +969,21 @@ namespace ttg_madness {
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
     }
 
-    template <typename keymapT = ttg::detail::default_keymap<keyT>,
-              typename priomapT = ttg::detail::default_priomap<keyT>>
+    template <typename policyT_ = policyT,
+              typename = std::enable_if_t<std::is_constructible_v<policyT_, ttg::meta::detail::keymap_t<keyT>>>>
     TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
-       keymapT &&keymap = keymapT(ttg::default_execution_context()), priomapT &&priomap = priomapT())
+       ttg::meta::detail::keymap_t<keyT> keymap)
         : TT(inedges, outedges, name, innames, outnames, ttg::default_execution_context(),
-             std::forward<keymapT>(keymap), std::forward<priomapT>(priomap)) {}
+             policyT_(std::move(keymap))) {}
+
+    template <typename policyT_ = policyT,
+              typename = std::enable_if_t<std::is_default_constructible_v<policyT_>>>
+    TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
+       const std::vector<std::string> &innames, const std::vector<std::string> &outnames)
+        : TT(inedges, outedges, name, innames, outnames, ttg::default_execution_context(),
+             policyT_()) {}
+
 
     // Destructor checks for unexecuted tasks
     virtual ~TT() {
@@ -986,21 +1019,6 @@ namespace ttg_madness {
     void set_input_reducer(Reducer &&reducer, std::size_t size) {
       set_input_reducer<i>(std::forward<Reducer>(reducer));
       set_static_argstream_size<i>(size);
-    }
-
-    template <typename Keymap>
-    void set_keymap(Keymap &&km) {
-      keymap = km;
-    }
-
-    auto get_priomap(void) const { return priomap; }
-
-    /// Set the priority map, mapping a Key to an integral value.
-    /// Higher values indicate higher priority. The default priority is 0, higher
-    /// values are treated as high priority tasks in the MADNESS backend.
-    template <typename Priomap>
-    void set_priomap(Priomap &&pm) {
-      priomap = pm;
     }
 
     /// implementation of TTBase::make_executable()
@@ -1077,25 +1095,6 @@ namespace ttg_madness {
         invoke<keyT>();
       else
         TTBase::invoke();
-    }
-
-    /// keymap accessor
-    /// @return the keymap
-    const decltype(keymap) &get_keymap() const { return keymap; }
-
-    /// computes the owner of key @c key
-    /// @param[in] key the key
-    /// @return the owner of @c key
-    template <typename Key>
-    std::enable_if_t<!ttg::meta::is_void_v<Key>, int> owner(const Key &key) const {
-      return keymap(key);
-    }
-
-    /// computes the owner of void key
-    /// @return the owner of void key
-    template <typename Key>
-    std::enable_if_t<ttg::meta::is_void_v<Key>, int> owner() const {
-      return keymap();
     }
   };
 

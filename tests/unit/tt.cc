@@ -145,6 +145,35 @@ namespace tt_i_iv {
   };
 }  // namespace tt_i_iv
 
+// {task_id,data} = {int, int, void}
+namespace tt_i_i_p {
+
+  struct Policy : public ttg::TTPolicyBase<int> {
+
+    Policy() : TTPolicyBase() {}
+
+    int procmap(const int&) const { return 0; }
+
+  };
+
+  class tt : public ttg::TT<int, std::tuple<>, tt, ttg::typelist<const int>, Policy> {
+    using baseT = typename tt::ttT;
+
+   public:
+    tt(const typename baseT::input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
+       const std::string &name)
+        : baseT(inedges, outedges, name, {"int"}, {}, Policy()) {}
+
+    static constexpr const bool have_cuda_op = false;
+
+    void op(const int &key, const baseT::input_refs_tuple_type &data, baseT::output_terminals_type &outs) {}
+
+    ~tt() {}
+  };
+}  // namespace tt_i_iv
+
+
+
 TEST_CASE("TemplateTask", "[core]") {
   SECTION("constructors") {
     {  // void task id, void data
@@ -248,6 +277,90 @@ TEST_CASE("TemplateTask", "[core]") {
             ttg::send(0, std::decay_t<decltype(key)>{}, std::decay_t<decltype(datum)>{});
           },
           ttg::edges(in), ttg::edges()));
+    }
+    {  // nonvoid task id, nonvoid data, w/ policies
+      ttg::Edge<int, int> in;
+      CHECK_NOTHROW(std::make_unique<tt_i_i_p::tt>(ttg::edges(in), ttg::edges(), ""));
+      CHECK_NOTHROW(
+          ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges(),
+                       tt_i_i_p::Policy()));
+
+          auto tt = ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges(),
+                                 tt_i_i_p::Policy());
+          auto policy = tt->get_policy();
+          auto procmap = tt->get_procmap();
+    }
+  }
+
+  SECTION("policies") {
+    { // default policy
+      ttg::Edge<int, int> in;
+      auto tt = ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges());
+      auto policy = tt->get_policy();
+      CHECK(tt->procmap(0) == 0);
+      CHECK(tt->get_procmap()(0) == 0);
+      CHECK(policy.procmap(0) == 0);
+    }
+    { // custom procmap
+      ttg::Edge<int, int> in;
+      auto tt = ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges(),
+                             ttg::make_policy([](const int& key){ return key*1000; }));
+      auto policy = tt->get_policy();
+      CHECK(tt->procmap(1) == 1000);
+      CHECK(tt->get_procmap()(2) == 2000);
+      CHECK(policy.procmap(3) == 3000);
+      tt->set_priomap([](const int&){ return 0; });
+    }
+    { // custom all maps
+      ttg::Edge<int, int> in;
+      auto tt = ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges(),
+                             ttg::make_policy([](const int& key){ return key*1000; },
+                                              [](const int& key){ return key*1000; },
+                                              [](const int& key){ return key*1000; }));
+      auto policy = tt->get_policy();
+      CHECK(policy.procmap(1) == 1000);
+      CHECK(tt->procmap(2) == 2000);
+      CHECK(tt->get_procmap()(3) == 3000);
+
+      CHECK(tt->priomap(1) == 1000);
+      CHECK(tt->get_priomap()(2) == 2000);
+
+      CHECK(tt->inlinemap(1) == 1000);
+      CHECK(tt->get_inlinemap()(2) == 2000);
+    }
+    { // custom all maps static
+      ttg::Edge<int, int> in;
+      auto tt = ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges(),
+                             ttg::make_static_policy([](const int& key){ return key*1000; },
+                                                     [](const int& key){ return key*1000; },
+                                                     [](const int& key){ return key*1000; }));
+      auto policy = tt->get_policy();
+      CHECK(policy.procmap(1) == 1000);
+      CHECK(tt->procmap(2) == 2000);
+      CHECK(tt->get_procmap()(3) == 3000);
+
+      CHECK(tt->priomap(1) == 1000);
+      CHECK(tt->get_priomap()(2) == 2000);
+
+      CHECK(tt->inlinemap(1) == 1000);
+      CHECK(tt->get_inlinemap()(2) == 2000);
+    }
+    { // custom all maps static, void key
+      ttg::Edge<void, int> in;
+      auto tt = ttg::make_tt([](const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges(),
+                             ttg::make_static_policy([](){ return 1000; },
+                                                     [](){ return 2000; },
+                                                     [](){ return 3000; }));
+      auto policy = tt->get_policy();
+      CHECK(policy.procmap() == 1000);
+      CHECK(tt->procmap() == 1000);
+      CHECK(tt->get_procmap()() == 1000);
+
+      CHECK(tt->priomap() == 2000);
+      CHECK(tt->get_priomap()() == 2000);
+
+      CHECK(tt->inlinemap() == 3000);
+      CHECK(tt->get_inlinemap()() == 3000);
     }
   }
 }

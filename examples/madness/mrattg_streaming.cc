@@ -72,7 +72,7 @@ class LevelPmapX {
     LevelPmapX(size_t nproc) : nproc(nproc) {}
 
     /// Find the owner of a given key
-    HashValue operator()(const Key<3>& key) const {
+    int operator()(const Key<3>& key) const {
       Level n = key.level();
       if (n == 0) return 0;
         madness::hashT hash;
@@ -112,7 +112,7 @@ public:
     }
 
     /// Find the owner of a given key
-    HashValue operator()(const Key<NDIM>& key) const {
+    int operator()(const Key<NDIM>& key) const {
         HashValue hash;
         if (key.level() <= target_level) {
             hash = key.hash();
@@ -313,12 +313,14 @@ auto make_start(const ctlEdge<NDIM>& ctl) {
 /// Constructs an operator that adaptively projects the provided function into the basis
 
 /// Returns an std::unique_ptr to the object
-template <typename functorT, typename T, size_t K, Dimension NDIM>
+template <typename functorT, typename T, size_t K, Dimension NDIM,
+          typename PmapT = ttg::detail::default_keymap<Key<NDIM>>>
 auto make_project(functorT& f,
                   const T thresh, /// should be scalar value not complex
                   ctlEdge<NDIM>& ctl,
                   rnodeEdge<T,K,NDIM>& result,
-                  const std::string& name = "project") {
+                  const std::string& name = "project",
+                  PmapT&& pmap = PmapT()) {
 
     auto F = [f, thresh](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>, rnodeOut<T,K,NDIM>>& out) {
         FunctionReconstructedNodeWrap<T,K,NDIM> node(key); // Our eventual result
@@ -348,7 +350,8 @@ auto make_project(functorT& f,
         ttg::send<1>(key, std::move(node), out); // always produce a result
     };
     ctlEdge<NDIM> refine("refine");
-    return ttg::make_tt(F, edges(fuse(refine, ctl)), ttg::edges(refine, result), name, {"control"}, {"refine", "result"});
+    return ttg::make_tt(F, edges(fuse(refine, ctl)), ttg::edges(refine, result),
+                        ttg::make_static_policy(pmap), name, {"control"}, {"refine", "result"});
 }
 
 namespace detail {
@@ -471,13 +474,20 @@ std::string int2bitstring(size_t i, size_t width) {
 }
 
 /// Make a composite operator that implements compression for a single function
-template <typename T, size_t K, Dimension NDIM>
-auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std::string& name = "compress") {
+template <typename T, size_t K, Dimension NDIM, typename PmapT = ttg::detail::default_keymap<Key<NDIM>>>
+auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out,
+                   PmapT&& pmap, const std::string& name = "compress") {
   rnodeEdge<T,K,NDIM> children1("children1"), children2("children2");
 
-  return std::make_tuple(ttg::make_tt(&send_leaves_up<T,K,NDIM>, edges(in), edges(children1, out), "send_leaves_up", {"input"}, {"children1", "output"}),
-                         ttg::make_tt(&reduce_leaves<T,K,NDIM>, edges(children1), edges(children2), "reduce_leaves", {"children1"}, {"children2"}),
-                         ttg::make_tt(&do_compress<T,K,NDIM>, edges(children2), edges(children1,out), "do_compress", {"children2"}, {"recur","output"}));
+  return std::make_tuple(ttg::make_tt(&send_leaves_up<T,K,NDIM>, edges(in), edges(children1, out),
+                                      ttg::make_static_policy(pmap),
+                                      "send_leaves_up", {"input"}, {"children1", "output"}),
+                         ttg::make_tt(&reduce_leaves<T,K,NDIM>, edges(children1), edges(children2),
+                                      ttg::make_static_policy(pmap),
+                                      "reduce_leaves", {"children1"}, {"children2"}),
+                         ttg::make_tt(&do_compress<T,K,NDIM>, edges(children2), edges(children1,out),
+                                      ttg::make_static_policy(pmap),
+                                      "do_compress", {"children2"}, {"recur","output"}));
 }
 
 template <typename T, size_t K, Dimension NDIM>
@@ -519,11 +529,13 @@ void do_reconstruct(const Key<NDIM>& key,
     ttg::broadcast<1>(bcast_keys[1], std::move(r), out);
 }
 
-template <typename T, size_t K, Dimension NDIM>
-auto make_reconstruct(const cnodeEdge<T,K,NDIM>& in, rnodeEdge<T,K,NDIM>& out, const std::string& name = "reconstruct") {
+template <typename T, size_t K, Dimension NDIM, typename PmapT = ttg::detail::default_keymap<Key<NDIM>>>
+auto make_reconstruct(const cnodeEdge<T,K,NDIM>& in, rnodeEdge<T,K,NDIM>& out,
+                      PmapT&& pmap = PmapT(), const std::string& name = "reconstruct") {
   ttg::Edge<Key<NDIM>,FixedTensor<T,K,NDIM>> S("S");  // passes scaling functions down
 
-    auto s = ttg::make_tt_tpl(&do_reconstruct<T,K,NDIM>, ttg::edges(in, S), ttg::edges(S, out), name, {"input", "s"}, {"s", "output"});
+    auto s = ttg::make_tt_tpl(&do_reconstruct<T,K,NDIM>, ttg::edges(in, S), ttg::edges(S, out),
+                              ttg::make_static_policy(pmap), name, {"input", "s"}, {"s", "output"});
 
     if (ttg::default_execution_context().rank() == 0) {
       s->template in<1>()->send(Key<NDIM>{0,{0}}, FixedTensor<T,K,NDIM>()); // Prime the flow of scaling functions
@@ -764,16 +776,12 @@ void test2(size_t nfunc, T thresh = 1e-6) {
         rnodeEdge<T,K,NDIM> a("a"), c("c");
         cnodeEdge<T,K,NDIM> b("b");
 
-        auto p1 = make_project(ff, T(thresh), ctl, a, "project A");
-        p1->set_keymap(pmap);
+        auto p1 = make_project(ff, T(thresh), ctl, a, "project A", pmap);
 
-        auto compress = make_compress<T,K,NDIM>(a, b);
-        std::get<0>(compress)->set_keymap(pmap);
-        std::get<1>(compress)->set_keymap(pmap);
-        std::get<2>(compress)->set_keymap(pmap);
+        auto compress = make_compress<T,K,NDIM>(a, b, pmap);
 
         auto &reduce_leaves_op = std::get<1>(compress);
-	reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNodeWrap<T,K,NDIM> &node,
+        reduce_leaves_op->template set_input_reducer<0>([](FunctionReconstructedNodeWrap<T,K,NDIM> &node,
                                                            const FunctionReconstructedNodeWrap<T,K,NDIM> &another)
                                                         {
                                                           //Update self values into the array.
@@ -786,8 +794,7 @@ void test2(size_t nfunc, T thresh = 1e-6) {
                                                         });
         reduce_leaves_op->template set_static_argstream_size<0>(1 << NDIM);
 
-        auto recon = make_reconstruct<T,K,NDIM>(b,c);
-        recon->set_keymap(pmap);
+        auto recon = make_reconstruct<T,K,NDIM>(b,c,pmap);
 
         //auto printer =   make_printer(a,"projected    ", true);
         // auto printer2 =  make_printer(b,"compressed   ", false);
@@ -814,7 +821,7 @@ void test2(size_t nfunc, T thresh = 1e-6) {
         //std::cout << "==== begin dot ====\n";
         //std::cout << Dot()(start.get()) << std::endl;
         //std::cout << "====  end dot  ====\n";
-	beg = std::chrono::high_resolution_clock::now();
+        beg = std::chrono::high_resolution_clock::now();
         // This kicks off the entire computation
         start->invoke(Key<NDIM>(0, {0}));
     }
