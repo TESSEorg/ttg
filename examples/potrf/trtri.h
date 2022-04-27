@@ -314,14 +314,14 @@ auto make_trtri_ttg(MatrixT<double> &A, lapack::Diag diag, ttg::Edge<Key2, Matri
                             gemm_trsml);
   tt_gemm->set_keymap(keymap3);
 
+  auto ins = std::make_tuple(tt_dispatch->template in<0>());
+  auto outs = std::make_tuple(tt_trtri->template out<0>());
   std::vector<std::unique_ptr<ttg::TTBase>> ops(5);
   ops[0] = std::move(tt_dispatch);
   ops[1] = std::move(tt_trtri);
   ops[2] = std::move(tt_trsml);
   ops[3] = std::move(tt_trsmr);
   ops[4] = std::move(tt_gemm);
-  auto ins = std::make_tuple(tt_dispatch->template in<0>());
-  auto outs = std::make_tuple(tt_trtri->template out<0>());
 
   return make_ttg(std::move(ops), ins, outs, "TRTRI TTG");
 }

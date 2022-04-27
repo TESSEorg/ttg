@@ -38,10 +38,10 @@ auto make_plgsy_ttg(MatrixT<double> &A, unsigned long bump, unsigned long random
   auto plgsy_tt = make_plgsy(A, bump, random_seed, startup, result);
   plgsy_tt->set_keymap(keymap2);
 
-  std::vector<std::unique_ptr<ttg::TTBase>> ops(1);
-  ops[0] = std::move(plgsy_tt);
   auto ins = std::make_tuple(plgsy_tt->template in<0>());
   auto outs = std::make_tuple(plgsy_tt->template out<0>());
+  std::vector<std::unique_ptr<ttg::TTBase>> ops(1);
+  ops[0] = std::move(plgsy_tt);
 
   return make_ttg(std::move(ops), ins, outs, "PLGSY TTG");
 }

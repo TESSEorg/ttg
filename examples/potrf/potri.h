@@ -22,9 +22,9 @@ auto make_potri_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&inpu
   auto ttg_trtri = trtri::make_trtri_ttg(A, lapack::Diag::NonUnit, input, trtri_to_lauum);
   auto ttg_lauum = lauum::make_lauum_ttg(A, trtri_to_lauum, output);
 
-  std::vector<std::unique_ptr<ttg::TTBase>> ops(2);
   auto ins = std::make_tuple(ttg_trtri->template in<0>());
   auto outs = std::make_tuple(ttg_lauum->template out<0>());
+  std::vector<std::unique_ptr<ttg::TTBase>> ops(2);
   ops[0] = std::move(ttg_trtri);
   ops[1] = std::move(ttg_lauum);
 

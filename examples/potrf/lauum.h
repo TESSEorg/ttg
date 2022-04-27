@@ -292,14 +292,14 @@ auto make_lauum_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&inpu
   auto tt_gemm  = make_gemm(A, disp_gemm_A, disp_gemm_B, gemm_C, gemm_gemm_C,output);
   tt_gemm->set_keymap(keymap3);
 
+  auto ins = std::make_tuple(tt_dispatch->template in<0>());
+  auto outs = std::make_tuple(tt_lauum->template out<1>());
   std::vector<std::unique_ptr<ttg::TTBase>> ops(5);
   ops[0] = std::move(tt_dispatch);
   ops[1] = std::move(tt_lauum);
   ops[2] = std::move(tt_syrk);
   ops[3] = std::move(tt_trmm);
   ops[4] = std::move(tt_gemm);
-  auto ins = std::make_tuple(tt_dispatch->template in<0>());
-  auto outs = std::make_tuple(tt_lauum->template out<1>());
 
   return make_ttg(std::move(ops), ins, outs, "LAUUM TTG");
 }

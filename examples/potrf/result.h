@@ -33,9 +33,9 @@ auto make_result_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&res
   auto result_tt = make_result(A, result);
   result_tt->set_keymap(keymap2);
 
+  auto ins = std::make_tuple(result_tt->template in<0>());
   std::vector<std::unique_ptr<ttg::TTBase>> ops(1);
   ops[0] = std::move(result_tt);
-  auto ins = std::make_tuple(result_tt->template in<0>());
 
   return make_ttg(std::move(ops), ins, std::make_tuple(), "Result Writer");
 }

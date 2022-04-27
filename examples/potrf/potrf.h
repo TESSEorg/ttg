@@ -313,14 +313,14 @@ auto make_potrf_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&inpu
                                                       + 3 * ((2 * nt) - key.I - key.J - 3) * (key.I - key.J)
                                                       + 6 * (key.I - key.K)); });
 
+  auto ins = std::make_tuple(tt_dispatch->template in<0>());
+  auto outs = std::make_tuple(tt_potrf->template out<0>());
   std::vector<std::unique_ptr<ttg::TTBase>> ops(5);
   ops[0] = std::move(tt_dispatch);
   ops[1] = std::move(tt_potrf);
   ops[2] = std::move(tt_syrk);
   ops[3] = std::move(tt_trsm);
   ops[4] = std::move(tt_gemm);
-  auto ins = std::make_tuple(tt_dispatch->template in<0>());
-  auto outs = std::make_tuple(tt_potrf->template out<0>());
 
   return make_ttg(std::move(ops), ins, outs, "POTRF TTG");
 }
