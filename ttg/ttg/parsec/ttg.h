@@ -1357,7 +1357,7 @@ namespace ttg_parsec {
           if constexpr (valueT_is_Void) return false;
           else return ttg::detail::is_aggregator_v<typename std::tuple_element_t<i, input_edges_type>::value_type>; };
       constexpr bool is_aggregator = is_aggregator_check();
-      bool release = false;
+      bool release = true;
       bool remove_from_hash = true;
       bool use_hash_table = is_aggregator || (numins > 1) || reducer;
       /* If we have only one input and no reducer on that input we can skip the hash table */
@@ -1386,7 +1386,7 @@ namespace ttg_parsec {
 
         using aggregator_t = typename std::tuple_element_t<i, input_edges_type>::value_type;
         aggregator_t* agg;
-        detail::ttg_data_copy_t *agg_copy = reinterpret_cast<detail::ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
+        detail::ttg_data_copy_t *agg_copy = static_cast<detail::ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
         assert(agg_copy != nullptr);
         agg = reinterpret_cast<aggregator_t *>(agg_copy->device_private);
 
