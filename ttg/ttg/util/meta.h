@@ -764,7 +764,7 @@ namespace ttg {
     };
 
     template<typename T>
-    using remove_wrapper_t = typename remove_wrapper<T>::type;
+    using remove_wrapper_t = typename remove_wrapper<std::decay_t<T>>::type;
 
     template<typename T>
     struct remove_wrapper_tuple;

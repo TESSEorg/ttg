@@ -1275,9 +1275,9 @@ namespace ttg_parsec {
       if constexpr (is_aggregator) {
         /* create a new aggregator and put it in */
         using aggregator_t = typename std::tuple_element_t<I, input_edges_type>::value_type;
-        ttg_parsec::detail::ttg_data_copy_t *agg_copy;
         aggregator_t agg = std::get<I>(aggregator_factories)(t->key);
         size_t target = agg.target();
+        ttg_parsec::detail::ttg_data_copy_t *agg_copy;
         agg_copy = detail::create_new_datacopy(std::move(agg));
         t->parsec_task.data[I].data_in = agg_copy;
         if (target == 0) {
@@ -1393,10 +1393,14 @@ namespace ttg_parsec {
         detail::ttg_data_copy_t *copy;
         if (nullptr != copy_in) {
           /* register this copy with the task */
-          copy = detail::register_data_copy<std::decay_t<Value>>(copy_in, task, std::is_const_v<typename aggregator_t::value_type>);
+          constexpr bool agg_is_const = std::is_const_v<std::tuple_element_t<i, input_tuple_type>>;
+          /* TODO: fix this */
+          static_assert(agg_is_const, "Only const aggregators are supported!");
+          copy = detail::register_data_copy<std::decay_t<Value>>(copy_in, task, agg_is_const);
         } else {
           copy = detail::create_new_datacopy(std::forward<Value>(value));
         }
+        assert(copy->push_task == nullptr);
         /* put the value into the aggregator */
         agg->add_value(*reinterpret_cast<std::decay_t<Value> *>(copy->device_private));
         assert(agg->size() <= agg->target());

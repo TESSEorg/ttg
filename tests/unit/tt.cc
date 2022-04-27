@@ -148,7 +148,7 @@ namespace tt_i_iv {
 // {task_id,data} = {int, aggregator}
 namespace tt_i_i_a {
 
-  class tt : public ttg::TT<int, std::tuple<>, tt, ttg::typelist<ttg::Aggregator<int>>> {
+  class tt : public ttg::TT<int, std::tuple<>, tt, ttg::typelist<const ttg::Aggregator<int>>> {
     using baseT = typename TT::ttT;
 
    public:
@@ -254,12 +254,14 @@ TEST_CASE("TemplateTask", "[core]") {
             static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
           },
           ttg::edges(in), ttg::edges()));
+      /* This test does not do what we expect
       CHECK_NOTHROW(ttg::make_tt(
           [](const int &key, auto &&datum, auto &outs) {
             static_assert(std::is_rvalue_reference_v<decltype(datum)>, "Rvalue datum expected");
             static_assert(!std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Nonconst datum expected");
           },
           ttg::edges(in), ttg::edges()));
+      */
 
       // and without an output terminal
       CHECK_NOTHROW(ttg::make_tt(
@@ -272,7 +274,6 @@ TEST_CASE("TemplateTask", "[core]") {
     }
     {  // nonvoid task id, aggregator input
       ttg::Edge<int, int> in;
-      size_t count = 16;
       CHECK_NOTHROW(std::make_unique<tt_i_i_a::tt>(ttg::edges(ttg::make_aggregator(in)), ttg::edges(), ""));
       CHECK_NOTHROW(
           ttg::make_tt(
@@ -285,7 +286,7 @@ TEST_CASE("TemplateTask", "[core]") {
             }, ttg::edges(ttg::make_aggregator(in)), ttg::edges()));
       CHECK_NOTHROW(
           ttg::make_tt(
-            [](const int &key, ttg::Aggregator<int> &&datum, std::tuple<> &outs) {
+            [](const int &key, const ttg::Aggregator<int> &datum, std::tuple<> &outs) {
               for (auto&& v : datum)
               { }
 
@@ -296,7 +297,7 @@ TEST_CASE("TemplateTask", "[core]") {
             ttg::edges()));
       CHECK_NOTHROW(
           ttg::make_tt(
-            [](const int &key, ttg::Aggregator<int> &&datum, std::tuple<> &outs) {
+            [](const int &key, const ttg::Aggregator<int> &datum, std::tuple<> &outs) {
               for (auto&& v : datum)
               { }
 
