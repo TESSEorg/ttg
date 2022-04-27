@@ -179,6 +179,7 @@ namespace ttg_parsec {
     static constexpr const int PARSEC_TTG_MAX_AM_SIZE = 1024 * 1024;
     WorldImpl(int *argc, char **argv[], int ncores) : WorldImplBase(query_comm_size(), query_comm_rank())
 #if defined(PARSEC_PROF_TRACE) 
+       , profiling_array(nullptr)
        , profiling_array_size(0)
 #endif
        , _dag_profiling(false)
@@ -232,6 +233,10 @@ namespace ttg_parsec {
       tpool->tdm.module->taskpool_set_nb_pa(tpool, 0);
       parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
 
+#if defined(PARSEC_PROF_TRACE)
+      tpool->profiling_array = profiling_array;
+#endif
+
       // Termination detection in PaRSEC requires to synchronize the
       // taskpool enabling, to avoid a race condition that would keep
       // termination detection-related messages in a waiting queue
@@ -270,6 +275,12 @@ namespace ttg_parsec {
     }
 
     void destroy_tpool() {
+#if defined(PARSEC_PROF_TRACE)
+      // We don't want to release the profiling array, as it should be persistent
+      // between fences() to allow defining a TT/TTG before a fence() and schedule
+      // it / complete it after a fence()
+      tpool->profiling_array = nullptr;
+#endif
       parsec_taskpool_free(tpool);
       tpool = nullptr;
     }
@@ -287,6 +298,13 @@ namespace ttg_parsec {
         destroy_tpool();
         parsec_ce.tag_unregister(_PARSEC_TTG_TAG);
         parsec_ce.tag_unregister(_PARSEC_TTG_RMA_TAG);
+#if defined(PARSEC_PROF_TRACE)
+        if(nullptr != profiling_array) {
+          free(profiling_array);
+          profiling_array = nullptr;
+          profiling_array_size = 0;
+        }
+#endif
         parsec_fini(&ctx);
         mark_invalid();
       }
@@ -377,10 +395,11 @@ namespace ttg_parsec {
     void register_new_profiling_event(const char *name, int position) {
       if(2*position >= profiling_array_size) {
         size_t new_profiling_array_size = 64 * ((2*position + 63)/64 + 1);
-        tpool->profiling_array = (int*)realloc((void*)tpool->profiling_array, 
-                                                new_profiling_array_size * sizeof(int));
-        memset((void*)&tpool->profiling_array[profiling_array_size], 0, sizeof(int)*(new_profiling_array_size - profiling_array_size));
+        profiling_array = (int*)realloc((void*)profiling_array, 
+                                         new_profiling_array_size * sizeof(int));
+        memset((void*)&profiling_array[profiling_array_size], 0, sizeof(int)*(new_profiling_array_size - profiling_array_size));
         profiling_array_size = new_profiling_array_size;
+        tpool->profiling_array = profiling_array;
       }
      
       assert(0 == tpool->profiling_array[2*position]);
@@ -420,6 +439,7 @@ namespace ttg_parsec {
     parsec_taskpool_t *tpool = nullptr;
     bool parsec_taskpool_started = false;
 #if defined(PARSEC_PROF_TRACE)
+    int        *profiling_array;
     std::size_t profiling_array_size;
 #endif
   };
