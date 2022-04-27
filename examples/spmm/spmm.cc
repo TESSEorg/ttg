@@ -51,11 +51,11 @@ namespace ttg {
     //   - when we create the object with the metadata, we use a constructor that initializes
     //     the data to 0, which is useless: the data could be left uninitialized
     static auto get_metadata(const blk_t &b) {
-      std::pair<int, int> dim{0, 0};
+      std::pair<int, int> dim{0, 0};  // single pair created with name dim
       if (!b.empty()) {
         assert(b.range().extent().size() == 2);
-        std::get<0>(dim) = (int)b.range().extent(0);
-        std::get<1>(dim) = (int)b.range().extent(1);
+        std::get<0>(dim) = (int)b.range().extent(0);  // gets first element i.e. 0th element
+        std::get<1>(dim) = (int)b.range().extent(1);  // gets second element i.e. 1th element
       }
       return dim;
     }
@@ -67,7 +67,8 @@ namespace ttg {
     }
     static auto create_from_metadata(const std::pair<int, int> &meta) {
       if (meta != std::pair{0, 0})
-        return blk_t(btas::Range(std::get<0>(meta), std::get<1>(meta)), 0.0);
+        return blk_t(btas::Range(std::get<0>(meta), std::get<1>(meta)),
+                     0.0);  // if blk_t elements aren't 0, 0 then set them 0.0 each
       else
         return blk_t{};
     }
@@ -108,7 +109,12 @@ namespace btas {
   inline btas::Tensor<T_, Range_, Store_> operator*(const btas::Tensor<T_, Range_, Store_> &A,
                                                     const btas::Tensor<T_, Range_, Store_> &B) {
     btas::Tensor<T_, Range_, Store_> C;
-    btas::contract(1.0, A, {1, 2}, B, {2, 3}, 0.0, C, {1, 3});
+    btas::contract(1.0, A, {1, 2}, B, {2, 3}, 0.0, C, {1, 3}); /*void contract(
+const _T& alpha,
+const _TensorA& A, const _AnnotationA& aA,
+const _TensorB& B, const _AnnotationB& aB,
+const _T& beta,
+      _TensorC& C, const _AnnotationC& aC) */
     return C;
   }
 
@@ -125,7 +131,6 @@ namespace btas {
 }  // namespace btas
 #endif  // BTAS_IS_USABLE
 double gemm(double C, double A, double B) { return C + A * B; }
-/////////////////////////////////////////////
 
 // template <typename _Scalar, int _Options, typename _StorageIndex>
 // struct colmajor_layout;
@@ -192,6 +197,7 @@ class Read_SpMatrix : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMat
  public:
   using baseT = typename Read_SpMatrix::ttT;
 
+  // read_SpMatrix() reads the positions in the matrix where we have non-zero value
   Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>> &ctl, Edge<Key<2>, Blk> &out,
                 Keymap &keymap)
       : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
@@ -199,12 +205,21 @@ class Read_SpMatrix : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMat
       , matrix_(matrix) {}
 
   void op(const Key<2> &key, std::tuple<Out<Key<2>, Blk>> &out) {
+    int cnt = 0;
     auto rank = ttg::default_execution_context().rank();
-    for (int k = 0; k < matrix_.outerSize(); ++k) {
-      for (typename SpMatrix<Blk>::InnerIterator it(matrix_, k); it; ++it) {
-        if (rank == this->get_keymap()(Key<2>({it.row(), it.col()})))
-          ::send<0>(Key<2>({it.row(), it.col()}), it.value(), out);
+    // std::cout<<"..........................."<<matrix_.outerSize()<<"\t"; // outersize is 4
+    for (int k = 0; k < matrix_.outerSize(); ++k) {  // for runs from 0 to number of columns
+      for (typename SpMatrix<Blk>::InnerIterator it(matrix_, k); it;
+           ++it) {  // InnerIterator iterates over each non-zero element of Kth column
+        if (rank ==
+            this->get_keymap()(Key<2>({it.row(), it.col()})))  // The rank of a tensor is the number of indices required
+                                                               // to uniquely select each element of the tensor.
+          ::send<0>(Key<2>({it.row(), it.col()}), it.value(),
+                    out);  // All non-zero values are seperated and stored in a 'out' tuple
+        std::cout << "printed values:" << it.col() << "," << it.row() << "," << rank;
+        // cnt++;
       }
+      // std::cout<<"count=........."<<cnt;
     }
   }
 
@@ -333,6 +348,7 @@ class SpMM {
     void op(const Key<2> &key, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, Blk>> &a_ikp) {
       const auto i = key[0];
       const auto k = key[1];
+      // std::cout<<"Hello............"<<"Value i="<<i<<"Value k="<<k<<"\n";
       ttg::trace("BcastA(", i, ", ", k, ")");
       // broadcast a_ik to all existing {i,j,k}
       std::vector<Key<3>> ikp_keys;
@@ -1284,17 +1300,17 @@ int main(int argc, char **argv) {
     debugger->set_cmd("gdb_xterm");
   }
 
-  int mpi_size = ttg::default_execution_context().size();
-  int mpi_rank = ttg::default_execution_context().rank();
+  int mpi_size = ttg::default_execution_context().size();  // size is number of process in MPI world
+  int mpi_rank = ttg::default_execution_context().rank();  // rank of each process in MPI world
   int best_pq = mpi_size;
   int P, Q;
-  for (int p = 1; p <= (int)sqrt(mpi_size); p++) {
-    if ((mpi_size % p) == 0) {
-      int q = mpi_size / p;
-      if (abs(p - q) < best_pq) {
-        best_pq = abs(p - q);
-        P = p;
-        Q = q;
+  for (int p = 1; p <= (int)sqrt(mpi_size); p++) {  // second run of for when p=2
+    if ((mpi_size % p) == 0) {                      // 4%1==0 //4%2==0
+      int q = mpi_size / p;                         // q=4/1=4  so p=1 and q=4 //4/2=0 so q=0
+      if (abs(p - q) < best_pq) {                   // abs(4-1)<4 // 2<4
+        best_pq = abs(p - q);                       // best_qp=3 //best_pq=2
+        P = p;                                      // 1 //2
+        Q = q;                                      // 4 //0
       }
     }
   }
@@ -1318,15 +1334,19 @@ int main(int argc, char **argv) {
     P = parseOption(PStr, P);
     std::string QStr(getCmdOption(argv, argv + argc, "-Q"));
     Q = parseOption(QStr, Q);
+    std::string RStr(getCmdOption(argv, argv + argc, "-R"));
+    R = parseOption(RStr, R);
 
-    if (P * Q != mpi_size) {
-      if (!cmdOptionExists(argv, argv + argc, "-Q") && (mpi_size % P) == 0)
-        Q = mpi_size / P;
-      else if (!cmdOptionExists(argv, argv + argc, "-P") && (mpi_size % Q) == 0)
-        P = mpi_size / Q;
+    if (P * Q * R != mpi_size) {
+      if (!cmdOptionExists(argv, argv + argc, "-Q") && (mpi_size % P) == 0 && (mpi_size % R) == 0)
+        Q = mpi_size / (P * R);
+      else if (!cmdOptionExists(argv, argv + argc, "-P") && (mpi_size % Q) == 0 && (mpi_size % R) == 0)
+        P = mpi_size / (Q * R);
+      else if (!cmdOptionExists(argv, argv + argc, "-R") && (mpi_size % P) == 0 && (mpi_size % Q) == 0)
+        R = mpi_size / (P * Q);
       else {
         if (0 == mpi_rank) {
-          std::cerr << P << "x" << Q << " is not a valid process grid -- bailing out" << std::endl;
+          std::cerr << P << "x" << Q << "x" << R << " is not a valid process grid -- bailing out" << std::endl;
           MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
         }
       }
