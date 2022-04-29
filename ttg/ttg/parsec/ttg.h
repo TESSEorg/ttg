@@ -62,6 +62,12 @@
 
 #include "ttg/parsec/ttg_data_copy.h"
 
+
+/* Whether to defer a potential writer if there are readers.
+ * This may avoid extra copies in exchange for concurrency.
+ * This may cause deadlocks, so use with caution. */
+#define TTG_PARSEC_DEFER_WRITER false
+
 /* PaRSEC function declarations */
 extern "C" {
 void parsec_taskpool_termination_detected(parsec_taskpool_t *tp);
@@ -297,6 +303,7 @@ namespace ttg_parsec {
       parsec_hash_table_item_t tt_ht_item = {};
       parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces] =
           {nullptr};
+      bool defer_writer = TTG_PARSEC_DEFER_WRITER; // whether to defer writer instead of creating a new copy
 
       typedef void (release_task_fn)(parsec_ttg_task_base_t*);
 
@@ -326,8 +333,9 @@ namespace ttg_parsec {
        * but always be use through parsec_ttg_task_t.
        */
 
-      parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class, int data_count)
-          : data_count(data_count) {
+      parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class, int data_count,
+                             bool defer_writer = TTG_PARSEC_DEFER_WRITER)
+          : data_count(data_count), defer_writer(defer_writer) {
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
@@ -335,8 +343,11 @@ namespace ttg_parsec {
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
                              parsec_taskpool_t *taskpool, int32_t priority, int data_count,
-                             release_task_fn *release_fn)
-          : data_count(data_count), release_task_cb(release_fn) {
+                             release_task_fn *release_fn,
+                             bool defer_writer = TTG_PARSEC_DEFER_WRITER)
+          : data_count(data_count)
+          , defer_writer(defer_writer)
+          , release_task_cb(release_fn) {
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
@@ -368,7 +379,7 @@ namespace ttg_parsec {
                         parsec_task_class_t *task_class, parsec_taskpool_t *taskpool,
                         TT *tt_ptr, int32_t priority)
           : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
-                                   num_streams, &release_task)
+                                   num_streams, &release_task, tt_ptr->m_defer_writer)
           , tt(tt_ptr), key(key) {
         tt_ht_item.key = pkey();
 
@@ -404,7 +415,7 @@ namespace ttg_parsec {
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
                         parsec_taskpool_t *taskpool, TT *tt_ptr, int32_t priority)
           : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
-                                   num_streams, &release_task)
+                                   num_streams, &release_task, tt_ptr->m_defer_writer)
           , tt(tt_ptr) {
         tt_ht_item.key = pkey();
 
@@ -551,29 +562,29 @@ namespace ttg_parsec {
     }
 
     inline void release_data_copy(ttg_data_copy_t *copy) {
-      if (nullptr != copy->push_task) {
-        /* Release the deferred task.
-         * The copy was mutable and will be mutated by the released task,
-         * so simply transfer ownership.
-         */
-        parsec_task_t *push_task = copy->push_task;
-        copy->push_task = nullptr;
-        parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)push_task;
-        deferred_op->release_task();
-      } else {
-        if (copy->is_mutable()) {
-          /* current task mutated the data but there are no consumers so prepare
-          * the copy to be freed below */
-          copy->reset_readers();
-        }
+      if (copy->is_mutable()) {
+        /* current task mutated the data but there are no consumers so prepare
+        * the copy to be freed below */
+        copy->reset_readers();
+      }
 
-        int32_t readers = copy->num_readers();
-        if (readers > 1) {
-          /* potentially more than one reader, decrement atomically */
-          readers = copy->decrement_readers();
-        }
-        /* if there was only one reader (the current task) we release the copy */
-        if (1 == readers) {
+      int32_t readers = copy->num_readers();
+      if (readers > 1) {
+        /* potentially more than one reader, decrement atomically */
+        readers = copy->decrement_readers();
+      }
+      /* if there was only one reader (the current task) we release the copy */
+      if (1 == readers) {
+        if (nullptr != copy->push_task) {
+          /* Release the deferred task.
+          * The copy was mutable and will be mutated by the released task,
+          * so simply transfer ownership.
+          */
+          parsec_task_t *push_task = copy->push_task;
+          copy->push_task = nullptr;
+          parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)push_task;
+          deferred_op->release_task();
+        } else {
           delete copy;
         }
       }
@@ -593,6 +604,15 @@ namespace ttg_parsec {
       }
 
       if (readers == copy_in->mutable_tag) {
+        if (copy_res->push_task != nullptr) {
+          if (readonly) {
+            parsec_ttg_task_base_t *push_task = reinterpret_cast<parsec_ttg_task_base_t *>(copy_res->push_task);
+            if (push_task->defer_writer) {
+              /* there is a writer but it signalled that it wants to wait for readers to complete */
+              return copy_res;
+            }
+          }
+        }
         /* someone is going to write into this copy -> we need to make a copy */
         copy_res = NULL;
         if (readonly) {
@@ -626,8 +646,13 @@ namespace ttg_parsec {
           assert(nullptr != task);
           copy_in->push_task = &task->parsec_task;
         } else {
-          /* there are readers of this copy already, make a copy that we can mutate */
-          copy_res = NULL;
+          if (task->defer_writer && !copy_res->is_mutable()) {
+            /* we're the first writer and want to wait for all readers to complete */
+            copy_res->push_task = &task->parsec_task;
+          } else {
+            /* there are readers of this copy already, make a copy that we can mutate */
+            copy_res = NULL;
+          }
         }
       }
 
@@ -869,6 +894,8 @@ namespace ttg_parsec {
     ttg::meta::detail::input_reducers_t<actual_input_tuple_type>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
     std::array<std::size_t, numins> static_stream_goal;
+
+    bool m_defer_writer = TTG_PARSEC_DEFER_WRITER;
 
    public:
     ttg::World get_world() const { return world; }
@@ -1463,7 +1490,7 @@ namespace ttg_parsec {
           /* if we registered as a writer and were the first to register with this copy
            * we need to defer the release of this task to give other tasks a chance to
            * make a copy of the original data */
-          release = (copy->push_task == nullptr);
+          release = (copy->push_task != &task->parsec_task);
           task->parsec_task.data[i].data_in = copy;
         }
       }
@@ -2582,6 +2609,14 @@ namespace ttg_parsec {
         invoke<keyT>();
       else
         TTBase::invoke();
+    }
+
+    void set_defer_writer(bool value) {
+      m_defer_writer = value;
+    }
+
+    bool get_defer_writer(bool value) {
+      return m_defer_writer;
     }
 
    public:
