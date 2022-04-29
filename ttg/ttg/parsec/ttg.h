@@ -1402,7 +1402,7 @@ namespace ttg_parsec {
         }
         assert(copy->push_task == nullptr);
         /* put the value into the aggregator */
-        agg->add_value(*reinterpret_cast<std::decay_t<Value> *>(copy->device_private));
+        agg->add_value(*reinterpret_cast<std::decay_t<Value> *>(copy->device_private), copy);
         assert(agg->size() <= agg->target());
         assert(agg->size() <= task->stream[i].goal);
         release = (agg->size() == task->stream[i].goal);
@@ -2281,11 +2281,44 @@ namespace ttg_parsec {
 
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
 
+    template<std::size_t I, std::size_t ...Is>
+    static std::size_t release_data_copy_at(task_t *task, std::index_sequence<I, Is...>) {
+      using edge_value_type = typename std::tuple_element_t<I, input_edges_type>::value_type;
+      constexpr bool is_aggregator = ttg::detail::is_aggregator_v<edge_value_type>;
+      detail::ttg_data_copy_t *copy = static_cast<detail::ttg_data_copy_t *>(task->parsec_task.data[I].data_in);
+
+      if (nullptr != copy) {
+        if constexpr (is_aggregator) {
+          /* iterate over all copies in the aggregator and release them */
+          using aggregator_type = edge_value_type;
+          aggregator_type* agg = static_cast<aggregator_type*>(copy->device_private);
+          for (auto& v : agg->data()) {
+            auto* copy = reinterpret_cast<typename detail::ttg_data_value_copy_t<typename aggregator_type::value_type> *>(v.ptr);
+            assert(nullptr != copy);
+            detail::release_data_copy(copy);
+          }
+        }
+        detail::release_data_copy(copy);
+        task->parsec_task.data[I].data_in = nullptr;
+      }
+      if constexpr (sizeof...(Is)) {
+        return release_data_copy_at(task, std::index_sequence<Is...>());
+      }
+      return I;
+    }
+
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *t) {
       parsec_execution_stream_t *safe_es = parsec_ttg_es;
       parsec_ttg_es = es;
-      auto *task = (detail::parsec_ttg_task_base_t *)t;
-      for (int i = 0; i < task->data_count; i++) {
+      auto *task = (task_t *)t;
+      if constexpr (!std::is_void_v<keyT>) {
+        //std::cout << task->tt->get_name() << " complete_task_and_release " << task->key << " " << task->data_count << " data copies " << std::endl;
+      }
+      int i = 0;
+      if constexpr (numinedges > 0) {
+        i = release_data_copy_at(task, std::make_index_sequence<numinedges>());
+      }
+      for (; i < task->data_count; i++) {
         detail::ttg_data_copy_t *copy = static_cast<detail::ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
         if (nullptr == copy) continue;
         detail::release_data_copy(copy);

@@ -2,7 +2,7 @@
 #define TTG_AGGREGATOR_H
 
 #include <vector>
-
+#include "ttg/fwd.h"
 #include "ttg/edge.h"
 #include "ttg/util/meta.h"
 #include "ttg/terminal.h"
@@ -12,28 +12,40 @@ namespace ttg {
   template<typename ValueT>
   struct Aggregator
   {
+    template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs>
+    friend class TTG_IMPL_NS::TT;
     using decay_value_type = std::decay_t<ValueT>;
     static constexpr bool value_is_const = std::is_const_v<ValueT>;
+
   public:
     using value_type = std::conditional_t<value_is_const, std::add_const_t<decay_value_type>, decay_value_type>;
 
   private:
-    using vector_t = typename std::vector<value_type*>;
+    struct vector_element_t{
+      value_type* value;  // pointer to the value
+      void *ptr;          // pointer to implementation-specific data
+      vector_element_t(value_type *value, void *ptr)
+      : value(value), ptr(ptr)
+      { }
+    };
+    using vector_t = typename std::vector<vector_element_t>;
 
-  public:
-
-    template<typename IteratorValueT>
+    template<typename VectorElementT>
     struct Iterator {
     private:
-      IteratorValueT*const* m_ptr = nullptr;
-      using reference_t = std::add_lvalue_reference_t<IteratorValueT>;
-      using pointer_t = std::add_pointer_t<IteratorValueT>;
+
+      static constexpr bool iterator_value_is_const = std::is_const_v<VectorElementT>;
+
+      VectorElementT* m_ptr = nullptr;
+      using value_t         = std::conditional_t<iterator_value_is_const, std::add_const_t<decay_value_type>, decay_value_type>;
+      using reference_t     = std::add_lvalue_reference_t<value_t>;
+      using pointer_t       = std::add_pointer_t<value_t>;
 
     public:
 
-      using value_type = IteratorValueT;
-      using reference = reference_t;
-      using pointer = pointer_t;
+      using value_type        = value_t;
+      using reference         = reference_t;
+      using pointer           = pointer_t;
       using difference_type   = std::ptrdiff_t;
 
 
@@ -41,9 +53,9 @@ namespace ttg {
       Iterator(Ptr ptr) : m_ptr(&(*ptr))
       { }
 
-      reference operator*() const { return **m_ptr; }
+      reference operator*() const { return *m_ptr->value; }
 
-      pointer operator->() { return *m_ptr; }
+      pointer operator->() { return m_ptr->value; }
 
       // Prefix increment
       Iterator& operator++() { m_ptr++; return *this; }
@@ -56,9 +68,11 @@ namespace ttg {
 
     };
 
+  public:
+
     /* types like std::vector */
-    using iterator = std::conditional_t<value_is_const, Iterator<std::add_const_t<value_type>>, Iterator<value_type>>;
-    using const_iterator = Iterator<std::add_const_t<value_type>>;
+    using iterator = std::conditional_t<value_is_const, Iterator<std::add_const_t<vector_element_t>>, Iterator<vector_element_t>>;
+    using const_iterator = Iterator<std::add_const_t<vector_element_t>>;
     using size_type = typename vector_t::size_type;
     using pointer = value_type*;
     using reference = std::add_lvalue_reference_t<value_type>;
@@ -75,11 +89,28 @@ namespace ttg {
     Aggregator(const Aggregator&) = default;
     Aggregator(Aggregator&&) = default;
 
+  private:
     /* Add an element to the aggregator */
-    void add_value(value_type& value) {
-      m_elems.push_back(&value);
+    void add_value(value_type& value, void *ptr = nullptr) {
+      m_elems.emplace_back(&value, ptr);
     }
 
+    bool has_target() {
+      return (m_target != undef_target);
+    }
+
+    size_type target() const {
+      if (m_target == undef_target) {
+        throw std::logic_error("Aggregator has no target defined!");
+      }
+      return m_target;
+    }
+
+    auto& data() {
+      return m_elems;
+    }
+
+  public:
     reference operator[](size_type i) {
       return m_elems[i];
     }
@@ -98,17 +129,6 @@ namespace ttg {
 
     size_type size() const {
       return m_elems.size();
-    }
-
-    bool has_target() {
-      return (m_target != undef_target);
-    }
-
-    size_type target() const {
-      if (m_target == undef_target) {
-        throw std::logic_error("Aggregator has no target defined!");
-      }
-      return m_target;
     }
 
     iterator begin() {
