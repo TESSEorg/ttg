@@ -465,7 +465,7 @@ namespace ttg_parsec {
     inline void remove_data_copy(ttg_data_copy_t *copy, parsec_ttg_task_base_t *task) {
       int i;
       /* find and remove entry; copies are usually appended and removed, so start from back */
-      for (i = task->data_count; i >= 0; --i) {
+      for (i = task->data_count-1; i >= 0; --i) {
         if (copy == task->parsec_task.data[i].data_in) {
           break;
         }
