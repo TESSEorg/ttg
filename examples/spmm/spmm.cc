@@ -184,10 +184,14 @@ std::ostream &operator<<(std::ostream &os, const Key<Rank> &key) {
   return os;
 }
 
-inline int tile2rank(int i, int j, int P, int Q) {
+inline int tile2rank(int i, int j, int m, int P, int Q, int R) {
   int p = (i % P);
   int q = (j % Q);
-  int r = (q * P) + p;
+  int k = (m % R);
+  int r =
+      (q * P) +
+      p;  // How to find rank in 2.5D
+          // case????????????????????????????????????????????????????????????????????????????????????????????????????????
   return r;
 }
 
@@ -1300,17 +1304,27 @@ int main(int argc, char **argv) {
     debugger->set_cmd("gdb_xterm");
   }
 
-  int mpi_size = ttg::default_execution_context().size();  // size is number of process in MPI world
+  // int mpi_size = ttg::default_execution_context().size();  // size is number of process in MPI world
+  int mpi_size = 16;
   int mpi_rank = ttg::default_execution_context().rank();  // rank of each process in MPI world
   int best_pq = mpi_size;
   int P, Q;
-  for (int p = 1; p <= (int)sqrt(mpi_size); p++) {  // second run of for when p=2
-    if ((mpi_size % p) == 0) {                      // 4%1==0 //4%2==0
-      int q = mpi_size / p;                         // q=4/1=4  so p=1 and q=4 //4/2=0 so q=0
-      if (abs(p - q) < best_pq) {                   // abs(4-1)<4 // 2<4
-        best_pq = abs(p - q);                       // best_qp=3 //best_pq=2
-        P = p;                                      // 1 //2
-        Q = q;                                      // 4 //0
+  int R;
+  int cube_root = pow(mpi_size, (float)1 / 3);
+  std::cout << "cube root =" << cube_root << "\n";
+  for (int c = 1; c <= (int)(pow(mpi_size, (float)1 / 3)); c++) {
+    std::cout << "value of c=" << c << "\n";
+    for (int p = 1; p <= (int)sqrt(mpi_size / c); p++) {  // second run of for when p=2
+      if ((mpi_size % p) == 0) {                          // 4%1==0 //4%2==0
+        int q = mpi_size / (p * c);                       // q=4/1=4  so p=1 and q=4 //4/2=0 so q=0
+        // if (abs(p - q) < best_pq) {                   // abs(4-1)<4 // 2<4
+        // best_pq = abs(p - q);
+        if ((p * q * c) == mpi_size) {
+          P = p;  // 1 //2
+          Q = q;
+          R = c;
+          std::cout << "values are =......." << P << "," << Q << "," << R << "\n";
+        }
       }
     }
   }
@@ -1329,14 +1343,14 @@ int main(int argc, char **argv) {
     double avg_nb = nan("undefined");
     double Adensity = nan("undefined");
     double Bdensity = nan("undefined");
-
+    // Allowing user to input the values of P Q R
     std::string PStr(getCmdOption(argv, argv + argc, "-P"));
     P = parseOption(PStr, P);
     std::string QStr(getCmdOption(argv, argv + argc, "-Q"));
     Q = parseOption(QStr, Q);
     std::string RStr(getCmdOption(argv, argv + argc, "-R"));
     R = parseOption(RStr, R);
-
+    // mpi_size is number of processors
     if (P * Q * R != mpi_size) {
       if (!cmdOptionExists(argv, argv + argc, "-Q") && (mpi_size % P) == 0 && (mpi_size % R) == 0)
         Q = mpi_size / (P * R);
@@ -1352,10 +1366,11 @@ int main(int argc, char **argv) {
       }
     }
 
-    const auto &keymap = [P, Q](const Key<2> &key) {
+    const auto &keymap = [P, Q, R](const Key<3> &key) {
       int i = (int)key[0];
       int j = (int)key[1];
-      int r = tile2rank(i, j, P, Q);
+      int k = (int)key[2];
+      int r = tile2rank(i, j, k, P, Q, R);
       return r;
     };
 
