@@ -113,6 +113,8 @@ int main(int argc, char **argv)
 
   ttg::initialize(ttg_argc, ttg_argv, nthreads);
 
+  ttg::trace_on();
+
   auto world = ttg::default_execution_context();
   
   if(nullptr != prof_filename) {

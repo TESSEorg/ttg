@@ -1,10 +1,12 @@
 #pragma once
 
+#include "pmw.h"
 #include <ttg.h>
 // needed for madness::hashT and xterm_debug
 #include <madness/world/world.h>
-#include "pmw.h"
 #include "lapack.hh"
+
+#undef DEBUG_TILES_VALUES
 
 namespace potrf {
 
@@ -27,8 +29,16 @@ auto make_potrf(MatrixT<T>& A,
     const int K = key.K;
 
     if(ttg::tracing()) ttg::print("POTRF(", key, ")");
+#if defined(DEBUG_TILES_VALUES)
+    std::cout << "Before POTRF(" << key << "), A(" << K << ", " << K << ") is " << tile_kk;
+#endif
 
-    lapack::potrf(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.rows());
+    auto info = lapack::potrf(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.rows());
+    assert(info == 0);
+
+#if defined(DEBUG_TILES_VALUES)
+    std::cout << "After POTRF(" << key << "), A(" << K << ", " << K << ") is " << tile_kk << std::endl;
+#endif
 
     /* send the tile to outputs */
     std::vector<Key2> keylist;
@@ -62,8 +72,7 @@ auto make_trsm(MatrixT<T>& A,
                                 ttg::Out<Key2, MatrixTile<T>>,
                                 ttg::Out<Key3, MatrixTile<T>>,
                                 ttg::Out<Key3, MatrixTile<T>>>& out){
-    const int I = key.I;
-    const int J = key.J;
+    const int M = key.I;
     const int K = key.J; // the column equals the outer most look K (same as PO)
 
     /* No support for different tile sizes yet */
@@ -73,6 +82,10 @@ auto make_trsm(MatrixT<T>& A,
     auto m = tile_mk.rows();
 
     if(ttg::tracing()) ttg::print("TRSM(", key, ")");
+#if defined(DEBUG_TILES_VALUES)
+    std::cout << "Before TRSM(" << key << "), A(" << K << ", " << K << ") is " << tile_kk 
+              << " and A(" << M << ", " << K << ") is " << tile_mk;
+#endif
 
     blas::trsm(blas::Layout::ColMajor,
                blas::Side::Right,
@@ -83,35 +96,40 @@ auto make_trsm(MatrixT<T>& A,
                tile_kk.data(), m,
                tile_mk.data(), m);
 
+#if defined(DEBUG_TILES_VALUES)
+    std::cout << "After TRSM(" << key << "), A(" << K << ", " << K << ") is " << tile_mk << std::endl;
+#endif
+
     std::vector<Key3> keylist_row;
-    keylist_row.reserve(I-J-1);
+    keylist_row.reserve(M-K);
     std::vector<Key3> keylist_col;
-    keylist_col.reserve(A.rows()-I-1);
+    keylist_col.reserve(A.rows()-M-1);
 
     /* send tile to syrk on diagonal */
-    if(ttg::tracing()) ttg::print("TRSM(", key, "): sending output to syrk(", Key2{I, K}, ")");
+    if(ttg::tracing()) ttg::print("TRSM(", key, "): sending output to syrk(", Key2{K, M}, ")");
 
     /* send the tile to all gemms across in row i */
-    for (int n = J+1; n < I; ++n) {
-      if(ttg::tracing()) ttg::print("TRSM(", key, "): sending output to gemm( ", Key3{I, n, K}, ")");
-      keylist_row.push_back(Key3(I, n, K));
+    for (int n = K+1; n < M; ++n) {
+      if(ttg::tracing()) ttg::print("TRSM(", key, "): sending output to gemm( ", Key3{M, n, K}, ")");
+      keylist_row.push_back(Key3(M, n, K));
     }
 
     /* send the tile to all gemms down in column i */
-    for (int m = I+1; m < A.rows(); ++m) {
-      if(ttg::tracing()) ttg::print("TRSM(", key, "): sending output to gemm( ", Key3{m, I, K}, ")");
-      keylist_col.push_back(Key3(m, I, K));
+    for (int m = M+1; m < A.rows(); ++m) {
+      if(ttg::tracing()) ttg::print("TRSM(", key, "): sending output to gemm( ", Key3{m, M, K}, ")");
+      keylist_col.push_back(Key3(m, M, K));
     }
 
     ttg::broadcast<0, 1, 2, 3>(std::make_tuple(key,
-                                               Key2(I, K),
-                                               keylist_row, keylist_col),
+                                               Key2(K, M),
+                                               keylist_row, 
+                                               keylist_col),
                                std::move(tile_mk), out);
   };
   return ttg::make_tt(f, ttg::edges(input_kk, ttg::fuse(input_mk, input_disp)), 
                       ttg::edges(output_result, output_diag, output_row, output_col),
                       "TRSM", {"tile_kk", "tile_mk/dispatcher"}, 
-                      {"output_result", "output_diag", "output_row", "output_col"});
+                      {"output_result", "tile_mk", "output_row", "output_col"});
 }
 
 
@@ -119,101 +137,118 @@ template <typename T>
 auto make_syrk(MatrixT<T>& A,
                ttg::Edge<Key2, MatrixTile<T>>& input_disp,  // from the dispatcher
                ttg::Edge<Key2, MatrixTile<T>>& input_mk,    // from TRSM
-               ttg::Edge<Key2, MatrixTile<T>>& input_mm,    // from SYRK
+               ttg::Edge<Key2, MatrixTile<T>>& input_kk,    // from SYRK
                ttg::Edge<Key1, MatrixTile<T>>& output_potrf,// to POTRF
                ttg::Edge<Key2, MatrixTile<T>>& output_syrk)
 {
   auto f = [=](const Key2& key,
                const MatrixTile<T>&  tile_mk,
-                     MatrixTile<T>&& tile_mm,
+                     MatrixTile<T>&& tile_kk,
                      std::tuple<ttg::Out<Key1, MatrixTile<T>>,
                                 ttg::Out<Key2, MatrixTile<T>>>& out){
-    const int I = key.I;
-    const int K = key.J;
+    const int K = key.I;
+    const int M = key.J;
 
     /* No support for different tile sizes yet */
-    assert(tile_mk.rows() == tile_mm.rows());
-    assert(tile_mk.cols() == tile_mm.cols());
+    assert(tile_mk.rows() == tile_kk.rows());
+    assert(tile_mk.cols() == tile_kk.cols());
 
     auto m = tile_mk.rows();
 
     if(ttg::tracing()) ttg::print("SYRK(", key, ")");
+#if defined(DEBUG_TILES_VALUES)
+    std::cout << "Before SYRK(" << key << "), A(" << M << ", " << K << ") is " << tile_mk 
+              << " and A(" << K << ", " << K << ") is " << tile_kk;
+#endif
 
     blas::syrk(blas::Layout::ColMajor,
                lapack::Uplo::Lower,
                blas::Op::NoTrans,
                tile_mk.rows(), m, -1.0,
                tile_mk.data(), m, 1.0,
-               tile_mm.data(), m);
+               tile_kk.data(), m);
 
-    if (I == K+1) {
+#if defined(DEBUG_TILES_VALUES)
+    std::cout << "After SYRK(" << key << "), A(" << K << ", " << K << ") is " << tile_kk << std::endl;
+#endif
+
+    if (M == K+1) {
       /* send the tile to potrf */
       if(ttg::tracing()) ttg::print("SYRK(", key, "): sending output to POTRF(", Key1{K+1}, ")");
-      ttg::send<0>(Key1(K+1), std::move(tile_mm), out);
+      ttg::send<0>(Key1(K+1), std::move(tile_kk), out);
     } else {
       /* send output to next syrk */
-      if(ttg::tracing()) ttg::print("SYRK(", key, "): sending output to SYRK(", Key2{I, K+1}, ")");
-      ttg::send<1>(Key2(I, K+1), std::move(tile_mm), out);
+      if(ttg::tracing()) ttg::print("SYRK(", key, "): sending output to SYRK(", Key2{K+1, M}, ")");
+      ttg::send<1>(Key2(K+1, M), std::move(tile_kk), out);
     }
 
   };
   return ttg::make_tt(f,
-                      ttg::edges(input_mk, ttg::fuse(input_mm, input_disp)),
+                      ttg::edges(input_mk, ttg::fuse(input_kk, input_disp)),
                       ttg::edges(output_potrf, output_syrk), "SYRK",
-                      {"tile_mk", "tile_mm/dispatcher"}, {"output_potrf", "output_syrk"});
+                      {"tile_mk", "tile_kk/dispatcher"}, {"output_potrf", "output_syrk"});
 }
 
 
 template <typename T>
 auto make_gemm(MatrixT<T>& A,
                ttg::Edge<Key3, MatrixTile<T>>& input_disp,  // From the dispatcher
-               ttg::Edge<Key3, MatrixTile<T>>& input_nk,    // from TRSM
+               ttg::Edge<Key3, MatrixTile<T>>& input_kn,    // from TRSM
                ttg::Edge<Key3, MatrixTile<T>>& input_mk,    // from TRSM
-               ttg::Edge<Key3, MatrixTile<T>>& input_nm,    // from TRSM
+               ttg::Edge<Key3, MatrixTile<T>>& input_mn,    // from TRSM
                ttg::Edge<Key2, MatrixTile<T>>& output_trsm, // to TRSM
                ttg::Edge<Key3, MatrixTile<T>>& output_gemm)
 {
   auto f = [=](const Key3& key,
-              const MatrixTile<T>& tile_nk,
+              const MatrixTile<T>& tile_kn,
               const MatrixTile<T>& tile_mk,
-                    MatrixTile<T>&& tile_nm,
+                    MatrixTile<T>&& tile_mn,
                     std::tuple<ttg::Out<Key2, MatrixTile<T>>,
                                ttg::Out<Key3, MatrixTile<T>>>& out){
-    const int I = key.I;
-    const int J = key.J;
+    const int M = key.I;
+    const int N = key.J;
     const int K = key.K;
-    assert(I != J && I > K && J > K);
+    assert(M != N && M > K && N > K);
 
     /* No support for different tile sizes yet */
-    assert(tile_nk.rows() == tile_mk.rows() && tile_nk.rows() == tile_nm.rows());
-    assert(tile_nk.cols() == tile_mk.cols() && tile_nk.cols() == tile_nm.cols());
+    assert(tile_kn.rows() == tile_mk.rows() && tile_kn.rows() == tile_mn.rows());
+    assert(tile_kn.cols() == tile_mk.cols() && tile_kn.cols() == tile_mn.cols());
 
-    auto m = tile_nk.rows();
+    auto m = tile_kn.rows();
 
     if(ttg::tracing()) ttg::print("GEMM(", key, ")");
+#if defined(DEBUG_TILES_VALUES)
+    std::cout << "Before GEMM(" << key << "), A(" << M << ", " << K << ") is " << tile_mk 
+              << " and A(" << K << ", " << N << ") is " << tile_kn 
+              << " and A(" << M << ", " << N << ") is " << tile_mn;
+#endif
 
     blas::gemm(blas::Layout::ColMajor,
                blas::Op::NoTrans,
                blas::Op::Trans,
                m, m, m, -1.0,
-               tile_nk.data(), m,
-               tile_mk.data(), m, 1.0,
-               tile_nm.data(), m);
+               tile_mk.data(), m,
+               tile_kn.data(), m, 1.0,
+               tile_mn.data(), m);
 
-    if (J == K+1) {
+#if defined(DEBUG_TILES_VALUES)
+    std::cout << "After GEMM(" << key << "), A(" << M << ", " << N << ") is " << tile_mn << std::endl;
+#endif
+
+    if (N == K+1) {
       /* send the tile to trsm */
-      if(ttg::tracing()) ttg::print("GEMM(", key, "): sending output to TRSM(", Key2{I, J}, ")");
-      ttg::send<0>(Key2(I, J), std::move(tile_nm), out);
+      if(ttg::tracing()) ttg::print("GEMM(", key, "): sending output to TRSM(", Key2{M, N}, ")");
+      ttg::send<0>(Key2(M, N), std::move(tile_mn), out);
     } else {
       /* send the tile to the next gemm */
-      if(ttg::tracing()) ttg::print("GEMM(", key, "): sending output to GEMM(", Key3{I, J, K+1}, ")");
-      ttg::send<1>(Key3(I, J, K+1), std::move(tile_nm), out);
+      if(ttg::tracing()) ttg::print("GEMM(", key, "): sending output to GEMM(", Key3{M, N, K+1}, ")");
+      ttg::send<1>(Key3(M, N, K+1), std::move(tile_mn), out);
     }
   };
   return ttg::make_tt(f,
-                      ttg::edges(input_nk, input_mk, ttg::fuse(input_disp, input_nm)),
+                      ttg::edges(input_mk, input_kn, ttg::fuse(input_disp, input_mn)),
                       ttg::edges(output_trsm, output_gemm), "GEMM",
-                      {"input_nk", "input_mk", "input_nm/dispatcher"},
+                      {"input_mk", "input_kn", "input_mn/dispatcher"},
                       {"output_trsm", "outout_gemm"});
 }
 
@@ -239,8 +274,8 @@ auto make_dispatcher(ttg::Edge<Key2, MatrixTile<T>>& input,
     }
     if(key.I == key.J) {
       // Other diagonal elements go to SYRK
-      if(ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to SYRK(", Key2{key.I, 0}, ")");
-      ttg::send<2>(Key2{key.I, 0}, std::move(tile), out);
+      if(ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to SYRK(", Key2{0, key.I}, ")");
+      ttg::send<2>(Key2{0, key.I}, std::move(tile), out);
       return;
     }
     // We only consider the lower triangular
@@ -264,8 +299,11 @@ auto make_potrf_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&inpu
     return A.rank_of(key.K, key.K);
   };
 
-  auto keymap2 = [&](const Key2& key) {
+  auto keymap2a = [&](const Key2& key) {
     return A.rank_of(key.I, key.J);
+  };
+  auto keymap2b = [&](const Key2& key) {
+    return A.rank_of(key.I, key.I);
   };
 
   auto keymap3 = [&](const Key3& key) {
@@ -287,16 +325,16 @@ auto make_potrf_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&inpu
                                       disp_gemm("disp_gemm");
 
   auto tt_dispatch = make_dispatcher(input, disp_potrf, disp_trsm, disp_syrk, disp_gemm);
-  tt_dispatch->set_keymap(keymap2);
+  tt_dispatch->set_keymap(keymap2a);
 
   auto tt_potrf = make_potrf(A, disp_potrf, syrk_potrf, potrf_trsm, output);
   tt_potrf->set_keymap(keymap1);
   auto tt_trsm  = make_trsm(A,
                             disp_trsm, potrf_trsm, gemm_trsm,
                             trsm_syrk, trsm_gemm_row, trsm_gemm_col, output);
-  tt_trsm->set_keymap(keymap2);
+  tt_trsm->set_keymap(keymap2a);
   auto tt_syrk  = make_syrk(A, disp_syrk, trsm_syrk, syrk_syrk, syrk_potrf, syrk_syrk);
-  tt_syrk->set_keymap(keymap2);
+  tt_syrk->set_keymap(keymap2b);
   auto tt_gemm  = make_gemm(A,
                             disp_gemm, trsm_gemm_row, trsm_gemm_col, gemm_gemm,
                             gemm_trsm, gemm_gemm);

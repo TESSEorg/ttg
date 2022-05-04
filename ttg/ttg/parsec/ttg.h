@@ -2887,8 +2887,9 @@ namespace ttg_parsec {
         static_map_mutex.unlock();
 
         for (auto it : tmp) {
-          ttg::print("ttg_parsec(", rank, ") Unpacking delayed message (", ", ", get_instance_id(), ", ",
-                     std::get<1>(it), ", ", std::get<2>(it), ")");
+          if(ttg::tracing())
+            ttg::print("ttg_parsec(", rank, ") Unpacking delayed message (", ", ", get_instance_id(), ", ",
+                       std::get<1>(it), ", ", std::get<2>(it), ")");
           int rc = detail::static_unpack_msg(&parsec_ce, world_impl.parsec_ttg_tag(), std::get<1>(it), std::get<2>(it),
                                              std::get<0>(it), NULL);
           assert(rc == 0);

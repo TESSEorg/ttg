@@ -2,6 +2,7 @@
 #define TTG_EXAMPLES_MATRIX_TILE_H
 
 #include <memory>
+#include <iostream>
 
 #include <ttg/serialization/splitmd_data_descriptor.h>
 
@@ -75,17 +76,17 @@ public:
 
   MatrixTile& operator=(MatrixTile<T>&& other)  = default;
 
-
+#if 0
   /* Defaulted copy ctor and op for shallow copies, see comment below */
   MatrixTile(const MatrixTile<T>& other)  = default;
 
   MatrixTile& operator=(const MatrixTile<T>& other)  = default;
-
+#endif // 0
   /* Deep copy ctor und op are not needed for PO since tiles will never be read
    * and written concurrently. Hence shallow copies are enough, will all
    * receiving tasks sharing tile data. Re-enable this once the PaRSEC backend
    * can handle data sharing without excessive copying */
-#if 0
+#if 1
   MatrixTile(const MatrixTile<T>& other)
   : _rows(other._rows), _cols(other._cols)
   {
@@ -99,7 +100,7 @@ public:
     this->realloc();
     std::copy_n(other.data(), _rows*_cols, this->data());
   }
-#endif // 0
+#endif // 1
 
   void set_metadata(metadata_t meta) {
     _rows = std::get<0>(meta);
@@ -129,6 +130,18 @@ public:
 
   int cols() const {
     return _cols;
+  }
+
+  friend std::ostream& operator<< (std::ostream& o, MatrixTile<T> const& tt)  {
+  auto ptr = tt.data();
+  o << std::endl << " ";
+  for(int i = 0; i < tt.rows(); i++) {
+    for(int j = 0; j < tt.cols(); j++) {
+      o << *ptr++ << " ";
+    }
+    o << std::endl << " ";
+  }
+  return o;
   }
 };
 

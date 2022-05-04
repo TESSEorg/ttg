@@ -13,7 +13,7 @@ auto make_result(MatrixT<T>& A, ttg::Edge<Key2, MatrixTile<T>>& result) {
     const int J = key.J;
     if(ttg::tracing()) ttg::print("RESULT( ", key, ") on rank ", A.rank_of(key.I, key.J));
     if (A(I, J).data() != tile.data()) {
-      //if(ttg::tracing()) ttg::print("Writing back tile {" << I << ", " << J << "} " << std::endl;
+      if(ttg::tracing()) ttg::print("Writing back tile {",I , ",", J, "} ");
       std::copy_n(tile.data(), tile.rows()*tile.cols(), A(I, J).data());
     }
 #ifdef TTG_USE_USER_TERMDET
