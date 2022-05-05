@@ -17,6 +17,8 @@ namespace ttg {
     using decay_value_type = std::decay_t<ValueT>;
     static constexpr bool value_is_const = std::is_const_v<ValueT>;
 
+    static constexpr size_t short_vector_size = 6; // try to fit the Aggregator into 2 cache lines
+
   public:
     using value_type = std::conditional_t<value_is_const, std::add_const_t<decay_value_type>, decay_value_type>;
 
@@ -24,6 +26,7 @@ namespace ttg {
     struct vector_element_t{
       value_type* value;  // pointer to the value
       void *ptr;          // pointer to implementation-specific data
+      vector_element_t() = default;
       vector_element_t(value_type *value, void *ptr)
       : value(value), ptr(ptr)
       { }
@@ -79,20 +82,39 @@ namespace ttg {
     using const_reference = std::add_const_t<reference>;
     static constexpr const size_type undef_target = std::numeric_limits<size_type>::max();
 
-    Aggregator()
+    Aggregator() : m_vec()
     { }
 
     Aggregator(size_type target)
     : m_target(target)
-    { }
+    {
+      if (target > short_vector_size) {
+        m_vec.reserve(target);
+        m_is_dynamic = true;
+      } else {
+        m_is_dynamic = false;
+      }
+    }
 
     Aggregator(const Aggregator&) = default;
     Aggregator(Aggregator&&) = default;
 
+    ~Aggregator() = default;
+
   private:
     /* Add an element to the aggregator */
     void add_value(value_type& value, void *ptr = nullptr) {
-      m_elems.emplace_back(&value, ptr);
+      if (m_is_dynamic) {
+        m_vec.emplace_back(&value, ptr);
+      } else {
+        if (m_size < short_vector_size) {
+          m_arr[m_size] = vector_element_t(&value, ptr);
+        } else {
+          move_to_dynamic();
+          m_vec.emplace_back(&value, ptr);
+        }
+      }
+      ++m_size;
     }
 
     bool has_target() {
@@ -106,58 +128,88 @@ namespace ttg {
       return m_target;
     }
 
-    auto& data() {
-      return m_elems;
+    auto data() {
+      if (m_is_dynamic) {
+        return ttg::span(m_vec.data(), m_size);
+      } else {
+        return ttg::span(static_cast<vector_element_t*>(&m_arr[0]), m_size);
+      }
+    }
+
+    void move_to_dynamic() {
+      assert(!m_is_dynamic);
+      vector_t vec;
+      if (has_target()) {
+        vec.reserve(m_target);
+      } else {
+        vec.reserve(m_size);
+      }
+      /* copies elements into dynamic storage */
+      vec.insert(vec.begin(), &m_arr[0], &m_arr[m_size]);
+      /* move data into member vector */
+      m_vec = std::move(vec);
+      m_is_dynamic = true;
+    }
+
+    vector_element_t* get_ptr() {
+      return (m_is_dynamic) ? m_vec.data() : static_cast<vector_element_t*>(&m_arr[0]);
+    }
+
+    const vector_element_t* get_ptr() const {
+      return (m_is_dynamic) ? m_vec.data() : static_cast<const vector_element_t*>(&m_arr[0]);
     }
 
   public:
     reference operator[](size_type i) {
-      return m_elems[i];
+      return (m_is_dynamic) ? m_vec[i] : m_arr[i];
     }
 
     const_reference operator[](size_type i) const {
-      return m_elems[i];
+      return (m_is_dynamic) ? m_vec[i] : m_arr[i];
     }
 
     reference at(size_type i) {
-      return m_elems.at(i);
+      return (m_is_dynamic) ? m_vec.at(i) : m_arr[i];
     }
 
     const_reference at(size_type i) const {
-      return m_elems.at(i);
+      return (m_is_dynamic) ? m_vec.at(i) : m_arr[i];
     }
 
     size_type size() const {
-      return m_elems.size();
+      return m_size;
     }
 
     iterator begin() {
-      return iterator(m_elems.data());
+      return iterator(get_ptr());
     }
 
     const_iterator begin() const {
-      return const_iterator(m_elems.data());
+      return const_iterator(get_ptr());
     }
 
 
     const_iterator cbegin() const {
-      return const_iterator(m_elems.data());
+      return const_iterator(get_ptr());
     }
 
     iterator end() {
-      return iterator(m_elems.data()+m_elems.size());
+      return iterator(get_ptr() + m_size);
     }
 
     const_iterator end() const {
-      return const_iterator(m_elems.data()+m_elems.size());
+      return const_iterator(get_ptr() + m_size);
     }
 
     const_iterator cend() const {
-      return const_iterator(m_elems.data()+m_elems.size());
+      return const_iterator(get_ptr() + m_size);
     }
   private:
-    vector_t m_elems;
+    std::vector<vector_element_t> m_vec;
+    vector_element_t m_arr[short_vector_size];
+    size_type m_size = 0;
     size_type m_target = undef_target;
+    bool m_is_dynamic = true;
   };
 
   namespace detail {
