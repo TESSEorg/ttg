@@ -74,6 +74,39 @@ namespace ttg {
   /// @note This is a collective operation with respect to @p world
   inline void fence(World world = default_execution_context()) { TTG_IMPL_NS::ttg_fence(world); }
 
+  /// @param world an execution context to query the process rank from
+  /// @note Calls \c rank() on \c world
+  inline int rank(World world = default_execution_context()) { return world.rank(); }
+
+  /// @param world an execution context whose number of processes to query
+  /// @note Calls \c size() on \c world
+  inline int size(World world = default_execution_context()) { return world.size(); }
+
+  /// Invoke the provided template task \c tt once, on the process
+  /// provided by the tt's keymap
+  /// @param tt a template task to invoke
+  /// @note \c invoke_once may be called by all processes and must at least be
+  ///       called by the process returned by \c tt.keymap()
+  template<typename TT>
+  inline void invoke_once(TT& tt) {
+    if (tt.keymap() == tt.get_world().rank()) {
+      tt.invoke();
+    }
+  }
+
+  /// Invoke the provided template task \c tt once with the provided key,
+  /// on the process provided by the tt's keymap.
+  /// @param tt a template task to invoke
+  /// @param key the to invoke the \c tt on
+  /// @note \c invoke_once may be called by all processes and must at least be
+  ///       called by the process returned by \c tt.keymap(key)
+  template<typename TT, typename Key>
+  inline void invoke_once(TT&& tt, Key&& key) {
+    if (tt.keymap(key) == tt.get_world().rank()) {
+      tt.invoke(std::forward<Key>(key));
+    }
+  }
+
 }  // namespace ttg
 
 #endif  // TTG_RUN_H
