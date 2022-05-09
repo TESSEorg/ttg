@@ -125,6 +125,10 @@ int main(int argc, char **argv)
 
   int P = std::sqrt(world.size());
   int Q = (world.size() + P - 1)/P;
+  while(P * Q != world.size()) {
+    P--;
+    Q = (world.size() + P - 1)/P;
+  }
 
   static_assert(ttg::has_split_metadata<MatrixTile<double>>::value);
 
@@ -265,19 +269,19 @@ int main(int argc, char **argv)
         end = endlauum;
 
         auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endpotrf - begpotrf).count());
-        std::cout << "SEQ POTRI -- POTRF TTG Execution Time (milliseconds) : "
+        std::cout << "SEQ POTRI -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads << " POTRF TTG Execution Time (milliseconds) : "
                   << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
         
         elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endtrtri - begtrtri).count());
-        std::cout << "SEQ POTRI -- TRTRI TTG Execution Time (milliseconds) : "
+        std::cout << "SEQ POTRI -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads << " TRTRI TTG Execution Time (milliseconds) : "
                   << elapsed / 1E3 << " : Flops " << (trtri::FLOPS_DTRTRI(N)) << " " << (trtri::FLOPS_DTRTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
 
         elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endlauum - beglauum).count());
-        std::cout << "SEQ POTRI -- LAUUM TTG Execution Time (milliseconds) : "
+        std::cout << "SEQ POTRI -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads << " LAUUM TTG Execution Time (milliseconds) : "
                   << elapsed / 1E3 << " : Flops " << (lauum::FLOPS_DLAUUM(N)) << " " << (lauum::FLOPS_DLAUUM(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
 
         elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
-        std::cout << "SEQ POTRI TTG Execution Time (milliseconds) : "
+        std::cout << "SEQ POTRI N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads << " TTG Execution Time (milliseconds) : "
                   << elapsed / 1E3 << " : Flops " << (potri::FLOPS_DPOTRI(N)) << " " << (potri::FLOPS_DPOTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
       }
     }
@@ -339,7 +343,7 @@ int main(int argc, char **argv)
         end = std::chrono::high_resolution_clock::now();
         auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
         end = std::chrono::high_resolution_clock::now();
-        std::cout << "NONSEQ POTRI Execution Time (milliseconds) : "
+        std::cout << "NONSEQ POTRI N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads << " Execution Time (milliseconds) : "
                   << elapsed / 1E3 << " : Flops " << (potri::FLOPS_DPOTRI(N)) << " " << (potri::FLOPS_DPOTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
       }
     }
