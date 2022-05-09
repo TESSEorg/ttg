@@ -294,7 +294,7 @@ auto make_dispatcher(ttg::Edge<Key2, MatrixTile<T>>& input,
   return ttg::make_tt(f, ttg::edges(input), ttg::edges(to_potrf, to_trsm, to_syrk, to_gemm), "POTRF Dispatch", {"Input"}, {"POTRF", "TRSM", "SYRK", "GEMM"});
 }
 
-auto make_potrf_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&input, ttg::Edge<Key2, MatrixTile<double>>&output ) {
+auto make_potrf_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&input, ttg::Edge<Key2, MatrixTile<double>>&output, bool defer_write ) {
   auto keymap1 = [&](const Key1& key) {
     return A.rank_of(key.K, key.K);
   };
@@ -326,19 +326,27 @@ auto make_potrf_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&inpu
 
   auto tt_dispatch = make_dispatcher(input, disp_potrf, disp_trsm, disp_syrk, disp_gemm);
   tt_dispatch->set_keymap(keymap2a);
+  tt_dispatch->set_defer_writer(defer_write);
 
   auto tt_potrf = make_potrf(A, disp_potrf, syrk_potrf, potrf_trsm, output);
   tt_potrf->set_keymap(keymap1);
+  tt_potrf->set_defer_writer(defer_write);
+
   auto tt_trsm  = make_trsm(A,
                             disp_trsm, potrf_trsm, gemm_trsm,
                             trsm_syrk, trsm_gemm_row, trsm_gemm_col, output);
   tt_trsm->set_keymap(keymap2a);
+  tt_trsm->set_defer_writer(defer_write);
+
   auto tt_syrk  = make_syrk(A, disp_syrk, trsm_syrk, syrk_syrk, syrk_potrf, syrk_syrk);
   tt_syrk->set_keymap(keymap2b);
+  tt_syrk->set_defer_writer(defer_write);
+
   auto tt_gemm  = make_gemm(A,
                             disp_gemm, trsm_gemm_row, trsm_gemm_col, gemm_gemm,
                             gemm_trsm, gemm_gemm);
   tt_gemm->set_keymap(keymap3);
+  tt_gemm->set_defer_writer(defer_write);
 
   /* Priorities taken from DPLASMA */
   auto nt = A.cols();

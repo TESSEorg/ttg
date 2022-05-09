@@ -31,12 +31,13 @@ auto make_plgsy(MatrixT<T>& A, unsigned long bump, unsigned long random_seed, tt
   return ttg::make_tt(f, ttg::edges(input), ttg::edges(output), "PLGSY", {"startup"}, {"output"});
 }
 
-auto make_plgsy_ttg(MatrixT<double> &A, unsigned long bump, unsigned long random_seed, ttg::Edge<Key2, void>& startup, ttg::Edge<Key2, MatrixTile<double>>&result) {
+auto make_plgsy_ttg(MatrixT<double> &A, unsigned long bump, unsigned long random_seed, ttg::Edge<Key2, void>& startup, ttg::Edge<Key2, MatrixTile<double>>&result, bool defer_write) {
   auto keymap2 = [&](const Key2& key) {
     return A.rank_of(key.I, key.J);
   };
   auto plgsy_tt = make_plgsy(A, bump, random_seed, startup, result);
   plgsy_tt->set_keymap(keymap2);
+  plgsy_tt->set_defer_writer(defer_write);
 
   auto ins = std::make_tuple(plgsy_tt->template in<0>());
   auto outs = std::make_tuple(plgsy_tt->template out<0>());

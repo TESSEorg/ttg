@@ -26,12 +26,13 @@ auto make_result(MatrixT<T>& A, ttg::Edge<Key2, MatrixTile<T>>& result) {
   return ttg::make_tt(f, ttg::edges(result), ttg::edges(), "Final Output", {"result"}, {});
 }
 
-auto make_result_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&result) {
+auto make_result_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&result, bool defer_write) {
   auto keymap2 = [&](const Key2& key) {
     return A.rank_of(key.I, key.J);
   };
   auto result_tt = make_result(A, result);
   result_tt->set_keymap(keymap2);
+  result_tt->set_defer_writer(defer_write);
 
   auto ins = std::make_tuple(result_tt->template in<0>());
   std::vector<std::unique_ptr<ttg::TTBase>> ops(1);

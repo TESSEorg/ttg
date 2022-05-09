@@ -240,7 +240,7 @@ auto make_dispatcher(const MatrixT<T>& A,
                       "LAUUM Dispatch", {"Input"}, {"LAUUM", "SYRK", "TRMM_A", "TRMM_B", "GEMM_A", "GEMM_B"});
 }
 
-auto make_lauum_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&input, ttg::Edge<Key2, MatrixTile<double>>&output ) {
+auto make_lauum_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&input, ttg::Edge<Key2, MatrixTile<double>>&output, bool defer_write ) {
   auto keymap1 = [&](const Key1& key) {
     //if(ttg::tracing()) ttg::print("Key ", key, " is at rank ", A.rank_of(key.K, key.K));
     return A.rank_of(key.K, key.K);
@@ -277,20 +277,25 @@ auto make_lauum_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&inpu
 
   auto tt_dispatch = make_dispatcher(A, input, disp_lauum, disp_syrk, disp_trmm_A, disp_trmm_B, disp_gemm_A, disp_gemm_B);
   tt_dispatch->set_keymap(keymap2a);
+  tt_dispatch->set_defer_writer(defer_write);
 
   auto tt_lauum = make_lauum(A, disp_lauum, lauum_syrk_nn, output);
   tt_lauum->set_keymap(keymap1);
+  tt_lauum->set_defer_writer(defer_write);
 
   syrk_nn = ttg::fuse(lauum_syrk_nn, syrk_syrk_nn);
   auto tt_syrk  = make_syrk(A, disp_syrk, syrk_nn, syrk_syrk_nn, output);
   tt_syrk->set_keymap(keymap2b);
+  tt_syrk->set_defer_writer(defer_write);
 
   auto tt_trmm = make_trmm(A, disp_trmm_A, disp_trmm_B, trmm_gemm_C, output);
   tt_trmm->set_keymap(keymap2a);
+  tt_trmm->set_defer_writer(defer_write);
 
   gemm_C = ttg::fuse(trmm_gemm_C, gemm_gemm_C);
   auto tt_gemm  = make_gemm(A, disp_gemm_A, disp_gemm_B, gemm_C, gemm_gemm_C,output);
   tt_gemm->set_keymap(keymap3);
+  tt_gemm->set_defer_writer(defer_write);
 
   auto ins = std::make_tuple(tt_dispatch->template in<0>());
   auto outs = std::make_tuple(tt_lauum->template out<1>());

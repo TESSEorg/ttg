@@ -255,7 +255,7 @@ auto make_dispatcher(const MatrixT<T>& A,
   return ttg::make_tt(f, ttg::edges(input), ttg::edges(to_trtri, to_trsml_kk, to_trsmr_kk, to_trsmr_mk), "TRTRI Dispatch", {"Input"}, {"TRTRI", "TRSML_kk", "TRSMR_kk", "TRSMR_mk"});
 }
 
-auto make_trtri_ttg(MatrixT<double> &A, lapack::Diag diag, ttg::Edge<Key2, MatrixTile<double>>&input, ttg::Edge<Key2, MatrixTile<double>>&output ) {
+auto make_trtri_ttg(MatrixT<double> &A, lapack::Diag diag, ttg::Edge<Key2, MatrixTile<double>>&input, ttg::Edge<Key2, MatrixTile<double>>&output, bool defer_write ) {
   auto keymap1 = [&](const Key1& key) {
     return A.rank_of(key.K, key.K);
   };
@@ -290,18 +290,22 @@ auto make_trtri_ttg(MatrixT<double> &A, lapack::Diag diag, ttg::Edge<Key2, Matri
 
   auto tt_dispatch = make_dispatcher(A, input, disp_trtri, disp_trsml_kk, disp_trsmr_kk, disp_trsmr_mk);
   tt_dispatch->set_keymap(keymap2a);
+  tt_dispatch->set_defer_writer(defer_write);
 
   auto tt_trtri = make_trtri(A, diag, disp_trtri, output);
   tt_trtri->set_keymap(keymap1);
+  tt_trtri->set_defer_writer(defer_write);
 
   trsml_nk = ttg::fuse(gemm_trsml, trsmr_trsml);
   auto tt_trsml  = make_trsml(A, diag, disp_trsml_kk, trsml_nk, output);
   tt_trsml->set_keymap(keymap2a);
+  tt_trsml->set_defer_writer(defer_write);
 
   auto tt_trsmr = make_trsmr(A, diag, disp_trsmr_kk, disp_trsmr_mk, 
                              trsmr_gemm_A, trsmr_gemm_B, trsmr_gemm_C,
                              trsmr_trsml);
   tt_trsmr->set_keymap(keymap2b);
+  tt_trsmr->set_defer_writer(defer_write);
 
   gemm_B = ttg::fuse(trsmr_gemm_B, gemm_gemm_B);
   gemm_C = ttg::fuse(trsmr_gemm_C, gemm_gemm_C);
@@ -313,6 +317,7 @@ auto make_trtri_ttg(MatrixT<double> &A, lapack::Diag diag, ttg::Edge<Key2, Matri
                             gemm_gemm_C,
                             gemm_trsml);
   tt_gemm->set_keymap(keymap3);
+  tt_gemm->set_defer_writer(defer_write);
 
   auto ins = std::make_tuple(tt_dispatch->template in<0>());
   auto outs = std::make_tuple(tt_trtri->template out<0>());

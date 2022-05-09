@@ -35,7 +35,7 @@ bool cmdOptionExists(char** begin, char** end, const std::string& option)
     return std::find(begin, end, option) != end;
 }
 
-static auto make_load_tt(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>> &toop)
+static auto make_load_tt(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>> &toop, bool defer_write)
 {
   auto load_tt = ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, MatrixTile<double>>>& out) {
       for(int i = 0; i < A.rows(); i++) {
@@ -48,6 +48,7 @@ static auto make_load_tt(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>
       }
     }, ttg::edges(), ttg::edges(toop), "Load Matrix", {}, {"To Op"});
   load_tt->set_keymap([]() {return ttg::ttg_default_execution_context().rank();});
+  load_tt->set_defer_writer(defer_write);
 
   return std::move(load_tt);
 }
@@ -89,7 +90,7 @@ int main(int argc, char **argv)
 
   bool ttg_dags = cmdOptionExists(argv+1, argv+argc, "-ttg-dag");
   bool verbose = cmdOptionExists(argv+1, argv+argc, "-v");
-
+  bool defer_cow_hint = cmdOptionExists(argv+1, argv+argc, "-w");
 
   auto dashdash = std::find(argv, argv+argc, std::string("--"));
   char **ttg_argv;
@@ -170,9 +171,10 @@ int main(int argc, char **argv)
         }
       }, ttg::edges(), ttg::edges(startuppotrf), "Startup Trigger for POTRF", {}, {"startup"});
       init_tt->set_keymap([&]() {return world.rank();});
-      auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startuppotrf, topotrf);
-      auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, torespotrf);
-      auto store_potrf_ttg = make_result_ttg(A, torespotrf);
+      init_tt->set_defer_writer(defer_cow_hint);
+      auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startuppotrf, topotrf, defer_cow_hint);
+      auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, torespotrf, defer_cow_hint);
+      auto store_potrf_ttg = make_result_ttg(A, torespotrf, defer_cow_hint);
 
       auto connected = make_graph_executable(init_tt.get());
       assert(connected);
@@ -204,9 +206,9 @@ int main(int argc, char **argv)
 
       /********************** Second step: TRTRI  **********************/
 
-      auto load_potrf = make_load_tt(A, totrtri);
-      auto trtri_ttg = trtri::make_trtri_ttg(A, lapack::Diag::NonUnit, totrtri, torestrtri);
-      auto store_trtri_ttg = make_result_ttg(A, torestrtri);
+      auto load_potrf = make_load_tt(A, totrtri, defer_cow_hint);
+      auto trtri_ttg = trtri::make_trtri_ttg(A, lapack::Diag::NonUnit, totrtri, torestrtri, defer_cow_hint);
+      auto store_trtri_ttg = make_result_ttg(A, torestrtri, defer_cow_hint);
 
       connected = make_graph_executable(load_potrf.get());
       assert(connected);
@@ -234,9 +236,9 @@ int main(int argc, char **argv)
 
       /********************** Last step: LAUUM  **********************/
 
-      auto load_trtri = make_load_tt(A, tolauum);
-      auto lauum_ttg = lauum::make_lauum_ttg(A, tolauum, toresult);
-      auto result = make_result_ttg(A, toresult);
+      auto load_trtri = make_load_tt(A, tolauum, defer_cow_hint);
+      auto lauum_ttg = lauum::make_lauum_ttg(A, tolauum, toresult, defer_cow_hint);
+      auto result = make_result_ttg(A, toresult, defer_cow_hint);
 
       connected = make_graph_executable(load_trtri.get());
       assert(connected);
@@ -303,12 +305,13 @@ int main(int argc, char **argv)
         }
       }, ttg::edges(), ttg::edges(startup), "Startup Trigger", {}, {"startup"});
       init_tt->set_keymap([&]() {return world.rank();});
+      init_tt->set_defer_writer(defer_cow_hint);
 
-      auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, topotrf);
+      auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, topotrf, defer_cow_hint);
 
-      auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, topotri);
-      auto potri_ttg = potri::make_potri_ttg(A, topotri, result);
-      auto result_ttg = make_result_ttg(A, result);
+      auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, topotri, defer_cow_hint);
+      auto potri_ttg = potri::make_potri_ttg(A, topotri, result, defer_cow_hint);
+      auto result_ttg = make_result_ttg(A, result, defer_cow_hint);
 
       auto connected = make_graph_executable(init_tt.get());
       assert(connected);
@@ -353,4 +356,3 @@ int main(int argc, char **argv)
   ttg::finalize();
   return 0;
 }
-
