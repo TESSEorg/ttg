@@ -1434,6 +1434,13 @@ namespace ttg_parsec {
         assert(agg->size() <= task->stream[i].goal);
         release = (agg->size() == task->stream[i].goal);
 
+        if (release) {
+          if ((numins - 1) == task->in_data_count) {
+            parsec_hash_table_nolock_remove(&tasks_table, hk);
+            remove_from_hash = false;
+          }
+        }
+
         /* release the hash table bucket */
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
 
@@ -1461,14 +1468,20 @@ namespace ttg_parsec {
         }
         task->stream[i].size++;
         release = (task->stream[i].size == task->stream[i].goal);
-        if (release) {
-          parsec_hash_table_nolock_remove(&tasks_table, hk);
-          remove_from_hash = false;
-        }
+        //if (release) {
+        //  parsec_hash_table_nolock_remove(&tasks_table, hk);
+        //  remove_from_hash = false;
+        //}
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
       } else {
         /* release the lock, not needed anymore */
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        if (use_hash_table) {
+          if ((numins - 1) == task->in_data_count) {
+            parsec_hash_table_nolock_remove(&tasks_table, hk);
+            remove_from_hash = false;
+          }
+          parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        }
         /* whether the task needs to be deferred or not */
         if constexpr (!valueT_is_Void) {
           if (nullptr != task->parsec_task.data[i].data_in) {
@@ -1506,7 +1519,8 @@ namespace ttg_parsec {
 
       /* if remove_from_hash == false, someone has already removed the task from the hash table
        * so we know that the task is ready, no need to do atomic increments here */
-      bool is_ready = !task->remove_from_hash;
+      //bool is_ready = !task->remove_from_hash || ((numins -1) == task->in_data_count);
+      bool is_ready = ((numins -1) == task->in_data_count);
       int32_t count;
       if (is_ready) {
         count = numins;
