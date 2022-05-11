@@ -230,13 +230,13 @@ namespace ttg {
   namespace detail {
     template <typename keyT, typename... valuesT>
     struct input_terminals_tuple {
-      using type = std::tuple<ttg::In<keyT, valuesT>...>;
+      using type = std::tuple<ttg::In<keyT, ttg::meta::remove_wrapper_t<valuesT>>...>;
     };
 
     template <typename keyT, typename... valuesT>
-    struct input_terminals_tuple<keyT, std::tuple<valuesT...>> {
-      using type = std::tuple<ttg::In<keyT, valuesT>...>;
-    };
+    struct input_terminals_tuple<keyT, std::tuple<valuesT...>>
+    : input_terminals_tuple<keyT, valuesT...>
+    { };
 
     template <typename keyT, typename... valuesT>
     using input_terminals_tuple_t = typename input_terminals_tuple<keyT, valuesT...>::type;

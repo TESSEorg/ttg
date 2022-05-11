@@ -27,6 +27,7 @@
 #include "ttg/util/print.h"
 #include "ttg/util/trace.h"
 #include "ttg/util/typelist.h"
+#include "ttg/aggregator.h"
 
 #include "ttg/serialization/data_descriptor.h"
 
@@ -60,6 +61,12 @@
 #include <cstring>
 
 #include "ttg/parsec/ttg_data_copy.h"
+
+
+/* Whether to defer a potential writer if there are readers.
+ * This may avoid extra copies in exchange for concurrency.
+ * This may cause deadlocks, so use with caution. */
+#define TTG_PARSEC_DEFER_WRITER false
 
 /* PaRSEC function declarations */
 extern "C" {
@@ -296,6 +303,7 @@ namespace ttg_parsec {
       parsec_hash_table_item_t tt_ht_item = {};
       parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces] =
           {nullptr};
+      bool defer_writer = TTG_PARSEC_DEFER_WRITER; // whether to defer writer instead of creating a new copy
 
       typedef void (release_task_fn)(parsec_ttg_task_base_t*);
 
@@ -325,8 +333,9 @@ namespace ttg_parsec {
        * but always be use through parsec_ttg_task_t.
        */
 
-      parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class, int data_count)
-          : data_count(data_count) {
+      parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class, int data_count,
+                             bool defer_writer = TTG_PARSEC_DEFER_WRITER)
+          : data_count(data_count), defer_writer(defer_writer) {
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
@@ -334,8 +343,11 @@ namespace ttg_parsec {
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
                              parsec_taskpool_t *taskpool, int32_t priority, int data_count,
-                             release_task_fn *release_fn)
-          : data_count(data_count), release_task_cb(release_fn) {
+                             release_task_fn *release_fn,
+                             bool defer_writer = TTG_PARSEC_DEFER_WRITER)
+          : data_count(data_count)
+          , defer_writer(defer_writer)
+          , release_task_cb(release_fn) {
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
@@ -367,7 +379,7 @@ namespace ttg_parsec {
                         parsec_task_class_t *task_class, parsec_taskpool_t *taskpool,
                         TT *tt_ptr, int32_t priority)
           : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
-                                   num_streams, &release_task)
+                                   num_streams, &release_task, tt_ptr->m_defer_writer)
           , tt(tt_ptr), key(key) {
         tt_ht_item.key = pkey();
 
@@ -403,7 +415,7 @@ namespace ttg_parsec {
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
                         parsec_taskpool_t *taskpool, TT *tt_ptr, int32_t priority)
           : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
-                                   num_streams, &release_task)
+                                   num_streams, &release_task, tt_ptr->m_defer_writer)
           , tt(tt_ptr) {
         tt_ht_item.key = pkey();
 
@@ -453,7 +465,7 @@ namespace ttg_parsec {
     inline void remove_data_copy(ttg_data_copy_t *copy, parsec_ttg_task_base_t *task) {
       int i;
       /* find and remove entry; copies are usually appended and removed, so start from back */
-      for (i = task->data_count; i >= 0; --i) {
+      for (i = task->data_count-1; i >= 0; --i) {
         if (copy == task->parsec_task.data[i].data_in) {
           break;
         }
@@ -550,29 +562,29 @@ namespace ttg_parsec {
     }
 
     inline void release_data_copy(ttg_data_copy_t *copy) {
-      if (nullptr != copy->push_task) {
-        /* Release the deferred task.
-         * The copy was mutable and will be mutated by the released task,
-         * so simply transfer ownership.
-         */
-        parsec_task_t *push_task = copy->push_task;
-        copy->push_task = nullptr;
-        parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)push_task;
-        deferred_op->release_task();
-      } else {
-        if (copy->is_mutable()) {
-          /* current task mutated the data but there are no consumers so prepare
-          * the copy to be freed below */
-          copy->reset_readers();
-        }
+      if (copy->is_mutable()) {
+        /* current task mutated the data but there are no consumers so prepare
+        * the copy to be freed below */
+        copy->reset_readers();
+      }
 
-        int32_t readers = copy->num_readers();
-        if (readers > 1) {
-          /* potentially more than one reader, decrement atomically */
-          readers = copy->decrement_readers();
-        }
-        /* if there was only one reader (the current task) we release the copy */
-        if (1 == readers) {
+      int32_t readers = copy->num_readers();
+      if (readers > 1) {
+        /* potentially more than one reader, decrement atomically */
+        readers = copy->decrement_readers();
+      }
+      /* if there was only one reader (the current task) we release the copy */
+      if (1 == readers) {
+        if (nullptr != copy->push_task) {
+          /* Release the deferred task.
+          * The copy was mutable and will be mutated by the released task,
+          * so simply transfer ownership.
+          */
+          parsec_task_t *push_task = copy->push_task;
+          copy->push_task = nullptr;
+          parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)push_task;
+          deferred_op->release_task();
+        } else {
           delete copy;
         }
       }
@@ -592,6 +604,15 @@ namespace ttg_parsec {
       }
 
       if (readers == copy_in->mutable_tag) {
+        if (copy_res->push_task != nullptr) {
+          if (readonly) {
+            parsec_ttg_task_base_t *push_task = reinterpret_cast<parsec_ttg_task_base_t *>(copy_res->push_task);
+            if (push_task->defer_writer) {
+              /* there is a writer but it signalled that it wants to wait for readers to complete */
+              return copy_res;
+            }
+          }
+        }
         /* someone is going to write into this copy -> we need to make a copy */
         copy_res = NULL;
         if (readonly) {
@@ -625,8 +646,13 @@ namespace ttg_parsec {
           assert(nullptr != task);
           copy_in->push_task = &task->parsec_task;
         } else {
-          /* there are readers of this copy already, make a copy that we can mutate */
-          copy_res = NULL;
+          if (task->defer_writer && !copy_res->is_mutable()) {
+            /* we're the first writer and want to wait for all readers to complete */
+            copy_res->push_task = &task->parsec_task;
+          } else {
+            /* there are readers of this copy already, make a copy that we can mutate */
+            copy_res = NULL;
+          }
         }
       }
 
@@ -758,7 +784,9 @@ namespace ttg_parsec {
                   "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
     // create a virtual control input if the input list is empty, to be used in invoke()
     using actual_input_tuple_type = std::conditional_t<!ttg::meta::typelist_is_empty_v<input_valueTs>,
-                                                       ttg::meta::typelist_to_tuple_t<input_valueTs>, std::tuple<void>>;
+                                                          ttg::meta::remove_wrapper_tuple_t<
+                                                              ttg::meta::typelist_to_tuple_t<input_valueTs>>,
+                                                          std::tuple<void>>;
     using input_tuple_type = ttg::meta::typelist_to_tuple_t<input_valueTs>;
     static_assert(ttg::meta::is_tuple_v<output_terminalsT>,
                   "Second template argument for ttg::TT must be std::tuple containing the output terminal types");
@@ -801,6 +829,8 @@ namespace ttg_parsec {
     using input_values_tuple_type = ttg::meta::drop_void_t<ttg::meta::decayed_typelist_t<input_tuple_type>>;
     using input_refs_tuple_type = ttg::meta::drop_void_t<ttg::meta::add_glvalue_reference_tuple_t<input_tuple_type>>;
 
+    using aggregator_factory_tuple_type = ttg::meta::aggregator_factory_tuple_type_t<input_edges_type>;
+
     static constexpr int numinvals =
         std::tuple_size_v<input_refs_tuple_type>;  // number of input arguments with values (i.e. omitting the control
                                                    // input, if any)
@@ -827,6 +857,7 @@ namespace ttg_parsec {
 
     input_terminals_type input_terminals;
     output_terminalsT output_terminals;
+    aggregator_factory_tuple_type aggregator_factories;
 
    protected:
     const auto &get_output_terminals() const { return output_terminals; }
@@ -863,6 +894,8 @@ namespace ttg_parsec {
     ttg::meta::detail::input_reducers_t<actual_input_tuple_type>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
     std::array<std::size_t, numins> static_stream_goal;
+
+    bool m_defer_writer = TTG_PARSEC_DEFER_WRITER;
 
    public:
     ttg::World get_world() const { return world; }
@@ -1255,6 +1288,38 @@ namespace ttg_parsec {
       set_arg_local_impl<i>(ttg::Void{}, *valueptr);
     }
 
+    template<std::size_t I, std::size_t ...Is>
+    void setup_aggregators(task_t *t, std::index_sequence<I, Is...>) {
+
+      using valueT = std::tuple_element_t<I, input_values_full_tuple_type>;
+      constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
+      constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
+      auto is_aggregator_check =
+        [&](){
+          if constexpr (valueT_is_Void) return false;
+          else return ttg::detail::is_aggregator_v<typename std::tuple_element_t<I, input_edges_type>::value_type>; };
+      constexpr bool is_aggregator = is_aggregator_check();
+      if constexpr (is_aggregator) {
+        /* create a new aggregator and put it in */
+        using aggregator_t = typename std::tuple_element_t<I, input_edges_type>::value_type;
+        aggregator_t agg = std::get<I>(aggregator_factories)(t->key);
+        size_t target = agg.target();
+        ttg_parsec::detail::ttg_data_copy_t *agg_copy;
+        agg_copy = detail::create_new_datacopy(std::move(agg));
+        t->parsec_task.data[I].data_in = agg_copy;
+        if (target == 0) {
+          /* there won't be any data coming in, so release that dependency immediately */
+          ++t->in_data_count;
+        } else {
+          t->stream[I].goal = target;
+        }
+      }
+      // recurse to the next input
+      if constexpr (sizeof...(Is) > 0) {
+        setup_aggregators(t, std::index_sequence<Is...>());
+      }
+    }
+
     template <typename Key>
     task_t *create_new_task(const Key &key) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
@@ -1282,6 +1347,8 @@ namespace ttg_parsec {
       for (int i = 0; i < static_stream_goal.size(); ++i) {
         newtask->stream[i].goal = static_stream_goal[i];
       }
+
+      setup_aggregators(newtask, std::make_index_sequence<numins>());
 
       ttg::trace(world.rank(), ":", get_name(), " : ", key, ": creating task");
       return newtask;
@@ -1312,31 +1379,76 @@ namespace ttg_parsec {
       task_t *task;
       auto &world_impl = world.impl();
       auto &reducer = std::get<i>(input_reducers);
+      auto is_aggregator_check =
+        [&](){
+          if constexpr (valueT_is_Void) return false;
+          else return ttg::detail::is_aggregator_v<typename std::tuple_element_t<i, input_edges_type>::value_type>; };
+      constexpr bool is_aggregator = is_aggregator_check();
       bool release = true;
       bool remove_from_hash = true;
+      bool use_hash_table = is_aggregator || (numins > 1) || reducer;
       /* If we have only one input and no reducer on that input we can skip the hash table */
-      if (numins > 1 || reducer) {
+      if (use_hash_table) {
         parsec_hash_table_lock_bucket(&tasks_table, hk);
         if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
           task = create_new_task(key);
           world_impl.increment_created();
           parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
-        } else if (!reducer && numins == (task->in_data_count + 1)) {
+        } else if (!reducer && !is_aggregator && numins == (task->in_data_count + 1)) {
           /* remove while we have the lock */
           parsec_hash_table_nolock_remove(&tasks_table, hk);
           remove_from_hash = false;
         }
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        /* we'll keep the lock for later */
       } else {
         task = create_new_task(key);
         world_impl.increment_created();
         remove_from_hash = false;
       }
 
-      if (reducer) {  // is this a streaming input? reduce the received value
+      /* TODO: fix the case of void keys and value! */
+      if constexpr (is_aggregator && !keyT_is_Void && !valueT_is_Void) {
+
+        /* we use the lock to ensure mutual exclusion when inserting into the aggregator */
+
+        using aggregator_t = typename std::tuple_element_t<i, input_edges_type>::value_type;
+        aggregator_t* agg;
+        detail::ttg_data_copy_t *agg_copy = static_cast<detail::ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
+        assert(agg_copy != nullptr);
+        agg = reinterpret_cast<aggregator_t *>(agg_copy->device_private);
+
+        detail::ttg_data_copy_t *copy;
+        if (nullptr != copy_in) {
+          /* register this copy with the task */
+          constexpr bool agg_is_const = std::is_const_v<std::tuple_element_t<i, input_tuple_type>>;
+          /* TODO: fix this */
+          static_assert(agg_is_const, "Only const aggregators are supported!");
+          copy = detail::register_data_copy<std::decay_t<Value>>(copy_in, task, agg_is_const);
+        } else {
+          copy = detail::create_new_datacopy(std::forward<Value>(value));
+        }
+        assert(copy->push_task == nullptr);
+        /* put the value into the aggregator */
+        agg->add_value(*reinterpret_cast<std::decay_t<Value> *>(copy->device_private), copy);
+        assert(agg->size() <= agg->target());
+        assert(agg->size() <= task->stream[i].goal);
+        release = (agg->size() == task->stream[i].goal);
+
+        if (release) {
+          if ((numins - 1) == task->in_data_count) {
+            parsec_hash_table_nolock_remove(&tasks_table, hk);
+            remove_from_hash = false;
+          }
+        }
+
+        /* release the hash table bucket */
+        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+
+      } else if (reducer) {  // is this a streaming input? reduce the received value
         // N.B. Right now reductions are done eagerly, without spawning tasks
         //      this means we must lock
-        parsec_hash_table_lock_bucket(&tasks_table, hk);
+
+        /* we use the lock for mutual exclusion for the reducer */
 
         if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
           // have a value already? if not, set, otherwise reduce
@@ -1348,19 +1460,28 @@ namespace ttg_parsec {
             copy = detail::create_new_datacopy(std::forward<Value>(value));
             task->parsec_task.data[i].data_in = copy;
           } else {
-            reducer(*reinterpret_cast<std::decay_t<valueT> *>(copy->device_private), value);
+            using decay_valueT = std::decay_t<valueT>;
+            reducer(*reinterpret_cast<decay_valueT *>(copy->device_private), value);
           }
         } else {
           reducer();  // even if this was a control input, must execute the reducer for possible side effects
         }
         task->stream[i].size++;
         release = (task->stream[i].size == task->stream[i].goal);
-        if (release) {
-          parsec_hash_table_nolock_remove(&tasks_table, hk);
-          remove_from_hash = false;
-        }
+        //if (release) {
+        //  parsec_hash_table_nolock_remove(&tasks_table, hk);
+        //  remove_from_hash = false;
+        //}
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
       } else {
+        /* release the lock, not needed anymore */
+        if (use_hash_table) {
+          if ((numins - 1) == task->in_data_count) {
+            parsec_hash_table_nolock_remove(&tasks_table, hk);
+            remove_from_hash = false;
+          }
+          parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        }
         /* whether the task needs to be deferred or not */
         if constexpr (!valueT_is_Void) {
           if (nullptr != task->parsec_task.data[i].data_in) {
@@ -1382,7 +1503,7 @@ namespace ttg_parsec {
           /* if we registered as a writer and were the first to register with this copy
            * we need to defer the release of this task to give other tasks a chance to
            * make a copy of the original data */
-          release = (copy->push_task == nullptr);
+          release = (copy->push_task != &task->parsec_task);
           task->parsec_task.data[i].data_in = copy;
         }
       }
@@ -1398,7 +1519,8 @@ namespace ttg_parsec {
 
       /* if remove_from_hash == false, someone has already removed the task from the hash table
        * so we know that the task is ready, no need to do atomic increments here */
-      bool is_ready = !task->remove_from_hash;
+      //bool is_ready = !task->remove_from_hash || ((numins -1) == task->in_data_count);
+      bool is_ready = ((numins -1) == task->in_data_count);
       int32_t count;
       if (is_ready) {
         count = numins;
@@ -2200,11 +2322,44 @@ namespace ttg_parsec {
 
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
 
+    template<std::size_t I, std::size_t ...Is>
+    static std::size_t release_data_copy_at(task_t *task, std::index_sequence<I, Is...>) {
+      using edge_value_type = typename std::tuple_element_t<I, input_edges_type>::value_type;
+      constexpr bool is_aggregator = ttg::detail::is_aggregator_v<edge_value_type>;
+      detail::ttg_data_copy_t *copy = static_cast<detail::ttg_data_copy_t *>(task->parsec_task.data[I].data_in);
+
+      if (nullptr != copy) {
+        if constexpr (is_aggregator) {
+          /* iterate over all copies in the aggregator and release them */
+          using aggregator_type = edge_value_type;
+          aggregator_type* agg = static_cast<aggregator_type*>(copy->device_private);
+          for (auto& v : agg->data()) {
+            auto* copy = reinterpret_cast<typename detail::ttg_data_value_copy_t<typename aggregator_type::value_type> *>(v.ptr);
+            assert(nullptr != copy);
+            detail::release_data_copy(copy);
+          }
+        }
+        detail::release_data_copy(copy);
+        task->parsec_task.data[I].data_in = nullptr;
+      }
+      if constexpr (sizeof...(Is)) {
+        return release_data_copy_at(task, std::index_sequence<Is...>());
+      }
+      return I;
+    }
+
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *t) {
       parsec_execution_stream_t *safe_es = parsec_ttg_es;
       parsec_ttg_es = es;
-      auto *task = (detail::parsec_ttg_task_base_t *)t;
-      for (int i = 0; i < task->data_count; i++) {
+      auto *task = (task_t *)t;
+      if constexpr (!std::is_void_v<keyT>) {
+        //std::cout << task->tt->get_name() << " complete_task_and_release " << task->key << " " << task->data_count << " data copies " << std::endl;
+      }
+      int i = 0;
+      if constexpr (numinedges > 0) {
+        i = release_data_copy_at(task, std::make_index_sequence<numinedges>());
+      }
+      for (; i < task->data_count; i++) {
         detail::ttg_data_copy_t *copy = static_cast<detail::ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
         if (nullptr == copy) continue;
         detail::release_data_copy(copy);
@@ -2217,7 +2372,8 @@ namespace ttg_parsec {
    public:
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
-    TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
+    TT(const input_edges_type &inedges,
+       const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        ttg::World world, keymapT &&keymap_ = keymapT(), priomapT &&priomap_ = priomapT())
         : ttg::TTBase(name, numinedges, numouts)
         , world(world)
@@ -2226,7 +2382,8 @@ namespace ttg_parsec {
                      ? decltype(keymap)(ttg::detail::default_keymap<keyT>(world))
                      : decltype(keymap)(std::forward<keymapT>(keymap_)))
         , priomap(decltype(keymap)(std::forward<priomapT>(priomap_)))
-        , static_stream_goal() {
+        , static_stream_goal()
+        , aggregator_factories(ttg::meta::make_aggregator_factory_tuple(inedges)) {
       // Cannot call these in base constructor since terminals not yet constructed
       if (innames.size() != numinedges) throw std::logic_error("ttg_parsec::TT: #input names != #input terminals");
       if (outnames.size() != numouts) throw std::logic_error("ttg_parsec::TT: #output names != #output terminals");
@@ -2328,7 +2485,7 @@ namespace ttg_parsec {
               typename priomapT = ttg::detail::default_priomap<keyT>>
     TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
        keymapT &&keymap = keymapT(ttg::default_execution_context()), priomapT &&priomap = priomapT())
-        : TT(name, innames, outnames, ttg::default_execution_context(), std::forward<keymapT>(keymap),
+        : TT(input_edges_type(), name, innames, outnames, ttg::default_execution_context(), std::forward<keymapT>(keymap),
              std::forward<priomapT>(priomap)) {}
 
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
@@ -2336,7 +2493,8 @@ namespace ttg_parsec {
     TT(const input_edges_type &inedges, const output_edges_type &outedges, const std::string &name,
        const std::vector<std::string> &innames, const std::vector<std::string> &outnames, ttg::World world,
        keymapT &&keymap_ = keymapT(), priomapT &&priomap = priomapT())
-        : TT(name, innames, outnames, world, std::forward<keymapT>(keymap_), std::forward<priomapT>(priomap)) {
+        : TT(inedges, name, innames, outnames, world, std::forward<keymapT>(keymap_), std::forward<priomapT>(priomap))
+         {
       connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numinedges>{}, inedges);
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
     }
@@ -2465,6 +2623,14 @@ namespace ttg_parsec {
         invoke<keyT>();
       else
         TTBase::invoke();
+    }
+
+    void set_defer_writer(bool value) {
+      m_defer_writer = value;
+    }
+
+    bool get_defer_writer(bool value) {
+      return m_defer_writer;
     }
 
    public:

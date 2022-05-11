@@ -15,6 +15,7 @@
 #include "ttg/base/keymap.h"
 #include "ttg/base/terminal.h"
 #include "ttg/base/world.h"
+#include "ttg/aggregator.h"
 #include "ttg/broadcast.h"
 #include "ttg/func.h"
 #include "ttg/reduce.h"
