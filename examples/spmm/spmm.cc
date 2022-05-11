@@ -51,11 +51,12 @@ namespace ttg {
     //   - when we create the object with the metadata, we use a constructor that initializes
     //     the data to 0, which is useless: the data could be left uninitialized
     static auto get_metadata(const blk_t &b) {
-      std::pair<int, int> dim{0, 0};  // single pair created with name dim
+      std::tuple<int, int, int> dim{0, 0, 0};  // single pair created with name dim //i can take tuple here
       if (!b.empty()) {
-        assert(b.range().extent().size() == 2);
+        assert(b.range().extent().size() == 3);
         std::get<0>(dim) = (int)b.range().extent(0);  // gets first element i.e. 0th element
         std::get<1>(dim) = (int)b.range().extent(1);  // gets second element i.e. 1th element
+        std::get<2>(dim) = (int)b.range().extent(2);
       }
       return dim;
     }
@@ -65,9 +66,9 @@ namespace ttg {
       else
         return boost::container::small_vector<iovec, 1>{};
     }
-    static auto create_from_metadata(const std::pair<int, int> &meta) {
-      if (meta != std::pair{0, 0})
-        return blk_t(btas::Range(std::get<0>(meta), std::get<1>(meta)),
+    static auto create_from_metadata(const std::tuple<int, int, int> &meta) {
+      if (meta != std::tuple{0, 0, 0})
+        return blk_t(btas::Range(std::get<0>(meta), std::get<1>(meta), std::get<2>(meta)),
                      0.0);  // if blk_t elements aren't 0, 0 then set them 0.0 each
       else
         return blk_t{};
@@ -187,11 +188,11 @@ std::ostream &operator<<(std::ostream &os, const Key<Rank> &key) {
 inline int tile2rank(int i, int j, int m, int P, int Q, int R) {
   int p = (i % P);
   int q = (j % Q);
-  int k = (m % R);
+  int s = (m % R);
   int r =
       (q * P) +
-      p;  // How to find rank in 2.5D
-          // case????????????????????????????????????????????????????????????????????????????????????????????????????????
+      p;  // What is this....processor rank...how to computer this for 2.5
+          // ????????????????????????????????????????????????????????????????????????????????????????????????????????
   return r;
 }
 
@@ -214,12 +215,13 @@ class Read_SpMatrix : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMat
     // std::cout<<"..........................."<<matrix_.outerSize()<<"\t"; // outersize is 4
     for (int k = 0; k < matrix_.outerSize(); ++k) {  // for runs from 0 to number of columns
       for (typename SpMatrix<Blk>::InnerIterator it(matrix_, k); it;
-           ++it) {  // InnerIterator iterates over each non-zero element of Kth column
+           ++it) {  // InnerIterator iterates over each non-zero element of Kth column of process gird/tensor
         if (rank ==
             this->get_keymap()(Key<2>({it.row(), it.col()})))  // The rank of a tensor is the number of indices required
                                                                // to uniquely select each element of the tensor.
-          ::send<0>(Key<2>({it.row(), it.col()}), it.value(),
-                    out);  // All non-zero values are seperated and stored in a 'out' tuple
+          ::send<0>(
+              Key<2>({it.row(), it.col()}), it.value(),
+              out);  // All non-zero values are seperated and stored in a 'out' tuple //every Pij string Aij and Bij
         std::cout << "printed values:" << it.col() << "," << it.row() << "," << rank;
         // cnt++;
       }
@@ -340,6 +342,7 @@ class SpMM {
   };  // class LocalBcastA
 
   /// broadcast A[i][k] to all procs where B[j][k]
+  // BcastA is broadcasting Aik across the row of process grid 2D
   class BcastA : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, ttg::typelist<Blk>> {
    public:
     using baseT = typename BcastA::ttT;
@@ -361,11 +364,13 @@ class SpMM {
       std::vector<bool> procmap(world.size());
       auto keymap = baseT::get_keymap();
       for (auto &j : b_rowidx_to_colidx_[k]) {
-        long proc = keymap(Key<2>({i, j}));
-        if (!procmap[proc]) {
-          ttg::trace("Broadcasting A[", i, "][", k, "] to proc ", proc);
-          ikp_keys.emplace_back(Key<3>({i, k, proc}));
-          procmap[proc] = true;
+        for (int t = 1; t < ; t++) {
+          long proc = keymap(Key<3>({i, j, t}));  // but in 2.5D proc will be identified by 3keys for 3 dimentions
+          if (!procmap[proc]) {                   // all proc stored in vector
+            ttg::trace("Broadcasting A[", i, "][", k, "] to proc ", proc);
+            ikp_keys.emplace_back(Key<3>({i, k, proc}));
+            procmap[proc] = true;
+          }
         }
       }
       ::broadcast<0>(ikp_keys, baseT::template get<0>(a_ik), a_ikp);
@@ -1035,7 +1040,7 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
 }
 
 #if defined(BTAS_IS_USABLE)
-static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, size_t M, size_t N, size_t K, int minTs,
+static void initBlSpRandom(const std::function<int(const Key<3> &)> &keymap, size_t M, size_t N, size_t K, int minTs,
                            int maxTs, double avgDensity, SpMatrix<> &A, SpMatrix<> &B, SpMatrix<> &Aref,
                            SpMatrix<> &Bref, bool buildRefs, std::vector<int> &mTiles, std::vector<int> &nTiles,
                            std::vector<int> &kTiles, std::vector<std::vector<long>> &a_rowidx_to_colidx,
@@ -1307,11 +1312,11 @@ int main(int argc, char **argv) {
   // int mpi_size = ttg::default_execution_context().size();  // size is number of process in MPI world
   int mpi_size = 16;
   int mpi_rank = ttg::default_execution_context().rank();  // rank of each process in MPI world
-  int best_pq = mpi_size;
+  int best_pqr = mpi_size;
   int P, Q;
   int R;
-  int cube_root = pow(mpi_size, (float)1 / 3);
-  std::cout << "cube root =" << cube_root << "\n";
+  int cube_root_c = pow(mpi_size, (float)1 / 3);
+  std::cout << "cube root =" << cube_root_c << "\n";
   for (int c = 1; c <= (int)(pow(mpi_size, (float)1 / 3)); c++) {
     std::cout << "value of c=" << c << "\n";
     for (int p = 1; p <= (int)sqrt(mpi_size / c); p++) {  // second run of for when p=2
@@ -1463,7 +1468,7 @@ int main(int argc, char **argv) {
       for (int nrun = 0; nrun < nb_runs; nrun++) {
         timed_measurement(A, B, keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
                           a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles, nTiles, kTiles, M, N, K,
-                          P, Q);
+                          P, Q, );
       }
     } else {
       // flow graph needs to exist on every node
@@ -1490,7 +1495,8 @@ int main(int argc, char **argv) {
       TTGUNUSED(connected);
 
       // ready, go! need only 1 kick, so must be done by 1 thread only
-      if (ttg::default_execution_context().rank() == 0) control.start(P, Q);
+      if (ttg::default_execution_context().rank() == 0)
+        control.start(P, Q);  // Not considering R bcoz matrix is 2D just process grid is 3D, don't confuse
 
       execute();
       fence();
