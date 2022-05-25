@@ -50,7 +50,7 @@ macro(add_ttg_executable)
 
         set(_compile_definitions "TTG_EXECUTABLE=1")
         if (r STREQUAL "mad")
-            list(APPEND _compile_definitions "TTG_USE_MADNESS=1;WORLD_INSTANTIATE_STATIC_TEMPLATES=1")
+            list(APPEND _compile_definitions "TTG_USE_MADNESS=1")
         elseif(r STREQUAL "parsec")
             list(APPEND _compile_definitions "TTG_USE_PARSEC=1")
         endif()
