@@ -635,7 +635,7 @@ namespace ttg_parsec {
          *       (current task) or there are others, in which we case won't
          *       touch it.
          */
-        if (1 == copy_in->num_readers()) {
+        if (1 == copy_in->num_readers() && !task->defer_writer) {
           /**
            * no other readers, mark copy as mutable and defer the release
            * of the task
@@ -645,11 +645,11 @@ namespace ttg_parsec {
           assert(nullptr != task);
           copy_in->push_task = &task->parsec_task;
         } else {
-          if (task->defer_writer && !copy_res->is_mutable()) {
+          if (task->defer_writer && nullptr == copy_in->push_task) {
             /* we're the first writer and want to wait for all readers to complete */
             copy_res->push_task = &task->parsec_task;
           } else {
-            /* there are readers of this copy already, make a copy that we can mutate */
+            /* there are writers and/or waiting already of this copy already, make a copy that we can mutate */
             copy_res = NULL;
           }
         }
