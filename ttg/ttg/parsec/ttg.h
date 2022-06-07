@@ -60,7 +60,7 @@
 #include <parsec/scheduling.h>
 #if defined(PARSEC_PROF_TRACE)
 #include <parsec/profiling.h>
-#define PARSEC_TTG_PROFILE_BACKEND 1
+#undef PARSEC_TTG_PROFILE_BACKEND 1
 #if defined(PARSEC_PROF_GRAPHER)
 #include <parsec/parsec_prof_grapher.h>
 #endif
@@ -70,6 +70,11 @@
 
 #include "ttg/parsec/ttg_data_copy.h"
 
+#undef TTG_PARSEC_DEBUG_TRACK_DATA_COPIES
+
+#if defined(TTG_PARSEC_DEBUG_TRACK_DATA_COPIES)
+#include <unordered_set>
+#endif
 
 /* Whether to defer a potential writer if there are readers.
  * This may avoid extra copies in exchange for concurrency.
@@ -647,7 +652,7 @@ namespace ttg_parsec {
         return i;
       }
       for (i = 0; i < task->data_count; ++i) {
-        auto copy = reinterpret_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
+        auto copy = static_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
         if (NULL != copy && copy->device_private == ptr) {
           return i;
         }
@@ -687,6 +692,15 @@ namespace ttg_parsec {
       task->data_count--;
     }
 
+#if defined(TTG_PARSEC_DEBUG_TRACK_DATA_COPIES)
+#warning "ttg::PaRSEC enables data copy tracking"
+    static std::unordered_set<ttg_data_copy_t *> pending_copies;
+    static std::mutex pending_copies_mutex;
+#endif
+#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
+    static int64_t parsec_ttg_data_copy_uid = 0;
+#endif
+
     template <typename Value>
     inline ttg_data_copy_t *create_new_datacopy(Value &&value) {
       using value_type = std::decay_t<Value>;
@@ -695,10 +709,18 @@ namespace ttg_parsec {
       // Keep track of additional memory usage
       if(ttg::default_execution_context().impl().profiling()) {
         copy->size = sizeof(Value);
+        copy->uid = parsec_atomic_fetch_inc_int64(&parsec_ttg_data_copy_uid);
         parsec_profiling_ts_trace_flags(ttg::default_execution_context().impl().parsec_ttg_profile_backend_allocate_datacopy, 
-                                        reinterpret_cast<uint64_t>(copy), 
+                                        static_cast<uint64_t>(copy->uid), 
                                         PROFILE_OBJECT_ID_NULL, &copy->size, 
                                         PARSEC_PROFILING_EVENT_COUNTER|PARSEC_PROFILING_EVENT_HAS_INFO);
+      }
+#endif
+#if defined(TTG_PARSEC_DEBUG_TRACK_DATA_COPIES)
+      {
+        const std::lock_guard<std::mutex> lock(pending_copies_mutex);
+        auto rc = pending_copies.insert(copy);
+        assert(std::get<1>(rc));
       }
 #endif
       return copy;
@@ -802,11 +824,18 @@ namespace ttg_parsec {
           parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)push_task;
           deferred_op->release_task();
         } else {
+#if defined(TTG_PARSEC_DEBUG_TRACK_DATA_COPIES)
+          {
+            const std::lock_guard<std::mutex> lock(pending_copies_mutex);
+            size_t rc = pending_copies.erase(copy);
+            assert(1 == rc);
+          }
+#endif
 #if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
           // Keep track of additional memory usage
           if(ttg::default_execution_context().impl().profiling()) {
             parsec_profiling_ts_trace_flags(ttg::default_execution_context().impl().parsec_ttg_profile_backend_free_datacopy, 
-                                            reinterpret_cast<uint64_t>(copy), 
+                                            static_cast<uint64_t>(copy->uid), 
                                             PROFILE_OBJECT_ID_NULL, &copy->size, 
                                             PARSEC_PROFILING_EVENT_COUNTER|PARSEC_PROFILING_EVENT_HAS_INFO);
           }
