@@ -113,6 +113,7 @@ int main(int argc, char **argv)
   }
 
   ttg::initialize(ttg_argc, ttg_argv, nthreads);
+  delete[] ttg_argv;
 
   ttg::trace_on();
 
