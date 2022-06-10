@@ -14,6 +14,8 @@
 
 namespace ttg {
 
+  /// \brief Base type for input terminals receiving messages annotated by task IDs of type `keyT`
+  /// \tparam <keyT> a task ID type (can be `void`)
   template <typename keyT = void>
   class InTerminalBase : public TerminalBase {
    public:
@@ -70,7 +72,10 @@ namespace ttg {
     }
   };
 
-  /// Input terminal
+  /// An input terminal for receiving messages annotated by task IDs of type `KeyT` and values of type `valueT`
+  /// \tparam <keyT> a task ID type (can be `void`)
+  /// \tparam <valueT> a data type (can be `void`); a const `valueT` indicates that the incoming data is passed by
+  ///         const reference
   template <typename keyT = void, typename valueT = void>
   class In : public InTerminalBase<keyT> {
    public:
@@ -105,8 +110,18 @@ namespace ttg {
     }
 
    public:
+    /// Default constructor of an Input Terminal
     In() : InTerminalBase<keyT>(std::is_const_v<valueT> ? TerminalBase::Type::Read : TerminalBase::Type::Consume){};
 
+    /// Define the callbacks used by the backend task system to implement data movement
+    /// when a data is set in this Input Terminal
+    /// \param[in] send_callback: when an object must be copied inside this terminal
+    /// \param[in] move_callback: when a rvalue reference is std::move onto this terminal
+    /// \param[in] bcast_callback: when this terminal receives a list of task identifiers to broadcast a data to
+    /// \param[in] finalize_callback: if the terminal is a reduce terminal, denotes that no other local thread
+    ///     will continue adding data onto this terminal
+    /// \param[in] setsize_callback: if the terminal is a reduce terminal, announces how many items will be set
+    ///     unto this terminal for reduction
     void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback,
                       const broadcast_callback_type &bcast_callback = broadcast_callback_type{},
                       const setsize_callback_type &setsize_callback = setsize_callback_type{},
@@ -218,6 +233,7 @@ namespace ttg {
     }
   };
 
+  /// detects whether a given type is an input terminal type
   template <typename T>
   inline constexpr bool is_input_terminal_v = false;
   template <typename keyT>
@@ -242,6 +258,8 @@ namespace ttg {
     using input_terminals_tuple_t = typename input_terminals_tuple<keyT, valuesT...>::type;
   }  // namespace detail
 
+  /// A base type for output terminals that send messages annotated by task IDs of type `KeyT`
+  /// \tparam <keyT> a task ID type (can be `void`)
   template <typename keyT = void>
   class OutTerminalBase : public TerminalBase {
    public:
@@ -295,7 +313,9 @@ namespace ttg {
     }
   };
 
-  /// Output terminal
+  /// An output terminal for sending messages annotated by task IDs of type `KeyT` and values of type `valueT`
+  /// \tparam <keyT> a task ID type (can be `void`)
+  /// \tparam <valueT> a data type (can be `void`)
   template <typename keyT = void, typename valueT = void>
   class Out : public OutTerminalBase<keyT> {
    public:
@@ -443,6 +463,7 @@ namespace ttg {
     }
   };
 
+  /// detects whether a given type is an output terminal type
   template <typename T>
   inline constexpr bool is_output_terminal_v = false;
   template <typename keyT>

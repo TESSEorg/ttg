@@ -10,6 +10,8 @@ $ cmake --build ttg/build --target install
 
 # prerequisites
 
+TTG is usable only on POSIX systems.
+
 ## mandatory prerequisites
 - [CMake](https://cmake.org/), version 3.14 or higher
 - C++ compiler with support for the [C++17 standard](http://www.iso.org/standard/68564.html), or a more recent standard. This includes the following compilers:
@@ -29,6 +31,7 @@ Also: it is _strongly_ recommended that the runtimes are built as parts of the T
 - [Boost](https://boost.org/) version 1.66 or later: needed to use TTG with classes serializable by the [Boost.Serialization](https://www.boost.org/doc/libs/master/libs/serialization/doc/index.html) library.
   - The [Boost.Serialization](https://www.boost.org/doc/libs/master/libs/serialization/doc/index.html) library is not header-only, i.e., it must be compiled.
   - If the Boost package is not detected TTG can download and build Boost as part of its build process; to do that configure TTG with the CMake cache variable `TTG_FETCH_BOOST` set to `ON` (e.g., by adding `-DTTG_FETCH_BOOST=ON` to the CMake executable command line)
+- ([Doxygen](http://www.doxygen.nl/), version 1.8.12 or later: needed for building documentation
 
 ## transitive prerequisites
 
@@ -48,9 +51,11 @@ TTG includes several examples that may require additional prerequisites. These a
   - [BTAS](https://github.com/ValeevGroup/BTAS) library: for the _block_-sparse case only
     - BTAS' prerequisites are listed [here](https://github.com/ValeevGroup/BTAS#prerequisites)
 
-# configure + build
-- `cmake -S /path/to/ttg/source/directory -B /path/to/ttg/build/directory <cmake args>`
-- `cmake --build /path/to/ttg/build/directory [--target <check-ttg | install>]`
+# build
+- configure: `cmake -S /path/to/ttg/source/directory -B /path/to/ttg/build/directory <cmake args>`
+- build+test: `cmake --build /path/to/ttg/build/directory --target check-ttg`
+- generate HTML dox: `cmake --build /path/to/ttg/build/directory --target html-ttg`
+- install: `cmake --build /path/to/ttg/build/directory --target install`
 
 ## useful cmake cache variables:
 
