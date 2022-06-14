@@ -8,7 +8,28 @@
 #include "ttg/util/meta.h"
 #include "ttg/util/typelist.h"
 
+#ifdef TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS
+#include <ttg/external/boost/callable_traits.hpp>
+#else
+#include <boost/callable_traits.hpp>
+#endif
+
 namespace ttg::meta {
+
+  //////////////////////////////////////
+  // nongeneric callables
+  //////////////////////////////////////
+  // handled using Boost.CallableTraits ... to detect whether a callable is generic or not detect existence of
+  // boost::callable_traits::args_t
+  template <typename, typename = void>
+  constexpr bool is_generic_callable_v = true;
+
+  template <typename T>
+  constexpr bool is_generic_callable_v<T, ttg::meta::void_t<boost::callable_traits::args_t<T, ttg::typelist>>> = false;
+
+  //////////////////////////////////////
+  // generic callables
+  //////////////////////////////////////
 
   //// Andrey's solution
 

@@ -23,8 +23,8 @@ cd boost_${VERSION_}
 ./bootstrap.sh && ./b2 tools/bcp
 
 #### extract boost/callable_traits.hpp and dependencies
-mkdir -p ../../ttg/ttg/external/boost/v${VERSION}
-dist/bin/bcp --unix-lines boost/callable_traits.hpp ../../../ttg/ttg/external/boost/v${VERSION}
+mkdir -p ../../../ttg/ttg/external
+dist/bin/bcp --unix-lines boost/callable_traits.hpp ../../../ttg/ttg/external
 
 #### cleanup
 rm -rf boost_${VERSION_}
