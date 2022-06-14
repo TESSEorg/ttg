@@ -298,9 +298,10 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
   // list argument types with which func can be invoked
   using gross_func_args_t = decltype(ttg::meta::compute_arg_binding_types_r<void>(func, candidate_func_args_t{}));
   constexpr auto DETECTED_HOW_TO_INVOKE_FUNC = !std::is_same_v<gross_func_args_t, std::tuple<>>;
-  static_assert(DETECTED_HOW_TO_INVOKE_FUNC,
-                "ttd::make_tt(func, inedges, ...): could not detect how to invoke func, either the signature of func "
-                "is faulty, or inedges does match the expected list of types, or both");
+  static_assert(
+      DETECTED_HOW_TO_INVOKE_FUNC,
+      "ttd::make_tt_tpl(func, inedges, ...): could not detect how to invoke func, either the signature of func "
+      "is faulty, or inedges does match the expected list of types, or both");
 
   constexpr bool have_outterm_tuple = !ttg::meta::is_last_void_v<gross_func_args_t>;
   // net argument typelist
