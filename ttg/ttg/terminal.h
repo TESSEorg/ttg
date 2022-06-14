@@ -233,16 +233,6 @@ namespace ttg {
     }
   };
 
-  /// detects whether a given type is an input terminal type
-  template <typename T>
-  inline constexpr bool is_input_terminal_v = false;
-  template <typename keyT>
-  inline constexpr bool is_input_terminal_v<InTerminalBase<keyT>> = true;
-  template <typename keyT, typename valueT>
-  inline constexpr bool is_input_terminal_v<In<keyT, valueT>> = true;
-  template <>
-  inline constexpr bool is_input_terminal_v<TerminalBase> = true;
-
   namespace detail {
     template <typename keyT, typename... valuesT>
     struct input_terminals_tuple {
@@ -257,6 +247,21 @@ namespace ttg {
     template <typename keyT, typename... valuesT>
     using input_terminals_tuple_t = typename input_terminals_tuple<keyT, valuesT...>::type;
   }  // namespace detail
+
+  namespace meta {
+    /// detects whether a given type is an input terminal type
+    template <typename T>
+    inline constexpr bool is_input_terminal_v = false;
+    template <typename keyT>
+    inline constexpr bool is_input_terminal_v<InTerminalBase<keyT>> = true;
+    template <typename keyT, typename valueT>
+    inline constexpr bool is_input_terminal_v<In<keyT, valueT>> = true;
+    template <>
+    inline constexpr bool is_input_terminal_v<TerminalBase> = true;
+
+    template <typename T>
+    struct is_input_terminal : std::bool_constant<is_input_terminal_v<T>> {};
+  }  // namespace meta
 
   /// A base type for output terminals that send messages annotated by task IDs of type `KeyT`
   /// \tparam <keyT> a task ID type (can be `void`)
@@ -463,15 +468,40 @@ namespace ttg {
     }
   };
 
-  /// detects whether a given type is an output terminal type
-  template <typename T>
-  inline constexpr bool is_output_terminal_v = false;
-  template <typename keyT>
-  inline constexpr bool is_output_terminal_v<OutTerminalBase<keyT>> = true;
-  template <typename keyT, typename valueT>
-  inline constexpr bool is_output_terminal_v<Out<keyT, valueT>> = true;
-  template <>
-  inline constexpr bool is_output_terminal_v<TerminalBase> = true;
+  namespace meta {
+    /// detects whether a given type is an output terminal type
+    template <typename T>
+    inline constexpr bool is_output_terminal_v = false;
+    template <typename keyT>
+    inline constexpr bool is_output_terminal_v<OutTerminalBase<keyT>> = true;
+    template <typename keyT, typename valueT>
+    inline constexpr bool is_output_terminal_v<Out<keyT, valueT>> = true;
+    template <>
+    inline constexpr bool is_output_terminal_v<TerminalBase> = true;
+
+    template <typename T>
+    struct is_output_terminal : std::bool_constant<is_output_terminal_v<T>> {};
+
+    template <typename T>
+    struct is_output_terminal_tuple : std::false_type {};
+    template <typename... Ts>
+    struct is_output_terminal_tuple<std::tuple<Ts...>> : probe_all<is_output_terminal, Ts...> {};
+    template <typename... Ts>
+    inline constexpr bool is_output_terminal_tuple_v = is_output_terminal_tuple<Ts...>::value;
+
+    template <typename T>
+    inline constexpr bool decays_to_output_terminal_tuple_v = is_output_terminal_tuple_v<std::decay_t<T>>;
+    template <typename T>
+    struct decays_to_output_terminal_tuple : std::bool_constant<decays_to_output_terminal_tuple_v<T>> {};
+
+    template <typename T>
+    inline constexpr bool is_nonconst_lvalue_reference_to_output_terminal_tuple_v =
+        is_output_terminal_tuple_v<std::decay_t<T>> &&std::is_lvalue_reference_v<T> &&
+        !std::is_const_v<std::remove_reference_t<T>>;
+    template <typename T>
+    struct is_nonconst_lvalue_reference_to_output_terminal_tuple
+        : std::bool_constant<is_nonconst_lvalue_reference_to_output_terminal_tuple_v<T>> {};
+  }  // namespace meta
 
 }  // namespace ttg
 
