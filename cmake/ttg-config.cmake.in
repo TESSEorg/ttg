@@ -42,4 +42,9 @@ if(NOT TARGET ttg)
   endif()
 endif()
 
+# if don't have Boost, use bundled Boost.CallableTraits
+if (NOT TARGET Boost::boost)
+  target_compile_definitions(ttg INTERFACE TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1)
+endif()
+
 set(TTG_FOUND TRUE)
