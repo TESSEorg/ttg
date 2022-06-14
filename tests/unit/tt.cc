@@ -145,6 +145,16 @@ namespace tt_i_iv {
   };
 }  // namespace tt_i_iv
 
+namespace args_pmf {
+  struct X {
+    auto f(int &i) { i = 1; }
+    template <typename T>
+    auto g(T &i) {
+      i = 1;
+    }
+  };
+}  // namespace args_pmf
+
 TEST_CASE("TemplateTask", "[core]") {
   SECTION("constructors") {
     {  // void task id, void data
@@ -248,6 +258,21 @@ TEST_CASE("TemplateTask", "[core]") {
             ttg::send(0, std::decay_t<decltype(key)>{}, std::decay_t<decltype(datum)>{});
           },
           ttg::edges(in), ttg::edges()));
+    }
+  }
+
+  SECTION("args_t") {
+    int i = 0;
+    auto f = [&i](int &j) { j = i; };
+    auto g = [&i](auto &j) { j = i; };
+    static_assert(!ttg::meta::is_generic_callable_v<decltype(f)>);
+    static_assert(ttg::meta::is_generic_callable_v<decltype(g)>);
+
+    {
+      static_assert(!ttg::meta::is_generic_callable_v<decltype(&args_pmf::X::f)>);
+      static_assert(std::is_same_v<boost::callable_traits::args_t<decltype(&args_pmf::X::f), ttg::typelist>,
+                                   ttg::typelist<args_pmf::X &, int &>>);
+      static_assert(!ttg::meta::is_generic_callable_v<decltype(&args_pmf::X::g<int>)>);
     }
   }
 }
