@@ -47,4 +47,8 @@ if (NOT TARGET Boost::boost)
   target_compile_definitions(ttg INTERFACE TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1)
 endif()
 
+# load CMake modules
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/modules")
+include(AddTTGExecutable)
+
 set(TTG_FOUND TRUE)

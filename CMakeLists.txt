@@ -144,6 +144,13 @@ configure_package_config_file(cmake/ttg-config.cmake.in
         CMAKE_INSTALL_INCLUDEDIR CMAKE_INSTALL_LIBDIR
         CMAKE_INSTALL_DOCDIR CMAKE_INSTALL_CMAKEDIR)
 
+# Install some CMake modules
+install(FILES
+        "${PROJECT_SOURCE_DIR}/cmake/modules/AddTTGExecutable.cmake"
+        "${PROJECT_SOURCE_DIR}/cmake/modules/AddTTGTestExecutable.cmake"
+        DESTINATION "${CMAKE_INSTALL_CMAKEDIR}/modules"
+        COMPONENT ttg-config)
+
 # Install config, version, and target files
 install(EXPORT ttg
         FILE "ttg-targets.cmake"
