@@ -3,12 +3,4 @@ project(test)
 
 find_package(ttg REQUIRED)
 
-add_executable(test-mad test.cpp)
-target_compile_features(test-mad PRIVATE cxx_std_17)
-target_compile_definitions(test-mad PRIVATE TTG_USE_MADNESS=1;WORLD_INSTANTIATE_STATIC_TEMPLATES=1)
-target_link_libraries(test-mad ttg-mad)
-
-add_executable(test-parsec test.cpp)
-target_compile_features(test-parsec PRIVATE cxx_std_17)
-target_compile_definitions(test-parsec PRIVATE TTG_USE_PARSEC=1)
-target_link_libraries(test-parsec ttg-parsec)
+add_ttg_executable(test test.cpp NOT_EXCLUDE_FROM_ALL)
