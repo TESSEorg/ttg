@@ -295,18 +295,30 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
   // net list of candidate argument types excludes the empty typelists for void arguments
   using candidate_func_args_t = ttg::meta::filter_t<gross_candidate_func_args_t, ttg::meta::typelist_is_not_empty>;
 
-  // list argument types with which func can be invoked
+  // compute list of argument types with which func can be invoked
+  constexpr static auto func_is_generic = ttg::meta::is_generic_callable_v<funcT>;
   using gross_func_args_t = decltype(ttg::meta::compute_arg_binding_types_r<void>(func, candidate_func_args_t{}));
-  constexpr auto DETECTED_HOW_TO_INVOKE_FUNC = !std::is_same_v<gross_func_args_t, std::tuple<>>;
-  static_assert(
-      DETECTED_HOW_TO_INVOKE_FUNC,
-      "ttd::make_tt_tpl(func, inedges, ...): could not detect how to invoke func, either the signature of func "
-      "is faulty, or inedges does match the expected list of types, or both");
+  constexpr auto DETECTED_HOW_TO_INVOKE_GENERIC_FUNC =
+      !func_is_generic || (func_is_generic && !std::is_same_v<gross_func_args_t, ttg::typelist<>>);
+  static_assert(DETECTED_HOW_TO_INVOKE_GENERIC_FUNC,
+                "ttd::make_tt_tpl(func, inedges, ...): could not detect how to invoke generic callable func, either "
+                "the signature of func "
+                "is faulty, or inedges does match the expected list of types, or both");
 
-  constexpr bool have_outterm_tuple = !ttg::meta::is_last_void_v<gross_func_args_t>;
   // net argument typelist
   using func_args_t = ttg::meta::drop_void_t<gross_func_args_t>;
   constexpr auto num_args = std::tuple_size_v<func_args_t>;
+
+  // if given out-terminal tuple, make sure it's passed via nonconst lvalue ref
+  constexpr bool have_outterm_tuple =
+      func_is_generic ? !ttg::meta::is_last_void_v<gross_func_args_t>
+                      : ttg::meta::probe_last_v<ttg::meta::is_nonconst_lvalue_reference_to_output_terminal_tuple, true,
+                                                gross_func_args_t>;
+  constexpr bool OUTTERM_TUPLE_PASSED_AS_NONCONST_LVALUE_REF =
+      have_outterm_tuple ? ttg::meta::probe_last_v<ttg::meta::is_nonconst_lvalue_reference, true, func_args_t> : true;
+  static_assert(
+      OUTTERM_TUPLE_PASSED_AS_NONCONST_LVALUE_REF,
+      "ttd::make_tt_tpl(func, ...): if given to func, the output terminal tuple must be passed by nonconst lvalue ref");
 
   static_assert(num_args == 3 - (void_key ? 1 : 0) - (have_outterm_tuple ? 0 : 1),
                 "ttg::make_tt_tpl(func, ...): func takes wrong number of arguments (2, or 1, if keyT=void + optional "
@@ -373,16 +385,28 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   using candidate_func_args_t = ttg::meta::filter_t<gross_candidate_func_args_t, ttg::meta::typelist_is_not_empty>;
 
   // gross argument typelist for invoking func, can include void for optional args
+  constexpr static auto func_is_generic = ttg::meta::is_generic_callable_v<funcT>;
   using gross_func_args_t = decltype(ttg::meta::compute_arg_binding_types_r<void>(func, candidate_func_args_t{}));
-  constexpr auto DETECTED_HOW_TO_INVOKE_FUNC = !std::is_same_v<gross_func_args_t, std::tuple<>>;
-  static_assert(DETECTED_HOW_TO_INVOKE_FUNC,
-                "ttd::make_tt(func, inedges, ...): could not detect how to invoke func, either the signature of func "
+  constexpr auto DETECTED_HOW_TO_INVOKE_GENERIC_FUNC =
+      !func_is_generic || (func_is_generic && !std::is_same_v<gross_func_args_t, ttg::typelist<>>);
+  static_assert(DETECTED_HOW_TO_INVOKE_GENERIC_FUNC,
+                "ttd::make_tt(func, inedges, ...): could not detect how to invoke generic callable func, either the "
+                "signature of func "
                 "is faulty, or inedges does match the expected list of types, or both");
 
-  constexpr bool have_outterm_tuple = !ttg::meta::is_last_void_v<gross_func_args_t>;
   // net argument typelist
   using func_args_t = ttg::meta::drop_void_t<gross_func_args_t>;
   constexpr auto num_args = std::tuple_size_v<func_args_t>;
+
+  // if given out-terminal tuple, make sure it's passed via nonconst lvalue ref
+  constexpr bool have_outterm_tuple =
+      func_is_generic ? !ttg::meta::is_last_void_v<gross_func_args_t>
+                      : ttg::meta::probe_last_v<ttg::meta::decays_to_output_terminal_tuple, false, gross_func_args_t>;
+  constexpr bool OUTTERM_TUPLE_PASSED_AS_NONCONST_LVALUE_REF =
+      have_outterm_tuple ? ttg::meta::probe_last_v<ttg::meta::is_nonconst_lvalue_reference, false, func_args_t> : true;
+  static_assert(
+      OUTTERM_TUPLE_PASSED_AS_NONCONST_LVALUE_REF,
+      "ttg::make_tt(func, ...): if given to func, the output terminal tuple must be passed by nonconst lvalue ref");
 
   // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
   using input_edge_value_types = ttg::meta::typelist<std::decay_t<input_edge_valuesT>...>;
@@ -394,7 +418,7 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
       !ttg::meta::is_any_nonconst_lvalue_reference_v<input_args_t>;
   static_assert(
       NO_ARGUMENTS_PASSED_AS_NONCONST_LVALUE_REF,
-      "ttg::make_tt_tpl(func, inedges, outedges): one or more arguments to func can only be passed by nonconst lvalue "
+      "ttg::make_tt(func, inedges, outedges): one or more arguments to func can only be passed by nonconst lvalue "
       "ref; this is illegal, should only pass arguments as const lavlue ref or (nonconst) rvalue ref");
   using decayed_input_args_t = ttg::meta::decayed_typelist_t<input_args_t>;
   // 3. full_input_args_t = edge-types with non-void types replaced by input_args_t

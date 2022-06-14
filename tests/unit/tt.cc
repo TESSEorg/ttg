@@ -161,13 +161,17 @@ TEST_CASE("TemplateTask", "[core]") {
       ttg::Edge<void, void> in;
       CHECK_NOTHROW(std::make_unique<tt_v_v::tt>(ttg::edges(in), ttg::edges(), ""));
 
-      // compilation error: can't deduce task_id
-      // CHECK_NOTHROW(ttg::make_tt([](std::tuple<>& outs) {}, ttg::edges(in), ttg::edges()));
-      // compilation error: can't deal with generic lambdas
-      // CHECK_NOTHROW(ttg::make_tt([](auto& outs) {}, ttg::edges(in), ttg::edges()));
+      // N.B. no need anymore to explicitly specify void task id
+      CHECK_NOTHROW(ttg::make_tt([](std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
+      // generic lambdas OK too
+      CHECK_NOTHROW(ttg::make_tt([](auto &outs) {}, ttg::edges(in), ttg::edges()));
+      // OK: output terminals passed by nonconst ref
+      CHECK_NOTHROW(ttg::make_tt([](std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
+      // OK: output terminals are optional
+      CHECK_NOTHROW(ttg::make_tt([]() {}, ttg::edges(in), ttg::edges()));
+
       // compilation error: outs must be passed by nonconst ref
       // CHECK_NOTHROW(ttg::make_tt([](const std::tuple<>& outs) {}, ttg::edges(in), ttg::edges()));
-      CHECK_NOTHROW(ttg::make_tt<void>([](std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
     }
     {  // nonvoid task id, void data
       ttg::Edge<int, void> in;
@@ -267,6 +271,12 @@ TEST_CASE("TemplateTask", "[core]") {
     auto g = [&i](auto &j) { j = i; };
     static_assert(!ttg::meta::is_generic_callable_v<decltype(f)>);
     static_assert(ttg::meta::is_generic_callable_v<decltype(g)>);
+    auto [f_is_generic, f_args_t_v] = ttg::meta::callable_args<decltype(f)>;
+    CHECK(!f_is_generic);
+    static_assert(std::is_same_v<decltype(f_args_t_v), ttg::typelist<int &>>);
+    auto [g_is_generic, g_args_t_v] = ttg::meta::callable_args<decltype(g)>;
+    CHECK(g_is_generic);
+    static_assert(std::is_same_v<decltype(g_args_t_v), ttg::typelist<>>);
 
     {
       static_assert(!ttg::meta::is_generic_callable_v<decltype(&args_pmf::X::f)>);

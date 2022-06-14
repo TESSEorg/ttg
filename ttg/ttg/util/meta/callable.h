@@ -21,11 +21,22 @@ namespace ttg::meta {
   //////////////////////////////////////
   // handled using Boost.CallableTraits ... to detect whether a callable is generic or not detect existence of
   // boost::callable_traits::args_t
-  template <typename, typename = void>
-  constexpr bool is_generic_callable_v = true;
+  template <typename Callable, typename = void>
+  struct is_generic_callable : std::true_type {};
 
-  template <typename T>
-  constexpr bool is_generic_callable_v<T, ttg::meta::void_t<boost::callable_traits::args_t<T, ttg::typelist>>> = false;
+  template <typename Callable>
+  struct is_generic_callable<Callable, ttg::meta::void_t<boost::callable_traits::args_t<Callable, ttg::typelist>>>
+      : std::false_type {};
+
+  template <typename Callable>
+  constexpr inline bool is_generic_callable_v = is_generic_callable<Callable>::value;
+
+  template <typename Callable, typename Enabler = void>
+  constexpr std::pair<bool, ttg::typelist<>> callable_args = {true, {}};
+
+  template <typename Callable>
+  constexpr auto callable_args<Callable, ttg::meta::void_t<boost::callable_traits::args_t<Callable, ttg::typelist>>> =
+      std::pair<bool, boost::callable_traits::args_t<Callable, ttg::typelist>>{false, {}};
 
   //////////////////////////////////////
   // generic callables
@@ -94,12 +105,20 @@ namespace ttg::meta {
   /// @tparam Typelists a pack of typelists encoding how each argument can be invoked
   /// @param func a reference to callable of type @p Func
   /// @param argument_type_lists a list of possible types to try for each argument; can contain `void`
-  /// @return a ttg::typelist encoding the first invocable combination of argument types discovered by
-  ///         row-major iteration
+  /// @return a ttg::typelist encoding:
+  ///         - the exact argument bindings used by `Func`, if @p func is a nongeneric callable;
+  ///         - the first invocable combination of argument types discovered by row-major iteration, if @p func is a
+  ///         generic callable
   template <typename Func, typename... Typelists>
   auto compute_arg_binding_types(Func& func, typelist<Typelists...> argument_type_lists) {
-    return compute_arg_binding_types_impl<0>(func, argument_type_lists,
-                                             std::make_index_sequence<sizeof...(Typelists)>{});
+    constexpr auto is_generic__args = callable_args<Func&>;
+    constexpr bool is_generic = is_generic__args.first;
+    if constexpr (is_generic) {
+      return compute_arg_binding_types_impl<0>(func, argument_type_lists,
+                                               std::make_index_sequence<sizeof...(Typelists)>{});
+    } else {
+      return is_generic__args.second;
+    }
   }
 
   /// @tparam ReturnType a type expected to be returned by @p Func
@@ -107,12 +126,20 @@ namespace ttg::meta {
   /// @tparam Typelists a pack of typelists encoding how each argument can be invoked
   /// @param func a reference to callable of type @p Func
   /// @param argument_type_lists a list of possible types to try for each argument; can contain `void`
-  /// @return a ttg::typelist encoding the first invocable combination of argument types discovered by
-  ///         row-major iteration
+  /// @return a ttg::typelist encoding:
+  ///         - the exact argument bindings used by `Func`, if @p func is a nongeneric callable;
+  ///         - the first invocable combination of argument types discovered by row-major iteration, if @p func is a
+  ///         generic callable
   template <typename ReturnType, typename Func, typename... Typelists>
   auto compute_arg_binding_types_r(Func& func, typelist<Typelists...> argument_type_lists) {
-    return compute_arg_binding_types_r_impl<0, ReturnType>(func, argument_type_lists,
-                                                           std::make_index_sequence<sizeof...(Typelists)>{});
+    constexpr auto is_generic__args = callable_args<Func&>;
+    constexpr bool is_generic = is_generic__args.first;
+    if constexpr (is_generic) {
+      return compute_arg_binding_types_r_impl<0, ReturnType>(func, argument_type_lists,
+                                                             std::make_index_sequence<sizeof...(Typelists)>{});
+    } else {
+      return is_generic__args.second;
+    }
   }
 
   /// @tparam T a non-reference type
