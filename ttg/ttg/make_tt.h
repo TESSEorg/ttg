@@ -251,15 +251,24 @@ struct CallableWrapTTArgsAsTypelist<funcT, funcT_receives_outterm_tuple, keyT, o
                                   std::remove_reference_t<input_valuesT>...>;
 };
 
+// clang-format off
 /// @brief Factory function to assist in wrapping a callable with signature
 ///
 /// @tparam keyT a task ID type
 /// @tparam funcT a callable type
 /// @tparam input_edge_valuesT a pack of types of input data
 /// @tparam output_edgesT a pack of types of output edges
-/// @param[in] func a callable object; if `ttg::meta::is_void_v<keyT>==true`, the signature
-///         must be `void(const std::tuple<input_valuesT&...>&, std::tuple<output_terminalsT...>&)`,
-///         else `void(const keyT&, const std::tuple<input_valuesT&...>&, std::tuple<output_terminalsT...>&)`
+/// @param[in] func a callable object; it can be _generic_ (e.g., a template function, a generic lambda, etc.; see
+///            below) or _nongeneric_ (with concrete types for its arguments). In either case its signature
+///            must match the following:
+///         - if `ttg::meta::is_void_v<keyT>==true`:
+///           - `void(const std::tuple<input_valuesT&...>&, std::tuple<output_terminalsT...>&)`: full form, with the explicitly-passed
+///             output terminals ensuring compile-time type-checking of the dataflow into the output terminals (see ttg::send);
+///           - `void(const std::tuple<input_valuesT&...>&)`: simplified form, with no type-checking of the dataflow into the output terminals;
+///         - if `ttg::meta::is_void_v<keyT>==false`:
+///           - `void(const keyT&, const std::tuple<input_valuesT&...>&, std::tuple<output_terminalsT...>&)`: full form, with the explicitly-passed
+/////             output terminals ensuring compile-time type-checking of the dataflow into the output terminals (see ttg::send);
+///           - `void(const keyT&, const std::tuple<input_valuesT&...>&)`: simplified form, with no type-checking of the dataflow into the output terminals.
 /// @param[in] inedges a tuple of input edges
 /// @param[in] outedges a tuple of output edges
 /// @param[in] name a string label for the resulting TT
@@ -267,8 +276,8 @@ struct CallableWrapTTArgsAsTypelist<funcT, funcT_receives_outterm_tuple, keyT, o
 /// @param[in] innames string labels for the respective input terminals of the resulting TT
 /// @param[in] outnames string labels for the respective output terminals of the resulting TT
 ///
-/// @internal To be able to handle generic callables the input edges are used to determine the trial set of
-/// argument types.
+/// @note Handling of generic @p func is described in the documentation of make_tt()
+// clang-format on
 template <typename keyT = void, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
 auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges = std::tuple<>{},
                  const std::tuple<output_edgesT...> &outedges = std::tuple<>{}, const std::string &name = "wrapper",
@@ -348,15 +357,24 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
+// clang-format off
 /// @brief Factory function to assist in wrapping a callable with signature
 ///
 /// @tparam keyT a task ID type
 /// @tparam funcT a callable type
 /// @tparam input_edge_valuesT a pack of types of input data
 /// @tparam output_edgesT a pack of types of output edges
-/// @param[in] func a callable object; if `ttg::meta::is_void_v<keyT>==true`, the signature
-///         must be `void(input_valuesT&&..., std::tuple<output_terminalsT...>&)`,
-///         else `void(const keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)`
+/// @param[in] func a callable object; it can be _generic_ (e.g., a template function, a generic lambda, etc.; see
+///            below) or _nongeneric_ (with concrete types for its arguments). In either case its signature
+///            must match the following:
+///         - if `ttg::meta::is_void_v<keyT>==true`:
+///           - `void(input_valuesT&&..., std::tuple<output_terminalsT...>&)`: full form, with the explicitly-passed
+///             output terminals ensuring compile-time type-checking of the dataflow into the output terminals (see ttg::send);
+///           - `void(input_valuesT&&...)`: simplified form, with no type-checking of the dataflow into the output terminals;
+///         - if `ttg::meta::is_void_v<keyT>==false`:
+///           - `void(const keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)`: full form, with the explicitly-passed
+/////             output terminals ensuring compile-time type-checking of the dataflow into the output terminals (see ttg::send);
+///           - `void(const keyT&, input_valuesT&&...)`: simplified form, with no type-checking of the dataflow into the output terminals.
 /// @param[in] inedges a tuple of input edges
 /// @param[in] outedges a tuple of output edges
 /// @param[in] name a string label for the resulting TT
@@ -364,8 +382,21 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
 /// @param[in] innames string labels for the respective input terminals of the resulting TT
 /// @param[in] outnames string labels for the respective output terminals of the resulting TT
 ///
-/// @internal To be able to handle generic callables the input edges are used to determine the trial set of
-/// argument types.
+/// @note For generic callables the arguments that are used read-only should be declared as `U&` (where `U` is the corresponding template parameter)
+///       or `auto&` (in contexts such as generic lambdas where template arguments are implicit). The arguments that are
+///       to be consumed (e.g. mutated, moved, etc.) should be declared as `U&&` or `auto&&` (i.e., as universal references).
+///       For example, in
+///       @code
+///          make_tt([](auto& key, auto& datum1, auto&& datum2) { ... }, ...);
+///       @endcode
+///       the task id (`key`) and the first datum will be passed by const lvalue reference (i.e. no copy will be created by the runtime),
+///       whereas the second datum will be passed by an rvalue reference, which may cause copying.
+///       The corresponding free function analog of the above lambda is:
+///       @code
+///          template <typename K, typename D1, typename D2>
+///          void func (K& key, D1& datum1, D2&& datum2) { ... }
+///       @endcode
+// clang-format on
 template <typename keyT = void, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
 auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges = std::tuple<>{},
              const std::tuple<output_edgesT...> &outedges = std::tuple<>{}, const std::string &name = "wrapper",
