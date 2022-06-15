@@ -104,6 +104,24 @@ namespace ttg {
     template <template <typename> typename Predicate, bool Default, typename... Ts>
     constexpr bool probe_last_v = probe_last<Predicate, Default, Ts...>::value;
 
+    template <template <typename> typename Predicate, bool Default, typename... Ts>
+    struct probe_first;
+
+    template <template <typename> typename Predicate, bool Default>
+    struct probe_first<Predicate, Default> : public std::bool_constant<Default> {};
+
+    template <template <typename> typename Predicate, bool Default, typename T1, typename... Ts>
+    struct probe_first<Predicate, Default, T1, Ts...> : public std::bool_constant<Predicate<T1>::value> {};
+
+    template <template <typename> typename Predicate, bool Default, typename... Ts>
+    struct probe_first<Predicate, Default, std::tuple<Ts...>> : public probe_first<Predicate, Default, Ts...> {};
+
+    template <template <typename> typename Predicate, bool Default, typename... Ts>
+    struct probe_first<Predicate, Default, ttg::typelist<Ts...>> : public probe_first<Predicate, Default, Ts...> {};
+
+    template <template <typename> typename Predicate, bool Default, typename... Ts>
+    constexpr bool probe_first_v = probe_first<Predicate, Default, Ts...>::value;
+
     template <template <typename> typename Predicate, typename... Ts>
     struct probe_any : std::bool_constant<(Predicate<Ts>::value || ...)> {};
 
@@ -204,6 +222,13 @@ namespace ttg {
     };
     template <typename T>
     using void_to_Void_t = typename void_to_Void<T>::type;
+
+    template <typename T>
+    constexpr bool is_const_lvalue_reference_v =
+        std::is_lvalue_reference_v<T> &&std::is_const_v<std::remove_reference_t<T>>;
+
+    template <typename T>
+    struct is_const_lvalue_reference : std::bool_constant<is_const_lvalue_reference_v<T>> {};
 
     template <typename T>
     constexpr bool is_nonconst_lvalue_reference_v =
