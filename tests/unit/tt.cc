@@ -159,7 +159,11 @@ TEST_CASE("TemplateTask", "[core]") {
   SECTION("constructors") {
     {  // void task id, void data
       ttg::Edge<void, void> in;
+
+      // write TT as a class
       CHECK_NOTHROW(std::make_unique<tt_v_v::tt>(ttg::edges(in), ttg::edges(), ""));
+
+      // ... or wrap a lambda via make_tt
 
       // N.B. no need anymore to explicitly specify void task id
       CHECK_NOTHROW(ttg::make_tt([](std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
@@ -175,41 +179,77 @@ TEST_CASE("TemplateTask", "[core]") {
     }
     {  // nonvoid task id, void data
       ttg::Edge<int, void> in;
+
+      // write TT as a class
       CHECK_NOTHROW(std::make_unique<tt_i_v::tt>(ttg::edges(in), ttg::edges(), ""));
 
+      // ... or wrap a lambda via make_tt
+
+      // OK
+      CHECK_NOTHROW(ttg::make_tt([](const int &task_id, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
       // compilation error: must pass task_id by const lvalue ref
       // CHECK_NOTHROW(ttg::make_tt([](int task_id, std::tuple<>& outs) {}, ttg::edges(in), ttg::edges()));
-      CHECK_NOTHROW(ttg::make_tt([](const int &task_id, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
+      // OK: out-terminals are optional
+      CHECK_NOTHROW(ttg::make_tt([](const int &task_id) {}, ttg::edges(in), ttg::edges()));
+      // generic lambdas OK too
+      CHECK_NOTHROW(ttg::make_tt([](auto &task_id) {}, ttg::edges(in), ttg::edges()));
+      CHECK_NOTHROW(ttg::make_tt([](auto &task_id, auto &&outs) {}, ttg::edges(in), ttg::edges()));
+      // WARNING: mixed (some generic, some not) lambdas can't work, the generic mechanism deduces the last argument to
+      // be std::tuple<>&
+      CHECK_NOTHROW(ttg::make_tt([](auto &task_id, const std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
+
+      // compilation error: must pass task_id by const lvalue ref
+      CHECK_NOTHROW(ttg::make_tt([](auto &task_id, const std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
     }
     {  // void task id, nonvoid data
       ttg::Edge<void, int> in;
-      CHECK_NOTHROW(std::make_unique<tt_v_i::tt>(ttg::edges(in), ttg::edges(), ""));
-      CHECK_NOTHROW(ttg::make_tt<void>([](const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
-
       ttg::Edge<void, void> in2;
+
+      // write TT as a class
+      CHECK_NOTHROW(std::make_unique<tt_v_i::tt>(ttg::edges(in), ttg::edges(), ""));
       CHECK_NOTHROW(std::make_unique<tt_v_iv::tt>(ttg::edges(in, in2), ttg::edges(), ""));
-      CHECK_NOTHROW(ttg::make_tt<void>([](const int &datum, std::tuple<> &outs) {}, ttg::edges(in, in2), ttg::edges()));
+
+      // ... or wrap a lambda via make_tt
+
+      // nongeneric
+      CHECK_NOTHROW(ttg::make_tt([](const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
+      CHECK_NOTHROW(ttg::make_tt([](const int &datum, std::tuple<> &outs) {}, ttg::edges(in, in2), ttg::edges()));
+      // generic
+      CHECK_NOTHROW(ttg::make_tt([](auto &datum, auto &&outs) {}, ttg::edges(in), ttg::edges()));
+      CHECK_NOTHROW(ttg::make_tt([](auto &datum, auto &&outs) {}, ttg::edges(in, in2), ttg::edges()));
+      // OK: outterm tuple is optional
+      CHECK_NOTHROW(ttg::make_tt([](auto &datum) {}, ttg::edges(in, in2), ttg::edges()));
     }
     {  // nonvoid task id, nonvoid data
       ttg::Edge<int, int> in;
+
+      // write TT as a class
       CHECK_NOTHROW(std::make_unique<tt_i_i::tt>(ttg::edges(in), ttg::edges(), ""));
+
+      // ... or wrap a lambda via make_tt
       CHECK_NOTHROW(
           ttg::make_tt([](const int &key, const int &datum, std::tuple<> &outs) {}, ttg::edges(in), ttg::edges()));
+      CHECK_NOTHROW(ttg::make_tt([](auto &key, auto &datum, auto &&outs) {}, ttg::edges(in), ttg::edges()));
     }
     {  // nonvoid task id, nonvoid data, generic operator
       ttg::Edge<int, int> in;
       ttg::Edge<int, int> out;
+
+      // write TT as a class
       CHECK_NOTHROW(std::make_unique<tt_i_t::tt>(ttg::edges(in), ttg::edges(), ""));
 
-      // same, but using generic lambdas
+      // ... or wrap a lambda via make_tt
 
       // testing generic lambda introspection
       auto func0 = [](auto key, auto &&datum0, auto &datum1, const auto &datum2, auto datum3, auto &outs) {};
+      // OK: all of {auto&&, auto&, const auto&} bind to const T&
       static_assert(std::is_invocable<decltype(func0), int, const float &, const float &, const float &, const float &,
                                       std::tuple<> &>::value);
-      // error: auto& does not bind to T&&
-      // static_assert(std::is_invocable<decltype(func0), int, float&&, float&&, float&&, float&&, std::tuple<>
-      // &>::value);
+      // compile error: auto& does not bind to T&&, while {auto&&, const auto&} do
+      // static_assert(std::is_invocable<decltype(func0), int, float&&, float&&, float&&, float&&,
+      // std::tuple<>&>::value); OK: all of {auto&&, auto&, const auto&} bind to T&
+      static_assert(std::is_invocable<decltype(func0), int, float &, float &, float &, float &, std::tuple<> &>::value);
+
       static_assert(ttg::meta::is_invocable_typelist_v<
                     decltype(func0), ttg::typelist<int, float &&, const float &, float &&, float &&, std::tuple<> &>>);
       static_assert(std::is_same_v<
