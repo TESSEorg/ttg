@@ -299,7 +299,7 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
   constexpr static auto func_is_generic = ttg::meta::is_generic_callable_v<funcT>;
   using gross_func_args_t = decltype(ttg::meta::compute_arg_binding_types_r<void>(func, candidate_func_args_t{}));
   constexpr auto DETECTED_HOW_TO_INVOKE_GENERIC_FUNC =
-      !func_is_generic || (func_is_generic && !std::is_same_v<gross_func_args_t, ttg::typelist<>>);
+      func_is_generic ? !std::is_same_v<gross_func_args_t, ttg::typelist<>> : true;
   static_assert(DETECTED_HOW_TO_INVOKE_GENERIC_FUNC,
                 "ttd::make_tt_tpl(func, inedges, ...): could not detect how to invoke generic callable func, either "
                 "the signature of func "
@@ -308,6 +308,12 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
   // net argument typelist
   using func_args_t = ttg::meta::drop_void_t<gross_func_args_t>;
   constexpr auto num_args = std::tuple_size_v<func_args_t>;
+
+  // if given task id, make sure it's passed via const lvalue ref
+  constexpr bool TASK_ID_PASSED_AS_CONST_LVALUE_REF =
+      !void_key ? ttg::meta::probe_first_v<ttg::meta::is_const_lvalue_reference, true, func_args_t> : true;
+  static_assert(TASK_ID_PASSED_AS_CONST_LVALUE_REF,
+                "ttg::make_tt(func, ...): if given to func, the task id must be passed by const lvalue ref");
 
   // if given out-terminal tuple, make sure it's passed via nonconst lvalue ref
   constexpr bool have_outterm_tuple =
@@ -388,7 +394,7 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   constexpr static auto func_is_generic = ttg::meta::is_generic_callable_v<funcT>;
   using gross_func_args_t = decltype(ttg::meta::compute_arg_binding_types_r<void>(func, candidate_func_args_t{}));
   constexpr auto DETECTED_HOW_TO_INVOKE_GENERIC_FUNC =
-      !func_is_generic || (func_is_generic && !std::is_same_v<gross_func_args_t, ttg::typelist<>>);
+      func_is_generic ? !std::is_same_v<gross_func_args_t, ttg::typelist<>> : true;
   static_assert(DETECTED_HOW_TO_INVOKE_GENERIC_FUNC,
                 "ttd::make_tt(func, inedges, ...): could not detect how to invoke generic callable func, either the "
                 "signature of func "
@@ -397,6 +403,12 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   // net argument typelist
   using func_args_t = ttg::meta::drop_void_t<gross_func_args_t>;
   constexpr auto num_args = std::tuple_size_v<func_args_t>;
+
+  // if given task id, make sure it's passed via const lvalue ref
+  constexpr bool TASK_ID_PASSED_AS_CONST_LVALUE_REF =
+      !void_key ? ttg::meta::probe_first_v<ttg::meta::is_const_lvalue_reference, true, func_args_t> : true;
+  static_assert(TASK_ID_PASSED_AS_CONST_LVALUE_REF,
+                "ttg::make_tt(func, ...): if given to func, the task id must be passed by const lvalue ref");
 
   // if given out-terminal tuple, make sure it's passed via nonconst lvalue ref
   constexpr bool have_outterm_tuple =
