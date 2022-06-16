@@ -143,6 +143,11 @@ namespace tt_i_iv {
 
     ~tt() {}
   };
+
+  template <typename K, typename D1, typename D2>
+  void func0(K &key, D1 &datum1, D2 &&datum2) {
+    abort();
+  }
 }  // namespace tt_i_iv
 
 namespace args_pmf {
@@ -152,6 +157,7 @@ namespace args_pmf {
     auto g(T &i) {
       i = 1;
     }
+    int i_m;
   };
 }  // namespace args_pmf
 
@@ -245,10 +251,20 @@ TEST_CASE("TemplateTask", "[core]") {
       // OK: all of {auto&&, auto&, const auto&} bind to const T&
       static_assert(std::is_invocable<decltype(func0), int, const float &, const float &, const float &, const float &,
                                       std::tuple<> &>::value);
+      // OK: ditto
+      static_assert(std::is_void_v<decltype(tt_i_iv::func0(std::declval<const int &>(), std::declval<const float &>(),
+                                                           std::declval<const float &>()))>);
       // compile error: auto& does not bind to T&&, while {auto&&, const auto&} do
-      // static_assert(std::is_invocable<decltype(func0), int, float&&, float&&, float&&, float&&,
-      // std::tuple<>&>::value); OK: all of {auto&&, auto&, const auto&} bind to T&
+      // static_assert(
+      //  std::is_invocable<decltype(func0), int, float &&, float &&, float &&, float &&, std::tuple<> &>::value);
+      // compile error: D1& does not bind to T&&, D2&& does
+      // static_assert(std::is_void_v<decltype(tt_i_iv::func0(std::declval<const int &>(), std::declval<float &&>(),
+      //                                                      std::declval<float &&>()))>);
+      // OK: all of {auto&&, auto&, const auto&} bind to T&
       static_assert(std::is_invocable<decltype(func0), int, float &, float &, float &, float &, std::tuple<> &>::value);
+      // OK: ditto
+      static_assert(std::is_void_v<decltype(tt_i_iv::func0(std::declval<const int &>(), std::declval<float &>(),
+                                                           std::declval<float &>()))>);
 
       static_assert(ttg::meta::is_invocable_typelist_v<
                     decltype(func0), ttg::typelist<int, float &&, const float &, float &&, float &&, std::tuple<> &>>);
