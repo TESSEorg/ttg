@@ -322,7 +322,7 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
   constexpr bool TASK_ID_PASSED_AS_CONST_LVALUE_REF =
       !void_key ? ttg::meta::probe_first_v<ttg::meta::is_const_lvalue_reference, true, func_args_t> : true;
   static_assert(TASK_ID_PASSED_AS_CONST_LVALUE_REF,
-                "ttg::make_tt(func, ...): if given to func, the task id must be passed by const lvalue ref");
+                "ttg::make_tt_tpl(func, ...): if given to func, the task id must be passed by const lvalue ref");
 
   // if given out-terminal tuple, make sure it's passed via nonconst lvalue ref
   constexpr bool have_outterm_tuple =
