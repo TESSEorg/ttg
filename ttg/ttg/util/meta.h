@@ -83,6 +83,12 @@ namespace ttg {
     template <typename Tuple, template <typename> typename Pred>
     using filtered_tuple_t = typename filtered_tuple<Tuple, Pred>::type;
 
+    // clang-format off
+    /// This metafunction applies `Predicate` is true when applied to the last element of `Ts...`, if not empty, else evaluates to `Default`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Default the metafunction result for the case of empty `Ts...`
+    /// \tparam Ts a type pack
+    // clang-format on
     template <template <typename> typename Predicate, bool Default, typename... Ts>
     struct probe_last;
 
@@ -101,9 +107,21 @@ namespace ttg {
     template <template <typename> typename Predicate, bool Default, typename... Ts>
     struct probe_last<Predicate, Default, ttg::typelist<Ts...>> : public probe_last<Predicate, Default, Ts...> {};
 
+    // clang-format off
+    /// This constexpr function applies `Predicate` is true when applied to the last element of `Ts...`, if not empty, else evaluates to `Default`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Default the metafunction result for the case of empty `Ts...`
+    /// \tparam Ts a type pack
+    // clang-format on
     template <template <typename> typename Predicate, bool Default, typename... Ts>
     constexpr bool probe_last_v = probe_last<Predicate, Default, Ts...>::value;
 
+    // clang-format off
+    /// This metafunction checks if `Predicate` is true when applied to the first element of `Ts...`, if not empty, else evaluates to `Default`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Default the metafunction result for the case of empty `Ts...`
+    /// \tparam Ts a type pack
+    // clang-format on
     template <template <typename> typename Predicate, bool Default, typename... Ts>
     struct probe_first;
 
@@ -119,9 +137,20 @@ namespace ttg {
     template <template <typename> typename Predicate, bool Default, typename... Ts>
     struct probe_first<Predicate, Default, ttg::typelist<Ts...>> : public probe_first<Predicate, Default, Ts...> {};
 
+    // clang-format off
+    /// This constexpr function checks if `Predicate` is true when applied to the first element of `Ts...`, if not empty, else evaluates to `Default`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Default the metafunction result for the case of empty `Ts...`
+    /// \tparam Ts a type pack
+    // clang-format on
     template <template <typename> typename Predicate, bool Default, typename... Ts>
     constexpr bool probe_first_v = probe_first<Predicate, Default, Ts...>::value;
 
+    // clang-format off
+    /// This metafunction checks if `Predicate` is true for any element of `Ts...`; evaluates to false for the empty `Ts...`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Ts a type pack
+    // clang-format on
     template <template <typename> typename Predicate, typename... Ts>
     struct probe_any : std::bool_constant<(Predicate<Ts>::value || ...)> {};
 
@@ -131,9 +160,19 @@ namespace ttg {
     template <template <typename> typename Predicate, typename... Ts>
     struct probe_any<Predicate, ttg::typelist<Ts...>> : public probe_any<Predicate, Ts...> {};
 
+    // clang-format off
+    /// This constexpr function checks if `Predicate` is true for any element of `Ts...`; evaluates to false for the empty `Ts...`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Ts a type pack
+    // clang-format on
     template <template <typename> typename Predicate, typename... Ts>
     constexpr bool probe_any_v = probe_any<Predicate, Ts...>::value;
 
+    // clang-format off
+    /// This metafunction checks if `Predicate` is true for all elements of `Ts...`; evaluates to true for the empty `Ts...`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Ts a type pack
+    // clang-format on
     template <template <typename> typename Predicate, typename... Ts>
     struct probe_all : std::bool_constant<(Predicate<Ts>::value && ...)> {};
 
@@ -143,6 +182,11 @@ namespace ttg {
     template <template <typename> typename Predicate, typename... Ts>
     struct probe_all<Predicate, ttg::typelist<Ts...>> : public probe_all<Predicate, Ts...> {};
 
+    // clang-format off
+    /// This constexpr function checks if `Predicate` is true for all elements of `Ts...`; evaluates to true for the empty `Ts...`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Ts a type pack
+    // clang-format on
     template <template <typename> typename Predicate, typename... Ts>
     constexpr bool probe_all_v = probe_all<Predicate, Ts...>::value;
 
