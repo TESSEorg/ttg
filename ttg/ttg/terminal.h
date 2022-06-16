@@ -256,8 +256,6 @@ namespace ttg {
     inline constexpr bool is_input_terminal_v<InTerminalBase<keyT>> = true;
     template <typename keyT, typename valueT>
     inline constexpr bool is_input_terminal_v<In<keyT, valueT>> = true;
-    template <>
-    inline constexpr bool is_input_terminal_v<TerminalBase> = true;
 
     template <typename T>
     struct is_input_terminal : std::bool_constant<is_input_terminal_v<T>> {};
@@ -476,8 +474,6 @@ namespace ttg {
     inline constexpr bool is_output_terminal_v<OutTerminalBase<keyT>> = true;
     template <typename keyT, typename valueT>
     inline constexpr bool is_output_terminal_v<Out<keyT, valueT>> = true;
-    template <>
-    inline constexpr bool is_output_terminal_v<TerminalBase> = true;
 
     template <typename T>
     struct is_output_terminal : std::bool_constant<is_output_terminal_v<T>> {};
