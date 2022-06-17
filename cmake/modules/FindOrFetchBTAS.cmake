@@ -30,9 +30,6 @@ if (NOT TARGET BTAS::BTAS)
     add_library(BTAS::BTAS ALIAS BTAS)
   endif(TARGET BTAS AND NOT TARGET BTAS::BTAS)
 
-  # set BTAS_CONFIG to the install location so that we know where to find it
-  set(BTAS_CONFIG ${CMAKE_INSTALL_PREFIX}/${BTAS_INSTALL_CMAKEDIR}/btas-config.cmake)
-
   # define macros specifying Fortran mangling convention, if necessary
   if (_linalgpp_use_standard_linalg_kits)
     if (NOT TARGET blaspp AND NOT TARGET lapackpp)
