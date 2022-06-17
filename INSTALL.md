@@ -31,6 +31,7 @@ Also: it is _strongly_ recommended that the runtimes are built as parts of the T
 - [Boost](https://boost.org/) version 1.66 or later: needed to use TTG with classes serializable by the [Boost.Serialization](https://www.boost.org/doc/libs/master/libs/serialization/doc/index.html) library.
   - The [Boost.Serialization](https://www.boost.org/doc/libs/master/libs/serialization/doc/index.html) library is not header-only, i.e., it must be compiled.
   - If the Boost package is not detected TTG can download and build Boost as part of its build process; to do that configure TTG with the CMake cache variable `TTG_FETCH_BOOST` set to `ON` (e.g., by adding `-DTTG_FETCH_BOOST=ON` to the CMake executable command line)
+  - *Note to package maintainers*: TTG also requires Boost.CallableTraits; if Boost is not found or built, TTG installs and uses a bundled copy of Boost.CallableTraits. To avoid the installation and use of the bundled Boost.CallableTraits configure TTG with the CMake cache variable `TTG_IGNORE_BUNDLED_EXTERNALS` set to `ON`.
 - ([Doxygen](http://www.doxygen.nl/), version 1.8.12 or later: needed for building documentation
 
 ## transitive prerequisites
@@ -59,8 +60,10 @@ TTG includes several examples that may require additional prerequisites. These a
 
 ## useful cmake cache variables:
 
-|Variable                         |Default             | Description   |
-|---------------------------------|--------------------|---------------|
-| `BUILD_TESTING`                 | `ON`               | whether target `check-ttg` and its relatives will actually build and run unit tests |
-| `TTG_EXAMPLES`                  | `OFF`              | whether target `check-ttg` and its relatives will actually build and run examples; setting this to `ON` will cause detection of several optional prerequisites, and (if missing) building from source |
-| `TTG_ENABLE_TRACE`              | `OFF`              | setting this to `ON` will enable the ability to instrument TTG code for tracing (see `ttg::trace()`, etc.); if this is set to `OFF`, `ttg::trace()` is a no-op |
+| Variable                       |Default             | Description                                                                                                                                                                                           |
+|--------------------------------|--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `BUILD_TESTING`                | `ON`               | whether target `check-ttg` and its relatives will actually build and run unit tests                                                                                                                   |
+| `TTG_EXAMPLES`                 | `OFF`              | whether target `check-ttg` and its relatives will actually build and run examples; setting this to `ON` will cause detection of several optional prerequisites, and (if missing) building from source |
+| `TTG_ENABLE_TRACE`             | `OFF`              | setting this to `ON` will enable the ability to instrument TTG code for tracing (see `ttg::trace()`, etc.); if this is set to `OFF`, `ttg::trace()` is a no-op                                        |
+| `TTG_FETCH_BOOST`              | `OFF`              | whether to download and build Boost automatically, if missing                                                                                                                                         |
+| `TTG_IGNORE_BUNDLED_EXTERNALS` | `OFF`              | whether to install and use bundled external dependencies (currently, only Boost.CallableTraits)                                                                                                       |
