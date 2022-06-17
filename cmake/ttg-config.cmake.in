@@ -10,6 +10,8 @@ set(Boost_CONFIG "@Boost_CONFIG@")
 
 set(TTG_TRACKED_BOOST_VERSION "@TTG_TRACKED_BOOST_VERSION@")
 
+set(TTG_IGNORE_BUNDLED_EXTERNALS @TTG_IGNORE_BUNDLED_EXTERNALS@)
+
 @PACKAGE_INIT@
 
 if (NOT TARGET MADworld AND MADNESS_CONFIG)
@@ -38,7 +40,11 @@ endif()
 
 # if don't have Boost, use bundled Boost.CallableTraits
 if (NOT TARGET Boost::boost)
-  target_compile_definitions(ttg INTERFACE TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1)
+  if (TTG_IGNORE_BUNDLED_EXTERNALS)
+    find_package(Boost ${TTG_TRACKED_BOOST_VERSION} QUIET REQUIRED)
+  else()
+    target_compile_definitions(ttg INTERFACE TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1)
+  endif()
 endif()
 
 # load CMake modules

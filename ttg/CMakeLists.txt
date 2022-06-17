@@ -57,11 +57,17 @@ set(ttg-sources
         ${ttg-impl-headers}
         ${ttg-base-headers}
         ${ttg-util-headers}
+        ${ttg-external-headers}
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/bug.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/env.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
     )
+set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers})
+if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
+  list(APPEND ttg-sources ${ttg-external-headers})
+  list(APPEND ttg-public-headers ${ttg-external-headers})
+endif()
 # optional dependencies
 if (TARGET Boost::boost)
   list(APPEND ttg-deps Boost::boost)
@@ -75,7 +81,7 @@ if (TTG_ENABLE_TRACE)
   list(APPEND ttg-defs "TTG_ENABLE_TRACE=1")
 endif (TTG_ENABLE_TRACE)
 
-add_ttg_library(ttg "${ttg-sources}" PUBLIC_HEADER "${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers};${ttg-external-headers}" LINK_LIBRARIES "${ttg-deps}" INCLUDE_DIRECTORIES "${ttg-incs}" COMPILE_DEFINITIONS "${ttg-defs}")
+add_ttg_library(ttg "${ttg-sources}" PUBLIC_HEADER "${ttg-public-headers}" LINK_LIBRARIES "${ttg-deps}" INCLUDE_DIRECTORIES "${ttg-incs}" COMPILE_DEFINITIONS "${ttg-defs}")
 
 ########################
 ####### Serialization
