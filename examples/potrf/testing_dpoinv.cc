@@ -65,6 +65,7 @@ int main(int argc, char **argv)
   int nruns = 3;
   const char* prof_filename = nullptr;
   char *opt = nullptr;
+  int sequential=0;
 
   if( (opt = getCmdOption(argv+1, argv+argc, "-N")) != nullptr ) {
     N = M = atoi(opt);
@@ -86,7 +87,9 @@ int main(int argc, char **argv)
     nruns = atoi(opt);
   }
 
-  bool sequential = cmdOptionExists(argv+1, argv+argc, "-seq");
+  if( (opt = getCmdOption(argv+1, argv+argc, "-seq")) != nullptr ) {
+    sequential = atoi(opt);
+  }
 
   bool ttg_dags = cmdOptionExists(argv+1, argv+argc, "-ttg-dag");
   bool verbose = cmdOptionExists(argv+1, argv+argc, "-v");
@@ -146,18 +149,14 @@ int main(int argc, char **argv)
                                  (size_t)parsec_datadist_getsizeoftype(dcA.super.mtype));
   parsec_data_collection_set_key((parsec_data_collection_t*)&dcA, (char*)"Matrix A");
 
-  if(sequential) {
+  if(sequential > 0) {
     for(int t = 0; t <= nruns; t++) {
       ttg::Edge<Key2, void> startuppotrf("startup POTRF");
       ttg::Edge<Key2, MatrixTile<double>> topotrf("To POTRF");
       ttg::Edge<Key2, MatrixTile<double>> torespotrf("To Res POTRF");
-      ttg::Edge<Key2, MatrixTile<double>> totrtri("To TRTRI");
-      ttg::Edge<Key2, MatrixTile<double>> torestrtri("To Res TRTRI");
-      ttg::Edge<Key2, MatrixTile<double>> tolauum("To LAUUM");
-      ttg::Edge<Key2, MatrixTile<double>> toresult("To result");
       std::chrono::time_point<std::chrono::high_resolution_clock> begpotrf, endpotrf;
-      std::chrono::time_point<std::chrono::high_resolution_clock> begtrtri, endtrtri;
-      std::chrono::time_point<std::chrono::high_resolution_clock> beglauum, endlauum;
+
+      /********************** First Step: Generation and POTRF  **********************/
 
       //Matrix<double>* A = new Matrix<double>(n_rows, n_cols, NB, NB);
       MatrixT<double> A{&dcA};
@@ -209,81 +208,138 @@ int main(int argc, char **argv)
         endpotrf = std::chrono::high_resolution_clock::now();
       }
 
-      /********************** Second step: TRTRI  **********************/
+      if( 1 == sequential ) {
+        ttg::Edge<Key2, MatrixTile<double>> topotri("To POTRI");
+        ttg::Edge<Key2, MatrixTile<double>> toresult("To result");
+        std::chrono::time_point<std::chrono::high_resolution_clock> begpotri, endpotri;
 
-      auto load_potrf = make_load_tt(A, totrtri, defer_cow_hint);
-      auto trtri_ttg = trtri::make_trtri_ttg(A, lapack::Diag::NonUnit, totrtri, torestrtri, defer_cow_hint);
-      auto store_trtri_ttg = make_result_ttg(A, torestrtri, defer_cow_hint);
+        /********************** Second step: POTRI  **********************/
 
-      connected = make_graph_executable(load_potrf.get());
-      assert(connected);
-      TTGUNUSED(connected);
-      if(verbose) {
-        std::cout << "Graph is connected: " << connected << std::endl;
-      }
+        auto load_potrf = make_load_tt(A, topotri, defer_cow_hint);
+        auto potri_ttg = potri::make_potri_ttg(A, topotri, toresult, defer_cow_hint);
+        auto store_potri_ttg = make_result_ttg(A, toresult, defer_cow_hint);
 
-      if (world.rank() == 0) {
-    #if 1
+        connected = make_graph_executable(load_potrf.get());
+        assert(connected);
+        TTGUNUSED(connected);
         if(verbose) {
-          std::cout << "==== begin dot ====\n";
-          std::cout << ttg::Dot()(load_potrf.get()) << std::endl;
-          std::cout << "==== end dot ====\n";
+          std::cout << "Graph is connected: " << connected << std::endl;
         }
-    #endif // 0
-        begtrtri = std::chrono::high_resolution_clock::now();
-      }
-      load_potrf->invoke();
 
-      ttg::fence(world);
-      if (world.rank() == 0) {
-        endtrtri = std::chrono::high_resolution_clock::now();
-      }
+        if (world.rank() == 0) {
+      #if 1
+          if(verbose) {
+            std::cout << "==== begin dot ====\n";
+            std::cout << ttg::Dot()(load_potrf.get()) << std::endl;
+            std::cout << "==== end dot ====\n";
+          }
+      #endif // 0
+          begpotri = std::chrono::high_resolution_clock::now();
+        }
+        load_potrf->invoke();
 
-      /********************** Last step: LAUUM  **********************/
+        ttg::fence(world);
+        if (world.rank() == 0 && t > 0) {
+          endpotri = std::chrono::high_resolution_clock::now();
+          end = endpotri;
 
-      auto load_trtri = make_load_tt(A, tolauum, defer_cow_hint);
-      auto lauum_ttg = lauum::make_lauum_ttg(A, tolauum, toresult, defer_cow_hint);
-      auto result = make_result_ttg(A, toresult, defer_cow_hint);
+          auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endpotrf - begpotrf).count());
+          std::cout << "POINV (POTRF+POTRI) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+                    << " POTRF TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+          
+          elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endpotri - begpotri).count());
+          std::cout << "POINV (POTRF+POTRI) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+                    << " TRTRI TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (potri::FLOPS_DPOTRI(N)) << " " << (potri::FLOPS_DPOTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
 
-      connected = make_graph_executable(load_trtri.get());
-      assert(connected);
-      TTGUNUSED(connected);
-      if( verbose ) {
-        std::cout << "Graph is connected: " << connected << std::endl;
-      }
+          elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
+          std::cout << "POINV (POTRF+POTRI) (" << (defer_cow_hint ? "with" : "without") << " defer writer) N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+                    << " TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N) + potri::FLOPS_DPOTRI(N)) << " " << ((potrf::FLOPS_DPOTRF(N)+potri::FLOPS_DPOTRI(N))/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+        }
+      } else {
+        ttg::Edge<Key2, MatrixTile<double>> totrtri("To TRTRI");
+        ttg::Edge<Key2, MatrixTile<double>> torestrtri("To Res TRTRI");
+        ttg::Edge<Key2, MatrixTile<double>> tolauum("To LAUUM");
+        ttg::Edge<Key2, MatrixTile<double>> toresult("To result");
+        std::chrono::time_point<std::chrono::high_resolution_clock> begtrtri, endtrtri;
+        std::chrono::time_point<std::chrono::high_resolution_clock> beglauum, endlauum;
 
-      if (world.rank() == 0) {
-    #if 1
+        /********************** Second step: TRTRI  **********************/
+
+        auto load_potrf = make_load_tt(A, totrtri, defer_cow_hint);
+        auto trtri_ttg = trtri::make_trtri_ttg(A, lapack::Diag::NonUnit, totrtri, torestrtri, defer_cow_hint);
+        auto store_trtri_ttg = make_result_ttg(A, torestrtri, defer_cow_hint);
+
+        connected = make_graph_executable(load_potrf.get());
+        assert(connected);
+        TTGUNUSED(connected);
         if(verbose) {
-          std::cout << "==== begin dot ====\n";
-          std::cout << ttg::Dot()(load_trtri.get()) << std::endl;
-          std::cout << "==== end dot ====\n";
+          std::cout << "Graph is connected: " << connected << std::endl;
         }
-    #endif // 0
-        beglauum = std::chrono::high_resolution_clock::now();
-      }
-      load_trtri->invoke();
 
-      ttg::fence(world);
-      if (world.rank() == 0 && t > 0) {
-        endlauum = std::chrono::high_resolution_clock::now();
-        end = endlauum;
+        if (world.rank() == 0) {
+      #if 1
+          if(verbose) {
+            std::cout << "==== begin dot ====\n";
+            std::cout << ttg::Dot()(load_potrf.get()) << std::endl;
+            std::cout << "==== end dot ====\n";
+          }
+      #endif // 0
+          begtrtri = std::chrono::high_resolution_clock::now();
+        }
+        load_potrf->invoke();
 
-        auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endpotrf - begpotrf).count());
-        std::cout << "SEQ POTRI -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads << " POTRF TTG Execution Time (milliseconds) : "
-                  << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
-        
-        elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endtrtri - begtrtri).count());
-        std::cout << "SEQ POTRI -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads << " TRTRI TTG Execution Time (milliseconds) : "
-                  << elapsed / 1E3 << " : Flops " << (trtri::FLOPS_DTRTRI(N)) << " " << (trtri::FLOPS_DTRTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+        ttg::fence(world);
+        if (world.rank() == 0) {
+          endtrtri = std::chrono::high_resolution_clock::now();
+        }
 
-        elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endlauum - beglauum).count());
-        std::cout << "SEQ POTRI -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads << " LAUUM TTG Execution Time (milliseconds) : "
-                  << elapsed / 1E3 << " : Flops " << (lauum::FLOPS_DLAUUM(N)) << " " << (lauum::FLOPS_DLAUUM(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+        /********************** Last step: LAUUM  **********************/
 
-        elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
-        std::cout << "SEQ POTRI N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads << " TTG Execution Time (milliseconds) : "
-                  << elapsed / 1E3 << " : Flops " << (potri::FLOPS_DPOTRI(N)) << " " << (potri::FLOPS_DPOTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+        auto load_trtri = make_load_tt(A, tolauum, defer_cow_hint);
+        auto lauum_ttg = lauum::make_lauum_ttg(A, tolauum, toresult, defer_cow_hint);
+        auto result = make_result_ttg(A, toresult, defer_cow_hint);
+
+        connected = make_graph_executable(load_trtri.get());
+        assert(connected);
+        TTGUNUSED(connected);
+        if( verbose ) {
+          std::cout << "Graph is connected: " << connected << std::endl;
+        }
+
+        if (world.rank() == 0) {
+      #if 1
+          if(verbose) {
+            std::cout << "==== begin dot ====\n";
+            std::cout << ttg::Dot()(load_trtri.get()) << std::endl;
+            std::cout << "==== end dot ====\n";
+          }
+      #endif // 0
+          beglauum = std::chrono::high_resolution_clock::now();
+        }
+        load_trtri->invoke();
+
+        ttg::fence(world);
+        if (world.rank() == 0 && t > 0) {
+          endlauum = std::chrono::high_resolution_clock::now();
+          end = endlauum;
+
+          auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endpotrf - begpotrf).count());
+          std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+                    << " POTRF TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+          
+          elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endtrtri - begtrtri).count());
+          std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+                    << " TRTRI TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (trtri::FLOPS_DTRTRI(N)) << " " << (trtri::FLOPS_DTRTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+
+          elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endlauum - beglauum).count());
+          std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+                    << " LAUUM TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (lauum::FLOPS_DLAUUM(N)) << " " << (lauum::FLOPS_DLAUUM(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+
+          elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
+          std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+                    << " TTG Execution Time (milliseconds) : " << elapsed / 1E3 
+                    << " : Flops " << (potrf::FLOPS_DPOTRF(N) + potri::FLOPS_DPOTRI(N)) << " " << ((potrf::FLOPS_DPOTRF(N)+potri::FLOPS_DPOTRI(N))/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+        }
       }
     }
   } else {
@@ -344,8 +400,9 @@ int main(int argc, char **argv)
         end = std::chrono::high_resolution_clock::now();
         auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
         end = std::chrono::high_resolution_clock::now();
-        std::cout << "NONSEQ POTRI N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads << " Execution Time (milliseconds) : "
-                  << elapsed / 1E3 << " : Flops " << (potri::FLOPS_DPOTRI(N)) << " " << (potri::FLOPS_DPOTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+        std::cout << "POINV (POINV) (" << (defer_cow_hint ? "with" : "without") << " defer writer) N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+                  << " TTG Execution Time (milliseconds) : " << elapsed / 1E3 
+                  << " : Flops " << (potrf::FLOPS_DPOTRF(N) + potri::FLOPS_DPOTRI(N)) << " " << ((potrf::FLOPS_DPOTRF(N)+potri::FLOPS_DPOTRI(N))/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
       }
     }
   }

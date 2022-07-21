@@ -14,8 +14,14 @@
 namespace lauum {
 
 /* FLOP macros taken from DPLASMA */
-double FMULS_DLAUUM(double __n) { return 0.0; }
-double FADDS_DLAUUM(double __n) { return 0.0; }
+double FMULS_POTRI(double __n) { return ( __n * ((2. / 3.) + __n * ((1. / 3.) * __n + 1. )) ); }
+double FADDS_POTRI(double __n) { return ( __n * ((1. / 6.) + __n * ((1. / 3.) * __n - 0.5)) ); }
+double FLOPS_DPOTRI(double __n) { return FMULS_POTRI(__n) + FADDS_POTRI(__n); }
+double FMULS_DTRTRI(double __n) { return __n * (__n * ( 1./6. * __n + 0.5 ) + 1./3.); }
+double FADDS_DTRTRI(double __n) { return __n * (__n * ( 1./6. * __n - 0.5 ) + 1./3.); }
+double FLOPS_DTRTRI(double __n) { return      FMULS_DTRTRI(__n) +       FADDS_DTRTRI(__n); }
+double FMULS_DLAUUM(double __n) { return FMULS_POTRI(__n) - FMULS_DTRTRI(__n); }
+double FADDS_DLAUUM(double __n) { return FADDS_POTRI(__n) - FADDS_DTRTRI(__n); }
 double FLOPS_DLAUUM(double __n) { return      FMULS_DLAUUM(__n) +       FADDS_DLAUUM(__n); }
 
 template <typename T>
