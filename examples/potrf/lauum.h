@@ -37,7 +37,7 @@ auto make_lauum(const MatrixT<T>& A,
 
     if(ttg::tracing()) ttg::print("LAUUM(", key, ")");
 
-    lapack::lauum(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.rows());
+    lapack::lauum(lapack::Uplo::Lower, tile_kk.cols(), tile_kk.data(), tile_kk.rows());
 
     /* send the tile to output */
     if(K < A.rows()-1) {
@@ -67,7 +67,8 @@ auto make_trmm(const MatrixT<T>& A,
     const int N = key.J;
 
     auto mb = tile_kn.rows();
-    assert(tile_kk.rows() == mb);
+    auto nb = tile_kn.cols();
+    assert( tile_kk.cols() == mb /* tile_kk must be tile_kk.rows() x mb if SIDE='L' in TRMM */ );
 
     if(ttg::tracing()) ttg::print("TRMM(", key, ")");
 
@@ -76,9 +77,9 @@ auto make_trmm(const MatrixT<T>& A,
                lapack::Uplo::Lower,
                blas::Op::Trans,
                blas::Diag::NonUnit,
-               mb, mb, 1.0,
-               tile_kk.data(), mb,
-               tile_kn.data(), mb);
+               mb, nb, 1.0,
+               tile_kk.data(), tile_kk.rows(),
+               tile_kn.data(), tile_kk.rows());
 
     if(K < A.rows()-1) {
       if(ttg::tracing()) ttg::print("TRMM(", key, ") sending to C of GEMM(", Key3{K+1, N, K}, ")");
@@ -109,17 +110,19 @@ auto make_syrk(const MatrixT<T>& A,
     const int K = key.I;
     const int N = key.J;
 
-    auto mb = tile_kn.rows();
-    assert(tile_nn.rows() == mb);
+    assert(tile_nn.rows() == tile_nn.cols() /* tile_nn must be square for SYRK */);
+    assert(tile_kn.cols() == tile_nn.rows() /* tile_kn must be k x tile_nn.rows() for SYRK in Trans mode */);
+    auto m = tile_nn.rows();
+    auto k = tile_kn.rows();
 
     if(ttg::tracing()) ttg::print("SYRK(", key, ")");
 
     blas::syrk(blas::Layout::ColMajor,
                lapack::Uplo::Lower,
                blas::Op::Trans,
-               mb, mb, 
-               1.0, tile_kn.data(), mb,
-               1.0, tile_nn.data(), mb);
+               m, k, 
+               1.0, tile_kn.data(), tile_kn.rows(),
+               1.0, tile_nn.data(), tile_nn.rows());
 
     if(K < A.rows()-1) {
         if(ttg::tracing()) ttg::print("SYRK(", key, ") sending to nn of SYRK(", Key2{K+1, N}, ")");
@@ -152,19 +155,19 @@ auto make_gemm(const MatrixT<T>& A,
     const int N = key.J;
     const int M = key.K;
 
-    auto mb = input_A.rows();
-    assert(input_B.rows() == mb);
-    assert(input_C.rows() == mb);
+    assert(input_A.cols() == input_B.rows());
+    assert(input_A.rows() == input_C.rows());
+    assert(input_B.cols() == input_C.cols());
 
     if(ttg::tracing()) ttg::print("GEMM(", key, ")");
 
     blas::gemm(blas::Layout::ColMajor,
                blas::Op::Trans,
                blas::Op::NoTrans,
-               mb, mb, mb, 
-               1.0, input_A.data(), mb,
-                    input_B.data(), mb, 
-               1.0, input_C.data(), mb);
+               input_A.rows(), input_B.cols(), input_A.cols(),
+               1.0, input_A.data(), input_A.rows(),
+                    input_B.data(), input_B.rows(), 
+               1.0, input_C.data(), input_C.rows());
 
     if(K < A.rows()-1) {
         if(ttg::tracing()) ttg::print("GEMM(", key, ") sending to C of GEMM(", Key3{K+1, N, M}, ")");

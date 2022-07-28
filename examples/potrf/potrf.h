@@ -75,11 +75,12 @@ auto make_trsm(MatrixT<T>& A,
     const int M = key.I;
     const int K = key.J; // the column equals the outer most look K (same as PO)
 
-    /* No support for different tile sizes yet */
+    /* in trsm, both matrices are MxN */
     assert(tile_mk.rows() == tile_kk.rows());
     assert(tile_mk.cols() == tile_kk.cols());
 
-    auto m = tile_mk.rows();
+    auto mb = tile_mk.rows();
+    auto nb = tile_mk.cols();
 
     if(ttg::tracing()) ttg::print("TRSM(", key, ")");
 #if defined(DEBUG_TILES_VALUES)
@@ -92,9 +93,9 @@ auto make_trsm(MatrixT<T>& A,
                lapack::Uplo::Lower,
                blas::Op::Trans,
                blas::Diag::NonUnit,
-               tile_kk.rows(), m, 1.0,
-               tile_kk.data(), m,
-               tile_mk.data(), m);
+               mb, nb, 1.0,
+               tile_kk.data(), tile_kk.rows(),
+               tile_mk.data(), tile_kk.rows());
 
 #if defined(DEBUG_TILES_VALUES)
     std::cout << "After TRSM(" << key << "), A(" << K << ", " << K << ") is " << tile_mk << std::endl;
@@ -149,11 +150,12 @@ auto make_syrk(MatrixT<T>& A,
     const int K = key.I;
     const int M = key.J;
 
-    /* No support for different tile sizes yet */
+    /* tile_kk is mb x mb and tile_mk is mb x nb */
+    assert(tile_kk.rows() == tile_kk.cols());
     assert(tile_mk.rows() == tile_kk.rows());
-    assert(tile_mk.cols() == tile_kk.cols());
 
-    auto m = tile_mk.rows();
+    auto mb = tile_mk.rows();
+    auto nb = tile_mk.cols();
 
     if(ttg::tracing()) ttg::print("SYRK(", key, ")");
 #if defined(DEBUG_TILES_VALUES)
@@ -164,9 +166,9 @@ auto make_syrk(MatrixT<T>& A,
     blas::syrk(blas::Layout::ColMajor,
                lapack::Uplo::Lower,
                blas::Op::NoTrans,
-               tile_mk.rows(), m, -1.0,
-               tile_mk.data(), m, 1.0,
-               tile_kk.data(), m);
+               mb, nb, -1.0,
+               tile_mk.data(), tile_mk.rows(), 1.0,
+               tile_kk.data(), tile_kk.rows());
 
 #if defined(DEBUG_TILES_VALUES)
     std::cout << "After SYRK(" << key << "), A(" << K << ", " << K << ") is " << tile_kk << std::endl;
@@ -210,11 +212,9 @@ auto make_gemm(MatrixT<T>& A,
     const int K = key.K;
     assert(M != N && M > K && N > K);
 
-    /* No support for different tile sizes yet */
-    assert(tile_kn.rows() == tile_mk.rows() && tile_kn.rows() == tile_mn.rows());
-    assert(tile_kn.cols() == tile_mk.cols() && tile_kn.cols() == tile_mn.cols());
-
-    auto m = tile_kn.rows();
+    assert(tile_mk.cols() == tile_kn.rows());
+    assert(tile_mk.rows() == tile_mn.rows());
+    assert(tile_kn.cols() == tile_mn.cols());
 
     if(ttg::tracing()) ttg::print("GEMM(", key, ")");
 #if defined(DEBUG_TILES_VALUES)
@@ -226,10 +226,10 @@ auto make_gemm(MatrixT<T>& A,
     blas::gemm(blas::Layout::ColMajor,
                blas::Op::NoTrans,
                blas::Op::Trans,
-               m, m, m, -1.0,
-               tile_mk.data(), m,
-               tile_kn.data(), m, 1.0,
-               tile_mn.data(), m);
+               tile_mk.rows(), tile_mn.cols(), tile_kn.rows(), -1.0,
+               tile_mk.data(), tile_mk.rows(),
+               tile_kn.data(), tile_kn.rows(), 1.0,
+               tile_mn.data(), tile_mn.rows());
 
 #if defined(DEBUG_TILES_VALUES)
     std::cout << "After GEMM(" << key << "), A(" << M << ", " << N << ") is " << tile_mn << std::endl;

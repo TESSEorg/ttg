@@ -32,7 +32,7 @@ auto make_trtri(const MatrixT<T>& A,
 
     if(ttg::tracing()) ttg::print("TRTRI(", key, ")");
     
-    int info = lapack::trtri(lapack::Uplo::Lower, diag, tile_kk.rows(), tile_kk.data(), tile_kk.rows());
+    int info = lapack::trtri(lapack::Uplo::Lower, diag, tile_kk.cols(), tile_kk.data(), tile_kk.rows());
     assert(0 == info);
 
     /* send the tile to output */
@@ -56,8 +56,10 @@ auto make_trsml(const MatrixT<T>& A,
     const int K = key.I;
     const int N = key.J;
 
+    /* tile_kn is mb x nb */
     auto mb = tile_kn.rows();
-    assert(tile_kk.rows() == mb);
+    auto nb = tile_kn.cols();
+    assert(tile_kk.cols() == mb /* tile_kk must be tile_kk.rows() x mb if side == Left in TRSM */);
 
     if(ttg::tracing()) ttg::print("TRSML(", key, ")");
 
@@ -66,9 +68,9 @@ auto make_trsml(const MatrixT<T>& A,
                lapack::Uplo::Lower,
                blas::Op::NoTrans,
                diag,
-               mb, mb, 1.0,
-               tile_kk.data(), mb,
-               tile_kn.data(), mb);
+               mb, nb, 1.0,
+               tile_kk.data(), tile_kk.rows(),
+               tile_kn.data(), tile_kn.rows());
 
     /* send the tile to output */
     ttg::send<0>(Key2{K, N}, std::move(tile_kn), out);
@@ -89,8 +91,8 @@ auto make_trsmr(const MatrixT<T>& A,
                 ttg::Edge<Key2, MatrixTile<T>>& to_trsml_kn)
 {
   auto f = [=](const Key2& key,
-               const MatrixTile<T>& tile_kk,
-               MatrixTile<T>&& tile_mk,
+               const MatrixTile<T>& tile_mm,
+               MatrixTile<T>&& tile_kn,
                std::tuple<ttg::Out<Key3, MatrixTile<T>>, // gemm_A 
                           ttg::Out<Key3, MatrixTile<T>>, // gemm_B
                           ttg::Out<Key3, MatrixTile<T>>, // gemm_C
@@ -99,8 +101,9 @@ auto make_trsmr(const MatrixT<T>& A,
     const int K = key.I;
     const int M = key.J;
 
-    auto mb = tile_mk.rows();
-    assert(tile_kk.rows() == mb);
+    auto mb = tile_kn.rows();
+    auto nb = tile_kn.cols();
+    assert(tile_mm.cols() == nb /* tile_mm must be tile_mm.rows() x nb if side == Right in TRSM */);
 
     if(ttg::tracing()) ttg::print("TRSMR(", key, ")");
 
@@ -109,9 +112,9 @@ auto make_trsmr(const MatrixT<T>& A,
                lapack::Uplo::Lower,
                blas::Op::NoTrans,
                diag,
-               mb, mb, -1.0,
-               tile_kk.data(), mb,
-               tile_mk.data(), mb);
+               mb, nb, -1.0,
+               tile_mm.data(), tile_mm.rows(),
+               tile_kn.data(), tile_kn.rows());
 
     std::vector<Key3> keylist_A_gemm;
     std::vector<Key3> keylist_B_gemm;
@@ -139,7 +142,7 @@ auto make_trsmr(const MatrixT<T>& A,
     }
 
     ttg::broadcast<0, 1, 2, 3>(std::make_tuple(keylist_A_gemm, keylist_B_gemm, keylist_C_gemm, keylist_kn_trsml),
-                                  std::move(tile_mk), out);
+                                  std::move(tile_kn), out);
   };
   return ttg::make_tt(f, ttg::edges(input_kk, input_mk), 
                          ttg::edges(to_gemm_A, to_gemm_B, to_gemm_C, to_trsml_kn), "TRSMR", 
@@ -167,19 +170,19 @@ auto make_gemm(const MatrixT<T>& A,
     const int M = key.J;
     const int N = key.K;
 
-    auto mb = input_A.rows();
-    assert(input_B.rows() == mb);
-    assert(input_C.rows() == mb);
+    assert(input_A.cols() == input_B.rows());
+    assert(input_A.rows() == input_C.rows());
+    assert(input_B.cols() == input_C.cols());
 
     if(ttg::tracing()) ttg::print("GEMM(", key, ")");
 
     blas::gemm(blas::Layout::ColMajor,
                blas::Op::NoTrans,
                blas::Op::NoTrans,
-               mb, mb, mb, 
-               1.0, input_A.data(), mb,
-                    input_B.data(), mb, 
-               1.0, input_C.data(), mb);
+               input_A.rows(), input_B.cols(), input_A.cols(), 
+               1.0, input_A.data(), input_A.rows(),
+                    input_B.data(), input_B.rows(), 
+               1.0, input_C.data(), input_C.rows());
 
     std::vector<Key3> keylist_B_gemm;
     std::vector<Key3> keylist_C_gemm;
