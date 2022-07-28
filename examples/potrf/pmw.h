@@ -99,12 +99,12 @@ namespace std {
     std::size_t operator()(const Key3& s) const noexcept { return s.hash(); }
   };
 
-  std::ostream& operator<<(std::ostream& s, const Key1& key) {
+  inline std::ostream& operator<<(std::ostream& s, const Key1& key) {
     s << "Key(" << key.K << ")";
     return s;
   }
 
-  std::ostream& operator<<(std::ostream& s, const Key3& key) {
+  inline std::ostream& operator<<(std::ostream& s, const Key3& key) {
     s << "Key(" << key.I << "," << key.J << "," << key.K << ")";
     return s;
   }
@@ -119,7 +119,7 @@ namespace std {
     std::size_t operator()(const Key2& s) const noexcept { return s.hash(); }
   };
 
-  std::ostream& operator<<(std::ostream& s, const Key2& key) {
+  inline std::ostream& operator<<(std::ostream& s, const Key2& key) {
     s << "Key(" << key.I << "," << key.J << ")";
     return s;
   }
@@ -148,6 +148,8 @@ class PaRSECMatrixWrapper {
   PaRSECMatrixT* pm;
 
 public:
+ using element_type = ValueT;
+
   PaRSECMatrixWrapper(PaRSECMatrixT* dc) : pm(dc)
   {
     //std::cout << "PaRSECMatrixWrapper of matrix with " << rows() << "x" << cols() << " tiles " << std::endl;

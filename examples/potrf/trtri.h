@@ -15,16 +15,17 @@
 namespace trtri {
 
 /* FLOP macros taken from DPLASMA */
-double FMULS_DTRTRI(double __n) { return __n * (__n * ( 1./6. * __n + 0.5 ) + 1./3.); }
-double FADDS_DTRTRI(double __n) { return __n * (__n * ( 1./6. * __n - 0.5 ) + 1./3.); }
-double FLOPS_DTRTRI(double __n) { return      FMULS_DTRTRI(__n) +       FADDS_DTRTRI(__n); }
+inline double FMULS_DTRTRI(double __n) { return __n * (__n * ( 1./6. * __n + 0.5 ) + 1./3.); }
+inline double FADDS_DTRTRI(double __n) { return __n * (__n * ( 1./6. * __n - 0.5 ) + 1./3.); }
+inline double FLOPS_DTRTRI(double __n) { return      FMULS_DTRTRI(__n) +       FADDS_DTRTRI(__n); }
 
-template <typename T>
-auto make_trtri(const MatrixT<T>& A,
+template <typename MatrixT>
+auto make_trtri(const MatrixT& A,
                 lapack::Diag diag,
-                ttg::Edge<Key1, MatrixTile<T>>& input_disp, // from the dispatcher
-                ttg::Edge<Key2, MatrixTile<T>>& output_result)
+                ttg::Edge<Key1, MatrixTile<typename MatrixT::element_type>>& input_disp, // from the dispatcher
+                ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_result)
 {
+  using T = typename MatrixT::element_type;
   auto f = [=](const Key1& key,
                MatrixTile<T>&& tile_kk,
                std::tuple<ttg::Out<Key2, MatrixTile<T>>>& out){
@@ -42,13 +43,14 @@ auto make_trtri(const MatrixT<T>& A,
                       {"tile_kk"}, {"output_result"});
 }
 
-template <typename T>
-auto make_trsml(const MatrixT<T>& A,
+template <typename MatrixT>
+auto make_trsml(const MatrixT& A,
                 lapack::Diag diag,
-                ttg::Edge<Key2, MatrixTile<T>>& input_kk, // will come from the dispatcher
-                ttg::Edge<Key2, MatrixTile<T>>& input_kn,
-                ttg::Edge<Key2, MatrixTile<T>>& output_result)
+                ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& input_kk, // will come from the dispatcher
+                ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& input_kn,
+                ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_result)
 {
+  using T = typename MatrixT::element_type;
   auto f = [=](const Key2& key,
                const MatrixTile<T>& tile_kk,
                MatrixTile<T>&& tile_kn,
@@ -80,16 +82,17 @@ auto make_trsml(const MatrixT<T>& A,
 }
 
 
-template <typename T>
-auto make_trsmr(const MatrixT<T>& A,
+template <typename MatrixT>
+auto make_trsmr(const MatrixT& A,
                 lapack::Diag diag,
-                ttg::Edge<Key2, MatrixTile<T>>& input_kk, // will from the dispatcher
-                ttg::Edge<Key2, MatrixTile<T>>& input_mk, // will also come from the dispatcher
-                ttg::Edge<Key3, MatrixTile<T>>& to_gemm_A,
-                ttg::Edge<Key3, MatrixTile<T>>& to_gemm_B,
-                ttg::Edge<Key3, MatrixTile<T>>& to_gemm_C,
-                ttg::Edge<Key2, MatrixTile<T>>& to_trsml_kn)
+                ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& input_kk, // will from the dispatcher
+                ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& input_mk, // will also come from the dispatcher
+                ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& to_gemm_A,
+                ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& to_gemm_B,
+                ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& to_gemm_C,
+                ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& to_trsml_kn)
 {
+  using T = typename MatrixT::element_type;
   auto f = [=](const Key2& key,
                const MatrixTile<T>& tile_mm,
                MatrixTile<T>&& tile_kn,
@@ -149,15 +152,16 @@ auto make_trsmr(const MatrixT<T>& A,
                       {"tile_kk", "tile_mk"}, {"GEMM_A", "GEMM_B", "GEMM_C", "TRSML_kn"});
 }
 
-template <typename T>
-auto make_gemm(const MatrixT<T>& A,
-               ttg::Edge<Key3, MatrixTile<T>>& input_A,
-               ttg::Edge<Key3, MatrixTile<T>>& input_B,
-               ttg::Edge<Key3, MatrixTile<T>>& input_C,
-               ttg::Edge<Key3, MatrixTile<T>>& to_gemm_B,
-               ttg::Edge<Key3, MatrixTile<T>>& to_gemm_C,
-               ttg::Edge<Key2, MatrixTile<T>>& to_trsml_kn)
+template <typename MatrixT>
+auto make_gemm(const MatrixT& A,
+               ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& input_A,
+               ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& input_B,
+               ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& input_C,
+               ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& to_gemm_B,
+               ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& to_gemm_C,
+               ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& to_trsml_kn)
 {
+  using T = typename MatrixT::element_type;
   auto f = [=](const Key3& key,
                const MatrixTile<T>& input_A,
                const MatrixTile<T>& input_B,
@@ -213,14 +217,15 @@ auto make_gemm(const MatrixT<T>& A,
 }
 
 
-template<typename T>
-auto make_dispatcher(const MatrixT<T>& A,
-                     ttg::Edge<Key2, MatrixTile<T>>& input,
-                     ttg::Edge<Key1, MatrixTile<T>>& to_trtri,
-                     ttg::Edge<Key2, MatrixTile<T>>& to_trsml_kk,
-                     ttg::Edge<Key2, MatrixTile<T>>& to_trsmr_kk,
-                     ttg::Edge<Key2, MatrixTile<T>>& to_trsmr_mk)
+template<typename MatrixT>
+auto make_dispatcher(const MatrixT& A,
+                     ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& input,
+                     ttg::Edge<Key1, MatrixTile<typename MatrixT::element_type>>& to_trtri,
+                     ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& to_trsml_kk,
+                     ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& to_trsmr_kk,
+                     ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& to_trsmr_mk)
 {
+  using T = typename MatrixT::element_type;
   auto f = [=](const Key2& key,
                MatrixTile<T>&&tile,
                std::tuple<ttg::Out<Key1, MatrixTile<T>>,
@@ -258,7 +263,9 @@ auto make_dispatcher(const MatrixT<T>& A,
   return ttg::make_tt(f, ttg::edges(input), ttg::edges(to_trtri, to_trsml_kk, to_trsmr_kk, to_trsmr_mk), "TRTRI Dispatch", {"Input"}, {"TRTRI", "TRSML_kk", "TRSMR_kk", "TRSMR_mk"});
 }
 
-auto make_trtri_ttg(MatrixT<double> &A, lapack::Diag diag, ttg::Edge<Key2, MatrixTile<double>>&input, ttg::Edge<Key2, MatrixTile<double>>&output, bool defer_write ) {
+template <typename MatrixT>
+auto make_trtri_ttg(const MatrixT &A, lapack::Diag diag, ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>&input, ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>&output, bool defer_write ) {
+  using T = typename MatrixT::element_type;
   auto keymap1 = [&](const Key1& key) {
     return A.rank_of(key.K, key.K);
   };
@@ -274,16 +281,16 @@ auto make_trtri_ttg(MatrixT<double> &A, lapack::Diag diag, ttg::Edge<Key2, Matri
     return A.rank_of(key.J, key.K);
   };
 
-  ttg::Edge<Key1, MatrixTile<double>> disp_trtri("disp_trtri");
+  ttg::Edge<Key1, MatrixTile<T>> disp_trtri("disp_trtri");
 
-  ttg::Edge<Key2, MatrixTile<double>> disp_trsml_kk("disp_trsml_kk"),
+  ttg::Edge<Key2, MatrixTile<T>> disp_trsml_kk("disp_trsml_kk"),
                                       disp_trsmr_kk("disp_trsmr_kk"),
                                       disp_trsmr_mk("disp_trsmr_mk"),
                                       trsmr_trsml("trsmr_trsml"),
                                       gemm_trsml("gemm_trsml"),
                                       trsml_nk("trsml_nk");
 
-  ttg::Edge<Key3, MatrixTile<double>> gemm_gemm_B("gemm_gemm_B"),
+  ttg::Edge<Key3, MatrixTile<T>> gemm_gemm_B("gemm_gemm_B"),
                                       gemm_gemm_C("gemm_gemm_C"),
                                       trsmr_gemm_A("trsmr_gemm_A"),
                                       trsmr_gemm_B("trsmr_gemm_B"),

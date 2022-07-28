@@ -7,8 +7,8 @@
 
 #include "ttg/fwd.h"
 
-#include "ttg/util/env.h"
 #include "ttg/util/bug.h"
+#include "ttg/util/env.h"
 
 namespace ttg {
 
@@ -18,12 +18,16 @@ namespace ttg {
   /// @note This is a collective operation with respect to the default backend's default execution context
   /// @internal ENABLE_WHEN_TTG_CAN_MULTIBACKEND To initialize the TTG runtime with multiple
   /// backends must call the corresponding `ttg_initialize` functions explicitly.
+  /// @tparam RestOfArgs... the type of parameter pack passed to ttg_initialize in the backend's namespace
   /// @param argc the argument count; this is typically the value received by `main`
   /// @param argv the vector of arguments; this is typically the value received by `main`
   /// @param num_threads the number of compute threads to initialize. If less than 1 then
   ///        ttg::detail::num_threads will be used to determine the default number of compute threads
+  /// @param args an optional parameter pack passed to passed to ttg_initialize in the backend's namespace ,
+  ///        by definition this is specific to the backend and assumes single backend is active;
+  ///        most users will want to omit this
   template <typename... RestOfArgs>
-  inline void initialize(int argc, char **argv, int num_threads, RestOfArgs &&...args) {
+  inline void initialize(int argc, char** argv, int num_threads, RestOfArgs&&... args) {
     // if requested by user, create a Debugger object
     if (auto debugger_cstr = std::getenv("TTG_DEBUGGER")) {
       using mpqc::Debugger;

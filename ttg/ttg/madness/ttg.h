@@ -116,8 +116,7 @@ namespace ttg_madness {
 #endif
   };
 
-  template <typename... RestOfArgs>
-  inline void ttg_initialize(int argc, char **argv, int num_threads, RestOfArgs &&...) {
+  inline void ttg_initialize(int argc, char **argv, int num_threads) {
     if (num_threads < 1) num_threads = ttg::detail::num_threads();
     ::madness::World &madworld = ::madness::initialize(argc, argv, num_threads, /* quiet = */ true);
     auto *world_ptr = new ttg_madness::WorldImpl{madworld};

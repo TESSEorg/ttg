@@ -120,6 +120,13 @@ public:
     return _data.get();
   }
 
+  /// yields data and resets this object to a default-constucted state
+  pointer_t yield_data() && {
+    pointer_t result = _data;
+    *this = MatrixTile();
+    return std::move(result);
+  }
+
   size_t size() const {
     return _cols*_rows;
   }
@@ -130,6 +137,11 @@ public:
 
   int cols() const {
     return _cols;
+  }
+
+  auto& fill(T value) {
+    std::fill(_data.get(), _data.get()+size(), value);
+    return *this;
   }
 
   friend std::ostream& operator<< (std::ostream& o, MatrixTile<T> const& tt)  {

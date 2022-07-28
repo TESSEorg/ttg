@@ -6,6 +6,8 @@
 
 #include <future>
 
+extern "C" struct parsec_context_s;
+
 namespace ttg_parsec {
 
   template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs = ttg::typelist<>>
@@ -20,8 +22,7 @@ namespace ttg_parsec {
 
   class WorldImpl;
 
-  template <typename... RestOfArgs>
-  inline void ttg_initialize(int argc, char **argv, int num_threads = -1, RestOfArgs &&...);
+  inline void ttg_initialize(int argc, char **argv, int num_threads = -1, parsec_context_s * = nullptr);
 
   inline void ttg_finalize();
 
