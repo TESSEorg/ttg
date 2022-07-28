@@ -32,6 +32,7 @@
 
 #include "ttg/parsec/fwd.h"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstring>
@@ -47,7 +48,6 @@
 #include <string>
 #include <tuple>
 #include <vector>
-#include <algorithm>
 
 #include <parsec.h>
 #include <parsec/class/parsec_hash_table.h>
@@ -140,6 +140,11 @@ namespace ttg_parsec {
     static int get_remote_complete_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg, size_t msg_size,
                                       int src, void *cb_data);
 
+    inline bool &initialized_mpi() {
+      static bool im = false;
+      return im;
+    }
+
   }  // namespace detail
 
   class WorldImpl : public ttg::base::WorldImplBase {
@@ -170,16 +175,18 @@ namespace ttg_parsec {
 #endif
 
     static constexpr const int PARSEC_TTG_MAX_AM_SIZE = 1024 * 1024;
-    WorldImpl(int *argc, char **argv[], int ncores) : WorldImplBase(query_comm_size(), query_comm_rank())
-#if defined(PARSEC_PROF_TRACE) 
-       , profiling_array(nullptr)
-       , profiling_array_size(0)
+    WorldImpl(int *argc, char **argv[], int ncores, parsec_context_t *c = nullptr)
+        : WorldImplBase(query_comm_size(), query_comm_rank())
+        , ctx(c)
+#if defined(PARSEC_PROF_TRACE)
+        , profiling_array(nullptr)
+        , profiling_array_size(0)
 #endif
        , _dag_profiling(false)
        , _task_profiling(false)
     {
       ttg::detail::register_world(*this);
-      ctx = parsec_init(ncores, argc, argv);
+      if (ctx == nullptr) ctx = parsec_init(ncores, argc, argv);
 
 #if defined(PARSEC_PROF_TRACE)
       if(parsec_profile_enabled) {
@@ -943,13 +950,23 @@ namespace ttg_parsec {
 
   inline thread_local detail::parsec_ttg_task_base_t *parsec_ttg_caller;
 
-  template <typename... RestOfArgs>
-  inline void ttg_initialize(int argc, char **argv, int num_threads, RestOfArgs &&...) {
-    int provided;
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+  inline void ttg_initialize(int argc, char **argv, int num_threads, parsec_context_t *ctx) {
+    if (detail::initialized_mpi()) throw std::runtime_error("ttg_parsec::ttg_initialize: can only be called once");
+
+    // make sure it's not already initialized
+    int mpi_initialized;
+    MPI_Initialized(&mpi_initialized);
+    if (!mpi_initialized) {  // MPI not initialized? do it, remember that we did it
+      int provided;
+      MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+      if (!provided)
+        throw std::runtime_error("ttg_parsec::ttg_initialize: MPI_Init_thread did not provide MPI_THREAD_MULTIPLE");
+      detail::initialized_mpi() = true;
+    } else {  // no way to test that MPI was initialized with MPI_THREAD_MULTIPLE, cross fingers and proceed
+    }
 
     if (num_threads < 1) num_threads = ttg::detail::num_threads();
-    auto world_ptr = new ttg_parsec::WorldImpl{&argc, &argv, num_threads};
+    auto world_ptr = new ttg_parsec::WorldImpl{&argc, &argv, num_threads, ctx};
     std::shared_ptr<ttg::base::WorldImplBase> world_sptr{static_cast<ttg::base::WorldImplBase *>(world_ptr)};
     ttg::World world{std::move(world_sptr)};
     ttg::detail::set_default_world(std::move(world));
@@ -961,7 +978,7 @@ namespace ttg_parsec {
       ttg::default_execution_context().impl().final_task();
     ttg::detail::set_default_world(ttg::World{});  // reset the default world
     ttg::detail::destroy_worlds<ttg_parsec::WorldImpl>();
-    MPI_Finalize();
+    if (detail::initialized_mpi()) MPI_Finalize();
   }
   inline ttg::World ttg_default_execution_context() { return ttg::get_default_world(); }
   inline void ttg_abort() { MPI_Abort(ttg_default_execution_context().impl().comm(), 1); }
