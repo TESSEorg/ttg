@@ -274,8 +274,8 @@ namespace ttg_parsec {
       parsec_enqueue(ctx, tpool);
       tpool->tdm.module->taskpool_addto_nb_pa(tpool, 1);
       tpool->tdm.module->taskpool_ready(tpool);
-      int ret = parsec_context_start(ctx);
-      if (ret != 0) throw std::runtime_error("TTG: parsec_context_start failed");
+      [[maybe_unused]] auto ret = parsec_context_start(ctx);
+      // ignore ret since all of its nonzero values are OK (e.g. -1 due to ctx already being active)
       parsec_taskpool_started = true;
     }
 
