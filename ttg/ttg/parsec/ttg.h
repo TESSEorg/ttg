@@ -296,7 +296,10 @@ namespace ttg_parsec {
           // We are locally ready (i.e. we won't add new tasks)
           tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
           ttg::trace("ttg_parsec(", this->rank(), "): final waiting for completion");
-          parsec_context_wait(ctx);
+          if (own_ctx)
+            parsec_context_wait(ctx);
+          else
+            parsec_taskpool_wait(tpool);
         }
         release_ops();
         ttg::detail::deregister_world(*this);
@@ -426,7 +429,7 @@ namespace ttg_parsec {
       // We are locally ready (i.e. we won't add new tasks)
       tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
       ttg::trace("ttg_parsec(", rank, "): waiting for completion");
-      parsec_context_wait(ctx);
+      parsec_taskpool_wait(tpool);
 
       // We need the synchronization between the end of the context and the restart of the taskpool
       // until we use parsec_taskpool_wait and implement an epoch in the PaRSEC taskpool
