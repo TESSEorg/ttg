@@ -178,6 +178,7 @@ namespace ttg_parsec {
     WorldImpl(int *argc, char **argv[], int ncores, parsec_context_t *c = nullptr)
         : WorldImplBase(query_comm_size(), query_comm_rank())
         , ctx(c)
+        , own_ctx(c == nullptr)
 #if defined(PARSEC_PROF_TRACE)
         , profiling_array(nullptr)
         , profiling_array_size(0)
@@ -186,7 +187,7 @@ namespace ttg_parsec {
        , _task_profiling(false)
     {
       ttg::detail::register_world(*this);
-      if (ctx == nullptr) ctx = parsec_init(ncores, argc, argv);
+      if (own_ctx) ctx = parsec_init(ncores, argc, argv);
 
 #if defined(PARSEC_PROF_TRACE)
       if(parsec_profile_enabled) {
@@ -274,8 +275,8 @@ namespace ttg_parsec {
       tpool->tdm.module->taskpool_addto_nb_pa(tpool, 1);
       tpool->tdm.module->taskpool_ready(tpool);
       int ret = parsec_context_start(ctx);
-      parsec_taskpool_started = true;
       if (ret != 0) throw std::runtime_error("TTG: parsec_context_start failed");
+      parsec_taskpool_started = true;
     }
 
     void destroy_tpool() {
@@ -309,7 +310,7 @@ namespace ttg_parsec {
           profiling_array_size = 0;
         }
 #endif
-        parsec_fini(&ctx);
+        if (own_ctx) parsec_fini(&ctx);
         mark_invalid();
       }
     }
@@ -439,6 +440,7 @@ namespace ttg_parsec {
 
    private:
     parsec_context_t *ctx = nullptr;
+    bool own_ctx = false;  //< whether I own the context
     parsec_execution_stream_t *es = nullptr;
     parsec_taskpool_t *tpool = nullptr;
     bool parsec_taskpool_started = false;
