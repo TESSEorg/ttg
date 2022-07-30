@@ -33,7 +33,7 @@ auto make_trtri(const MatrixT& A,
 
     if(ttg::tracing()) ttg::print("TRTRI(", key, ")");
     
-    int info = lapack::trtri(lapack::Uplo::Upper, diag, tile_kk.cols(), tile_kk.data(), tile_kk.rows());
+    int info = lapack::trtri(lapack::Uplo::Upper, diag, tile_kk.cols(), tile_kk.data(), tile_kk.lda());
     assert(0 == info);
 
     /* send the tile to output */
@@ -71,8 +71,8 @@ auto make_trsmr(const MatrixT& A,
                blas::Op::NoTrans,
                diag,
                mb, nb, 1.0,
-               tile_kk.data(), tile_kk.rows(),
-               tile_mk.data(), tile_mk.rows());
+               tile_kk.data(), tile_kk.lda(),
+               tile_mk.data(), tile_mk.lda());
 
     /* send the tile to output */
     ttg::send<0>(Key2{M, K}, std::move(tile_mk), out);
@@ -116,8 +116,8 @@ auto make_trsml(const MatrixT& A,
                blas::Op::NoTrans,
                diag,
                mb, nb, -1.0,
-               tile_kk.data(), tile_kk.rows(),
-               tile_kn.data(), tile_kn.rows());
+               tile_kk.data(), tile_kk.lda(),
+               tile_kn.data(), tile_kn.lda());
 
     std::vector<Key3> keylist_A_gemm;
     std::vector<Key3> keylist_B_gemm;
@@ -127,13 +127,13 @@ auto make_trsml(const MatrixT& A,
     if(K > 0) {
         keylist_B_gemm.reserve(K-1);
         for(auto k = 0; k < K; k++)
-            keylist_B_gemm.push_back(Key3{K, k, M});
+            keylist_B_gemm.push_back(Key3{K, k, N});
     }
 
-    if(N == K+1 && K < A.rows()-2) {
+    if(N == K+1 && K < A.cols()-2) {
         keylist_A_gemm.reserve(A.rows() - N + 1);
-        for(auto m = M+1; m < A.rows(); m++)
-            keylist_A_gemm.push_back(Key3{K+1, K, m});
+        for(auto n = N+1; n < A.cols(); n++)
+            keylist_A_gemm.push_back(Key3{K+1, K, n});
     }
 
     if(N > K+1) {
@@ -147,7 +147,7 @@ auto make_trsml(const MatrixT& A,
     ttg::broadcast<0, 1, 2, 3>(std::make_tuple(keylist_A_gemm, keylist_B_gemm, keylist_C_gemm, keylist_kn_trsmr),
                                   std::move(tile_kn), out);
   };
-  return ttg::make_tt(f, ttg::edges(input_kk, input_mk), 
+  return ttg::make_tt(f, ttg::edges(input_kk, input_kn), 
                          ttg::edges(to_gemm_A, to_gemm_B, to_gemm_C, to_trsml_kn), "TRSML", 
                       {"tile_kk", "tile_kn"}, {"GEMM_A", "GEMM_B", "GEMM_C", "TRSMR_kn"});
 }
@@ -184,9 +184,9 @@ auto make_gemm(const MatrixT& A,
                blas::Op::NoTrans,
                blas::Op::NoTrans,
                input_A.rows(), input_B.cols(), input_A.cols(), 
-               1.0, input_A.data(), input_A.rows(),
-                    input_B.data(), input_B.rows(), 
-               1.0, input_C.data(), input_C.rows());
+               1.0, input_A.data(), input_A.lda(),
+                    input_B.data(), input_B.lda(), 
+               1.0, input_C.data(), input_C.lda());
 
     std::vector<Key3> keylist_A_gemm;
     std::vector<Key3> keylist_C_gemm;
@@ -271,10 +271,10 @@ auto make_trtri_ttg(const MatrixT &A, lapack::Diag diag, ttg::Edge<Key2, MatrixT
   };
 
   auto keymap2a = [&](const Key2& key) {
-    return A.rank_of(key.I, key.J);
+    return A.rank_of(key.J, key.I);
   };
   auto keymap2b = [&](const Key2& key) {
-    return A.rank_of(key.J, key.I);
+    return A.rank_of(key.I, key.J);
   };
 
   auto keymap3 = [&](const Key3& key) {
@@ -295,18 +295,18 @@ auto make_trtri_ttg(const MatrixT &A, lapack::Diag diag, ttg::Edge<Key2, MatrixT
                                       trsml_gemm_A("trsml_gemm_A"),
                                       trsml_gemm_B("trsml_gemm_B"),
                                       trsml_gemm_C("trsml_gemm_C"),
-                                      gemm_A("gemm_A"),
+                                      gemm_B("gemm_B"),
                                       gemm_C("gemm_C");
 
   auto tt_dispatch = make_dispatcher(A, input, disp_trtri, disp_trsmr_kk, disp_trsml_kk, disp_trsml_kn);
-  tt_dispatch->set_keymap(keymap2a);
+  tt_dispatch->set_keymap(keymap2b);
   tt_dispatch->set_defer_writer(defer_write);
 
   auto tt_trtri = make_trtri(A, diag, disp_trtri, output);
   tt_trtri->set_keymap(keymap1);
   tt_trtri->set_defer_writer(defer_write);
 
-  trsmr_km = ttg::fuse(gemm_trsml, trsml_trsmr);
+  trsmr_km = ttg::fuse(gemm_trsmr, trsml_trsmr);
   auto tt_trsmr  = make_trsmr(A, diag, disp_trsmr_kk, trsmr_km, output);
   tt_trsmr->set_keymap(keymap2a);
   tt_trsmr->set_defer_writer(defer_write);
@@ -317,11 +317,11 @@ auto make_trtri_ttg(const MatrixT &A, lapack::Diag diag, ttg::Edge<Key2, MatrixT
   tt_trsml->set_keymap(keymap2b);
   tt_trsml->set_defer_writer(defer_write);
 
-  gemm_A = ttg::fuse(trsml_gemm_A, gemm_gemm_A);
+  gemm_B = ttg::fuse(trsml_gemm_B, gemm_gemm_B);
   gemm_C = ttg::fuse(trsml_gemm_C, gemm_gemm_C);
   auto tt_gemm  = make_gemm(A,
-                            gemm_A,
-                            trsml_gemm_B,
+                            trsml_gemm_A,
+                            gemm_B,
                             gemm_C,
                             gemm_gemm_B,
                             gemm_gemm_C,

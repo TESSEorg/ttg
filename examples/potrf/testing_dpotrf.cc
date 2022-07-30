@@ -25,26 +25,7 @@ bool cmdOptionExists(char** begin, char** end, const std::string& option)
     return std::find(begin, end, option) != end;
 }
 
-static auto make_load_tt(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>> &toop, bool defer_write)
-{
-  auto load_tt = ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, MatrixTile<double>>>& out) {
-      for(int i = 0; i < A.rows(); i++) {
-        for(int j = 0; j <= i && j < A.cols(); j++) {
-          if(A.is_local(i, j)) {
-            if(ttg::tracing()) ttg::print("load(", Key2{i, j}, ")");
-            ttg::send<0>(Key2{i, j}, std::move(A(i, j)), out);
-          }
-        }
-      }
-    }, ttg::edges(), ttg::edges(toop), "Load Matrix", {}, {"To Op"});
-  load_tt->set_keymap([]() {return ttg::ttg_default_execution_context().rank();});
-  load_tt->set_defer_writer(defer_write);
-
-  return std::move(load_tt);
-}
-
 int check_dpotrf( double *A, double *A0, int N );
-void print_matrix( const double *A, int N, const char *label);
 
 int main(int argc, char **argv)
 {
@@ -187,22 +168,7 @@ int main(int argc, char **argv)
     ttg::execute(world);
     ttg::fence(world);
 
-    /* Copy entire input matrix (which is local) into a single LAPACK format matrix */
-    double *A0 = new double[N*N];
-    for(auto i = 0; i < N; i++) {
-      for(auto j = 0; j < N; j++) {
-        if(j <= i) {
-          auto m = i/NB;
-          auto n = j/NB;
-          auto tile = A(m, n);
-          auto it = i%NB;
-          auto jt = j%NB;
-          A0[i + j*N] = tile.data()[it + jt*NB];
-        } else {
-          A0[i + j*N] = 0.0;
-        }
-      }
-    }
+    double *A0 = A.getLAPACKMatrix();
 
     ttg::Edge<Key2, MatrixTile<double>> topotrf("To POTRF");
     ttg::Edge<Key2, MatrixTile<double>> toresult("To Result");
@@ -220,26 +186,12 @@ int main(int argc, char **argv)
     ttg::fence(world);
 
     /* Copy result matrix (which is local) into a single LAPACK format matrix */
-    double *Acpy = new double[N*N];
-    for(auto i = 0; i < N; i++) {
-      for(auto j = 0; j < N; j++) {
-        if(j <= i) {
-          auto m = i/NB;
-          auto n = j/NB;
-          auto tile = A(m, n);
-          auto it = i%NB;
-          auto jt = j%NB;
-          Acpy[i + j*N] = tile.data()[it + jt*NB];
-        } else {
-          Acpy[i + j*N] = 0.0;
-        }
-      }
-    }
+    double *Acpy = A.getLAPACKMatrix();
     if(-1 == check_dpotrf(Acpy, A0, N)) {
-      print_matrix(A0, N, "Original");
+      print_LAPACK_matrix(A0, N, "Original");
       auto info = lapack::potrf(lapack::Uplo::Lower, N, A0, N);
-      print_matrix(A0, N, "lapack::potrf(Original)");
-      print_matrix(Acpy, N, "ttg::potrf(Original)");
+      print_LAPACK_matrix(A0, N, "lapack::potrf(Original)");
+      print_LAPACK_matrix(Acpy, N, "ttg::potrf(Original)");
     }
 
     delete [] Acpy;
@@ -347,17 +299,4 @@ int check_dpotrf( double *A, double *A0, int N )
     delete [] LLt;
 
     return ret;
-}
-
-void print_matrix( const double *A, int N, const char *label)
-{
-  std::cout << label << std::endl;
-  for(int i = 0; i < N; i++) {
-    std::cout << " ";
-    for(int j = 0; j < N; j++) {
-      std::cout << std::setw(11) << std::setprecision(5) << A[i+j*N] << " ";
-    }
-    std::cout << std::endl;
-  }
-  std::cout << std::endl;
 }

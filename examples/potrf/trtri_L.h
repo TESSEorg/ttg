@@ -33,7 +33,7 @@ auto make_trtri(const MatrixT& A,
 
     if(ttg::tracing()) ttg::print("TRTRI(", key, ")");
     
-    int info = lapack::trtri(lapack::Uplo::Lower, diag, tile_kk.cols(), tile_kk.data(), tile_kk.rows());
+    int info = lapack::trtri(lapack::Uplo::Lower, diag, tile_kk.cols(), tile_kk.data(), tile_kk.lda());
     assert(0 == info);
 
     /* send the tile to output */
@@ -71,8 +71,8 @@ auto make_trsml(const MatrixT& A,
                blas::Op::NoTrans,
                diag,
                mb, nb, 1.0,
-               tile_kk.data(), tile_kk.rows(),
-               tile_kn.data(), tile_kn.rows());
+               tile_kk.data(), tile_kk.lda(),
+               tile_kn.data(), tile_kn.lda());
 
     /* send the tile to output */
     ttg::send<0>(Key2{K, N}, std::move(tile_kn), out);
@@ -116,8 +116,8 @@ auto make_trsmr(const MatrixT& A,
                blas::Op::NoTrans,
                diag,
                mb, nb, -1.0,
-               tile_mm.data(), tile_mm.rows(),
-               tile_kn.data(), tile_kn.rows());
+               tile_mm.data(), tile_mm.lda(),
+               tile_kn.data(), tile_kn.lda());
 
     std::vector<Key3> keylist_A_gemm;
     std::vector<Key3> keylist_B_gemm;
@@ -184,9 +184,9 @@ auto make_gemm(const MatrixT& A,
                blas::Op::NoTrans,
                blas::Op::NoTrans,
                input_A.rows(), input_B.cols(), input_A.cols(), 
-               1.0, input_A.data(), input_A.rows(),
-                    input_B.data(), input_B.rows(), 
-               1.0, input_C.data(), input_C.rows());
+               1.0, input_A.data(), input_A.lda(),
+                    input_B.data(), input_B.lda(), 
+               1.0, input_C.data(), input_C.lda());
 
     std::vector<Key3> keylist_B_gemm;
     std::vector<Key3> keylist_C_gemm;
