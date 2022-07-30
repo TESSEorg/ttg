@@ -178,6 +178,7 @@ namespace ttg_parsec {
     WorldImpl(int *argc, char **argv[], int ncores, parsec_context_t *c = nullptr)
         : WorldImplBase(query_comm_size(), query_comm_rank())
         , ctx(c)
+        , own_ctx(c == nullptr)
 #if defined(PARSEC_PROF_TRACE)
         , profiling_array(nullptr)
         , profiling_array_size(0)
@@ -186,7 +187,7 @@ namespace ttg_parsec {
        , _task_profiling(false)
     {
       ttg::detail::register_world(*this);
-      if (ctx == nullptr) ctx = parsec_init(ncores, argc, argv);
+      if (own_ctx) ctx = parsec_init(ncores, argc, argv);
 
 #if defined(PARSEC_PROF_TRACE)
       if(parsec_profile_enabled) {
@@ -273,9 +274,9 @@ namespace ttg_parsec {
       parsec_enqueue(ctx, tpool);
       tpool->tdm.module->taskpool_addto_nb_pa(tpool, 1);
       tpool->tdm.module->taskpool_ready(tpool);
-      int ret = parsec_context_start(ctx);
+      [[maybe_unused]] auto ret = parsec_context_start(ctx);
+      // ignore ret since all of its nonzero values are OK (e.g. -1 due to ctx already being active)
       parsec_taskpool_started = true;
-      if (ret != 0) throw std::runtime_error("TTG: parsec_context_start failed");
     }
 
     void destroy_tpool() {
@@ -295,7 +296,10 @@ namespace ttg_parsec {
           // We are locally ready (i.e. we won't add new tasks)
           tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
           ttg::trace("ttg_parsec(", this->rank(), "): final waiting for completion");
-          parsec_context_wait(ctx);
+          if (own_ctx)
+            parsec_context_wait(ctx);
+          else
+            parsec_taskpool_wait(tpool);
         }
         release_ops();
         ttg::detail::deregister_world(*this);
@@ -309,7 +313,7 @@ namespace ttg_parsec {
           profiling_array_size = 0;
         }
 #endif
-        parsec_fini(&ctx);
+        if (own_ctx) parsec_fini(&ctx);
         mark_invalid();
       }
     }
@@ -425,7 +429,7 @@ namespace ttg_parsec {
       // We are locally ready (i.e. we won't add new tasks)
       tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
       ttg::trace("ttg_parsec(", rank, "): waiting for completion");
-      parsec_context_wait(ctx);
+      parsec_taskpool_wait(tpool);
 
       // We need the synchronization between the end of the context and the restart of the taskpool
       // until we use parsec_taskpool_wait and implement an epoch in the PaRSEC taskpool
@@ -439,6 +443,7 @@ namespace ttg_parsec {
 
    private:
     parsec_context_t *ctx = nullptr;
+    bool own_ctx = false;  //< whether I own the context
     parsec_execution_stream_t *es = nullptr;
     parsec_taskpool_t *tpool = nullptr;
     bool parsec_taskpool_started = false;
