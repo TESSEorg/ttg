@@ -33,7 +33,7 @@ auto make_potrf(MatrixT<T>& A,
     std::cout << "Before POTRF(" << key << "), A(" << K << ", " << K << ") is " << tile_kk;
 #endif
 
-    auto info = lapack::potrf(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.rows());
+    auto info = lapack::potrf(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.lda());
     assert(info == 0);
 
 #if defined(DEBUG_TILES_VALUES)
@@ -75,12 +75,11 @@ auto make_trsm(MatrixT<T>& A,
     const int M = key.I;
     const int K = key.J; // the column equals the outer most look K (same as PO)
 
-    /* in trsm, both matrices are MxN */
-    assert(tile_mk.rows() == tile_kk.rows());
-    assert(tile_mk.cols() == tile_kk.cols());
-
     auto mb = tile_mk.rows();
     auto nb = tile_mk.cols();
+
+    /* in trsm, tile_mk is mb x nb, and tile_kk needs to be lda x nb because side = Right */
+    assert(nb == tile_kk.rows());
 
     if(ttg::tracing()) ttg::print("TRSM(", key, ")");
 #if defined(DEBUG_TILES_VALUES)
@@ -94,8 +93,8 @@ auto make_trsm(MatrixT<T>& A,
                blas::Op::Trans,
                blas::Diag::NonUnit,
                mb, nb, 1.0,
-               tile_kk.data(), tile_kk.rows(),
-               tile_mk.data(), tile_kk.rows());
+               tile_kk.data(), tile_kk.lda(),
+               tile_mk.data(), tile_kk.lda());
 
 #if defined(DEBUG_TILES_VALUES)
     std::cout << "After TRSM(" << key << "), A(" << K << ", " << K << ") is " << tile_mk << std::endl;
@@ -167,8 +166,8 @@ auto make_syrk(MatrixT<T>& A,
                lapack::Uplo::Lower,
                blas::Op::NoTrans,
                mb, nb, -1.0,
-               tile_mk.data(), tile_mk.rows(), 1.0,
-               tile_kk.data(), tile_kk.rows());
+               tile_mk.data(), tile_mk.lda(), 1.0,
+               tile_kk.data(), tile_kk.lda());
 
 #if defined(DEBUG_TILES_VALUES)
     std::cout << "After SYRK(" << key << "), A(" << K << ", " << K << ") is " << tile_kk << std::endl;
@@ -227,9 +226,9 @@ auto make_gemm(MatrixT<T>& A,
                blas::Op::NoTrans,
                blas::Op::Trans,
                tile_mk.rows(), tile_mn.cols(), tile_kn.rows(), -1.0,
-               tile_mk.data(), tile_mk.rows(),
-               tile_kn.data(), tile_kn.rows(), 1.0,
-               tile_mn.data(), tile_mn.rows());
+               tile_mk.data(), tile_mk.lda(),
+               tile_kn.data(), tile_kn.lda(), 1.0,
+               tile_mn.data(), tile_mn.lda());
 
 #if defined(DEBUG_TILES_VALUES)
     std::cout << "After GEMM(" << key << "), A(" << M << ", " << N << ") is " << tile_mn << std::endl;

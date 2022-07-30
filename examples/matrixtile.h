@@ -10,18 +10,18 @@ template<typename T>
 class MatrixTile {
 
 public:
-  using metadata_t = typename std::pair<int, int>;
+  using metadata_t = typename std::tuple<int, int, int>;
 
   using pointer_t  = typename std::shared_ptr<T>;
 
 private:
   pointer_t _data;
-  int _rows = 0, _cols = 0;
+  int _rows = 0, _cols = 0, _lda = 0;
 
   // (Re)allocate the tile memory
   void realloc() {
     //std::cout << "Reallocating new tile" << std::endl;
-    _data = std::shared_ptr<T>(new T[_rows * _cols], [](T* p) { delete[] p; });
+    _data = std::shared_ptr<T>(new T[_lda * _cols], [](T* p) { delete[] p; });
   }
 
 public:
@@ -30,33 +30,33 @@ public:
   { }
 
 
-  MatrixTile(int rows, int cols) : _rows(rows), _cols(cols)
+  MatrixTile(int rows, int cols, int lda) : _rows(rows), _cols(cols), _lda(lda)
   {
     realloc();
   }
 
   MatrixTile(const metadata_t& metadata)
-  : MatrixTile(std::get<0>(metadata), std::get<1>(metadata))
+  : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::get<2>(metadata))
   { }
 
-  MatrixTile(int rows, int cols, pointer_t data)
-  : _data(data), _rows(rows), _cols(cols)
+  MatrixTile(int rows, int cols, pointer_t data, int lda)
+  : _data(data), _rows(rows), _cols(cols), _lda(lda)
   { }
 
   MatrixTile(const metadata_t& metadata, pointer_t data)
-  : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::forward(data))
+  : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::forward(data), std::get<2>(metadata))
   { }
 
   /**
    * Constructor with outside memory. The tile will *not* delete this memory
    * upon destruction.
    */
-  MatrixTile(int rows, int cols, T* data)
-  : _data(data, [](T*){}), _rows(rows), _cols(cols)
+  MatrixTile(int rows, int cols, T* data, int lda)
+  : _data(data, [](T*){}), _rows(rows), _cols(cols), _lda(lda)
   { }
 
   MatrixTile(const metadata_t& metadata, T* data)
-  : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), data)
+  : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), data, std::get<2>(metadata))
   { }
 
 
@@ -88,27 +88,29 @@ public:
    * can handle data sharing without excessive copying */
 #if 1
   MatrixTile(const MatrixTile<T>& other)
-  : _rows(other._rows), _cols(other._cols)
+  : _rows(other._rows), _cols(other._cols), _lda(other._lda)
   {
     this->realloc();
-    std::copy_n(other.data(), _rows*_cols, this->data());
+    std::copy_n(other.data(), _lda*_cols, this->data());
   }
 
   MatrixTile& operator=(const MatrixTile<T>& other) {
     this->_rows = other._rows;
     this->_cols = other._cols;
+    this->_lda  = other._lda;
     this->realloc();
-    std::copy_n(other.data(), _rows*_cols, this->data());
+    std::copy_n(other.data(), _lda*_cols, this->data());
   }
 #endif // 1
 
   void set_metadata(metadata_t meta) {
     _rows = std::get<0>(meta);
     _cols = std::get<1>(meta);
+    _lda  = std::get<2>(meta);
   }
 
   metadata_t get_metadata(void) const {
-    return metadata_t{_rows, _cols};
+    return metadata_t{_rows, _cols, _lda};
   }
 
   // Accessing the raw data
@@ -128,7 +130,7 @@ public:
   }
 
   size_t size() const {
-    return _cols*_rows;
+    return _cols*_lda;
   }
 
   int rows() const {
@@ -137,6 +139,10 @@ public:
 
   int cols() const {
     return _cols;
+  }
+
+  int lda() const {
+    return _lda;
   }
 
   auto& fill(T value) {
@@ -149,7 +155,7 @@ public:
   o << std::endl << " ";
   for(int i = 0; i < tt.rows(); i++) {
     for(int j = 0; j < tt.cols(); j++) {
-      o << *ptr++ << " ";
+      o << ptr[i+j*tt.lda()] << " ";
     }
     o << std::endl << " ";
   }

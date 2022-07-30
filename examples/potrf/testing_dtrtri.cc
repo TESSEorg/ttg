@@ -12,7 +12,7 @@
 
 #include "pmw.h"
 #include "plgsy.h"
-#include "trtri.h"
+#include "trtri_L.h"
 #include "result.h"
 
 #ifdef USE_DPLASMA
@@ -116,7 +116,7 @@ int main(int argc, char **argv)
   auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, totrtri);
 #endif // USE_DPLASMA
 
-  auto trtri_ttg = trtri::make_trtri_ttg(A, lapack::Diag::NonUnit, totrtri, result);
+  auto trtri_ttg = trtri_LOWER::make_trtri_ttg(A, lapack::Diag::NonUnit, totrtri, result);
   auto result_ttg = make_result_ttg(A, result);
 
   auto connected = make_graph_executable(init_tt.get());

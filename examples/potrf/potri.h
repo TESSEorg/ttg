@@ -6,7 +6,7 @@
 #include "pmw.h"
 #include "lapack.hh"
 
-#include "trtri.h"
+#include "trtri_L.h"
 #include "lauum.h"
 
 namespace potri {
@@ -19,7 +19,7 @@ double FLOPS_DPOTRI(double __n) { return FMULS_POTRI(__n) + FADDS_POTRI(__n); }
 auto make_potri_ttg(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>&input, ttg::Edge<Key2, MatrixTile<double>>&output, bool defer_write ) {
   ttg::Edge<Key2, MatrixTile<double>> trtri_to_lauum("trtri_to_lauum");
 
-  auto ttg_trtri = trtri::make_trtri_ttg(A, lapack::Diag::NonUnit, input, trtri_to_lauum, defer_write);
+  auto ttg_trtri = trtri_LOWER::make_trtri_ttg(A, lapack::Diag::NonUnit, input, trtri_to_lauum, defer_write);
   auto ttg_lauum = lauum::make_lauum_ttg(A, trtri_to_lauum, output, defer_write);
 
   auto ins = std::make_tuple(ttg_trtri->template in<0>());

@@ -289,7 +289,7 @@ int main(int argc, char **argv)
         /********************** Second step: TRTRI  **********************/
 
         auto load_potrf = make_load_tt(A, totrtri, defer_cow_hint);
-        auto trtri_ttg = trtri::make_trtri_ttg(A, lapack::Diag::NonUnit, totrtri, torestrtri, defer_cow_hint);
+        auto trtri_ttg = trtri_LOWER::make_trtri_ttg(A, lapack::Diag::NonUnit, totrtri, torestrtri, defer_cow_hint);
         auto store_trtri_ttg = make_result_ttg(A, torestrtri, defer_cow_hint);
 
         connected = make_graph_executable(load_potrf.get());
@@ -352,7 +352,7 @@ int main(int argc, char **argv)
           
           elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endtrtri - begtrtri).count());
           std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
-                    << " TRTRI TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (trtri::FLOPS_DTRTRI(N)) << " " << (trtri::FLOPS_DTRTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+                    << " TRTRI TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (trtri_LOWER::FLOPS_DTRTRI(N)) << " " << (trtri_LOWER::FLOPS_DTRTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
 
           elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endlauum - beglauum).count());
           std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 

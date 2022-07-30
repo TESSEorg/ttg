@@ -163,7 +163,9 @@ public:
   MatrixTile<ValueT> operator()(int row, int col) const {
     ValueT* ptr = static_cast<ValueT*>(parsec_data_copy_get_ptr(
                       parsec_data_get_copy(pm->super.super.data_of(&pm->super.super, row, col), 0)));
-    return MatrixTile<ValueT>{pm->super.mb, pm->super.nb, ptr};
+    auto mb = (row < pm->super.mt - 1) ? pm->super.mb : pm->super.m - row * pm->super.mb;
+    auto nb = (col < pm->super.nt - 1) ? pm->super.nb : pm->super.n - col * pm->super.nb;
+    return MatrixTile<ValueT>{mb, nb, ptr, pm->super.mb};
   }
 
   /** Number of tiled rows **/
