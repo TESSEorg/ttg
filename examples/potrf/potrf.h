@@ -82,7 +82,7 @@ namespace potrf {
 #endif
 
       blas::trsm(blas::Layout::ColMajor, blas::Side::Right, lapack::Uplo::Lower, blas::Op::Trans, blas::Diag::NonUnit,
-                 mb, nb, 1.0, tile_kk.data(), tile_kk.lda(), tile_mk.data(), tile_kk.lda());
+                 mb, nb, 1.0, tile_kk.data(), tile_kk.lda(), tile_mk.data(), tile_mk.lda());
 
 #if defined(DEBUG_TILES_VALUES)
       std::cout << "After TRSM(" << key << "), A(" << K << ", " << K << ") is " << tile_mk << std::endl;
