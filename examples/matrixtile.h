@@ -122,6 +122,16 @@ public:
     return _data.get();
   }
 
+  /// @return shared_ptr to data
+  pointer_t data_shared() & {
+    return _data;
+  }
+
+  /// @return shared_ptr to data
+  pointer_t data_shared() const& {
+    return _data;
+  }
+
   /// yields data and resets this object to a default-constucted state
   pointer_t yield_data() && {
     pointer_t result = _data;
