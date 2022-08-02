@@ -46,7 +46,7 @@
 #define TTG_HAS_CXA_DEMANGLE
 #endif
 
-namespace mpqc {
+namespace ttg {
   namespace detail {
     Backtrace::Backtrace(const std::string &prefix) : prefix_(prefix) {
 #ifdef TTG_HAS_LIBUNWIND
@@ -176,4 +176,4 @@ namespace mpqc {
     }
 
   }  // namespace detail
-}  // namespace mpqc
+}  // namespace ttg

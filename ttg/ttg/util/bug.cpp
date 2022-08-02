@@ -44,7 +44,7 @@
 #endif
 
 using namespace std;
-using namespace mpqc;
+using namespace ttg;
 
 //////////////////////////////////////////////////////////////////////
 // static variables
@@ -251,8 +251,7 @@ void Debugger::debug(const char *reason) {
           ;
       }
     }
-  }
-  else {  // empty command = wait for the user to attach manually
+  } else {  // empty command = wait for the user to attach manually
     std::cout << prefix_ << ": waiting for the user to attach a debugger to process " << getpid() << " ... " << endl;
     debugger_ready_ = 0;
     while (!debugger_ready_)
@@ -346,7 +345,7 @@ void Debugger::__traceback(const std::string &prefix, const char *reason) {
 
 namespace ttg {
   void launch_debugger(int rank, const char *exec_name, const char *cmd) {
-    using mpqc::Debugger;
+    using ttg::Debugger;
     auto debugger = std::make_shared<Debugger>();
     Debugger::set_default_debugger(debugger);
     debugger->set_exec(exec_name);
