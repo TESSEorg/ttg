@@ -271,12 +271,14 @@ namespace ttg_parsec {
     MPI_Comm comm() const { return MPI_COMM_WORLD; }
 
     virtual void execute() override {
-      parsec_enqueue(ctx, tpool);
-      tpool->tdm.module->taskpool_addto_nb_pa(tpool, 1);
-      tpool->tdm.module->taskpool_ready(tpool);
-      [[maybe_unused]] auto ret = parsec_context_start(ctx);
-      // ignore ret since all of its nonzero values are OK (e.g. -1 due to ctx already being active)
-      parsec_taskpool_started = true;
+      if (!parsec_taskpool_started) {
+        parsec_enqueue(ctx, tpool);
+        tpool->tdm.module->taskpool_addto_nb_pa(tpool, 1);
+        tpool->tdm.module->taskpool_ready(tpool);
+        [[maybe_unused]] auto ret = parsec_context_start(ctx);
+        // ignore ret since all of its nonzero values are OK (e.g. -1 due to ctx already being active)
+        parsec_taskpool_started = true;
+      }
     }
 
     void destroy_tpool() {
