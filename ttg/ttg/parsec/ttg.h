@@ -60,7 +60,7 @@
 #include <parsec/scheduling.h>
 #if defined(PARSEC_PROF_TRACE)
 #include <parsec/profiling.h>
-#undef PARSEC_TTG_PROFILE_BACKEND 1
+#undef PARSEC_TTG_PROFILE_BACKEND
 #if defined(PARSEC_PROF_GRAPHER)
 #include <parsec/parsec_prof_grapher.h>
 #endif
@@ -105,6 +105,8 @@ namespace ttg_parsec {
     int32_t param_id;
     int num_keys;
   };
+
+  static void unregister_parsec_tags(void *_);
 
   namespace detail {
 
@@ -265,8 +267,8 @@ namespace ttg_parsec {
 
     ~WorldImpl() { destroy(); }
 
-    constexpr int parsec_ttg_tag() const { return _PARSEC_TTG_TAG; }
-    constexpr int parsec_ttg_rma_tag() const { return _PARSEC_TTG_RMA_TAG; }
+    static constexpr int parsec_ttg_tag() { return _PARSEC_TTG_TAG; }
+    static constexpr int parsec_ttg_rma_tag() { return _PARSEC_TTG_RMA_TAG; }
 
     MPI_Comm comm() const { return MPI_COMM_WORLD; }
 
@@ -306,8 +308,11 @@ namespace ttg_parsec {
         release_ops();
         ttg::detail::deregister_world(*this);
         destroy_tpool();
-        parsec_ce.tag_unregister(_PARSEC_TTG_TAG);
-        parsec_ce.tag_unregister(_PARSEC_TTG_RMA_TAG);
+        if (own_ctx) {
+          unregister_parsec_tags(nullptr);
+        } else {
+          parsec_context_at_fini(unregister_parsec_tags, nullptr);
+        }
 #if defined(PARSEC_PROF_TRACE)
         if(nullptr != profiling_array) {
           free(profiling_array);
@@ -454,6 +459,12 @@ namespace ttg_parsec {
     std::size_t profiling_array_size;
 #endif
   };
+
+  static void unregister_parsec_tags(void *_)
+  {
+    parsec_ce.tag_unregister(WorldImpl::parsec_ttg_tag());
+    parsec_ce.tag_unregister(WorldImpl::parsec_ttg_rma_tag());
+  }
 
   namespace detail {
 
