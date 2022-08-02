@@ -30,7 +30,7 @@ namespace ttg {
   inline void initialize(int argc, char** argv, int num_threads, RestOfArgs&&... args) {
     // if requested by user, create a Debugger object
     if (auto debugger_cstr = std::getenv("TTG_DEBUGGER")) {
-      using mpqc::Debugger;
+      using ttg::Debugger;
       auto debugger = std::make_shared<Debugger>();
       Debugger::set_default_debugger(debugger);
       debugger->set_exec(argv[0]);
@@ -41,8 +41,8 @@ namespace ttg {
     TTG_IMPL_NS::ttg_initialize(argc, argv, num_threads, std::forward<RestOfArgs>(args)...);
 
     // finish setting up the Debugger, if needed
-    if (mpqc::Debugger::default_debugger())
-      mpqc::Debugger::default_debugger()->set_prefix(ttg::default_execution_context().rank());
+    if (ttg::Debugger::default_debugger())
+      ttg::Debugger::default_debugger()->set_prefix(ttg::default_execution_context().rank());
   }
 
   /// Finalizes the TTG runtime
@@ -91,7 +91,7 @@ namespace ttg {
   /// @param tt a template task to invoke
   /// @note \c invoke_once may be called by all processes and must at least be
   ///       called by the process returned by \c tt.keymap()
-  template<typename TT>
+  template <typename TT>
   inline void invoke_once(TT& tt) {
     if (tt.keymap() == tt.get_world().rank()) {
       tt.invoke();
@@ -104,7 +104,7 @@ namespace ttg {
   /// @param key the to invoke the \c tt on
   /// @note \c invoke_once may be called by all processes and must at least be
   ///       called by the process returned by \c tt.keymap(key)
-  template<typename TT, typename Key>
+  template <typename TT, typename Key>
   inline void invoke_once(TT&& tt, Key&& key) {
     if (tt.keymap(key) == tt.get_world().rank()) {
       tt.invoke(std::forward<Key>(key));

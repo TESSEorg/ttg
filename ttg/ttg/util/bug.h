@@ -243,9 +243,6 @@ namespace ttg {
     };
 
   }  // namespace detail
-}  // namespace ttg
-
-namespace mpqc {
 
   /**
    * The Debugger class describes what should be done when a catastrophic
@@ -349,7 +346,7 @@ namespace mpqc {
     void resolve_cmd_alias();
   };
 
-}  // namespace mpqc
+}  // namespace ttg
 
 namespace ttg {
   void launch_debugger(int rank, const char *exec_name, const char *cmd);

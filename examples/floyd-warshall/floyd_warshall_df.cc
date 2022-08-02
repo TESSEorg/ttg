@@ -103,17 +103,17 @@ class Initiator : public TT<int,
  public:
   Initiator(Matrix<T>* adjacency_matrix_ttg, const std::string& name)
       : baseT(name, {}, {"outA", "outB", "outC", "outD"}), adjacency_matrix_ttg(adjacency_matrix_ttg) {
-        /* Initiator should run on all ranks */
-        auto rank = ttg::default_execution_context().rank();
-        this->set_keymap([=](int i){ return rank; });
-      }
+    /* Initiator should run on all ranks */
+    auto rank = ttg::default_execution_context().rank();
+    this->set_keymap([=](int i) { return rank; });
+  }
   Initiator(Matrix<T>* adjacency_matrix_ttg, const typename baseT::output_edges_type& outedges, const std::string& name)
       : baseT(edges(), outedges, name, {}, {"outA", "outB", "outC", "outD"})
       , adjacency_matrix_ttg(adjacency_matrix_ttg) {
-        /* Initiator should run on all ranks */
-        auto rank = ttg::default_execution_context().rank();
-        this->set_keymap([=](int i){ return rank; });
-      }
+    /* Initiator should run on all ranks */
+    auto rank = ttg::default_execution_context().rank();
+    this->set_keymap([=](int i) { return rank; });
+  }
 
   ~Initiator() {}
 
@@ -122,8 +122,7 @@ class Initiator : public TT<int,
     // This triggers for the immediate execution of function A at tile [0, 0]. But
     // functions B, C, and D have other dependencies to meet before execution; They wait
     std::for_each(adjacency_matrix_ttg->get().begin(), adjacency_matrix_ttg->get().end(),
-                  [&out](const std::pair<std::pair<int, int>, BlockMatrix<T>>& kv)
-                  {
+                  [&out](const std::pair<std::pair<int, int>, BlockMatrix<T>>& kv) {
                     auto [i, j] = kv.first;
                     if (i == 0 && j == 0) {  // A function call
                       ::send<0>(Key(std::make_pair(std::make_pair(i, j), 0)), kv.second, out);
@@ -288,8 +287,8 @@ class FuncA : public TT<Key,
     }
 
     // making x_ready for the computation on the SAME block in the NEXT iteration
-    if (K < (blocking_factor - 1)) {   // if there is a NEXT iteration
-      std::get<0>(bcast_keys)[0] = {I, J, K+1};
+    if (K < (blocking_factor - 1)) {  // if there is a NEXT iteration
+      std::get<0>(bcast_keys)[0] = {I, J, K + 1};
       if (I == K + 1 && J == K + 1) {  // in the next iteration, we have A function call
                                        // cout << "Send " << I << " " << J << " " << K << endl;
         //::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
@@ -378,8 +377,8 @@ class FuncB : public TT<Key,
     }
 
     // making x_ready for the computation on the SAME block in the NEXT iteration
-    if (K < (blocking_factor - 1)) {   // if there is a NEXT iteration
-      std::get<0>(bcast_keys)[0] = {I, J, K+1};
+    if (K < (blocking_factor - 1)) {  // if there is a NEXT iteration
+      std::get<0>(bcast_keys)[0] = {I, J, K + 1};
       if (I == K + 1 && J == K + 1) {  // in the next iteration, we have A function call
                                        // cout << "Send " << I << " " << J << " " << K << endl;
         //::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
@@ -467,8 +466,8 @@ class FuncC : public TT<Key,
     }
 
     // making x_ready for the computation on the SAME block in the NEXT iteration
-    if (K < (blocking_factor - 1)) {   // if there is a NEXT iteration
-      std::get<0>(bcast_keys)[0] = {I, J, K+1};
+    if (K < (blocking_factor - 1)) {  // if there is a NEXT iteration
+      std::get<0>(bcast_keys)[0] = {I, J, K + 1};
       if (I == K + 1 && J == K + 1) {  // in the next iteration, we have A function call
                                        // cout << "Send " << I << " " << J << " " << K << endl;
         //::send<0>(Key(std::make_pair(std::make_pair(I, J), K + 1)), m_ij, out);
@@ -580,10 +579,10 @@ class FloydWarshall {
   int blocking_factor;
 
  public:
-  template<typename Keymap>
+  template <typename Keymap>
   FloydWarshall(Matrix<T>* adjacency_matrix_ttg, Matrix<T>* result_matrix_ttg, int problem_size, int blocking_factor,
-                const std::string& kernel_type, int recursive_fan_out, int base_size, T* adjacency_matrix_serial, Keymap&& keymap,
-                bool verify_results = false)
+                const std::string& kernel_type, int recursive_fan_out, int base_size, T* adjacency_matrix_serial,
+                Keymap&& keymap, bool verify_results = false)
       : initiator(adjacency_matrix_ttg, "initiator")
       , funcA(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcA")
       , funcB(adjacency_matrix_ttg, problem_size, blocking_factor, kernel_type, recursive_fan_out, base_size, "funcB")
@@ -677,7 +676,7 @@ int main(int argc, char** argv) {
 
   ttg::World world = ttg::default_execution_context();
 
-  using mpqc::Debugger;
+  using ttg::Debugger;
   auto debugger = std::make_shared<Debugger>();
   Debugger::set_default_debugger(debugger);
   debugger->set_exec(argv[0]);
@@ -721,15 +720,15 @@ int main(int argc, char** argv) {
   int n_bcols = n_brows;
 
   int rank = world.rank();
-  int P  = std::sqrt(world.size());
-  int Q  = world.size() / P;
-  auto keymap = [=](const Key &key) {
+  int P = std::sqrt(world.size());
+  int Q = world.size() / P;
+  auto keymap = [=](const Key& key) {
     int I = key.execution_info.first.first;
     int J = key.execution_info.first.second;
-    return ((I%P) + (J%Q)*P);
+    return ((I % P) + (J % Q) * P);
   };
 
-  auto predicate = [=](int i, int j){ return keymap(Key{i, j, 0}) == rank; };
+  auto predicate = [=](int i, int j) { return keymap(Key{i, j, 0}) == rank; };
 
   Matrix<double>* m = new Matrix<double>(n_brows, n_bcols, block_size, block_size, predicate);
   Matrix<double>* r = new Matrix<double>(n_brows, n_bcols, block_size, block_size, predicate);
@@ -738,13 +737,12 @@ int main(int argc, char** argv) {
     adjacency_matrix_serial = (double*)malloc(sizeof(double) * problem_size * problem_size);
   }
 
-  //double start = madness::wall_time();
+  // double start = madness::wall_time();
   m->fill();
-  if (verify_results)
-    init_square_matrix(problem_size, blocking_factor, adjacency_matrix_serial);
-  //std::cout << "Init took: " << madness::wall_time() - start << std::endl;
-  // Run in every process to be able to verify? Is there another way?
-  // Calling the iterative fw-apsp
+  if (verify_results) init_square_matrix(problem_size, blocking_factor, adjacency_matrix_serial);
+  // std::cout << "Init took: " << madness::wall_time() - start << std::endl;
+  //  Run in every process to be able to verify? Is there another way?
+  //  Calling the iterative fw-apsp
   if (verify_results) {
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     floyd_iterative(adjacency_matrix_serial, problem_size);
@@ -830,11 +828,11 @@ void init_square_matrix(int problem_size, int blocking_factor, double* adjacency
     for (int nc = 0; nc < n_brows; nc++) {
       for (int i = 0; i < block_size; ++i) {
         int row = (i + nr * block_size) * problem_size;
-        //int blockX = i / block_size;
-        //int x = i % block_size;
+        // int blockX = i / block_size;
+        // int x = i % block_size;
         for (int j = 0; j < block_size; ++j) {
-          //int blockY = j / block_size;
-          //int y = j % block_size;
+          // int blockY = j / block_size;
+          // int y = j % block_size;
           /*if (i != j) {
             double value = i * blocking_factor + j;  // rand() % 100 + 1;
             ((*m)(blockX, blockY))(x, y, value);

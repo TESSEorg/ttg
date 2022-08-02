@@ -1277,7 +1277,7 @@ int main(int argc, char **argv) {
   auto debug = (unsigned int)parseOption(debugStr, 0);
 
   if (debug & (1 << 1)) {
-    using mpqc::Debugger;
+    using ttg::Debugger;
     auto debugger = std::make_shared<Debugger>();
     Debugger::set_default_debugger(debugger);
     debugger->set_exec(argv[0]);
