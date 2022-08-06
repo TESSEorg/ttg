@@ -165,31 +165,31 @@ namespace potrf {
   template <typename MatrixT>
   auto make_gemm(MatrixT& A,
                  ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& input_disp,   // From the dispatcher
-                 ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& input_kn,     // from TRSM
                  ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& input_mk,     // from TRSM
+                 ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& input_nk,     // from TRSM
                  ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& input_mn,     // from TRSM
                  ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_trsm,  // to TRSM
                  ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& output_gemm) {
     using T = typename MatrixT::element_type;
-    auto f = [=](const Key3& key, const MatrixTile<T>& tile_kn, const MatrixTile<T>& tile_mk, MatrixTile<T>&& tile_mn,
+    auto f = [=](const Key3& key, const MatrixTile<T>& tile_mk, const MatrixTile<T>& tile_nk, MatrixTile<T>&& tile_mn,
                  std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key3, MatrixTile<T>>>& out) {
       const int M = key.I;
       const int N = key.J;
       const int K = key.K;
       assert(M != N && M > K && N > K);
 
-      assert(tile_mk.cols() == tile_kn.rows());
+      assert(tile_mk.cols() == tile_nk.cols());
       assert(tile_mk.rows() == tile_mn.rows());
-      assert(tile_kn.cols() == tile_mn.cols());
+      assert(tile_nk.rows() == tile_mn.cols());
 
       if (ttg::tracing()) ttg::print("GEMM(", key, ")");
 #if defined(DEBUG_TILES_VALUES)
       std::cout << "Before GEMM(" << key << "), A(" << M << ", " << K << ") is " << tile_mk << " and A(" << K << ", "
-                << N << ") is " << tile_kn << " and A(" << M << ", " << N << ") is " << tile_mn;
+                << N << ") is " << tile_nk << " and A(" << M << ", " << N << ") is " << tile_mn;
 #endif
 
-      blas::gemm(blas::Layout::ColMajor, blas::Op::NoTrans, blas::Op::Trans, tile_mk.rows(), tile_mn.cols(),
-                 tile_kn.rows(), -1.0, tile_mk.data(), tile_mk.lda(), tile_kn.data(), tile_kn.lda(), 1.0,
+      blas::gemm(blas::Layout::ColMajor, blas::Op::NoTrans, blas::Op::Trans, tile_mk.rows(), tile_nk.rows(),
+                 tile_nk.cols(), -1.0, tile_mk.data(), tile_mk.lda(), tile_nk.data(), tile_nk.lda(), 1.0,
                  tile_mn.data(), tile_mn.lda());
 
 #if defined(DEBUG_TILES_VALUES)
@@ -206,7 +206,7 @@ namespace potrf {
         ttg::send<1>(Key3(M, N, K + 1), std::move(tile_mn), out);
       }
     };
-    return ttg::make_tt(f, ttg::edges(input_mk, input_kn, ttg::fuse(input_disp, input_mn)),
+    return ttg::make_tt(f, ttg::edges(input_mk, input_nk, ttg::fuse(input_disp, input_mn)),
                         ttg::edges(output_trsm, output_gemm), "GEMM", {"input_mk", "input_kn", "input_mn/dispatcher"},
                         {"output_trsm", "outout_gemm"});
   }
