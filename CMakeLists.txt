@@ -46,7 +46,9 @@ set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
 ########################################
 option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" ON)
 option(TTG_EXAMPLES "Whether to build examples" OFF)
+
 option(TTG_FETCH_BOOST "Whether to fetch+build Boost, if missing" OFF)
+option(TTG_IGNORE_BUNDLED_EXTERNALS "Whether to skip installation and use of bundled external depenedencies (Boost.CallableTraits)" OFF)
 option(TTG_ENABLE_TRACE "Whether to enable ttg::trace() output" OFF)
 # See https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
 option (FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." TRUE)
@@ -149,6 +151,13 @@ configure_package_config_file(cmake/ttg-config.cmake.in
         PATH_VARS CMAKE_INSTALL_PREFIX CMAKE_INSTALL_BINDIR
         CMAKE_INSTALL_INCLUDEDIR CMAKE_INSTALL_LIBDIR
         CMAKE_INSTALL_DOCDIR CMAKE_INSTALL_CMAKEDIR)
+
+# Install some CMake modules
+install(FILES
+        "${PROJECT_SOURCE_DIR}/cmake/modules/AddTTGExecutable.cmake"
+        "${PROJECT_SOURCE_DIR}/cmake/modules/AddTTGTestExecutable.cmake"
+        DESTINATION "${CMAKE_INSTALL_CMAKEDIR}/modules"
+        COMPONENT ttg-config)
 
 # Install config, version, and target files
 install(EXPORT ttg

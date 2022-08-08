@@ -623,7 +623,9 @@ namespace ttg_madness {
       static_streamsize[i] = size;
     }
 
-    /// sets stream size for input \c i
+    /// sets stream size for input \c i and key \c key
+    /// \tparam <i>: index of the input terminal to set
+    /// \param key the task identifier
     /// \param size positive integer that specifies the stream size
     template <std::size_t i, typename Key = keyT, bool key_is_void = ttg::meta::is_void_v<Key>>
     std::enable_if_t<!key_is_void, void> set_argstream_size(const Key &key, std::size_t size) {
@@ -975,12 +977,24 @@ namespace ttg_madness {
       }
     }
 
+    /// define the reducer function to be called when additional inputs are
+    /// received on a streaming terminal
+    ///   @tparam <i> the index of the input terminal that is used as a streaming terminal
+    ///   @param[in] reducer: a function of prototype (input_type<i> &a, const input_type<i> &b)
+    ///                       that function should aggregate b into a
     template <std::size_t i, typename Reducer>
     void set_input_reducer(Reducer &&reducer) {
       ttg::trace(world.rank(), ":", get_name(), " : setting reducer for terminal ", i);
       std::get<i>(input_reducers) = reducer;
     }
 
+    /// define the reducer function to be called when additional inputs are
+    /// received on a streaming terminal
+    ///   @tparam <i> the index of the input terminal that is used as a streaming terminal
+    ///   @param[in] reducer: a function of prototype (input_type<i> &a, const input_type<i> &b)
+    ///                       that function should aggregate b into a
+    ///   @param[in] size: the default number of inputs that are received in this streaming terminal,
+    ///                    for each task
     template <std::size_t i, typename Reducer>
     void set_input_reducer(Reducer &&reducer, std::size_t size) {
       set_input_reducer<i>(std::forward<Reducer>(reducer));

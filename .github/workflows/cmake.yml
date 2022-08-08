@@ -57,8 +57,8 @@ jobs:
           cd ${{github.workspace}}/build
           wget https://downloads.sourceforge.net/project/doxygen/rel-${DOXYGEN_VERSION}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
           # using EFV's gdrive mirror of 1.9.2 to work around the unreliable sourceforge
-          # the sharing link: https://drive.google.com/file/d//view?usp=sharing
-          # wget -O doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz "https://drive.google.com/uc?export=download&id=16GXpH4YOEUxGXQrXOKdAIibhdfzATY0d"
+          # the sharing link: https://drive.google.com/file/d/16GXpH4YOEUxGXQrXOKdAIibhdfzATY0d/view?usp=sharing
+          wget -4 --no-check-certificate -O doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz "https://drive.google.com/uc?export=download&id=16GXpH4YOEUxGXQrXOKdAIibhdfzATY0d"
           tar xzf ./doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz
           export DOXYGEN_DIR=${{github.workspace}}/build/doxygen-${DOXYGEN_VERSION}
           ${DOXYGEN_DIR}/bin/doxygen --version
@@ -114,8 +114,20 @@ jobs:
       working-directory: ${{github.workspace}}/build
       shell: bash
       run: |
-        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/main -B test_install -DCMAKE_PREFIX_PATH=${{github.workspace}}/install
-        cmake --build test_install
+        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/main -B test_install_devsamp -DCMAKE_PREFIX_PATH=${{github.workspace}}/install
+        cmake --build test_install_devsamp
+        cmake -E make_directory test_install_userexamples
+        cat > test_install_userexamples/CMakeLists.txt <<EOF
+        cmake_minimum_required(VERSION 3.14)
+        project(test)
+        find_package(ttg REQUIRED)
+        add_ttg_executable(simple $GITHUB_WORKSPACE/doc/dox/user/examples/simple.cc NOT_EXCLUDE_FROM_ALL)
+        add_ttg_executable(reducing $GITHUB_WORKSPACE/doc/dox/user/examples/reducing.cc NOT_EXCLUDE_FROM_ALL)
+        add_ttg_executable(iterative $GITHUB_WORKSPACE/doc/dox/user/examples/iterative.cc NOT_EXCLUDE_FROM_ALL)
+        add_ttg_executable(distributed $GITHUB_WORKSPACE/doc/dox/user/examples/distributed.cc NOT_EXCLUDE_FROM_ALL)
+        EOF
+        cmake -S test_install_userexamples -B test_install_userexamples/build -DCMAKE_PREFIX_PATH=${{github.workspace}}/install
+        cmake --build test_install_userexamples/build
 
     - name: Build+Deploy Dox
       if: ${{ matrix.os == 'ubuntu-20.04' && matrix.build_type == 'Release' && github.ref == 'refs/heads/master' }}

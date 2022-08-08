@@ -109,6 +109,15 @@ namespace ttg {
 
     virtual ~TerminalBase() = default;
   };
+
+  namespace meta {
+    template <typename T, typename = void>
+    inline constexpr bool is_terminal_v = false;
+    template <typename T>
+    inline constexpr bool is_terminal_v<T, std::is_base_of<TerminalBase, T>> = true;
+    template <typename T>
+    struct is_terminal : std::bool_constant<is_terminal_v<T>> {};
+  }  // namespace meta
 }  // namespace ttg
 
 #endif  // TTG_BASE_TERMINAL_H

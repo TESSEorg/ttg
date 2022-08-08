@@ -136,7 +136,9 @@ namespace ttg {
    public:
     virtual ~TTBase() = default;
 
-    // Manual injection of a task that has no key or arguments
+    /// Use this to create a task that takes no data "manually"
+    /// @warning calls std::abort() if the derived class TT did not override this;
+    ///          only makes sense to override this if the derived TT uses void for key or data
     virtual void invoke() {
       std::cerr << "TTBase::invoke() invoked on a TT that did not override it" << std::endl;
       abort();

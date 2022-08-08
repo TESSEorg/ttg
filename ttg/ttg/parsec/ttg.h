@@ -2242,8 +2242,8 @@ namespace ttg_parsec {
     }
 
    public:
-    // sets the default stream size for input \c i
-    // \param size positive integer that specifies the default stream size
+    /// sets the default stream size for input \c i
+    /// \param size positive integer that specifies the default stream size
     template <std::size_t i>
     void set_static_argstream_size(std::size_t size) {
       assert(std::get<i>(input_reducers) && "TT::set_argstream_size called on nonstreaming input terminal");
@@ -2262,6 +2262,7 @@ namespace ttg_parsec {
 
     /// sets stream size for input \c i
     /// \param size positive integer that specifies the stream size
+    /// \param key the task identifier that expects this number of inputs in the streaming terminal
     template <std::size_t i, typename Key>
     std::enable_if_t<!ttg::meta::is_void_v<Key>, void> set_argstream_size(const Key &key, std::size_t size) {
       // preconditions
@@ -2860,12 +2861,24 @@ namespace ttg_parsec {
 
     static constexpr const ttg::Runtime runtime = ttg::Runtime::PaRSEC;
 
+    /// define the reducer function to be called when additional inputs are
+    /// received on a streaming terminal
+    ///   @tparam <i> the index of the input terminal that is used as a streaming terminal
+    ///   @param[in] reducer: a function of prototype (input_type<i> &a, const input_type<i> &b)
+    ///                       that function should aggregate b into a
     template <std::size_t i, typename Reducer>
     void set_input_reducer(Reducer &&reducer) {
       ttg::trace(world.rank(), ":", get_name(), " : setting reducer for terminal ", i);
       std::get<i>(input_reducers) = reducer;
     }
 
+    /// define the reducer function to be called when additional inputs are
+    /// received on a streaming terminal
+    ///   @tparam <i> the index of the input terminal that is used as a streaming terminal
+    ///   @param[in] reducer: a function of prototype (input_type<i> &a, const input_type<i> &b)
+    ///                       that function should aggregate b into a
+    ///   @param[in] size: the default number of inputs that are received in this streaming terminal,
+    ///                    for each task
     template <std::size_t i, typename Reducer>
     void set_input_reducer(Reducer &&reducer, std::size_t size) {
       set_input_reducer<i>(std::forward<Reducer>(reducer));

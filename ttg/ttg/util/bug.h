@@ -96,7 +96,10 @@ namespace ttg {
           return result;
         }
 
-        /// Sets a watchpoint in thread @c thread and pointing to @c addr
+        /// Sets a watchpoint in thread @c thread and pointing to @c size bytes starting at @c addr if @c cond holds
+        /// @param addr base address to watch
+        /// @param size how many bytes to watch starting at address @c addr
+        /// @param cond condition that need to hold to trigger the watchpoint
         /// @param thread pthread_t object
         /// @throws std::runtime_error if setting memory watchpoint failed
         /// @return reference to this
@@ -120,6 +123,7 @@ namespace ttg {
         }
 
         /// Find watchpoint in thread @c thread and pointing to @c addr
+        /// @param addr base address to watch
         /// @param thread pointer to the pthread_t
         /// @return the pointer to the MemoryWatchpoint object; nullptr if such a watchpoint does not exist
         MemoryWatchpoint_x86_64 *find(void *addr, const pthread_t *thread) {
@@ -131,6 +135,8 @@ namespace ttg {
           return nullptr;
         }
 
+        /// Clear a watchpoint
+        /// @param addr address that is watched
         /// @param thread pointer to the pthread_t
         Pool &clear(void *addr, const pthread_t *thread) {
           const auto it = pool_.find(thread);
@@ -171,7 +177,7 @@ namespace ttg {
       /// @param[in] size the size of the memory window
       /// @param[in] cond the condition to watch for
       /// @param[in] dr the debugging register to use
-      /// @param[in] threads the set of threads to watch
+      /// @param[in] thread the thread to watch
       /// @throw std::runtime_error if setting the watchpoint fails (either due to the lack of available registers or
       /// another reason)
       MemoryWatchpoint_x86_64(void *addr, Size size, Condition cond, DebugRegister dr, const pthread_t *thread)
