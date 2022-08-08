@@ -35,24 +35,6 @@ bool cmdOptionExists(char** begin, char** end, const std::string& option)
     return std::find(begin, end, option) != end;
 }
 
-static auto make_load_tt(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>> &toop, bool defer_write)
-{
-  auto load_tt = ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, MatrixTile<double>>>& out) {
-      for(int i = 0; i < A.rows(); i++) {
-        for(int j = 0; j <= i && j < A.cols(); j++) {
-          if(A.is_local(i, j)) {
-            if(ttg::tracing()) ttg::print("load(", Key2{i, j}, ")");
-            ttg::send<0>(Key2{i, j}, std::move(A(i, j)), out);
-          }
-        }
-      }
-    }, ttg::edges(), ttg::edges(toop), "Load Matrix", {}, {"To Op"});
-  load_tt->set_keymap([]() {return ttg::ttg_default_execution_context().rank();});
-  load_tt->set_defer_writer(defer_write);
-
-  return std::move(load_tt);
-}
-
 int main(int argc, char **argv)
 {
 

@@ -60,6 +60,7 @@ int main(int argc, char **argv)
   if( (opt = getCmdOption(argv+1, argv+argc, "-dag")) != nullptr ) {
     prof_filename = opt;
   }
+  bool defer_cow_hint = cmdOptionExists(argv+1, argv+argc, "-w");
 
   ttg::initialize(argc, argv, nthreads);
 
@@ -113,11 +114,11 @@ int main(int argc, char **argv)
                 (parsec_tiled_matrix_dc_t *)&dcA, random_seed);
   auto init_tt  = make_matrix_reader_tt(A, startup, topotrf);
 #else
-  auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, tolauum);
+  auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, tolauum, defer_cow_hint);
 #endif // USE_DPLASMA
 
-  auto lauum_ttg = lauum::make_lauum_ttg(A, tolauum, result);
-  auto result_ttg = make_result_ttg(A, result);
+  auto lauum_ttg = lauum::make_lauum_ttg(A, tolauum, result, defer_cow_hint);
+  auto result_ttg = make_result_ttg(A, result, defer_cow_hint);
 
   auto connected = make_graph_executable(init_tt.get());
   assert(connected);
