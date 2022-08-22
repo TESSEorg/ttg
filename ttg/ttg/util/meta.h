@@ -24,7 +24,7 @@ namespace ttg {
     using remove_cvr_t = std::remove_cv_t<std::remove_reference_t<T>>;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // tuple manipulations
+    // (meta)tuple/typelist/typepack manipulations
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // tuple<Ts...> -> tuple<std::remove_reference_t<Ts>...>
@@ -82,6 +82,113 @@ namespace ttg {
 
     template <typename Tuple, template <typename> typename Pred>
     using filtered_tuple_t = typename filtered_tuple<Tuple, Pred>::type;
+
+    // clang-format off
+    /// This metafunction applies `Predicate` is true when applied to the last element of `Ts...`, if not empty, else evaluates to `Default`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Default the metafunction result for the case of empty `Ts...`
+    /// \tparam Ts a type pack
+    // clang-format on
+    template <template <typename> typename Predicate, bool Default, typename... Ts>
+    struct probe_last;
+
+    template <template <typename> typename Predicate, bool Default>
+    struct probe_last<Predicate, Default> : public std::bool_constant<Default> {};
+
+    template <template <typename> typename Predicate, bool Default, typename T>
+    struct probe_last<Predicate, Default, T> : public std::bool_constant<Predicate<T>::value> {};
+
+    template <template <typename> typename Predicate, bool Default, typename T1, typename... Ts>
+    struct probe_last<Predicate, Default, T1, Ts...> : public probe_last<Predicate, Default, Ts...> {};
+
+    template <template <typename> typename Predicate, bool Default, typename... Ts>
+    struct probe_last<Predicate, Default, std::tuple<Ts...>> : public probe_last<Predicate, Default, Ts...> {};
+
+    template <template <typename> typename Predicate, bool Default, typename... Ts>
+    struct probe_last<Predicate, Default, ttg::typelist<Ts...>> : public probe_last<Predicate, Default, Ts...> {};
+
+    // clang-format off
+    /// This constexpr function applies `Predicate` is true when applied to the last element of `Ts...`, if not empty, else evaluates to `Default`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Default the metafunction result for the case of empty `Ts...`
+    /// \tparam Ts a type pack
+    // clang-format on
+    template <template <typename> typename Predicate, bool Default, typename... Ts>
+    constexpr bool probe_last_v = probe_last<Predicate, Default, Ts...>::value;
+
+    // clang-format off
+    /// This metafunction checks if `Predicate` is true when applied to the first element of `Ts...`, if not empty, else evaluates to `Default`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Default the metafunction result for the case of empty `Ts...`
+    /// \tparam Ts a type pack
+    // clang-format on
+    template <template <typename> typename Predicate, bool Default, typename... Ts>
+    struct probe_first;
+
+    template <template <typename> typename Predicate, bool Default>
+    struct probe_first<Predicate, Default> : public std::bool_constant<Default> {};
+
+    template <template <typename> typename Predicate, bool Default, typename T1, typename... Ts>
+    struct probe_first<Predicate, Default, T1, Ts...> : public std::bool_constant<Predicate<T1>::value> {};
+
+    template <template <typename> typename Predicate, bool Default, typename... Ts>
+    struct probe_first<Predicate, Default, std::tuple<Ts...>> : public probe_first<Predicate, Default, Ts...> {};
+
+    template <template <typename> typename Predicate, bool Default, typename... Ts>
+    struct probe_first<Predicate, Default, ttg::typelist<Ts...>> : public probe_first<Predicate, Default, Ts...> {};
+
+    // clang-format off
+    /// This constexpr function checks if `Predicate` is true when applied to the first element of `Ts...`, if not empty, else evaluates to `Default`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Default the metafunction result for the case of empty `Ts...`
+    /// \tparam Ts a type pack
+    // clang-format on
+    template <template <typename> typename Predicate, bool Default, typename... Ts>
+    constexpr bool probe_first_v = probe_first<Predicate, Default, Ts...>::value;
+
+    // clang-format off
+    /// This metafunction checks if `Predicate` is true for any element of `Ts...`; evaluates to false for the empty `Ts...`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Ts a type pack
+    // clang-format on
+    template <template <typename> typename Predicate, typename... Ts>
+    struct probe_any : std::bool_constant<(Predicate<Ts>::value || ...)> {};
+
+    template <template <typename> typename Predicate, typename... Ts>
+    struct probe_any<Predicate, std::tuple<Ts...>> : public probe_any<Predicate, Ts...> {};
+
+    template <template <typename> typename Predicate, typename... Ts>
+    struct probe_any<Predicate, ttg::typelist<Ts...>> : public probe_any<Predicate, Ts...> {};
+
+    // clang-format off
+    /// This constexpr function checks if `Predicate` is true for any element of `Ts...`; evaluates to false for the empty `Ts...`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Ts a type pack
+    // clang-format on
+    template <template <typename> typename Predicate, typename... Ts>
+    constexpr bool probe_any_v = probe_any<Predicate, Ts...>::value;
+
+    // clang-format off
+    /// This metafunction checks if `Predicate` is true for all elements of `Ts...`; evaluates to true for the empty `Ts...`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Ts a type pack
+    // clang-format on
+    template <template <typename> typename Predicate, typename... Ts>
+    struct probe_all : std::bool_constant<(Predicate<Ts>::value && ...)> {};
+
+    template <template <typename> typename Predicate, typename... Ts>
+    struct probe_all<Predicate, std::tuple<Ts...>> : public probe_all<Predicate, Ts...> {};
+
+    template <template <typename> typename Predicate, typename... Ts>
+    struct probe_all<Predicate, ttg::typelist<Ts...>> : public probe_all<Predicate, Ts...> {};
+
+    // clang-format off
+    /// This constexpr function checks if `Predicate` is true for all elements of `Ts...`; evaluates to true for the empty `Ts...`
+    /// \tparam Predicate boolean metafunction, i.e. `Predicate<T>::value` is a compile-time boolean
+    /// \tparam Ts a type pack
+    // clang-format on
+    template <template <typename> typename Predicate, typename... Ts>
+    constexpr bool probe_all_v = probe_all<Predicate, Ts...>::value;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // is_Void_v
@@ -144,22 +251,7 @@ namespace ttg {
     constexpr bool is_none_Void_v<ttg::typelist<Ts...>> = is_none_Void_v<Ts...>;
 
     template <typename... Ts>
-    struct is_last_void;
-
-    template <>
-    struct is_last_void<> : public std::false_type {};
-
-    template <typename T>
-    struct is_last_void<T> : public std::conditional_t<is_void_v<T>, std::true_type, std::false_type> {};
-
-    template <typename T1, typename... Ts>
-    struct is_last_void<T1, Ts...> : public is_last_void<Ts...> {};
-
-    template <typename... Ts>
-    struct is_last_void<std::tuple<Ts...>> : public is_last_void<Ts...> {};
-
-    template <typename... Ts>
-    struct is_last_void<ttg::typelist<Ts...>> : public is_last_void<Ts...> {};
+    struct is_last_void : probe_last<is_void, false, Ts...> {};
 
     template <typename... Ts>
     constexpr bool is_last_void_v = is_last_void<Ts...>::value;
@@ -176,8 +268,18 @@ namespace ttg {
     using void_to_Void_t = typename void_to_Void<T>::type;
 
     template <typename T>
+    constexpr bool is_const_lvalue_reference_v =
+        std::is_lvalue_reference_v<T> &&std::is_const_v<std::remove_reference_t<T>>;
+
+    template <typename T>
+    struct is_const_lvalue_reference : std::bool_constant<is_const_lvalue_reference_v<T>> {};
+
+    template <typename T>
     constexpr bool is_nonconst_lvalue_reference_v =
         std::is_lvalue_reference_v<T> && !std::is_const_v<std::remove_reference_t<T>>;
+
+    template <typename T>
+    struct is_nonconst_lvalue_reference : std::bool_constant<is_nonconst_lvalue_reference_v<T>> {};
 
     template <typename... Ts>
     constexpr bool is_any_nonconst_lvalue_reference_v = (is_nonconst_lvalue_reference_v<Ts> || ...);
