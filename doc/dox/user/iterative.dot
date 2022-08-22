@@ -1,0 +1,15 @@
+digraph G {
+  rankdir="LR";
+  subgraph simple {
+    { rank="same"; A [label="A(k)"]; }
+    { rank="same";
+      B0 [label="B(k, 0)"];
+      B1 [label="B(k, 1)"]; }
+    { rank="same"; C [label="C(k)"]; }
+    A -> B1 [label="n+1.0"];
+    A -> B0 [label="n+2.0"];
+    B0 -> C [label="n+1.0"];
+    B1 -> C [label="n+1.0"];
+  }
+  C -> A [label="n1+n2 iff n1+n2 < 100.0"];
+}

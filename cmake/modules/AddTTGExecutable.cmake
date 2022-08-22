@@ -8,14 +8,14 @@
 # creates executable X-r for every r in runtime_list:
 # * if RUNTIMES is omitted, will use all known runtimes, otherwise use the specified runtimes
 #
-# example: add_ttg_executable(test "test/test1.cc;test/test2.cc" RUNTIMES "mad" LINK_LIBRARIES "BTAS" COMPILE_DEFINITIONG "COOL_DEFINE=1" COMPILE_FEATURES "cxx_std_20")
+# example: add_ttg_executable(test "test/test1.cc;test/test2.cc" RUNTIMES "mad" LINK_LIBRARIES "BTAS" COMPILE_DEFINITIONG "COOL_DEFINE=1" COMPILE_FEATURES "cxx_std_20" NOT_EXCLUDE_FROM_ALL SINGLERANKONLY)
 #
 
 include(AddTTGTestExecutable)
 
 macro(add_ttg_executable)
 
-    set(optionArgs SINGLERANKONLY)
+    set(optionArgs SINGLERANKONLY NOT_EXCLUDE_FROM_ALL)
     set(multiValueArgs RUNTIMES LINK_LIBRARIES COMPILE_DEFINITIONS COMPILE_FEATURES TEST_CMDARGS)
     cmake_parse_arguments(ADD_TTG_EXECUTABLE "${optionArgs}" ""
             "${multiValueArgs}" ${ARGN})
@@ -68,7 +68,11 @@ macro(add_ttg_executable)
             list(APPEND _compile_features "${ADD_TTG_EXECUTABLE_COMPILE_FEATURES}")
         endif ()
 
-        add_executable(${_executable}-${r} EXCLUDE_FROM_ALL "${_sources_list}")
+        if (NOT ADD_TTG_EXECUTABLE_NOT_EXCLUDE_FROM_ALL)
+            add_executable(${_executable}-${r} EXCLUDE_FROM_ALL "${_sources_list}")
+        else()
+            add_executable(${_executable}-${r} "${_sources_list}")
+        endif()
         target_compile_definitions(${_executable}-${r} PRIVATE "${_compile_definitions}")
         target_link_libraries(${_executable}-${r} PRIVATE "${_link_libraries}")
         if (_compile_features)
