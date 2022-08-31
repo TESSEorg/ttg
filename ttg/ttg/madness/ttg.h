@@ -1018,8 +1018,8 @@ namespace ttg_madness {
 
     /// implementation of TTBase::make_executable()
     void make_executable() override {
-      this->process_pending();
       TTBase::make_executable();
+      this->process_pending();
     }
 
     /// Waits for the entire TTG associated with this TT to be completed (collective)

@@ -326,7 +326,7 @@ namespace ttg {
     /// Set the prefix to the decimal represention of p followed by a ": ".
     virtual void set_prefix(int p);
 
-    /** Sets the command to be exectuted when debug is called.
+    /** Sets the command to be executed when debug is called.
         The character sequence "$(EXEC)" is replaced by the executable
         name (see set_exec), "$(PID)" is replaced by the
         current process id, and "$(PREFIX)" is replaced by the
