@@ -254,7 +254,7 @@ int main(int argc, char **argv)
           
           elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endpotri - begpotri).count());
           std::cout << "POINV (POTRF+POTRI) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
-                    << " TRTRI TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (potri::FLOPS_DPOTRI(N)) << " " << (potri::FLOPS_DPOTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+                    << " POTRI TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (potri::FLOPS_DPOTRI(N)) << " " << (potri::FLOPS_DPOTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
 
           elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
           std::cout << "POINV (POTRF+POTRI) (" << (defer_cow_hint ? "with" : "without") << " defer writer) N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
