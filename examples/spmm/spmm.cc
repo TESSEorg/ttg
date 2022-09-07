@@ -207,8 +207,8 @@ class Read_SpMatrix : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, Read_SpMat
     auto rank = ttg::default_execution_context().rank();
     for (int k = 0; k < matrix_.outerSize(); ++k) {
       for (typename SpMatrix<Blk>::InnerIterator it(matrix_, k); it; ++it) {
-        if (rank == this->get_keymap()(Key<3>({it.row(), it.col(), 0})))
-          ::send<0>(Key<3>({it.row(), it.col(), 0}), it.value(), out);
+        if (rank == this->get_keymap()(Key<3>(std::initializer_list<long>({it.row(), it.col(), 0}))))
+          ::send<0>(Key<3>(std::initializer_list<long>({it.row(), it.col(), 0})), it.value(), out);
       }
     }
   }
@@ -227,7 +227,7 @@ class Write_SpMatrix : public TT<Key<3>, std::tuple<>, Write_SpMatrix<Blk>, ttg:
   Write_SpMatrix(SpMatrix<Blk> &matrix, Edge<Key<3>, Blk> &in, Keymap &&keymap)
       : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, keymap), matrix_(matrix) {}
 
-  void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
+  void op(const Key<3> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
     std::lock_guard<std::mutex> lock(mtx_);
     ttg::trace("rank =", default_execution_context().rank(),
                "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.cc Write_SpMatrix wrote {",
@@ -260,7 +260,7 @@ class Write_SpMatrix : public TT<Key<3>, std::tuple<>, Write_SpMatrix<Blk>, ttg:
 };
 
 // sparse mm
-template <typename Keymap = std::function<int(const Key<3> &)>, typename Blk = blk_t>
+template <typename Keymap = std::function<int(const Key<4> &)>, typename Blk = blk_t>
 class SpMM {
  public:
   SpMM(Edge<Key<3>, Blk> &a, Edge<Key<3>, Blk> &b, Edge<Key<3>, Blk> &c, const SpMatrix<Blk> &a_mat,
@@ -370,7 +370,7 @@ class SpMM {
 
   class SummaBcastA : public TT<Key<4>, std::tuple<Out<Key<4>, Blk>>, BcastA, ttg::typelist<Blk>> {
    public:
-    using baseT = typename BcastA::ttT;
+    using baseT = typename SummaBcastA::ttT;
 
     SummaBcastA(Edge<Key<4>, Blk> &a_iklp, Edge<Key<4>, Blk> &a_iklnp,
                 const std::vector<std::vector<long>> &b_rowidx_to_colidx, Keymap keymap)
@@ -410,10 +410,9 @@ class SpMM {
    public:
     using baseT = typename SummaBcastB::ttT;
 
-    SummaBcastB(Edge<Key<4>, Blk> &b_kjlp, Edge<Key<4>, Blk> &b_kjlnp, ,
-                btas::Tensor<double, btas::RangeNd<82>, btas::mohndle<btas::varray<double>, 3, void>> > b_kjlnp,
-                const std::vector<std::vector<long>> &a_colidx_to_rowidx_, Keymap keymap)
-        : baseT(edges(b_kjlp), edges(b_kjlnp), "2.5 SpMM::bcast_b", {"b_kjlp"}, {"b_kjlnp"}, keymap)
+    SummaBcastB(Edge<Key<4>, Blk> &b_kjlp, Edge<Key<4>, Blk> &b_kjlnp,
+                const std::vector<std::vector<long>> &b_rowidx_to_colidx, Keymap keymap)
+        : baseT(edges(b_kjlp), edges(b_kjlnp), "2.5 SpMM::bcast_a", {"a_iklp"}, {"a_iklnp"}, keymap)
         , a_colidx_to_rowidx_(a_colidx_to_rowidx_) {}
 
     void op(const Key<4> &kjlp, typename baseT::input_values_tuple_type &&b_kjlp,
@@ -1618,3 +1617,4 @@ int main(int argc, char **argv) {
 
     return 0;
   }
+}
