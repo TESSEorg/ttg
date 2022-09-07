@@ -152,10 +152,15 @@ struct Key : public std::array<long, Rank> {
       (*this)[0] = hash / max_index_square;
       (*this)[1] = (hash % max_index_square) / max_index;
       (*this)[2] = hash % max_index;
+    } else if (Rank == 4) {  // Add Hashing formula for 4 keys
+      (*this)[0] = hash / max_index_square;
+      (*this)[1] = (hash % max_index_square) / max_index;
+      (*this)[2] = hash % max_index;
     }
   }
+
   std::size_t hash() const {
-    static_assert(Rank == 2 || Rank == 3, "Key<Rank>::hash only implemented for Rank={2,3}");
+    static_assert(Rank == 2 || Rank == 3 || Rank == 4, "Key<Rank>::hash only implemented for Rank={2,3}");
     return Rank == 2 ? (*this)[0] * max_index + (*this)[1]
                      : ((*this)[0] * max_index + (*this)[1]) * max_index + (*this)[2];
   }
@@ -183,8 +188,6 @@ inline int tile2rank(int i, int j, int k, int P, int Q, int R) {
   int p = (i % P);
   int q = (j % Q);
   int l = (k % R);
-  // r = (q * P) + p;
-  // for(int l=0;l<R;l++) {
   int r = (l * P * Q) + (q * P) + p;
   return r;
 }
@@ -194,7 +197,6 @@ template <typename Blk = blk_t, typename Keymap = std::function<int(const Key<3>
 class Read_SpMatrix : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, Read_SpMatrix<Blk, Keymap>, ttg::typelist<void>> {
  public:
   using baseT = typename Read_SpMatrix::ttT;
-  // This function is now ready and reading matrix only on first k [first slice]
   Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<3>> &ctl, Edge<Key<3>, Blk> &out,
                 Keymap &keymap)
       : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
@@ -268,19 +270,21 @@ class SpMM {
        const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<int> &mTiles,
        const std::vector<int> &nTiles, const std::vector<int> &kTiles, const Keymap &keymap)
       : a_ijk_()
+      , summa_a_ijk_()
       , local_a_ijk_()
       , b_ijk_()
+      , summa_b_ijk_()
       , local_b_ijk_()
       , c_ijk_()
       , a_rowidx_to_colidx_(a_rowidx_to_colidx)
       , b_colidx_to_rowidx_(b_colidx_to_rowidx)
       , a_colidx_to_rowidx_(a_colidx_to_rowidx)
       , b_rowidx_to_colidx_(b_rowidx_to_colidx) {
-    bcast_a_ = std::make_unique<BcastA>(a, local_a_ijk_, b_rowidx_to_colidx_, keymap);
-    summabcast_a_ = std::make_unique<SummaBcastA>(a, local_a_ijk_, b_rowidx_to_colidx_, keymap);
+    bcast_a_ = std::make_unique<BcastA>(a, summa_a_ijk_, b_rowidx_to_colidx_, keymap);
+    summabcast_a_ = std::make_unique<SummaBcastA>(summa_a_ijk_, local_a_ijk_, b_rowidx_to_colidx_, keymap);
     local_bcast_a_ = std::make_unique<LocalBcastA>(local_a_ijk_, a_ijk_, b_rowidx_to_colidx_, keymap);
-    bcast_b_ = std::make_unique<BcastB>(b, local_b_ijk_, a_colidx_to_rowidx_, keymap);
-    summabcast_b_ = std::make_unique<SummaBcastB>(b, local_b_ijk_, a_colidx_to_rowidx_, keymap);
+    bcast_b_ = std::make_unique<BcastB>(b, summa_b_ijk_, a_colidx_to_rowidx_, keymap);
+    summabcast_b_ = std::make_unique<SummaBcastB>(summa_b_ijk_, local_b_ijk_, a_colidx_to_rowidx_, keymap);
     local_bcast_b_ = std::make_unique<LocalBcastB>(local_b_ijk_, b_ijk_, a_colidx_to_rowidx_, keymap);
     multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c, a_rowidx_to_colidx_, b_colidx_to_rowidx_,
                                                  mTiles, nTiles, keymap);
@@ -336,7 +340,7 @@ class SpMM {
 
     BcastA(Edge<Key<3>, Blk> &a_ikl, Edge<Key<4>, Blk> &a_iklp,
            const std::vector<std::vector<long>> &b_rowidx_to_colidx, Keymap keymap)
-        : baseT(edges(a_ikl), edges(a_iklp), "SpMM::bcast_a", {"a_ikl"}, {"a_ikp"}, keymap)
+        : baseT(edges(a_ikl), edges(a_iklp), "SpMM::bcast_a", {"a_ikl"}, {"a_iklp"}, keymap)
         , b_rowidx_to_colidx_(b_rowidx_to_colidx) {}
 
     void op(const Key<3> &ikl, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<4>, Blk>> &a_iklp) {
@@ -344,20 +348,15 @@ class SpMM {
       const auto k = ikl[1];
       const auto l = ikl[2];
       ttg::trace("BcastA(", i, ", ", k, ",", l, ")");
-      // broadcast a_ikl to all processors which will contain at least one c_ijk such that b_kj exists
       std::vector<Key<4>> iklp_keys;
-      // std::cout<<"Value of K ...............= "<<k<<"\n";
-      // std::cout<<"b_rowidx_to_colidx_.size() ..................= "<<b_rowidx_to_colidx_.size()<<"\n";
 
-      if (k >= b_rowidx_to_colidx_.size()) return;  // because k of A and rows of B i.e.K will always be equal
+      if (k >= b_rowidx_to_colidx_.size()) return;
       auto world = default_execution_context();
       std::vector<bool> procmap(world.size());
       auto keymap = baseT::get_keymap();
-      // const auto l = k;
-      const long p = keymap(Key<3>(
-          {i, k, l}));  // Note: not computing p for ik instead using ij to get p because there will be cij not cik
+      const long p = keymap(Key<3>({i, k, l}));
       if (!procmap[p]) {
-        ttg::trace("Broadcasting A[", i, "][", k, "] to proc ", p);
+        ttg::trace("Broadcasting A[", i, "][", k, "][", l, "] to proc ", p);
         iklp_keys.emplace_back(Key<4>({i, k, l, p}));
         procmap[p] = true;
       }
@@ -373,36 +372,29 @@ class SpMM {
    public:
     using baseT = typename BcastA::ttT;
 
-    SummaBcastA(Edge<Key<4>, Blk> &a_iklp, Edge<Key<4>, Blk> &a_ikjnp,
+    SummaBcastA(Edge<Key<4>, Blk> &a_iklp, Edge<Key<4>, Blk> &a_iklnp,
                 const std::vector<std::vector<long>> &b_rowidx_to_colidx, Keymap keymap)
-        : baseT(edges(a_iklp), edges(a_ikjnp), "SpMM::bcast_a", {"a_ik"}, {"a_ikp"}, keymap)
+        : baseT(edges(a_iklp), edges(a_iklnp), "2.5 SpMM::bcast_a", {"a_iklp"}, {"a_iklnp"}, keymap)
         , b_rowidx_to_colidx_(b_rowidx_to_colidx) {}
 
     void op(const Key<4> &iklp, typename baseT::input_values_tuple_type &&a_iklp,
             std::tuple<Out<Key<4>, Blk>> &a_iklnp) {
-      const auto i = iklp[0];  // 1  //0
-      const auto k = iklp[1];  // 2  //3
+      const auto i = iklp[0];
+      const auto k = iklp[1];
       const auto l = iklp[2];
       const auto p = iklp[3];
 
       ttg::trace("BcastA(", i, ", ", k, ")");
-      // broadcast a_ik to all processors which will contain at least one c_ijk such that b_kj exists
       std::vector<Key<4>> iklnp_keys;
-      // std::cout<<"Value of K ...............= "<<k<<"\n";
-      // std::cout<<"b_rowidx_to_colidx_.size() ..................= "<<b_rowidx_to_colidx_.size()<<"\n";
-
-      if (k >= b_rowidx_to_colidx_.size()) return;  // because k of A and rows of B i.e.K will always be equal
+      if (k >= b_rowidx_to_colidx_.size()) return;
       auto world = default_execution_context();
       std::vector<bool> procmap(world.size());
       auto keymap = baseT::get_keymap();
       for (auto &j : b_rowidx_to_colidx_[k]) {
-        // std::cout<<"Value of j = "<<j<<"\n";
-        // for(int j=0;j<R;j++){
-        const long np = keymap(Key<3>(
-            {i, j, l}));  // Note: not computing p for ik instead using ij to get p because there will be cij not cik
+        const long np = keymap(Key<3>({i, j, l}));
         if (!procmap[np]) {
-          ttg::trace("Broadcasting A[", i, "][", k, "] to proc ", np);  // P (i, k) broadcasts Ai,k to the i-th row
-          iklnp_keys.emplace_back(Key<4>({i, k, l, np}));               // row col and processor sent only
+          ttg::trace("Broadcasting A[", i, "][", k, "] to proc ", np);
+          iklnp_keys.emplace_back(Key<4>({i, k, l, np}));
           procmap[np] = true;
         }
       }
@@ -418,10 +410,11 @@ class SpMM {
    public:
     using baseT = typename SummaBcastB::ttT;
 
-    SummaBcastB(Edge<Key<4>, Blk> &b_kjlp, Edge<Key<3>, Blk> &b_kjlnp,
-                const std::vector<std::vector<long>> &a_colidx_to_rowidx, Keymap keymap)
-        : baseT(edges(b_kjlp), edges(b_kjlnp), "SpMM::bcast_b", {"b_kj"}, {"b_kjp"}, keymap)
-        , a_colidx_to_rowidx_(a_colidx_to_rowidx) {}
+    SummaBcastB(Edge<Key<4>, Blk> &b_kjlp, Edge<Key<4>, Blk> &b_kjlnp, ,
+                btas::Tensor<double, btas::RangeNd<82>, btas::mohndle<btas::varray<double>, 3, void>> > b_kjlnp,
+                const std::vector<std::vector<long>> &a_colidx_to_rowidx_, Keymap keymap)
+        : baseT(edges(b_kjlp), edges(b_kjlnp), "2.5 SpMM::bcast_b", {"b_kjlp"}, {"b_kjlnp"}, keymap)
+        , a_colidx_to_rowidx_(a_colidx_to_rowidx_) {}
 
     void op(const Key<4> &kjlp, typename baseT::input_values_tuple_type &&b_kjlp,
             std::tuple<Out<Key<4>, Blk>> &b_kjlnp) {
@@ -695,9 +688,11 @@ class SpMM {
 
  private:
   Edge<Key<3>, Blk> a_ijk_;
-  Edge<Key<3>, Blk> local_a_ijk_;
+  Edge<Key<4>, Blk> local_a_ijk_;
+  Edge<Key<4>, Blk> summa_a_ijk_;
   Edge<Key<3>, Blk> b_ijk_;
-  Edge<Key<3>, Blk> local_b_ijk_;
+  Edge<Key<4>, Blk> local_b_ijk_;
+  Edge<Key<4>, Blk> summa_b_ijk_;
   Edge<Key<3>, Blk> c_ijk_;
   const std::vector<std::vector<long>> &a_rowidx_to_colidx_;
   const std::vector<std::vector<long>> &b_colidx_to_rowidx_;
@@ -1281,7 +1276,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   // flow graph needs to exist on every node
   Edge<Key<3>> ctl("control");
   Control control(ctl);
-  Edge<Key<2>, blk_t> eA, eB;
+  Edge<Key<3>, blk_t> eA, eB;
   Edge<Key<3>, blk_t> eC;
 
   Read_SpMatrix a("A", A, ctl, eA, keymap);
@@ -1450,7 +1445,7 @@ int main(int argc, char **argv) {
           R = mpi_size / (Q * P);
         else {
           if (0 == mpi_rank) {
-            std::cerr << P << "x" << Q << " is not a valid process grid -- bailing out" << std::endl;
+            std::cerr << P << "x" << Q << "x" << R << " is not a valid process grid -- bailing out" << std::endl;
             MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
           }
         }
@@ -1554,14 +1549,14 @@ int main(int argc, char **argv) {
         for (int nrun = 0; nrun < nb_runs; nrun++) {
           timed_measurement(A, B, keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
                             a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles, nTiles, kTiles, M, N, K,
-                            P, Q);
+                            P, Q, R);
         }
       } else {
         // flow graph needs to exist on every node
         auto keymap_write = [](const Key<3> &key) { return 0; };
         Edge<Key<3>> ctl("control");
         Control control(ctl);
-        Edge<Key<2>, blk_t> eA, eB, eC;
+        Edge<Key<3>, blk_t> eA, eB, eC;
         Read_SpMatrix a("A", A, ctl, eA, keymap);
         Read_SpMatrix b("B", B, ctl, eB, keymap);
         Write_SpMatrix<> c(C, eC, keymap_write);
