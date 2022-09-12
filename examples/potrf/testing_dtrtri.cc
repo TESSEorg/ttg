@@ -315,7 +315,7 @@ int check_dtrtri( lapack::Diag diag, lapack::Uplo uplo, double *A, double *Ainv,
     std::cout <<  "-- ||A||_one = " << Anorm << " ||A^(-1)||_one = " << Ainvnorm << " ||I - A * A^(-1)||_one = " 
               << Rnorm << ", cond = " << Rcond << ", result = " << result << std::endl;
 
-    if ( isinf(Ainvnorm) || isnan(result) || isinf(result) || (result > 10.0) ) {
+    if ( std::isinf(Ainvnorm) || std::isnan(result) || std::isinf(result) || (result > 10.0) ) {
         std::cout << "-- Inversion is suspicious !" << std::endl;
         ret = -1;
     }

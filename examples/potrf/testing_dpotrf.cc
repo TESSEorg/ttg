@@ -286,8 +286,8 @@ int check_dpotrf( double *A, double *A0, int N )
     std::cout <<  "-- ||A||_oo = " << Anorm << ", ||LL'-A||_oo = " << Rnorm << std::endl;
     std::cout << "-- ||LL'-A||_oo/(||A||_oo.N.eps) = " << result << std::endl;
 
-    if ( isnan(Rnorm)  || isinf(Rnorm)  ||
-         isnan(result) || isinf(result) ||
+    if ( std::isnan(Rnorm)  || std::isinf(Rnorm)  ||
+         std::isnan(result) || std::isinf(result) ||
          (result > 60.0) ) {
         std::cout << "-- Factorization is suspicious !" << std::endl;
         ret = -1;
