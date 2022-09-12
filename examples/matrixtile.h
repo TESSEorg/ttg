@@ -82,6 +82,7 @@ class MatrixTile {
     this->_lda = other._lda;
     this->realloc();
     std::copy_n(other.data(), _lda * _cols, this->data());
+    return *this;
   }
 #endif  // 1
 
@@ -162,7 +163,7 @@ namespace madness {
     template <class Archive, typename T>
     struct ArchiveStoreImpl<Archive, MatrixTile<T>> {
       static inline void store(const Archive& ar, const MatrixTile<T>& tile) {
-        ar << tile.rows() << tile.cols();
+        ar << tile.rows() << tile.cols() << tile.lda();
         ar << wrap(tile.data(), tile.rows() * tile.cols());
       }
     };
@@ -170,9 +171,9 @@ namespace madness {
     template <class Archive, typename T>
     struct ArchiveLoadImpl<Archive, MatrixTile<T>> {
       static inline void load(const Archive& ar, MatrixTile<T>& tile) {
-        int rows, cols;
-        ar >> rows >> cols;
-        tile = MatrixTile<T>(rows, cols);
+        int rows, cols, lda;
+        ar >> rows >> cols >> lda;
+        tile = MatrixTile<T>(rows, cols, lda);
         ar >> wrap(tile.data(), tile.rows() * tile.cols());  // MatrixTile<T>(bm.rows(), bm.cols());
       }
     };
