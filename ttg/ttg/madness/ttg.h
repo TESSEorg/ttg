@@ -1092,6 +1092,13 @@ namespace ttg_madness {
         TTBase::invoke();
     }
 
+    void set_defer_writer(bool _) {
+    }
+
+    bool get_defer_writer(bool _) {
+      return false;
+    }
+
     /// keymap accessor
     /// @return the keymap
     const decltype(keymap) &get_keymap() const { return keymap; }
