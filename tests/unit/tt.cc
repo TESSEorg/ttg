@@ -303,12 +303,6 @@ TEST_CASE("TemplateTask", "[core]") {
             static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
           },
           ttg::edges(in), ttg::edges()));
-      CHECK_NOTHROW(ttg::make_tt(
-          [](const int &key, auto &&datum, auto &outs) {
-            static_assert(std::is_rvalue_reference_v<decltype(datum)>, "Rvalue datum expected");
-            static_assert(!std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Nonconst datum expected");
-          },
-          ttg::edges(in), ttg::edges()));
 
       // and without an output terminal
       CHECK_NOTHROW(ttg::make_tt(
