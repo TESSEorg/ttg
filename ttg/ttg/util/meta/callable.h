@@ -150,9 +150,10 @@ namespace ttg::meta {
   template <typename T>
   struct candidate_argument_bindings<T, std::enable_if_t<!std::is_reference_v<T> && !std::is_void_v<T>>> {
     using type = std::conditional_t<std::is_const_v<T>, typelist<const T&>,
-                                    typelist<T&&, const T&,
-                                             // check for T& to be able to detect (erroneous) passing non-const lvalue&
-                                             T&>>;
+                                    typelist<  // prioritize binding T&&, rather than const T&, to auto&&
+                                        T&&, const T&,
+                                        // check for T& to be able to detect (erroneous) passing non-const lvalue&
+                                        T&>>;
   };
 
   template <>

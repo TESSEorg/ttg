@@ -291,68 +291,52 @@ TEST_CASE("TemplateTask", "[core]") {
                                        ttg::typelist<void>>{})),
               ttg::typelist<int, void, float &&, const float &, float &&, float &&, std::tuple<> &, void>>);
 
-      CHECK_NOTHROW(ttg::make_tt(
-          [](const int &key, auto &datum, auto &outs) {
-            static_assert(std::is_lvalue_reference_v<decltype(datum)>, "Lvalue datum expected");
-            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
-          },
-          ttg::edges(in), ttg::edges()));
-      CHECK_NOTHROW(ttg::make_tt(
-          [](const int &key, const auto &datum, auto &outs) {
-            static_assert(std::is_lvalue_reference_v<decltype(datum)>, "Lvalue datum expected");
-            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
-          },
-          ttg::edges(in), ttg::edges()));
-      // this test fails because the detection of constness in the backend is broken
-#if 0
+      // test introspection of generic arguments by the runtime (i.e. contents of TT::input_args_type) and
+      // the deduced types inside the function body
       {
+        // N.B. NEVER USE const auto& like datum3 here
         auto tt = ttg::make_tt(
-          [](const int &key, const auto &datum, auto &outs) {
-            static_assert(std::is_lvalue_reference_v<decltype(datum)>, "Lvalue datum expected");
-            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
-          },
-          ttg::edges(in), ttg::edges());
+            [](const int &key, auto &datum1, auto &&datum2, const auto &datum3, auto &outs) {
+              // `auto&` means READ-ONLY: datum1 is an lvalue ref to const
+              static_assert(std::is_const_v<std::remove_reference_t<decltype(datum1)>>, "Const datum expected");
+              static_assert(std::is_lvalue_reference_v<decltype(datum1)>, "Lvalue datum expected");
+
+              // `auto&&` means CONSUMABLE: datum2 is an lvalue ref to const
+              static_assert(!std::is_const_v<std::remove_reference_t<decltype(datum2)>>, "Nonconst datum expected");
+              static_assert(std::is_rvalue_reference_v<decltype(datum2)>, "Rvalue datum expected");
+
+              // `const auto&` looks READ-ONLY from the inside the function body, but the runtime will treat it as
+              // CONSUMABLE since it binds like `auto&&`, not like `auto&` although datum3 is a lvalue ref to const you
+              // can safely move from it
+              static_assert(std::is_const_v<std::remove_reference_t<decltype(datum3)>>, "Nonconst datum expected");
+              static_assert(std::is_lvalue_reference_v<decltype(datum3)>, "Lvalue datum expected");
+            },
+            ttg::edges(in, in, in), ttg::edges());
         using tt_t = typename std::remove_reference_t<decltype(*tt)>;
+        // `auto&` means READ-ONLY
         static_assert(std::is_const_v<std::tuple_element_t<0, tt_t::input_args_type>>);
-      }
-#endif // 0
-      CHECK_NOTHROW(ttg::make_tt(
-          [](const int &key, auto &&datum, auto &outs) {
-            static_assert(std::is_rvalue_reference_v<decltype(datum)>, "Rvalue datum expected");
-            static_assert(!std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Nonconst datum expected");
-          },
-          ttg::edges(in), ttg::edges()));
-      {
-        auto tt = ttg::make_tt(
-          [](const int &key, auto &&datum, auto &outs) {
-            static_assert(std::is_rvalue_reference_v<decltype(datum)>, "Rvalue datum expected");
-            static_assert(!std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Nonconst datum expected");
-          },
-          ttg::edges(in), ttg::edges());
-        using tt_t = typename std::remove_reference_t<decltype(*tt)>;
-        static_assert(!std::is_const_v<std::tuple_element_t<0, tt_t::input_args_type>>);
+        // `auto&&` means CONSUMABLE
+        static_assert(!std::is_const_v<std::tuple_element_t<1, tt_t::input_args_type>>);
+        // `const auto&` means CONSUMABLE (binds like `auto&&`, not like `auto&`)
+        static_assert(!std::is_const_v<std::tuple_element_t<2, tt_t::input_args_type>>);
       }
 
       // and without an output terminal
-      CHECK_NOTHROW(ttg::make_tt(
-          [](const int &key, auto &datum) {
-            static_assert(std::is_lvalue_reference_v<decltype(datum)>, "Lvalue datum expected");
-            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
-            ttg::send(0, std::decay_t<decltype(key)>{}, std::decay_t<decltype(datum)>{});
-          },
-          ttg::edges(in), ttg::edges()));
       {
         auto tt = ttg::make_tt(
-          [](const int &key, auto &datum) {
-            static_assert(std::is_lvalue_reference_v<decltype(datum)>, "Lvalue datum expected");
-            static_assert(std::is_const_v<std::remove_reference_t<decltype(datum)>>, "Const datum expected");
-            ttg::send(0, std::decay_t<decltype(key)>{}, std::decay_t<decltype(datum)>{});
-          },
-          ttg::edges(in), ttg::edges());
+            [](const int &key, auto &datum1, auto &&datum2) {
+              static_assert(std::is_lvalue_reference_v<decltype(datum1)>, "Lvalue datum expected");
+              static_assert(std::is_const_v<std::remove_reference_t<decltype(datum1)>>, "Const datum expected");
+              static_assert(std::is_rvalue_reference_v<decltype(datum2)>, "Rvalue datum expected");
+              static_assert(!std::is_const_v<std::remove_reference_t<decltype(datum2)>>, "Nonconst datum expected");
+              ttg::send(0, std::decay_t<decltype(key)>{0}, datum1);
+              ttg::send(1, std::decay_t<decltype(key)>{0}, std::move(datum2));
+            },
+            ttg::edges(in, in), ttg::edges(in, in));
         using tt_t = typename std::remove_reference_t<decltype(*tt)>;
         static_assert(std::is_const_v<std::tuple_element_t<0, tt_t::input_args_type>>);
+        static_assert(!std::is_const_v<std::tuple_element_t<1, tt_t::input_args_type>>);
       }
-
     }
   }
 

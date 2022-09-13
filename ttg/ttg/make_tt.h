@@ -396,6 +396,8 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
 ///          template <typename K, typename D1, typename D2>
 ///          void func (K& key, D1& datum1, D2&& datum2) { ... }
 ///       @endcode
+///       @warning Although generic arguments annotated by `const auto&` are also permitted, their use is discouraged to avoid confusion;
+///                namely, `const auto&` denotes a _consumable_ argument, NOT read-only, despite the `const`.
 // clang-format on
 template <typename keyT = void, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
 auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges = std::tuple<>{},
