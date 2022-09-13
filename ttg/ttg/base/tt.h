@@ -129,6 +129,7 @@ namespace ttg {
       return outputs_tls_ptr;
     }
     void set_outputs_tls_ptr() { outputs_tls_ptr_accessor() = &this->outputs; }
+    void set_outputs_tls_ptr(const std::vector<TerminalBase *> *ptr) { outputs_tls_ptr_accessor() = ptr; }
 
    public:
     virtual ~TTBase() = default;
