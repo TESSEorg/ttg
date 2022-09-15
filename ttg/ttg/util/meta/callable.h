@@ -160,9 +160,10 @@ namespace ttg::meta {
                                         //   creation of extra copies. Thus you should not try to use nongeneric
                                         //   data arguments in generic task functions; for purely nongeneric functions
                                         //   a different introspection mechanism (Boost.CallableTraits) is used
-                                        T&&, const T&,
-                                        // - check for T& to be able to detect (erroneous) passing non-const lvalue&
-                                        T&>>;
+                                        T&&, const T&
+                                        // - no need to check T& since auto& and auto&& both bind to it
+                                        //, T&
+                                        >>;
   };
 
   template <>
