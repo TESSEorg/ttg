@@ -405,10 +405,8 @@ TEST_CASE("TemplateTask", "[core]") {
                 static_assert(std::is_const_v<std::remove_reference_t<decltype(datum1)>>, "Const datum expected");
                 static_assert(std::is_rvalue_reference_v<decltype(datum2)>, "Rvalue datum expected");
                 static_assert(!std::is_const_v<std::remove_reference_t<decltype(datum2)>>, "Nonconst datum expected");
-                ttg::send(0, std::decay_t<decltype(key)>{0}, datum1);
-                ttg::send(1, std::decay_t<decltype(key)>{0}, std::move(datum2));
               },
-              ttg::edges(in, in), ttg::edges(in, in));
+              ttg::edges(in, in), ttg::edges());
           using tt_t = typename std::remove_reference_t<decltype(*tt)>;
           // `auto&` means READ-ONLY
           static_assert(std::is_const_v<std::tuple_element_t<0, tt_t::input_args_type>>);
