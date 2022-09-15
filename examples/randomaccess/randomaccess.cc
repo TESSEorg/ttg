@@ -12,6 +12,8 @@
 #define CHUNKBIG (32 * CHUNK)
 
 #include "ttg.h"
+#include "ttg/util/hash/std/pair.h"
+
 using namespace ttg;
 
 typedef struct params {
