@@ -90,7 +90,14 @@ namespace ttg {
     template <>
     struct hash<void, void> {
       auto operator()() const { return detail::FNVhasher::initial_value(); }
+      // convenient to be able to hash Void using hash<void>
       auto operator()(const ttg::Void&) const { return operator()(); }
+    };
+
+    /// instantiation of hash for Void
+    template <>
+    struct hash<Void, void> {
+      auto operator()(const ttg::Void&) const { return hash<void>{}(); }
     };
 
     /// instantiation of hash for integral types smaller or equal to size_t
