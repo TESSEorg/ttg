@@ -20,6 +20,7 @@ using namespace std;
 
 #include "ttg/serialization.h"
 #include "ttg/serialization/std/pair.h"
+#include "ttg/util/hash/std/pair.h"
 
 using namespace ttg;
 
@@ -116,8 +117,7 @@ std::ostream& operator<<(std::ostream& s, const Integer& intVal) {
 }
 
 class Initiator
-    : public TT<Integer, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>,
-                Initiator> {
+    : public TT<Integer, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>, Initiator> {
   using baseT = typename Initiator::ttT;
 
  public:
@@ -371,8 +371,8 @@ class FuncC : public TT<Key, std::tuple<Out<Key, void>>, FuncC, ttg::typelist<vo
   }
 };
 
-class FuncD : public TT<Key, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>,
-                        FuncD, ttg::typelist<void, void, void, void>> {
+class FuncD : public TT<Key, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>, FuncD,
+                        ttg::typelist<void, void, void, void>> {
   using baseT = typename FuncD::ttT;
   double* adjacency_matrix_ttg;
   int problem_size;

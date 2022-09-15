@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "ttg/serialization/std/pair.h"
+#include "ttg/util/hash/std/pair.h"
 
 #include "ttg.h"
 
@@ -92,10 +93,8 @@ void wavefront_serial() {
 
 // Method to generate  wavefront tasks with two inputs.
 template <typename funcT>
-auto make_wavefront2(std::shared_ptr<double> m, const funcT& func, Edge<Key, void>& input1,
-                     Edge<Key, void>& input2) {
-  auto f = [m, func](const Key& key,
-                     std::tuple<Out<Key, void>, Out<Key, void>>& out) {
+auto make_wavefront2(std::shared_ptr<double> m, const funcT& func, Edge<Key, void>& input1, Edge<Key, void>& input2) {
+  auto f = [m, func](const Key& key, std::tuple<Out<Key, void>, Out<Key, void>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
     int next_j = j + 1;
@@ -123,10 +122,8 @@ auto make_wavefront2(std::shared_ptr<double> m, const funcT& func, Edge<Key, voi
 
 // Method to generate wavefront task with single input.
 template <typename funcT>
-auto make_wavefront(std::shared_ptr<double> m, const funcT& func, Edge<Key, void>& input1,
-                    Edge<Key, void>& input2) {
-  auto f = [m, func](const Key& key,
-                     std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>>& out) {
+auto make_wavefront(std::shared_ptr<double> m, const funcT& func, Edge<Key, void>& input1, Edge<Key, void>& input2) {
+  auto f = [m, func](const Key& key, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>>& out) {
     auto [i, j] = key;
     int next_i = i + 1;
     int next_j = j + 1;
@@ -148,7 +145,8 @@ auto make_wavefront(std::shared_ptr<double> m, const funcT& func, Edge<Key, void
   };
 
   Edge<Key, void> recur("recur");
-  return make_tt(f, edges(recur), edges(recur, input1, input2), "wavefront", {"control"}, {"recur", "output1", "output2"});
+  return make_tt(f, edges(recur), edges(recur, input1, input2), "wavefront", {"control"},
+                 {"recur", "output1", "output2"});
 }
 
 int main(int argc, char** argv) {

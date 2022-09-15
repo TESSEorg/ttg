@@ -23,6 +23,7 @@ using namespace ttg;
 
 #include "ttg/serialization.h"
 #include "ttg/serialization/std/pair.h"
+#include "ttg/util/hash/std/pair.h"
 
 #include "../blockmatrix.h"
 #include "ttg/util/bug.h"
