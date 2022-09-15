@@ -32,6 +32,30 @@ namespace ttg {
       /// @return the initial hash value
       static result_type initial_value() { return offset_basis; }
     };
+
+    /// combines 2 hash values; implementation based on boost::hash_combine_impl<64> from Boost v1.79.0
+    struct hash_combine_impl {
+      static_assert(sizeof(std::size_t) == sizeof(std::uint64_t));
+
+      inline static std::size_t fn(std::size_t h, std::size_t k) {
+        const std::size_t m = (std::size_t(0xc6a4a793) << 32) + 0x5bd1e995;
+        const int r = 47;
+
+        k *= m;
+        k ^= k >> r;
+        k *= m;
+
+        h ^= k;
+        h *= m;
+
+        // Completely arbitrary number, to prevent 0's
+        // from hashing to 0.
+        h += 0xe6546b64;
+
+        return h;
+      }
+    };
+
   }  // namespace detail
 
   namespace meta {
@@ -111,6 +135,12 @@ namespace ttg {
     template <typename T>
     constexpr bool has_ttg_hash_specialization_v = has_ttg_hash_specialization<T>::value;
   }  // namespace meta
+
+  template <class T>
+  inline void hash_combine(std::size_t& seed, T const& v) {
+    ttg::hash<T> hasher;
+    seed = detail::hash_combine_impl::fn(seed, hasher(v));
+  }
 
 }  // namespace ttg
 
