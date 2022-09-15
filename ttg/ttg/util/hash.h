@@ -34,6 +34,18 @@ namespace ttg {
     };
   }  // namespace detail
 
+  namespace meta {
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // has_member_function_hash_v<T> evaluates to true if T::hash() is defined
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <typename T, typename Enabler = void>
+    struct has_member_function_hash : std::false_type {};
+    template <typename T>
+    struct has_member_function_hash<T, std::void_t<decltype(std::declval<const T&>().hash())>> : std::true_type {};
+    template <typename T>
+    constexpr bool has_member_function_hash_v = has_member_function_hash<T>::value;
+  }  // namespace meta
+
   /// place for overloading/instantiating hash and other functionality
   namespace overload {
 
@@ -44,10 +56,10 @@ namespace ttg {
     template <typename T, typename Enabler = void>
     struct hash;
 
-    /// instantiation of hash for types which have member function hash()
+    /// instantiation of hash for types which have member function hash() that returns
     template <typename T>
-    struct hash<T, std::void_t<decltype(std::declval<const T&>().hash())>> {
-      auto operator()(const T &t) const { return t.hash(); }
+    struct hash<T, std::enable_if_t<meta::has_member_function_hash_v<T>>> {
+      auto operator()(const T& t) const { return t.hash(); }
     };
 
     /// instantiation of hash for void
@@ -59,14 +71,17 @@ namespace ttg {
 
     /// instantiation of hash for integral types smaller or equal to size_t
     template <typename T>
-    struct hash<T, std::enable_if_t<std::is_integral_v<std::decay_t<T>> &&
-                                    sizeof(T) <= sizeof(std::size_t), void>> {
+    struct hash<T, std::enable_if_t<std::is_integral_v<std::decay_t<T>> && sizeof(T) <= sizeof(std::size_t), void>> {
       auto operator()(T t) const { return static_cast<std::size_t>(t); }
     };
 
-    /// default implementation uses the bitwise hasher FNVhasher
-    template <typename T, typename Enabler>
-    struct hash {
+    /// default implementation for types with unique object representation uses the bitwise hasher FNVhasher
+    /// \sa https://en.cppreference.com/w/cpp/types/has_unique_object_representations
+    template <typename T>
+    struct hash<
+        T, std::enable_if_t<!(std::is_integral_v<std::decay_t<T>> && sizeof(T) <= sizeof(std::size_t)) &&
+                                !(meta::has_member_function_hash_v<T>)&&std::has_unique_object_representations_v<T>,
+                            void>> {
       auto operator()(const T& t) const {
         detail::FNVhasher hasher;
         hasher.update(sizeof(T), reinterpret_cast<const std::byte*>(&t));
@@ -74,6 +89,12 @@ namespace ttg {
       }
     };
 
+    /// provide default implementation for error-reporting purposes
+    template <typename T, typename Enabler>
+    struct hash {
+      constexpr static bool NEED_TO_PROVIDE_SPECIALIZATION_OF_TTG_OVERLOAD_HASH_FOR_THIS_TYPE = !std::is_same_v<T, T>;
+      static_assert(NEED_TO_PROVIDE_SPECIALIZATION_OF_TTG_OVERLOAD_HASH_FOR_THIS_TYPE);
+    };
   }  // namespace overload
 
   using namespace ttg::overload;
