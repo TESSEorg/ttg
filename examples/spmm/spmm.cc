@@ -282,8 +282,7 @@ class SpMM25D {
           const std::vector<std::vector<long>> &a_colidx_to_rowidx,
           const std::vector<std::vector<long>> &b_rowidx_to_colidx,
           const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<int> &mTiles,
-          const std::vector<int> &nTiles, const std::vector<int> &kTiles, const Keymap2 &ij_keymap,
-          const Keymap3 &ijk_keymap, long R)
+          const std::vector<int> &nTiles, const std::vector<int> &kTiles, Keymap2 ij_keymap, Keymap3 ijk_keymap, long R)
       : a_rowidx_to_colidx_(a_rowidx_to_colidx)
       , b_colidx_to_rowidx_(b_colidx_to_rowidx)
       , a_colidx_to_rowidx_(a_colidx_to_rowidx)
@@ -704,8 +703,8 @@ class SpMM25D {
   std::unique_ptr<LocalBcastB> local_bcast_b_;
   std::unique_ptr<MultiplyAdd> multiplyadd_;
   std::unique_ptr<ReduceC> reduce_c_;
-  const Keymap2 &ij_keymap_;
-  const Keymap3 &ijk_keymap_;
+  Keymap2 ij_keymap_;
+  Keymap3 ijk_keymap_;
 };
 
 class Control : public TT<void, std::tuple<Out<Key<2>>>, Control> {
@@ -1448,14 +1447,14 @@ int main(int argc, char **argv) {
         }
       }
 
-      const auto &ij_keymap = [P, Q, R](const Key<2> &ij) {
+      auto ij_keymap = [P, Q, R](const Key<2> &ij) {
         int i = (int)ij[0];
         int j = (int)ij[1];
         int r = ij2rank(i, j, P, Q);
         return r;
       };
 
-      const auto &ijk_keymap = [P, Q, R](const Key<3> &ijk) {
+      auto ijk_keymap = [P, Q, R](const Key<3> &ijk) {
         int i = (int)ijk[0];
         int j = (int)ijk[1];
         int k = (int)ijk[2];
@@ -1557,6 +1556,7 @@ int main(int argc, char **argv) {
         }
       } else {
         // flow graph needs to exist on every node
+        // N.B. to validate C we need it on node 0!
         auto keymap_write = [](const Key<2> &key) { return 0; };
         Edge<Key<2>> ctl("control");
         Control control(ctl);
