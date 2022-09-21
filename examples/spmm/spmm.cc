@@ -324,7 +324,7 @@ class SpMM25D {
           }
         }
         const auto c_ij_nprocs = std::count_if(c_ij_procmask.begin(), c_ij_procmask.end(), [](bool b) { return b; });
-        reduce_c_->template set_argstream_size<0>(Key<2>{i, j}, c_ij_nprocs);
+        if (c_ij_nprocs > 0) reduce_c_->template set_argstream_size<0>(Key<2>{i, j}, c_ij_nprocs);
       }
     }
 
