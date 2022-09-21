@@ -311,15 +311,15 @@ class SpMM25D {
         std::tie(k, have_k) = multiplyadd_->compute_first_k(i, j);
         std::vector<bool> c_ij_procmask(R, false);
         if (have_k) {
-          const auto p = ijk_keymap_(Key<3>{i, j, k});
-          assert(p < c_ij_procmask.size());
-          c_ij_procmask[p] = true;
+          const auto pR = k % R;  // k values are distributed round-robin among the layers of the 3-D grid
+          assert(pR < c_ij_procmask.size());
+          c_ij_procmask[pR] = true;
           while (have_k) {
             std::tie(k, have_k) = multiplyadd_->compute_next_k(i, j, k);
             if (have_k) {
-              const auto p = ijk_keymap_(Key<3>{i, j, k});
-              assert(p < c_ij_procmask.size());
-              c_ij_procmask[p] = true;
+              const auto pR = k % R;
+              assert(pR < c_ij_procmask.size());
+              c_ij_procmask[pR] = true;
             }
           }
         }
