@@ -122,7 +122,9 @@ auto initiator(Matrix<T>* m, Edge<Key, BlockMatrix<T>>& out0, Edge<Key, BlockMat
                Edge<Key, BlockMatrix<T>>& out2, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right0,
                Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right1,
                Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right2) {
-  auto f = [m](const Key& key, auto& out) {
+  auto f = [m](const Key& key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
+                                          Out<Key, std::vector<BlockMatrix<T>>>, Out<Key, std::vector<BlockMatrix<T>>>,
+                                          Out<Key, std::vector<BlockMatrix<T>>>>& out) {
     for (int i = 0; i < m->rows(); i++) {
       for (int j = 0; j < m->cols(); j++) {
         std::vector<BlockMatrix<T>> v;
