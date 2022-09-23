@@ -287,8 +287,8 @@ class SpMM25D {
       , b_colidx_to_rowidx_(b_colidx_to_rowidx)
       , a_colidx_to_rowidx_(a_colidx_to_rowidx)
       , b_rowidx_to_colidx_(b_rowidx_to_colidx)
-      , ij_keymap_(ij_keymap)
-      , ijk_keymap_(ijk_keymap) {
+      , ij_keymap_(std::move(ij_keymap))
+      , ijk_keymap_(std::move(ijk_keymap)) {
     bcast_a_ = std::make_unique<BcastA>(a, local_a_ijk_, b_rowidx_to_colidx_, ij_keymap_, ijk_keymap_);
     local_bcast_a_ = std::make_unique<LocalBcastA>(local_a_ijk_, a_ijk_, b_rowidx_to_colidx_, ijk_keymap_);
     bcast_b_ = std::make_unique<BcastB>(b, local_b_ijk_, a_colidx_to_rowidx_, ij_keymap_, ijk_keymap_);
@@ -301,30 +301,34 @@ class SpMM25D {
     // send message from each process p to the process owning C[i][j] to expect a contribution from it for now replicate
     // this logic ...
     // TODO: do this in MultiplyAdd (need to allreduce this info so that everyone has it)
+    // N.B. only need to set stream size on the rank that will accumulate the C[i][j] contribution
+    const auto my_rank = ttg::default_execution_context().rank();
     for (auto i = 0ul; i != a_rowidx_to_colidx_.size(); ++i) {
       if (a_rowidx_to_colidx_[i].empty()) continue;
       for (auto j = 0ul; j != b_colidx_to_rowidx_.size(); ++j) {
         if (b_colidx_to_rowidx_[j].empty()) continue;
 
-        decltype(i) k;
-        bool have_k;
-        std::tie(k, have_k) = multiplyadd_->compute_first_k(i, j);
-        std::vector<bool> c_ij_procmask(R, false);
-        if (have_k) {
-          const auto pR = k % R;  // k values are distributed round-robin among the layers of the 3-D grid
-          assert(pR < c_ij_procmask.size());
-          c_ij_procmask[pR] = true;
-          while (have_k) {
-            std::tie(k, have_k) = multiplyadd_->compute_next_k(i, j, k);
-            if (have_k) {
-              const auto pR = k % R;
-              assert(pR < c_ij_procmask.size());
-              c_ij_procmask[pR] = true;
+        if (ij_keymap_(Key<2>{i, j}) == my_rank) {
+          decltype(i) k;
+          bool have_k;
+          std::tie(k, have_k) = multiplyadd_->compute_first_k(i, j);
+          std::vector<bool> c_ij_procmask(R, false);
+          if (have_k) {
+            const auto pR = k % R;  // k values are distributed round-robin among the layers of the 3-D grid
+            assert(pR < c_ij_procmask.size());
+            c_ij_procmask[pR] = true;
+            while (have_k) {
+              std::tie(k, have_k) = multiplyadd_->compute_next_k(i, j, k);
+              if (have_k) {
+                const auto pR = k % R;
+                assert(pR < c_ij_procmask.size());
+                c_ij_procmask[pR] = true;
+              }
             }
           }
+          const auto c_ij_nprocs = std::count_if(c_ij_procmask.begin(), c_ij_procmask.end(), [](bool b) { return b; });
+          if (c_ij_nprocs > 0) reduce_c_->template set_argstream_size<0>(Key<2>{i, j}, c_ij_nprocs);
         }
-        const auto c_ij_nprocs = std::count_if(c_ij_procmask.begin(), c_ij_procmask.end(), [](bool b) { return b; });
-        if (c_ij_nprocs > 0) reduce_c_->template set_argstream_size<0>(Key<2>{i, j}, c_ij_nprocs);
       }
     }
 
