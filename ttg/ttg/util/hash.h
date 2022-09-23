@@ -151,4 +151,7 @@ namespace ttg {
 
 }  // namespace ttg
 
+
+#include "ttg/util/hash/std/pair.h"
+
 #endif  // TTG_UTIL_HASH_H
