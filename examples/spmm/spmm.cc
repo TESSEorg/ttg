@@ -1487,14 +1487,14 @@ int main(int argc, char **argv) {
       if (cmdOptionExists(argv, argv + argc, "-mm")) {
         char *filename = getCmdOption(argv, argv + argc, "-mm");
         tiling_type = filename;
-        initSpMatrixMarket(keymap, filename, A, B, C, M, N, K);
+        initSpMatrixMarket(ij_keymap, filename, A, B, C, M, N, K);
       } else if (cmdOptionExists(argv, argv + argc, "-rmat")) {
         char *opt = getCmdOption(argv, argv + argc, "-rmat");
         tiling_type = "RandomSparseMatrix";
-        initSpRmat(keymap, opt, A, B, C, M, N, K, seed);
+        initSpRmat(ij_keymap, opt, A, B, C, M, N, K, seed);
       } else {
         tiling_type = "HardCodedSparseMatrix";
-        initSpHardCoded(keymap, A, B, C, M, N, K);
+        initSpHardCoded(ij_keymap, A, B, C, M, N, K);
       }
 
       if (check) {
