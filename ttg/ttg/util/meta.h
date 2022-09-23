@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <type_traits>
+
 #include "ttg/util/span.h"
 #include "ttg/util/typelist.h"
 

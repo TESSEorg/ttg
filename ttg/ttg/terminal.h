@@ -27,12 +27,15 @@ namespace ttg {
       std::function<size_t (keyT const& key)> owner = nullptr;
 
       ContainerWrapper() = default;
+      ContainerWrapper(const ContainerWrapper &) = default;
+      ContainerWrapper(ContainerWrapper &&) = default;
+      ContainerWrapper& operator=(const ContainerWrapper&) = default;
 
       template<typename T, typename mapperT, typename keymapT, std::enable_if_t<!std::is_same<std::decay_t<T>,
                                                           ContainerWrapper>{}, bool> = true>
         //Store a pointer to the user's container in std::any, no copies
         ContainerWrapper(T &t, mapperT &&mapper,
-                         keymapT &&keymap) : get([&t,mapper = std::forward<mapperT>(mapper)](keyT const &key) {
+                         keymapT &&keymap) : get([t = std::forward<T>(t), mapper = std::forward<mapperT>(mapper)](keyT const &key) {
                                                    if constexpr (!std::is_class_v<T> && std::is_invocable_v<T, keyT>) {
                                                       auto k = mapper(key);
                                                       return t(k); //Call the user-defined lambda function.
@@ -44,7 +47,8 @@ namespace ttg {
                                                       return t.at(k);
                                                     }
                                                 }),
-                                            owner([&t, mapper = std::forward<mapperT>(mapper), keymap = std::forward<keymapT>(keymap)](keyT const &key) {
+                                             owner([t = std::forward<T>(t), mapper = std::forward<mapperT>(mapper),
+                                                    keymap = std::forward<keymapT>(keymap)](keyT const &key) {
                                                     auto idx = mapper(key); //Mapper to map task ID to index of the data structure.
                                                     return keymap(idx);
                                                   })

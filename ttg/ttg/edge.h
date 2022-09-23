@@ -53,7 +53,9 @@ namespace ttg {
         is_pull_edge(is_pull),
         container(c),
         outs(),
-        ins() {}
+        ins() {
+        static_assert(!meta::is_void_v<keyT>, "Void keys are not supported with pull terminals.");
+      }
 
       void set_in(Out<keyT, valueT> *in) {
         if (ins.size()) {

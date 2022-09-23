@@ -334,7 +334,7 @@ namespace ttg_madness {
     using accessorT = typename cacheT::accessor;
     cacheT cache;
 
-   protected:
+  protected:
     template <typename terminalT, std::size_t i, typename Key>
     void invoke_pull_terminal(terminalT &in, const Key &key, TTArgs *args) {
       if (in.is_pull_terminal) {
