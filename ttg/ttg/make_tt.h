@@ -29,8 +29,10 @@ class CallableWrapTT
     if constexpr (funcT_receives_outterm_tuple)
       func(std::forward<Key>(key), std::forward<Tuple>(args), out);
     else {
+      auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
       func(std::forward<Key>(key), std::forward<Tuple>(args));
+      this->set_outputs_tls_ptr(old_output_tls_ptr);
     }
   }
 
@@ -39,8 +41,10 @@ class CallableWrapTT
     if constexpr (funcT_receives_outterm_tuple)
       func(std::forward<TupleOrKey>(args), out);
     else {
+      auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
       func(std::forward<TupleOrKey>(args));
+      this->set_outputs_tls_ptr(old_output_tls_ptr);
     }
   }
 
@@ -48,8 +52,10 @@ class CallableWrapTT
     if constexpr (funcT_receives_outterm_tuple)
       func(std::tuple<>(), out);
     else {
+      auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
       func(std::tuple<>());
+      this->set_outputs_tls_ptr(old_output_tls_ptr);
     }
   }
 
@@ -142,9 +148,11 @@ class CallableWrapTTArgs
       func(std::forward<Key>(key),
            baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
     else {
+      auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
       func(std::forward<Key>(key),
            baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))...);
+      this->set_outputs_tls_ptr(old_output_tls_ptr);
     }
   }
 
@@ -154,8 +162,10 @@ class CallableWrapTTArgs
     if constexpr (funcT_receives_outterm_tuple)
       func(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
     else {
+      auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
       func(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))...);
+      this->set_outputs_tls_ptr(old_output_tls_ptr);
     }
   }
 
@@ -164,8 +174,10 @@ class CallableWrapTTArgs
     if constexpr (funcT_receives_outterm_tuple)
       func(std::forward<Key>(key), out);
     else {
+      auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
       func(std::forward<Key>(key));
+      this->set_outputs_tls_ptr(old_output_tls_ptr);
     }
   }
 
@@ -174,8 +186,10 @@ class CallableWrapTTArgs
     if constexpr (funcT_receives_outterm_tuple)
       func(out);
     else {
+      auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
       func();
+      this->set_outputs_tls_ptr(old_output_tls_ptr);
     }
   }
 
