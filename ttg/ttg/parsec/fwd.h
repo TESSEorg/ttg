@@ -5,8 +5,19 @@
 #include "ttg/util/typelist.h"
 
 #include <future>
+#include <parsec.h>
 
 namespace ttg_parsec {
+
+
+  namespace detail {
+    inline int static_unpack_msg(parsec_comm_engine_t *ce, uint64_t tag, void *data, long unsigned int size,
+                                 int src_rank, void *obj);
+
+    inline int get_remote_complete_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg, size_t msg_size,
+                                      int src, void *cb_data);
+  }
+
 
   template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs = ttg::typelist<>>
   class TT;

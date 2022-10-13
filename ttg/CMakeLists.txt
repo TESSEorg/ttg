@@ -172,10 +172,18 @@ endif(TARGET MADworld)
 ########################
 if (TARGET PaRSEC::parsec)
   set(ttg-parsec-headers
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/comm_helper.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/copy_handler.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/funcs.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/fwd.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/hooks.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/import.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/task.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/tt.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttg.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttg_data_copy.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/vars.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/world.h
           )
   find_package(MPI)
   set(ttg-parsec-deps "ttg;MPI::MPI_CXX;PaRSEC::parsec")
