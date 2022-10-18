@@ -1434,7 +1434,7 @@ int main(int argc, char **argv) {
       std::string QStr(getCmdOption(argv, argv + argc, "-Q"));
       Q = parseOption(QStr, Q);
       std::string RStr(getCmdOption(argv, argv + argc, "-R"));
-      R = parseOption(QStr, R);
+      R = parseOption(RStr, R);
 
       if (P * Q * R != mpi_size) {
         if (!cmdOptionExists(argv, argv + argc, "-Q") && (mpi_size % (P * R) == 0))
@@ -1451,7 +1451,7 @@ int main(int argc, char **argv) {
         }
       }
 
-      auto ij_keymap = [P, Q, R](const Key<2> &ij) {
+      auto ij_keymap = [P, Q](const Key<2> &ij) {
         int i = (int)ij[0];
         int j = (int)ij[1];
         int r = ij2rank(i, j, P, Q);
