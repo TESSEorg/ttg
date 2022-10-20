@@ -290,6 +290,8 @@ namespace ttg_parsec {
       // it / complete it after a fence()
       tpool->profiling_array = nullptr;
 #endif
+      assert(NULL != tpool->tdm.monitor);
+      tpool->tdm.module->unmonitor_taskpool(tpool);
       parsec_taskpool_free(tpool);
       tpool = nullptr;
     }
