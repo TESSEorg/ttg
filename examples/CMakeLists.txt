@@ -32,6 +32,8 @@ add_ttg_executable(fw-apsp floyd-warshall/floyd_warshall.cc LINK_LIBRARIES MADwo
 add_ttg_executable(helloworld helloworld/helloworld.cpp)
 add_ttg_executable(simplegenerator simplegenerator/simplegenerator.cc RUNTIMES "mad")
 
+add_ttg_executable(device_mock device_mock/device_mock.cc LINK_LIBRARIES MADworld)
+
 if(TARGET DPLASMA::dplasma)
   add_ttg_executable(potrf potrf/potrf_pdc.cc LINK_LIBRARIES lapackpp DPLASMA::dplasma MADworld)
 #  add_executable(potrf-pdc-parsec potrf/potrf_pdc.cc)

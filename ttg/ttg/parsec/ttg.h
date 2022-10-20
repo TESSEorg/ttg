@@ -67,6 +67,8 @@ void parsec_taskpool_termination_detected(parsec_taskpool_t *tp);
 int parsec_add_fetch_runtime_task(parsec_taskpool_t *tp, int tasks);
 }
 
+#include "ttg/view.h"
+
 namespace ttg_parsec {
   inline thread_local parsec_execution_stream_t *parsec_ttg_es;
 
