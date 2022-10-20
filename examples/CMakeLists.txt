@@ -37,6 +37,8 @@ add_ttg_executable(testing_dtrtri potrf/testing_dtrtri.cc LINK_LIBRARIES lapackp
 add_ttg_executable(testing_dlauum potrf/testing_dlauum.cc LINK_LIBRARIES lapackpp)
 add_ttg_executable(testing_dpoinv potrf/testing_dpoinv.cc LINK_LIBRARIES lapackpp)
 
+add_ttg_executable(device_mock device_mock/device_mock.cc LINK_LIBRARIES MADworld)
+
 if (OpenMP_CXX_FOUND AND TARGET std::execution)
         add_ttg_executable(fw-apsp-df floyd-warshall/floyd_warshall_df.cc LINK_LIBRARIES OpenMP::OpenMP_CXX std::execution MADworld)
 endif ()

@@ -92,6 +92,8 @@ void parsec_taskpool_termination_detected(parsec_taskpool_t *tp);
 int parsec_add_fetch_runtime_task(parsec_taskpool_t *tp, int tasks);
 }
 
+#include "ttg/view.h"
+
 namespace ttg_parsec {
   typedef void (*static_set_arg_fct_type)(void *, size_t, ttg::TTBase *);
   typedef std::pair<static_set_arg_fct_type, ttg::TTBase *> static_set_arg_fct_call_t;
