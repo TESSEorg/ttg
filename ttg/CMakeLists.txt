@@ -3,6 +3,10 @@ include (AddTTGLibrary)
 ########################
 ####### Runtime-neutral
 ########################
+configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.h.in
+        ${CMAKE_CURRENT_BINARY_DIR}/ttg/util/version.h
+)
 set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/bug.h
@@ -12,6 +16,7 @@ set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/env.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/future.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/hash.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/hash/std/pair.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/macro.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/meta.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/meta/callable.h
@@ -20,7 +25,7 @@ set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/trace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/tree.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/typelist.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.h
+        ${CMAKE_CURRENT_BINARY_DIR}/ttg/util/version.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/void.h
     )
 set(ttg-base-headers
@@ -63,6 +68,13 @@ set(ttg-sources
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/env.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
     )
+# extract git metadata
+include(GetGitMetadata)
+vgkit_cmake_git_metadata()
+# feed TTG_GIT_REVISION and TTG_GIT_DESCRIPTION to ttg/util/version.cc _only_ to avoid recompiling everything
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
+        PROPERTIES
+        COMPILE_DEFINITIONS "TTG_GIT_REVISION=\"${TTG_GIT_REVISION}\";TTG_GIT_DESCRIPTION=\"${TTG_GIT_DESCRIPTION}\"")
 set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers})
 if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
   list(APPEND ttg-sources ${ttg-external-headers})

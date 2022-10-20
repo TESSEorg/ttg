@@ -12,6 +12,7 @@ namespace ttg {
   class TerminalBase {
    public:
     static constexpr bool is_a_terminal = true;
+    bool is_pull_terminal = false; //< Default is push terminal
 
     /// describes the terminal type
     enum class Type {
@@ -30,6 +31,7 @@ namespace ttg {
     std::string value_type_str;  //< String describing value type
 
     std::vector<TerminalBase *> successors_;
+    std::vector<TerminalBase *> predecessors_; //This is required for pull terminals.
 
     TerminalBase(const TerminalBase &) = delete;
     TerminalBase(TerminalBase &&) = delete;
@@ -61,7 +63,13 @@ namespace ttg {
       successor->connected = true;
     }
 
-   public:
+    void connect_pull(TerminalBase *predecessor) {
+      predecessors_.push_back(predecessor);
+      predecessor->connected = true;
+      connected = true;
+    }
+
+  public:
     /// Return ptr to containing tt
     TTBase *get_tt() const {
       if (!tt) throw "ttg::TerminalBase:get_tt() but tt is null";
@@ -97,6 +105,14 @@ namespace ttg {
 
     /// Get connections to successors
     const std::vector<TerminalBase *> &get_connections() const { return successors_; }
+    // Get connections to predecessors
+    const std::vector<TerminalBase *> &get_predecessors() const {return predecessors_; }
+
+    //Connect Container pull terminals without incoming terminals
+    //This is a hack, is there a better way?
+    void connect_pull_nopred(TerminalBase *p) {
+      p->connected = true;
+    }
 
     /// Returns true if this terminal (input or output) is connected
     bool is_connected() const { return connected; }

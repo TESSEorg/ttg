@@ -197,6 +197,7 @@ namespace ttg_madness {
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<actual_input_tuple_type>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
+    int num_pullins = 0;
 
     std::array<std::size_t, std::tuple_size_v<actual_input_tuple_type>> static_streamsize;
 
@@ -270,6 +271,7 @@ namespace ttg_madness {
                                                     // inputs (0 = unbounded stream, >0 = bounded stream)
       input_values_tuple_type input_values;         // The input values (does not include control)
       derivedT *derived;                            // Pointer to derived class instance
+      bool pull_terminals_invoked = false;
       std::conditional_t<ttg::meta::is_void_v<keyT>, ttg::Void, keyT> key;  // Task key
 
       /// makes a tuple of references out of tuple of
@@ -316,7 +318,7 @@ namespace ttg_madness {
 
         ttT::threaddata.call_depth--;
 
-        // ttg::print("finishing task",opT::threaddata.call_depth);
+        // ttg::print("finishing task",ttT::threaddata.call_depth);
       }
 
       virtual ~TTArgs() {}  // Will be deleted via TaskInterface*
@@ -333,7 +335,83 @@ namespace ttg_madness {
     using accessorT = typename cacheT::accessor;
     cacheT cache;
 
-   protected:
+  protected:
+    template <typename terminalT, std::size_t i, typename Key>
+    void invoke_pull_terminal(terminalT &in, const Key &key, TTArgs *args) {
+      if (in.is_pull_terminal) {
+        int owner;
+        if constexpr (!ttg::meta::is_void_v<Key>) {
+            owner = in.container.owner(key);
+          } else {
+          owner = in.container.owner();
+        }
+
+        if (owner != world.rank()) {
+          get_terminal_data<i, Key>(owner, key);
+        } else {
+          if constexpr (!ttg::meta::is_void_v<Key>) {
+            auto value = (in.container).get(key);
+            if (args->nargs[i] == 0) {
+              ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
+                                 ": error argument is already finalized : ", i);
+              throw std::runtime_error("Op::set_arg called for a finalized stream");
+            }
+
+            if (typeid(value) != typeid(std::nullptr_t) && i < std::tuple_size_v<input_values_tuple_type>) {
+              this->get<i, std::decay_t<decltype(value)> &>(args->input_values) =
+                std::forward<decltype(value)>(value);
+              args->nargs[i] = 0;
+              args->counter--;
+            }
+          }
+          else {
+            auto value = (in.container).get();
+            if (args->nargs[i] == 0) {
+              ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
+                                 ": error argument is already finalized : ", i);
+              throw std::runtime_error("Op::set_arg called for a finalized stream");
+            }
+
+            if (typeid(value) != typeid(std::nullptr_t) && i < std::tuple_size_v<input_values_tuple_type>) {
+              this->get<i, std::decay_t<decltype(value)> &>(args->input_values) =
+                std::forward<decltype(value)>(value);
+              args->nargs[i] = 0;
+              args->counter--;
+            }
+          }
+        }
+      }
+    }
+
+    template <std::size_t i, typename Key>
+    void get_terminal_data(const int owner,
+                           const Key &key) {
+      if (owner != world.rank()) {
+        worldobjT::send(owner, &ttT::template get_terminal_data<i, Key>, owner, key);
+      }
+      else {
+        auto &in = std::get<i>(input_terminals);
+        if constexpr (!ttg::meta::is_void_v<Key>) {
+          auto value = (in.container).get(key);
+          worldobjT::send(keymap(key), &ttT::template set_arg<i, Key,
+                          const std::remove_reference_t<decltype(value)>&>, key, value);
+        }
+        else {
+          auto value = (in.container).get();
+          worldobjT::send(keymap(), &ttT::template set_arg<i, void,
+                          const std::remove_reference_t<decltype(value)> &>, value);
+        }
+      }
+    }
+
+    template <std::size_t... IS, typename Key = keyT>
+    void invoke_pull_terminals(std::index_sequence<IS...>, const Key &key, TTArgs *args) {
+      int junk[] = {0, (invoke_pull_terminal<typename std::tuple_element<IS, input_terminals_type>::type, IS>(
+                            std::get<IS>(input_terminals), key, args),
+                        0)...};
+      junk[0]++;
+    }
+
     // there are 6 types of set_arg:
     // - case 1: nonvoid Key, complete Value type
     // - case 2: nonvoid Key, void Value, mixed (data+control) inputs
@@ -383,17 +461,27 @@ namespace ttg_madness {
       } else {
         ttg::trace(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
 
+        bool pullT_invoked = false;
         accessorT acc;
+
         int prio;
         if constexpr (!ttg::meta::is_void_v<Key>) {
           prio = this->priomap(key);
-          if (cache.insert(acc, key)) acc->second = new TTArgs(prio);  // It will be deleted by the task q
+          if (cache.insert(acc, key)) {
+            acc->second = new TTArgs(prio);  // It will be deleted by the task q
+            if (!is_lazy_pull()) {
+              //Invoke pull terminals for only the terminals with non-void values.
+              invoke_pull_terminals(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, key, acc->second);
+              pullT_invoked = true;
+            }
+          }
         } else {
           prio = this->priomap();
           if (cache.insert(acc, 0)) acc->second = new TTArgs(prio);  // It will be deleted by the task q
         }
 
         TTArgs *args = acc->second;
+        if (!is_lazy_pull() && pullT_invoked) args->pull_terminals_invoked = true;
 
         if (args->nargs[i] == 0) {
           ttg::print_error(world.rank(), ":", get_name(), " : ", key, ": error argument is already finalized : ", i);
@@ -449,6 +537,14 @@ namespace ttg_madness {
           }
           args->nargs[i] = 0;
           args->counter--;
+        }
+
+        // If lazy pulling in enabled, check it here.
+        if (numins - args->counter == num_pullins) {
+          if (is_lazy_pull() && !args->pull_terminals_invoked) {
+            //Invoke pull terminals for only the terminals with non-void values.
+            invoke_pull_terminals(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, key, args);
+          }
         }
 
         // ready to run the task?
@@ -803,6 +899,10 @@ namespace ttg_madness {
                     "TT::register_input_callback(terminalT) -- incompatible terminalT");
       using valueT = std::decay_t<typename terminalT::value_type>;
 
+      if (input.is_pull_terminal) {
+        num_pullins++;
+      }
+
       //////////////////////////////////////////////////////////////////
       // case 1: nonvoid key, nonvoid value
       //////////////////////////////////////////////////////////////////
@@ -941,10 +1041,10 @@ namespace ttg_madness {
       register_input_terminals(input_terminals, innames);
       register_output_terminals(output_terminals, outnames);
 
-      register_input_callbacks(std::make_index_sequence<numinedges>{});
-
       connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numinedges>{}, inedges);
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
+      //DO NOT MOVE THIS - information about the number of pull terminals is only available after connecting the edges.
+      register_input_callbacks(std::make_index_sequence<numinedges>{});
     }
 
     template <typename keymapT = ttg::detail::default_keymap<keyT>,

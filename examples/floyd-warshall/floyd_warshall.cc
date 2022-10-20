@@ -23,6 +23,7 @@ using namespace ttg;
 
 #include "ttg/serialization.h"
 #include "ttg/serialization/std/pair.h"
+#include "ttg/util/hash/std/pair.h"
 
 struct Key {
   // ((I, J), K) where (I, J) is the tile coordinate and K is the iteration number
@@ -81,8 +82,8 @@ namespace std {
   };
 }  // namespace std
 
-class Initiator : public TT<int, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>,
-                            Initiator> {
+class Initiator
+    : public TT<int, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>, Initiator> {
   using baseT = typename Initiator::ttT;
 
  public:
@@ -112,10 +113,11 @@ class Initiator : public TT<int, std::tuple<Out<Key, void>, Out<Key, void>, Out<
   }
 };
 
-class FuncA : public TT<Key,
-                        std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>,
-                                   Out<Key, void>, Out<Key, void>>,
-                        FuncA, ttg::typelist<void>> {
+class FuncA
+    : public TT<
+          Key,
+          std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>,
+          FuncA, ttg::typelist<void>> {
   using baseT = typename FuncA::ttT;
   double* adjacency_matrix_ttg;
   int problem_size;
@@ -204,11 +206,8 @@ class FuncA : public TT<Key,
   }
 };
 
-class FuncB
-    : public TT<
-          Key,
-          std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>,
-          FuncB, ttg::typelist<void, void>> {
+class FuncB : public TT<Key, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>,
+                        FuncB, ttg::typelist<void, void>> {
   using baseT = typename FuncB::ttT;
   double* adjacency_matrix_ttg;
   int problem_size;
@@ -295,11 +294,8 @@ class FuncB
   }
 };
 
-class FuncC
-    : public TT<
-          Key,
-          std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>,
-          FuncC, ttg::typelist<void, void>> {
+class FuncC : public TT<Key, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>,
+                        FuncC, ttg::typelist<void, void>> {
   using baseT = typename FuncC::ttT;
   double* adjacency_matrix_ttg;
   int problem_size;
@@ -386,8 +382,8 @@ class FuncC
   }
 };
 
-class FuncD : public TT<Key, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>,
-                        FuncD, ttg::typelist<void, void, void>> {
+class FuncD : public TT<Key, std::tuple<Out<Key, void>, Out<Key, void>, Out<Key, void>, Out<Key, void>>, FuncD,
+                        ttg::typelist<void, void, void>> {
   using baseT = typename FuncD::ttT;
   double* adjacency_matrix_ttg;
   int problem_size;
