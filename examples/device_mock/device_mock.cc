@@ -19,12 +19,6 @@ using Key3 = std::tuple<int, int, int>;
 /* number of tiles */
 #define KT 100
 
-static void
-dplasma_dprint_tile( int m, int n,
-                     const parsec_tiled_matrix_dc_t* descA,
-                     const double *M );
-
-
 template<typename T>
 auto make_gemm(ttg::Edge<Key2, MatrixTile<T>>& A,
                ttg::Edge<Key2, MatrixTile<T>>& B,
