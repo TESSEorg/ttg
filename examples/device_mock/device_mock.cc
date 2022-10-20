@@ -1,11 +1,6 @@
-//#define TTG_USE_PARSEC 1
-
-#ifdef TTG_USE_PARSEC
-#endif // TTG_USE_PARSEC
-
-#define USE_PARSEC_PROF_API 0
 
 #include <ttg.h>
+#include <ttg/view.h>
 #include "../matrixtile.h"
 
 #include <parsec.h>
