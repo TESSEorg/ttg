@@ -1,3 +1,4 @@
+// clang-format off
 
 #include <ttg.h>
 #include <ttg/view.h>
@@ -186,4 +187,3 @@ int main(int argc, char **argv)
   ttg::finalize();
   return 0;
 }
-
