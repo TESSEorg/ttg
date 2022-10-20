@@ -48,6 +48,10 @@ namespace ttg {
       return *m_obj;
     }
 
+    constexpr static std::size_t size() {
+      return std::tuple_size_v<decltype(m_spans)>;
+    }
+
   private:
     HostT* m_obj;
     std::tuple<ttg::span<DevTs>...> m_spans;
