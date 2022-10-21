@@ -335,14 +335,14 @@ namespace ttg_madness {
     using accessorT = typename cacheT::accessor;
     cacheT cache;
 
-  protected:
+   protected:
     template <typename terminalT, std::size_t i, typename Key>
     void invoke_pull_terminal(terminalT &in, const Key &key, TTArgs *args) {
       if (in.is_pull_terminal) {
         int owner;
         if constexpr (!ttg::meta::is_void_v<Key>) {
-            owner = in.container.owner(key);
-          } else {
+          owner = in.container.owner(key);
+        } else {
           owner = in.container.owner();
         }
 
@@ -358,13 +358,11 @@ namespace ttg_madness {
             }
 
             if (typeid(value) != typeid(std::nullptr_t) && i < std::tuple_size_v<input_values_tuple_type>) {
-              this->get<i, std::decay_t<decltype(value)> &>(args->input_values) =
-                std::forward<decltype(value)>(value);
+              this->get<i, std::decay_t<decltype(value)> &>(args->input_values) = std::forward<decltype(value)>(value);
               args->nargs[i] = 0;
               args->counter--;
             }
-          }
-          else {
+          } else {
             auto value = (in.container).get();
             if (args->nargs[i] == 0) {
               ::ttg::print_error(world.rank(), ":", get_name(), " : ", key,
@@ -373,8 +371,7 @@ namespace ttg_madness {
             }
 
             if (typeid(value) != typeid(std::nullptr_t) && i < std::tuple_size_v<input_values_tuple_type>) {
-              this->get<i, std::decay_t<decltype(value)> &>(args->input_values) =
-                std::forward<decltype(value)>(value);
+              this->get<i, std::decay_t<decltype(value)> &>(args->input_values) = std::forward<decltype(value)>(value);
               args->nargs[i] = 0;
               args->counter--;
             }
@@ -384,22 +381,19 @@ namespace ttg_madness {
     }
 
     template <std::size_t i, typename Key>
-    void get_terminal_data(const int owner,
-                           const Key &key) {
+    void get_terminal_data(const int owner, const Key &key) {
       if (owner != world.rank()) {
         worldobjT::send(owner, &ttT::template get_terminal_data<i, Key>, owner, key);
-      }
-      else {
+      } else {
         auto &in = std::get<i>(input_terminals);
         if constexpr (!ttg::meta::is_void_v<Key>) {
           auto value = (in.container).get(key);
-          worldobjT::send(keymap(key), &ttT::template set_arg<i, Key,
-                          const std::remove_reference_t<decltype(value)>&>, key, value);
-        }
-        else {
+          worldobjT::send(keymap(key), &ttT::template set_arg<i, Key, const std::remove_reference_t<decltype(value)> &>,
+                          key, value);
+        } else {
           auto value = (in.container).get();
-          worldobjT::send(keymap(), &ttT::template set_arg<i, void,
-                          const std::remove_reference_t<decltype(value)> &>, value);
+          worldobjT::send(keymap(), &ttT::template set_arg<i, void, const std::remove_reference_t<decltype(value)> &>,
+                          value);
         }
       }
     }
@@ -470,8 +464,9 @@ namespace ttg_madness {
           if (cache.insert(acc, key)) {
             acc->second = new TTArgs(prio);  // It will be deleted by the task q
             if (!is_lazy_pull()) {
-              //Invoke pull terminals for only the terminals with non-void values.
-              invoke_pull_terminals(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, key, acc->second);
+              // Invoke pull terminals for only the terminals with non-void values.
+              invoke_pull_terminals(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, key,
+                                    acc->second);
               pullT_invoked = true;
             }
           }
@@ -542,7 +537,7 @@ namespace ttg_madness {
         // If lazy pulling in enabled, check it here.
         if (numins - args->counter == num_pullins) {
           if (is_lazy_pull() && !args->pull_terminals_invoked) {
-            //Invoke pull terminals for only the terminals with non-void values.
+            // Invoke pull terminals for only the terminals with non-void values.
             invoke_pull_terminals(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, key, args);
           }
         }
@@ -1043,7 +1038,7 @@ namespace ttg_madness {
 
       connect_my_inputs_to_incoming_edge_outputs(std::make_index_sequence<numinedges>{}, inedges);
       connect_my_outputs_to_outgoing_edge_inputs(std::make_index_sequence<numouts>{}, outedges);
-      //DO NOT MOVE THIS - information about the number of pull terminals is only available after connecting the edges.
+      // DO NOT MOVE THIS - information about the number of pull terminals is only available after connecting the edges.
       register_input_callbacks(std::make_index_sequence<numinedges>{});
     }
 
@@ -1115,7 +1110,7 @@ namespace ttg_madness {
     /// values are treated as high priority tasks in the MADNESS backend.
     template <typename Priomap>
     void set_priomap(Priomap &&pm) {
-      priomap = pm;
+      priomap = std::forward<Priomap>(pm);
     }
 
     /// implementation of TTBase::make_executable()
@@ -1194,12 +1189,9 @@ namespace ttg_madness {
         TTBase::invoke();
     }
 
-    void set_defer_writer(bool _) {
-    }
+    void set_defer_writer(bool _) {}
 
-    bool get_defer_writer(bool _) {
-      return false;
-    }
+    bool get_defer_writer(bool _) { return false; }
 
     /// keymap accessor
     /// @return the keymap

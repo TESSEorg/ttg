@@ -3079,7 +3079,7 @@ namespace ttg_parsec {
     /// @arg pm a function that maps a key to an integral priority value.
     template <typename Priomap>
     void set_priomap(Priomap &&pm) {
-      priomap = pm;
+      priomap = std::forward<Priomap>(pm);
     }
 
     // Register the static_op function to associate it to instance_id
