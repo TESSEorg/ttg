@@ -288,13 +288,13 @@ namespace potrf {
 
     /* Priorities taken from DPLASMA */
     auto nt = A.cols();
-    tt_potrf->set_priomap([&](const Key1& key) { return ((nt - key.K) * (nt - key.K) * (nt - key.K)); });
-    tt_trsm->set_priomap([&](const Key2& key) {
+    tt_potrf->set_priomap([nt](const Key1& key) { return ((nt - key.K) * (nt - key.K) * (nt - key.K)); });
+    tt_trsm->set_priomap([nt](const Key2& key) {
       return ((nt - key.I) * (nt - key.I) * (nt - key.I) + 3 * ((2 * nt) - key.J - key.I - 1) * (key.I - key.J));
     });
     tt_syrk->set_priomap(
-        [&](const Key2& key) { return ((nt - key.I) * (nt - key.I) * (nt - key.I) + 3 * (key.I - key.J)); });
-    tt_gemm->set_priomap([&](const Key3& key) {
+        [nt](const Key2& key) { return ((nt - key.I) * (nt - key.I) * (nt - key.I) + 3 * (key.I - key.J)); });
+    tt_gemm->set_priomap([nt](const Key3& key) {
       return ((nt - key.I) * (nt - key.I) * (nt - key.I) + 3 * ((2 * nt) - key.I - key.J - 3) * (key.I - key.J) +
               6 * (key.I - key.K));
     });
