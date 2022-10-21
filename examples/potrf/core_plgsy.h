@@ -1,5 +1,7 @@
 #pragma once
 
+#include <complex>
+
 /**
  *
  * @file core_dplgsy.c

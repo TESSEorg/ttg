@@ -1,14 +1,10 @@
 #pragma once
 
 #include <ttg.h>
-// needed for madness::hashT and xterm_debug
-#include <madness/world/world.h>
 #include "pmw.h"
 #include "lapack.hh"
 
 #include <ttg.h>
-// needed for madness::hashT and xterm_debug
-#include <madness/world/world.h>
 #include "pmw.h"
 #include "lapack.hh"
 
@@ -29,7 +25,7 @@ auto make_trtri(const MatrixT& A,
   auto f = [=](const Key1& key,
                MatrixTile<T>&& tile_kk,
                std::tuple<ttg::Out<Key2, MatrixTile<T>>>& out){
-    const int K = key.K;
+    const int K = key[0];
 
     if(ttg::tracing()) ttg::print("TRTRI(", key, ")");
     
@@ -55,8 +51,8 @@ auto make_trsml(const MatrixT& A,
                const MatrixTile<T>& tile_kk,
                MatrixTile<T>&& tile_kn,
                std::tuple<ttg::Out<Key2, MatrixTile<T>>>& out){
-    const int K = key.I;
-    const int N = key.J;
+    const int K = key[0];
+    const int N = key[1];
 
     /* tile_kn is mb x nb */
     auto mb = tile_kn.rows();
@@ -101,8 +97,8 @@ auto make_trsmr(const MatrixT& A,
                           ttg::Out<Key3, MatrixTile<T>>, // gemm_C
                           ttg::Out<Key2, MatrixTile<T>>  // trsml_kn
                          >& out){
-    const int K = key.I;
-    const int M = key.J;
+    const int K = key[0];
+    const int M = key[1];
 
     auto mb = tile_kn.rows();
     auto nb = tile_kn.cols();
@@ -170,9 +166,9 @@ auto make_gemm(const MatrixT& A,
                           ttg::Out<Key3, MatrixTile<T>>, // gemm_C
                           ttg::Out<Key2, MatrixTile<T>> // trsml_kn
                          >& out){
-    const int K = key.I;
-    const int M = key.J;
-    const int N = key.K;
+    const int K = key[0];
+    const int M = key[1];
+    const int N = key[2];
 
     assert(input_A.cols() == input_B.rows());
     assert(input_A.rows() == input_C.rows());
@@ -233,31 +229,31 @@ auto make_dispatcher(const MatrixT& A,
                           ttg::Out<Key2, MatrixTile<T>>,
                           ttg::Out<Key2, MatrixTile<T>>>& out){
     if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ")");
-    if(key.I == key.J) {
+    if(key[0] == key[1]) {
       std::vector<Key2> keylist_trsml;
       std::vector<Key2> keylist_trsmr;
-      if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ") sending to TRTRI(", Key1{key.I}, ")");
+      if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ") sending to TRTRI(", Key1{key[0]}, ")");
       
-      if(key.I < A.rows()) {
-          keylist_trsmr.reserve(A.rows()-key.I+1);
-          for(int k = key.I+1; k < A.rows(); k++) {
-              if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ") sending to input_kk of TRSMR(", Key2{key.I, k}, ")");
-              keylist_trsmr.push_back(Key2{key.I, k});
+      if(key[0] < A.rows()) {
+          keylist_trsmr.reserve(A.rows()-key[0]+1);
+          for(int k = key[0]+1; k < A.rows(); k++) {
+              if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ") sending to input_kk of TRSMR(", Key2{key[0], k}, ")");
+              keylist_trsmr.push_back(Key2{key[0], k});
           }
       }
-      if(key.I > 0) {
-          keylist_trsml.reserve(key.I-1);
-          for(int k = 0; k < key.I; k++) {
-              if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ") sending to input_kk of TRSML(", Key2{key.I, k}, ")");
-              keylist_trsml.push_back(Key2{key.I, k});
+      if(key[0] > 0) {
+          keylist_trsml.reserve(key[0]-1);
+          for(int k = 0; k < key[0]; k++) {
+              if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ") sending to input_kk of TRSML(", Key2{key[0], k}, ")");
+              keylist_trsml.push_back(Key2{key[0], k});
           }
       }
-      ttg::broadcast<0, 1, 2>(std::make_tuple(Key1{key.I}, std::move(keylist_trsml), std::move(keylist_trsmr)), std::move(tile), out);
+      ttg::broadcast<0, 1, 2>(std::make_tuple(Key1{key[0]}, std::move(keylist_trsml), std::move(keylist_trsmr)), std::move(tile), out);
       return;
     }
 
-    if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ") sending to input_mk of TRSM_R(", Key2{key.J, key.I}, ")");
-    ttg::send<3>(Key2{key.J, key.I}, std::move(tile), out);
+    if(ttg::tracing()) ttg::print("TRTRI_Dispatch(", key, ") sending to input_mk of TRSM_R(", Key2{key[1], key[0]}, ")");
+    ttg::send<3>(Key2{key[1], key[0]}, std::move(tile), out);
   };
 
   return ttg::make_tt(f, ttg::edges(input), ttg::edges(to_trtri, to_trsml_kk, to_trsmr_kk, to_trsmr_mk), "TRTRI Dispatch", {"Input"}, {"TRTRI", "TRSML_kk", "TRSMR_kk", "TRSMR_mk"});
@@ -267,18 +263,18 @@ template <typename MatrixT>
 auto make_trtri_ttg(const MatrixT &A, lapack::Diag diag, ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>&input, ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>&output, bool defer_write ) {
   using T = typename MatrixT::element_type;
   auto keymap1 = [&](const Key1& key) {
-    return A.rank_of(key.K, key.K);
+    return A.rank_of(key[0], key[0]);
   };
 
   auto keymap2a = [&](const Key2& key) {
-    return A.rank_of(key.I, key.J);
+    return A.rank_of(key[0], key[1]);
   };
   auto keymap2b = [&](const Key2& key) {
-    return A.rank_of(key.J, key.I);
+    return A.rank_of(key[1], key[0]);
   };
 
   auto keymap3 = [&](const Key3& key) {
-    return A.rank_of(key.J, key.K);
+    return A.rank_of(key[1], key[2]);
   };
 
   ttg::Edge<Key1, MatrixTile<T>> disp_trtri("disp_trtri");

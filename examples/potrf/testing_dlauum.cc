@@ -3,21 +3,14 @@
 #ifdef TTG_USE_PARSEC
 // tell TTG/PARSEC that we need to rely on dynamic termination detection
 #undef TTG_USE_USER_TERMDET
-#endif // TTG_USE_PARSEC
+#endif  // TTG_USE_PARSEC
 
 #include <ttg.h>
 
-// needed for madness::hashT and xterm_debug
-#include <madness/world/world.h>
-
-#include "pmw.h"
-#include "plgsy.h"
 #include "lauum.h"
+#include "plgsy.h"
+#include "pmw.h"
 #include "result.h"
-
-#ifdef USE_DPLASMA
-#include <dplasma.h>
-#endif
 
 char* getCmdOption(char ** begin, char ** end, const std::string & option)
 {
@@ -109,14 +102,7 @@ int main(int argc, char **argv)
   }, ttg::edges(), ttg::edges(startup), "Startup Trigger", {}, {"startup"});
   init_tt->set_keymap([&]() {return world.rank();});
 
-#if defined(USE_DPLASMA)
-  dplasma_dplgsy( world.impl().context(), (double)(N), matrix_Lower,
-                (parsec_tiled_matrix_dc_t *)&dcA, random_seed);
-  auto init_tt  = make_matrix_reader_tt(A, startup, topotrf);
-#else
   auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, tolauum, defer_cow_hint);
-#endif // USE_DPLASMA
-
   auto lauum_ttg = lauum::make_lauum_ttg(A, tolauum, result, defer_cow_hint);
   auto result_ttg = make_result_ttg(A, result, defer_cow_hint);
 
@@ -155,36 +141,4 @@ int main(int argc, char **argv)
 
   ttg::finalize();
   return ret;
-}
-
-static void
-dplasma_dprint_tile( int m, int n,
-                     const parsec_tiled_matrix_dc_t* descA,
-                     const double *M )
-{
-    int tempmm = ( m == descA->mt-1 ) ? descA->m - m*descA->mb : descA->mb;
-    int tempnn = ( n == descA->nt-1 ) ? descA->n - n*descA->nb : descA->nb;
-    int ldam = BLKLDD( descA, m );
-
-    int ii, jj;
-
-    fflush(stdout);
-    for(ii=0; ii<tempmm; ii++) {
-        if ( ii == 0 )
-            fprintf(stdout, "(%2d, %2d) :", m, n);
-        else
-            fprintf(stdout, "          ");
-        for(jj=0; jj<tempnn; jj++) {
-#if defined(PRECISION_z) || defined(PRECISION_c)
-            fprintf(stdout, " (% e, % e)",
-                    creal( M[jj*ldam + ii] ),
-                    cimag( M[jj*ldam + ii] ));
-#else
-            fprintf(stdout, " % e", M[jj*ldam + ii]);
-#endif
-        }
-        fprintf(stdout, "\n");
-    }
-    fflush(stdout);
-    usleep(1000);
 }

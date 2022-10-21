@@ -1,8 +1,6 @@
 #pragma once
 
 #include <ttg.h>
-// needed for madness::hashT and xterm_debug
-#include <madness/world/world.h>
 #include "pmw.h"
 #include "lapack.hh"
 

@@ -3,22 +3,15 @@
 #ifdef TTG_USE_PARSEC
 // Use the dynamic termination detection by default
 #undef TTG_USE_USER_TERMDET
-#endif // TTG_USE_PARSEC
+#endif  // TTG_USE_PARSEC
 
 #include <ttg.h>
 
-// needed for madness::hashT and xterm_debug
-#include <madness/world/world.h>
-
-#include "pmw.h"
 #include "plgsy.h"
+#include "pmw.h"
 #include "potrf.h"
 #include "potri.h"
 #include "result.h"
-
-#ifdef USE_DPLASMA
-#include <dplasma.h>
-#endif
 
 char* getCmdOption(char ** begin, char ** end, const std::string & option)
 {
