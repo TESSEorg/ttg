@@ -40,6 +40,7 @@ namespace ttg {
     friend class TTG;  // TTG needs to be able to control owning_ttg
 
     bool executable = false;  //!< ready to execute?
+    bool is_ttg_ = false;
     bool lazy_pull_instance = false;
 
     // Default copy/move/assign all OK
@@ -113,6 +114,7 @@ namespace ttg {
    protected:
     TTBase(TTBase &&other)
         : instance_id(other.instance_id)
+        , is_ttg_(std::move(other.is_ttg_))
         , name(std::move(other.name))
         , inputs(std::move(other.inputs))
         , outputs(std::move(other.outputs)) {
@@ -120,6 +122,7 @@ namespace ttg {
     }
     TTBase &operator=(TTBase &&other) {
       instance_id = other.instance_id;
+      is_ttg_ = std::move(other.is_ttg_);
       name = std::move(other.name);
       inputs = std::move(other.inputs);
       outputs = std::move(other.outputs);
@@ -128,7 +131,7 @@ namespace ttg {
     }
 
     TTBase(const std::string &name, size_t numins, size_t numouts)
-        : instance_id(next_instance_id()), name(name), inputs(numins), outputs(numouts) {}
+        : instance_id(next_instance_id()), is_ttg_(false), name(name), inputs(numins), outputs(numouts) {}
 
     static const std::vector<TerminalBase *> *&outputs_tls_ptr_accessor() {
       static thread_local const std::vector<TerminalBase *> *outputs_tls_ptr = nullptr;
@@ -197,6 +200,14 @@ namespace ttg {
 
     std::optional<std::reference_wrapper<const TTBase>> ttg() const {
       return owning_ttg ? std::cref(*owning_ttg) : std::optional<std::reference_wrapper<const TTBase>>{};
+    }
+
+    const TTBase *ttg_ptr() const {
+      return owning_ttg;
+    }
+
+    bool is_ttg() const {
+      return is_ttg_;
     }
 
     /// Sets the name of this operation

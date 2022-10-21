@@ -8,6 +8,19 @@ if (TARGET Boost::boost)
     list(APPEND _msg " includes Boost::serialization")
   endif(TARGET Boost::serialization)
   message(STATUS "${_msg}")
+
+  # Boost::* targets by default are not GLOBAL, so to allow users of TTG to safely use them we need to make them global
+  # more discussion here: https://gitlab.kitware.com/cmake/cmake/-/issues/17256
+  foreach(tgt boost;headers;${Boost_BTAS_DEPS_LIBRARIES})
+    if (TARGET Boost::${tgt})
+      get_target_property(_boost_tgt_${tgt}_is_imported_global Boost::${tgt} IMPORTED_GLOBAL)
+      if (NOT _boost_tgt_${tgt}_is_imported_global)
+        set_target_properties(Boost::${tgt} PROPERTIES IMPORTED_GLOBAL TRUE)
+      endif()
+      unset(_boost_tgt_${tgt}_is_imported_global)
+    endif()
+  endforeach()
+
 elseif (TTG_FETCH_BOOST)
 
   FetchContent_Declare(

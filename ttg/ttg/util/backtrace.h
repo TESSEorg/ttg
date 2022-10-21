@@ -25,20 +25,20 @@
 // The U.S. Government is granted a limited license as per AL 91-7.
 //
 
-#ifndef MPQC4_SRC_MPQC_UTIL_CORE_BACKTRACE_H_
-#define MPQC4_SRC_MPQC_UTIL_CORE_BACKTRACE_H_
+#ifndef TTG_UTIL_CORE_BACKTRACE_H_
+#define TTG_UTIL_CORE_BACKTRACE_H_
 
 #include <string>
 #include <vector>
 
-namespace mpqc {
+namespace ttg {
   namespace detail {
     /**
      * Creates a backtrace of a running program/thread. Example of use:
      * @code
      * void make_omelet(int num_eggs) {
      *   if (num_eggs < 1) {
-     *     mpqc::detail::Backtrace bt("breakfast fail:");
+     *     ttg::detail::Backtrace bt("breakfast fail:");
      *     throw std::runtime_error(bt.str());
      *   }
      *   stove.on();
@@ -78,6 +78,6 @@ namespace mpqc {
       static std::string __demangle(const std::string& symbol);
     };
   }  // namespace detail
-}  // namespace mpqc
+}  // namespace ttg
 
-#endif  // MPQC4_SRC_MPQC_UTIL_CORE_BACKTRACE_H_
+#endif  // TTG_UTIL_CORE_BACKTRACE_H_

@@ -3,6 +3,7 @@
 #include "ttg.h"
 
 #include "ttg/serialization/std/pair.h"
+#include "ttg/util/hash/std/pair.h"
 
 constexpr int64_t N = 1000;
 

@@ -36,10 +36,12 @@ namespace ttg {
     TTG &operator=(const TTG &) = delete;
     // movable
     TTG(TTG && other) : TTBase(static_cast<TTBase&&>(other)), tts(other.tts), ins(std::move(other.ins)), outs(std::move(other.outs)) {
+        is_ttg_ = true;
         own_my_tts();
     }
     TTG& operator=(TTG &&other) {
       static_cast<TTBase&>(*this) = static_cast<TTBase&&>(other);
+      is_ttg_ = true;
       tts = std::move(other.tts);
       ins = std::move(other.ins);
       outs = std::move(other.outs);
@@ -59,6 +61,7 @@ namespace ttg {
 
       set_terminals(ins, &TTG<input_terminalsT, output_terminalsT>::set_input);
       set_terminals(outs, &TTG<input_terminalsT, output_terminalsT>::set_output);
+      is_ttg_ = true;
       own_my_tts();
 
       // traversal is still broken ... need to add checking for composite

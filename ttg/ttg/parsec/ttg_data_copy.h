@@ -16,6 +16,10 @@ namespace ttg_parsec {
     * TODO: create abstractions for all fields in parsec_data_copy_t that we access.
     */
     struct ttg_data_copy_t : public parsec_data_copy_t {
+#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
+      int64_t size;
+      int64_t uid;
+#endif
 
       /* special value assigned to parsec_data_copy_t::readers to mark the copy as
       * mutable, i.e., a task will modify it */
