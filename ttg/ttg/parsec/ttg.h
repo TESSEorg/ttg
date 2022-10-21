@@ -1,3 +1,4 @@
+// clang-format off
 #ifndef PARSEC_TTG_H_INCLUDED
 #define PARSEC_TTG_H_INCLUDED
 
@@ -3210,3 +3211,4 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
 };
 
 #endif  // PARSEC_TTG_H_INCLUDED
+// clang-format on
