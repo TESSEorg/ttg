@@ -44,14 +44,14 @@ static bool inmatrix(int i, int j, lapack::Uplo uplo) {
 int main(int argc, char **argv)
 {
   std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
-  int NB = 128;
+  int NB = 32;
   int N = 5*NB;
   int M = N;
-  bool check;
-  int nthreads = 1;
+  int nthreads = -1;
   const char* prof_filename = nullptr;
   char *opt = nullptr;
   lapack::Uplo uplo;
+  int ret = EXIT_SUCCESS;
 
   if( (opt = getCmdOption(argv+1, argv+argc, "-N")) != nullptr ) {
     N = M = atoi(opt);
@@ -69,8 +69,8 @@ int main(int argc, char **argv)
     prof_filename = opt;
   }
 
-  check = cmdOptionExists(argv+1, argv+argc, "-x");
-  bool cow_hint = cmdOptionExists(argv+1, argv+argc, "-w");
+  bool check = !cmdOptionExists(argv+1, argv+argc, "-x");
+  bool cow_hint = !cmdOptionExists(argv+1, argv+argc, "-w");
   bool upper = cmdOptionExists(argv+1, argv+argc, "-U");
 
   if(upper)
@@ -215,10 +215,13 @@ int main(int argc, char **argv)
     double *Ainv = A.getLAPACKMatrix();
 
     if( check_dtrtri(lapack::Diag::NonUnit, uplo, A0, Ainv, N) == -1 ) {
-      print_LAPACK_matrix(A0, N, "Original");
-      auto info = lapack::trtri(uplo, lapack::Diag::NonUnit, N, A0, N);
-      print_LAPACK_matrix(A0, N, "lapack::trtri(Original)");
-      print_LAPACK_matrix(Ainv, N, "ttg::trtri(Original)");
+      if(N < 32) {
+        print_LAPACK_matrix(A0, N, "Original");
+        auto info = lapack::trtri(uplo, lapack::Diag::NonUnit, N, A0, N);
+        print_LAPACK_matrix(A0, N, "lapack::trtri(Original)");
+        print_LAPACK_matrix(Ainv, N, "ttg::trtri(Original)");
+      }
+      ret = EXIT_FAILURE;
     }
 
     delete [] Ainv;
@@ -232,7 +235,7 @@ int main(int argc, char **argv)
   world.profile_off();
 
   ttg::finalize();
-  return 0;
+  return ret;
 }
 
 static void

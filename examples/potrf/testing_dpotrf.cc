@@ -31,12 +31,13 @@ int main(int argc, char **argv)
 {
 
   std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
-  int NB = 128;
+  int NB = 32;
   int N = 5*NB;
   int M = N;
   int nthreads = -1;
   const char* prof_filename = nullptr;
   char *opt = nullptr;
+  int ret = EXIT_SUCCESS;
 
   if( (opt = getCmdOption(argv+1, argv+argc, "-N")) != nullptr ) {
     N = M = atoi(opt);
@@ -54,8 +55,8 @@ int main(int argc, char **argv)
     prof_filename = opt;
   }
 
-  bool check = cmdOptionExists(argv+1, argv+argc, "-x");
-  bool cow_hint = cmdOptionExists(argv+1, argv+argc, "-w");
+  bool check = !cmdOptionExists(argv+1, argv+argc, "-x");
+  bool cow_hint = !cmdOptionExists(argv+1, argv+argc, "-w");
 
   ttg::initialize(argc, argv, nthreads);
 
@@ -188,10 +189,13 @@ int main(int argc, char **argv)
     /* Copy result matrix (which is local) into a single LAPACK format matrix */
     double *Acpy = A.getLAPACKMatrix();
     if(-1 == check_dpotrf(Acpy, A0, N)) {
-      print_LAPACK_matrix(A0, N, "Original");
-      auto info = lapack::potrf(lapack::Uplo::Lower, N, A0, N);
-      print_LAPACK_matrix(A0, N, "lapack::potrf(Original)");
-      print_LAPACK_matrix(Acpy, N, "ttg::potrf(Original)");
+      if(N < 32) {
+        print_LAPACK_matrix(A0, N, "Original");
+        auto info = lapack::potrf(lapack::Uplo::Lower, N, A0, N);
+        print_LAPACK_matrix(A0, N, "lapack::potrf(Original)");
+        print_LAPACK_matrix(Acpy, N, "ttg::potrf(Original)");
+      }
+      ret = EXIT_FAILURE;
     }
 
     delete [] Acpy;
@@ -206,7 +210,7 @@ int main(int argc, char **argv)
   world.profile_off();
 
   ttg::finalize();
-  return 0;
+  return ret;
 }
 
 static void

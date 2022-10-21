@@ -37,13 +37,13 @@ bool cmdOptionExists(char** begin, char** end, const std::string& option)
 int main(int argc, char **argv)
 {
   std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
-  int NB = 128;
+  int NB = 32;
   int N = 5*NB;
   int M = N;
-  int check = 0;
-  int nthreads = 1;
+  int nthreads = -1;
   const char* prof_filename = nullptr;
   char *opt = nullptr;
+  int ret = EXIT_SUCCESS;
 
   if( (opt = getCmdOption(argv+1, argv+argc, "-N")) != nullptr ) {
     N = M = atoi(opt);
@@ -60,7 +60,7 @@ int main(int argc, char **argv)
   if( (opt = getCmdOption(argv+1, argv+argc, "-dag")) != nullptr ) {
     prof_filename = opt;
   }
-  bool defer_cow_hint = cmdOptionExists(argv+1, argv+argc, "-w");
+  bool defer_cow_hint = !cmdOptionExists(argv+1, argv+argc, "-w");
 
   ttg::initialize(argc, argv, nthreads);
 
@@ -154,7 +154,7 @@ int main(int argc, char **argv)
   world.profile_off();
 
   ttg::finalize();
-  return 0;
+  return ret;
 }
 
 static void

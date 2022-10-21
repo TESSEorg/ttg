@@ -39,15 +39,15 @@ int main(int argc, char **argv)
 {
 
   std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
-  int NB = 128;
+  int NB = 32;
   int N = 5*NB;
   int M = N;
-  int check = 0;
   int nthreads = -1;
   int nruns = 3;
   const char* prof_filename = nullptr;
   char *opt = nullptr;
   int sequential=0;
+  int ret = EXIT_SUCCESS;
 
   if( (opt = getCmdOption(argv+1, argv+argc, "-N")) != nullptr ) {
     N = M = atoi(opt);
@@ -75,7 +75,7 @@ int main(int argc, char **argv)
 
   bool ttg_dags = cmdOptionExists(argv+1, argv+argc, "-ttg-dag");
   bool verbose = cmdOptionExists(argv+1, argv+argc, "-v");
-  bool defer_cow_hint = cmdOptionExists(argv+1, argv+argc, "-w");
+  bool defer_cow_hint = !cmdOptionExists(argv+1, argv+argc, "-w");
 
   auto dashdash = std::find(argv, argv+argc, std::string("--"));
   char **ttg_argv;
@@ -397,5 +397,5 @@ int main(int argc, char **argv)
   parsec_tiled_matrix_dc_destroy( (parsec_tiled_matrix_dc_t*)&dcA);
 
   ttg::finalize();
-  return 0;
+  return ret;
 }
