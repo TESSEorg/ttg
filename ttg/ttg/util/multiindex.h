@@ -7,18 +7,18 @@
 
 namespace ttg {
 
-  template <std::size_t Rank>
+  template <std::size_t Rank, typename Int = int>
   struct MultiIndex {
-    static constexpr const long max_index = 1 << 21;
-    static constexpr const long max_index_square = max_index * max_index;
+    static constexpr const std::size_t max_index = 1 << 21;
+    static constexpr const std::size_t max_index_square = max_index * max_index;
     MultiIndex() = default;
-    template <typename Integer>
+    template <typename Integer, typename = std::enable_if_t<std::is_integral_v<Int>>>
     MultiIndex(std::initializer_list<Integer> ilist) {
       std::copy(ilist.begin(), ilist.end(), data_.begin());
       assert(valid());
     }
-    template <typename... Ints>
-    MultiIndex(Ints... ilist) : data_{{ilist...}} {
+    template <typename... Ints, typename = std::enable_if_t<(std::is_integral_v<Ints> && ...)>>
+    MultiIndex(Ints... ilist) : data_{{static_cast<Int>(ilist)...}} {
       assert(valid());
     }
     explicit MultiIndex(std::size_t hash) {
@@ -62,7 +62,7 @@ namespace ttg {
       return result;
     }
 
-    std::array<long, Rank> data_;
+    std::array<Int, Rank> data_;
   };
 
   template <std::size_t Rank>
