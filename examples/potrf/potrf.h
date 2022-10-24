@@ -1,10 +1,8 @@
 #pragma once
 
 #include <ttg.h>
-#include "pmw.h"
-// needed for madness::hashT and xterm_debug
-#include <madness/world/world.h>
 #include "lapack.hh"
+#include "pmw.h"
 
 #undef DEBUG_TILES_VALUES
 
@@ -24,7 +22,7 @@ namespace potrf {
     using T = typename MatrixT::element_type;
     auto f = [=](const Key1& key, MatrixTile<T>&& tile_kk,
                  std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out) {
-      const int K = key.K;
+      const int K = key[0];
 
       if (ttg::tracing()) ttg::print("POTRF(", key, ")");
 #if defined(DEBUG_TILES_VALUES)
@@ -66,8 +64,8 @@ namespace potrf {
     auto f = [=](const Key2& key, const MatrixTile<T>& tile_kk, MatrixTile<T>&& tile_mk,
                  std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key3, MatrixTile<T>>,
                             ttg::Out<Key3, MatrixTile<T>>>& out) {
-      const int M = key.I;
-      const int K = key.J;  // the column equals the outer most look K (same as PO)
+      const int M = key[0];
+      const int K = key[1];  // the column equals the outer most look K (same as PO)
 
       auto mb = tile_mk.rows();
       auto nb = tile_mk.cols();
@@ -125,8 +123,8 @@ namespace potrf {
     using T = typename MatrixT::element_type;
     auto f = [=](const Key2& key, const MatrixTile<T>& tile_mk, MatrixTile<T>&& tile_kk,
                  std::tuple<ttg::Out<Key1, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out) {
-      const int K = key.I;
-      const int M = key.J;
+      const int K = key[0];
+      const int M = key[1];
 
       /* tile_kk is mb x mb and tile_mk is mb x nb */
       assert(tile_kk.rows() == tile_kk.cols());
@@ -173,9 +171,9 @@ namespace potrf {
     using T = typename MatrixT::element_type;
     auto f = [=](const Key3& key, const MatrixTile<T>& tile_mk, const MatrixTile<T>& tile_nk, MatrixTile<T>&& tile_mn,
                  std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key3, MatrixTile<T>>>& out) {
-      const int M = key.I;
-      const int N = key.J;
-      const int K = key.K;
+      const int M = key[0];
+      const int N = key[1];
+      const int K = key[2];
       assert(M != N && M > K && N > K);
 
       assert(tile_mk.cols() == tile_nk.cols());
@@ -219,29 +217,29 @@ namespace potrf {
                  std::tuple<ttg::Out<Key1, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>,
                             ttg::Out<Key3, MatrixTile<T>>>& out) {
       if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ")");
-      if (0 == key.I && 0 == key.J) {
+      if (0 == key[0] && 0 == key[1]) {
         // First element goes to POTRF
-        if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to POTRF(", Key1{key.I}, ")");
-        ttg::send<0>(Key1{key.I}, std::move(tile), out);
+        if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to POTRF(", Key1{key[0]}, ")");
+        ttg::send<0>(Key1{key[0]}, std::move(tile), out);
         return;
       }
-      if (key.I == key.J) {
+      if (key[0] == key[1]) {
         // Other diagonal elements go to SYRK
-        if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to SYRK(", Key2{0, key.I}, ")");
-        ttg::send<2>(Key2{0, key.I}, std::move(tile), out);
+        if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to SYRK(", Key2{0, key[0]}, ")");
+        ttg::send<2>(Key2{0, key[0]}, std::move(tile), out);
         return;
       }
       // We only consider the lower triangular
-      assert(key.I > key.J);
-      if (0 == key.J) {
+      assert(key[0] > key[1]);
+      if (0 == key[1]) {
         // First column goes to TRSM
         if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to TRSM(", key, ")");
         ttg::send<1>(key, std::move(tile), out);
         return;
       }
       // Rest goes to GEMM
-      if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to GEMM(", Key3{key.I, key.J, 0}, ")");
-      ttg::send<3>(Key3{key.I, key.J, 0}, std::move(tile), out);
+      if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to GEMM(", Key3{key[0], key[1], 0}, ")");
+      ttg::send<3>(Key3{key[0], key[1], 0}, std::move(tile), out);
     };
 
     return ttg::make_tt(f, ttg::edges(input), ttg::edges(to_potrf, to_trsm, to_syrk, to_gemm), "POTRF Dispatch",
@@ -252,12 +250,12 @@ namespace potrf {
   auto make_potrf_ttg(MatrixT& A, ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& input,
                       ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output, bool defer_write) {
     using T = typename MatrixT::element_type;
-    auto keymap1 = [&](const Key1& key) { return A.rank_of(key.K, key.K); };
+    auto keymap1 = [&](const Key1& key) { return A.rank_of(key[0], key[0]); };
 
-    auto keymap2a = [&](const Key2& key) { return A.rank_of(key.I, key.J); };
-    auto keymap2b = [&](const Key2& key) { return A.rank_of(key.I, key.I); };
+    auto keymap2a = [&](const Key2& key) { return A.rank_of(key[0], key[1]); };
+    auto keymap2b = [&](const Key2& key) { return A.rank_of(key[0], key[0]); };
 
-    auto keymap3 = [&](const Key3& key) { return A.rank_of(key.I, key.J); };
+    auto keymap3 = [&](const Key3& key) { return A.rank_of(key[0], key[1]); };
 
     ttg::Edge<Key1, MatrixTile<T>> syrk_potrf("syrk_potrf"), disp_potrf("disp_potrf");
 
@@ -288,15 +286,15 @@ namespace potrf {
 
     /* Priorities taken from DPLASMA */
     auto nt = A.cols();
-    tt_potrf->set_priomap([nt](const Key1& key) { return ((nt - key.K) * (nt - key.K) * (nt - key.K)); });
+    tt_potrf->set_priomap([nt](const Key1& key) { return ((nt - key[0]) * (nt - key[0]) * (nt - key[0])); });
     tt_trsm->set_priomap([nt](const Key2& key) {
-      return ((nt - key.I) * (nt - key.I) * (nt - key.I) + 3 * ((2 * nt) - key.J - key.I - 1) * (key.I - key.J));
+      return ((nt - key[0]) * (nt - key[0]) * (nt - key[0]) + 3 * ((2 * nt) - key[1] - key[0] - 1) * (key[0] - key[1]));
     });
     tt_syrk->set_priomap(
-        [nt](const Key2& key) { return ((nt - key.I) * (nt - key.I) * (nt - key.I) + 3 * (key.I - key.J)); });
+        [nt](const Key2& key) { return ((nt - key[0]) * (nt - key[0]) * (nt - key[0]) + 3 * (key[0] - key[1])); });
     tt_gemm->set_priomap([nt](const Key3& key) {
-      return ((nt - key.I) * (nt - key.I) * (nt - key.I) + 3 * ((2 * nt) - key.I - key.J - 3) * (key.I - key.J) +
-              6 * (key.I - key.K));
+      return ((nt - key[0]) * (nt - key[0]) * (nt - key[0]) + 3 * ((2 * nt) - key[0] - key[1] - 3) * (key[0] - key[1]) +
+              6 * (key[0] - key[2]));
     });
 
     auto ins = std::make_tuple(tt_dispatch->template in<0>());
