@@ -360,7 +360,7 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
   static_assert(
       NO_ARGUMENTS_PASSED_AS_NONCONST_LVALUE_REF,
       "ttg::make_tt_tpl(func, inedges, outedges): one or more arguments to func can only be passed by nonconst lvalue "
-      "ref; this is illegal, should only pass arguments as const lavlue ref or (nonconst) rvalue ref");
+      "ref; this is illegal, should only pass arguments as const lvalue ref or (nonconst) rvalue ref");
   using input_args_t = std::decay_t<nondecayed_input_args_t>;
   using decayed_input_args_t = ttg::meta::decayed_typelist_t<input_args_t>;
   using wrapT =
@@ -387,7 +387,7 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
 ///           - `void(input_valuesT&&...)`: simplified form, with no type-checking of the dataflow into the output terminals;
 ///         - if `ttg::meta::is_void_v<keyT>==false`:
 ///           - `void(const keyT&, input_valuesT&&..., std::tuple<output_terminalsT...>&)`: full form, with the explicitly-passed
-/////             output terminals ensuring compile-time type-checking of the dataflow into the output terminals (see ttg::send);
+///             output terminals ensuring compile-time type-checking of the dataflow into the output terminals (see ttg::send);
 ///           - `void(const keyT&, input_valuesT&&...)`: simplified form, with no type-checking of the dataflow into the output terminals.
 /// @param[in] inedges a tuple of input edges
 /// @param[in] outedges a tuple of output edges
@@ -395,6 +395,10 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
 /// @param[in] name a string label for the resulting TT
 /// @param[in] innames string labels for the respective input terminals of the resulting TT
 /// @param[in] outnames string labels for the respective output terminals of the resulting TT
+///
+/// @warning You MUST NOT use generic callables that use concrete types for some data arguments, i.e. make either
+///          ALL data types or NONE of them generic. This warning only applies to the data arguments and
+///          does not apply to task ID (key) and optional out-terminal arguments.
 ///
 /// @note For generic callables the arguments that are used read-only should be declared as `U&` (where `U` is the corresponding template parameter)
 ///       or `auto&` (in contexts such as generic lambdas where template arguments are implicit). The arguments that are
@@ -410,6 +414,9 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
 ///          template <typename K, typename D1, typename D2>
 ///          void func (K& key, D1& datum1, D2&& datum2) { ... }
 ///       @endcode
+///
+/// @warning Although generic arguments annotated by `const auto&` are also permitted, their use is discouraged to avoid confusion;
+///          namely, `const auto&` denotes a _consumable_ argument, NOT read-only, despite the `const`.
 // clang-format on
 template <typename keyT = void, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
 auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges = std::tuple<>{},
@@ -476,7 +483,7 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   static_assert(
       NO_ARGUMENTS_PASSED_AS_NONCONST_LVALUE_REF,
       "ttg::make_tt(func, inedges, outedges): one or more arguments to func can only be passed by nonconst lvalue "
-      "ref; this is illegal, should only pass arguments as const lavlue ref or (nonconst) rvalue ref");
+      "ref; this is illegal, should only pass arguments as const lvalue ref or (nonconst) rvalue ref");
   using decayed_input_args_t = ttg::meta::decayed_typelist_t<input_args_t>;
   // 3. full_input_args_t = edge-types with non-void types replaced by input_args_t
   using full_input_args_t = ttg::meta::replace_nonvoid_t<input_edge_value_types, input_args_t>;

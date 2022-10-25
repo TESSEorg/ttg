@@ -1,3 +1,7 @@
+#pragma once
+
+#include <complex>
+
 /**
  *
  * @file core_dplgsy.c
@@ -16,15 +20,6 @@
  **/
 #include <stdint.h>
 #include "random.h"
-
-#define REAL
-#undef COMPLEX
-
-#ifdef COMPLEX
-#define NBELEM   2
-#else
-#define NBELEM   1
-#endif
 
 /***************************************************************************//**
  *
@@ -65,16 +60,18 @@
  *         all tiles initialized with this routine.
  *
  ******************************************************************************/
-#if defined(PLASMA_HAVE_WEAK)
-#pragma weak CORE_dplgsy = PCORE_dplgsy
-#define CORE_dplgsy PCORE_dplgsy
-#endif
-void CORE_dplgsy( double bump, int m, int n, double *A, int lda,
-                  int gM, int m0, int n0, unsigned long long int seed )
+template <typename T>
+void CORE_plgsy( T bump, int m, int n, T *A, int lda,
+                 int gM, int m0, int n0, unsigned long long int seed )
 {
-    double *tmp = A;
+    T *tmp = A;
     int64_t i, j;
     unsigned long long int ran, jump;
+    int nbelem = 1;
+    if constexpr (std::is_same<T, std::complex<double>>::value ||
+        std::is_same<T, std::complex<float>>::value ) {
+        nbelem = 2;
+    }
 
     jump = (unsigned long long int)m0 + (unsigned long long int)n0 * (unsigned long long int)gM;
 
@@ -83,15 +80,16 @@ void CORE_dplgsy( double bump, int m, int n, double *A, int lda,
      */
     if ( m0 == n0 ) {
         for (j = 0; j < n; j++) {
-            ran = Rnd64_jump( NBELEM * jump, seed );
+            ran = Rnd64_jump( nbelem * jump, seed );
 
             for (i = j; i < m; i++) {
                 *tmp = 0.5f - ran * RndF_Mul;
                 ran  = Rnd64_A * ran + Rnd64_C;
-#ifdef COMPLEX
-                *tmp += I*(0.5f - ran * RndF_Mul);
-                ran   = Rnd64_A * ran + Rnd64_C;
-#endif
+                if constexpr (std::is_same<T, std::complex<double>>::value ||
+                    std::is_same<T, std::complex<float>>::value ) {
+                  *tmp += T(- ran * RndF_Mul, 0.5);
+                  ran   = Rnd64_A * ran + Rnd64_C;
+                }
                 tmp++;
             }
             tmp  += (lda - i + j + 1);
@@ -111,15 +109,16 @@ void CORE_dplgsy( double bump, int m, int n, double *A, int lda,
      */
     else if ( m0 > n0 ) {
         for (j = 0; j < n; j++) {
-            ran = Rnd64_jump( NBELEM * jump, seed );
+            ran = Rnd64_jump( nbelem * jump, seed );
 
             for (i = 0; i < m; i++) {
                 *tmp = 0.5f - ran * RndF_Mul;
                 ran  = Rnd64_A * ran + Rnd64_C;
-#ifdef COMPLEX
-                *tmp += I*(0.5f - ran * RndF_Mul);
-                ran   = Rnd64_A * ran + Rnd64_C;
-#endif
+                if constexpr (std::is_same<T, std::complex<double>>::value ||
+                    std::is_same<T, std::complex<float>>::value ) {
+                  *tmp += T(- ran * RndF_Mul, 0.5);
+                  ran   = Rnd64_A * ran + Rnd64_C;
+                }
                 tmp++;
             }
             tmp  += (lda - i);
@@ -134,15 +133,16 @@ void CORE_dplgsy( double bump, int m, int n, double *A, int lda,
         jump = (unsigned long long int)n0 + (unsigned long long int)m0 * (unsigned long long int)gM;
 
         for (i = 0; i < m; i++) {
-            ran = Rnd64_jump( NBELEM * jump, seed );
+            ran = Rnd64_jump( nbelem * jump, seed );
 
             for (j = 0; j < n; j++) {
                 A[j*lda+i] = 0.5f - ran * RndF_Mul;
                 ran = Rnd64_A * ran + Rnd64_C;
-#ifdef COMPLEX
-                A[j*lda+i] += I*(0.5f - ran * RndF_Mul);
-                ran = Rnd64_A * ran + Rnd64_C;
-#endif
+                if constexpr (std::is_same<T, std::complex<double>>::value ||
+                    std::is_same<T, std::complex<float>>::value ) {
+                  A[j*lda+i] += T(0.0, 0.5f - ran * RndF_Mul);
+                  ran = Rnd64_A * ran + Rnd64_C;
+                }
             }
             jump += gM;
         }

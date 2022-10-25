@@ -112,7 +112,6 @@ namespace ttg {
     return me;
   }
 
-
 } // namespace ttg
 
 #endif // TTG_WORLD_H

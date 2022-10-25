@@ -24,6 +24,7 @@ using namespace ttg;
 
 #include "ttg/serialization.h"
 #include "ttg/serialization/std/pair.h"
+#include "ttg/util/hash/std/pair.h"
 
 #include <madness/world/world.h>
 
@@ -328,8 +329,8 @@ class FuncA : public TT<Key,
 };
 
 template <typename T>
-class FuncB : public TT<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                        FuncB<T>, ttg::typelist<BlockMatrix<T>, BlockMatrix<T>>> {
+class FuncB : public TT<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncB<T>,
+                        ttg::typelist<BlockMatrix<T>, BlockMatrix<T>>> {
   using baseT = typename FuncB::ttT;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;
@@ -408,8 +409,8 @@ class FuncB : public TT<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, Block
 };
 
 template <typename T>
-class FuncC : public TT<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>,
-                        FuncC<T>, ttg::typelist<BlockMatrix<T>, BlockMatrix<T>>> {
+class FuncC : public TT<Key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>>, FuncC<T>,
+                        ttg::typelist<BlockMatrix<T>, BlockMatrix<T>>> {
   using baseT = typename FuncC::ttT;
   Matrix<T>* adjacency_matrix_ttg;
   int problem_size;

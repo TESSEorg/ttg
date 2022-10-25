@@ -25,8 +25,8 @@
 // The U.S. Government is granted a limited license as per AL 91-7.
 //
 
-#ifndef MPQC4_SRC_MPQC_UTIL_MISC_BUG_H_
-#define MPQC4_SRC_MPQC_UTIL_MISC_BUG_H_
+#ifndef TTG_UTIL_MISC_BUG_H_
+#define TTG_UTIL_MISC_BUG_H_
 
 #include <cassert>
 #include <memory>
@@ -249,9 +249,6 @@ namespace ttg {
     };
 
   }  // namespace detail
-}  // namespace ttg
-
-namespace mpqc {
 
   /**
    * The Debugger class describes what should be done when a catastrophic
@@ -329,7 +326,7 @@ namespace mpqc {
     /// Set the prefix to the decimal represention of p followed by a ": ".
     virtual void set_prefix(int p);
 
-    /** Sets the command to be exectuted when debug is called.
+    /** Sets the command to be executed when debug is called.
         The character sequence "$(EXEC)" is replaced by the executable
         name (see set_exec), "$(PID)" is replaced by the
         current process id, and "$(PREFIX)" is replaced by the
@@ -355,7 +352,7 @@ namespace mpqc {
     void resolve_cmd_alias();
   };
 
-}  // namespace mpqc
+}  // namespace ttg
 
 namespace ttg {
   void launch_debugger(int rank, const char *exec_name, const char *cmd);
@@ -365,7 +362,7 @@ namespace ttg {
 
 }  // namespace ttg
 
-#endif  // MPQC4_SRC_MPQC_UTIL_MISC_BUG_H_
+#endif  // TTG_UTIL_MISC_BUG_H_
 
 // Local Variables:
 // mode: c++

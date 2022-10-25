@@ -438,7 +438,7 @@ class BroadcastTest {
 int try_main(int argc, char **argv) {
   ttg::initialize(argc, argv, 2);
 
-  //  using mpqc::Debugger;
+  //  using ttg::Debugger;
   //  auto debugger = std::make_shared<Debugger>();
   //  Debugger::set_default_debugger(debugger);
   //  debugger->set_exec(argv[0]);

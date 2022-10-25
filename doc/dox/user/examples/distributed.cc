@@ -1,5 +1,6 @@
 #include <ttg.h>
 #include <ttg/serialization/std/pair.h>
+#include <ttg/util/hash/std/pair.h>
 
 const double threshold = 100.0;
 using Key2 = std::pair<int, int>;
@@ -35,7 +36,7 @@ int main(int argc, char **argv) {
   ttg::Edge<int, double> C_A("C(k)->A(k)");
 
   auto wc(ttg::make_tt(c, ttg::edges(B_C), ttg::edges(C_A), "C", {"From B"}, {"to A"}));
-  
+
   /**! \link TT::set_input_reducer() */wc->set_input_reducer/**! \endlink */<0>([](double &a, const double &b) { a += b; });
 
   auto wa(ttg::make_tt([&](const int &k, const double &input, std::tuple<ttg::Out<Key2, double>> &out) {
@@ -67,8 +68,8 @@ int main(int argc, char **argv) {
 /**
  * \example distributed.cc
  * This is the iterative diamond DAG with variable number of inputs using the reducing
- * terminals of Template Task Graph, adapted to run in distributed: iteratively, a reducing 
- * diamond of data-dependent width is run, until the amount of data gathered at the bottom 
+ * terminals of Template Task Graph, adapted to run in distributed: iteratively, a reducing
+ * diamond of data-dependent width is run, until the amount of data gathered at the bottom
  * of the diamond exceeds a given threshold. First and last tasks of each diamond are run
  * on rank 0, while the tasks inside the diamond are distributed between the ranks in a
  * round-robin fashion.

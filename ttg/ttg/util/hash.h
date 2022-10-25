@@ -32,7 +32,43 @@ namespace ttg {
       /// @return the initial hash value
       static result_type initial_value() { return offset_basis; }
     };
+
+    /// combines 2 hash values; implementation based on boost::hash_combine_impl<64> from Boost v1.79.0
+    struct hash_combine_impl {
+      static_assert(sizeof(std::size_t) == sizeof(std::uint64_t));
+
+      inline static std::size_t fn(std::size_t h, std::size_t k) {
+        const std::size_t m = (std::size_t(0xc6a4a793) << 32) + 0x5bd1e995;
+        const int r = 47;
+
+        k *= m;
+        k ^= k >> r;
+        k *= m;
+
+        h ^= k;
+        h *= m;
+
+        // Completely arbitrary number, to prevent 0's
+        // from hashing to 0.
+        h += 0xe6546b64;
+
+        return h;
+      }
+    };
+
   }  // namespace detail
+
+  namespace meta {
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // has_member_function_hash_v<T> evaluates to true if T::hash() is defined
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <typename T, typename Enabler = void>
+    struct has_member_function_hash : std::false_type {};
+    template <typename T>
+    struct has_member_function_hash<T, std::void_t<decltype(std::declval<const T&>().hash())>> : std::true_type {};
+    template <typename T>
+    constexpr bool has_member_function_hash_v = has_member_function_hash<T>::value;
+  }  // namespace meta
 
   /// place for overloading/instantiating hash and other functionality
   namespace overload {
@@ -44,29 +80,39 @@ namespace ttg {
     template <typename T, typename Enabler = void>
     struct hash;
 
-    /// instantiation of hash for types which have member function hash()
+    /// instantiation of hash for types which have member function hash() that returns
     template <typename T>
-    struct hash<T, std::void_t<decltype(std::declval<const T&>().hash())>> {
-      auto operator()(const T &t) const { return t.hash(); }
+    struct hash<T, std::enable_if_t<meta::has_member_function_hash_v<T>>> {
+      auto operator()(const T& t) const { return t.hash(); }
     };
 
     /// instantiation of hash for void
     template <>
     struct hash<void, void> {
       auto operator()() const { return detail::FNVhasher::initial_value(); }
+      // convenient to be able to hash Void using hash<void>
       auto operator()(const ttg::Void&) const { return operator()(); }
+    };
+
+    /// instantiation of hash for Void
+    template <>
+    struct hash<Void, void> {
+      auto operator()(const ttg::Void&) const { return hash<void>{}(); }
     };
 
     /// instantiation of hash for integral types smaller or equal to size_t
     template <typename T>
-    struct hash<T, std::enable_if_t<std::is_integral_v<std::decay_t<T>> &&
-                                    sizeof(T) <= sizeof(std::size_t), void>> {
+    struct hash<T, std::enable_if_t<std::is_integral_v<std::decay_t<T>> && sizeof(T) <= sizeof(std::size_t), void>> {
       auto operator()(T t) const { return static_cast<std::size_t>(t); }
     };
 
-    /// default implementation uses the bitwise hasher FNVhasher
-    template <typename T, typename Enabler>
-    struct hash {
+    /// default implementation for types with unique object representation uses the bitwise hasher FNVhasher
+    /// \sa https://en.cppreference.com/w/cpp/types/has_unique_object_representations
+    template <typename T>
+    struct hash<
+        T, std::enable_if_t<!(std::is_integral_v<std::decay_t<T>> && sizeof(T) <= sizeof(std::size_t)) &&
+                                !(meta::has_member_function_hash_v<T>)&&std::has_unique_object_representations_v<T>,
+                            void>> {
       auto operator()(const T& t) const {
         detail::FNVhasher hasher;
         hasher.update(sizeof(T), reinterpret_cast<const std::byte*>(&t));
@@ -74,6 +120,12 @@ namespace ttg {
       }
     };
 
+    /// provide default implementation for error-reporting purposes
+    template <typename T, typename Enabler>
+    struct hash {
+      constexpr static bool NEED_TO_PROVIDE_SPECIALIZATION_OF_TTG_OVERLOAD_HASH_FOR_THIS_TYPE = !std::is_same_v<T, T>;
+      static_assert(NEED_TO_PROVIDE_SPECIALIZATION_OF_TTG_OVERLOAD_HASH_FOR_THIS_TYPE);
+    };
   }  // namespace overload
 
   using namespace ttg::overload;
@@ -91,6 +143,15 @@ namespace ttg {
     constexpr bool has_ttg_hash_specialization_v = has_ttg_hash_specialization<T>::value;
   }  // namespace meta
 
+  template <class T>
+  inline void hash_combine(std::size_t& seed, T const& v) {
+    ttg::hash<T> hasher;
+    seed = detail::hash_combine_impl::fn(seed, hasher(v));
+  }
+
 }  // namespace ttg
+
+
+#include "ttg/util/hash/std/pair.h"
 
 #endif  // TTG_UTIL_HASH_H
