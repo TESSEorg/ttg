@@ -3,9 +3,9 @@
 
 #if __cplusplus >= 202002L
 
-namespace ttg {
 /* Use the std:: implementation available from C++20 onwards */
 #include <span>
+namespace ttg {
   template <class T, std::size_t Extent = std::dynamic_extent>
   using span = std::span<T, Extent>;
 }  // namespace ttg
