@@ -1,0 +1,26 @@
+digraph G {
+  rankdir="LR";
+  subgraph simple {
+    { rank="same"; A [label="A(k)"]; }
+    { rank="same";
+      B0 [label="B(k, 0)"];
+      B1 [label="B(k, 1)"];
+      Bd [label="..."];
+      Bn [label="B(k, n)"]; }
+    {
+        rank="same";
+        nodesep=0.02;
+        { fixedsize=true; rank="same"; Ci [label="+", width=.1, height=.1]; }
+        { rank="same"; C [label="C(k)"]; }
+    }
+    A -> B0 [label="n+1.0"];
+    A -> B1 [label="n+2.0"];
+    A -> Bd [color="#ffffff00"];
+    A -> Bn [label="n+p"];
+    B0 -> Ci [label="n+1.0"];
+    B1 -> Ci [label="n+1.0"];
+    Bn -> Ci [label="n+1.0"];
+  }
+  Ci -> C;
+  C -> A [dir=backward,label="Sum(input) if Sum(input) < 100.0"];
+}

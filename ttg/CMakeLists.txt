@@ -3,6 +3,10 @@ include (AddTTGLibrary)
 ########################
 ####### Runtime-neutral
 ########################
+configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.h.in
+        ${CMAKE_CURRENT_BINARY_DIR}/ttg/util/version.h
+)
 set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/bug.h
@@ -12,6 +16,7 @@ set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/env.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/future.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/hash.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/hash/std/pair.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/macro.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/meta.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/meta/callable.h
@@ -20,7 +25,7 @@ set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/trace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/tree.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/typelist.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.h
+        ${CMAKE_CURRENT_BINARY_DIR}/ttg/util/version.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/void.h
     )
 set(ttg-base-headers
@@ -28,6 +33,9 @@ set(ttg-base-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/tt.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/terminal.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/world.h
+    )
+file(GLOB_RECURSE ttg-external-headers $<$<VERSION_GREATER_EQUAL:${CMAKE_VERSION},3.12>:CONFIGURE_DEPENDS>
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/external/boost/*
     )
 set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/broadcast.h
@@ -54,15 +62,30 @@ set(ttg-sources
         ${ttg-impl-headers}
         ${ttg-base-headers}
         ${ttg-util-headers}
+        ${ttg-external-headers}
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/bug.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/env.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
     )
+# extract git metadata
+include(GetGitMetadata)
+vgkit_cmake_git_metadata()
+# feed TTG_GIT_REVISION and TTG_GIT_DESCRIPTION to ttg/util/version.cc _only_ to avoid recompiling everything
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
+        PROPERTIES
+        COMPILE_DEFINITIONS "TTG_GIT_REVISION=\"${TTG_GIT_REVISION}\";TTG_GIT_DESCRIPTION=\"${TTG_GIT_DESCRIPTION}\"")
+set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers})
+if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
+  list(APPEND ttg-sources ${ttg-external-headers})
+  list(APPEND ttg-public-headers ${ttg-external-headers})
+endif()
 # optional dependencies
 if (TARGET Boost::boost)
   list(APPEND ttg-deps Boost::boost)
-endif (TARGET Boost::boost)
+else () # if Boost::boost is missing must use bundled Boost.CallableTraits
+  list(APPEND ttg-defs "$<BUILD_INTERFACE:TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1>")
+endif ()
 if (TARGET TTG_Libunwind)
   list(APPEND ttg-deps TTG_Libunwind)
 endif(TARGET TTG_Libunwind)
@@ -70,7 +93,7 @@ if (TTG_ENABLE_TRACE)
   list(APPEND ttg-defs "TTG_ENABLE_TRACE=1")
 endif (TTG_ENABLE_TRACE)
 
-add_ttg_library(ttg "${ttg-sources}" PUBLIC_HEADER "${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers}" LINK_LIBRARIES "${ttg-deps}" INCLUDE_DIRECTORIES "${ttg-incs}" COMPILE_DEFINITIONS "${ttg-defs}")
+add_ttg_library(ttg "${ttg-sources}" PUBLIC_HEADER "${ttg-public-headers}" LINK_LIBRARIES "${ttg-deps}" INCLUDE_DIRECTORIES "${ttg-incs}" COMPILE_DEFINITIONS "${ttg-defs}")
 
 ########################
 ####### Serialization

@@ -9,3 +9,7 @@ if(DOXYGEN_FOUND)
     SOURCES ${PROJECT_BINARY_DIR}/doc/dox/config/Doxyfile)
   add_dependencies(doc-ttg html-ttg)
 endif()
+
+if (TTG_EXAMPLES)
+  add_subdirectory(user/examples)
+endif()

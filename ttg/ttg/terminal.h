@@ -11,9 +11,73 @@
 #include "ttg/util/meta.h"
 #include "ttg/util/trace.h"
 #include "ttg/world.h"
+#include "boost/callable_traits.hpp"
 
 namespace ttg {
+  namespace detail {
 
+    /* Wraps any key,value data structure.
+     * Elements of the data structure can be accessed using get method, which calls the at method of the Container.
+     * keyT - taskID
+     * valueT - Value type of the Container
+    */
+    template<typename keyT, typename valueT>
+    struct ContainerWrapper {
+      std::function<valueT (keyT const& key)> get = nullptr;
+      std::function<size_t (keyT const& key)> owner = nullptr;
+
+      ContainerWrapper() = default;
+      ContainerWrapper(const ContainerWrapper &) = default;
+      ContainerWrapper(ContainerWrapper &&) = default;
+      ContainerWrapper& operator=(const ContainerWrapper&) = default;
+
+      template<typename T, typename mapperT, typename keymapT, std::enable_if_t<!std::is_same<std::decay_t<T>,
+                                                          ContainerWrapper>{}, bool> = true>
+        //Store a pointer to the user's container in std::any, no copies
+        ContainerWrapper(T &t, mapperT &&mapper,
+                         keymapT &&keymap) : get([&t, mapper = std::forward<mapperT>(mapper)](keyT const &key) {
+                                                   if constexpr (!std::is_class_v<T> && std::is_invocable_v<T, keyT>) {
+                                                      auto k = mapper(key);
+                                                      return t(k); //Call the user-defined lambda function.
+                                                    }
+                                                  else
+                                                    {
+                                                      auto k = mapper(key);
+                                                      //at method returns a const ref to the item.
+                                                      return t.at(k);
+                                                    }
+                                                }),
+                                             owner([&t, mapper = std::forward<mapperT>(mapper),
+                                                    keymap = std::forward<keymapT>(keymap)](keyT const &key) {
+                                                    auto idx = mapper(key); //Mapper to map task ID to index of the data structure.
+                                                    return keymap(idx);
+                                                  })
+        {}
+    };
+
+    template <typename valueT> struct ContainerWrapper<void, valueT> {
+      std::function<valueT ()> get = nullptr;
+      std::function<size_t ()> owner = nullptr;
+    };
+
+    template <typename keyT> struct ContainerWrapper<keyT, void> {
+      std::function<std::nullptr_t (keyT const& key)> get = nullptr;
+      std::function<size_t (keyT const& key)> owner = nullptr;
+    };
+
+    template <typename valueT> struct ContainerWrapper<ttg::Void, valueT> {
+      std::function<valueT ()> get = nullptr;
+      std::function<size_t ()> owner = nullptr;
+    };
+
+    template <> struct ContainerWrapper<void, void> {
+      std::function<std::nullptr_t ()> get = nullptr;
+      std::function<size_t ()> owner = nullptr;
+    };
+  } //namespace detail
+
+  /// \brief Base type for input terminals receiving messages annotated by task IDs of type `keyT`
+  /// \tparam <keyT> a task ID type (can be `void`)
   template <typename keyT = void>
   class InTerminalBase : public TerminalBase {
    public:
@@ -70,7 +134,11 @@ namespace ttg {
     }
   };
 
-  /// Input terminal
+  /// An input terminal for receiving messages annotated by task IDs of type `KeyT` and values of type `valueT`
+  /// \tparam <keyT> a task ID type (can be `void`)
+  /// \tparam <valueT> a data type (can be `void`); a const `valueT` indicates that the incoming data is passed by
+  ///         const reference
+
   template <typename keyT = void, typename valueT = void>
   class In : public InTerminalBase<keyT> {
    public:
@@ -88,6 +156,7 @@ namespace ttg {
     using setsize_callback_type = typename base_type::setsize_callback_type;
     using finalize_callback_type = typename base_type::finalize_callback_type;
     static constexpr bool is_an_input_terminal = true;
+    ttg::detail::ContainerWrapper<keyT, valueT> container;
 
    private:
     send_callback_type send_callback;
@@ -105,8 +174,18 @@ namespace ttg {
     }
 
    public:
+    /// Default constructor of an Input Terminal
     In() : InTerminalBase<keyT>(std::is_const_v<valueT> ? TerminalBase::Type::Read : TerminalBase::Type::Consume){};
 
+    /// Define the callbacks used by the backend task system to implement data movement
+    /// when a data is set in this Input Terminal
+    /// \param[in] send_callback: when an object must be copied inside this terminal
+    /// \param[in] move_callback: when a rvalue reference is std::move onto this terminal
+    /// \param[in] bcast_callback: when this terminal receives a list of task identifiers to broadcast a data to
+    /// \param[in] finalize_callback: if the terminal is a reduce terminal, denotes that no other local thread
+    ///     will continue adding data onto this terminal
+    /// \param[in] setsize_callback: if the terminal is a reduce terminal, announces how many items will be set
+    ///     unto this terminal for reduction
     void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback,
                       const broadcast_callback_type &bcast_callback = broadcast_callback_type{},
                       const setsize_callback_type &setsize_callback = setsize_callback_type{},
@@ -218,15 +297,6 @@ namespace ttg {
     }
   };
 
-  template <typename T>
-  inline constexpr bool is_input_terminal_v = false;
-  template <typename keyT>
-  inline constexpr bool is_input_terminal_v<InTerminalBase<keyT>> = true;
-  template <typename keyT, typename valueT>
-  inline constexpr bool is_input_terminal_v<In<keyT, valueT>> = true;
-  template <>
-  inline constexpr bool is_input_terminal_v<TerminalBase> = true;
-
   namespace detail {
     template <typename keyT, typename... valuesT>
     struct input_terminals_tuple {
@@ -242,6 +312,21 @@ namespace ttg {
     using input_terminals_tuple_t = typename input_terminals_tuple<keyT, valuesT...>::type;
   }  // namespace detail
 
+  namespace meta {
+    /// detects whether a given type is an input terminal type
+    template <typename T>
+    inline constexpr bool is_input_terminal_v = false;
+    template <typename keyT>
+    inline constexpr bool is_input_terminal_v<InTerminalBase<keyT>> = true;
+    template <typename keyT, typename valueT>
+    inline constexpr bool is_input_terminal_v<In<keyT, valueT>> = true;
+
+    template <typename T>
+    struct is_input_terminal : std::bool_constant<is_input_terminal_v<T>> {};
+  }  // namespace meta
+
+  /// A base type for output terminals that send messages annotated by task IDs of type `KeyT`
+  /// \tparam <keyT> a task ID type (can be `void`)
   template <typename keyT = void>
   class OutTerminalBase : public TerminalBase {
    public:
@@ -295,7 +380,9 @@ namespace ttg {
     }
   };
 
-  /// Output terminal
+  /// An output terminal for sending messages annotated by task IDs of type `KeyT` and values of type `valueT`
+  /// \tparam <keyT> a task ID type (can be `void`)
+  /// \tparam <valueT> a data type (can be `void`)
   template <typename keyT = void, typename valueT = void>
   class Out : public OutTerminalBase<keyT> {
    public:
@@ -337,11 +424,14 @@ namespace ttg {
             ")");
 #endif
       this->connect_base(in);
+      //If I am a pull terminal, add me as (in)'s predecessor
+      if (this->is_pull_terminal)
+        in->connect_pull(this);
     }
 
-    template <typename Key = keyT, typename Value = valueT>
-    std::enable_if_t<meta::is_none_void_v<Key, Value>, void> send(const Key &key, const Value &value) {
-      for (auto &&successor : this->successors()) {
+    template<typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<meta::is_none_void_v<Key,Value>,void> send(const Key &key, const Value &value) {
+      for (auto && successor : this->successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
@@ -443,14 +533,38 @@ namespace ttg {
     }
   };
 
-  template <typename T>
-  inline constexpr bool is_output_terminal_v = false;
-  template <typename keyT>
-  inline constexpr bool is_output_terminal_v<OutTerminalBase<keyT>> = true;
-  template <typename keyT, typename valueT>
-  inline constexpr bool is_output_terminal_v<Out<keyT, valueT>> = true;
-  template <>
-  inline constexpr bool is_output_terminal_v<TerminalBase> = true;
+  namespace meta {
+    /// detects whether a given type is an output terminal type
+    template <typename T>
+    inline constexpr bool is_output_terminal_v = false;
+    template <typename keyT>
+    inline constexpr bool is_output_terminal_v<OutTerminalBase<keyT>> = true;
+    template <typename keyT, typename valueT>
+    inline constexpr bool is_output_terminal_v<Out<keyT, valueT>> = true;
+
+    template <typename T>
+    struct is_output_terminal : std::bool_constant<is_output_terminal_v<T>> {};
+
+    template <typename T>
+    struct is_output_terminal_tuple : std::false_type {};
+    template <typename... Ts>
+    struct is_output_terminal_tuple<std::tuple<Ts...>> : probe_all<is_output_terminal, Ts...> {};
+    template <typename... Ts>
+    inline constexpr bool is_output_terminal_tuple_v = is_output_terminal_tuple<Ts...>::value;
+
+    template <typename T>
+    inline constexpr bool decays_to_output_terminal_tuple_v = is_output_terminal_tuple_v<std::decay_t<T>>;
+    template <typename T>
+    struct decays_to_output_terminal_tuple : std::bool_constant<decays_to_output_terminal_tuple_v<T>> {};
+
+    template <typename T>
+    inline constexpr bool is_nonconst_lvalue_reference_to_output_terminal_tuple_v =
+        is_output_terminal_tuple_v<std::decay_t<T>> &&std::is_lvalue_reference_v<T> &&
+        !std::is_const_v<std::remove_reference_t<T>>;
+    template <typename T>
+    struct is_nonconst_lvalue_reference_to_output_terminal_tuple
+        : std::bool_constant<is_nonconst_lvalue_reference_to_output_terminal_tuple_v<T>> {};
+  }  // namespace meta
 
 }  // namespace ttg
 

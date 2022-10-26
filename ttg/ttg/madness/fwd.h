@@ -20,8 +20,7 @@ namespace ttg_madness {
 
   class WorldImpl;
 
-  template <typename... RestOfArgs>
-  inline void ttg_initialize(int argc, char **argv, int num_threads = -1, RestOfArgs &&...);
+  inline void ttg_initialize(int argc, char **argv, int num_threads = -1);
 
   inline void ttg_finalize();
 

@@ -49,6 +49,7 @@ macro(add_ttg_library)
 
       target_include_directories(${_library} PUBLIC
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>  # look in binary dir also for files preprocessed by configure_file
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
             )
 

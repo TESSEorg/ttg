@@ -19,6 +19,11 @@ namespace ttg {
       static bool trace = false;
       return trace;
     }
+
+    inline bool &op_base_lazy_pull_accessor(void) {
+      static bool lazy_pull = false;
+      return lazy_pull;
+    }
   }  // namespace detail
 
   /// A base class for all template tasks
@@ -35,6 +40,8 @@ namespace ttg {
     friend class TTG;  // TTG needs to be able to control owning_ttg
 
     bool executable = false;  //!< ready to execute?
+    bool is_ttg_ = false;
+    bool lazy_pull_instance = false;
 
     // Default copy/move/assign all OK
     static uint64_t next_instance_id() {
@@ -107,6 +114,7 @@ namespace ttg {
    protected:
     TTBase(TTBase &&other)
         : instance_id(other.instance_id)
+        , is_ttg_(std::move(other.is_ttg_))
         , name(std::move(other.name))
         , inputs(std::move(other.inputs))
         , outputs(std::move(other.outputs)) {
@@ -114,6 +122,7 @@ namespace ttg {
     }
     TTBase &operator=(TTBase &&other) {
       instance_id = other.instance_id;
+      is_ttg_ = std::move(other.is_ttg_);
       name = std::move(other.name);
       inputs = std::move(other.inputs);
       outputs = std::move(other.outputs);
@@ -122,18 +131,21 @@ namespace ttg {
     }
 
     TTBase(const std::string &name, size_t numins, size_t numouts)
-        : instance_id(next_instance_id()), name(name), inputs(numins), outputs(numouts) {}
+        : instance_id(next_instance_id()), is_ttg_(false), name(name), inputs(numins), outputs(numouts) {}
 
     static const std::vector<TerminalBase *> *&outputs_tls_ptr_accessor() {
       static thread_local const std::vector<TerminalBase *> *outputs_tls_ptr = nullptr;
       return outputs_tls_ptr;
     }
     void set_outputs_tls_ptr() { outputs_tls_ptr_accessor() = &this->outputs; }
+    void set_outputs_tls_ptr(const std::vector<TerminalBase *> *ptr) { outputs_tls_ptr_accessor() = ptr; }
 
    public:
     virtual ~TTBase() = default;
 
-    // Manual injection of a task that has no key or arguments
+    /// Use this to create a task that takes no data "manually"
+    /// @warning calls std::abort() if the derived class TT did not override this;
+    ///          only makes sense to override this if the derived TT uses void for key or data
     virtual void invoke() {
       std::cerr << "TTBase::invoke() invoked on a TT that did not override it" << std::endl;
       abort();
@@ -146,7 +158,15 @@ namespace ttg {
       return value;
     }
 
-    /// Sets trace for just this instance to value and returns previous setting.
+    //Sets lazy pulling on.
+    //Lazy pulling delays invoking pull terminals until all inputs from push terminals for a task have arrived.
+    //Default is false.
+    static bool set_lazy_pull(bool value) {
+      std::swap(ttg::detail::op_base_lazy_pull_accessor(), value);
+      return value;
+    }
+
+    /// Sets trace for just this instance to value and returns previous setting
     /// This has no effect unless `trace_enabled()==true`
     bool set_trace_instance(bool value) {
       if constexpr (trace_enabled()) std::swap(trace_instance, value);
@@ -171,8 +191,23 @@ namespace ttg {
       }
     }
 
+    bool set_lazy_pull_instance(bool value) {
+      std::swap(lazy_pull_instance, value);
+      return value;
+    }
+
+    bool is_lazy_pull() { return ttg::detail::op_base_lazy_pull_accessor() || lazy_pull_instance; }
+
     std::optional<std::reference_wrapper<const TTBase>> ttg() const {
       return owning_ttg ? std::cref(*owning_ttg) : std::optional<std::reference_wrapper<const TTBase>>{};
+    }
+
+    const TTBase *ttg_ptr() const {
+      return owning_ttg;
+    }
+
+    bool is_ttg() const {
+      return is_ttg_;
     }
 
     /// Sets the name of this operation

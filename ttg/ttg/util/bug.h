@@ -25,8 +25,8 @@
 // The U.S. Government is granted a limited license as per AL 91-7.
 //
 
-#ifndef MPQC4_SRC_MPQC_UTIL_MISC_BUG_H_
-#define MPQC4_SRC_MPQC_UTIL_MISC_BUG_H_
+#ifndef TTG_UTIL_MISC_BUG_H_
+#define TTG_UTIL_MISC_BUG_H_
 
 #include <cassert>
 #include <memory>
@@ -96,7 +96,10 @@ namespace ttg {
           return result;
         }
 
-        /// Sets a watchpoint in thread @c thread and pointing to @c addr
+        /// Sets a watchpoint in thread @c thread and pointing to @c size bytes starting at @c addr if @c cond holds
+        /// @param addr base address to watch
+        /// @param size how many bytes to watch starting at address @c addr
+        /// @param cond condition that need to hold to trigger the watchpoint
         /// @param thread pthread_t object
         /// @throws std::runtime_error if setting memory watchpoint failed
         /// @return reference to this
@@ -120,6 +123,7 @@ namespace ttg {
         }
 
         /// Find watchpoint in thread @c thread and pointing to @c addr
+        /// @param addr base address to watch
         /// @param thread pointer to the pthread_t
         /// @return the pointer to the MemoryWatchpoint object; nullptr if such a watchpoint does not exist
         MemoryWatchpoint_x86_64 *find(void *addr, const pthread_t *thread) {
@@ -131,6 +135,8 @@ namespace ttg {
           return nullptr;
         }
 
+        /// Clear a watchpoint
+        /// @param addr address that is watched
         /// @param thread pointer to the pthread_t
         Pool &clear(void *addr, const pthread_t *thread) {
           const auto it = pool_.find(thread);
@@ -171,7 +177,7 @@ namespace ttg {
       /// @param[in] size the size of the memory window
       /// @param[in] cond the condition to watch for
       /// @param[in] dr the debugging register to use
-      /// @param[in] threads the set of threads to watch
+      /// @param[in] thread the thread to watch
       /// @throw std::runtime_error if setting the watchpoint fails (either due to the lack of available registers or
       /// another reason)
       MemoryWatchpoint_x86_64(void *addr, Size size, Condition cond, DebugRegister dr, const pthread_t *thread)
@@ -243,9 +249,6 @@ namespace ttg {
     };
 
   }  // namespace detail
-}  // namespace ttg
-
-namespace mpqc {
 
   /**
    * The Debugger class describes what should be done when a catastrophic
@@ -323,7 +326,7 @@ namespace mpqc {
     /// Set the prefix to the decimal represention of p followed by a ": ".
     virtual void set_prefix(int p);
 
-    /** Sets the command to be exectuted when debug is called.
+    /** Sets the command to be executed when debug is called.
         The character sequence "$(EXEC)" is replaced by the executable
         name (see set_exec), "$(PID)" is replaced by the
         current process id, and "$(PREFIX)" is replaced by the
@@ -349,7 +352,7 @@ namespace mpqc {
     void resolve_cmd_alias();
   };
 
-}  // namespace mpqc
+}  // namespace ttg
 
 namespace ttg {
   void launch_debugger(int rank, const char *exec_name, const char *cmd);
@@ -359,7 +362,7 @@ namespace ttg {
 
 }  // namespace ttg
 
-#endif  // MPQC4_SRC_MPQC_UTIL_MISC_BUG_H_
+#endif  // TTG_UTIL_MISC_BUG_H_
 
 // Local Variables:
 // mode: c++

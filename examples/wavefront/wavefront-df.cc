@@ -14,6 +14,7 @@
 #include "ttg/serialization.h"
 #include "ttg/serialization/std/pair.h"
 #include "ttg/serialization/std/vector.h"
+#include "ttg/util/hash/std/pair.h"
 
 /* TODO: Get rid of using statement */
 using namespace ttg;
@@ -113,7 +114,7 @@ auto make_wavefront2(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
   };
 
   return make_tt(f, edges(input, left, top, bottom_right), edges(left, top, result), "wavefront2",
-              {"input", "left", "top", "bottom-right"}, {"left", "top", "result"});
+                 {"input", "left", "top", "bottom-right"}, {"left", "top", "result"});
 }
 
 template <typename T>
@@ -121,7 +122,9 @@ auto initiator(Matrix<T>* m, Edge<Key, BlockMatrix<T>>& out0, Edge<Key, BlockMat
                Edge<Key, BlockMatrix<T>>& out2, Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right0,
                Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right1,
                Edge<Key, std::vector<BlockMatrix<T>>>& bottom_right2) {
-  auto f = [m](const Key& key, auto& out) {
+  auto f = [m](const Key& key, std::tuple<Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>, Out<Key, BlockMatrix<T>>,
+                                          Out<Key, std::vector<BlockMatrix<T>>>, Out<Key, std::vector<BlockMatrix<T>>>,
+                                          Out<Key, std::vector<BlockMatrix<T>>>>& out) {
     for (int i = 0; i < m->rows(); i++) {
       for (int j = 0; j < m->cols(); j++) {
         std::vector<BlockMatrix<T>> v;
@@ -165,7 +168,7 @@ auto initiator(Matrix<T>* m, Edge<Key, BlockMatrix<T>>& out0, Edge<Key, BlockMat
   };
 
   return make_tt<Key>(f, edges(), edges(out0, out1, out2, bottom_right0, bottom_right1, bottom_right2), "initiator", {},
-                   {"out0", "out1", "out2", "bottom_right0", "bottom-right1", "bottom-right2"});
+                      {"out0", "out1", "out2", "bottom_right0", "bottom-right1", "bottom-right2"});
 }
 
 template <typename funcT, typename T>
@@ -189,7 +192,7 @@ auto make_wavefront0(const funcT& func, int MB, int NB, Edge<Key, BlockMatrix<T>
   };
 
   return make_tt(f, edges(input, bottom_right), edges(toporleft, result), "wavefront0", {"input", "bottom_right"},
-              {"toporleft", "result"});
+                 {"toporleft", "result"});
 }
 
 // Method to generate wavefront task with single input.

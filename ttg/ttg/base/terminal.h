@@ -7,12 +7,12 @@
 
 namespace ttg {
 
-
   /// Provides basic information and graph connectivity (eventually statistics,
   /// etc.)
   class TerminalBase {
-  public:
+   public:
     static constexpr bool is_a_terminal = true;
+    bool is_pull_terminal = false; //< Default is push terminal
 
     /// describes the terminal type
     enum class Type {
@@ -21,16 +21,17 @@ namespace ttg {
       Consume  //!< can only be used to read consumable data
     };
 
-  private:
-    TTBase *tt;                  //< Pointer to containing operation
-    size_t n = 0;                    //< Index of terminal
-    std::string name = "";            //< Name of terminal
-    bool connected = false;              //< True if is connected
+   private:
+    TTBase *tt;              //< Pointer to containing operation
+    size_t n = 0;            //< Index of terminal
+    std::string name = "";   //< Name of terminal
+    bool connected = false;  //< True if is connected
     Type type;
     std::string key_type_str;    //< String describing key type
     std::string value_type_str;  //< String describing value type
 
     std::vector<TerminalBase *> successors_;
+    std::vector<TerminalBase *> predecessors_; //This is required for pull terminals.
 
     TerminalBase(const TerminalBase &) = delete;
     TerminalBase(TerminalBase &&) = delete;
@@ -41,11 +42,11 @@ namespace ttg {
     template <typename keyT, typename valueT>
     friend class Out;
 
-  protected:
+   protected:
     TerminalBase(Type type) : type(type) {}
 
     void set(TTBase *tt, size_t index, const std::string &name, const std::string &key_type_str,
-            const std::string &value_type_str, Type type) {
+             const std::string &value_type_str, Type type) {
       this->tt = tt;
       this->n = index;
       this->name = name;
@@ -56,7 +57,17 @@ namespace ttg {
 
     /// Add directed connection (this --> successor) in internal representation of the TTG.
     /// This is called by the derived class's connect method
-    void connect_base(TerminalBase *successor) { successors_.push_back(successor); connected = true; successor->connected = true;}
+    void connect_base(TerminalBase *successor) {
+      successors_.push_back(successor);
+      connected = true;
+      successor->connected = true;
+    }
+
+    void connect_pull(TerminalBase *predecessor) {
+      predecessors_.push_back(predecessor);
+      predecessor->connected = true;
+      connected = true;
+    }
 
   public:
     /// Return ptr to containing tt
@@ -90,15 +101,21 @@ namespace ttg {
     }
 
     /// Returns the terminal type
-    Type get_type() const {
-      return this->type;
-    }
+    Type get_type() const { return this->type; }
 
     /// Get connections to successors
     const std::vector<TerminalBase *> &get_connections() const { return successors_; }
+    // Get connections to predecessors
+    const std::vector<TerminalBase *> &get_predecessors() const {return predecessors_; }
+
+    //Connect Container pull terminals without incoming terminals
+    //This is a hack, is there a better way?
+    void connect_pull_nopred(TerminalBase *p) {
+      p->connected = true;
+    }
 
     /// Returns true if this terminal (input or output) is connected
-    bool is_connected() const {return connected;}
+    bool is_connected() const { return connected; }
 
     /// Connect this (a TTG output terminal) to a TTG input terminal.
     /// The base class method forwards to the the derived class connect method and so
@@ -108,6 +125,15 @@ namespace ttg {
 
     virtual ~TerminalBase() = default;
   };
-} // namespace ttg
 
-#endif // TTG_BASE_TERMINAL_H
+  namespace meta {
+    template <typename T, typename = void>
+    inline constexpr bool is_terminal_v = false;
+    template <typename T>
+    inline constexpr bool is_terminal_v<T, std::is_base_of<TerminalBase, T>> = true;
+    template <typename T>
+    struct is_terminal : std::bool_constant<is_terminal_v<T>> {};
+  }  // namespace meta
+}  // namespace ttg
+
+#endif  // TTG_BASE_TERMINAL_H
