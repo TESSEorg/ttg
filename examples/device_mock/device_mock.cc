@@ -60,21 +60,25 @@ auto make_gemm(ttg::Edge<Key3, MatrixTile<T>>& A,
                               const MatrixTile<T>& B,
                               MatrixTile<T>&& C)
   {
-    ttg::View<const MatrixTile<T>, const T> dev_A = ttg::make_view( A, std::make_tuple(ttg::span(A.data(), A.size())) );
-    ttg::View<const MatrixTile<T>, const T> dev_B = ttg::make_view( B, std::make_tuple(ttg::span(B.data(), B.size())) );
+    // The default ViewScope::SyncIn scope tells the runtime that the data should be copied
+    // to the device before the kernel callable is invoked.
+    ttg::View<const MatrixTile<T>, const T> dev_A = ttg::make_view( A, ttg::ViewSpan(A.data(), A.size()) );
+    ttg::View<const MatrixTile<T>, const T> dev_B = ttg::make_view( B, ttg::ViewSpan(B.data(), B.size()) );
     ttg::View<MatrixTile<T>, T> dev_C;
     ttg::View<T, T> dev_tmp;
     T *host_tmp = new(T);
-    dev_tmp = ttg::new_view( *host_tmp, std::make_tuple(ttg::span(host_tmp, 1)) ); // dev_tmp is a promise of 1 T on the device, associated with host_tmp
+    // ViewScope::SyncOut tells the runtime system that the view should be synchronized back to the
+    // host before invoking the output callable.
+    dev_tmp = ttg::make_view( *host_tmp, ttg::ViewSpan(host_tmp, 1, ttg::ViewScope::SyncOut) );
 
     int k = key[2];
     if(0 == k) {
-      // view_new tells the runtime system that the device view needs to be allocated but doesn't need to be
+      // ViewScope::Allocate tells the runtime system that the device view needs to be allocated but doesn't need to be
       // initialized with C.data(). However, C.data() is still associated with the device memory, so if the
       // runtime system evicts that data from the device, it will be first copied back into C.data().
-      dev_C = ttg::new_view( C, std::make_tuple(ttg::span(C.data(), C.size())) );
+      dev_C = ttg::make_view( C, ttg::ViewSpan(C.data(), C.size(), ttg::ViewScope::Allocate) );
     } else {
-      dev_C = ttg::make_view( C, std::make_tuple(ttg::span(C.data(), C.size())) );
+      dev_C = ttg::make_view( C, ttg::ViewSpan(C.data(), C.size()) );
     }
 
     return std::make_tuple(dev_A, dev_B, dev_C, dev_tmp);

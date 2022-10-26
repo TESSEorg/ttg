@@ -36,7 +36,9 @@ namespace detail {
   }
 
   template<typename HostT, typename... DevTs, std::size_t I, std::size_t... Is>
-  inline void create_view_on_device(const ttg::View<HostT, DevTs...>& view, std::tuple<ttg::span<DevTs>...>& dev_spans, std::index_sequence<I, Is...>) {
+  inline void create_view_on_device(const ttg::View<HostT, DevTs...>& view,
+                                    std::tuple<ttg::ViewSpan<DevTs>...>& dev_spans,
+                                    std::index_sequence<I, Is...>) {
 
     /* fill in pointers for the device -- we're relying on managed memory for this simple wrapper */
     typename std::tuple_element_t<I, typename ttg::View<HostT, DevTs...>::span_tuple_type>::element_type *ptr;
@@ -44,16 +46,24 @@ namespace detail {
     ptr = view.template get_device_ptr<I>();
     size = view.template get_device_size<I>();
     //cudaMalloc(&ptr, span.size_bytes());
-    std::get<I>(dev_spans) = ttg::span(ptr, size);
+    std::get<I>(dev_spans) = ttg::ViewSpan(ptr, size, view.template get_scope<I>());
 
     /* copy data to device */
     //cudaMemcpy(ptr, span.data(), span.size_bytes(), cudaMemcpyHostToDevice);
+    if (view.template get_span<I>().is_sync_in()) {
 #ifdef TTG_USE_CUDA
-    cudaMemPrefetchAsync(span.data(), span.size_bytes(), 0, *ts_stream);
+      cudaMemPrefetchAsync(span.data(), span.size_bytes(), 0, *ts_stream);
 #endif // TTG_USE_CUDA
+    }
+
     if constexpr(sizeof...(Is) > 0) {
       create_view_on_device(view, dev_spans, std::index_sequence<Is...>{});
     }
+  }
+
+  template<typename HostT, typename... ViewSpanTs, std::size_t... Is>
+  auto make_view_from_tuple(HostT& obj, std::tuple<ttg::ViewSpan<ViewSpanTs>...>& spans, std::index_sequence<Is...>) {
+    return ttg::make_view(obj, std::get<Is>(spans)...);
   }
 
   template<typename... ViewTs, std::size_t I, std::size_t... Is>
@@ -65,39 +75,36 @@ namespace detail {
     create_view_on_device(view, dev_spans, std::make_index_sequence<std::tuple_element_t<I, view_tuple_t>::size()>());
 
     /* set the view for the device */
-    std::get<I>(dev_views) = ttg::make_view(view.get_host_object(), dev_spans);
+    std::get<I>(dev_views) = make_view_from_tuple(view.get_host_object(), dev_spans, std::make_index_sequence<std::tuple_size_v<decltype(dev_spans)>>{});
     if constexpr(sizeof...(Is) > 0) {
       create_on_device(views, dev_views, std::index_sequence<Is...>{});
     }
   }
 
-  template<typename HostT, typename... ViewTs, typename... DevTs, std::size_t I, std::size_t... Is>
-  inline void sync_view_to_host(const ttg::View<HostT, ViewTs...>& view, std::tuple<ttg::span<DevTs>...>& dev_spans, std::index_sequence<I, Is...>) {
+  template<typename HostT, typename... DevTs, std::size_t I, std::size_t... Is>
+  inline void sync_view_to_host(ttg::View<HostT, DevTs...>& dev_view, std::index_sequence<I, Is...>) {
     /* prefetch back to host */
-
-    void *ptr;
-    auto& span = std::get<I>(dev_spans);
+    auto span = dev_view.template get_span<I>();
 
     /* prefetch data from device */
+    if (span.is_sync_out()) {
 #ifdef TTG_USE_CUDA
-    cudaMemPrefetchAsync(span.data(), span.size_bytes(), cudaCpuDeviceId, *ts_stream);
+      cudaMemPrefetchAsync(span.data(), span.size_bytes(), cudaCpuDeviceId, *ts_stream);
 #endif // TTG_USE_CUDA
+    }
 
     if constexpr(sizeof...(Is) > 0) {
-      sync_view_to_host(view, dev_spans, std::index_sequence<Is...>{});
+      sync_view_to_host(dev_view, std::index_sequence<Is...>{});
     }
   }
 
   template<typename... ViewTs, std::size_t I, std::size_t... Is>
-  inline void sync_back_to_host(std::tuple<ViewTs...>& views, std::tuple<ViewTs...>& dev_views, std::index_sequence<I, Is...>) {
+  inline void sync_back_to_host(std::tuple<ViewTs...>& dev_views, std::index_sequence<I, Is...>) {
 
-    auto& view = std::get<I>(views);
-    using view_type = std::remove_reference_t<decltype(view)>;
-    typename std::tuple_element_t<I, std::tuple<ViewTs...>>::span_tuple_type dev_spans;
-    sync_view_to_host(view, dev_spans, std::make_index_sequence<view_type::size()>());
+    sync_view_to_host(std::get<I>(dev_views), std::make_index_sequence<std::tuple_element_t<I, std::tuple<ViewTs...>>::size()>());
 
     if constexpr(sizeof...(Is) > 0) {
-      sync_back_to_host(views, dev_views, std::index_sequence<Is...>{});
+      sync_back_to_host(dev_views, std::index_sequence<Is...>{});
     }
   }
 
@@ -144,7 +151,7 @@ namespace detail {
       detail::invoke_with_unpacked_views(kernel_func, key, device_views, std::make_index_sequence<view_tuple_size>());
       /* 4) move data back out into host objects */
       if constexpr(std::tuple_size_v<view_tuple_t> > 0) {
-        sync_back_to_host(views, device_views, std::make_index_sequence<view_tuple_size>());
+        sync_back_to_host(device_views, std::make_index_sequence<view_tuple_size>());
       }
   #ifdef TTG_USE_CUDA
       /* wait for the */

@@ -549,6 +549,15 @@ namespace ttg {
     template <typename T>
     constexpr bool is_tuple_v = is_tuple<T>::value;
 
+    template <typename>
+    struct is_span : std::false_type {};
+
+    template <typename T, std::size_t S>
+    struct is_span<ttg::span<T, S>> : std::true_type {};
+
+    template <typename T>
+    constexpr bool is_span_v = is_span<T>::value;
+
     template <template <class> class Pred, typename TupleT, std::size_t I, std::size_t... Is>
     struct predicate_index_seq_helper;
 
