@@ -9,8 +9,6 @@
 #include <parsec/data_dist/matrix/matrix.h>
 #include <parsec/data_dist/matrix/sym_two_dim_rectangle_cyclic.h>
 #include <parsec/data_dist/matrix/two_dim_rectangle_cyclic.h>
-// needed for madness::hashT and xterm_debug
-#include <madness/world/world.h>
 
 using Key2 = std::tuple<int, int>;
 
