@@ -11,6 +11,7 @@
 #include "ttg.h"
 
 #include "ttg/serialization/std/pair.h"
+#include "ttg/util/hash/std/pair.h"
 
 using namespace ttg;
 

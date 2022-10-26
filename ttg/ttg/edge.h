@@ -10,6 +10,7 @@
 #include "ttg/util/diagnose.h"
 #include "ttg/util/print.h"
 #include "ttg/util/trace.h"
+#include "boost/callable_traits.hpp"
 
 namespace ttg {
 
@@ -37,17 +38,30 @@ namespace ttg {
     // to a single terminal.
     struct EdgeImpl {
       std::string name;
+      bool is_pull_edge = false;
       std::vector<TerminalBase *> outs;  // In<keyT, valueT> or In<keyT, const valueT>
       std::vector<Out<keyT, valueT> *> ins;
+
+      ttg::detail::ContainerWrapper<keyT, valueT> container;
 
       EdgeImpl() : name(""), outs(), ins() {}
 
       EdgeImpl(const std::string &name) : name(name), outs(), ins() {}
 
+      EdgeImpl(const std::string &name, bool is_pull, ttg::detail::ContainerWrapper<keyT, valueT> &c) :
+        name(name),
+        is_pull_edge(is_pull),
+        container(c),
+        outs(),
+        ins() {
+        static_assert(!meta::is_void_v<keyT>, "Void keys are not supported with pull terminals.");
+      }
+
       void set_in(Out<keyT, valueT> *in) {
         if (ins.size()) {
           trace("Edge: ", name, " : has multiple inputs");
         }
+        in->is_pull_terminal = is_pull_edge;
         ins.push_back(in);
         try_to_connect_new_in(in);
       }
@@ -56,6 +70,8 @@ namespace ttg {
         if (outs.size()) {
           trace("Edge: ", name, " : has multiple outputs");
         }
+        out->is_pull_terminal = is_pull_edge;
+        static_cast<In<keyT, valueT>*>(out)->container = container;
         outs.push_back(out);
         try_to_connect_new_out(out);
       }
@@ -67,14 +83,18 @@ namespace ttg {
 
       void try_to_connect_new_out(TerminalBase *out) const {
         assert(out->get_type() != TerminalBase::Type::Write);  // out must be an In<>
-        for (auto in : ins)
-          if (in && out) in->connect(out);
+        if (out->is_pull_terminal) {
+          out->connect_pull_nopred(out);
+        }
+        else {
+          for (auto in : ins)
+            if (in && out) in->connect(out);
+        }
       }
 
       ~EdgeImpl() {
-        if (diagnose() && ((ins.size() == 0 && outs.size() != 0) || (ins.size() != 0 && outs.size() == 0))) {
-          print_error("Edge: destroying edge pimpl ('", name,
-                      "') with either in or out not assigned --- graph may be incomplete");
+        if (diagnose() && ((ins.size() == 0 && outs.size() != 0) || (ins.size() != 0 && outs.size() == 0)) && !is_pull_edge) {
+            print_error("Edge: destroying edge pimpl ('", name, "') with either in or out not assigned --- graph may be incomplete");
         }
       }
     };
@@ -91,13 +111,21 @@ namespace ttg {
     static_assert(std::is_same_v<valueT, std::decay_t<valueT>>,
                   "Edge<keyT,valueT> assumes valueT is a non-decayable type");
 
-    /// Default anonymous and unconnected Edge.
     Edge(const std::string name = "anonymous edge") : p(1) { p[0] = std::make_shared<EdgeImpl>(name); }
+
+    Edge(const std::string name, bool is_pull, ttg::detail::ContainerWrapper<keyT, valueT> c)
+      : p(1) {
+      p[0] = std::make_shared<EdgeImpl>(name, is_pull, c);
+    }
 
     /// Edge carrying a tuple of values
     template <typename... valuesT, typename = std::enable_if_t<(std::is_same_v<valuesT, valueT> && ...)>>
     Edge(const Edge<keyT, valuesT> &...edges) : p(0) {
       std::vector<Edge<keyT, valueT>> v = {edges...};
+      //Do not allow fusing of push and pull terminals
+      if (!std::all_of(v.begin(), v.end(), [](Edge<keyT, valueT> e){return !e.is_pull_edge();}))
+        throw std::runtime_error("Edge: fusing push and pull terminals is not supported.");
+
       for (auto &edge : v) {
         p.insert(p.end(), edge.p.begin(), edge.p.end());
       }
@@ -114,6 +142,10 @@ namespace ttg {
         if (!edge->ins.empty()) return true;
       }
       return result;
+    }
+
+    bool is_pull_edge() const {
+      return p.at(0)->is_pull_edge;
     }
 
     /// Sets the output terminal that goes into this Edge

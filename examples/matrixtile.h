@@ -1,63 +1,49 @@
 #ifndef TTG_EXAMPLES_MATRIX_TILE_H
 #define TTG_EXAMPLES_MATRIX_TILE_H
 
+#include <iostream>
 #include <memory>
 
 #include <ttg/serialization/splitmd_data_descriptor.h>
 
-template<typename T>
+template <typename T>
 class MatrixTile {
+ public:
+  using metadata_t = typename std::tuple<int, int, int>;
 
-public:
-  using metadata_t = typename std::pair<int, int>;
+  using pointer_t = typename std::shared_ptr<T>;
 
-  using pointer_t  = typename std::shared_ptr<T>;
-
-private:
+ private:
   pointer_t _data;
-  int _rows = 0, _cols = 0;
+  int _rows = 0, _cols = 0, _lda = 0;
 
   // (Re)allocate the tile memory
   void realloc() {
-    //std::cout << "Reallocating new tile" << std::endl;
-    _data = std::shared_ptr<T>(new T[_rows * _cols], [](T* p) { delete[] p; });
+    // std::cout << "Reallocating new tile" << std::endl;
+    _data = std::shared_ptr<T>(new T[_lda * _cols], [](T* p) { delete[] p; });
   }
 
-public:
+ public:
+  MatrixTile() {}
 
-  MatrixTile()
-  { }
-
-
-  MatrixTile(int rows, int cols) : _rows(rows), _cols(cols)
-  {
-    realloc();
-  }
+  MatrixTile(int rows, int cols, int lda) : _rows(rows), _cols(cols), _lda(lda) { realloc(); }
 
   MatrixTile(const metadata_t& metadata)
-  : MatrixTile(std::get<0>(metadata), std::get<1>(metadata))
-  { }
+      : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::get<2>(metadata)) {}
 
-  MatrixTile(int rows, int cols, pointer_t data)
-  : _data(data), _rows(rows), _cols(cols)
-  { }
+  MatrixTile(int rows, int cols, pointer_t data, int lda) : _data(data), _rows(rows), _cols(cols), _lda(lda) {}
 
   MatrixTile(const metadata_t& metadata, pointer_t data)
-  : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::forward(data))
-  { }
+      : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::forward(data), std::get<2>(metadata)) {}
 
   /**
    * Constructor with outside memory. The tile will *not* delete this memory
    * upon destruction.
    */
-  MatrixTile(int rows, int cols, T* data)
-  : _data(data, [](T*){}), _rows(rows), _cols(cols)
-  { }
+  MatrixTile(int rows, int cols, T* data, int lda) : _data(data, [](T*) {}), _rows(rows), _cols(cols), _lda(lda) {}
 
   MatrixTile(const metadata_t& metadata, T* data)
-  : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), data)
-  { }
-
+      : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), data, std::get<2>(metadata)) {}
 
 #if 0
   /* Copy dtor and operator with a static_assert to catch unexpected copying */
@@ -70,92 +56,106 @@ public:
   }
 #endif
 
+  MatrixTile(MatrixTile<T>&& other) = default;
 
-  MatrixTile(MatrixTile<T>&& other)  = default;
+  MatrixTile& operator=(MatrixTile<T>&& other) = default;
 
-  MatrixTile& operator=(MatrixTile<T>&& other)  = default;
-
-
+#if 0
   /* Defaulted copy ctor and op for shallow copies, see comment below */
   MatrixTile(const MatrixTile<T>& other)  = default;
 
   MatrixTile& operator=(const MatrixTile<T>& other)  = default;
-
+#endif  // 0
   /* Deep copy ctor und op are not needed for PO since tiles will never be read
    * and written concurrently. Hence shallow copies are enough, will all
    * receiving tasks sharing tile data. Re-enable this once the PaRSEC backend
    * can handle data sharing without excessive copying */
-#if 0
-  MatrixTile(const MatrixTile<T>& other)
-  : _rows(other._rows), _cols(other._cols)
-  {
+#if 1
+  MatrixTile(const MatrixTile<T>& other) : _rows(other._rows), _cols(other._cols), _lda(other._lda) {
     this->realloc();
-    std::copy_n(other.data(), _rows*_cols, this->data());
+    std::copy_n(other.data(), _lda * _cols, this->data());
   }
 
   MatrixTile& operator=(const MatrixTile<T>& other) {
     this->_rows = other._rows;
     this->_cols = other._cols;
+    this->_lda = other._lda;
     this->realloc();
-    std::copy_n(other.data(), _rows*_cols, this->data());
+    std::copy_n(other.data(), _lda * _cols, this->data());
+    return *this;
   }
-#endif // 0
+#endif  // 1
 
   void set_metadata(metadata_t meta) {
     _rows = std::get<0>(meta);
     _cols = std::get<1>(meta);
+    _lda = std::get<2>(meta);
   }
 
-  metadata_t get_metadata(void) const {
-    return metadata_t{_rows, _cols};
-  }
+  metadata_t get_metadata(void) const { return metadata_t{_rows, _cols, _lda}; }
 
   // Accessing the raw data
-  T* data(){
-    return _data.get();
+  T* data() { return _data.get(); }
+
+  const T* data() const { return _data.get(); }
+
+  /// @return shared_ptr to data
+  pointer_t data_shared() & { return _data; }
+
+  /// @return shared_ptr to data
+  pointer_t data_shared() const& { return _data; }
+
+  /// yields data and resets this object to a default-constucted state
+  pointer_t yield_data() && {
+    pointer_t result = _data;
+    *this = MatrixTile();
+    return std::move(result);
   }
 
-  const T* data() const {
-    return _data.get();
+  size_t size() const { return _cols * _lda; }
+
+  int rows() const { return _rows; }
+
+  int cols() const { return _cols; }
+
+  int lda() const { return _lda; }
+
+  auto& fill(T value) {
+    std::fill(_data.get(), _data.get() + size(), value);
+    return *this;
   }
 
-  size_t size() const {
-    return _cols*_rows;
-  }
-
-  int rows() const {
-    return _rows;
-  }
-
-  int cols() const {
-    return _cols;
+  friend std::ostream& operator<<(std::ostream& o, MatrixTile<T> const& tt) {
+    auto ptr = tt.data();
+    o << std::endl << " ";
+    o << "MatrixTile<" << typeid(T).name() << ">{ rows=" << tt.rows() << " cols=" << tt.cols() << " ld=" << tt.lda();
+#if DEBUG_TILES_VALUES
+    o << " data=[ " for (int i = 0; i < tt.rows(); i++) {
+      for (int j = 0; j < tt.cols(); j++) {
+        o << ptr[i + j * tt.lda()] << " ";
+      }
+      o << std::endl << " ";
+    }
+    o << " ] "
+#endif
+        o
+      << " } ";
+    return o;
   }
 };
 
 namespace ttg {
 
-  template<typename T>
-  struct SplitMetadataDescriptor<MatrixTile<T>>
-  {
+  template <typename T>
+  struct SplitMetadataDescriptor<MatrixTile<T>> {
+    auto get_metadata(const MatrixTile<T>& t) { return t.get_metadata(); }
 
-    auto get_metadata(const MatrixTile<T>& t)
-    {
-      return t.get_metadata();
-    }
+    auto get_data(MatrixTile<T>& t) { return std::array<iovec, 1>({t.size() * sizeof(T), t.data()}); }
 
-    auto get_data(MatrixTile<T>& t)
-    {
-      return std::array<iovec, 1>({t.size()*sizeof(T), t.data()});
-    }
-
-    auto create_from_metadata(const typename MatrixTile<T>::metadata_t& meta)
-    {
-      return MatrixTile<T>(meta);
-    }
+    auto create_from_metadata(const typename MatrixTile<T>::metadata_t& meta) { return MatrixTile<T>(meta); }
   };
 
-} // namespace ttg
-
+}  // namespace ttg
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
 namespace madness {
@@ -163,7 +163,7 @@ namespace madness {
     template <class Archive, typename T>
     struct ArchiveStoreImpl<Archive, MatrixTile<T>> {
       static inline void store(const Archive& ar, const MatrixTile<T>& tile) {
-        ar << tile.rows() << tile.cols();
+        ar << tile.rows() << tile.cols() << tile.lda();
         ar << wrap(tile.data(), tile.rows() * tile.cols());
       }
     };
@@ -171,9 +171,9 @@ namespace madness {
     template <class Archive, typename T>
     struct ArchiveLoadImpl<Archive, MatrixTile<T>> {
       static inline void load(const Archive& ar, MatrixTile<T>& tile) {
-        int rows, cols;
-        ar >> rows >> cols;
-        tile = MatrixTile<T>(rows, cols);
+        int rows, cols, lda;
+        ar >> rows >> cols >> lda;
+        tile = MatrixTile<T>(rows, cols, lda);
         ar >> wrap(tile.data(), tile.rows() * tile.cols());  // MatrixTile<T>(bm.rows(), bm.cols());
       }
     };
@@ -184,5 +184,4 @@ static_assert(madness::is_serializable_v<madness::archive::BufferOutputArchive, 
 
 #endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
 
-#endif // TTG_EXAMPLES_MATRIX_TILE_H
-
+#endif  // TTG_EXAMPLES_MATRIX_TILE_H

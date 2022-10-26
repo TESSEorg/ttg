@@ -34,6 +34,8 @@ using namespace ttg;
 
 #include "ttg/util/future.h"
 
+#include "ttg/util/multiindex.h"
+
 #include "ttg/util/bug.h"
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
@@ -134,51 +136,7 @@ double gemm(double C, double A, double B) { return C + A * B; }
 // struct colmajor_layout<_Scalar, Eigen::RowMajor, _StorageIndex> : public std::false_type {};
 
 template <std::size_t Rank>
-struct Key : public std::array<long, Rank> {
-  static constexpr const long max_index = 1 << 21;
-  static constexpr const long max_index_square = max_index * max_index;
-  Key() = default;
-  template <typename Integer>
-  Key(std::initializer_list<Integer> ilist) {
-    std::copy(ilist.begin(), ilist.end(), this->begin());
-    assert(valid());
-  }
-  explicit Key(std::size_t hash) {
-    static_assert(Rank == 2 || Rank == 3, "Key<Rank>::Key(hash) only implemented for Rank={2,3}");
-    if constexpr (Rank == 2) {
-      (*this)[0] = hash / max_index;
-      (*this)[1] = hash % max_index;
-    } else if constexpr (Rank == 3) {
-      (*this)[0] = hash / max_index_square;
-      (*this)[1] = (hash % max_index_square) / max_index;
-      (*this)[2] = hash % max_index;
-    }
-    std::abort();  // to be implemented
-  }
-
-  std::size_t hash() const {
-    static_assert(Rank == 2 || Rank == 3, "Key<Rank>::hash only implemented for Rank={2,3}");
-    return Rank == 2 ? (*this)[0] * max_index + (*this)[1]
-                     : ((*this)[0] * max_index + (*this)[1]) * max_index + (*this)[2];
-  }
-
- private:
-  bool valid() {
-    bool result = true;
-    for (auto &idx : *this) {
-      result = result && (idx < max_index);
-    }
-    return result;
-  }
-};
-
-template <std::size_t Rank>
-std::ostream &operator<<(std::ostream &os, const Key<Rank> &key) {
-  os << "{";
-  for (size_t i = 0; i != Rank; ++i) os << key[i] << (i + 1 != Rank ? "," : "");
-  os << "}";
-  return os;
-}
+using Key = MultiIndex<Rank>;
 
 /// maps {i,j} to rank within first (R=0) layer of the 3-d process grid
 inline int ij2rank(int i, int j, int P, int Q) {
@@ -1388,7 +1346,7 @@ int main(int argc, char **argv) {
   auto debug = (unsigned int)parseOption(debugStr, 0);
 
   if (debug & (1 << 1)) {
-    using mpqc::Debugger;
+    using ttg::Debugger;
     auto debugger = std::make_shared<Debugger>();
     Debugger::set_default_debugger(debugger);
     debugger->set_exec(argv[0]);

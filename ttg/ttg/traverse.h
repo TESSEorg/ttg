@@ -55,8 +55,21 @@ namespace ttg {
           count++;
         }
 
-        count = 0;
-        for (auto out : tt->get_outputs()) {
+      for (auto in : tt->get_inputs()) {
+        if (in) {
+          for (auto predecessor : in->get_predecessors()) {
+            if (!predecessor) {
+              std::cout << "ttg::Traverse: got a null predecessor!\n";
+              status = false;
+            } else {
+              status = status && traverse(predecessor->get_tt());
+            }
+          }
+        }
+      }
+
+      count = 0;
+      for (auto out : tt->get_outputs()) {
           if (!out) {
             std::cout << "ttg::Traverse: got a null out!\n";
             status = false;
