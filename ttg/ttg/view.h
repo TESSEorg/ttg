@@ -81,13 +81,11 @@ namespace ttg {
 
   template<typename HostT, typename... Spans>
   auto make_view(HostT& obj, std::tuple<Spans...> spans) {
-    /* TODO: allocate memory on the device and transfer the data to it */
     return View(obj, std::move(spans));
   }
 
   template<typename HostT, typename... Spans>
   auto new_view(HostT& obj, std::tuple<Spans...> spans) {
-    /* TODO: allocate memory on the device, no copying needed */
     return View(obj, std::move(spans));
   }
 
