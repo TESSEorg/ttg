@@ -63,7 +63,7 @@ namespace ttg {
 
     using view_type = View<HostT, DevTypeTs...>;
 
-    constexpr View() noexcept = default;
+    constexpr View() = default;
 
     View(HostT& obj, span_tuple_type spans)
     : m_obj(&obj)
