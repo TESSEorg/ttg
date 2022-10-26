@@ -10,16 +10,19 @@
 #include <parsec/data_dist/matrix/sym_two_dim_rectangle_cyclic.h>
 #include <parsec/data_dist/matrix/two_dim_rectangle_cyclic.h>
 
-using Key2 = std::tuple<int, int>;
+#include "ttg/util/meta.h"
 
-using Key3 = std::tuple<int, int, int>;
+#include <ttg/util/multiindex.h>
+
+using Key2 = ttg::MultiIndex<2>;
+using Key3 = ttg::MultiIndex<3>;
 
 /* number of tiles */
 #define KT 100
 
 template<typename T>
-auto make_gemm(ttg::Edge<Key2, MatrixTile<T>>& A,
-               ttg::Edge<Key2, MatrixTile<T>>& B,
+auto make_gemm(ttg::Edge<Key3, MatrixTile<T>>& A,
+               ttg::Edge<Key3, MatrixTile<T>>& B,
                ttg::Edge<Key2, MatrixTile<T>>& output_result)
 {
 
@@ -31,9 +34,9 @@ auto make_gemm(ttg::Edge<Key2, MatrixTile<T>>& A,
                    std::tuple<ttg::Out<Key2, MatrixTile<T>>,
                               ttg::Out<Key3, MatrixTile<T>>>& out)
   {
-    int m = std::get<0>(key);
-    int n = std::get<1>(key);
-    int k = std::get<2>(key);
+    int m = key[0];
+    int n = key[1];
+    int k = key[2];
 
     /*
     if(k == 0) {
@@ -54,8 +57,8 @@ auto make_gemm(ttg::Edge<Key2, MatrixTile<T>>& A,
 
   auto f_gpu_host_views = [=](const Key3& key,
                               const MatrixTile<T>& A,
-                                const MatrixTile<T>& B,
-                              MatrixTile<T>& C)
+                              const MatrixTile<T>& B,
+                              MatrixTile<T>&& C)
   {
     ttg::View<const MatrixTile<T>, const T> dev_A = ttg::make_view( A, std::make_tuple(ttg::span(A.data(), A.size())) );
     ttg::View<const MatrixTile<T>, const T> dev_B = ttg::make_view( B, std::make_tuple(ttg::span(B.data(), B.size())) );
@@ -64,7 +67,7 @@ auto make_gemm(ttg::Edge<Key2, MatrixTile<T>>& A,
     T *host_tmp = new(T);
     dev_tmp = ttg::new_view( *host_tmp, std::make_tuple(ttg::span(host_tmp, 1)) ); // dev_tmp is a promise of 1 T on the device, associated with host_tmp
 
-    int k = std::get<2>(key);
+    int k = key[2];
     if(0 == k) {
       // view_new tells the runtime system that the device view needs to be allocated but doesn't need to be
       // initialized with C.data(). However, C.data() is still associated with the device memory, so if the
@@ -83,7 +86,7 @@ auto make_gemm(ttg::Edge<Key2, MatrixTile<T>>& A,
                                 ttg::View<MatrixTile<T>, T>& dev_C,
                           ttg::View<T, T>& dev_tmp)
   {
-    int k = std::get<2>(key);
+    int k = key[2];
 
     const MatrixTile<T>&  A = dev_A.get_host_object();
     const MatrixTile<T>&  B = dev_B.get_host_object();
@@ -105,16 +108,14 @@ auto make_gemm(ttg::Edge<Key2, MatrixTile<T>>& A,
   };
 
   auto f_gpu_output_flows = [=](const Key3& key,
-                                            const MatrixTile<T>&  A,
-                                            const MatrixTile<T>&  B,
-                                            MatrixTile<T>&  C,
-                                    T& host_tmp,
-                                  std::tuple<ttg::Out<Key2, MatrixTile<T>>,
-                                           ttg::Out<Key3, MatrixTile<T>>>& out)
+                                const MatrixTile<T>&  A,
+                                const MatrixTile<T>&  B,
+                                MatrixTile<T>&  C,
+                                T& host_tmp)
   {
-    int m = std::get<0>(key);
-    int n = std::get<1>(key);
-    int k = std::get<2>(key);
+    int m = key[0];
+    int n = key[1];
+    int k = key[2];
 
     if( k == KT-1 || host_tmp < 1e-9 ) {
         ttg::send<0>(Key2{m, n}, std::move(C));
@@ -124,9 +125,11 @@ auto make_gemm(ttg::Edge<Key2, MatrixTile<T>>& A,
     delete &host_tmp;
   };
 
+  //ttg::meta::type_printer<decltype(ttg::edges(output_result, C))> x;
+
   /* If we only have GPU */
-  auto gemm_tt = ttg::make_device_tt(f_gpu_host_views, f_gpu_kernel, f_gpu_output_flows, ttg::ExecutionSpace::CUDA,
-                                     ttg::edges(A, B), ttg::edges(output_result, C),
+  auto gemm_tt = ttg::make_device_tt<Key3>(f_gpu_host_views, f_gpu_kernel, f_gpu_output_flows, ttg::ExecutionSpace::CUDA,
+                                     ttg::edges(A, B, C), ttg::edges(output_result, C),
                                      "GEMM", {"A", "B"}, {"output_result", "C"});
 
 #if 0
@@ -169,7 +172,7 @@ int main(int argc, char **argv)
 
   auto world = ttg::default_execution_context();
 
-  ttg::Edge<Key2, MatrixTile<double>> edge_a, edge_b;
+  ttg::Edge<Key3, MatrixTile<double>> edge_a, edge_b;
   ttg::Edge<Key2, MatrixTile<double>> edge_out;
 
   auto gemm_tt = make_gemm(edge_a, edge_b, edge_out);
