@@ -35,7 +35,7 @@ namespace detail {
 
     /* TODO: copy data to device */
 
-    allocate_view_on_device(view, std::index_sequence<Is...>);
+    allocate_view_on_device(view, std::index_sequence<Is...>{});
   }
 
   template<typename... ViewTs, std::size_t I, std::size_t... Is>
