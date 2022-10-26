@@ -5,17 +5,17 @@
 
 
 namespace detail {
-#ifdef TTG_USE_CUDA
+#ifdef TTG_HAVE_CUDA
   inline thread_local cudaStream_t* ts_stream = nullptr;
-#endif // TTG_USE_CUDA
+#endif // TTG_HAVE_CUDA
 
   template<typename FuncT, typename keyT, typename... Args, std::size_t... Is>
   inline void invoke_with_unpacked_views(FuncT&& func, const keyT& key, std::tuple<Args...>& views, std::index_sequence<Is...>) {
-#ifdef TTG_USE_CUDA
+#ifdef TTG_HAVE_CUDA
     func(key, std::get<Is>(views)..., ts_stream);
-#else // TTG_USE_CUDA
+#else // TTG_HAVE_CUDA
     func(key, std::get<Is>(views)...);
-#endif // TTG_USE_CUDA
+#endif // TTG_HAVE_CUDA
   }
 
   /* TODO: extract host objects from views */
@@ -51,9 +51,9 @@ namespace detail {
     /* copy data to device */
     //cudaMemcpy(ptr, span.data(), span.size_bytes(), cudaMemcpyHostToDevice);
     if (view.template get_span<I>().is_sync_in()) {
-#ifdef TTG_USE_CUDA
+#if defined(TTG_HAVE_CUDA) && defined(TTG_USE_CUDA_PREFETCH)
       cudaMemPrefetchAsync(span.data(), span.size_bytes(), 0, *ts_stream);
-#endif // TTG_USE_CUDA
+#endif // TTG_USE_CUDA_PREFETCH
     }
 
     if constexpr(sizeof...(Is) > 0) {
@@ -88,9 +88,9 @@ namespace detail {
 
     /* prefetch data from device */
     if (span.is_sync_out()) {
-#ifdef TTG_USE_CUDA
+#if defined(TTG_HAVE_CUDA) && defined(TTG_USE_CUDA_PREFETCH)
       cudaMemPrefetchAsync(span.data(), span.size_bytes(), cudaCpuDeviceId, *ts_stream);
-#endif // TTG_USE_CUDA
+#endif // TTG_USE_CUDA_PREFETCH
     }
 
     if constexpr(sizeof...(Is) > 0) {
@@ -131,12 +131,12 @@ namespace detail {
 
     auto taskfn = [=](const keyT& key, Args... args) mutable {
 
-#ifdef TTG_USE_CUDA
+#ifdef TTG_HAVE_CUDA
       if (nullptr == ts_stream) {
         ts_stream = new cudaStream_t();
         cudaStreamCreate(ts_stream);
       }
-#endif // TTG_USE_CUDA
+#endif // TTG_HAVE_CUDA
 
       auto views = view_func(key, std::forward<Args>(args)...);
       using view_tuple_t = std::remove_reference_t<decltype(views)>;
@@ -153,10 +153,10 @@ namespace detail {
       if constexpr(std::tuple_size_v<view_tuple_t> > 0) {
         sync_back_to_host(device_views, std::make_index_sequence<view_tuple_size>());
       }
-  #ifdef TTG_USE_CUDA
+  #ifdef TTG_HAVE_CUDA
       /* wait for the */
       cudaStreamSynchronize(*ts_stream);
-  #endif // TTG_USE_CUDA
+  #endif // TTG_HAVE_CUDA
       /* 5) call output function */
       detail::invoke_out_with_unpacked_views(out_func, key, views, std::make_index_sequence<view_tuple_size>());
     };
