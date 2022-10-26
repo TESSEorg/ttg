@@ -134,7 +134,7 @@ auto make_gemm(ttg::Edge<Key3, MatrixTile<T>>& A,
   /* If we only have GPU */
   auto gemm_tt = ttg::make_device_tt<Key3>(f_gpu_host_views, f_gpu_kernel, f_gpu_output_flows, ttg::ExecutionSpace::CUDA,
                                      ttg::edges(A, B, C), ttg::edges(output_result, C),
-                                     "GEMM", {"A", "B"}, {"output_result", "C"});
+                                     "GEMM", {"A", "B", "C"}, {"output_result", "C"});
 
 #if 0
   /* Alternative: to get both type of tasklets: */
