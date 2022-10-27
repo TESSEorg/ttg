@@ -11,17 +11,25 @@ The key issues are how to manage:
 There are multiple "solutions" to each issue, hence there are many possible designs. I'll discuss each issue first, then outline the aggregate designs we are pursuing.
 
 #### Memory:
-- *Unified (UM)*: where available, use single address space (unified memory visible to both host and device executors; it is also possible to use pinned host memory for device calls)
+- *Unified Memory (UM)*: where available, use single address space (unified memory visible to both host and device executors; it is also possible to use pinned host memory for device calls)
     - pro: simplifies memory management by removing the capacity limitation
     - con: still needs user cooperation: all compute data must be allocated on UM heap, this impacts the design of
       user data types, e.g. making them allocator aware, etc.
     - con: the user will likely needs to use pooled memory management for efficiency reasons (e.g., TiledArray uses Umpire)
     - con: still necessary to provide hints to the kernel driver managing UM.
     - con: reasoning about UM driver performance is difficult, its details are opaque and platform dependent.
-- *Native (NM)*: using "native" device memory.
+- *Device Memory (DM)*: using "native" device memory.
     - pro: simpler performance model due to greatest amount of control (by runtime) over execution
     - pro: can work with stack-capable data types
     - con: The amount is limited, hence this memory must be explicitly managed (akin to how a cache is managed).
+
+Additional memory-related concerns common to both models:
+- only partial state needs to be transferred to/from the device
+    - which part of the state will differ from algorithm to algorithm, hence encoding/constructing such representation cannot use constexpr code (such as traits)
+    - the need for _explicit_ handling of object's partial state is shared by both models
+        - UM: such optimization may seem automatic (only the pages of the data actually used on the device are transfered) but in practice the data must be explicitly prefetched, hence partial state transfers are not automatic; furthermore, the unit of UM transfer is a page (4k or more), which is too coarse for many applications
+        - DM: serialization of an entire object (which can leverage standard RDMA-like serialization), transfering partial state requires explicit annotation 
+    - hence it makes sense to make representation of object's partial state (`View`) a first-class concept in both models.
 
 #### Asynchrony
 - *Stages*: decompose tasks into stages, with runtime-managed periods between stages for managing asynchrony of the actions scheduled by each stage
