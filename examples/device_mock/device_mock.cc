@@ -181,7 +181,7 @@ int main(int argc, char **argv)
 
   auto gemm_tt = make_gemm(edge_a, edge_b, edge_out);
 
-
+  ttg::fence();
 
   ttg::finalize();
   return 0;
