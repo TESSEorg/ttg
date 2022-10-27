@@ -17,6 +17,7 @@ set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/future.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/hash.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/hash/std/pair.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/iovec.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/macro.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/meta.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/meta/callable.h
