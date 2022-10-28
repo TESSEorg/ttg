@@ -519,7 +519,7 @@ namespace ttg {
 
   template <std::size_t i>
   inline void set_size(const std::size_t size) {
-    set_size<i>(size);
+    set_size(i, size);
   }
 
   /// \brief Finalize streaming input terminals connecting to the given output terminal for tasks
@@ -574,7 +574,7 @@ namespace ttg {
 
   template <std::size_t i>
   inline void finalize() {
-    finalize<i>();
+    finalize(i);
   }
 
 }  // namespace ttg
