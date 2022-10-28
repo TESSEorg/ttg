@@ -29,7 +29,12 @@ project(ttg
     LANGUAGES CXX
     HOMEPAGE_URL "https://tesseorg.github.io/ttg/")
 
-set(CMAKE_CXX_EXTENSIONS OFF)
+if (NOT CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD "17" CACHE STRING "The C++ standard")
+endif()
+if (NOT CMAKE_CXX_EXTENSIONS)
+  set(CMAKE_CXX_EXTENSIONS OFF CACHE BOOL "The C++ standard extensions allowed?")
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
 include(GNUInstallDirs)

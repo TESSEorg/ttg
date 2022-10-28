@@ -1,17 +1,6 @@
 #ifndef TTG_UTIL_SPAN_H
 #define TTG_UTIL_SPAN_H
 
-#if __cplusplus >= 202002L
-
-/* Use the std:: implementation available from C++20 onwards */
-#include <span>
-namespace ttg {
-  template <class T, std::size_t Extent = std::dynamic_extent>
-  using span = std::span<T, Extent>;
-}  // namespace ttg
-
-#else  // __cplusplus >= 202002L
-
 /* if TCB_SPAN_NAMESPACE_NAME already defined someone imported TCB span somewhere,
  * then reset it here to the ttg namespace, don't forget to revert back */
 #ifdef TCB_SPAN_NAMESPACE_NAME
@@ -532,7 +521,5 @@ namespace std {
 #undef TTG_TCB_SPAN_NAMESPACE_NAME_AT_TOP_OF_SPAN_H
 
 #endif
-
-#endif  // __cplusplus >= 202002L
 
 #endif  // TTG_UTIL_SPAN_H
