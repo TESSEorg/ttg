@@ -57,13 +57,13 @@ Additional memory-related concerns common to both models:
 C++ coroutines were introduced in C++20. The design is fairly convoluted, with many customization points, and our understanding of the best practices is evolving.
 The basic idea is to have user compose device tasks as a single coroutine that gets decomposed by the compiler into the stages that in the *DM+stages* design user had to express as individual lambdas:
 ```cpp
-make_tt([](auto& key, auto& data1, auto& data2) -> ttg::coroutine {
+make_tt([](auto& key, auto& data1, auto& data2) -> ttg::resumable_task {
     // stage 1
-    ConstView view1(data1);  // gets added aww's list of work items
-    ConstView view2(data2);  // gets added aww's list of work items
+    ConstView view1(data1);
+    ConstView view2(data2);
     double data3;
     View view3(data3, NewView | SyncView_D2H);
-    co_await sync_views(view1, view2, view3);  // runtime processes these work items
+    co_await sync_views(data1, data2, data3);  // creates list of transfers to be fulfilled by the runtime
     
     // stage 2
     cublasDdot(view1.device_ptr(), view2.device_ptr(), view3.device_ptr());
@@ -73,7 +73,7 @@ make_tt([](auto& key, auto& data1, auto& data2) -> ttg::coroutine {
         send<0>(data1);
     else
         send<0>(data2);
-    co_return;  // processes sends and destroys coroutine+aww
+    co_return;  // processes sends and destroys coroutine
 }, ...);
 ```
 
