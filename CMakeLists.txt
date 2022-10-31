@@ -84,7 +84,7 @@ include(FindOrFetchBoost)
 # Cereal
 #include(FindOrFetchCereal)
 # C++ coroutines
-find_package(CXXStdCoroutine REQUIRED COMPONENTS Final Experimental)
+find_package(CXXStdCoroutine COMPONENTS Final Experimental)
 
 
 ##########################
