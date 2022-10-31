@@ -38,6 +38,10 @@ set(ttg-base-headers
 file(GLOB_RECURSE ttg-external-headers $<$<VERSION_GREATER_EQUAL:${CMAKE_VERSION},3.12>:CONFIGURE_DEPENDS>
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/external/boost/*
     )
+configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/config.in.h
+        ${CMAKE_CURRENT_BINARY_DIR}/ttg/config.h
+)
 set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/broadcast.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/edge.h
@@ -56,6 +60,7 @@ set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/make_tt.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/make_device_tt.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/view.h
+        ${CMAKE_CURRENT_BINARY_DIR}/ttg/config.h
     )
 set(ttg-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg.h

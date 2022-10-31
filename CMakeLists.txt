@@ -83,6 +83,9 @@ endif (BUILD_TESTING)
 include(FindOrFetchBoost)
 # Cereal
 #include(FindOrFetchCereal)
+# C++ coroutines
+find_package(CXXStdCoroutine REQUIRED COMPONENTS Final Experimental)
+
 
 ##########################
 #### prerequisite runtimes
