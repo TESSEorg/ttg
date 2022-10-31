@@ -1,7 +1,18 @@
 include(AddTTGExecutable)
 
 # TT unit test: core TTG ops
-add_ttg_executable(core-unittests-ttg "fibonacci.cc;ranges.cc;tt.cc;unit_main.cpp" LINK_LIBRARIES "Catch2::Catch2")
+set(ut_src
+        fibonacci.cc
+        ranges.cc
+        tt.cc
+        unit_main.cpp)
+set(ut_libs Catch2::Catch2)
+if (TARGET std::coroutine)
+    list(APPEND ut_src fibonacci-coro.cc)
+    list(APPEND ut_libs std::coroutine)
+endif()
+add_ttg_executable(core-unittests-ttg "${ut_src}" LINK_LIBRARIES "${ut_libs}")
+
 
 # serialization test: probes serialization via all supported serialization methods (MADNESS, Boost::serialization, cereal) that are available
 add_executable(serialization "serialization.cc;unit_main.cpp")
