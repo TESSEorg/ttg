@@ -477,7 +477,7 @@ namespace ttg_parsec {
 
   namespace detail {
 
-    typedef void (*parsec_static_op_t)(void *);  // static_op will be cast to this type
+    typedef parsec_hook_return_t (*parsec_static_op_t)(void *);  // static_op will be cast to this type
 
     const parsec_symbol_t parsec_taskclass_param0 = {
       .flags = PARSEC_SYMBOL_IS_STANDALONE|PARSEC_SYMBOL_IS_GLOBAL,
@@ -1266,7 +1266,7 @@ namespace ttg_parsec {
     }
 
     template <ttg::ExecutionSpace Space>
-    static void static_op(parsec_task_t *parsec_task) {
+    static parsec_hook_return_t static_op(parsec_task_t *parsec_task) {
       task_t *task = (task_t*)parsec_task;
       ttT *baseobj = task->tt;
       derivedT *obj = static_cast<derivedT *>(baseobj);
@@ -1300,10 +1300,13 @@ namespace ttg_parsec {
         else
           ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
       }
+
+      // if op is coro-based this will be something else
+      return PARSEC_HOOK_RETURN_DONE;
     }
 
     template <ttg::ExecutionSpace Space>
-    static void static_op_noarg(parsec_task_t *parsec_task) {
+    static parsec_hook_return_t static_op_noarg(parsec_task_t *parsec_task) {
       task_t *task = static_cast<task_t*>(parsec_task);
       ttT *baseobj = (ttT *)task->object_ptr;
       derivedT *obj = (derivedT *)task->object_ptr;
@@ -1316,6 +1319,9 @@ namespace ttg_parsec {
       } else
         abort();
       parsec_ttg_caller = NULL;
+
+      // if op is coro-based this will be something else
+      return PARSEC_HOOK_RETURN_DONE;
     }
 
    protected:
