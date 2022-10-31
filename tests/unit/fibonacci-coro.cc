@@ -36,8 +36,14 @@ TEST_CASE("Fibonacci-coroutines", "[fib][core]") {
       // N.B. wrap a trivial (nonsuspending) coroutine using make_tt!
       auto fib_op = ttg::make_tt(
           // computes next value: F_{n+2} = F_{n+1} + F_{n}, seeded by F_1 = 1, F_0 = 0
-          // N.B. can't autodeduce return type, must add "-> void"
-          [](const int &F_n_plus_1, const int &F_n) -> void {
+          // N.B. can't autodeduce return type, must explicitly declare the return type
+          [](const int &F_n_plus_1, const int &F_n)
+#ifdef __clang__
+              -> void
+#else  // gcc gets confused by co_return; statement in function returning void, use ttg::Void
+              -> ttg::Void
+#endif
+          {
             // on 1 process the right order of sends can avoid the race iff reductions are inline (on-current-thread)
             // and not async (nthread>1):
             // - send<1> will call wc->set_arg which will eagerly reduce the argument
