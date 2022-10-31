@@ -9,8 +9,8 @@
 FindCXXStdExecution
 ##############
 
-This module supports the C++17 standard library's execution utilities. Use the
-:imp-target:`std::execution` imported target to
+This module supports the C++17 standard library's execution utilities. Link your target to the
+:imp-target:`std::execution` imported target to provide standard C++ execution API.
 
 Imported Targets
 ****************
@@ -84,7 +84,7 @@ string(CONFIGURE [[
   }
   ]] code @ONLY)
 
-# Try to compile a simple filesystem program without any linker flags
+# Try to compile a simple execution program without any linker flags
 check_cxx_source_compiles("${code}" CXX_EXECUTION_NO_LINK_NEEDED)
 
 set(CXXStdExecution_CAN_LINK ${CXX_EXECUTION_NO_LINK_NEEDED})
