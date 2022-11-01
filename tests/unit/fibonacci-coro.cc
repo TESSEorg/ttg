@@ -37,13 +37,7 @@ TEST_CASE("Fibonacci-coroutines", "[fib][core]") {
       auto fib_op = ttg::make_tt(
           // computes next value: F_{n+2} = F_{n+1} + F_{n}, seeded by F_1 = 1, F_0 = 0
           // N.B. can't autodeduce return type, must explicitly declare the return type
-          [](const int &F_n_plus_1, const int &F_n)
-#ifdef __clang__
-              -> void
-#else  // gcc gets confused by co_return; statement in function returning void, use ttg::Void
-              -> ttg::Void
-#endif
-          {
+          [](const int &F_n_plus_1, const int &F_n) -> ttg::resumable_task {
             // on 1 process the right order of sends can avoid the race iff reductions are inline (on-current-thread)
             // and not async (nthread>1):
             // - send<1> will call wc->set_arg which will eagerly reduce the argument
@@ -57,6 +51,8 @@ TEST_CASE("Fibonacci-coroutines", "[fib][core]") {
             // The order of operations will still matter.
             if (F_n_plus_1 < N) {
               const auto F_n_plus_2 = F_n_plus_1 + F_n;
+              // cool, if there are no events to wait for co_await is no-op
+              co_await ttg::resumable_task_events{};
               ttg::sendv<1>(F_n_plus_1);
               ttg::send<0>(F_n_plus_2, F_n_plus_1);
             } else
