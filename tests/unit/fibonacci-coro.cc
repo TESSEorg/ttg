@@ -58,6 +58,10 @@ TEST_CASE("Fibonacci-coroutines", "[fib][core]") {
             } else
               ttg::finalize<1>();
 
+            // to test coro-based task lifecycle introduce fake events
+            ttg::event null_event;
+            co_await ttg::resumable_task_events{null_event};
+
             // N.B. return void just as normal TT op
             co_return;
           },

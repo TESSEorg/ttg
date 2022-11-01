@@ -144,14 +144,60 @@ class CallableWrapTTArgs
   template <typename Key, typename Tuple, std::size_t... S>
   void call_func(Key &&key, Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
     using func_args_t = ttg::meta::tuple_concat_t<std::tuple<const Key &>, input_refs_tuple_type, output_edges_type>;
-    if constexpr (funcT_receives_outterm_tuple)
-      func(std::forward<Key>(key),
-           baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
-    else {
+    if constexpr (funcT_receives_outterm_tuple) {
+      using func_result_type = decltype(func(
+          std::forward<Key>(key),
+          baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out));
+      if constexpr (std::is_void_v<func_result_type>)
+        func(std::forward<Key>(key),
+             baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
+      else {
+        auto ret = func(
+            std::forward<Key>(key),
+            baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
+        if (ret.completed())
+          ret.destroy();
+        else {
+          // in general will return the task handle ... now just mark events finished
+          auto events = ret.events();
+          for (auto &event_ptr : events) {
+            event_ptr->finish();
+          }
+          // in general will resume somewhere else ... in our test this proceeds to the end
+          assert(ret.ready());
+          ret.resume();
+          assert(ret.completed());
+          ret.destroy();
+        }
+      }
+    } else {
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
-      func(std::forward<Key>(key),
-           baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))...);
+      using func_return_type =
+          decltype(func(std::forward<Key>(key), baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(
+                                                    std::forward<Tuple>(args_tuple))...));
+      if constexpr (std::is_void_v<func_return_type>) {
+        func(std::forward<Key>(key),
+             baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))...);
+      } else {
+        auto ret =
+            func(std::forward<Key>(key),
+                 baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))...);
+        if (ret.completed())
+          ret.destroy();
+        else {
+          // in general will return the task handle ... now just mark events finished
+          auto events = ret.events();
+          for (auto &event_ptr : events) {
+            event_ptr->finish();
+          }
+          // in general will resume somewhere else ... in our test this proceeds to the end
+          assert(ret.ready());
+          ret.resume();
+          assert(ret.completed());
+          ret.destroy();
+        }
+      }
       this->set_outputs_tls_ptr(old_output_tls_ptr);
     }
   }
