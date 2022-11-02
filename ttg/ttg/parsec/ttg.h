@@ -1212,13 +1212,27 @@ namespace ttg_parsec {
 
    private:
     /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
+    /// @return void*; if called a synchronous function or a coroutine that completed will return nullptr,
+    ///         else points to the state (promise) of the suspended coroutine
     template <ttg::ExecutionSpace Space, typename... Args>
-    void op(Args &&...args) {
+    void* op(Args &&...args) {
       derivedT *derived = static_cast<derivedT *>(this);
-      if constexpr (Space == ttg::ExecutionSpace::Host)
-        derived->op(std::forward<Args>(args)...);
-      else if constexpr (Space == ttg::ExecutionSpace::CUDA)
-        derived->op_cuda(std::forward<Args>(args)...);
+      if constexpr (Space == ttg::ExecutionSpace::Host) {
+        using return_type = decltype(derived->op(std::forward<Args>(args)...));
+        if constexpr (std::is_same_v<return_type,void>) {
+          derived->op(std::forward<Args>(args)...);
+          return nullptr;
+        }
+        else return derived->op(std::forward<Args>(args)...);
+      }
+      else if constexpr (Space == ttg::ExecutionSpace::CUDA) {
+        using return_type = decltype(derived->op_cuda(std::forward<Args>(args)...));
+        if constexpr (std::is_same_v<return_type,void>) {
+          derived->op_cuda(std::forward<Args>(args)...);
+          return nullptr;
+        }
+        else return derived->op_cuda(std::forward<Args>(args)...);
+      }
       else
         abort();
     }
@@ -1282,16 +1296,17 @@ namespace ttg_parsec {
           ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : executing");
       }
 
+      void* suspended_task_state = nullptr;  // if non-null, must resubmit the task
       if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
         auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
-        baseobj->template op<Space>(task->key, std::move(input), obj->output_terminals);
+        suspended_task_state = baseobj->template op<Space>(task->key, std::move(input), obj->output_terminals);
       } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-        baseobj->template op<Space>(task->key, obj->output_terminals);
+        suspended_task_state = baseobj->template op<Space>(task->key, obj->output_terminals);
       } else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
         auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
-        baseobj->template op<Space>(std::move(input), obj->output_terminals);
+        suspended_task_state = baseobj->template op<Space>(std::move(input), obj->output_terminals);
       } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-        baseobj->template op<Space>(obj->output_terminals);
+        suspended_task_state = baseobj->template op<Space>(obj->output_terminals);
       } else {
         abort();
       }
@@ -1305,6 +1320,8 @@ namespace ttg_parsec {
       }
 
       // if op is coro-based this will be something else
+      // for now cannot handle suspended tasks
+      if (suspended_task_state) std::abort();
       return PARSEC_HOOK_RETURN_DONE;
     }
 
