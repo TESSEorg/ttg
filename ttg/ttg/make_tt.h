@@ -122,15 +122,17 @@ struct CallableWrapTTUnwrapTypelist<funcT, funcT_receives_outterm_tuple, keyT, o
 
 // Class to wrap a callable with signature
 //
-// case 1 (keyT != void): void op(auto&& key, input_valuesT&&..., std::tuple<output_terminalsT...>&)
-// case 2 (keyT == void): void op(input_valuesT&&..., std::tuple<output_terminalsT...>&)
+// case 1 (keyT != void): returnT op(auto&& key, input_valuesT&&..., std::tuple<output_terminalsT...>&)
+// case 2 (keyT == void): returnT op(input_valuesT&&..., std::tuple<output_terminalsT...>&)
 //
-template <typename funcT, bool funcT_receives_outterm_tuple, typename keyT, typename output_terminalsT,
-          typename... input_valuesT>
+// returnT is void for funcT = synchronous (ordinary) function and the appropriate return type for funcT=coroutine
+template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, typename keyT,
+          typename output_terminalsT, typename... input_valuesT>
 class CallableWrapTTArgs
-    : public TT<keyT, output_terminalsT,
-                CallableWrapTTArgs<funcT, funcT_receives_outterm_tuple, keyT, output_terminalsT, input_valuesT...>,
-                ttg::typelist<input_valuesT...>> {
+    : public TT<
+          keyT, output_terminalsT,
+          CallableWrapTTArgs<funcT, returnT, funcT_receives_outterm_tuple, keyT, output_terminalsT, input_valuesT...>,
+          ttg::typelist<input_valuesT...>> {
   using baseT = typename CallableWrapTTArgs::ttT;
 
   using input_values_tuple_type = typename baseT::input_values_tuple_type;
@@ -141,64 +143,91 @@ class CallableWrapTTArgs
   using noref_funcT = std::remove_reference_t<funcT>;
   std::conditional_t<std::is_function_v<noref_funcT>, std::add_pointer_t<noref_funcT>, noref_funcT> func;
 
+  using op_return_type =
+#ifdef TTG_HAS_COROUTINE
+      std::conditional_t<std::is_same_v<returnT, ttg::resumable_task>, ttg::resumable_task_state *, void>;
+#else   // TTG_HAS_COROUTINE
+      void;
+#endif  // TTG_HAS_COROUTINE
+
+  /// @return pointer to the coroutine state (promise) if funcT is a coroutine and it did not complete, else void
   template <typename Key, typename Tuple, std::size_t... S>
-  void call_func(Key &&key, Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
+  auto call_func(Key &&key, Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
     using func_args_t = ttg::meta::tuple_concat_t<std::tuple<const Key &>, input_refs_tuple_type, output_edges_type>;
+
+    auto process_return = [&out](auto &&ret) {
+      static_assert(std::is_same_v<std::remove_reference_t<decltype(ret)>, returnT>,
+                    "CallableWrapTTArgs<funcT,returnT,...>: returnT does not match the actual return type of funcT");
+      if constexpr (!std::is_void_v<returnT>) {  // protect from compiling for void returnT
+#ifdef TTG_HAS_COROUTINE
+        if constexpr (std::is_same_v<returnT, ttg::resumable_task>) {
+          ttg::resumable_task_state *result_value = nullptr;
+          if (ret.completed()) {
+            ret.destroy();
+          } else {
+            // in general will return the coroutine promise ptr
+            result_value = &ret.promise();
+            // BUT ... now just mark events finished
+            auto events = ret.events();
+            for (auto &event_ptr : events) {
+              event_ptr->finish();
+            }
+            // in general will resume somewhere else ... in our test this proceeds to the end
+            assert(ret.ready());
+            ret.resume();
+            assert(ret.completed());
+            ret.destroy();
+            result_value = nullptr;
+          }
+          return result_value;
+        } else
+#endif
+        {
+          static_assert(std::tuple_size_v<std::remove_reference_t<decltype(out)>> == 1,
+                        "CallableWrapTTArgs<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
+                        "value only if there is only 1 out terminal");
+          static_assert(std::tuple_size_v<returnT> <= 2,
+                        "CallableWrapTTArgs<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
+                        "value only if it is a plain value (then sent with null key), a tuple-like containing a single "
+                        "key (hence value is void), or a tuple-like containing a key and a value");
+          if constexpr (std::tuple_size_v<returnT> == 0)
+            std::get<0>(out).sendv(std::move(ret));
+          else if constexpr (std::tuple_size_v<returnT> == 1)
+            std::get<0>(out).sendk(std::move(std::get<0>(ret)));
+          else if constexpr (std::tuple_size_v<returnT> == 2)
+            std::get<0>(out).send(std::move(std::get<0>(ret)), std::move(std::get<1>(ret)));
+          return;
+        }
+      }
+    };
+
     if constexpr (funcT_receives_outterm_tuple) {
-      using func_result_type = decltype(func(
-          std::forward<Key>(key),
-          baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out));
-      if constexpr (std::is_void_v<func_result_type>)
+      if constexpr (std::is_void_v<returnT>) {
         func(std::forward<Key>(key),
              baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
-      else {
+        return;
+      } else {
         auto ret = func(
             std::forward<Key>(key),
             baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
-        if (ret.completed())
-          ret.destroy();
-        else {
-          // in general will return the task handle ... now just mark events finished
-          auto events = ret.events();
-          for (auto &event_ptr : events) {
-            event_ptr->finish();
-          }
-          // in general will resume somewhere else ... in our test this proceeds to the end
-          assert(ret.ready());
-          ret.resume();
-          assert(ret.completed());
-          ret.destroy();
-        }
+
+        return process_return(std::move(ret));
       }
     } else {
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
-      using func_return_type =
-          decltype(func(std::forward<Key>(key), baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(
-                                                    std::forward<Tuple>(args_tuple))...));
-      if constexpr (std::is_void_v<func_return_type>) {
+      if constexpr (std::is_void_v<returnT>) {
         func(std::forward<Key>(key),
              baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))...);
+        this->set_outputs_tls_ptr(old_output_tls_ptr);
+        return;
       } else {
         auto ret =
             func(std::forward<Key>(key),
                  baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))...);
-        if (ret.completed())
-          ret.destroy();
-        else {
-          // in general will return the task handle ... now just mark events finished
-          auto events = ret.events();
-          for (auto &event_ptr : events) {
-            event_ptr->finish();
-          }
-          // in general will resume somewhere else ... in our test this proceeds to the end
-          assert(ret.ready());
-          ret.resume();
-          assert(ret.completed());
-          ret.destroy();
-        }
+        this->set_outputs_tls_ptr(old_output_tls_ptr);
+        return process_return(std::move(ret));
       }
-      this->set_outputs_tls_ptr(old_output_tls_ptr);
     }
   }
 
@@ -260,54 +289,55 @@ class CallableWrapTTArgs
   template <typename Key, typename ArgsTuple>
   std::enable_if_t<std::is_same_v<ArgsTuple, input_refs_tuple_type> &&
                        !ttg::meta::is_empty_tuple_v<input_refs_tuple_type> && !ttg::meta::is_void_v<Key>,
-                   void>
+                   op_return_type>
   op(Key &&key, ArgsTuple &&args_tuple, output_terminalsT &out) {
     assert(&out == &baseT::get_output_terminals());
-    call_func(std::forward<Key>(key), std::forward<ArgsTuple>(args_tuple), out,
-              std::make_index_sequence<std::tuple_size_v<ArgsTuple>>{});
+    return call_func(std::forward<Key>(key), std::forward<ArgsTuple>(args_tuple), out,
+                     std::make_index_sequence<std::tuple_size_v<ArgsTuple>>{});
   };
 
   template <typename ArgsTuple, typename Key = keyT>
   std::enable_if_t<std::is_same_v<ArgsTuple, input_refs_tuple_type> &&
                        !ttg::meta::is_empty_tuple_v<input_refs_tuple_type> && ttg::meta::is_void_v<Key>,
-                   void>
+                   op_return_type>
   op(ArgsTuple &&args_tuple, output_terminalsT &out) {
     assert(&out == &baseT::get_output_terminals());
-    call_func(std::forward<ArgsTuple>(args_tuple), out, std::make_index_sequence<std::tuple_size_v<ArgsTuple>>{});
+    return call_func(std::forward<ArgsTuple>(args_tuple), out,
+                     std::make_index_sequence<std::tuple_size_v<ArgsTuple>>{});
   };
 
   template <typename Key, typename ArgsTuple = input_refs_tuple_type>
-  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && !ttg::meta::is_void_v<Key>, void> op(
+  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && !ttg::meta::is_void_v<Key>, op_return_type> op(
       Key &&key, output_terminalsT &out) {
     assert(&out == &baseT::get_output_terminals());
-    call_func(std::forward<Key>(key), out);
+    return call_func(std::forward<Key>(key), out);
   };
 
   template <typename Key = keyT, typename ArgsTuple = input_refs_tuple_type>
-  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && ttg::meta::is_void_v<Key>, void> op(
+  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && ttg::meta::is_void_v<Key>, op_return_type> op(
       output_terminalsT &out) {
     assert(&out == &baseT::get_output_terminals());
-    call_func(out);
+    return call_func(out);
   };
 };
 
-template <typename funcT, bool funcT_receives_outterm_tuple, typename keyT, typename output_terminalsT,
-          typename input_values_typelistT>
+template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, typename keyT,
+          typename output_terminalsT, typename input_values_typelistT>
 struct CallableWrapTTArgsAsTypelist;
 
-template <typename funcT, bool funcT_receives_outterm_tuple, typename keyT, typename output_terminalsT,
-          typename... input_valuesT>
-struct CallableWrapTTArgsAsTypelist<funcT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
+template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, typename keyT,
+          typename output_terminalsT, typename... input_valuesT>
+struct CallableWrapTTArgsAsTypelist<funcT, returnT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
                                     std::tuple<input_valuesT...>> {
-  using type = CallableWrapTTArgs<funcT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
+  using type = CallableWrapTTArgs<funcT, returnT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
                                   std::remove_reference_t<input_valuesT>...>;
 };
 
-template <typename funcT, bool funcT_receives_outterm_tuple, typename keyT, typename output_terminalsT,
-          typename... input_valuesT>
-struct CallableWrapTTArgsAsTypelist<funcT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
+template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, typename keyT,
+          typename output_terminalsT, typename... input_valuesT>
+struct CallableWrapTTArgsAsTypelist<funcT, returnT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
                                     ttg::meta::typelist<input_valuesT...>> {
-  using type = CallableWrapTTArgs<funcT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
+  using type = CallableWrapTTArgs<funcT, returnT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
                                   std::remove_reference_t<input_valuesT>...>;
 };
 
@@ -536,8 +566,8 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   using decayed_input_args_t = ttg::meta::decayed_typelist_t<input_args_t>;
   // 3. full_input_args_t = edge-types with non-void types replaced by input_args_t
   using full_input_args_t = ttg::meta::replace_nonvoid_t<input_edge_value_types, input_args_t>;
-  using wrapT = typename CallableWrapTTArgsAsTypelist<funcT, have_outterm_tuple, keyT, output_terminals_type,
-                                                      full_input_args_t>::type;
+  using wrapT = typename CallableWrapTTArgsAsTypelist<funcT, func_return_t, have_outterm_tuple, keyT,
+                                                      output_terminals_type, full_input_args_t>::type;
 
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }

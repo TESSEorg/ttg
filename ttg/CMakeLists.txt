@@ -76,6 +76,7 @@ set(ttg-sources
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/env.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
     )
+
 # extract git metadata
 include(GetGitMetadata)
 vgkit_cmake_git_metadata()
@@ -83,11 +84,7 @@ vgkit_cmake_git_metadata()
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
         PROPERTIES
         COMPILE_DEFINITIONS "TTG_GIT_REVISION=\"${TTG_GIT_REVISION}\";TTG_GIT_DESCRIPTION=\"${TTG_GIT_DESCRIPTION}\"")
-set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers})
-if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
-  list(APPEND ttg-sources ${ttg-external-headers})
-  list(APPEND ttg-public-headers ${ttg-external-headers})
-endif()
+
 # optional dependencies
 if (TARGET Boost::boost)
   list(APPEND ttg-deps Boost::boost)
@@ -100,6 +97,19 @@ endif(TARGET TTG_Libunwind)
 if (TTG_ENABLE_TRACE)
   list(APPEND ttg-defs "TTG_ENABLE_TRACE=1")
 endif (TTG_ENABLE_TRACE)
+if (TARGET std::coroutine)
+  list(APPEND ttg-deps std::coroutine)
+  list(APPEND ttg-defs "TTG_HAS_COROUTINE=1")
+  list(APPEND ttg-util-headers
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/coroutine.h
+          )
+endif ()
+
+set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers})
+if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
+  list(APPEND ttg-sources ${ttg-external-headers})
+  list(APPEND ttg-public-headers ${ttg-external-headers})
+endif()
 
 add_ttg_library(ttg "${ttg-sources}" PUBLIC_HEADER "${ttg-public-headers}" LINK_LIBRARIES "${ttg-deps}" INCLUDE_DIRECTORIES "${ttg-incs}" COMPILE_DEFINITIONS "${ttg-defs}")
 
