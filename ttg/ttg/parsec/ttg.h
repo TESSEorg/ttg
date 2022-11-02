@@ -28,6 +28,9 @@
 #include "ttg/util/print.h"
 #include "ttg/util/trace.h"
 #include "ttg/util/typelist.h"
+#ifdef TTG_HAS_COROUTINE
+# include "ttg/util/coroutine.h"
+#endif
 
 #include "ttg/serialization/data_descriptor.h"
 

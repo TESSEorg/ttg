@@ -50,6 +50,11 @@ namespace ttg {
   /// encapsulates the state of the coroutine object visible to the outside world
   /// @note this is the `promise_type` for resumable_task coroutine
   struct resumable_task_state {
+    resumable_task_state() noexcept = default;
+    // noncopyiable
+    resumable_task_state(const resumable_task_state&) = delete;
+    resumable_task_state& operator=(const resumable_task_state&) = delete;
+
     constexpr static inline std::size_t MaxNumEvents = 20;
     using handle_type = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<resumable_task_state>;
 

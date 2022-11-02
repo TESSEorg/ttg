@@ -1,3 +1,4 @@
+// clang-format off
 #ifndef TTG_MAKE_DEVICE_TT_H
 #define TTG_MAKE_DEVICE_TT_H
 
@@ -161,7 +162,7 @@ namespace detail {
       detail::invoke_out_with_unpacked_views(out_func, key, views, std::make_index_sequence<view_tuple_size>());
     };
 
-  using wrapT = typename CallableWrapTTArgsAsTypelist<decltype(taskfn), have_outterm_tuple, keyT, output_terminals_type,
+  using wrapT = typename CallableWrapTTArgsAsTypelist<decltype(taskfn), void, have_outterm_tuple, keyT, output_terminals_type,
                                                       ttg::typelist<Args...>>::type;
 
   return std::make_unique<wrapT>(std::move(taskfn), inedges, outedges, name, innames, outnames);
@@ -276,3 +277,5 @@ auto make_device_tt(HostFuncT &&host_func,
 }
 #endif // 0
 #endif // TTG_MAKE_DEVICE_TT_H
+
+// clang-format on
