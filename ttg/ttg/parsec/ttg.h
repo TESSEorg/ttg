@@ -591,6 +591,7 @@ namespace ttg_parsec {
       TT* tt;
       key_type key;
       size_goal_t stream[num_streams] = {};
+      void* suspended_task_state = nullptr;  // if not null the function already started
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
           : parsec_ttg_task_base_t(mempool, task_class, num_streams) {
@@ -637,6 +638,7 @@ namespace ttg_parsec {
       static constexpr size_t num_streams = TT::numins;
       TT* tt;
       size_goal_t stream[num_streams] = {};
+      void* suspended_task_state = nullptr;  // if not null the function already started
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
           : parsec_ttg_task_base_t(mempool, task_class, num_streams) {
@@ -1214,6 +1216,7 @@ namespace ttg_parsec {
     /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
     /// @return void*; if called a synchronous function or a coroutine that completed will return nullptr,
     ///         else points to the state (promise) of the suspended coroutine
+    /// @internal the only reason to return dummy nullptr is to reduce the code duplication in the caller (static_op)
     template <ttg::ExecutionSpace Space, typename... Args>
     void* op(Args &&...args) {
       derivedT *derived = static_cast<derivedT *>(this);
@@ -1285,38 +1288,62 @@ namespace ttg_parsec {
     template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t static_op(parsec_task_t *parsec_task) {
       task_t *task = (task_t*)parsec_task;
-      ttT *baseobj = task->tt;
-      derivedT *obj = static_cast<derivedT *>(baseobj);
-      assert(parsec_ttg_caller == NULL);
-      parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
-      if (obj->tracing()) {
-        if constexpr (!ttg::meta::is_void_v<keyT>)
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": executing");
-        else
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : executing");
-      }
+      void* suspended_task_state = task->suspended_task_state;  // if non-null, must resubmit the task
+      if (suspended_task_state == nullptr) {  // task has not started
+        ttT *baseobj = task->tt;
+        derivedT *obj = static_cast<derivedT *>(baseobj);
+        assert(parsec_ttg_caller == NULL);
+        parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
+        if (obj->tracing()) {
+          if constexpr (!ttg::meta::is_void_v<keyT>)
+            ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": executing");
+          else
+            ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : executing");
+        }
 
-      void* suspended_task_state = nullptr;  // if non-null, must resubmit the task
-      if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-        auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
-        suspended_task_state = baseobj->template op<Space>(task->key, std::move(input), obj->output_terminals);
-      } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-        suspended_task_state = baseobj->template op<Space>(task->key, obj->output_terminals);
-      } else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-        auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
-        suspended_task_state = baseobj->template op<Space>(std::move(input), obj->output_terminals);
-      } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-        suspended_task_state = baseobj->template op<Space>(obj->output_terminals);
-      } else {
-        abort();
+        if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+          auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
+          suspended_task_state = baseobj->template op<Space>(task->key, std::move(input), obj->output_terminals);
+        } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+          suspended_task_state = baseobj->template op<Space>(task->key, obj->output_terminals);
+        } else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+          auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
+          suspended_task_state = baseobj->template op<Space>(std::move(input), obj->output_terminals);
+        } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+          suspended_task_state = baseobj->template op<Space>(obj->output_terminals);
+        } else {
+          abort();
+        }
+        parsec_ttg_caller = NULL;
       }
-      parsec_ttg_caller = NULL;
+      else {
+#ifdef TTG_HAS_COROUTINE
+        auto* coro_state = static_cast<ttg::resumable_task_state*>(suspended_task_state);
+        auto ret = coro_state->get_return_object();
+        assert(ret.ready());
+        ret.resume();
+        if (ret.completed()) {
+          ret.destroy();
+          suspended_task_state = nullptr;
+        }
+        else { // not yet completed
+          // leave suspended_task_state as is
+        }
+#else
+        abort();  // should not happen
+#endif
+      }
+      task->suspended_task_state = suspended_task_state;
 
-      if (obj->tracing()) {
-        if constexpr (!ttg::meta::is_void_v<keyT>)
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": done executing");
-        else
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
+      if (suspended_task_state == nullptr) {
+        ttT *baseobj = task->tt;
+        derivedT *obj = static_cast<derivedT *>(baseobj);
+        if (obj->tracing()) {
+          if constexpr (!ttg::meta::is_void_v<keyT>)
+            ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": done executing");
+          else
+            ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
+        }
       }
 
       // if op is coro-based this will be something else
