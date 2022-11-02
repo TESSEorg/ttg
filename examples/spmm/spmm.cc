@@ -1263,8 +1263,8 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
                               const std::vector<std::vector<long>> &a_colidx_to_rowidx,
                               const std::vector<std::vector<long>> &b_rowidx_to_colidx,
                               const std::vector<std::vector<long>> &b_colidx_to_rowidx, std::vector<int> &mTiles,
-                              std::vector<int> &nTiles, std::vector<int> &kTiles, int M, int N, int K, int P, int Q,
-                              int R) {
+                              std::vector<int> &nTiles, std::vector<int> &kTiles, int M, int N, int K, int minTs,
+                              int maxTs, int P, int Q,int R) {
   int MT = (int)A.rows();
   int NT = (int)B.cols();
   int KT = (int)A.cols();
@@ -1313,8 +1313,8 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   std::string rt("Unkown???");
 #endif
   if (ttg::default_execution_context().rank() == 0) {
-    std::cout << "TTG-" << rt << " PxQxg=   " << P << " " << Q << " 1 average_NB= " << avg_nb << " M= " << M
-              << " N= " << N << " K= " << K << " Tiling= " << tiling_type << " A_density= " << Adensity
+    std::cout << "TTG-" << rt << " PxQxR=   " << P << " " << Q <<" "<< R <<" 1 average_NB= " << avg_nb << " M= " << M
+              << " N= " << N << " K= "<< K << " t= " << minTs << " T=" << maxTs  << " Tiling= " << tiling_type << " A_density= " << Adensity
               << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
               << " gflops/s= " << gflops / tc << std::endl;
   }
@@ -1424,6 +1424,7 @@ int main(int argc, char **argv) {
       SpMatrix<> A, B, C, Aref, Bref;
       std::string tiling_type;
       int M = 0, N = 0, K = 0;
+      int minTs = 0, maxTs = 0;
 
       double avg_nb = nan("undefined");
       double Adensity = nan("undefined");
@@ -1526,9 +1527,9 @@ int main(int argc, char **argv) {
         std::string Kstr(getCmdOption(argv, argv + argc, "-K"));
         K = parseOption(Kstr, 1200);
         std::string minTsStr(getCmdOption(argv, argv + argc, "-t"));
-        int minTs = parseOption(minTsStr, 32);
+        minTs = parseOption(minTsStr, 32);
         std::string maxTsStr(getCmdOption(argv, argv + argc, "-T"));
-        int maxTs = parseOption(maxTsStr, 256);
+        maxTs = parseOption(maxTsStr, 256);
         std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
         double avg = parseOption(avgStr, 0.3);
         timing = (check == 0);
@@ -1556,7 +1557,7 @@ int main(int argc, char **argv) {
         for (int nrun = 0; nrun < nb_runs; nrun++) {
           timed_measurement(A, B, ij_keymap, ijk_keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity,
                             a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles,
-                            nTiles, kTiles, M, N, K, P, Q, R);
+                            nTiles, kTiles, M, N, K, minTs, maxTs, P, Q, R);
         }
       } else {
         // flow graph needs to exist on every node
