@@ -490,7 +490,10 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
 
   // gross argument typelist for invoking func, can include void for optional args
   constexpr static auto func_is_generic = ttg::meta::is_generic_callable_v<funcT>;
-  using gross_func_args_t = decltype(ttg::meta::compute_arg_binding_types_r<void>(func, candidate_func_args_t{}));
+  using return_type_typelist_and_gross_func_args_t =
+      decltype(ttg::meta::compute_arg_binding_types(func, candidate_func_args_t{}));
+  using func_return_t = std::tuple_element_t<0, std::tuple_element_t<0, return_type_typelist_and_gross_func_args_t>>;
+  using gross_func_args_t = std::tuple_element_t<1, return_type_typelist_and_gross_func_args_t>;
   constexpr auto DETECTED_HOW_TO_INVOKE_GENERIC_FUNC =
       func_is_generic ? !std::is_same_v<gross_func_args_t, ttg::typelist<>> : true;
   static_assert(DETECTED_HOW_TO_INVOKE_GENERIC_FUNC,
