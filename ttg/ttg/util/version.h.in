@@ -1,0 +1,42 @@
+
+#ifndef TTG_UTIL_VERSION_H
+#define TTG_UTIL_VERSION_H
+
+/** TTG version X.Y.Z */
+#define TTG_VERSION "@TTG_VERSION@"
+
+/** TTG version X.Y.Z-id */
+#define TTG_EXT_VERSION "@TTG_EXT_VERSION@"
+
+/** TTG major version */
+#define TTG_MAJOR_VERSION @TTG_MAJOR_VERSION@
+
+/** TTG minor version */
+#define TTG_MINOR_VERSION @TTG_MINOR_VERSION@
+
+/** TTG micro version */
+#define TTG_MICRO_VERSION @TTG_MICRO_VERSION@
+
+/** TTG prerelease id */
+#define TTG_PRERELEASE_ID "@TTG_PRERELEASE_ID@"
+
+#include <array>
+
+namespace ttg {
+
+  /** \return `{TTG_MAJOR_VERSION, TTG_MINOR_VERSION, TTG_MICRO_VERSION}` */
+  std::array<int,3> version();
+
+  /** \return a string with the Git SHA1 revision hash tag of TTG */
+  const char* git_revision() noexcept;
+
+  /**
+   * \return a string with the human-readable description of the current source
+   *   tree of TTG
+   * \note see `git describe --dirty` for the format description
+   */
+  const char* git_description() noexcept;
+
+}
+
+#endif // TTG_UTIL_VERSION_H

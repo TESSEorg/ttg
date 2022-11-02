@@ -3,10 +3,10 @@ cmake_minimum_required (VERSION 3.14) # supports FetchContent_MakeAvailable
 # Set TTG version =======================================================
 
 # see https://semver.org/
-set(TTG_MAJOR_VERSION 0)
-set(TTG_MINOR_VERSION 1)
+set(TTG_MAJOR_VERSION 1)
+set(TTG_MINOR_VERSION 0)
 set(TTG_MICRO_VERSION 0)
-set(TTG_PRERELEASE_ID )
+set(TTG_PRERELEASE_ID alpha)
 
 set(TTG_VERSION "${TTG_MAJOR_VERSION}.${TTG_MINOR_VERSION}.${TTG_MICRO_VERSION}")
 if (TTG_PRERELEASE_ID)
@@ -15,10 +15,17 @@ else(TTG_PRERELEASE_ID)
   set(TTG_EXT_VERSION "${TTG_VERSION}")
 endif(TTG_PRERELEASE_ID)
 
+# CMake defaults to address key pain points =========================
+
+# safety net for dev workflow: accidental install will not affect FindOrFetch*
+if (NOT DEFINED CACHE{CMAKE_FIND_NO_INSTALL_PREFIX})
+    set(CMAKE_FIND_NO_INSTALL_PREFIX ON CACHE BOOL "Whether find_* commands will search CMAKE_INSTALL_PREFIX and CMAKE_STAGING_PREFIX; see https://cmake.org/cmake/help/latest/variable/CMAKE_FIND_NO_INSTALL_PREFIX.html#variable:CMAKE_FIND_NO_INSTALL_PREFIX")
+endif()
+
 # Declare TTG =======================================================
 project(ttg
     VERSION ${TTG_VERSION}
-    DESCRIPTION "Template Task Graph: flowgraph programming model"
+    DESCRIPTION "Template Task Graph: flowgraph programming model for distributed-memory computing"
     LANGUAGES CXX
     HOMEPAGE_URL "https://tesseorg.github.io/ttg/")
 
@@ -105,8 +112,6 @@ if (TTG_EXAMPLES)
     find_package(OpenMP COMPONENTS CXX)
     # std::execution may also be used by some examples
     find_package(CXXStdExecution)
-    # to compare against potrf
-    include(FindDPLASMA)
 endif (TTG_EXAMPLES)
 
 

@@ -150,9 +150,20 @@ namespace ttg::meta {
   template <typename T>
   struct candidate_argument_bindings<T, std::enable_if_t<!std::is_reference_v<T> && !std::is_void_v<T>>> {
     using type = std::conditional_t<std::is_const_v<T>, typelist<const T&>,
-                                    typelist<T&&, const T&,
-                                             // check for T& to be able to detect (erroneous) passing non-const lvalue&
-                                             T&>>;
+                                    typelist<
+                                        // RATIONALE for this order of binding detection tries:
+                                        // - to be able to distinguish arguments declared as auto& vs auto&& should try
+                                        //   binding to T&& first since auto& won't bind to it
+                                        // - HOWEVER argument declared as const T& will bind to either T&& or const T&,
+                                        //   so this order will detect such argument as binding to T&&, which will
+                                        //   indicate to the runtime that the argument is CONSUMABLE and may cause
+                                        //   creation of extra copies. Thus you should not try to use nongeneric
+                                        //   data arguments in generic task functions; for purely nongeneric functions
+                                        //   a different introspection mechanism (Boost.CallableTraits) is used
+                                        T&&, const T&
+                                        // - no need to check T& since auto& and auto&& both bind to it
+                                        //, T&
+                                        >>;
   };
 
   template <>
