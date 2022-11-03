@@ -1349,16 +1349,24 @@ namespace ttg_parsec {
         }
       }
 
-      // TODO PARSEC_HOOK_RETURN_AGAIN -> PARSEC_HOOK_RETURN_ASYNC when event tracking and task resumption (by this thread) is ready
-      // right now can events are not properly implemented, we are only testing the workflow with dummy events
-      // so mark the events finished manually, parsec will rerun this task again and it should complete the second time
       if (suspended_task_state) {
+        // right now can events are not properly implemented, we are only testing the workflow with dummy events
+        // so mark the events finished manually, parsec will rerun this task again and it should complete the second time
         auto events = static_cast<ttg::resumable_task_state*>(suspended_task_state)->events();
         for (auto &event_ptr : events) {
           event_ptr->finish();
         }
+
+        // TODO: shove {ptr to parsec_task, ptr to this function} to the list of tasks suspended by this thread (hence stored in TLS)
+        // thread will loop over its list (after running every task? periodically? need a dedicated queue of ready tasks?)
+        // and resume the suspended tasks whose events are ready (N.B. ptr to parsec_task is enough to get the list of pending events)
+        // event clearance will in device case handled by host callbacks run by the dedicated device runtime thread
+
+        // TODO PARSEC_HOOK_RETURN_AGAIN -> PARSEC_HOOK_RETURN_ASYNC when event tracking and task resumption (by this thread) is ready
+        return PARSEC_HOOK_RETURN_AGAIN;
       }
-      return suspended_task_state ? PARSEC_HOOK_RETURN_AGAIN : PARSEC_HOOK_RETURN_DONE;
+      else
+        return PARSEC_HOOK_RETURN_DONE;
     }
 
     template <ttg::ExecutionSpace Space>
