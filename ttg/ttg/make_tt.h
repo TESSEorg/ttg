@@ -162,22 +162,11 @@ class CallableWrapTTArgs
 #ifdef TTG_HAS_COROUTINE
         if constexpr (std::is_same_v<returnT, ttg::resumable_task>) {
           ttg::resumable_task_state *result_value = nullptr;
+          // if task completed destroy it
           if (ret.completed()) {
             ret.destroy();
-          } else {
-            // in general will return the coroutine promise ptr
+          } else {  // if task is suspended return the coroutine promise ptr
             result_value = &ret.promise();
-            // BUT ... now just mark events finished
-            auto events = ret.events();
-            for (auto &event_ptr : events) {
-              event_ptr->finish();
-            }
-            // in general will resume somewhere else ... in our test this proceeds to the end
-            assert(ret.ready());
-            ret.resume();
-            assert(ret.completed());
-            ret.destroy();
-            result_value = nullptr;
           }
           return result_value;
         } else
