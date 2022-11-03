@@ -1288,7 +1288,8 @@ namespace ttg_parsec {
     template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t static_op(parsec_task_t *parsec_task) {
       task_t *task = (task_t*)parsec_task;
-      void* suspended_task_state = task->suspended_task_state;  // if non-null, must resubmit the task
+
+      void* suspended_task_state = task->suspended_task_state;  // non-null = need to resume the task
       if (suspended_task_state == nullptr) {  // task has not started
         ttT *baseobj = task->tt;
         derivedT *obj = static_cast<derivedT *>(baseobj);
@@ -1346,10 +1347,16 @@ namespace ttg_parsec {
         }
       }
 
-      // if op is coro-based this will be something else
-      // for now cannot handle suspended tasks
-      if (suspended_task_state) std::abort();
-      return PARSEC_HOOK_RETURN_DONE;
+      // TODO PARSEC_HOOK_RETURN_AGAIN -> PARSEC_HOOK_RETURN_ASYNC when event tracking and task resumption (by this thread) is ready
+      // right now can events are not properly implemented, we are only testing the workflow with dummy events
+      // so mark the events finished manually, parsec will rerun this task again and it should complete the second time
+      if (suspended_task_state) {
+        auto events = static_cast<ttg::resumable_task_state*>(suspended_task_state)->events();
+        for (auto &event_ptr : events) {
+          event_ptr->finish();
+        }
+      }
+      return suspended_task_state ? PARSEC_HOOK_RETURN_AGAIN : PARSEC_HOOK_RETURN_DONE;
     }
 
     template <ttg::ExecutionSpace Space>
