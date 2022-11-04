@@ -183,7 +183,7 @@ namespace ttg {
     }                                                \
   }
 #else
-#define TTG_PROCESS_OP_RETURN(result, invoke) invoke
+#define TTG_PROCESS_TT_OP_RETURN(result, invoke) invoke
 #endif
 #endif  // !defined(TTG_PROCESS_TT_OP_RETURN)
 
