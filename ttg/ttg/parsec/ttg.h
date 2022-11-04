@@ -1338,11 +1338,11 @@ namespace ttg_parsec {
         else { // not yet completed
           // leave suspended_task_address as is
         }
+        task->suspended_task_address = suspended_task_address;
 #else
         abort();  // should not happen
 #endif
       }
-      task->suspended_task_address = suspended_task_address;
 
       if (suspended_task_address == nullptr) {
         ttT *baseobj = task->tt;

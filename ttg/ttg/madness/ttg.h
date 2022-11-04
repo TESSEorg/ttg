@@ -343,11 +343,11 @@ namespace ttg_madness {
           } else {  // not yet completed
             // leave suspended_task_address as is
           }
+          this->suspended_task_address = suspended_task_address;
 #else
           abort();  // should not happen
 #endif
         }
-        this->suspended_task_address = suspended_task_address;
 
         ttT::threaddata.call_depth--;
 
