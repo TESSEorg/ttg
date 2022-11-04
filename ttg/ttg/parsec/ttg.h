@@ -1328,7 +1328,7 @@ namespace ttg_parsec {
         }
         parsec_ttg_caller = NULL;
       }
-      else {
+      else {  // resume the suspended coroutine
 #ifdef TTG_HAS_COROUTINE
         auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<>::from_address(suspended_task_address));
         assert(ret.ready());
@@ -1357,6 +1357,7 @@ namespace ttg_parsec {
         }
       }
 
+#ifdef TTG_HAS_COROUTINE
       if (suspended_task_address) {
         // right now can events are not properly implemented, we are only testing the workflow with dummy events
         // so mark the events finished manually, parsec will rerun this task again and it should complete the second time
@@ -1375,6 +1376,7 @@ namespace ttg_parsec {
         return PARSEC_HOOK_RETURN_AGAIN;
       }
       else
+#endif  // TTG_HAS_COROUTINE
         return PARSEC_HOOK_RETURN_DONE;
     }
 
