@@ -29,7 +29,7 @@ project(ttg
     LANGUAGES CXX
     HOMEPAGE_URL "https://tesseorg.github.io/ttg/")
 
-if (NOT CMAKE_CXX_STANDARD)
+if (NOT DEFINED CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_STANDARD "17" CACHE STRING "The C++ standard")
 endif()
 if (NOT CMAKE_CXX_EXTENSIONS)
