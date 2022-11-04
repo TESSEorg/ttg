@@ -145,12 +145,12 @@ class CallableWrapTTArgs
 
   using op_return_type =
 #ifdef TTG_HAS_COROUTINE
-      std::conditional_t<std::is_same_v<returnT, ttg::resumable_task>, ttg::resumable_task_state *, void>;
+      std::conditional_t<std::is_same_v<returnT, ttg::resumable_task>, ttg::coroutine_handle<>, void>;
 #else   // TTG_HAS_COROUTINE
       void;
 #endif  // TTG_HAS_COROUTINE
 
-  /// @return pointer to the coroutine state (promise) if funcT is a coroutine and it did not complete, else void
+  /// @return coroutine handle<> (if funcT is a coroutine), else void
   template <typename Key, typename Tuple, std::size_t... S>
   auto call_func(Key &&key, Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
     using func_args_t = ttg::meta::tuple_concat_t<std::tuple<const Key &>, input_refs_tuple_type, output_edges_type>;
@@ -161,14 +161,14 @@ class CallableWrapTTArgs
       if constexpr (!std::is_void_v<returnT>) {  // protect from compiling for void returnT
 #ifdef TTG_HAS_COROUTINE
         if constexpr (std::is_same_v<returnT, ttg::resumable_task>) {
-          ttg::resumable_task_state *result_value = nullptr;
+          ttg::coroutine_handle<> coro_handle;
           // if task completed destroy it
           if (ret.completed()) {
             ret.destroy();
           } else {  // if task is suspended return the coroutine promise ptr
-            result_value = &ret.promise();
+            coro_handle = ret;
           }
-          return result_value;
+          return coro_handle;
         } else
 #endif
         {

@@ -15,6 +15,10 @@ namespace ttg {
 
   struct resumable_task_state;
 
+  // import coroutine_handle, with default promise redefined to resumable_task_state
+  template <typename Promise = resumable_task_state>
+  using coroutine_handle = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<Promise>;
+
   template <std::size_t N>
   struct resumable_task_events;
 
@@ -30,10 +34,17 @@ namespace ttg {
   };
 
   /// task that can be resumed after some events occur
-  struct resumable_task : TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<resumable_task_state> {
-    using base_type = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<resumable_task_state>;
+  struct resumable_task : public ttg::coroutine_handle<> {
+    using base_type = ttg::coroutine_handle<>;
+
+    /// these are members mandated by the promise_type concept
+    ///@{
 
     using promise_type = struct resumable_task_state;
+
+    ///@}
+
+    resumable_task(base_type base) : base_type(std::move(base)) {}
 
     base_type handle() { return *this; }
 
@@ -58,7 +69,10 @@ namespace ttg {
     resumable_task_state& operator=(resumable_task_state&&) = delete;
 
     constexpr static inline std::size_t MaxNumEvents = 20;
-    using handle_type = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<resumable_task_state>;
+    using handle_type = coroutine_handle<>;
+
+    /// these are members mandated by the promise_type concept
+    ///@{
 
     resumable_task get_return_object() { return resumable_task{handle_type::from_promise(*this)}; }
 
@@ -72,6 +86,26 @@ namespace ttg {
     }
     void return_void() {}
     void unhandled_exception() {}
+
+    ///@}
+
+    /// these are optional members of the promise_type concept
+    ///@{
+
+    // these can be used to use optional storage provided by the runtime (e.g. part of the runtime's task data struct)
+    // N.B. the existing buffer must be passed to operator new via TLS
+    //    void* operator new(std::size_t size)
+    //    {
+    //      return ::operator new(size);
+    //    }
+
+    // N.B. whether the external buffer was used by operator new must be passed via TLS
+    //    void operator delete(void* ptr, std::size_t size)
+    //    {
+    //      ::operator delete(ptr, size);
+    //    }
+
+    ///@}
 
     /// @return true if ready to resume
     constexpr bool ready() const {
@@ -111,7 +145,9 @@ namespace ttg {
   ttg::span<event*> resumable_task::events() { return base_type::promise().events(); }
 
   /// statically-sized sequence of events on whose completion progress of a given task depends on
-  /// @note this is the `Awaitable` for resumable_task coroutine
+  /// @note this is the `Awaiter` for resumable_task coroutine
+  ///       (the concept is not defined in the standard, see
+  ///       https://lewissbaker.github.io/2017/11/17/understanding-operator-co-await instead )
   template <std::size_t N>
   struct resumable_task_events {
    private:
@@ -124,9 +160,12 @@ namespace ttg {
     template <typename... Events>
     constexpr resumable_task_events(Events&&... events) : events_{(&events)...} {}
 
+    /// these are members mandated by the Awaiter concept
+    ///@{
+
     constexpr bool await_ready() const { return await_ready(std::make_index_sequence<N>{}); }
 
-    void await_suspend(TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<resumable_task_state> pending_task) {
+    void await_suspend(coroutine_handle<> pending_task) {
       pending_task_ = pending_task;
       pending_task_.promise().set_events(events_);
     }
@@ -138,9 +177,11 @@ namespace ttg {
       }
     }
 
+    ///@}
+
    private:
     std::array<event*, N> events_;
-    TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<resumable_task_state> pending_task_;
+    coroutine_handle<> pending_task_;
   };  // resumable_task_events
 
   // deduce the number of events properly

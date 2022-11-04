@@ -1,15 +1,23 @@
 #ifndef TTG_TT_H
 #define TTG_TT_H
 
-#include <vector>
 #include <memory>
+#include <vector>
 
 #include "ttg/fwd.h"
 
 #include "ttg/base/tt.h"
 #include "ttg/edge.h"
 
+#ifdef TTG_HAS_COROUTINE
+#include "ttg/util/coroutine.h"
+#endif
+
 namespace ttg {
+
+  // TODO describe TT concept (preferably as a C++20 concept)
+  // N.B. TT::op returns void or ttg::coroutine_handle<>
+  // see TTG_PROCESS_TT_OP_RETURN below
 
   /// @brief a template task graph implementation
 
@@ -35,12 +43,16 @@ namespace ttg {
     TTG(const TTG &) = delete;
     TTG &operator=(const TTG &) = delete;
     // movable
-    TTG(TTG && other) : TTBase(static_cast<TTBase&&>(other)), tts(other.tts), ins(std::move(other.ins)), outs(std::move(other.outs)) {
-        is_ttg_ = true;
-        own_my_tts();
+    TTG(TTG &&other)
+        : TTBase(static_cast<TTBase &&>(other))
+        , tts(other.tts)
+        , ins(std::move(other.ins))
+        , outs(std::move(other.outs)) {
+      is_ttg_ = true;
+      own_my_tts();
     }
-    TTG& operator=(TTG &&other) {
-      static_cast<TTBase&>(*this) = static_cast<TTBase&&>(other);
+    TTG &operator=(TTG &&other) {
+      static_cast<TTBase &>(*this) = static_cast<TTBase &&>(other);
       is_ttg_ = true;
       tts = std::move(other.tts);
       ins = std::move(other.ins);
@@ -91,16 +103,13 @@ namespace ttg {
     void own_my_tts() const {
       for (auto &op : tts) op->owning_ttg = this;
     }
-
   };
 
   template <typename ttseqT, typename input_terminalsT, typename output_terminalsT>
-  auto make_ttg(ttseqT &&tts, const input_terminalsT &ins,
-                const output_terminalsT &outs,
+  auto make_ttg(ttseqT &&tts, const input_terminalsT &ins, const output_terminalsT &outs,
                 const std::string &name = "ttg") {
     return std::make_unique<TTG<input_terminalsT, output_terminalsT>>(std::forward<ttseqT>(tts), ins, outs, name);
   }
-
 
   /// A data sink for one input
   template <typename keyT, typename input_valueT>
@@ -126,20 +135,20 @@ namespace ttg {
       using valueT = std::decay_t<typename terminalT::value_type>;
       auto move_callback = [](const keyT &key, valueT &&value) {};
       auto send_callback = [](const keyT &key, const valueT &value) {};
-      auto broadcast_callback = [](const ttg::span<const keyT>& key, const valueT &value) {};
+      auto broadcast_callback = [](const ttg::span<const keyT> &key, const valueT &value) {};
       auto setsize_callback = [](const keyT &key, std::size_t size) {};
       auto finalize_callback = [](const keyT &key) {};
 
       input.set_callback(send_callback, move_callback, broadcast_callback, setsize_callback, finalize_callback);
     }
 
-  public:
-   SinkTT(const std::string& inname="junk") : TTBase("sink", numins, numouts) {
+   public:
+    SinkTT(const std::string &inname = "junk") : TTBase("sink", numins, numouts) {
       register_input_terminals(input_terminals, std::vector<std::string>{inname});
       register_input_callback(std::get<0>(input_terminals));
     }
 
-    SinkTT(const input_edges_type &inedges, const std::string& inname="junk") : TTBase("sink", numins, numouts) {
+    SinkTT(const input_edges_type &inedges, const std::string &inname = "junk") : TTBase("sink", numins, numouts) {
       register_input_terminals(input_terminals, std::vector<std::string>{inname});
       register_input_callback(std::get<0>(input_terminals));
       std::get<0>(inedges).set_out(&std::get<0>(input_terminals));
@@ -154,12 +163,28 @@ namespace ttg {
     /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned
     template <std::size_t i>
     std::tuple_element_t<i, input_terminals_type> *in() {
-      static_assert(i==0);
+      static_assert(i == 0);
       return &std::get<i>(input_terminals);
     }
   };
 
+}  // namespace ttg
 
-} // namespace ttg
+#ifndef TTG_PROCESS_TT_OP_RETURN
+#ifdef TTG_HAS_COROUTINE
+#define TTG_PROCESS_TT_OP_RETURN(result, invoke)     \
+  {                                                  \
+    using return_type = decltype(invoke);            \
+    if constexpr (std::is_same_v<return_type, void>) \
+      invoke;                                        \
+    else {                                           \
+      auto coro_return = invoke;                     \
+      result = coro_return.address();                \
+    }                                                \
+  }
+#else
+#define TTG_PROCESS_OP_RETURN(result, invoke) invoke
+#endif
+#endif  // !defined(TTG_PROCESS_TT_OP_RETURN)
 
-#endif // TTG_TT_H
+#endif  // TTG_TT_H
