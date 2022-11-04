@@ -1379,20 +1379,51 @@ namespace ttg_parsec {
     template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t static_op_noarg(parsec_task_t *parsec_task) {
       task_t *task = static_cast<task_t*>(parsec_task);
-      ttT *baseobj = (ttT *)task->object_ptr;
-      derivedT *obj = (derivedT *)task->object_ptr;
-      assert(parsec_ttg_caller == NULL);
-      parsec_ttg_caller = task;
-      if constexpr (!ttg::meta::is_void_v<keyT>) {
-        baseobj->template op<Space>(task->key, obj->output_terminals);
-      } else if constexpr (ttg::meta::is_void_v<keyT>) {
-        baseobj->template op<Space>(obj->output_terminals);
-      } else
-        abort();
-      parsec_ttg_caller = NULL;
 
-      // if op is coro-based this will be something else
-      return PARSEC_HOOK_RETURN_DONE;
+      void* suspended_task_address =
+#ifdef TTG_HAS_COROUTINE
+        task->suspended_task_address;  // non-null = need to resume the task
+#else
+        nullptr;
+#endif
+      if (suspended_task_address == nullptr) {  // task is a coroutine that has not started or an ordinary function
+        ttT *baseobj = (ttT *)task->object_ptr;
+        derivedT *obj = (derivedT *)task->object_ptr;
+        assert(parsec_ttg_caller == NULL);
+        parsec_ttg_caller = task;
+        if constexpr (!ttg::meta::is_void_v<keyT>) {
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(task->key, obj->output_terminals));
+        } else if constexpr (ttg::meta::is_void_v<keyT>) {
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(obj->output_terminals));
+        } else
+          abort();
+        parsec_ttg_caller = NULL;
+      }
+      else {
+#ifdef TTG_HAS_COROUTINE
+        auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<>::from_address(suspended_task_address));
+        assert(ret.ready());
+        ret.resume();
+        if (ret.completed()) {
+          ret.destroy();
+          suspended_task_address = nullptr;
+        }
+        else { // not yet completed
+          // leave suspended_task_address as is
+        }
+#else
+        abort();  // should not happen
+#endif
+      }
+      task->suspended_task_address = suspended_task_address;
+
+      if (suspended_task_address) {
+        abort();  // not yet implemented
+        // see comments in static_op()
+        return PARSEC_HOOK_RETURN_AGAIN;
+      }
+      else
+        return PARSEC_HOOK_RETURN_DONE;
     }
 
    protected:
