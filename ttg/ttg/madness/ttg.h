@@ -333,8 +333,8 @@ namespace ttg_madness {
                             derived->output_terminals));  // !!! NOTE converting input values to refs
           } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
             TTG_PROCESS_TT_OP_RETURN(suspended_task_address, derived->op(derived->output_terminals));
-          } else
-            abort();
+          } else  // unreachable
+            ttg::abort();
         } else {  // resume suspended coroutine
 #ifdef TTG_HAS_COROUTINE
           auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<>::from_address(suspended_task_address));
@@ -348,7 +348,7 @@ namespace ttg_madness {
           }
           this->suspended_task_address = suspended_task_address;
 #else
-          abort();  // should not happen
+          ttg::abort();  // should not happen
 #endif
         }
 
@@ -380,7 +380,7 @@ namespace ttg_madness {
             ret.destroy();
             suspended_task_address = nullptr;
           } else {  // not yet completed
-            abort();
+            ttg::abort();
           }
         }
 #endif  // TTG_HAS_COROUTINE
@@ -629,7 +629,7 @@ namespace ttg_madness {
             } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
               static_cast<derivedT *>(this)->op(output_terminals);  // Runs immediately
             } else
-              abort();
+              ttg::abort();
             ttT::threaddata.call_depth--;
 
           } else {
@@ -1009,7 +1009,7 @@ namespace ttg_madness {
         auto finalize_callback = [this]() { finalize_argstream<i>(); };
         input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
       } else
-        abort();
+        ttg::abort();
     }
 
     template <std::size_t... IS>
@@ -1135,7 +1135,7 @@ namespace ttg_madness {
           for (std::size_t i = 0; i < numins; i++) std::cerr << (item.second->nargs[i] == 0 ? "T" : "F") << " ";
           std::cerr << ")" << std::endl;
         }
-        abort();
+        ttg::abort();
       }
     }
 

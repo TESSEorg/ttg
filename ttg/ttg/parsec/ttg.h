@@ -1243,7 +1243,7 @@ namespace ttg_parsec {
         }
       }
       else
-        abort();
+        ttg::abort();
     }
 
     template <std::size_t i, typename terminalT, typename Key>
@@ -1324,7 +1324,7 @@ namespace ttg_parsec {
         } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
           TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(obj->output_terminals));
         } else {
-          abort();
+          ttg::abort();
         }
         parsec_ttg_caller = NULL;
       }
@@ -1342,7 +1342,7 @@ namespace ttg_parsec {
         }
         task->suspended_task_address = suspended_task_address;
 #else
-        abort();  // should not happen
+        ttg::abort();  // should not happen
 #endif
       }
 
@@ -1399,8 +1399,8 @@ namespace ttg_parsec {
           TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(task->key, obj->output_terminals));
         } else if constexpr (ttg::meta::is_void_v<keyT>) {
           TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(obj->output_terminals));
-        } else
-          abort();
+        } else  // unreachable
+          ttg:: abort();
         parsec_ttg_caller = NULL;
       }
       else {
@@ -1416,13 +1416,13 @@ namespace ttg_parsec {
           // leave suspended_task_address as is
         }
 #else
-        abort();  // should not happen
+        ttg::abort();  // should not happen
 #endif
       }
       task->suspended_task_address = suspended_task_address;
 
       if (suspended_task_address) {
-        abort();  // not yet implemented
+        ttg::abort();  // not yet implemented
         // see comments in static_op()
         return PARSEC_HOOK_RETURN_AGAIN;
       }
@@ -1473,7 +1473,7 @@ namespace ttg_parsec {
             (obj->*member)(data, size);
           } else {
             // there is no good reason to have negative param ids
-            abort();
+            ttg::abort();
           }
           break;
         }
@@ -1499,7 +1499,7 @@ namespace ttg_parsec {
           break;
         }
         default:
-          abort();
+          ttg::abort();
       }
     }
 
@@ -1680,8 +1680,8 @@ namespace ttg_parsec {
         // case 5 and 6
       } else if constexpr (ttg::meta::is_void_v<keyT> && std::is_void_v<valueT>) {
         set_arg<i, keyT, ttg::Void>(ttg::Void{});
-      } else {
-        abort();
+      } else {  // unreachable
+        ttg:: abort();
       }
     }
 
@@ -2747,7 +2747,7 @@ namespace ttg_parsec {
       // NOTE: subsumed in case 5 above, kept for historical reasons
       //////////////////////////////////////////////////////////////////
       else
-        abort();
+        ttg::abort();
     }
 
     template <std::size_t... IS>
