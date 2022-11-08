@@ -146,7 +146,7 @@ namespace tt_i_iv {
 
   template <typename K, typename D1, typename D2>
   void func0(K &key, D1 &datum1, D2 &&datum2) {
-    abort();
+    ttg::abort();
   }
 }  // namespace tt_i_iv
 
