@@ -128,7 +128,7 @@ jobs:
       working-directory: ${{github.workspace}}/build
       shell: bash
       run: |
-        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/main -B test_install_devsamp -DCMAKE_PREFIX_PATH=${{github.workspace}}/install
+        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/main -B test_install_devsamp -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat test_install_devsamp/CMakeFiles/CMakeOutput.log && cat test_install_devsamp/CMakeFiles/CMakeError.log)
         cmake --build test_install_devsamp
         cmake -E make_directory test_install_userexamples
         cat > test_install_userexamples/CMakeLists.txt <<EOF
@@ -140,7 +140,7 @@ jobs:
         add_ttg_executable(iterative $GITHUB_WORKSPACE/doc/dox/user/examples/iterative.cc NOT_EXCLUDE_FROM_ALL)
         add_ttg_executable(distributed $GITHUB_WORKSPACE/doc/dox/user/examples/distributed.cc NOT_EXCLUDE_FROM_ALL)
         EOF
-        cmake -S test_install_userexamples -B test_install_userexamples/build -DCMAKE_PREFIX_PATH=${{github.workspace}}/install
+        cmake -S test_install_userexamples -B test_install_userexamples/build -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat test_install_userexamples/CMakeFiles/CMakeOutput.log && cat test_install_userexamples/CMakeFiles/CMakeError.log)
         cmake --build test_install_userexamples/build
 
     - name: Build+Deploy Dox
