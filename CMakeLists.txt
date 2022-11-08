@@ -84,8 +84,7 @@ include(FindOrFetchBoost)
 # Cereal
 #include(FindOrFetchCereal)
 # C++ coroutines
-find_package(CXXStdCoroutine COMPONENTS Final Experimental)
-
+find_package(CXXStdCoroutine MODULE REQUIRED COMPONENTS Final Experimental)
 
 ##########################
 #### prerequisite runtimes
@@ -162,6 +161,7 @@ configure_package_config_file(cmake/ttg-config.cmake.in
 install(FILES
         "${PROJECT_SOURCE_DIR}/cmake/modules/AddTTGExecutable.cmake"
         "${PROJECT_SOURCE_DIR}/cmake/modules/AddTTGTestExecutable.cmake"
+        "${PROJECT_SOURCE_DIR}/cmake/modules/FindCXXStdCoroutine.cmake"
         DESTINATION "${CMAKE_INSTALL_CMAKEDIR}/modules"
         COMPONENT ttg-config)
 
