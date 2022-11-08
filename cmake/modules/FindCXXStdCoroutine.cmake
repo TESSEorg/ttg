@@ -62,10 +62,12 @@ Imported Targets
 Variables
 *********
 
-.. variable:: CXX_COROUTINE_IS_EXPERIMENTAL
+.. variable:: CXX_COROUTINE_COMPONENT
 
-    Set to ``TRUE`` when the :find-component:`coro.Experimental` version of C++
-    coroutine library was found, otherwise ``FALSE``.
+    Set to ``Final`` when the :find-component:`coro.Final` version of C++
+    coroutine library was found, ``Experimental`` when
+    the :find-component:`coro.Experimental` version of C++
+    coroutine library was found, otherwise not defined.
 
 .. variable:: CXX_COROUTINE_HAVE_CORO
 
@@ -149,6 +151,7 @@ foreach(component IN LISTS CXXStdCoroutines_want_components_ordered)
     if(_CXX_COROUTINE_HAVE_HEADER)
       set(CXXStdCoroutines_option "${option}" CACHE STRING "The compiler option needed to use <coroutine>")
       mark_as_advanced(CXXStdCoroutines_option)
+      set(CXX_COROUTINE_COMPONENT "${component}" CACHE STRING "The component of CXXStdCoroutine package found")
       # We found a header, skip rest of tests
       break()
     else()
