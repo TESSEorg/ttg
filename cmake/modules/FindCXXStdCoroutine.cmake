@@ -131,6 +131,7 @@ endforeach()
 # clang may need to use -stdlib=c++ to have coroutines
 # gcc/libstdc++ needs -fcoroutines
 set(CXXStdCoroutines_find_options "" "-stdlib=libc++" "-fcoroutines")
+set(CXXStdCoroutines_std_options "" "-std=c++20" "-std=c++2a")
 set(CXXStdCoroutines_want_components_ordered "${CXXStdCoroutines_want_components}")
 list(SORT CXXStdCoroutines_want_components_ordered ORDER DESCENDING)  # Final before Experimental
 
@@ -143,21 +144,23 @@ foreach(component IN LISTS CXXStdCoroutines_want_components_ordered)
     set(_coro_namespace std::experimental)
   endif()
   foreach(option IN LISTS CXXStdCoroutines_find_options)
-    cmake_push_check_state()
-    list(APPEND CMAKE_REQUIRED_FLAGS "${option}")
-    check_include_file_cxx("${_coro_header}" _CXX_COROUTINE_HAVE_HEADER)
-    mark_as_advanced(_CXX_COROUTINE_HAVE_HEADER)
-    cmake_pop_check_state()
-    if(_CXX_COROUTINE_HAVE_HEADER)
-      set(CXXStdCoroutines_option "${option}" CACHE STRING "The compiler option needed to use <coroutine>")
-      mark_as_advanced(CXXStdCoroutines_option)
-      set(CXX_COROUTINE_COMPONENT "${component}" CACHE STRING "The component of CXXStdCoroutine package found")
-      # We found a header, skip rest of tests
-      break()
-    else()
-      unset(_CXX_COROUTINE_HAVE_HEADER CACHE)
-    endif()
-  endforeach()  # options
+    foreach(stdoption IN LISTS CXXStdCoroutines_std_options)
+      cmake_push_check_state()
+      list(APPEND CMAKE_REQUIRED_FLAGS "${option} ${stdoption}")
+      check_include_file_cxx("${_coro_header}" _CXX_COROUTINE_HAVE_HEADER)
+      mark_as_advanced(_CXX_COROUTINE_HAVE_HEADER)
+      cmake_pop_check_state()
+      if(_CXX_COROUTINE_HAVE_HEADER)
+        set(CXXStdCoroutines_option "${option}" CACHE STRING "The compiler option needed to use <coroutine>")
+        mark_as_advanced(CXXStdCoroutines_option)
+        set(CXX_COROUTINE_COMPONENT "${component}" CACHE STRING "The component of CXXStdCoroutine package found")
+        # We found a header, skip rest of tests
+        break()
+      else()
+        unset(_CXX_COROUTINE_HAVE_HEADER CACHE)
+      endif()
+    endforeach()  # stdoption
+  endforeach()  # option
   if (_CXX_COROUTINE_HAVE_HEADER)
     break()
   endif()
