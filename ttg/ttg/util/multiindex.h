@@ -5,6 +5,8 @@
 #ifndef TTG_UTIL_MULTIINDEX_H
 #define TTG_UTIL_MULTIINDEX_H
 
+#include "ttg/serialization/std/array.h"
+
 namespace ttg {
 
   template <std::size_t Rank, typename Int = int>
@@ -51,6 +53,11 @@ namespace ttg {
     const auto &operator[](std::size_t idx) const {
       if (idx >= Rank) assert(idx < Rank);
       return data_[idx];
+    }
+
+    template <typename Archive>
+    void serialize(Archive &ar, const unsigned int version = 0) {
+      ar &data_;
     }
 
    private:
