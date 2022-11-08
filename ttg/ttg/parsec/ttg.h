@@ -123,6 +123,12 @@ namespace ttg_parsec {
       parsec_taskpool_t *tp = NULL;
       msg_header_t *msg = static_cast<msg_header_t *>(data);
       uint64_t op_id = msg->op_id;
+      bool reset_es = false;
+      // this callback is likely invoked by the comm thread so set the execution stream
+      if (nullptr == parsec_ttg_es) {
+        parsec_ttg_es = &parsec_comm_es;
+        reset_es = true;
+      }
       tp = parsec_taskpool_lookup(msg->taskpool_id);
       assert(NULL != tp);
       static_map_mutex.lock();
@@ -133,6 +139,9 @@ namespace ttg_parsec {
         static_set_arg_fct = op_pair.first;
         static_set_arg_fct(data, size, op_pair.second);
         tp->tdm.module->incoming_message_end(tp, NULL);
+        if (reset_es) {
+          parsec_ttg_es = nullptr;
+        }
         return 0;
       } catch (const std::out_of_range &e) {
         void *data_cpy = malloc(size);
@@ -142,6 +151,9 @@ namespace ttg_parsec {
                    ", ", op_id, ", ", data_cpy, ", ", size, ")");
         delayed_unpack_actions.insert(std::make_pair(op_id, std::make_tuple(src_rank, data_cpy, size)));
         static_map_mutex.unlock();
+        if (reset_es) {
+          parsec_ttg_es = nullptr;
+        }
         return 1;
       }
     }
@@ -807,30 +819,57 @@ namespace ttg_parsec {
     static int get_complete_cb(parsec_comm_engine_t *comm_engine, parsec_ce_mem_reg_handle_t lreg, ptrdiff_t ldispl,
                                parsec_ce_mem_reg_handle_t rreg, ptrdiff_t rdispl, size_t size, int remote,
                                void *cb_data) {
+      bool reset_es = false;
+      // this callback is likely invoked by the comm thread so set the execution stream
+      if (nullptr == parsec_ttg_es) {
+        parsec_ttg_es = &parsec_comm_es;
+        reset_es = true;
+      }
       parsec_ce.mem_unregister(&lreg);
       ActivationT *activation = static_cast<ActivationT *>(cb_data);
       if (activation->complete_transfer()) {
         delete activation;
+      }
+      if (reset_es) {
+        parsec_ttg_es = nullptr;
       }
       return PARSEC_SUCCESS;
     }
 
     static int get_remote_complete_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg, size_t msg_size,
                                       int src, void *cb_data) {
+      bool reset_es = false;
+      // this callback is likely invoked by the comm thread so set the execution stream
+      if (nullptr == parsec_ttg_es) {
+        parsec_ttg_es = &parsec_comm_es;
+        reset_es = true;
+      }
       std::intptr_t *fn_ptr = static_cast<std::intptr_t *>(msg);
       std::function<void(void)> *fn = reinterpret_cast<std::function<void(void)> *>(*fn_ptr);
       (*fn)();
       delete fn;
+      if (reset_es) {
+        parsec_ttg_es = nullptr;
+      }
       return PARSEC_SUCCESS;
     }
 
     template <typename FuncT>
     static int invoke_get_remote_complete_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg, size_t msg_size,
                                              int src, void *cb_data) {
+      bool reset_es = false;
+      // this callback is likely invoked by the comm thread so set the execution stream
+      if (nullptr == parsec_ttg_es) {
+        parsec_ttg_es = &parsec_comm_es;
+        reset_es = true;
+      }
       std::intptr_t *iptr = static_cast<std::intptr_t *>(msg);
       FuncT *fn_ptr = reinterpret_cast<FuncT *>(*iptr);
       (*fn_ptr)();
       delete fn_ptr;
+      if (reset_es) {
+        parsec_ttg_es = nullptr;
+      }
       return PARSEC_SUCCESS;
     }
 
