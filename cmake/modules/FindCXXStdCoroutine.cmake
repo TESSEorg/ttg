@@ -146,74 +146,49 @@ foreach(component IN LISTS CXXStdCoroutines_want_components_ordered)
   foreach(option IN LISTS CXXStdCoroutines_find_options)
     foreach(stdoption IN LISTS CXXStdCoroutines_std_options)
       cmake_push_check_state()
-      list(APPEND CMAKE_REQUIRED_FLAGS "${option};${stdoption}")
-      check_include_file_cxx("${_coro_header}" _CXX_COROUTINE_HAVE_HEADER)
-      mark_as_advanced(_CXX_COROUTINE_HAVE_HEADER)
+      set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${option} ${stdoption}")
+
+      string(CONFIGURE [[
+        #include <@_coro_header@>
+
+        int main() {
+            auto x = @_coro_namespace@::suspend_always{};
+            return 0;
+        }
+      ]] code @ONLY)
+
+      check_cxx_source_compiles("${code}" HAVE_USABLE_${_coro_header})
+      mark_as_advanced(HAVE_USABLE_${_coro_header})
       cmake_pop_check_state()
-      if(_CXX_COROUTINE_HAVE_HEADER)
+      if(HAVE_USABLE_${_coro_header})
+        add_library(std::coroutine INTERFACE IMPORTED GLOBAL)
+        target_compile_features(std::coroutine INTERFACE cxx_std_20)
         if (option)
-          set(CXXStdCoroutines_option "${option}" CACHE STRING "The compiler option needed to use <coroutine>")
+          target_compile_options(std::coroutine INTERFACE "${option}")
         endif()
-        mark_as_advanced(CXXStdCoroutines_option)
         set(CXX_COROUTINE_COMPONENT "${component}" CACHE STRING "The component of CXXStdCoroutine package found")
-        # We found a header, skip rest of tests
+        # break out of this loop
         break()
       else()
-        unset(_CXX_COROUTINE_HAVE_HEADER CACHE)
+        unset(HAVE_USABLE_${_coro_header} CACHE)
       endif()
     endforeach()  # stdoption
+    if (TARGET std::coroutine)
+      break()
+    endif()
   endforeach()  # option
-  if (_CXX_COROUTINE_HAVE_HEADER)
+  if (TARGET std::coroutine)
     break()
   endif()
 endforeach() # components
 
-set(CXX_COROUTINE_HAVE_CORO ${_CXX_COROUTINE_HAVE_HEADER} CACHE BOOL "TRUE if we have the C++ coroutine headers")
+set(CXX_COROUTINE_HAVE_CORO ${HAVE_USABLE_${_coro_header}} CACHE BOOL "TRUE if we have usable C++ coroutine headers")
 set(CXX_COROUTINE_HEADER ${_coro_header} CACHE STRING "The header that should be included to obtain the coroutine APIs")
 set(CXX_COROUTINE_NAMESPACE ${_coro_namespace} CACHE STRING "The C++ namespace that contains the coroutine APIs")
 
-set(_found FALSE)
-
-if(CXX_COROUTINE_HAVE_CORO)
-  # We have some coroutine library available. Do compile checks
-  string(CONFIGURE [[
-        #include <@CXX_COROUTINE_HEADER@>
-
-        int main() {
-            auto x = @CXX_COROUTINE_NAMESPACE@::suspend_always{};
-            return 0;
-        }
-    ]] code @ONLY)
-
-  # argh ... check_include_file_cxx will discover coroutine header but it is not usable without -std flag
-  foreach(stdoption IN LISTS CXXStdCoroutines_std_options)
-    cmake_push_check_state()
-    if (DEFINED CXXStdCoroutines_option)
-      set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${CXXStdCoroutines_option}")
-    endif()
-    if (stdoption)
-      set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${stdoption}")
-    endif()
-    check_cxx_source_compiles("${code}" CXX_COROUTINE_NO_LINK_NEEDED)
-
-    if(CXX_COROUTINE_NO_LINK_NEEDED)
-      add_library(std::coroutine INTERFACE IMPORTED GLOBAL)
-      target_compile_features(std::coroutine INTERFACE cxx_std_20)
-      if (DEFINED CXXStdCoroutines_option)
-        target_compile_options(std::coroutine INTERFACE "${CXXStdCoroutines_option}")
-      endif()
-      set(_found TRUE)
-      break()
-    else()
-      unset(CXX_COROUTINE_NO_LINK_NEEDED CACHE)
-    endif()
-    cmake_pop_check_state()
-  endforeach()  # stdoption
-endif()
-
 cmake_pop_check_state()
 
-set(CXXStdCoroutine_FOUND ${_found} CACHE BOOL "TRUE if we can compile and link a program using std::coroutine" FORCE)
+set(CXXStdCoroutine_FOUND ${HAVE_USABLE_${_coro_header}} CACHE BOOL "TRUE if we have usable C++ coroutine headers" FORCE)
 
 if(CXXStdCoroutine_FIND_REQUIRED AND NOT TARGET std::coroutine)
   message(FATAL_ERROR "Cannot discover std::coroutine headers and/or compile simple program using std::coroutine")
