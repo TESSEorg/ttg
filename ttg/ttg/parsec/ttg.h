@@ -489,7 +489,7 @@ namespace ttg_parsec {
 
   namespace detail {
 
-    typedef void (*parsec_static_op_t)(void *);  // static_op will be cast to this type
+    typedef parsec_hook_return_t (*parsec_static_op_t)(void *);  // static_op will be cast to this type
 
     const parsec_symbol_t parsec_taskclass_param0 = {
       .flags = PARSEC_SYMBOL_IS_STANDALONE|PARSEC_SYMBOL_IS_GLOBAL,
@@ -600,6 +600,9 @@ namespace ttg_parsec {
       TT* tt;
       key_type key;
       size_goal_t stream[num_streams] = {};
+#ifdef TTG_HAS_COROUTINE
+      void* suspended_task_address = nullptr;  // if not null the function is suspended
+#endif
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
           : parsec_ttg_task_base_t(mempool, task_class, num_streams) {
@@ -646,6 +649,9 @@ namespace ttg_parsec {
       static constexpr size_t num_streams = TT::numins;
       TT* tt;
       size_goal_t stream[num_streams] = {};
+#ifdef TTG_HAS_COROUTINE
+      void* suspended_task_address = nullptr;  // if not null the function is suspended
+#endif
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
           : parsec_ttg_task_base_t(mempool, task_class, num_streams) {
@@ -1248,15 +1254,33 @@ namespace ttg_parsec {
 
    private:
     /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
+    /// @return void if called a synchronous function, or ttg::coroutine_handle<> if called a coroutine (if non-null,
+    ///    points to the suspended coroutine)
     template <ttg::ExecutionSpace Space, typename... Args>
-    void op(Args &&...args) {
+    auto op(Args &&...args) {
       derivedT *derived = static_cast<derivedT *>(this);
-      if constexpr (Space == ttg::ExecutionSpace::Host)
-        derived->op(std::forward<Args>(args)...);
-      else if constexpr (Space == ttg::ExecutionSpace::CUDA)
-        derived->op_cuda(std::forward<Args>(args)...);
+      if constexpr (Space == ttg::ExecutionSpace::Host) {
+        using return_type = decltype(derived->op(std::forward<Args>(args)...));
+        if constexpr (std::is_same_v<return_type,void>) {
+          derived->op(std::forward<Args>(args)...);
+          return;
+        }
+        else {
+          return derived->op(std::forward<Args>(args)...);
+        }
+      }
+      else if constexpr (Space == ttg::ExecutionSpace::CUDA) {
+        using return_type = decltype(derived->op_cuda(std::forward<Args>(args)...));
+        if constexpr (std::is_same_v<return_type,void>) {
+          derived->op_cuda(std::forward<Args>(args)...);
+          return;
+        }
+        else {
+          return derived->op_cuda(std::forward<Args>(args)...);
+        }
+      }
       else
-        abort();
+        ttg::abort();
     }
 
     template <std::size_t i, typename terminalT, typename Key>
@@ -1305,56 +1329,142 @@ namespace ttg_parsec {
     }
 
     template <ttg::ExecutionSpace Space>
-    static void static_op(parsec_task_t *parsec_task) {
+    static parsec_hook_return_t static_op(parsec_task_t *parsec_task) {
       task_t *task = (task_t*)parsec_task;
-      ttT *baseobj = task->tt;
-      derivedT *obj = static_cast<derivedT *>(baseobj);
-      assert(parsec_ttg_caller == NULL);
-      parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
-      if (obj->tracing()) {
-        if constexpr (!ttg::meta::is_void_v<keyT>)
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": executing");
-        else
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : executing");
+
+      void* suspended_task_address =
+#ifdef TTG_HAS_COROUTINE
+        task->suspended_task_address;  // non-null = need to resume the task
+#else
+        nullptr;
+#endif
+      if (suspended_task_address == nullptr) {  // task is a coroutine that has not started or an ordinary function
+        ttT *baseobj = task->tt;
+        derivedT *obj = static_cast<derivedT *>(baseobj);
+        assert(parsec_ttg_caller == NULL);
+        parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
+        if (obj->tracing()) {
+          if constexpr (!ttg::meta::is_void_v<keyT>)
+            ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": executing");
+          else
+            ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : executing");
+        }
+
+        if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+          auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(task->key, std::move(input), obj->output_terminals));
+        } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(task->key, obj->output_terminals));
+        } else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+          auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(std::move(input), obj->output_terminals));
+        } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(obj->output_terminals));
+        } else {
+          ttg::abort();
+        }
+        parsec_ttg_caller = NULL;
+      }
+      else {  // resume the suspended coroutine
+#ifdef TTG_HAS_COROUTINE
+        auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<>::from_address(suspended_task_address));
+        assert(ret.ready());
+        ret.resume();
+        if (ret.completed()) {
+          ret.destroy();
+          suspended_task_address = nullptr;
+        }
+        else { // not yet completed
+          // leave suspended_task_address as is
+        }
+        task->suspended_task_address = suspended_task_address;
+#else
+        ttg::abort();  // should not happen
+#endif
       }
 
-      if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-        auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
-        baseobj->template op<Space>(task->key, std::move(input), obj->output_terminals);
-      } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-        baseobj->template op<Space>(task->key, obj->output_terminals);
-      } else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-        auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
-        baseobj->template op<Space>(std::move(input), obj->output_terminals);
-      } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-        baseobj->template op<Space>(obj->output_terminals);
-      } else {
-        abort();
+      if (suspended_task_address == nullptr) {
+        ttT *baseobj = task->tt;
+        derivedT *obj = static_cast<derivedT *>(baseobj);
+        if (obj->tracing()) {
+          if constexpr (!ttg::meta::is_void_v<keyT>)
+            ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": done executing");
+          else
+            ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
+        }
       }
-      parsec_ttg_caller = NULL;
 
-      if (obj->tracing()) {
-        if constexpr (!ttg::meta::is_void_v<keyT>)
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": done executing");
-        else
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
+#ifdef TTG_HAS_COROUTINE
+      if (suspended_task_address) {
+        // right now can events are not properly implemented, we are only testing the workflow with dummy events
+        // so mark the events finished manually, parsec will rerun this task again and it should complete the second time
+        auto events = static_cast<ttg::resumable_task>(ttg::coroutine_handle<>::from_address(suspended_task_address)).events();
+        for (auto &event_ptr : events) {
+          event_ptr->finish();
+        }
+        assert(ttg::coroutine_handle<>::from_address(suspended_task_address).promise().ready());
+
+        // TODO: shove {ptr to parsec_task, ptr to this function} to the list of tasks suspended by this thread (hence stored in TLS)
+        // thread will loop over its list (after running every task? periodically? need a dedicated queue of ready tasks?)
+        // and resume the suspended tasks whose events are ready (N.B. ptr to parsec_task is enough to get the list of pending events)
+        // event clearance will in device case handled by host callbacks run by the dedicated device runtime thread
+
+        // TODO PARSEC_HOOK_RETURN_AGAIN -> PARSEC_HOOK_RETURN_ASYNC when event tracking and task resumption (by this thread) is ready
+        return PARSEC_HOOK_RETURN_AGAIN;
       }
+      else
+#endif  // TTG_HAS_COROUTINE
+        return PARSEC_HOOK_RETURN_DONE;
     }
 
     template <ttg::ExecutionSpace Space>
-    static void static_op_noarg(parsec_task_t *parsec_task) {
+    static parsec_hook_return_t static_op_noarg(parsec_task_t *parsec_task) {
       task_t *task = static_cast<task_t*>(parsec_task);
-      ttT *baseobj = (ttT *)task->object_ptr;
-      derivedT *obj = (derivedT *)task->object_ptr;
-      assert(parsec_ttg_caller == NULL);
-      parsec_ttg_caller = task;
-      if constexpr (!ttg::meta::is_void_v<keyT>) {
-        baseobj->template op<Space>(task->key, obj->output_terminals);
-      } else if constexpr (ttg::meta::is_void_v<keyT>) {
-        baseobj->template op<Space>(obj->output_terminals);
-      } else
-        abort();
-      parsec_ttg_caller = NULL;
+
+      void* suspended_task_address =
+#ifdef TTG_HAS_COROUTINE
+        task->suspended_task_address;  // non-null = need to resume the task
+#else
+        nullptr;
+#endif
+      if (suspended_task_address == nullptr) {  // task is a coroutine that has not started or an ordinary function
+        ttT *baseobj = (ttT *)task->object_ptr;
+        derivedT *obj = (derivedT *)task->object_ptr;
+        assert(parsec_ttg_caller == NULL);
+        parsec_ttg_caller = task;
+        if constexpr (!ttg::meta::is_void_v<keyT>) {
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(task->key, obj->output_terminals));
+        } else if constexpr (ttg::meta::is_void_v<keyT>) {
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(obj->output_terminals));
+        } else  // unreachable
+          ttg:: abort();
+        parsec_ttg_caller = NULL;
+      }
+      else {
+#ifdef TTG_HAS_COROUTINE
+        auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<>::from_address(suspended_task_address));
+        assert(ret.ready());
+        ret.resume();
+        if (ret.completed()) {
+          ret.destroy();
+          suspended_task_address = nullptr;
+        }
+        else { // not yet completed
+          // leave suspended_task_address as is
+        }
+#else
+        ttg::abort();  // should not happen
+#endif
+      }
+      task->suspended_task_address = suspended_task_address;
+
+      if (suspended_task_address) {
+        ttg::abort();  // not yet implemented
+        // see comments in static_op()
+        return PARSEC_HOOK_RETURN_AGAIN;
+      }
+      else
+        return PARSEC_HOOK_RETURN_DONE;
     }
 
    protected:
@@ -1400,7 +1510,7 @@ namespace ttg_parsec {
             (obj->*member)(data, size);
           } else {
             // there is no good reason to have negative param ids
-            abort();
+            ttg::abort();
           }
           break;
         }
@@ -1426,7 +1536,7 @@ namespace ttg_parsec {
           break;
         }
         default:
-          abort();
+          ttg::abort();
       }
     }
 
@@ -1606,8 +1716,8 @@ namespace ttg_parsec {
         // case 5 and 6
       } else if constexpr (ttg::meta::is_void_v<keyT> && std::is_void_v<valueT>) {
         set_arg<i, keyT, ttg::Void>(ttg::Void{});
-      } else {
-        abort();
+      } else {  // unreachable
+        ttg:: abort();
       }
     }
 
@@ -2671,7 +2781,7 @@ namespace ttg_parsec {
       // NOTE: subsumed in case 5 above, kept for historical reasons
       //////////////////////////////////////////////////////////////////
       else
-        abort();
+        ttg::abort();
     }
 
     template <std::size_t... IS>

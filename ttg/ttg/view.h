@@ -124,7 +124,49 @@ namespace ttg {
     return View(obj, std::make_tuple(std::move(spans)...));
   }
 
-} // namespace ttg
+  /// std::span mirrored between host and device memory
+  struct HDSpan {
+    HDSpan() = default;
+    HDSpan(std::byte* ptr, std::size_t nbytes) {
+      ptrs_[0] = ptr;
+      nbytes_ = nbytes;
+      last_touched_space_ = 0;
+    }
+
+    std::size_t nbytes() const { return nbytes_; }
+
+    const std::byte* host_data() const { return ptrs_[0]; }
+
+    std::byte* host_data() {
+      last_touched_space_ = 0;
+      return ptrs_[0];
+    }
+
+    const std::byte* device_data() const { return ptrs_[1]; }
+
+    std::byte* device_data() {
+      last_touched_space_ = 1;
+      return ptrs_[1];
+    }
+
+    void mark_synched() { last_touched_space_ = 2; }
+
+   private:
+    std::array<std::byte*, 2> ptrs_ = {nullptr, nullptr};
+    std::size_t nbytes_ = 0;
+    std::size_t last_touched_space_ = 2;
+  };
+
+  /// set of std::span's mirrored between host and device memory
+  template <std::size_t N = 10>
+  struct HDSpans {
+    HDSpans() = default;
+
+   private:
+    std::array<HDSpan, N> spans_;
+  };
+
+}  // namespace ttg
 
 
 #endif // TTG_VIEW_H
