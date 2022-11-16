@@ -426,6 +426,9 @@ namespace ttg_parsec {
 
       assert(0 == tpool->profiling_array[2*position]);
       assert(0 == tpool->profiling_array[2*position+1]);
+      // TODO PROFILING: 0 and NULL should be replaced with something that depends on the key human-readable serialization...
+      // Typically, we would put something like 3*sizeof(int32_t), "m{int32_t};n{int32_t};k{int32_t}" to say
+      // there are three fields, named m, n and k, stored in this order, and each of size int32_t
       parsec_profiling_add_dictionary_keyword(name, "fill:000000", 0, NULL,
                                               (int*)&tpool->profiling_array[2*position],
                                               (int*)&tpool->profiling_array[2*position+1]);
@@ -2736,6 +2739,21 @@ namespace ttg_parsec {
       return buffer;
     }
 
+#if defined(PARSEC_PROF_TRACE)
+    static void parsec_ttg_task_info(void *dst, const void *data, size_t size)
+    {
+      const parsec_task_t *t = reinterpret_cast<const parsec_task_t *>(data);
+      const parsec_ttg_task_t *task = static_cast<parsec_ttg_task_t*>(base);
+      // Cannot do that, template TT is not defined... Need to go through the whole lookup process
+      TT *tt = task->tt;
+      // The key is in tt->key
+
+      // TODO PROFILING: Now... we need to write some basic types (e.g. int32_t) in data, for up to size bytes
+      // These should be derived from the key, and they should match the type description used in
+      // the other TODO PROFILING...
+    }
+#endif
+
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
 
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *t) {
@@ -2809,6 +2827,10 @@ namespace ttg_parsec {
       self.make_key = make_key;
       self.key_functions = &tasks_hash_fcts;
       self.task_snprintf = parsec_ttg_task_snprintf;
+
+#if defined(PARSEC_PROF_TRACE)
+      self.profile_info = parsec_ttg_task_info;
+#endif
 
       world_impl.taskpool()->nb_task_classes = std::max(world_impl.taskpool()->nb_task_classes, static_cast<decltype(world_impl.taskpool()->nb_task_classes)>(self.task_class_id+1));
       //    function_id_to_instance[self.task_class_id] = this;
