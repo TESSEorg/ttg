@@ -23,13 +23,13 @@ struct type2matrixtype
 template<>
 struct type2matrixtype<float>
 {
-    static constexpr const matrix_type value = matrix_type::matrix_RealFloat;
+    static constexpr const parsec_matrix_type_t value = parsec_matrix_type_t::PARSEC_MATRIX_FLOAT;
 };
 
 template<>
 struct type2matrixtype<double>
 {
-    static constexpr const matrix_type value = matrix_type::matrix_RealDouble;
+    static constexpr const parsec_matrix_type_t value = parsec_matrix_type_t::PARSEC_MATRIX_DOUBLE;
 };
 
 template<typename PaRSECMatrixT, typename ValueT>
@@ -97,8 +97,8 @@ public:
   }
 
   bool in_matrix(int row, int col) const {
-    return (pm->uplo == matrix_Lower && col <= row) ||
-           (pm->uplo == matrix_Upper && col >= row);
+    return (pm->uplo == PARSEC_MATRIX_LOWER && col <= row) ||
+           (pm->uplo == PARSEC_MATRIX_UPPER && col >= row);
   }
 
   PaRSECMatrixT* parsec() {

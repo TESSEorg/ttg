@@ -115,10 +115,15 @@ int main(int argc, char **argv)
     std::cout << "Creating 2D block cyclic matrix with NB " << NB << " N " << N << " M " << M << " P " << P << std::endl;
   }
 
-  sym_two_dim_block_cyclic_t dcA;
-  sym_two_dim_block_cyclic_init(&dcA, matrix_type::matrix_RealDouble,
-                                world.size(), world.rank(), NB, NB, N, M,
-                                0, 0, N, M, P, matrix_Lower);
+  parsec_matrix_sym_block_cyclic_t dcA;
+  parsec_matrix_sym_block_cyclic_init(&dcA, parsec_matrix_type_t::PARSEC_MATRIX_DOUBLE,
+                                world.rank(), 
+                                NB, NB, 
+                                N, M,
+                                0, 0, 
+                                N, M, 
+                                P, Q, 
+                                PARSEC_MATRIX_LOWER);
   dcA.mat = parsec_data_allocate((size_t)dcA.super.nb_local_tiles *
                                  (size_t)dcA.super.bsiz *
                                  (size_t)parsec_datadist_getsizeoftype(dcA.super.mtype));
@@ -387,7 +392,7 @@ int main(int argc, char **argv)
   //delete A;
   /* cleanup allocated matrix before shutting down PaRSEC */
   parsec_data_free(dcA.mat); dcA.mat = NULL;
-  parsec_tiled_matrix_dc_destroy( (parsec_tiled_matrix_dc_t*)&dcA);
+  parsec_tiled_matrix_destroy( (parsec_tiled_matrix_t*)&dcA);
 
   ttg::finalize();
   return ret;

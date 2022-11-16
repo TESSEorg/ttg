@@ -10,7 +10,7 @@ if (NOT TARGET MADworld)
   set(MADNESS_TASK_BACKEND PaRSEC CACHE STRING "The task backend to use for MADNESS tasks")
   FetchContent_Declare(
           MADNESS
-          GIT_REPOSITORY https://github.com/m-a-d-n-e-s-s/madness.git
+          GIT_REPOSITORY https://github.com/therault/madness.git
           GIT_TAG ${TTG_TRACKED_MADNESS_TAG}
   )
   FetchContent_MakeAvailable(MADNESS)
