@@ -439,11 +439,7 @@ namespace ttg_parsec {
       // TODO PROFILING: 0 and NULL should be replaced with something that depends on the key human-readable serialization...
       // Typically, we would put something like 3*sizeof(int32_t), "m{int32_t};n{int32_t};k{int32_t}" to say
       // there are three fields, named m, n and k, stored in this order, and each of size int32_t
-<<<<<<< HEAD
       parsec_profiling_add_dictionary_keyword(name, "fill:000000", 64, "key{char[64]}",
-=======
-      parsec_profiling_add_dictionary_keyword(name, "fill:000000", 0, NULL,
->>>>>>> f3544fb3 (Base of the beginning to log the appropriate info from the profiling)
                                               (int*)&tpool->profiling_array[2*position],
                                               (int*)&tpool->profiling_array[2*position+1]);
     }
@@ -3160,11 +3156,7 @@ namespace ttg_parsec {
       self.task_snprintf = parsec_ttg_task_snprintf;
 
 #if defined(PARSEC_PROF_TRACE)
-<<<<<<< HEAD
       self.profile_info = &parsec_ttg_task_info;
-=======
-      self.profile_info = parsec_ttg_task_info;
->>>>>>> f3544fb3 (Base of the beginning to log the appropriate info from the profiling)
 #endif
 
       world_impl.taskpool()->nb_task_classes = std::max(world_impl.taskpool()->nb_task_classes, static_cast<decltype(world_impl.taskpool()->nb_task_classes)>(self.task_class_id+1));
