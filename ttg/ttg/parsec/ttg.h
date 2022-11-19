@@ -429,7 +429,7 @@ namespace ttg_parsec {
       // TODO PROFILING: 0 and NULL should be replaced with something that depends on the key human-readable serialization...
       // Typically, we would put something like 3*sizeof(int32_t), "m{int32_t};n{int32_t};k{int32_t}" to say
       // there are three fields, named m, n and k, stored in this order, and each of size int32_t
-      parsec_profiling_add_dictionary_keyword(name, "fill:000000", 0, NULL,
+      parsec_profiling_add_dictionary_keyword(name, "fill:000000", 64, "key{char[64]}",
                                               (int*)&tpool->profiling_array[2*position],
                                               (int*)&tpool->profiling_array[2*position+1]);
     }
@@ -2740,17 +2740,23 @@ namespace ttg_parsec {
     }
 
 #if defined(PARSEC_PROF_TRACE)
-    static void parsec_ttg_task_info(void *dst, const void *data, size_t size)
+    static void *parsec_ttg_task_info(void *dst, const void *data, size_t size)
     {
       const parsec_task_t *t = reinterpret_cast<const parsec_task_t *>(data);
-      const parsec_ttg_task_t *task = static_cast<parsec_ttg_task_t*>(base);
-      // Cannot do that, template TT is not defined... Need to go through the whole lookup process
-      TT *tt = task->tt;
-      // The key is in tt->key
 
-      // TODO PROFILING: Now... we need to write some basic types (e.g. int32_t) in data, for up to size bytes
-      // These should be derived from the key, and they should match the type description used in
-      // the other TODO PROFILING...
+      if constexpr (ttg::meta::is_void_v<keyT>) {
+        snprintf(reinterpret_cast<char*>(dst), size, "()");
+      } else {
+        // we use the locals array as a scratchpad to store the hash of the key and its actual address
+        // locals[0] amd locals[1] hold the hash, while locals[2] and locals[3] hold the key pointer
+        keyT *key = *(keyT**)&(t->locals[2]);
+        std::stringstream ss;
+        ss << *key;
+
+        std::string keystr = ss.str();
+        snprintf(reinterpret_cast<char*>(dst), size, "%s", keystr.c_str());
+      }
+      return dst;
     }
 #endif
 
@@ -2829,7 +2835,7 @@ namespace ttg_parsec {
       self.task_snprintf = parsec_ttg_task_snprintf;
 
 #if defined(PARSEC_PROF_TRACE)
-      self.profile_info = parsec_ttg_task_info;
+      self.profile_info = &parsec_ttg_task_info;
 #endif
 
       world_impl.taskpool()->nb_task_classes = std::max(world_impl.taskpool()->nb_task_classes, static_cast<decltype(world_impl.taskpool()->nb_task_classes)>(self.task_class_id+1));
