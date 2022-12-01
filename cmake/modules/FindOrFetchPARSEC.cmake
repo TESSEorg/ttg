@@ -12,7 +12,7 @@ if (NOT TARGET PaRSEC::parsec)
   set(CMAKE_CROSSCOMPILING OFF)
   set(CMAKE_SYSTEM_PROCESSOR ${CMAKE_HOST_SYSTEM_PROCESSOR})
   set(PARSEC_WITH_DEVEL_HEADERS ON CACHE BOOL "Install PaRSEC headers")
-  set(BUILD_TOOLS OFF CACHE BOOL "Do not build PaRSEC tools")
+  set(BUILD_TOOLS ON CACHE BOOL "Do not build PaRSEC tools")
 
   FetchContent_Declare(
           PARSEC
