@@ -23,42 +23,47 @@ def read_pbt(pbt_filename):
     print('The columns of the DataFrame (or data labels) and their datatypes are:')
     print(trace.events.dtypes)
 
+
+    print('the types are:\n', trace.event_types)
+    print('the streams are:\n', trace.streams)
+
     print('There are ' + str(len(trace.events)) + ' events in this trace', end=' ')
     for e in range(len(trace.events)):
-        print('id=',trace.events.id[e],' key=',trace.events.key[e],' type=',trace.events.type[e],' b=',trace.events.begin[e],' e=',trace.events.end[e],)
+        print('id===', trace.events.id[e], ' node_id=', trace.events.node_id[e],' stream_id=',trace.events.stream_id[e], 'key=' ,trace.events.key[e],' type=',trace.events.type[e],' b=',trace.events.begin[e],' e=',trace.events.end[e])
 
 import json
 import re
 import sys
 
-def pbt_to_ctf(otf2_trace_name, chrome_trace_name):
-    chrome_data = {"traceEvents": []}
-    with otf2.reader.open(otf2_trace_name) as trace:
-        for location, event in trace.events:
-            if not event.region.name.startswith("PARSEC "):
-                ctf_event = {}
-                ctf_event["name"] = event.region.name
-                ctf_event["ts"] = event.time / 1000  # convert ns to µs
+def pbt_to_ctf(pbt_filename, ctf_filename):
+    ctf_data = {"traceEvents": []}
+    ptt_filename = pbt2ptt.convert([pbt_filename], multiprocess=False)
+    trace = ptt.from_hdf(ptt_filename)
 
-                # location.name = "PaRSEC Thread ThreadId of VP ProcessorId"
-                loc_match = re.match("PaRSEC Thread (\d+) of VP (\d+)", location.name)
-                if loc_match == None:
-                    sys.exit("unexpected format for event's location.name")
-                ctf_event["pid"] = loc_match[2]
-                ctf_event["tid"] = loc_match[1]
+    for e in range(len(trace.events)):
+        print('id=',trace.events.id[e],' node_id=',trace.events.node_id[e],' stream_id=',trace.events.stream_id[e],' key=',trace.events.key[e],' type=',trace.events.type[e],' b=',trace.events.begin[e],' e=',trace.events.end[e])
+        print(' \n')
+        ctf_event = {}
+        ctf_event["ph"] = "X"  # complete event type
+        ctf_event["ts"] = 0.001 * trace.events.begin[e] # when we started, in ms
+        ctf_event["dur"] = 0.001 * (trace.events.end[e] - trace.events.begin[e]) # when we started, in ms
+        ctf_event["name"] = trace.event_names[trace.events.type[e]]
+        if trace.events.key[e] != None:
+            # ctf_event["args"] = trace.events.key[e].decode("utf-8")
+            ctf_event["args"] = trace.events.key[e].decode('utf-8').rstrip('\x00')
 
-                # event type
-                if isinstance(event, Enter):
-                    ctf_event["ph"] = "B"
-                elif isinstance(event, Leave):
-                    ctf_event["ph"] = "E"
-                chrome_data["traceEvents"].append(ctf_event)
+        ctf_event["name1"] = trace.event_names[trace.events.type[e]]+ctf_event["args"]
 
-    with open(chrome_trace_name, "w") as chrome_trace:
-        json.dump(chrome_data, chrome_trace)
+        ctf_event["pid"] = trace.events.node_id[e]
+        ctf_event["tid"] = trace.events.stream_id[e]
+
+        ctf_data["traceEvents"].append(ctf_event)
+
+    with open(ctf_filename, "w") as chrome_trace:
+        json.dump(ctf_data, chrome_trace)
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         sys.exit("usage: pbt_to_ctf.py <pbt file> <ctf file>")
-    read_pbt(sys.argv[1])
-    #pbt_to_ctf(sys.argv[1], sys.argv[2])
+    #read_pbt(sys.argv[1])
+    # pbt_to_ctf(sys.argv[1], sys.argv[2])
