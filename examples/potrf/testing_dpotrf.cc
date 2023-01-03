@@ -210,6 +210,38 @@ int main(int argc, char **argv)
   return ret;
 }
 
+static void
+dplasma_dprint_tile( int m, int n,
+                     const parsec_tiled_matrix_t* descA,
+                     const double *M )
+{
+    int tempmm = ( m == descA->mt-1 ) ? descA->m - m*descA->mb : descA->mb;
+    int tempnn = ( n == descA->nt-1 ) ? descA->n - n*descA->nb : descA->nb;
+    int ldam = BLKLDD( descA, m );
+
+    int ii, jj;
+
+    fflush(stdout);
+    for(ii=0; ii<tempmm; ii++) {
+        if ( ii == 0 )
+            fprintf(stdout, "(%2d, %2d) :", m, n);
+        else
+            fprintf(stdout, "          ");
+        for(jj=0; jj<tempnn; jj++) {
+#if defined(PRECISION_z) || defined(PRECISION_c)
+            fprintf(stdout, " (% e, % e)",
+                    creal( M[jj*ldam + ii] ),
+                    cimag( M[jj*ldam + ii] ));
+#else
+            fprintf(stdout, " % e", M[jj*ldam + ii]);
+#endif
+        }
+        fprintf(stdout, "\n");
+    }
+    fflush(stdout);
+    usleep(1000);
+}
+
 int check_dpotrf( double *A, double *A0, int N )
 {
     int ret;
