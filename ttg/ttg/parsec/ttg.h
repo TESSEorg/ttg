@@ -183,6 +183,18 @@ namespace ttg_parsec {
       return comm_rank;
     }
 
+    static void ttg_parsec_ce_up(parsec_comm_engine_t *comm_engine, void *user_data)
+    {
+      parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, user_data, PARSEC_TTG_MAX_AM_SIZE);
+      parsec_ce.tag_register(WorldImpl::parsec_ttg_rma_tag(), &detail::get_remote_complete_cb, user_data, 128);
+    }
+
+    static void ttg_parsec_ce_down(parsec_comm_engine_t *comm_engine, void *user_data)
+    {
+      parsec_ce.tag_unregister(WorldImpl::parsec_ttg_tag());
+      parsec_ce.tag_unregister(WorldImpl::parsec_ttg_rma_tag());
+    }
+
    public:
 #if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
     int parsec_ttg_profile_backend_set_arg_start, parsec_ttg_profile_backend_set_arg_end;
@@ -330,9 +342,9 @@ namespace ttg_parsec {
         ttg::detail::deregister_world(*this);
         destroy_tpool();
         if (own_ctx) {
-          unregister_parsec_tags(nullptr);
+          unregister_parsec_tags(&parsec_comm_engine_cb_idx);
         } else {
-          parsec_context_at_fini(unregister_parsec_tags, nullptr);
+          parsec_context_at_fini(unregister_parsec_tags, &parsec_comm_engine_cb_idx);
         }
 #if defined(PARSEC_PROF_TRACE)
         if(nullptr != profiling_array) {
@@ -479,7 +491,7 @@ namespace ttg_parsec {
 #endif
   };
 
-  inline void unregister_parsec_tags(void *_)
+  static void unregister_parsec_tags(void *_pidx)
   {
     if(NULL != parsec_ce.tag_unregister) {
       parsec_ce.tag_unregister(WorldImpl::parsec_ttg_tag());
