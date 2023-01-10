@@ -32,7 +32,6 @@ add_ttg_executable(fw-apsp floyd-warshall/floyd_warshall.cc LINK_LIBRARIES MADwo
 add_ttg_executable(helloworld helloworld/helloworld.cpp)
 add_ttg_executable(simplegenerator simplegenerator/simplegenerator.cc RUNTIMES "mad")
 
-add_ttg_executable(device_mock device_mock/device_mock.cc)
 add_ttg_executable(testing_dpotrf potrf/testing_dpotrf.cc LINK_LIBRARIES lapackpp)
 add_ttg_executable(testing_dtrtri potrf/testing_dtrtri.cc LINK_LIBRARIES lapackpp)
 add_ttg_executable(testing_dlauum potrf/testing_dlauum.cc LINK_LIBRARIES lapackpp)
