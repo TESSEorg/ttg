@@ -1,4 +1,4 @@
-# Pull Terminals - Design Notes
+# Pull Terminals Design Notes {#Design-Pull}
 
 ### Motivation
 
@@ -49,7 +49,3 @@
 
 - Should Pull Op be able to send data to multiple successors? Use cases?
 - Cholesky - why pull ops are needed?
-
-
-
-

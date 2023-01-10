@@ -3,19 +3,9 @@
 
 #include <type_traits>
 #include "ttg/util/meta.h"
+#include "ttg/util/iovec.h"
 
 namespace ttg {
-
-  /**
-   * Used to describe transfer payload in types using the \sa SplitMetadataDescriptor.
-   * @c data Pointer to the data to be read from / written to.
-   * @c num_bytes The number of bytes to read from / write to the memory location
-   *                   \sa data.
-   */
-  struct iovec {
-    size_t num_bytes;
-    void* data;
-  };
 
   /**
    * SplitMetadataDescriptor is a serialization descriptor provided by the user

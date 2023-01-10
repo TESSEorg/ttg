@@ -29,7 +29,12 @@ project(ttg
     LANGUAGES CXX
     HOMEPAGE_URL "https://tesseorg.github.io/ttg/")
 
-set(CMAKE_CXX_EXTENSIONS OFF)
+if (NOT DEFINED CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD "17" CACHE STRING "The C++ standard")
+endif()
+if (NOT CMAKE_CXX_EXTENSIONS)
+  set(CMAKE_CXX_EXTENSIONS OFF CACHE BOOL "The C++ standard extensions allowed?")
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/modules/")
 include(GNUInstallDirs)
@@ -78,6 +83,8 @@ endif (BUILD_TESTING)
 include(FindOrFetchBoost)
 # Cereal
 #include(FindOrFetchCereal)
+# C++ coroutines
+find_package(CXXStdCoroutine MODULE REQUIRED COMPONENTS Final Experimental)
 
 ##########################
 #### prerequisite runtimes
@@ -154,6 +161,7 @@ configure_package_config_file(cmake/ttg-config.cmake.in
 install(FILES
         "${PROJECT_SOURCE_DIR}/cmake/modules/AddTTGExecutable.cmake"
         "${PROJECT_SOURCE_DIR}/cmake/modules/AddTTGTestExecutable.cmake"
+        "${PROJECT_SOURCE_DIR}/cmake/modules/FindCXXStdCoroutine.cmake"
         DESTINATION "${CMAKE_INSTALL_CMAKEDIR}/modules"
         COMPONENT ttg-config)
 

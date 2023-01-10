@@ -26,7 +26,7 @@ namespace ttg {
       constexpr auto size() const { return sizeof...(Ts); }
 
       template <std::size_t I>
-      constexpr auto get() {
+      constexpr auto get() const {
         return type_identity<std::tuple_element_t<I, std::tuple<Ts...>>>{};
       }
     };

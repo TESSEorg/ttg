@@ -31,12 +31,22 @@ namespace ttg::meta {
   template <typename Callable>
   constexpr inline bool is_generic_callable_v = is_generic_callable<Callable>::value;
 
+  /// callable_args<Callable> detects whether `Callable` is generic or not, and in the latter case
+  /// detects (using Boost.CallableTraits) its return and argument types.
+  /// callable_args<Callable> is a constexpr value of type
+  /// `std::pair<bool,ttg::typelist<ttg::typelist<ReturnType>,ttg::typelist<ArgTypes>>>`
+  /// where:
+  /// - the boolean indicates whether `Callable` is generic (true) or not (false),
+  /// - `ReturnType` is the return type of the `Callable` if it's generic, empty otherwise
+  /// - `ArgTypes`  is the argument types of the `Callable` if it's generic, empty otherwise
+  /// \tparam Callable a callable type
   template <typename Callable, typename Enabler = void>
-  constexpr std::pair<bool, ttg::typelist<>> callable_args = {true, {}};
+  constexpr std::pair<bool, std::pair<ttg::typelist<>, ttg::typelist<>>> callable_args = {true, {}};
 
   template <typename Callable>
   constexpr auto callable_args<Callable, ttg::meta::void_t<boost::callable_traits::args_t<Callable, ttg::typelist>>> =
-      std::pair<bool, boost::callable_traits::args_t<Callable, ttg::typelist>>{false, {}};
+      std::pair<bool, std::pair<ttg::typelist<boost::callable_traits::return_type_t<Callable>>,
+                                boost::callable_traits::args_t<Callable, ttg::typelist>>>{false, {}};
 
   //////////////////////////////////////
   // generic callables
@@ -57,6 +67,19 @@ namespace ttg::meta {
     return idx;
   }
 
+  /// detects argument and return types of a generic callable (\p func)
+  /// by trying each combination of types (\p argument_type_lists) for the respective arguments starting with
+  /// the combination corresponding to the given \p Ordinal
+  /// \tparam Ordinal a nonnegative integer specifying the ordinal of the type combination from \p Typelists to try;
+  ///                 maximum value is `(std::tuple_size_v<Typelists> * ...)`
+  /// \tparam Func a generic callable type
+  /// \tparam Typelists a pack of ttg::typelist's each of which specifies candidate types for the respective
+  ///         argument of \p Func
+  /// \param func a generic callable
+  /// \param argument_type_lists a ttg::typelist<Typelists...>
+  /// @note iterates over \p argument_type_lists in "row-major" order (i.e. last list in \p argument_type_lists
+  ///       is iterated first, etc.; the maxim
+  /// @return an object of type `ttg::typelist<ttg::typelist<ReturnType>,ttg::typelist<ArgTypes>>`
   template <std::size_t Ordinal, typename Func, typename... Typelists, std::size_t... ArgIdx>
   auto compute_arg_binding_types_impl(Func& func, typelist<Typelists...> argument_type_lists,
                                       std::index_sequence<ArgIdx...> arg_idx = {}) {
@@ -67,18 +90,34 @@ namespace ttg::meta {
     constexpr auto tensor_size = (extents[ArgIdx] * ...);
     static_assert(tensor_size >= Ordinal);
     if constexpr (tensor_size == Ordinal) {
-      return typelist<>{};
+      return typelist<typelist<>, typelist<>>{};
     } else {
       constexpr auto idx = ordinal2index(Ordinal, extents);
       auto args = typelist<std::tuple_element_t<idx[ArgIdx], std::tuple_element_t<ArgIdx, arg_typelists_t>>...>{};
-      if constexpr (is_invocable_typelist_v<Func, drop_void_t<decltype(args)>>) {
-        return args;
+      using args_sans_void_t = drop_void_t<decltype(args)>;
+      if constexpr (is_invocable_typelist_v<Func, args_sans_void_t>) {
+        using return_type = invoke_result_typelist_t<Func, args_sans_void_t>;
+        return ttg::typelist<ttg::typelist<return_type>, decltype(args)>{};
       } else {
         return compute_arg_binding_types_impl<Ordinal + 1>(func, argument_type_lists, arg_idx);
       }
     }
   }
 
+  /// detects argument types of a generic callable (\p func)
+  /// by trying each combination of types (\p argument_type_lists) for the respective arguments starting with
+  /// the combination corresponding to the given \p Ordinal . The callable is expected to return \p ReturnType
+  /// \tparam Ordinal a nonnegative integer specifying the ordinal of the type combination from \p Typelists to try;
+  ///                 maximum value is `(std::tuple_size_v<Typelists> * ...)`
+  /// \tparam ReturnType the expected return type of \p Func
+  /// \tparam Func a generic callable type
+  /// \tparam Typelists a pack of ttg::typelist's each of which specifies candidate types for the respective
+  ///         argument of \p Func
+  /// \param func a generic callable
+  /// \param argument_type_lists a ttg::typelist<Typelists...>
+  /// @note iterates over \p argument_type_lists in "row-major" order (i.e. last list in \p argument_type_lists
+  ///       is iterated first, etc.; the maxim
+  /// @return an object of type `ttg::typelist<ArgTypes>`
   template <std::size_t Ordinal, typename ReturnType, typename Func, typename... Typelists, std::size_t... ArgIdx>
   auto compute_arg_binding_types_r_impl(Func& func, typelist<Typelists...> argument_type_lists,
                                         std::index_sequence<ArgIdx...> arg_idx = {}) {
@@ -105,7 +144,9 @@ namespace ttg::meta {
   /// @tparam Typelists a pack of typelists encoding how each argument can be invoked
   /// @param func a reference to callable of type @p Func
   /// @param argument_type_lists a list of possible types to try for each argument; can contain `void`
-  /// @return a ttg::typelist encoding:
+  /// @return a `ttg::typelist<ttg::typelist<ReturnType>,ttg::typelist<ArgsTypes>>` where
+  ///          `ReturnType` is the return type of \p func and
+  ///         `ArgsTypes` encodes:
   ///         - the exact argument bindings used by `Func`, if @p func is a nongeneric callable;
   ///         - the first invocable combination of argument types discovered by row-major iteration, if @p func is a
   ///         generic callable
@@ -138,7 +179,7 @@ namespace ttg::meta {
       return compute_arg_binding_types_r_impl<0, ReturnType>(func, argument_type_lists,
                                                              std::make_index_sequence<sizeof...(Typelists)>{});
     } else {
-      return is_generic__args.second;
+      return is_generic__args.second.second;
     }
   }
 

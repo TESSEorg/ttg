@@ -549,6 +549,15 @@ namespace ttg {
     template <typename T>
     constexpr bool is_tuple_v = is_tuple<T>::value;
 
+    template <typename>
+    struct is_span : std::false_type {};
+
+    template <typename T, std::size_t S>
+    struct is_span<ttg::span<T, S>> : std::true_type {};
+
+    template <typename T>
+    constexpr bool is_span_v = is_span<T>::value;
+
     template <template <class> class Pred, typename TupleT, std::size_t I, std::size_t... Is>
     struct predicate_index_seq_helper;
 
@@ -856,6 +865,16 @@ namespace ttg {
     template <typename ReturnType, typename Callable, typename... Args>
     constexpr bool is_invocable_typelist_r_v<ReturnType, Callable, ttg::typelist<Args...>> =
         std::is_invocable_r_v<ReturnType, Callable, Args...>;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // detects the return result of a Callable when invoked with the arguments given as a typelist
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <typename Callable, typename Typelist>
+    struct invoke_result_typelist {};
+    template <typename Callable, typename... Args>
+    struct invoke_result_typelist<Callable, ttg::typelist<Args...>> : std::invoke_result<Callable, Args...> {};
+    template <class F, class... ArgTypes>
+    using invoke_result_typelist_t = typename invoke_result_typelist<F, ArgTypes...>::type;
 
   }  // namespace meta
 }  // namespace ttg
