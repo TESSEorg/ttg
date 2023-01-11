@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
 cmake_minimum_required(VERSION 3.19)
 project(TTG-HW CXX)
 
-find_package(ttg) # check if TTG is already available
+find_package(ttg QUIET) # check if TTG is already available
 if (NOT TARGET ttg-parsec) # else build from source
   include(FetchContent)
   FetchContent_Declare(ttg GIT_REPOSITORY https://github.com/TESSEorg/ttg.git)
@@ -190,7 +190,7 @@ int main(int argc, char *argv[]) {
 
   ttg::make_graph_executable(fib);
   ttg::execute();
-  if (ttg::rank() == 0) fib->invoke(2, 1, 0);
+  if (ttg::rank() == 0) fib->invoke(2, std::make_tuple(1, 0));
   ttg::fence();
 
   ttg::finalize();
