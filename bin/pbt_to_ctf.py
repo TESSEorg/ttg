@@ -16,6 +16,32 @@ except ModuleNotFoundError:
     print("Did not find pbt2ptt, you are likely using python version that does not match the version used to build PaRSEC profiling tools")
     print(sys.path)
 
+#giving directory name
+dirname = "/tmp"
+
+prefix="bspmm-parsec-trace-2048-256"
+
+#giving file extension
+ext=('.prof')
+
+list_of_files=[]
+
+#iterating over all files within the specified directory
+for file in os.listdir(dirname):
+    if ext in file and file.startswith(prefix):
+        # print(file)
+        list_of_files.append(file)
+print(list_of_files)
+
+# output_file= list_of_files[0]
+
+with open('OutputFile.bin', 'wb') as f:
+    for file in list_of_files:
+        with open(file,'rb') as s:
+            f.write(s.read())
+print(f)
+
+
 def read_pbt(pbt_filename):
     ptt_filename = pbt2ptt.convert([pbt_filename], multiprocess=False)
     trace = ptt.from_hdf(ptt_filename)
@@ -41,8 +67,8 @@ def pbt_to_ctf(pbt_filename, ctf_filename):
     trace = ptt.from_hdf(ptt_filename)
 
     for e in range(len(trace.events)):
-        print('id=',trace.events.id[e],' node_id=',trace.events.node_id[e],' stream_id=',trace.events.stream_id[e],' key=',trace.events.key[e],' type=',trace.events.type[e],' b=',trace.events.begin[e],' e=',trace.events.end[e])
-        print(' \n')
+        # print('id=',trace.events.id[e],' node_id=',trace.events.node_id[e],' stream_id=',trace.events.stream_id[e],'key=',trace.events.key[e],' type=',trace.events.type[e],' b=',trace.events.begin[e],' e=',trace.events.end[e])
+        # print('\n')
         ctf_event = {}
         ctf_event["ph"] = "X"  # complete event type
         ctf_event["ts"] = 0.001 * trace.events.begin[e] # when we started, in ms
@@ -51,8 +77,7 @@ def pbt_to_ctf(pbt_filename, ctf_filename):
         if trace.events.key[e] != None:
             # ctf_event["args"] = trace.events.key[e].decode("utf-8")
             ctf_event["args"] = trace.events.key[e].decode('utf-8').rstrip('\x00')
-
-        ctf_event["name1"] = trace.event_names[trace.events.type[e]]+ctf_event["args"]
+            ctf_event["name"] = trace.event_names[trace.events.type[e]]+ctf_event["args"]
 
         ctf_event["pid"] = trace.events.node_id[e]
         ctf_event["tid"] = trace.events.stream_id[e]
@@ -65,5 +90,5 @@ def pbt_to_ctf(pbt_filename, ctf_filename):
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         sys.exit("usage: pbt_to_ctf.py <pbt file> <ctf file>")
-    #read_pbt(sys.argv[1])
-    # pbt_to_ctf(sys.argv[1], sys.argv[2])
+    # read_pbt(sys.argv[1])
+    pbt_to_ctf(sys.argv[1], sys.argv[2])
