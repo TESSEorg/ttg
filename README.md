@@ -245,46 +245,74 @@ To simplify debugging of multirank TTG programs it is possible to automate the p
 - If an X11 server is not running the set `TTG_DEBUGGER` to empty value; upon receiving a signal the program will print instructions for how to attach a debugger to a running process from another terminal.
 - run the ttg program and if it receives any signal the xterm windows should pop up to display debugging results
 
-# TTG performance
+# TTG Performance
 
 Competitive performance of TTG for several paradigmatic scientific applications on shared- and distributed-memory machines (CPU only)
 will be discussed in [manuscript ``Generalized Flow-Graph Programming Using Template Task-Graphs: Initial Implementation and Assessment''](https://www.ipdps.org/ipdps2022/2022-accepted-papers.html) to be presented at [IPDPS'22](https://www.ipdps.org/ipdps2022/).
 Stay tuned!
 
-# TTG performance tracing
+# TTG Performance Tracing
 
 To generate the trace results of any TTG program follow the process discussed below:
 
-- Configure the TTG program by setting up the environment variables as `-DPARSEC_PROF_TRACE=ON` and `-DBUILD_SHARED_LIBS=ON`
+- Configue CMAKE by setting up the environment variables as `-DPARSEC_PROF_TRACE=ON` ,`-DBUILD_SHARED_LIBS=ON`,and `-DTTG_ENABLE_TRACE=TRUE`
+- Configure the TTG program with `CMAKE_PREFIX_PATH=` {path to `ttg-config.cmake` file}
 - Install required sys packages including Python 3.8, Cython (required version >= 0.21.2), 2to3 V1.0, numpy version 1.23, pandas 1.5, and tables 3.7, using 
 ```console
- pip install package_name
+ pip install {package_name}
 ``` 
 - Create file 
 ```console 
 ${HOME}/.parsec/mca-params.conf 
 ````
 and add single line to it: `mca_pins = task_profiler`
-- Define environment variable before running TTG program: `PARSEC_MCA_profile_filename` to {`filename`} to let program generate traces with the specified filename
-- Set environment variable `PARSEC_MCA_profile_filename` to {`filename`} to let program generate traces with the specified filename. Also, provide program arguments (if any) while configuring the program before 
+- Define environment variable before running TTG program: `PARSEC_MCA_profile_filename` to {`filename`} to let program generate traces with the specified filename. 
 - Export environment variable PYTHONPATH as: 
 ```bash 
-export PYTHONPATH=~/ttg/cmake-build-debug/_deps/parsec-build/tools/profiling/python/build/lib_folder for Python3.8:$PYTHONPATH
+export PYTHONPATH={ttg_build_directory}/_deps/parsec-build/tools/profiling/python/build/{lib_folder} for Python3.8:$PYTHONPATH
 ````
-- Run the TTG program in debug mode to generate trace file 
-- to convert trace file into `.ctf.json` file format to be visualized using chrome tracing, use syntax - 
-```python
- ~/ttg/bin/pbt_to_ctf.py trace_file_name output_filename.ctf.json
+- Run the TTG program in debug mode to generate trace file. Provide program arguments (if any) 
+- To convert trace file into `.ctf.json` file format to be visualized using chrome tracing or perfetto, use syntax - 
+```
+ {ttg_root}/bin/pbt_to_ctf.py {trace_file_name} {ctf_filename}.ctf.json
 ```
 
-Let's use computation of `N`th Fibonacci number to exemplify tracing of a TTG program:
+### Let's use computation of `N`th Fibonacci number to exemplify tracing of a TTG program:
+- Follow the steps mentioned above and execute the `nth-fibonacci.cpp` program in debug mode to obtain traces 
+- To convert trace file to ctf file format:
+
+Export environment variable PYTHONPATH as:
+```bash 
+export PYTHONPATH={ttg_build_directory}/_deps/parsec-build/tools/profiling/python/build/{lib_folder} for Python3.8:$PYTHONPATH
+````
+Execute the python script in the following format on terminal
+```
+{ttg_root}/bin/pbt_to_ctf.py {trace_file_name} {ctf_filename}.ctf.json`
+```
+- Obtained traces `{filename}.ctf.json` file can be visualized on - `https://ui.perfetto.dev/`
+
+Obtained Traces will appear like this -
+
+![Fibonacci_traces_example](/home/ashawini/ttg/images/Fibonacci_traces_example.png) 
 
 
+### To generate traces for Multiple MPI Processes 
+- Execute the command on terminal 
+```console
+export PARSEC_MCA_profile_filename={trace_filename}
+ ```
+- Run TTG program by following the mpiexec syntax:
+
+`mpiexec {mpi_args} {executable} {program_args}`
+
+For instance, the following command will run the executable file on 2 processes:
+
+    mpiexec -n 2 nth-fibonacci 
 
 
 
 # TTG reference documentation
-TTG API documentation is available for the following versions:
+TTG API documentation is available for the following versions:0
 - [master branch](https://tesseorg.github.io/ttg/dox-master) .
 
 # Cite
