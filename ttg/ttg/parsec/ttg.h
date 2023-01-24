@@ -520,6 +520,7 @@ namespace ttg_parsec {
       parsec_task_t parsec_task;
       int32_t in_data_count = 0;  //< number of satisfied inputs
       int32_t data_count = 0;     //< number of data elements in parsec_task.data
+      ttg_data_copy_t *copies;    //< pointer to the fixed copies array of the derived task
       parsec_hash_table_item_t tt_ht_item = {};
       parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces] =
           {nullptr};
@@ -554,9 +555,10 @@ namespace ttg_parsec {
        * but always be use through parsec_ttg_task_t.
        */
 
-      parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class, int data_count,
+      parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
+                             int data_count, ttg_data_copy_t *copies,
                              bool defer_writer = TTG_PARSEC_DEFER_WRITER)
-          : data_count(data_count), defer_writer(defer_writer) {
+          : data_count(data_count), copies(copies) defer_writer(defer_writer) {
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
@@ -564,10 +566,12 @@ namespace ttg_parsec {
       }
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
-                             parsec_taskpool_t *taskpool, int32_t priority, int data_count,
+                             parsec_taskpool_t *taskpool, int32_t priority,
+                             int data_count, ttg_data_copy_t *copies,
                              release_task_fn *release_fn,
                              bool defer_writer = TTG_PARSEC_DEFER_WRITER)
           : data_count(data_count)
+          , copies(copies)
           , defer_writer(defer_writer)
           , release_task_cb(release_fn) {
             int32_t p = priority;
@@ -595,14 +599,12 @@ namespace ttg_parsec {
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
 #endif
+      ttg_data_copy_t *copies[num_streams+1] = { nullptr };  // the data copies tracked by this task
+                                                             // +1 for the copy needed during send/bcas
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
           : parsec_ttg_task_base_t(mempool, task_class, num_streams) {
         tt_ht_item.key = pkey();
-
-        for (int i = 0; i < num_streams; ++i) {
-          parsec_task.data[i].data_in = nullptr;
-        }
 
         // We store the hash of the key and the address where it can be found in locals considered as a scratchpad
         *(uintptr_t*)&(parsec_task.locals[0]) = 0; //there is no key
@@ -613,13 +615,9 @@ namespace ttg_parsec {
                         parsec_task_class_t *task_class, parsec_taskpool_t *taskpool,
                         TT *tt_ptr, int32_t priority)
           : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
-                                   num_streams, &release_task, tt_ptr->m_defer_writer)
+                                   num_streams, copies, &release_task, tt_ptr->m_defer_writer)
           , tt(tt_ptr), key(key) {
         tt_ht_item.key = pkey();
-
-        for (int i = 0; i < num_streams; ++i) {
-          parsec_task.data[i].data_in = nullptr;
-        }
 
         // We store the hash of the key and the address where it can be found in locals considered as a scratchpad
         uint64_t hv = ttg::hash<std::decay_t<decltype(key)>>{}(key);
@@ -644,26 +642,20 @@ namespace ttg_parsec {
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
 #endif
+      ttg_data_copy_t *copies[num_streams+1] = { nullptr };  // the data copies tracked by this task
+                                                             // +1 for the copy needed during send/bcas
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
-          : parsec_ttg_task_base_t(mempool, task_class, num_streams) {
+          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies) {
         tt_ht_item.key = pkey();
-
-        for (int i = 0; i < num_streams; ++i) {
-          parsec_task.data[i].data_in = nullptr;
-        }
       }
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
                         parsec_taskpool_t *taskpool, TT *tt_ptr, int32_t priority)
           : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
-                                   num_streams, &release_task, tt_ptr->m_defer_writer)
+                                   num_streams, copies, &release_task, tt_ptr->m_defer_writer)
           , tt(tt_ptr) {
         tt_ht_item.key = pkey();
-
-        for (int i = 0; i < num_streams; ++i) {
-          parsec_task.data[i].data_in = nullptr;
-        }
       }
 
       static void release_task(parsec_ttg_task_base_t* task_base) {
@@ -681,7 +673,7 @@ namespace ttg_parsec {
         return res;
       }
       for (int i = 0; i < task->data_count; ++i) {
-        auto copy = static_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
+        auto copy = static_cast<ttg_data_copy_t *>(task->copies[i]);
         if (NULL != copy && copy->device_private == ptr) {
           res = copy;
           break;
@@ -696,7 +688,7 @@ namespace ttg_parsec {
         return i;
       }
       for (i = 0; i < task->data_count; ++i) {
-        auto copy = static_cast<ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
+        auto copy = static_cast<ttg_data_copy_t *>(task->copies[i]);
         if (NULL != copy && copy->device_private == ptr) {
           return i;
         }
@@ -713,7 +705,7 @@ namespace ttg_parsec {
         throw std::logic_error("Too many data copies, check MAX_PARAM_COUNT!");
       }
 
-      task->parsec_task.data[task->data_count].data_in = copy;
+      task->copies[task->data_count] = copy;
       task->data_count++;
       return true;
     }
@@ -722,17 +714,17 @@ namespace ttg_parsec {
       int i;
       /* find and remove entry; copies are usually appended and removed, so start from back */
       for (i = task->data_count-1; i >= 0; --i) {
-        if (copy == task->parsec_task.data[i].data_in) {
+        if (copy == task->copies[i]) {
           break;
         }
       }
       if (i < 0) return;
       /* move all following elements one up */
       for (; i < task->data_count - 1; ++i) {
-        task->parsec_task.data[i].data_in = task->parsec_task.data[i + 1].data_in;
+        task->copies[i] = task->copies[i + 1];
       }
       /* null last element */
-      task->parsec_task.data[i].data_in = nullptr;
+      task->copies[i] = nullptr;
       task->data_count--;
     }
 
@@ -957,8 +949,8 @@ namespace ttg_parsec {
           new_copy->mark_mutable();
           /* replace the copy in the deferred task */
           for (int i = 0; i < deferred_op->data_count; ++i) {
-            if (deferred_op->parsec_task.data[i].data_in == copy_in) {
-              deferred_op->parsec_task.data[i].data_in = new_copy;
+            if (deferred_op->copies[i] == copy_in) {
+              deferred_op->copies[i] = new_copy;
               break;
             }
           }
@@ -1201,6 +1193,13 @@ namespace ttg_parsec {
     constexpr static std::array<void (TT::*)(void *, std::size_t), numinedges> get_from_pull_msg_fcts =
         make_get_from_pull_fcts(std::make_index_sequence<numinedges>{});
 
+    template<std::size_t... IS>
+    constexpr auto make_input_is_const(std::index_sequence<IS...>) {
+      using resultT = decltype(input_is_const);
+      return resultT{{std::is_const_v<std::tuple_element_t<IS, input_args_type>>...}};
+    }
+    constexpr static std::array<bool, numins> input_is_const = make_input_is_const(std::make_index_sequence<numins>{});
+
     ttg::World world;
     ttg::meta::detail::keymap_t<keyT> keymap;
     ttg::meta::detail::keymap_t<keyT> priomap;
@@ -1288,7 +1287,199 @@ namespace ttg_parsec {
     static input_refs_tuple_type make_tuple_of_ref_from_array(task_t *task, std::index_sequence<IS...>) {
       return input_refs_tuple_type{static_cast<std::tuple_element_t<IS, input_refs_tuple_type>>(
           *reinterpret_cast<std::remove_reference_t<std::tuple_element_t<IS, input_refs_tuple_type>> *>(
-              task->parsec_task.data[IS].data_in->device_private))...};
+              task->copies[IS]->device_private))...};
+    }
+
+    /**
+     * Submit callback called by PaRSEC once all input transfers have completed.
+     */
+    template <ttg::ExecutionSpace Space>
+    static parsec_hook_return_t device_static_submit(parsec_task_t* parsec_task) {
+
+      task_t *task = static_cast<task_t*>(parsec_task);
+      // get the device task from the coroutine handle
+      device_task* dev_task = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<device_task_promise_type>::from_address(task->suspended_task_address);
+
+      // get the promise which contains the views
+      auto dev_data = dev_task->promise();
+
+      /* we should still be waiting for the transfer to complete */
+      assert(dev_data.state() == TTG_DEVICE_CORO_WAIT_TRANSFER);
+
+      /* update the device pointers in the device views */
+      int i = 0;
+      for (auto& view : dev_data) {
+        /* iterate over all viewspans of this view (i.e., all memory ranges in this view) */
+        for (auto& view_span : view) {
+          view_span.set_data(task->parsec_task.data[i].copy_out);
+          ++i;
+        }
+      }
+
+      /* Here we call back into the coroutine again after the transfers have completed */
+      static_op(parsec_task);
+
+      /* for now make sure we're waiting for the kernel to complete and the coro hasn't skipped this step */
+      assert(dev_data.state() == TTG_DEVICE_CORO_WAIT_KERNEL);
+
+      /* next time we will come back into device_static_stage_complete */
+      return PARSEC_HOOK_RETURN_DONE;
+    }
+
+    /**
+     * Completion callback called by PaRSEC once the kernel submitted in the submit callback above
+     * have completed.
+     */
+    template <ttg::ExecutionSpace Space>
+    static parsec_hook_return_t device_static_stage_complete(parsec_task_t* parsec_task) {
+
+      // get the device task from the coroutine handle
+      device_task* dev_task = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<device_task_promise_type>::from_address(task->suspended_task_address);
+
+      // get the promise which contains the views
+      auto dev_data = dev_task->promise();
+
+      /* for now make sure we're waiting for the kernel to complete and the coro hasn't skipped this step */
+      assert(dev_data.state() == TTG_DEVICE_CORO_WAIT_KERNEL);
+
+      /* the kernel has completed, resume the coroutine once again to get to the send stage */
+      static_op(parsec_task);
+
+      /* the coroutine should have completed and we cannot access the promise anymore */
+      return PARSEC_HOOK_RETURN_DONE;
+    }
+
+    template <ttg::ExecutionSpace Space>
+    static parsec_hook_return_t device_static_op(parsec_task_t* parsec_task) {
+      static_assert(derived_has_cuda_op);
+      task_t *task = static_cast<task_t*>(parsec_task);
+
+      int dev_index;
+      dev_index = parsec_get_best_device(this_task, ratio);
+      assert(dev_index >= 0);
+      if (dev_index < 2) {
+          return PARSEC_HOOK_RETURN_NEXT; /* Fall back */
+      }
+
+      /* set up a device task */
+      /* TODO: take them from a free-list */
+      parsec_gpu_task_t *gpu_task;
+      gpu_task = (parsec_gpu_task_t *) calloc(1, sizeof(parsec_gpu_task_t));
+      PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_list_item_t);
+
+      gpu_task->ec = parsec_task;
+      /* come back into this function
+        * TODO: have a specialized function that checks
+        */
+      gpu_task->submit = device_static_submit<Space>;
+      gpu_task->complete_stage = device_static_stage_complete<Space>;
+      gpu_task->task_type = 0; // user task
+      gpu_task->load = 1.0;    // TODO: can we do better?
+      gpu_task->last_data_check_epoch = -1; // used internally
+      gpu_task->pushout = 0;
+
+      // first invocation of the coroutine to get the coroutine handle
+      static_op(parsec_task);
+
+      // get the device task from the coroutine handle
+      device_task* dev_task = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<device_task_promise_type>::from_address(task->suspended_task_address);
+
+      // get the promise which contains the views
+      auto dev_data = dev_task->promise();
+
+      /* for now make sure we're waiting for transfers and the coro hasn't skipped this step */
+      assert(dev_data.state() == TTG_DEVICE_CORO_WAIT_TRANSFER);
+
+      // manage the gpu_task flows
+
+      // set the input flows
+      int i = 0;
+      /* TODO: need to free flows at the end of the task lifetime */
+      parsec_flow_t* flows[] = new parsec_flow_t[MAX_PARAM_COUNT];
+      for (auto& view : dev_data) {
+        void *host_obj = view.host_obj();
+
+        /* iterate over all viewspans of this view (i.e., all memory ranges in this view) */
+        for (auto& view_span : view) {
+          gpu_task->flow_nb_elts[i] = view_span.size(); // size in bytes
+          gpu_task->flow[i] = &flows[i];
+          parsec_flow_t flow = {.name = nullptr,
+                                .sym_type = PARSEC_SYM_INOUT,
+                                .flow_flags = view->is_out() ? PARSEC_FLOW_ACCESS_RW : PARSEC_FLOW_ACCESS_READ,
+                                .flow_index = i,
+                                .flow_datatype_mask = ~0 };
+          *gpu_task->flow[i] = flow;
+
+          parsec_data_copy_t* copy = nullptr;
+          ttg_data_copy_t* obj_copy = nullptr;
+          int input_obj_idx = -1;
+          /* try to find the view in the task and allocate a new copy if needed */
+          for (int i = 0; nullptr == copy && i < numins; ++i) {
+            ttg_data_copy_t* obj_copy = task->copies[i];
+            if (obj_copy->device_private == host_obj) {
+              for (auto dev_copy : obj_copy) {
+                if (view_span.data() == dev_copy->device_private) {
+                  copy = dev_copy;
+                  input_obj_idx = i;
+                  break;
+                }
+              }
+            }
+          }
+
+          /* push all data back out, EXCEPT if the host object is a const input for the task
+           * TODO [JS]: if PaRSEC lets us send from the device we can avoid pushing out here
+           */
+          if (input_obj_idx == -1 || !input_is_const[input_obj_idx]) {
+            gpu_task->pushout |= 1<<i;
+          }
+
+          /* no copy found, create a new copy */
+          if (nullptr == copy) {
+            parsec_data_t *data = parsec_data_new();
+            copy = parsec_data_copy_new(data, 0, parsec_datatype_int8_t, 0);
+            copy->device_private = view_span.data();
+            parsec_data_copy_attach(data, copy, 0); // TODO: device 0 is the CPU?
+          }
+
+          if (obj_copy != nullptr) {
+            /* add the */
+            obj_copy->add_device_copy(copy);
+          }
+          /* register the copy with the task */
+          task->parsec_task.data[i].copy_in = copy;
+
+          ++i;
+        }
+      }
+
+      /* mark all other flows as ignored */
+      for (; i < MAX_PARAM_COUNT; ++i) {
+        gpu_task->flow_nb_elts[i] = 0;
+        gpu_task->flow[i] = &flows[i];
+        gpu_task->flow[i]->flow_flags = PARSEC_FLOW_ACCESS_NONE;
+      }
+
+      parsec_device_module_t *device = parsec_mca_device_get(dev_index);
+      assert(NULL != device);
+      switch(device->type) {
+
+#if defined(PARSEC_HAVE_CUDA)
+        case PARSEC_DEV_CUDA:
+          if constexpr (Space == ttg::ExecutionSpace::CUDA) {
+            /* TODO: we need custom staging functions because PaRSEC looks at the
+             *       task-class to determine the number of flows. */
+            gpu_task->stage_in  = parsec_default_cuda_stage_in;
+            gpu_task->stage_out = parsec_default_cuda_stage_out;
+            return parsec_cuda_kernel_scheduler(es, gpu_task, dev_index);
+          }
+          break;
+#endif
+        default:
+          break;
+      }
+      ttg::print_error(get_name(), " : received mismatching device type ", device->type, " from PaRSEC");
+      ttg::abort();
     }
 
     template <ttg::ExecutionSpace Space>
@@ -1302,6 +1493,7 @@ namespace ttg_parsec {
         nullptr;
 #endif
       if (suspended_task_address == nullptr) {  // task is a coroutine that has not started or an ordinary function
+
         ttT *baseobj = task->tt;
         derivedT *obj = static_cast<derivedT *>(baseobj);
         assert(parsec_ttg_caller == NULL);
@@ -1357,6 +1549,8 @@ namespace ttg_parsec {
         }
       }
 
+// XXX the below code is not needed, should be removed once the fib test has been changed
+#if 0
 #ifdef TTG_HAS_COROUTINE
       if (suspended_task_address) {
         // right now can events are not properly implemented, we are only testing the workflow with dummy events
@@ -1377,6 +1571,7 @@ namespace ttg_parsec {
       }
       else
 #endif  // TTG_HAS_COROUTINE
+#endif // 0
         return PARSEC_HOOK_RETURN_DONE;
     }
 
@@ -2924,7 +3119,9 @@ namespace ttg_parsec {
       self.task_class_id = get_instance_id();
       self.nb_parameters = 0;
       self.nb_locals = 0;
-      self.nb_flows = numflows;
+      //self.nb_flows = numflows;
+      self.nb_flows = MAX_PARAM_COUNT; // we're not using all flows but have to
+                                       // trick the device handler into looking at all of them
 
       if( world_impl.profiling() ) {
         // first two ints are used to store the hash of the key.

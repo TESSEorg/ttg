@@ -3,6 +3,8 @@
 
 #include <utility>
 #include <limits>
+#include <vector>
+#include <iterator>
 
 #include <parsec.h>
 
@@ -82,6 +84,60 @@ namespace ttg_parsec {
 
       /* mark destructor as virtual */
       virtual ~ttg_data_copy_t() = default;
+
+
+
+      /* manage device copies owned by this object
+       * we only touch the vector if we have more than one copies to track
+       * and otherwise use the single-element member.
+       */
+      using device_iterator = parsec_data_copy_t**;
+
+      void add_device_copy(parsec_data_copy_t* copy) {
+        switch (m_num_dev_copies) {
+          case 0:
+            m_single_dev_copy = copy;
+            break;
+          case 1:
+            /* move single copy into vector and add new copy below */
+            m_dev_copies.push_back(m_single_dev_copy);
+            /* fall-through */
+          default:
+            /* store in multi-copy vector */
+            m_dev_copies.push_back(copy);
+            break;
+        }
+        m_num_dev_copies++;
+      }
+
+      int num_dev_copies() const {
+        return m_num_dev_copies;
+      }
+
+      device_iterator begin() {
+        switch(m_num_dev_copies) {
+          // no device copies
+          case 0: return end();
+          case 1: return &m_single_dev_copy;
+          default: return m_dev_copies.data();
+        }
+      }
+
+      device_iterator end() {
+        switch(m_num_dev_copies) {
+          case 0:
+          case 1:
+            return &(m_single_dev_copy) + 1;
+          default:
+            return m_dev_copies.data() + m_dev_copies.size();
+        }
+      }
+
+    private:
+      std::vector<parsec_data_copy_t*> m_dev_copies;   //< used if there are multiple device copies
+                                                       //  that belong to this object
+      parsec_data_copy_t* m_single_dev_copy;           //< used if there is a single device copy
+      int m_num_dev_copies = 0;                        //< number of device copies
     };
 
 

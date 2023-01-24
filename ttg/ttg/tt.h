@@ -172,15 +172,15 @@ namespace ttg {
 
 #ifndef TTG_PROCESS_TT_OP_RETURN
 #ifdef TTG_HAS_COROUTINE
-#define TTG_PROCESS_TT_OP_RETURN(result, invoke)     \
-  {                                                  \
-    using return_type = decltype(invoke);            \
-    if constexpr (std::is_same_v<return_type, void>) \
-      invoke;                                        \
-    else {                                           \
-      auto coro_return = invoke;                     \
-      result = coro_return.address();                \
-    }                                                \
+#define TTG_PROCESS_TT_OP_RETURN(result, invoke)       \
+  {                                                    \
+    using return_type = decltype(invoke);              \
+    if constexpr (std::is_same_v<return_type, void>) { \
+      invoke;                                          \
+    } else {                                           \
+      auto coro_return = invoke;                       \
+      result = coro_return.address();                  \
+    }                                                  \
   }
 #else
 #define TTG_PROCESS_TT_OP_RETURN(result, invoke) invoke
