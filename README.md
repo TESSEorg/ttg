@@ -293,7 +293,7 @@ Execute the python script in the following format on terminal
 
 Obtained Traces will appear like this -
 
-![Fibonacci_traces_example](/home/ashawini/ttg/images/Fibonacci_traces_example.png) 
+![Fibonacci_traces_example](/home/ashawini/ttg/images/fib_NOPARSEC_traces.png) 
 
 
 ### To generate traces for Multiple MPI Processes 
