@@ -184,9 +184,11 @@ int main(int argc, char *argv[]) {
         } else
           ttg::sendv<2>(F_n);
       },
-      ttg::edges(f2f_nm1, f2f_nm2), ttg::edges(f2f_nm1, f2f_nm2, f2p));
+      ttg::edges(f2f_nm1, f2f_nm2), ttg::edges(f2f_nm1, f2f_nm2, f2p),
+      "fib");
   auto print = ttg::make_tt([](int64_t F_N) { std::cout << N << "th Fibonacci number is " << F_N << std::endl; },
-                            ttg::edges(f2p));
+                            ttg::edges(f2p),
+                            "print");
 
   ttg::make_graph_executable(fib);
   ttg::execute();
@@ -255,27 +257,30 @@ Stay tuned!
 
 To generate the trace results of any TTG program follow the process discussed below:
 
-- Configue CMAKE by setting up the environment variables as `-DPARSEC_PROF_TRACE=ON` ,`-DBUILD_SHARED_LIBS=ON`,and `-DTTG_ENABLE_TRACE=TRUE`
-- Configure the TTG program with `CMAKE_PREFIX_PATH=` {path to `ttg-config.cmake` file}
-- Install required sys packages including Python 3.8, Cython (required version >= 0.21.2), 2to3 V1.0, numpy version 1.23, pandas 1.5, and tables 3.7, using 
-```console
- pip install {package_name}
-``` 
-- Create file 
-```console 
-${HOME}/.parsec/mca-params.conf 
-````
-and add single line to it: `mca_pins = task_profiler`
-- Define environment variable before running TTG program: `PARSEC_MCA_profile_filename` to {`filename`} to let program generate traces with the specified filename. 
-- Export environment variable PYTHONPATH as: 
+- For simplicity we assume here that TTG will build PaRSEC from source. Make sure PaRSEC Python tools prerequisites have been installed, namely Python3 (version 3.8 is recommended) and the following Python packages (e.g., using `pip`):
+  - `cython`
+  - `2to3`
+  - `numpy`
+  - `pandas`
+  - `tables`
+- Configure and build TTG:
+  - Configure TTG with `-DPARSEC_PROF_TRACE=ON` (this turns on PaRSEC task tracing) and `-DBUILD_SHARED_LIBS=ON` (to support PaRSEC Python tools). Also make sure that CMake discovers the Python3 interpreter and the `cython` package.
+  - Build TTG
+- Build the TTG program to be traced.
+- Run the TTG program with tracing turned on:
+  - Create file `${HOME}/.parsec/mca-params.conf` and add line `mca_pins = task_profiler` to it
+  - Set environment variable `PARSEC_MCA_profile_filename` to the trace file name.
+  - Run the program and make sure the trace files (in PaRSEC binary format) have been generated.
+- Convert the traces from PaRSEC binary format to the Chrome Trace Format (CTF).
+  - Export environment variable PYTHONPATH as: 
 ```bash 
 export PYTHONPATH={ttg_build_directory}/_deps/parsec-build/tools/profiling/python/build/{lib_folder} for Python3.8:$PYTHONPATH
 ````
-- Run the TTG program in debug mode to generate trace file. Provide program arguments (if any) 
-- To convert trace file into `.ctf.json` file format to be visualized using chrome tracing or perfetto, use syntax - 
+  - To convert trace file into `.ctf.json` file format to be visualized using chrome tracing or perfetto, use syntax - 
 ```
  {ttg_root}/bin/pbt_to_ctf.py {trace_file_name} {ctf_filename}.ctf.json
 ```
+- Open the `chrome://tracing` URL in Chrome browser and load the resulting trace.
 
 ### Let's use computation of `N`th Fibonacci number to exemplify tracing of a TTG program:
 - Follow the steps mentioned above and execute the `nth-fibonacci.cpp` program in debug mode to obtain traces 
