@@ -3,6 +3,7 @@ include(AddTTGExecutable)
 # TT unit test: core TTG ops
 set(ut_src
         fibonacci.cc
+        device_coro.cc
         ranges.cc
         tt.cc
         unit_main.cpp)

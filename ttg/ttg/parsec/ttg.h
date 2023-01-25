@@ -50,6 +50,11 @@
 #include <tuple>
 #include <vector>
 
+/* TODO: remove once we use PaRSEC master */
+#ifndef PARSEC_HAVE_CUDA
+#define PARSEC_HAVE_CUDA 1
+#endif // PARSEC_HAVE_CUDA
+
 #include <parsec.h>
 #include <parsec/class/parsec_hash_table.h>
 #include <parsec/data_internal.h>
@@ -59,6 +64,9 @@
 #include <parsec/parsec_comm_engine.h>
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
+/* TODO: once we use parsec master we need to switch this include */
+#include <parsec/mca/device/cuda/device_cuda.h>
+//#include <parsec/mca/device/device_gpu.h>
 #if defined(PARSEC_PROF_TRACE)
 #include <parsec/profiling.h>
 #undef PARSEC_TTG_PROFILE_BACKEND
@@ -520,7 +528,7 @@ namespace ttg_parsec {
       parsec_task_t parsec_task;
       int32_t in_data_count = 0;  //< number of satisfied inputs
       int32_t data_count = 0;     //< number of data elements in parsec_task.data
-      ttg_data_copy_t *copies;    //< pointer to the fixed copies array of the derived task
+      ttg_data_copy_t **copies;    //< pointer to the fixed copies array of the derived task
       parsec_hash_table_item_t tt_ht_item = {};
       parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces] =
           {nullptr};
@@ -556,9 +564,11 @@ namespace ttg_parsec {
        */
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
-                             int data_count, ttg_data_copy_t *copies,
+                             int data_count, ttg_data_copy_t **copies,
                              bool defer_writer = TTG_PARSEC_DEFER_WRITER)
-          : data_count(data_count), copies(copies) defer_writer(defer_writer) {
+          : data_count(data_count)
+          , copies(copies)
+          , defer_writer(defer_writer) {
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
@@ -567,7 +577,7 @@ namespace ttg_parsec {
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
                              parsec_taskpool_t *taskpool, int32_t priority,
-                             int data_count, ttg_data_copy_t *copies,
+                             int data_count, ttg_data_copy_t **copies,
                              release_task_fn *release_fn,
                              bool defer_writer = TTG_PARSEC_DEFER_WRITER)
           : data_count(data_count)
@@ -603,7 +613,7 @@ namespace ttg_parsec {
                                                              // +1 for the copy needed during send/bcas
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
-          : parsec_ttg_task_base_t(mempool, task_class, num_streams) {
+          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies) {
         tt_ht_item.key = pkey();
 
         // We store the hash of the key and the address where it can be found in locals considered as a scratchpad
@@ -1194,7 +1204,7 @@ namespace ttg_parsec {
         make_get_from_pull_fcts(std::make_index_sequence<numinedges>{});
 
     template<std::size_t... IS>
-    constexpr auto make_input_is_const(std::index_sequence<IS...>) {
+    constexpr static auto make_input_is_const(std::index_sequence<IS...>) {
       using resultT = decltype(input_is_const);
       return resultT{{std::is_const_v<std::tuple_element_t<IS, input_args_type>>...}};
     }
@@ -1298,13 +1308,13 @@ namespace ttg_parsec {
 
       task_t *task = static_cast<task_t*>(parsec_task);
       // get the device task from the coroutine handle
-      device_task* dev_task = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<device_task_promise_type>::from_address(task->suspended_task_address);
+      ttg::device_task* dev_task = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<ttg::device_task_promise_type>::from_address(task->suspended_task_address);
 
       // get the promise which contains the views
       auto dev_data = dev_task->promise();
 
       /* we should still be waiting for the transfer to complete */
-      assert(dev_data.state() == TTG_DEVICE_CORO_WAIT_TRANSFER);
+      assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_TRANSFER);
 
       /* update the device pointers in the device views */
       int i = 0;
@@ -1320,7 +1330,7 @@ namespace ttg_parsec {
       static_op(parsec_task);
 
       /* for now make sure we're waiting for the kernel to complete and the coro hasn't skipped this step */
-      assert(dev_data.state() == TTG_DEVICE_CORO_WAIT_KERNEL);
+      assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL);
 
       /* next time we will come back into device_static_stage_complete */
       return PARSEC_HOOK_RETURN_DONE;
@@ -1333,14 +1343,16 @@ namespace ttg_parsec {
     template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t device_static_stage_complete(parsec_task_t* parsec_task) {
 
+      task_t *task = static_cast<task_t*>(parsec_task);
+
       // get the device task from the coroutine handle
-      device_task* dev_task = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<device_task_promise_type>::from_address(task->suspended_task_address);
+      ttg::device_task* dev_task = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<ttg::device_task_promise_type>::from_address(task->suspended_task_address);
 
       // get the promise which contains the views
       auto dev_data = dev_task->promise();
 
       /* for now make sure we're waiting for the kernel to complete and the coro hasn't skipped this step */
-      assert(dev_data.state() == TTG_DEVICE_CORO_WAIT_KERNEL);
+      assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL);
 
       /* the kernel has completed, resume the coroutine once again to get to the send stage */
       static_op(parsec_task);
@@ -1355,7 +1367,8 @@ namespace ttg_parsec {
       task_t *task = static_cast<task_t*>(parsec_task);
 
       int dev_index;
-      dev_index = parsec_get_best_device(this_task, ratio);
+      double ratio = 1.0;
+      dev_index = parsec_get_best_device(parsec_task, ratio);
       assert(dev_index >= 0);
       if (dev_index < 2) {
           return PARSEC_HOOK_RETURN_NEXT; /* Fall back */
@@ -1382,13 +1395,13 @@ namespace ttg_parsec {
       static_op(parsec_task);
 
       // get the device task from the coroutine handle
-      device_task* dev_task = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<device_task_promise_type>::from_address(task->suspended_task_address);
+      ttg::device_task* dev_task = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<ttg::device_task_promise_type>::from_address(task->suspended_task_address);
 
       // get the promise which contains the views
       auto dev_data = dev_task->promise();
 
       /* for now make sure we're waiting for transfers and the coro hasn't skipped this step */
-      assert(dev_data.state() == TTG_DEVICE_CORO_WAIT_TRANSFER);
+      assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_TRANSFER);
 
       // manage the gpu_task flows
 

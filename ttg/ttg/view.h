@@ -2,8 +2,8 @@
 #define TTG_VIEW_H
 
 #include <array>
-#include "ttg/util/iovec.h"
-#include "ttg/util/coroutine.h"
+#include <type_traits>
+#include <span>
 
 namespace ttg {
 
@@ -18,10 +18,11 @@ namespace ttg {
    * We use it instead of a std::span to be able
    * to remove the type and convert to void pointers instead.
    */
-  template<typename T>
+  template<typename T, typename = void>
   struct ViewSpan;
 
-  struct ViewSpan<void> {
+  template<>
+  struct ViewSpan<void, void> {
 
     using element_type  = void;
     using value_type    = void;
@@ -70,7 +71,7 @@ namespace ttg {
 
 
   template<typename T>
-  struct ViewSpan<T> : public ViewSpan<void> {
+  struct ViewSpan<T, void> : public ViewSpan<void, void> {
 
     using element_type  = T;
     using value_type    = std::remove_cv_t<T>;
@@ -78,28 +79,17 @@ namespace ttg {
 
     constexpr ViewSpan() = default;
     constexpr ViewSpan(T* ptr, std::size_t size, ViewScope scope = ViewScope::SyncIn)
-    : m_ptr(ptr)
-    , m_size(size)
-    , m_scope(scope)
+    : ViewSpan<void, void>(ptr, size, scope)
     { }
 
     constexpr T* data() const {
-      return static_cast<T*>(m_ptr);
+      return static_cast<T*>(m_data_ptr);
     }
 
-  }
+  };
 
   template<typename HostT, typename... DevTypeTs>
-  struct View;
-
-  template<>
-  struct View<void> {
-    void *m_obj = nullptr;
-    std::array<
-  }
-
-  template<typename HostT, typename... DevTypeTs>
-  struct View<HostT, DevTypeTs...> {
+  struct View {
 
     using span_tuple_type  = std::tuple<ttg::ViewSpan<DevTypeTs>...>;
     using host_type = HostT;
@@ -184,6 +174,12 @@ namespace ttg {
     return View(obj, std::make_tuple(std::move(spans)...));
   }
 
+  /* overload for trivially-copyable host objects */
+  template<typename HostT, typename = std::enable_if_t<std::is_trivially_copyable_v<HostT>>>
+  auto make_view(HostT& obj) {
+    return View(obj, std::make_tuple(ViewSpan{&obj, sizeof(HostT)}));
+  }
+
   /* yielded when waiting on a kernel to complete */
   struct device_op_wait_kernel
   { };
@@ -202,7 +198,7 @@ namespace ttg {
     using span_type = std::span<ViewSpan<void>>;
     using iterator = typename span_type::iterator;
 
-    device_obj_span(void *obj, span_type&& span)
+    device_obj_view(void *obj, span_type&& span)
     : m_obj(obj)
     , m_span(std::forward<span_type>(span))
     { }
@@ -233,7 +229,7 @@ namespace ttg {
     /// these are members mandated by the promise_type concept
     ///@{
 
-    using promise_type = device_op_promise_type;
+    using promise_type = device_task_promise_type;
 
     ///@}
 
@@ -259,7 +255,7 @@ namespace ttg {
     /* do not suspend the coroutine on first invocation, we want to run
      * the coroutine immediately and suspend when we get the device transfers.
      */
-    std::suspend_never initial_suspend() {
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_never initial_suspend() {
       m_state = TTG_DEVICE_CORO_INIT;
       return {};
     }
@@ -268,7 +264,7 @@ namespace ttg {
      * so we can access the promise.
      * TODO: necessary? maybe we can save one suspend here
      */
-    std::suspend_never final_suspend() noexcept {
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_never final_suspend() noexcept {
       m_state = TTG_DEVICE_CORO_COMPLETE;
       return {};
     }
@@ -278,9 +274,9 @@ namespace ttg {
      *       is already available and avoid suspending...
      */
     template<typename... Views>
-    std::suspend_always yield_value(std:tuple<Views...> &views) {
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always yield_value(std::tuple<Views&...> &views) {
       /* gather all the views (host object + view spans, type-punned) into a vector */
-      constexpr std::size_t view_count = std::tuple_size_v<std:tuple<Views...>>;
+      constexpr static std::size_t view_count = std::tuple_size_v<std::tuple<Views...>>;
       m_spans.clear(); // in case we ever come back here
       m_spans.reserve(view_count);
       if constexpr(view_count > 0) {
@@ -293,8 +289,14 @@ namespace ttg {
       return {};
     }
 
+    /* convenience-function to yield a single view */
+    template<typename HostT, typename... DeviceViewTs>
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always yield_value(View<HostT, DeviceViewTs...> &view) {
+      return yield_value(std::tie(view));
+    }
+
     /* waiting for the kernel to complete should always suspend */
-    std::suspend_always yield_value(device_op_wait_kernel) {
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always yield_value(device_op_wait_kernel) {
       m_state = TTG_DEVICE_CORO_WAIT_KERNEL;
       return {};
     }
@@ -303,14 +305,14 @@ namespace ttg {
       m_state = TTG_DEVICE_CORO_COMPLETE;
     }
 
-    bool complete const {
+    bool complete() const {
       return m_state == TTG_DEVICE_CORO_COMPLETE;
     }
 
-    using handle_type = device_task;
+    using handle_type = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<device_task_promise_type>;
     device_task get_return_object() { return device_task{handle_type::from_promise(*this)}; }
 
-    using iterator = std::vector<device_obj_span>::iterator;
+    using iterator = std::vector<device_obj_view>::iterator;
 
     auto begin() {
       return m_spans.begin();
