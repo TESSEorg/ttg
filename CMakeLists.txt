@@ -66,7 +66,7 @@ endif (FORCE_COLORED_OUTPUT)
 include(CTest)
 enable_testing()
 if (BUILD_TESTING)
-    include(FindOrFetchCatch2)
+    include(${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchCatch2.cmake)
     list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/contrib)
     include(Catch)
 endif (BUILD_TESTING)
@@ -75,20 +75,20 @@ endif (BUILD_TESTING)
 #### optional prerequisites
 ###########################
 # Boost
-include(FindOrFetchBoost)
+include(${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchBoost.cmake)
 # Cereal
-#include(FindOrFetchCereal)
+#include(${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchCereal.cmake)
 
 ##########################
 #### prerequisite runtimes
 ##########################
 # PaRSEC
-include(FindOrFetchPARSEC)
+include(${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchPARSEC.cmake)
 if (TARGET PaRSEC::parsec)
   message(STATUS "PARSEC_FOUND=1")
 endif(TARGET PaRSEC::parsec)
 # MADNESS
-include(FindOrFetchMADNESS)
+include(${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchMADNESS.cmake)
 if (TARGET MADworld)
   message(STATUS "MADNESS_FOUND=1")
 endif(TARGET MADworld)
@@ -107,7 +107,7 @@ if (TTG_EXAMPLES)
                 INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
     endif (EIGEN3_FOUND)
     # BTAS brings in linear algebra (BLAS++/LAPACK++)
-    include(FindOrFetchBTAS)
+    include(${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchBTAS.cmake)
     # OpenMP may also be used by some examples
     find_package(OpenMP COMPONENTS CXX)
     # std::execution may also be used by some examples
