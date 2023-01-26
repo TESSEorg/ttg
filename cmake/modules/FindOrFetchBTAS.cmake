@@ -14,6 +14,11 @@ if (NOT TARGET BTAS::BTAS)
     set(_linalgpp_use_standard_linalg_kits TRUE)
   endif(DEFINED BLA_VENDOR)
 
+  # warn if user wants BTAS to install Boost rather than TTG
+  if (NOT TTG_FETCH_BOOST AND BTAS_BUILD_DEPS_FROM_SOURCE)
+    message(WARNING "To build Boost from source prefer to configure with TTG_FETCH_BOOST=ON, not with BTAS_BUILD_DEPS_FROM_SOURCE=ON")
+  endif()
+
   FetchContent_Declare(
       BTAS
       GIT_REPOSITORY      https://github.com/BTAS/btas.git
