@@ -122,12 +122,12 @@ namespace ttg {
 
     template<std::size_t i>
     auto get_device_ptr() {
-      return static_cast<std::tuple_element<i, span_tuple_type>>(std::get<i>(m_spans).data());
+      return static_cast<std::tuple_element_t<i, span_tuple_type>::value_type*>(std::get<i>(m_spans).data());
     }
 
     template<std::size_t i>
     const auto get_device_ptr() const {
-      return static_cast<std::tuple_element<i, span_tuple_type>>(std::get<i>(m_spans).data());
+      return static_cast<std::tuple_element_t<i, span_tuple_type>::value_type>(std::get<i>(m_spans).data());
     }
 
     template<std::size_t i>
@@ -177,7 +177,7 @@ namespace ttg {
   /* overload for trivially-copyable host objects */
   template<typename HostT, typename = std::enable_if_t<std::is_trivially_copyable_v<HostT>>>
   auto make_view(HostT& obj) {
-    return View(obj, std::make_tuple(ViewSpan{&obj, sizeof(HostT)}));
+    return View<HostT, HostT>(obj, std::make_tuple(ViewSpan<HostT>(&obj, sizeof(HostT))));
   }
 
   /* yielded when waiting on a kernel to complete */
@@ -235,7 +235,7 @@ namespace ttg {
 
     device_task(base_type base) : base_type(std::move(base)) {}
 
-    base_type handle() { return *this; }
+    base_type& handle() { return *this; }
 
     /// @return true if ready to resume
     inline bool ready() {
@@ -281,7 +281,9 @@ namespace ttg {
       m_spans.reserve(view_count);
       if constexpr(view_count > 0) {
         auto unpack_lambda = [&](Views&... view){
-                                ((m_spans.push_back(device_obj_view(view.host_obj(), view.view_spans()))),...);
+                                ((m_spans.push_back(device_obj_view(&view.get_host_object(),
+                                                                    view.view_spans()))),
+                                  ...);
                               };
         std::apply(unpack_lambda, views);
       }
@@ -292,7 +294,8 @@ namespace ttg {
     /* convenience-function to yield a single view */
     template<typename HostT, typename... DeviceViewTs>
     TTG_CXX_COROUTINE_NAMESPACE::suspend_always yield_value(View<HostT, DeviceViewTs...> &view) {
-      return yield_value(std::tie(view));
+      auto tmp_tuple = std::tie(view);
+      return yield_value(tmp_tuple);
     }
 
     /* waiting for the kernel to complete should always suspend */
@@ -311,6 +314,10 @@ namespace ttg {
 
     using handle_type = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<device_task_promise_type>;
     device_task get_return_object() { return device_task{handle_type::from_promise(*this)}; }
+
+    void unhandled_exception() {
+
+    }
 
     using iterator = std::vector<device_obj_view>::iterator;
 

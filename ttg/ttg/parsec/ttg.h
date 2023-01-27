@@ -64,9 +64,10 @@
 #include <parsec/parsec_comm_engine.h>
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
+#include <parsec/remote_dep.h>
 /* TODO: once we use parsec master we need to switch this include */
 #include <parsec/mca/device/cuda/device_cuda.h>
-//#include <parsec/mca/device/device_gpu.h>
+#include <parsec/mca/device/device_gpu.h>
 #if defined(PARSEC_PROF_TRACE)
 #include <parsec/profiling.h>
 #undef PARSEC_TTG_PROFILE_BACKEND
@@ -1339,7 +1340,7 @@ namespace ttg_parsec {
       }
 
       /* Here we call back into the coroutine again after the transfers have completed */
-      static_op(parsec_task);
+      static_op<Space>(parsec_task);
 
       /* for now make sure we're waiting for the kernel to complete and the coro hasn't skipped this step */
       assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL);
@@ -1367,7 +1368,7 @@ namespace ttg_parsec {
       assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL);
 
       /* the kernel has completed, resume the coroutine once again to get to the send stage */
-      static_op(parsec_task);
+      static_op<Space>(parsec_task);
 
       /* the coroutine should have completed and we cannot access the promise anymore */
       return PARSEC_HOOK_RETURN_DONE;
@@ -1377,6 +1378,7 @@ namespace ttg_parsec {
     static parsec_hook_return_t device_static_op(parsec_task_t* parsec_task) {
       static_assert(derived_has_cuda_op);
       task_t *task = static_cast<task_t*>(parsec_task);
+      parsec_execution_stream_s *es = task->world().get_impl().execution_stream();
 
       int dev_index;
       double ratio = 1.0;
@@ -1404,13 +1406,13 @@ namespace ttg_parsec {
       gpu_task->pushout = 0;
 
       // first invocation of the coroutine to get the coroutine handle
-      static_op(parsec_task);
+      static_op<Space>(parsec_task);
 
       // get the device task from the coroutine handle
       ttg::device_task* dev_task = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<ttg::device_task_promise_type>::from_address(task->suspended_task_address);
 
       // get the promise which contains the views
-      auto dev_data = dev_task->promise();
+      ttg::device_task_promise_type& dev_data = dev_task->promise();
 
       /* for now make sure we're waiting for transfers and the coro hasn't skipped this step */
       assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_TRANSFER);
@@ -1420,7 +1422,7 @@ namespace ttg_parsec {
       // set the input flows
       int i = 0;
       /* TODO: need to free flows at the end of the task lifetime */
-      parsec_flow_t* flows[] = new parsec_flow_t[MAX_PARAM_COUNT];
+      parsec_flow_t* flows = new parsec_flow_t[MAX_PARAM_COUNT];
       for (auto& view : dev_data) {
         void *host_obj = view.host_obj();
 
@@ -1430,19 +1432,19 @@ namespace ttg_parsec {
           gpu_task->flow[i] = &flows[i];
           parsec_flow_t flow = {.name = nullptr,
                                 .sym_type = PARSEC_SYM_INOUT,
-                                .flow_flags = view->is_out() ? PARSEC_FLOW_ACCESS_RW : PARSEC_FLOW_ACCESS_READ,
+                                .flow_flags = view_span.is_sync_out() ? PARSEC_FLOW_ACCESS_RW : PARSEC_FLOW_ACCESS_READ,
                                 .flow_index = i,
                                 .flow_datatype_mask = ~0 };
           *gpu_task->flow[i] = flow;
 
           parsec_data_copy_t* copy = nullptr;
-          ttg_data_copy_t* obj_copy = nullptr;
+          ttg_parsec::detail::ttg_data_copy_t* obj_copy = nullptr;
           int input_obj_idx = -1;
           /* try to find the view in the task and allocate a new copy if needed */
           for (int i = 0; nullptr == copy && i < numins; ++i) {
-            ttg_data_copy_t* obj_copy = task->copies[i];
+            ttg_parsec::detail::ttg_data_copy_t* obj_copy = task->copies[i];
             if (obj_copy->device_private == host_obj) {
-              for (auto dev_copy : obj_copy) {
+              for (auto& dev_copy : *obj_copy) {
                 if (view_span.data() == dev_copy->device_private) {
                   copy = dev_copy;
                   input_obj_idx = i;
@@ -1503,7 +1505,7 @@ namespace ttg_parsec {
         default:
           break;
       }
-      ttg::print_error(get_name(), " : received mismatching device type ", device->type, " from PaRSEC");
+      ttg::print_error(task->get_name(), " : received mismatching device type ", device->type, " from PaRSEC");
       ttg::abort();
     }
 

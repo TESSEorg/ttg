@@ -91,7 +91,7 @@ namespace ttg_parsec {
        * we only touch the vector if we have more than one copies to track
        * and otherwise use the single-element member.
        */
-      using device_iterator = parsec_data_copy_t**;
+      using iterator = parsec_data_copy_t**;
 
       void add_device_copy(parsec_data_copy_t* copy) {
         switch (m_num_dev_copies) {
@@ -114,7 +114,7 @@ namespace ttg_parsec {
         return m_num_dev_copies;
       }
 
-      device_iterator begin() {
+      iterator begin() {
         switch(m_num_dev_copies) {
           // no device copies
           case 0: return end();
@@ -123,7 +123,7 @@ namespace ttg_parsec {
         }
       }
 
-      device_iterator end() {
+      iterator end() {
         switch(m_num_dev_copies) {
           case 0:
           case 1:

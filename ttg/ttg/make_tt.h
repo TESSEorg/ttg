@@ -145,7 +145,11 @@ class CallableWrapTTArgs
 
   using op_return_type =
 #ifdef TTG_HAS_COROUTINE
-      std::conditional_t<std::is_same_v<returnT, ttg::resumable_task>, ttg::coroutine_handle<>, void>;
+      std::conditional_t<std::is_same_v<returnT, ttg::resumable_task>,
+                         ttg::coroutine_handle<>,
+                         std::conditional_t<std::is_same_v<returnT, ttg::device_task>,
+                                            ttg::device_task::base_type,
+                                            void>>;
 #else   // TTG_HAS_COROUTINE
       void;
 #endif  // TTG_HAS_COROUTINE
@@ -169,7 +173,11 @@ class CallableWrapTTArgs
             coro_handle = ret;
           }
           return coro_handle;
-        } else
+        } else if constexpr (std::is_same_v<returnT, ttg::device_task>) {
+          ttg::device_task::base_type coro_handle = ret;
+          return coro_handle;
+        }
+        if constexpr (!(std::is_same_v<returnT, ttg::resumable_task> || std::is_same_v<returnT, ttg::device_task>))
 #endif
         {
           static_assert(std::tuple_size_v<std::remove_reference_t<decltype(out)>> == 1,
