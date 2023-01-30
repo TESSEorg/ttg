@@ -35,7 +35,8 @@ import json
 import re
 import sys
 
-def pbt_to_ctf(pbt_files_list, ctf_filename, PARSEC_TRACES):
+def pbt_to_ctf(pbt_files_list, ctf_filename, PARSEC_TRACES, MPI_TRACES):
+
     PARSEC_TRACES = PARSEC_TRACES.lower()
     if PARSEC_TRACES in ["true", "yes", "y", "1", "t"]:
         PARSEC_TRACES = True
@@ -43,62 +44,48 @@ def pbt_to_ctf(pbt_files_list, ctf_filename, PARSEC_TRACES):
     elif PARSEC_TRACES in ["false", "no", "n", "0", "f"]:
         PARSEC_TRACES = False
 
+
+    MPI_TRACES = MPI_TRACES.lower()
+    if MPI_TRACES in ["true", "yes", "y", "1", "t"]:
+        MPI_TRACES = True
+
+    elif MPI_TRACES in ["false", "no", "n", "0", "f"]:
+        MPI_TRACES = False
+
+
     ctf_data = {"traceEvents": []}
-    proc = 0;
     print("list of all pbt files = ", [pbt_files_list])
+
     for filename in pbt_files_list:
         ptt_filename = pbt2ptt.convert([filename], multiprocess=False)
         trace = ptt.from_hdf(ptt_filename)
 
-        index_of_proc= filename.find('.prof') - 1
-        print("Proc", filename[index_of_proc], "is executing ", filename)
         for e in range(len(trace.events)):
             # print('id=',trace.events.id[e],' node_id=',trace.events.node_id[e],' stream_id=',trace.events.stream_id[e],'key=',trace.events.key[e],' type=',trace.events.type[e],' b=',trace.events.begin[e],' e=',trace.events.end[e])
             # print('\n')
 
-            if(PARSEC_TRACES):
-                # if not trace.event_names[trace.events.type[e]].startswith("PARSEC"):
-                print(trace.event_names[trace.events.type[e]])
-                ctf_event = {}
-                ctf_event["Proc"] = "Proc" + filename[index_of_proc]
-                ctf_event["ph"] = "X"  # complete event type
-                ctf_event["ts"] = 0.001 * trace.events.begin[e] # when we started, in ms
-                ctf_event["dur"] = 0.001 * (trace.events.end[e] - trace.events.begin[e]) # when we started, in ms
-                ctf_event["name"] = trace.event_names[trace.events.type[e]]
 
-                if trace.events.key[e] != None:
-                    ctf_event["args"] = trace.events.key[e].decode('utf-8').rstrip('\x00')
-                    ctf_event["name"] = trace.event_names[trace.events.type[e]]+"<"+ctf_event["args"]+">"
+            if(PARSEC_TRACES == False and trace.event_names[trace.events.type[e]].startswith("PARSEC")):
+                continue
+            if(MPI_TRACES == False and trace.event_names[trace.events.type[e]].startswith("MPI")):
+                continue
 
-                ctf_event["pid"] = trace.events.node_id[e]
-                ctf_event["tid"] = trace.events.stream_id[e]
+            ctf_event = {}
+            ctf_event["ph"] = "X"  # complete event type
+            ctf_event["ts"] = 0.001 * trace.events.begin[e] # when we started, in ms
+            ctf_event["dur"] = 0.001 * (trace.events.end[e] - trace.events.begin[e]) # when we started, in ms
+            ctf_event["name"] = trace.event_names[trace.events.type[e]]
 
-                ctf_data["traceEvents"].append(ctf_event)
+            if trace.events.key[e] != None:
+                ctf_event["args"] = trace.events.key[e].decode('utf-8').rstrip('\x00')
+                ctf_event["name"] = trace.event_names[trace.events.type[e]]+"<"+ctf_event["args"]+">"
 
-                # print("Done............................................!!!!!!")
+                # ctf_event["pid"] = trace.events.node_id[e]
+            ctf_event["pid"] = filename[filename.find('.prof') - 1]
+            ctf_event["tid"] = trace.events.stream_id[e]
 
-            else:
-                if not trace.event_names[trace.events.type[e]].startswith("PARSEC"):
-                    print(trace.event_names[trace.events.type[e]])
-                    ctf_event = {}
-                    ctf_event["Proc"] = "Proc" + filename[index_of_proc]
-                    ctf_event["ph"] = "X"  # complete event type
-                    ctf_event["ts"] = 0.001 * trace.events.begin[e] # when we started, in ms
-                    ctf_event["dur"] = 0.001 * (trace.events.end[e] - trace.events.begin[e]) # when we started, in ms
-                    ctf_event["name"] = trace.event_names[trace.events.type[e]]
-                    ctf_event["pid"] = trace.events.node_id[e]
-                    ctf_event["tid"] = trace.events.stream_id[e]
-
-                    if trace.events.key[e] != None:
-                        ctf_event["args"] = trace.events.key[e].decode('utf-8').rstrip('\x00')
-                        ctf_event["name"] = trace.event_names[trace.events.type[e]]+"<"+ctf_event["args"]+">"
-
-                    ctf_event["pid"] = trace.events.node_id[e]
-                    ctf_event["tid"] = trace.events.stream_id[e]
-
-                    ctf_data["traceEvents"].append(ctf_event)
-
-        proc = proc+1
+            ctf_data["traceEvents"].append(ctf_event)
+            print(ctf_event)
 
 
     with open(ctf_filename, "w") as chrome_trace:
@@ -110,10 +97,8 @@ if __name__ == "__main__":
 
     pbt_files_list=[]
     directory = "/tmp"
-    print(str(sys.argv[1]).find('.prof'))
-    # print(str(sys.argv[1])[12:])
-    ext = str(sys.argv[1])[12:];
-    prefix = str(sys.argv[1])[:11];
+    ext = str(sys.argv[1])[sys.argv[1].find('.prof'):]
+    prefix = str(sys.argv[1])[:sys.argv[1].find('.prof') - 1]
 
     #iterate over all files within the directory
     for file in os.listdir(directory):
@@ -123,4 +108,4 @@ if __name__ == "__main__":
 
     # read_pbt(sys.argv[1])
 
-    pbt_to_ctf(pbt_files_list, sys.argv[2], sys.argv[3])
+    pbt_to_ctf(pbt_files_list, sys.argv[2], sys.argv[3], sys.argv[4])
