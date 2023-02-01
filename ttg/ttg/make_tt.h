@@ -8,7 +8,8 @@
 // case 1 (keyT != void): void op(auto&& key, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&)
 // case 2 (keyT == void): void op(std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&)
 //
-template <typename funcT, bool funcT_receives_outterm_tuple, typename keyT, typename output_terminalsT,
+template <typename funcT, bool funcT_receives_outterm_tuple,
+          typename keyT, typename output_terminalsT,
           typename... input_valuesT>
 class CallableWrapTT
     : public TT<keyT, output_terminalsT,
@@ -100,15 +101,19 @@ class CallableWrapTT
   }
 };
 
-template <typename funcT, bool funcT_receives_outterm_tuple, typename keyT, typename output_terminalsT,
+template <typename funcT, bool funcT_receives_outterm_tuple,
+          typename keyT, typename output_terminalsT,
           typename input_values_tupleT>
 struct CallableWrapTTUnwrapTypelist;
 
-template <typename funcT, bool funcT_receives_outterm_tuple, typename keyT, typename output_terminalsT,
+template <typename funcT, bool funcT_receives_outterm_tuple,
+          typename keyT, typename output_terminalsT,
           typename... input_valuesT>
-struct CallableWrapTTUnwrapTypelist<funcT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
+struct CallableWrapTTUnwrapTypelist<funcT, funcT_receives_outterm_tuple,
+                                    keyT, output_terminalsT,
                                     std::tuple<input_valuesT...>> {
-  using type = CallableWrapTT<funcT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
+  using type = CallableWrapTT<funcT, funcT_receives_outterm_tuple,
+                              keyT, output_terminalsT,
                               std::remove_reference_t<input_valuesT>...>;
 };
 
@@ -126,12 +131,12 @@ struct CallableWrapTTUnwrapTypelist<funcT, funcT_receives_outterm_tuple, keyT, o
 // case 2 (keyT == void): returnT op(input_valuesT&&..., std::tuple<output_terminalsT...>&)
 //
 // returnT is void for funcT = synchronous (ordinary) function and the appropriate return type for funcT=coroutine
-template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, typename keyT,
-          typename output_terminalsT, typename... input_valuesT>
+template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
+          typename keyT, typename output_terminalsT, typename... input_valuesT>
 class CallableWrapTTArgs
     : public TT<
           keyT, output_terminalsT,
-          CallableWrapTTArgs<funcT, returnT, funcT_receives_outterm_tuple, keyT, output_terminalsT, input_valuesT...>,
+          CallableWrapTTArgs<funcT, returnT, funcT_receives_outterm_tuple, space, keyT, output_terminalsT, input_valuesT...>,
           ttg::typelist<input_valuesT...>> {
   using baseT = typename CallableWrapTTArgs::ttT;
 
@@ -153,6 +158,11 @@ class CallableWrapTTArgs
 #else   // TTG_HAS_COROUTINE
       void;
 #endif  // TTG_HAS_COROUTINE
+
+public:
+  static constexpr bool have_cuda_op = (space == ttg::ExecutionSpace::CUDA);
+
+protected:
 
   /// @return coroutine handle<> (if funcT is a coroutine), else void
   template <typename Key, typename Tuple, std::size_t... S>
@@ -318,23 +328,23 @@ class CallableWrapTTArgs
   };
 };
 
-template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, typename keyT,
-          typename output_terminalsT, typename input_values_typelistT>
+template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
+          typename keyT, typename output_terminalsT, typename input_values_typelistT>
 struct CallableWrapTTArgsAsTypelist;
 
-template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, typename keyT,
-          typename output_terminalsT, typename... input_valuesT>
-struct CallableWrapTTArgsAsTypelist<funcT, returnT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
+template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
+          typename keyT, typename output_terminalsT, typename... input_valuesT>
+struct CallableWrapTTArgsAsTypelist<funcT, returnT, funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
                                     std::tuple<input_valuesT...>> {
-  using type = CallableWrapTTArgs<funcT, returnT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
+  using type = CallableWrapTTArgs<funcT, returnT, funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
                                   std::remove_reference_t<input_valuesT>...>;
 };
 
-template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, typename keyT,
-          typename output_terminalsT, typename... input_valuesT>
-struct CallableWrapTTArgsAsTypelist<funcT, returnT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
+template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
+          typename keyT, typename output_terminalsT, typename... input_valuesT>
+struct CallableWrapTTArgsAsTypelist<funcT, returnT, funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
                                     ttg::meta::typelist<input_valuesT...>> {
-  using type = CallableWrapTTArgs<funcT, returnT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
+  using type = CallableWrapTTArgs<funcT, returnT, funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
                                   std::remove_reference_t<input_valuesT>...>;
 };
 
@@ -494,7 +504,9 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
 /// @warning Although generic arguments annotated by `const auto&` are also permitted, their use is discouraged to avoid confusion;
 ///          namely, `const auto&` denotes a _consumable_ argument, NOT read-only, despite the `const`.
 // clang-format on
-template <typename keyT = void, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
+template <ttg::ExecutionSpace space,
+          typename keyT = void, typename funcT,
+          typename... input_edge_valuesT, typename... output_edgesT>
 auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges = std::tuple<>{},
              const std::tuple<output_edgesT...> &outedges = std::tuple<>{}, const std::string &name = "wrapper",
              const std::vector<std::string> &innames = std::vector<std::string>(sizeof...(input_edge_valuesT), "input"),
@@ -569,10 +581,19 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   using decayed_input_args_t = ttg::meta::decayed_typelist_t<input_args_t>;
   // 3. full_input_args_t = edge-types with non-void types replaced by input_args_t
   using full_input_args_t = ttg::meta::replace_nonvoid_t<input_edge_value_types, input_args_t>;
-  using wrapT = typename CallableWrapTTArgsAsTypelist<funcT, func_return_t, have_outterm_tuple, keyT,
+  using wrapT = typename CallableWrapTTArgsAsTypelist<funcT, func_return_t, have_outterm_tuple, space, keyT,
                                                       output_terminals_type, full_input_args_t>::type;
 
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+}
+
+template <typename keyT = void, typename funcT,
+          typename... input_edge_valuesT, typename... output_edgesT>
+auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges = std::tuple<>{},
+             const std::tuple<output_edgesT...> &outedges = std::tuple<>{}, const std::string &name = "wrapper",
+             const std::vector<std::string> &innames = std::vector<std::string>(sizeof...(input_edge_valuesT), "input"),
+             const std::vector<std::string> &outnames = std::vector<std::string>(sizeof...(output_edgesT), "output")) {
+  return make_tt<ttg::ExecutionSpace::Host>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
 template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
@@ -593,6 +614,6 @@ template <typename keyT, typename funcT, typename... input_edge_valuesT, typenam
   return make_tt<keyT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
-#include "ttg/make_device_tt.h"
+//#include "ttg/make_device_tt.h"
 
 #endif  // TTG_MAKE_TT_H

@@ -28,6 +28,7 @@ namespace ttg_parsec {
 
   inline void ttg_finalize();
 
+  [[noreturn]]
   static inline void ttg_abort();
 
   inline ttg::World ttg_default_execution_context();

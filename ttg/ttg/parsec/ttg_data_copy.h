@@ -94,6 +94,8 @@ namespace ttg_parsec {
       using iterator = parsec_data_copy_t**;
 
       void add_device_copy(parsec_data_copy_t* copy) {
+        // TODO: properly release again!
+        PARSEC_OBJ_RETAIN(copy);
         switch (m_num_dev_copies) {
           case 0:
             m_single_dev_copy = copy;

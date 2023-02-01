@@ -10,7 +10,8 @@ namespace ttg {
   enum class ViewScope {
     Allocate  = 0x0,
     SyncIn    = 0x1,
-    SyncOut   = 0x2
+    SyncOut   = 0x2,
+    SyncInOut = 0x3
   };
 
   /**
@@ -102,7 +103,7 @@ namespace ttg {
     template<std::size_t... Is>
     View(HostT& obj, span_tuple_type& spans, std::index_sequence<Is...>)
     : m_obj(&obj)
-    , m_spans({std::get<Is>(m_spans)...})
+    , m_spans({std::get<Is>(spans)...})
     { }
 
   public:
@@ -176,8 +177,8 @@ namespace ttg {
 
   /* overload for trivially-copyable host objects */
   template<typename HostT, typename = std::enable_if_t<std::is_trivially_copyable_v<HostT>>>
-  auto make_view(HostT& obj) {
-    return View<HostT, HostT>(obj, std::make_tuple(ViewSpan<HostT>(&obj, sizeof(HostT))));
+  auto make_view(HostT& obj, ViewScope scope = ViewScope::SyncIn) {
+    return View<HostT, HostT>(obj, std::make_tuple(ViewSpan<HostT>(&obj, sizeof(HostT), scope)));
   }
 
   /* yielded when waiting on a kernel to complete */
@@ -222,9 +223,11 @@ namespace ttg {
 
   struct device_task_promise_type;
 
+  using device_task_handle_type = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<device_task_promise_type>;
+
   /// task that can be resumed after some events occur
-  struct device_task : public TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<device_task_promise_type> {
-    using base_type = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<device_task_promise_type>;
+  struct device_task : public device_task_handle_type {
+    using base_type = device_task_handle_type;
 
     /// these are members mandated by the promise_type concept
     ///@{
@@ -264,7 +267,7 @@ namespace ttg {
      * so we can access the promise.
      * TODO: necessary? maybe we can save one suspend here
      */
-    TTG_CXX_COROUTINE_NAMESPACE::suspend_never final_suspend() noexcept {
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always final_suspend() noexcept {
       m_state = TTG_DEVICE_CORO_COMPLETE;
       return {};
     }
@@ -277,6 +280,7 @@ namespace ttg {
     TTG_CXX_COROUTINE_NAMESPACE::suspend_always yield_value(std::tuple<Views&...> &views) {
       /* gather all the views (host object + view spans, type-punned) into a vector */
       constexpr static std::size_t view_count = std::tuple_size_v<std::tuple<Views...>>;
+      std::cout << "yield_value: views" << std::endl;
       m_spans.clear(); // in case we ever come back here
       m_spans.reserve(view_count);
       if constexpr(view_count > 0) {
@@ -300,6 +304,7 @@ namespace ttg {
 
     /* waiting for the kernel to complete should always suspend */
     TTG_CXX_COROUTINE_NAMESPACE::suspend_always yield_value(device_op_wait_kernel) {
+      std::cout << "yield_value: device_op_wait_kernel" << std::endl;
       m_state = TTG_DEVICE_CORO_WAIT_KERNEL;
       return {};
     }
@@ -312,8 +317,7 @@ namespace ttg {
       return m_state == TTG_DEVICE_CORO_COMPLETE;
     }
 
-    using handle_type = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<device_task_promise_type>;
-    device_task get_return_object() { return device_task{handle_type::from_promise(*this)}; }
+    device_task get_return_object() { return device_task{device_task_handle_type::from_promise(*this)}; }
 
     void unhandled_exception() {
 

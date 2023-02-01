@@ -8,7 +8,8 @@ TEST_CASE("Device", "coro") {
   SECTION("device_task") {
     ttg::Edge<int, double> edge;
     auto fn = [&](const int& key, double&& val) -> ttg::device_task {
-      ttg::View<double, double> view = ttg::make_view(val);
+      ttg::View<double, double> view = ttg::make_view(val, ttg::ViewScope::SyncInOut);
+      ttg::print("device_task key ", key, ", value ", val);
       /* wait for the view to be available on the device */
       co_yield view;
       // co_yield std::tie(view1, view2);
@@ -17,6 +18,8 @@ TEST_CASE("Device", "coro") {
       CHECK(view.get_device_ptr<0>()  != nullptr);
       CHECK(view.get_device_size<0>() == sizeof(val));
       CHECK(&view.get_host_object() == &val);
+
+      ttg::print("device_task key ", key, ", device pointer ", view.get_device_ptr<0>());
 
       /* here we suspend to wait for a kernel to complete */
       co_yield ttg::device_op_wait_kernel{};
@@ -27,8 +30,8 @@ TEST_CASE("Device", "coro") {
         ttg::send<0>(key+1, val);
       }
     };
-    auto tt = ttg::make_tt(fn, ttg::edges(edge), ttg::edges(edge),
-                           "device_task", {"edge_in"}, {"edge_out"});
+    auto tt = ttg::make_tt<ttg::ExecutionSpace::CUDA>(fn, ttg::edges(edge), ttg::edges(edge),
+                                                      "device_task", {"edge_in"}, {"edge_out"});
     make_graph_executable(tt);
     if (ttg::default_execution_context().rank() == 0) tt->invoke(0, 0.0);
     ttg::ttg_fence(ttg::default_execution_context());
