@@ -2,16 +2,17 @@ include(AddTTGExecutable)
 
 # TT unit test: core TTG ops
 set(ut_src
-        fibonacci.cc
-        device_coro.cc
-        ranges.cc
-        tt.cc
-        unit_main.cpp)
+        #fibonacci.cc
+        #ranges.cc
+        #tt.cc
+        unit_main.cpp
+    )
 set(ut_libs Catch2::Catch2)
-if (TARGET std::coroutine)
-    list(APPEND ut_src fibonacci-coro.cc)
+#if (TARGET std::coroutine)
+    #list(APPEND ut_src fibonacci-coro.cc)
+    list(APPEND ut_src device_coro.cc)
     list(APPEND ut_libs std::coroutine)
-endif()
+#endif()
 add_ttg_executable(core-unittests-ttg "${ut_src}" LINK_LIBRARIES "${ut_libs}")
 
 

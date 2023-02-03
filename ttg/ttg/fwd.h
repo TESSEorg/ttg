@@ -47,6 +47,7 @@ namespace ttg {
   template <typename... RestOfArgs>
   void initialize(int argc, char **argv, int num_threads = -1, RestOfArgs &&...);
   void finalize();
+  [[noreturn]]
   void abort();
   World default_execution_context();
   void execute(ttg::World world);

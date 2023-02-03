@@ -57,6 +57,7 @@ namespace ttg {
   inline void finalize() { TTG_IMPL_NS::ttg_finalize(); }
 
   /// Aborts the TTG program using the default backend's `ttg_abort` method
+  [[noreturn]]
   inline void abort() { TTG_IMPL_NS::ttg_abort(); }
 
   /// Accesses the default backend's default execution context
