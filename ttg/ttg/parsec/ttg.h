@@ -103,42 +103,6 @@ int parsec_add_fetch_runtime_task(parsec_taskpool_t *tp, int tasks);
 
 #include "ttg/view.h"
 
-namespace test::meta {
-
-    template <class...>
-    using void_t = void;
-  namespace detail {
-      template <class Default, class Enabler, template <class...> class TT, class... Args>
-      struct detector {
-        using value_t = std::false_type;
-        using type = Default;
-      };
-
-      template <class Default, template <class...> class TT, class... Args>
-      struct detector<Default, void_t<TT<Args...>>, TT, Args...> {
-        using value_t = std::true_type;
-        using type = TT<Args...>;
-      };
-
-  }
-
-      template <template <class...> class TT, class... Args>
-      using is_detected = typename detail::detector<ttg::meta::nonesuch, void, TT, Args...>::value_t;
-
-    template <template <class...> class TT, class... Args>
-    using is_detected = typename detail::detector<ttg::meta::nonesuch, void, TT, Args...>::value_t;
-
-    template <template <class...> class TT, class... Args>
-    using detected_t = typename detail::detector<ttg::meta::nonesuch, void, TT, Args...>::type;
-
-    template <class Default, template <class...> class TT, class... Args>
-    using detected_or = detail::detector<Default, void, TT, Args...>;
-
-    template <template <class...> class TT, class... Args>
-    constexpr bool is_detected_v = is_detected<TT, Args...>::value;
-
-}
-
 namespace ttg_parsec {
   typedef void (*static_set_arg_fct_type)(void *, size_t, ttg::TTBase *);
   typedef std::pair<static_set_arg_fct_type, ttg::TTBase *> static_set_arg_fct_call_t;
@@ -1178,8 +1142,7 @@ namespace ttg_parsec {
 
     /// @return true if derivedT::have_cuda_op exists and is defined to true
     static constexpr bool derived_has_cuda_op() {
-      //if constexpr (test::meta::is_detected_v<have_cuda_op_non_type_t, derivedT>) {
-      if constexpr (derivedT::have_cuda_op) {
+      if constexpr (ttg::meta::is_detected_v<have_cuda_op_non_type_t, derivedT>) {
         return derivedT::have_cuda_op;
       } else {
         return false;
@@ -1552,30 +1515,10 @@ namespace ttg_parsec {
       return PARSEC_HOOK_RETURN_DONE; // will not be reacehed
     }
 
-    class A {
-    public:
-      static constexpr bool have_cuda_op = true;
-    };
-
     template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t static_op(parsec_task_t *parsec_task) {
 
-      //static_assert(ttg::meta::is_detected_v<have_cuda_op_non_type_t, A>);
-      //static_assert(ttg::meta::is_detected_v<have_cuda_op_non_type_t, derivedT>);
-      //static_assert(ttg::meta::is_detected<have_cuda_op_non_type_t, derivedT>::value);
-      // TODO: this does not compile
-      //static_assert(ttg::meta::detail::detector<ttg::meta::nonesuch, void, have_cuda_op_non_type_t, derivedT>::value_t::value);
-      // TODO: this does compile. WTF?!
-      //static_assert(test::meta::detail::detector<ttg::meta::nonesuch, void, have_cuda_op_non_type_t, derivedT>::value_t::value);
-      //static_assert(test::meta::is_detected<have_cuda_op_non_type_t, derivedT>::value);
-      //static_assert(derivedT::have_cuda_op);
-      //static_assert(detector<ttg::meta::nonesuch, void, have_cuda_op_non_type_t, derivedT>::value_t::value);
-      using t = ttg::meta::void_t<have_cuda_op_non_type_t<derivedT>>;
-
       task_t *task = (task_t*)parsec_task;
-      have_cuda_op_non_type_t<derivedT> tmp = 0;
-      std::cout << "static_op derived_has_cuda_op " << derived_has_cuda_op() << " detected " << test::meta::is_detected_v<have_cuda_op_non_type_t, derivedT>
-                << " have_cuda_op " << derivedT::have_cuda_op << " detected " << ttg::meta::detail::detector<ttg::meta::nonesuch, void, have_cuda_op_non_type_t, derivedT>::value_t::value << std::endl;
       void* suspended_task_address =
 #ifdef TTG_HAS_COROUTINE
         task->suspended_task_address;  // non-null = need to resume the task
