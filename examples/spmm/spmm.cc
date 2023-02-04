@@ -1222,7 +1222,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
                               const std::vector<std::vector<long>> &b_rowidx_to_colidx,
                               const std::vector<std::vector<long>> &b_colidx_to_rowidx, std::vector<int> &mTiles,
                               std::vector<int> &nTiles, std::vector<int> &kTiles, int M, int N, int K, int minTs,
-                              int maxTs, int P, int Q,int R) {
+                              int maxTs, int P, int Q, int R) {
   int MT = (int)A.rows();
   int NT = (int)B.cols();
   int KT = (int)A.cols();
@@ -1271,9 +1271,9 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   std::string rt("Unkown???");
 #endif
   if (ttg::default_execution_context().rank() == 0) {
-    std::cout << "TTG-" << rt << " PxQxR=   " << P << " " << Q <<" "<< R <<" 1 average_NB= " << avg_nb << " M= " << M
-              << " N= " << N << " K= "<< K << " t= " << minTs << " T=" << maxTs  << " Tiling= " << tiling_type << " A_density= " << Adensity
-              << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
+    std::cout << "TTG-" << rt << " PxQxR=   " << P << " " << Q << " " << R << " 1 average_NB= " << avg_nb << " M= " << M
+              << " N= " << N << " K= " << K << " t= " << minTs << " T=" << maxTs << " Tiling= " << tiling_type
+              << " A_density= " << Adensity << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
               << " gflops/s= " << gflops / tc << std::endl;
   }
 }
@@ -1331,6 +1331,25 @@ static double compute_gflops(const std::vector<std::vector<long>> &a_r2c, const 
 int main(int argc, char **argv) {
   bool timing;
   double gflops;
+
+  //  btas::Range R0()
+  //  btas::Range R1(1,5,0);
+  //  btas::Tensor<int> A(R1);
+
+  for (int i = 0; i < 20; i++) {
+    using baseT = typename btas::Tensor<double>;
+    btas::Tensor<double, btas::Range, std::vector<double>> At(30, 30);
+    btas::Tensor<double, btas::Range, std::vector<double>> Bt(30, 30);
+    btas::Tensor<double, btas::Range, std::vector<double>> Ct(30, 30);
+    At.fill(1.0);
+    Bt.fill(2.0);
+    Ct.fill(3.0);
+    //  btas::gemm<double, btas::Range, btas::Tensor<double>>(Ct, Bt, At);
+
+    // calling gemm code in loop to heat-up the silicon
+
+    btas::gemm(std::move(Ct), Bt, At);
+  }
 
   int cores = -1;
   std::string nbCoreStr(getCmdOption(argv, argv + argc, "-c"));

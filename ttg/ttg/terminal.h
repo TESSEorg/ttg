@@ -11,7 +11,7 @@
 #include "ttg/util/meta.h"
 #include "ttg/util/trace.h"
 #include "ttg/world.h"
-#include "boost/callable_traits.hpp"
+#include "ttg/run.h"
 
 namespace ttg {
   namespace detail {
