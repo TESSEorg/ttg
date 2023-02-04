@@ -188,6 +188,7 @@ int main(int argc, char *argv[]) {
       "fib");
   auto print = ttg::make_tt([](int64_t F_N) { std::cout << N << "th Fibonacci number is " << F_N << std::endl; },
                             ttg::edges(f2p),
+                            ttg::edges(),
                             "print");
 
   ttg::make_graph_executable(fib);
@@ -255,6 +256,10 @@ Stay tuned!
 
 # TTG Performance Tracing
 
+There are several ways to trace execution of a TTG program. The easiest way is to use the PaRSEC-based TTG backend to
+produce binary traces in PaRSEC Binary Trace (PBT) format and then convert them to
+a Chrome Trace Format (CTF) JSON file that can be visuzalized using built-in browser
+in Chrome browser or using web-based [Perfetto trace viewer](https://ui.perfetto.dev/).
 To generate the trace results of any TTG program follow the process discussed below:
 
 - For simplicity we assume here that TTG will build PaRSEC from source. Make sure PaRSEC Python tools prerequisites have been installed, namely Python3 (version 3.8 is recommended) and the following Python packages (e.g., using `pip`):
@@ -265,56 +270,24 @@ To generate the trace results of any TTG program follow the process discussed be
   - `tables`
 - Configure and build TTG:
   - Configure TTG with `-DPARSEC_PROF_TRACE=ON` (this turns on PaRSEC task tracing) and `-DBUILD_SHARED_LIBS=ON` (to support PaRSEC Python tools). Also make sure that CMake discovers the Python3 interpreter and the `cython` package.
-  - Build TTG
+  - Build and install TTG
 - Build the TTG program to be traced.
 - Run the TTG program with tracing turned on:
   - Create file `${HOME}/.parsec/mca-params.conf` and add line `mca_pins = task_profiler` to it
-  - Set environment variable `PARSEC_MCA_profile_filename` to the trace file name.
-  - Run the program and make sure the trace files (in PaRSEC binary format) have been generated.
-- Convert the traces from PaRSEC binary format to the Chrome Trace Format (CTF).
-  - Export environment variable PYTHONPATH as: 
-```bash 
-export PYTHONPATH={ttg_build_directory}/_deps/parsec-build/tools/profiling/python/build/{lib_folder} for Python3.8:$PYTHONPATH
-````
-  - To convert trace file into `.ctf.json` file format to be visualized using chrome tracing or perfetto, use syntax - 
+  - Set the environment variable `PARSEC_MCA_profile_filename` to the PBT file name _prefix_, e.g. `/tmp/ttg`.
+  - Run the program and make sure the trace files (in PBT format) have been generated; e.g., if you set `PARSEC_MCA_profile_filename` to `/tmp/ttg` you should find file `/tmp/ttg-0.prof-...` containing the trace from MPI rank 0, `/tmp/ttg-1.prof-...` from rank 1, and so on.
+- Convert the traces from PaRSEC Binary Trace (PBT) format to the Chrome Trace Format (CTF):
+  - Add `{TTG build directory}/_deps/parsec-build/tools/profiling/python/build/{lib folder for your version of Python}` (currently it is not possible to use PaRSEC Python module from the install tree, only from its build tree)
+ to the `PYTHONPATH` environment variable so that the Python  interpreter can find the modules for reading the PaRSEC trace files.
+  - Convert the PBT files to a CTF file by running the conversion script:
 ```
- {ttg_root}/bin/pbt_to_ctf.py {trace_file_name} {ctf_filename}.ctf.json
+ {TTG install prefix}/bin/pbt_to_ctf.py {PBT file name prefix} {CTF filename}
 ```
-- Open the `chrome://tracing` URL in Chrome browser and load the resulting trace.
+- Open the `chrome://tracing` URL in the Chrome browser and load the resulting trace; alternatively you can use the [Perfetto trace viewer](https://ui.perfetto.dev/) from any browser.
 
-### Let's use computation of `N`th Fibonacci number to exemplify tracing of a TTG program:
-- Follow the steps mentioned above and execute the `nth-fibonacci.cpp` program in debug mode to obtain traces 
-- To convert trace file to ctf file format:
+For example, executing the Fibonacci program described above using 2 MPI processes and with 2 threads each will produce a trace that looks like this:
 
-Export environment variable PYTHONPATH as:
-```bash 
-export PYTHONPATH={ttg_build_directory}/_deps/parsec-build/tools/profiling/python/build/{lib_folder} for Python3.8:$PYTHONPATH
-````
-Execute the python script in the following format on terminal
-```
-{ttg_root}/bin/pbt_to_ctf.py {trace_file_name} {ctf_filename}.ctf.json`
-```
-- Obtained traces `{filename}.ctf.json` file can be visualized on - `https://ui.perfetto.dev/`
-
-Obtained Traces will appear like this -
-
-![Fibonacci_traces_example](/home/ashawini/ttg/images/fib_NOPARSEC_traces.png) 
-
-
-### To generate traces for Multiple MPI Processes 
-- Execute the command on terminal 
-```console
-export PARSEC_MCA_profile_filename={trace_filename}
- ```
-- Run TTG program by following the mpiexec syntax:
-
-`mpiexec {mpi_args} {executable} {program_args}`
-
-For instance, the following command will run the executable file on 2 processes:
-
-    mpiexec -n 2 nth-fibonacci 
-
-
+![Fibonacci_traces_example](doc/images/nth-fib-trace-2proc-2thr.png) 
 
 # TTG reference documentation
 TTG API documentation is available for the following versions:0
