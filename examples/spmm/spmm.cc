@@ -1338,21 +1338,23 @@ int main(int argc, char **argv) {
   //    btas::Tensor<int> A(R1);
 
 #if __has_include(<btas/features.h>)
-  for (int i = 0; i < 20; i++) using baseT = typename btas::Tensor<double>;
-  btas::Tensor<double, btas::Range, std::vector<double>> At(30, 30);
-  btas::Tensor<double, btas::Range, std::vector<double>> Bt(30, 30);
-  btas::Tensor<double, btas::Range, std::vector<double>> Ct(30, 30);
-  At.fill(1.0);
-  Bt.fill(2.0);
-  Ct.fill(3.0);
-  //  btas::gemm<double, btas::Range, btas::Tensor<double>>(Ct, Bt, At);
+  for (int i = 0; i < 20; i++) {
+    using baseT = typename btas::Tensor<double>;
+    btas::Tensor<double, btas::Range, std::vector<double>> At(30, 30);
+    btas::Tensor<double, btas::Range, std::vector<double>> Bt(30, 30);
+    btas::Tensor<double, btas::Range, std::vector<double>> Ct(30, 30);
+    At.fill(1.0);
+    Bt.fill(2.0);
+    Ct.fill(3.0);
+    //  btas::gemm<double, btas::Range, btas::Tensor<double>>(Ct, Bt, At);
 
-  // calling gemm code in loop to heat-up the silicon
+    // calling gemm code in loop to heat-up the silicon
 
-  btas::gemm(std::move(Ct), Bt, At)
+    btas::gemm(std::move(Ct), Bt, At);
+  }
 #endif;
 
-      int cores = -1;
+  int cores = -1;
   std::string nbCoreStr(getCmdOption(argv, argv + argc, "-c"));
   cores = parseOption(nbCoreStr, cores);
 
