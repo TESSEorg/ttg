@@ -44,12 +44,16 @@ configure_file(
 )
 set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/broadcast.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/buffer.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/devicescope.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/devicescratch.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/edge.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/execution.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/func.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/fwd.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/impl_selector.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/tt.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/ptr.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/reduce.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/run.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/runtimes.h
@@ -203,8 +207,13 @@ endif(TARGET MADworld)
 ########################
 if (TARGET PaRSEC::parsec)
   set(ttg-parsec-headers
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/buffer.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/devicescratch.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/fwd.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/import.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ptr.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/task.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/thread_local.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttg.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttg_data_copy.h
           )

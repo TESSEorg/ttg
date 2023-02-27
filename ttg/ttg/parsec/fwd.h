@@ -13,6 +13,17 @@ namespace ttg_parsec {
   template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs = ttg::typelist<>>
   class TT;
 
+  template<typename T>
+  struct ptr;
+
+  template<typename T>
+  struct buffer;
+  template<typename T>
+  struct devicescratch;
+
+  template<typename... Views>
+  bool register_device_memory(std::tuple<Views&...> &views);
+
   /// \internal the OG name
   template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
   using Op [[deprecated("use TT instead")]] = TT<keyT, output_terminalsT, derivedT, ttg::typelist<input_valueTs...>>;
@@ -53,6 +64,13 @@ namespace ttg_parsec {
   /// @tparam T a serializable type
   template <typename T>
   static void ttg_broadcast(ttg::World world, T &data, int source_rank);
+
+  template<typename T>
+  ptr<T> get_ptr(const T& obj);
+
+  template<typename T, typename... Args>
+  ptr<T> make_ptr(Args&&... args);
+
 
 }  // namespace ttg_parsec
 

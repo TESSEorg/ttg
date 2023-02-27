@@ -27,6 +27,11 @@
 
 #include "ttg/edge.h"
 
+#include "ttg/ptr.h"
+#include "ttg/buffer.h"
+#include "ttg/devicescratch.h"
+#include "ttg/devicescope.h"
+
 #if defined(TTG_USE_PARSEC)
 #include "ttg/parsec/ttg.h"
 #elif defined(TTG_USE_MADNESS)

@@ -5,36 +5,102 @@
 #include <limits>
 #include <vector>
 #include <iterator>
+#include <atomic>
+#include <type_traits>
 
 #include <parsec.h>
+
+#include "ttg/parsec/thread_local.h"
 
 
 namespace ttg_parsec {
 
   namespace detail {
 
-    /* Extension of PaRSEC's data copy. Note that we use the readers field
-    * to facilitate the ref-counting of the data copy.
-    * TODO: create abstractions for all fields in parsec_data_copy_t that we access.
-    */
-    struct ttg_data_copy_t : public parsec_data_copy_t {
-#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
-      int64_t size;
-      int64_t uid;
-#endif
+    /* Non-owning copy-tracking wrapper, accounting for N readers or 1 writer.
+     * Also counts external references, which are not treated as
+     * readers or writers but merely prevent the object from being
+     * destroyed once no readers/writers exist.
+     */
+    struct ttg_data_copy_t {
 
       /* special value assigned to parsec_data_copy_t::readers to mark the copy as
       * mutable, i.e., a task will modify it */
       static constexpr int mutable_tag = std::numeric_limits<int>::min();
 
+      ttg_data_copy_t()
+      {
+        /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
+        ttg_data_copy_container() = this;
+      }
+
+      ttg_data_copy_t(const ttg_data_copy_t& c) {
+        /* we allow copying but do not copy any data over from the original
+         * device copies will have to be allocated again
+         * and it's a new object to reference */
+
+        /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
+        ttg_data_copy_container() = this;
+      }
+
+      ttg_data_copy_t(ttg_data_copy_t&& c)
+      : m_ptr(c.m_ptr)
+      , m_next_task(c.m_next_task)
+      , m_readers(c.m_readers)
+      , m_refs(c.m_refs.load(std::memory_order_relaxed))
+      , m_dev_data(std::move(c.m_dev_data))
+      , m_single_dev_data(c.m_single_dev_data)
+      , m_num_dev_data(c.m_num_dev_data)
+      {
+        c.m_num_dev_data = 0;
+        c.m_readers = 0;
+        c.m_single_dev_data = nullptr;
+
+        /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
+        ttg_data_copy_container() = this;
+      }
+
+      ttg_data_copy_t& operator=(ttg_data_copy_t&& c)
+      {
+        m_ptr = c.m_ptr;
+        c.m_ptr = nullptr;
+        m_next_task = c.m_next_task;
+        c.m_next_task = nullptr;
+        m_readers = c.m_readers;
+        c.m_readers = 0;
+        m_refs.store(c.m_refs.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        c.m_refs.store(0, std::memory_order_relaxed);
+        m_dev_data = std::move(c.m_dev_data);
+        m_single_dev_data = c.m_single_dev_data;
+        c.m_single_dev_data = nullptr;
+        m_num_dev_data = c.m_num_dev_data;
+        c.m_num_dev_data = 0;
+        /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
+        ttg_data_copy_container() = this;
+        return *this;
+      }
+
+      ttg_data_copy_t& operator=(const ttg_data_copy_t& c) {
+        /* we allow copying but do not copy any data over from the original
+         * device copies will have to be allocated again
+         * and it's a new object to reference */
+
+        /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
+        ttg_data_copy_container() = this;
+        return *this;
+      }
+
+      /* mark destructor as virtual */
+      virtual ~ttg_data_copy_t() = default;
+
       /* Returns true if the copy is mutable */
       bool is_mutable() const {
-        return this->readers == mutable_tag;
+        return m_readers == mutable_tag;
       }
 
       /* Mark the copy as mutable */
       void mark_mutable() {
-        this->readers = mutable_tag;
+        m_readers = mutable_tag;
       }
 
       /* Increment the reader counter and return previous value
@@ -43,9 +109,11 @@ namespace ttg_parsec {
       template<bool Atomic = true>
       int increment_readers() {
         if constexpr(Atomic) {
-          return parsec_atomic_fetch_inc_int32(&this->readers);
+          //return parsec_atomic_fetch_inc_int32(&m_readers);
+          std::atomic_ref<int32_t> a{m_readers};
+          return a.fetch_add(1, std::memory_order_relaxed);
         } else {
-          return this->readers++;
+          return m_readers++;
         }
       }
 
@@ -53,7 +121,7 @@ namespace ttg_parsec {
       * Reset the number of readers to read-only with a single reader.
       */
       void reset_readers() {
-        this->readers = 1;
+        m_readers = 1;
       }
 
       /* Decrement the reader counter and return previous value.
@@ -62,84 +130,122 @@ namespace ttg_parsec {
       template<bool Atomic = true>
       int decrement_readers() {
         if constexpr(Atomic) {
-          return parsec_atomic_fetch_dec_int32(&this->readers);
+          //return parsec_atomic_fetch_dec_int32(&m_readers);
+          std::atomic_ref<int32_t> a{m_readers};
+          return a.fetch_sub(1, std::memory_order_relaxed);
         } else {
-          return this->readers--;
+          return m_readers--;
         }
       }
 
       /* Returns the number of readers if the copy is immutable, or \c mutable_tag
       * if the copy is mutable */
       int num_readers() const {
-        return this->readers;
+        return m_readers;
       }
 
-      ttg_data_copy_t()
-      {
-        /* TODO: do we need this construction? */
-        PARSEC_OBJ_CONSTRUCT(this, parsec_data_copy_t);
-        this->readers = 1;
-        this->push_task = nullptr;
+      void *get_ptr() const {
+        return m_ptr;
       }
 
-      /* mark destructor as virtual */
-      virtual ~ttg_data_copy_t() = default;
+      parsec_task_t* get_next_task() const {
+        return m_next_task;
+      }
 
+      void set_next_task(parsec_task_t* task) {
+        m_next_task = task;
+      }
 
+      int32_t add_ref() {
+        return m_refs.fetch_add(1, std::memory_order_relaxed);
+      }
+
+      int32_t drop_ref() {
+        return m_refs.fetch_sub(1, std::memory_order_relaxed);
+      }
+
+      bool has_ref() {
+        return (m_refs.load(std::memory_order_relaxed) != 0);
+      }
+
+      int32_t num_ref() const {
+        return m_refs.load(std::memory_order_relaxed);
+      }
 
       /* manage device copies owned by this object
        * we only touch the vector if we have more than one copies to track
        * and otherwise use the single-element member.
        */
-      using iterator = parsec_data_copy_t**;
+      using iterator = parsec_data_t**;
 
-      void add_device_copy(parsec_data_copy_t* copy) {
+      void add_device_data(parsec_data_t* data) {
         // TODO: properly release again!
-        PARSEC_OBJ_RETAIN(copy);
-        switch (m_num_dev_copies) {
+        PARSEC_OBJ_RETAIN(data);
+        switch (m_num_dev_data) {
           case 0:
-            m_single_dev_copy = copy;
+            m_single_dev_data = data;
             break;
           case 1:
             /* move single copy into vector and add new copy below */
-            m_dev_copies.push_back(m_single_dev_copy);
+            m_dev_data.push_back(m_single_dev_data);
             /* fall-through */
           default:
             /* store in multi-copy vector */
-            m_dev_copies.push_back(copy);
+            m_dev_data.push_back(data);
             break;
         }
-        m_num_dev_copies++;
+        m_num_dev_data++;
       }
 
-      int num_dev_copies() const {
-        return m_num_dev_copies;
+      void remove_device_data(parsec_data_t* data) {
+        if (m_num_dev_data == 1) {
+          m_single_dev_data = nullptr;
+        } else if (m_num_dev_data > 1) {
+          auto it = std::find(m_dev_data.begin(), m_dev_data.end(), data);
+          if (it != m_dev_data.end()) {
+            m_dev_data.erase(it);
+          }
+        }
+        --m_num_dev_data;
+      }
+
+      int num_dev_data() const {
+        return m_num_dev_data;
       }
 
       iterator begin() {
-        switch(m_num_dev_copies) {
+        switch(m_num_dev_data) {
           // no device copies
           case 0: return end();
-          case 1: return &m_single_dev_copy;
-          default: return m_dev_copies.data();
+          case 1: return &m_single_dev_data;
+          default: return m_dev_data.data();
         }
       }
 
       iterator end() {
-        switch(m_num_dev_copies) {
+        switch(m_num_dev_data) {
           case 0:
           case 1:
-            return &(m_single_dev_copy) + 1;
+            return &(m_single_dev_data) + 1;
           default:
-            return m_dev_copies.data() + m_dev_copies.size();
+            return m_dev_data.data() + m_dev_data.size();
         }
       }
 
-    private:
-      std::vector<parsec_data_copy_t*> m_dev_copies;   //< used if there are multiple device copies
-                                                       //  that belong to this object
-      parsec_data_copy_t* m_single_dev_copy;           //< used if there is a single device copy
-      int m_num_dev_copies = 0;                        //< number of device copies
+#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
+      int64_t size;
+      int64_t uid;
+#endif
+    protected:
+      void          *m_ptr;
+      parsec_task_t *m_next_task = nullptr;
+      int32_t        m_readers  = 1;
+      std::atomic<int32_t>  m_refs = 1; // number of entities referencing this copy (TTGs, external)
+
+      std::vector<parsec_data_t*> m_dev_data;   //< used if there are multiple device copies
+                                                  //  that belong to this object
+      parsec_data_t *m_single_dev_data;           //< used if there is a single device copy
+      int m_num_dev_data = 0;                   //< number of device copies
     };
 
 
@@ -150,14 +256,57 @@ namespace ttg_parsec {
     */
     template<typename ValueT>
     struct ttg_data_value_copy_t final : public ttg_data_copy_t {
-      using value_type = std::decay_t<ValueT>;
+      using value_type = ValueT;
       value_type m_value;
 
       template<typename T>
       ttg_data_value_copy_t(T&& value)
-      : ttg_data_copy_t(), m_value(std::forward<T>(value))
+      : ttg_data_copy_t()
+      , m_value(std::forward<T>(value))
       {
-        this->device_private = const_cast<value_type*>(&m_value);
+        this->m_ptr = const_cast<value_type*>(&m_value);
+        /* reset the container tracker */
+        ttg_data_copy_container() = nullptr;
+      }
+
+      ttg_data_value_copy_t(ttg_data_value_copy_t&& c)
+        noexcept(std::is_nothrow_move_constructible_v<value_type>)
+      : ttg_data_copy_t(std::move(c))
+      , m_value(std::move(c.m_value))
+      {
+        /* reset the container tracker */
+        ttg_data_copy_container() = nullptr;
+      }
+
+      ttg_data_value_copy_t(const ttg_data_value_copy_t& c)
+        noexcept(std::is_nothrow_copy_constructible_v<value_type>)
+      : ttg_data_copy_t(c)
+      , m_value(c.m_value)
+      {
+        /* reset the container tracker */
+        ttg_data_copy_container() = nullptr;
+      }
+
+      ttg_data_value_copy_t& operator=(ttg_data_value_copy_t&& c)
+        noexcept(std::is_nothrow_move_assignable_v<value_type>)
+      {
+        ttg_data_copy_t::operator=(std::move(c));
+        m_value = std::move(c.m_value);
+        /* reset the container tracker */
+        ttg_data_copy_container() = nullptr;
+      }
+
+      ttg_data_value_copy_t& operator=(const ttg_data_value_copy_t& c)
+        noexcept(std::is_nothrow_copy_assignable_v<value_type>)
+      {
+        ttg_data_copy_t::operator=(c);
+        m_value = c.m_value;
+        /* reset the container tracker */
+        ttg_data_copy_container() = nullptr;
+      }
+
+      value_type& operator*() {
+        return m_value;
       }
 
       /* will destruct the value */

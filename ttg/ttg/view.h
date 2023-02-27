@@ -8,10 +8,14 @@
 namespace ttg {
 
   enum class ViewScope {
-    Allocate  = 0x0,
-    SyncIn    = 0x1,
-    SyncOut   = 0x2,
-    SyncInOut = 0x3
+    Allocate     = 0x0,  //< memory allocated as scratch, but not moved in or out
+    Available    = 0x1,  //< data will be reused on device if available, transferred to device otherwise
+    SyncIn       = 0x2,  //< data will be allocated on and transferred to device
+                         //< if latest version resides on the device (no previous sync-out) the data will
+                         //< not be transferred again
+    SyncOut      = 0x4,  //< value will be transferred from device to host after kernel completes
+    SyncInOut    = 0x8,  //< data will be moved in and synchronized back out after the kernel completes
+    AvailableOut = 0x16, //< similar to Available and data is transferred back to device after kernel completes
   };
 
   /**
@@ -20,17 +24,17 @@ namespace ttg {
    * to remove the type and convert to void pointers instead.
    */
   template<typename T, typename = void>
-  struct ViewSpan;
+  struct ViewPart;
 
   template<>
-  struct ViewSpan<void, void> {
+  struct ViewPart<void, void> {
 
     using element_type  = void;
     using value_type    = void;
-    using viewspan_type = ViewSpan<value_type>;
+    using view_part_type = ViewPart<value_type>;
 
-    constexpr ViewSpan() = default;
-    constexpr ViewSpan(void* ptr, std::size_t size, ViewScope scope = ViewScope::SyncIn)
+    constexpr ViewPart() = default;
+    constexpr ViewPart(void* ptr, std::size_t size, ViewScope scope = ViewScope::SyncIn)
     : m_data_ptr(ptr)
     , m_size(size)
     , m_scope(scope)
@@ -72,15 +76,15 @@ namespace ttg {
 
 
   template<typename T>
-  struct ViewSpan<T, void> : public ViewSpan<void, void> {
+  struct ViewPart<T, void> : public ViewPart<void, void> {
 
     using element_type  = T;
     using value_type    = std::remove_cv_t<T>;
-    using viewspan_type = ViewSpan<value_type>;
+    using view_part_type = ViewPart<value_type>;
 
-    constexpr ViewSpan() = default;
-    constexpr ViewSpan(T* ptr, std::size_t size, ViewScope scope = ViewScope::SyncIn)
-    : ViewSpan<void, void>(ptr, size, scope)
+    constexpr ViewPart() = default;
+    constexpr ViewPart(T* ptr, std::size_t size, ViewScope scope = ViewScope::SyncIn)
+    : ViewPart<void, void>(ptr, size, scope)
     { }
 
     constexpr T* data() const {
@@ -89,13 +93,22 @@ namespace ttg {
 
   };
 
-  template<typename HostT, typename... DevTypeTs>
+  namespace detail {
+    template<typename T>
+    struct view_trait
+    {
+      static constexpr bool is_view = false;
+      static constexpr bool is_persistent = false;
+    };
+  } // namespace detail
+
+  template<typename HostT, typename DevT = HostT, typename... DevTypeTs>
   struct View {
 
-    using span_tuple_type  = std::tuple<ttg::ViewSpan<DevTypeTs>...>;
+    using span_tuple_type  = std::tuple<ttg::ViewPart<DevT>, ttg::ViewPart<DevTypeTs>...>;
     using host_type = HostT;
 
-    using view_type = View<HostT, DevTypeTs...>;
+    using view_type = View<HostT, DevT, DevTypeTs...>;
 
     constexpr static std::size_t num_spans = std::tuple_size_v<span_tuple_type>;
 
@@ -106,20 +119,36 @@ namespace ttg {
     , m_spans({std::get<Is>(spans)...})
     { }
 
+    View(HostT& obj, span_tuple_type spans)
+    : View(obj, spans, std::make_index_sequence<sizeof...(DevTypeTs)+1>{})
+    {
+      /* TODO: let the runtime handle the view */
+      //ttg::detail::register_view(*this);
+    }
+
+    /* hidden so that users cannot create views outside of a task */
+    template<typename T, typename... ArgsT>
+    friend auto make_view(T& obj, ViewPart<ArgsT>... spans);
+
   public:
 
-    constexpr View() = default;
+    constexpr View() = delete;
 
-    View(HostT& obj, span_tuple_type spans)
-    : View(obj, spans, std::index_sequence_for<DevTypeTs...>{})
-    { }
+    /* move ctor deleted to prevent moving out of a task */
+    View(view_type&&) = delete;
 
-    View(view_type&&) = default;
+    /* copy ctor deleted to prevent copying out of a task */
+    View(const view_type&) = delete;
 
-    View(const view_type&) = default;
+    ~View() {
+      /* TODO: let the runtime remove the view */
+      //ttg::detail::drop_view(*this);
+    }
 
-    view_type& operator=(view_type&&) = default;
-    view_type& operator=(const view_type&) = default;
+    /* move operator deleted to prevent moving out of a task */
+    view_type& operator=(view_type&&) = delete;
+    /* copy operator deleted to prevent moving out of a task */
+    view_type& operator=(const view_type&) = delete;
 
     template<std::size_t i>
     auto get_device_ptr() {
@@ -137,7 +166,7 @@ namespace ttg {
     }
 
     template<std::size_t i>
-    auto& get_viewspan() const {
+    auto& get_ViewPart() const {
       return std::get<i>(m_spans);
     }
 
@@ -158,28 +187,37 @@ namespace ttg {
       return num_spans;
     }
 
-    /* return a std::span of type-punned ViewSpans */
-    std::span<ViewSpan<void>> view_spans() {
+    /* return a std::span of type-punned ViewParts */
+    std::span<ViewPart<void>> view_spans() {
       return {m_spans.begin(), m_spans.end()};
     }
 
   private:
     HostT* m_obj = nullptr;
     /* type-punned storage, cast to actual types in get_device_ptr */
-    std::array<ViewSpan<void>, num_spans> m_spans;
+    std::array<ViewPart<void>, num_spans> m_spans;
     //span_tuple_type m_spans{};
   };
 
-  template<typename HostT, typename... ViewSpanTs>
-  auto make_view(HostT& obj, ViewSpan<ViewSpanTs>... spans) {
+  template<typename HostT, typename... ViewPartTs>
+  auto make_view(HostT& obj, ViewPart<ViewPartTs>... spans) {
     return View(obj, std::make_tuple(std::move(spans)...));
   }
 
   /* overload for trivially-copyable host objects */
   template<typename HostT, typename = std::enable_if_t<std::is_trivially_copyable_v<HostT>>>
   auto make_view(HostT& obj, ViewScope scope = ViewScope::SyncIn) {
-    return View<HostT, HostT>(obj, std::make_tuple(ViewSpan<HostT>(&obj, sizeof(HostT), scope)));
+    return make_view(obj, ViewPart<HostT>(&obj, sizeof(HostT), scope));
   }
+
+  namespace detail {
+    template<typename HostT, typename... DevTs>
+    struct view_trait<View<HostT, DevTs...>>
+    {
+      static constexpr bool is_view = true;
+      static constexpr bool is_persistent = false;
+    };
+  } // namespace detail
 
   /* yielded when waiting on a kernel to complete */
   struct device_op_wait_kernel
@@ -196,7 +234,7 @@ namespace ttg {
   /* type-punned version of the View, providing access to the object
    * pointer and a std::span over the views of that object */
   struct device_obj_view {
-    using span_type = std::span<ViewSpan<void>>;
+    using span_type = std::span<ViewPart<void>>;
     using iterator = typename span_type::iterator;
 
     device_obj_view(void *obj, span_type&& span)
@@ -220,6 +258,164 @@ namespace ttg {
     void *m_obj;
     span_type m_span;
   };
+
+
+  /**
+   * A view that is persistent and can be copied in and out of the TTG
+   */
+  template<typename HostT, typename DevT = HostT, typename... DevTypeTs>
+  struct PersistentView {
+
+    using span_tuple_type  = std::tuple<ttg::ViewPart<DevT>, ttg::ViewPart<DevTypeTs>...>;
+    using host_type = HostT;
+
+    using view_type = PersistentView<HostT, DevT, DevTypeTs...>;
+
+    using ptr_type = ttg::ptr<host_type>;
+
+    constexpr static std::size_t num_spans = std::tuple_size_v<span_tuple_type>;
+
+  private:
+    template<std::size_t... Is>
+    PersistentView(ptr_type&& ptr, span_tuple_type& spans, std::index_sequence<Is...>)
+    : m_ptr(std::forward<ptr_type>(ptr))
+    , m_spans({std::get<Is>(spans)...})
+    { }
+
+  public:
+
+    constexpr PersistentView() = default;
+
+    PersistentView(ptr_type ptr, span_tuple_type spans)
+    : PersistentView(std::move(ptr), spans, std::make_index_sequence<sizeof...(DevTypeTs)+1>{})
+    {
+      /* TODO: let the runtime handle the view */
+      //ttg::detail::register_view(*this);
+    }
+
+    PersistentView(view_type&&) = default;
+
+    PersistentView(const view_type&) = default;
+
+    ~PersistentView() {
+      /* TODO: let the runtime remove the view */
+      //ttg::detail::drop_view(*this);
+    }
+
+    view_type& operator=(view_type&&) = default;
+    view_type& operator=(const view_type&) = default;
+
+    template<std::size_t i>
+    auto get_device_ptr() {
+      return static_cast<std::tuple_element_t<i, span_tuple_type>::value_type*>(std::get<i>(m_spans).data());
+    }
+
+    template<std::size_t i>
+    const auto get_device_ptr() const {
+      return static_cast<std::tuple_element_t<i, span_tuple_type>::value_type>(std::get<i>(m_spans).data());
+    }
+
+    template<std::size_t i>
+    std::size_t get_device_size() const {
+      return std::get<i>(m_spans).size();
+    }
+
+    template<std::size_t i>
+    auto& get_ViewPart() const {
+      return std::get<i>(m_spans);
+    }
+
+    HostT& get_host_object() {
+      return *m_ptr;
+    }
+
+    const HostT& get_host_object() const {
+      return *m_ptr;
+    }
+
+    template<std::size_t i>
+    ViewScope get_scope() const {
+      return std::get<i>(m_spans).scope();
+    }
+
+    constexpr static std::size_t size() {
+      return num_spans;
+    }
+
+    ptr_type get_ptr() const {
+      return m_ptr;
+    }
+
+    /* return a std::span of type-punned ViewParts */
+    std::span<ViewPart<void>> view_spans() {
+      return {m_spans.begin(), m_spans.end()};
+    }
+
+  private:
+    ptr_type m_ptr;
+    /* type-punned storage, cast to actual types in get_device_ptr */
+    std::array<ViewPart<void>, num_spans> m_spans;
+    //span_tuple_type m_spans{};
+  };
+
+  template<typename HostT, typename... ViewPartTs>
+  auto make_persistent_view(HostT& obj, ViewPart<ViewPartTs>... spans) {
+    return PersistentView(obj, std::make_tuple(std::move(spans)...));
+  }
+
+  /* overload for trivially-copyable host objects */
+  template<typename HostT, typename = std::enable_if_t<std::is_trivially_copyable_v<HostT>>>
+  auto make_persistent_view(HostT& obj, ViewScope scope = ViewScope::SyncIn) {
+    return PersistentView<HostT, HostT>(obj, std::make_tuple(ViewPart<HostT>(&obj, sizeof(HostT), scope)));
+  }
+
+
+  namespace detail {
+    template<typename HostT, typename... DevTs>
+    struct view_trait<PersistentView<HostT, DevTs...>>
+    {
+      static constexpr bool is_view = true;
+      static constexpr bool is_persistent = true;
+    };
+  } // namespace detail
+
+
+  namespace detail {
+    /* TODO: is this still needed? */
+    template<typename... Ts>
+    struct await_t {
+      std::tuple<Ts&...> ties;
+    };
+  }
+
+  template<typename... Args>
+  auto make_await(Args&&... args) {
+    return detail::await_t{std::tie(std::forward<Args>(args)...)};
+  }
+
+  namespace detail {
+    template<typename... Ts>
+    struct to_device_t {
+      std::tuple<Ts&...> ties;
+    };
+  }
+
+  template<typename... Args>
+  auto to_device(Args&&... args) {
+    return detail::to_device_t{std::tie(std::forward<Args>(args)...)};
+  }
+
+  namespace detail {
+    template<typename... Ts>
+    struct to_host_t {
+      std::tuple<Ts&...> ties;
+    };
+  }
+
+  template<typename... Args>
+  auto to_host(Args&&... args) {
+    return detail::to_host_t{std::tie(std::forward<Args>(args)...)};
+  }
 
   struct device_task_promise_type;
 
@@ -302,12 +498,63 @@ namespace ttg {
       return yield_value(tmp_tuple);
     }
 
+    /* convenience-function to yield a single view */
+    template<typename HostT, typename... DeviceViewTs>
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always yield_value(PersistentView<HostT, DeviceViewTs...> &view) {
+      auto tmp_tuple = std::tie(view);
+      return yield_value(tmp_tuple);
+    }
+
     /* waiting for the kernel to complete should always suspend */
     TTG_CXX_COROUTINE_NAMESPACE::suspend_always yield_value(device_op_wait_kernel) {
       std::cout << "yield_value: device_op_wait_kernel" << std::endl;
       m_state = TTG_DEVICE_CORO_WAIT_KERNEL;
       return {};
     }
+
+    /* Allow co_await on a tuple */
+    template<typename... Views>
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(std::tuple<Views&...> &views) {
+      return yield_value(views);
+    }
+
+    /* convenience-function to await a single view */
+    template<typename HostT, typename... DeviceViewTs>
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(View<HostT, DeviceViewTs...> &view) {
+      auto tmp_tuple = std::tie(view);
+      return yield_value(tmp_tuple);
+    }
+
+    /* convenience-function to await a single view */
+    template<typename HostT, typename... DeviceViewTs>
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(PersistentView<HostT, DeviceViewTs...> &view) {
+      auto tmp_tuple = std::tie(view);
+      return yield_value(tmp_tuple);
+    }
+
+    /* co_await for the kernel to complete should always suspend */
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(device_op_wait_kernel) {
+      std::cout << "yield_value: device_op_wait_kernel" << std::endl;
+      m_state = TTG_DEVICE_CORO_WAIT_KERNEL;
+      return {};
+    }
+
+    template<typename... Ts>
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(detail::await_t<Ts...>&& a) {
+      bool need_transfer = !(TTG_IMPL_NS::register_device_memory(a.ties));
+      /* TODO: are we allowed to not suspend here and launch the kernel directly? */
+      m_state = TTG_DEVICE_CORO_WAIT_TRANSFER;
+      return {};
+    }
+
+    template<typename... Ts>
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(detail::to_device_t<Ts...>&& a) {
+      bool need_transfer = !(TTG_IMPL_NS::register_device_memory(a.ties));
+      /* TODO: are we allowed to not suspend here and launch the kernel directly? */
+      m_state = TTG_DEVICE_CORO_WAIT_TRANSFER;
+      return {};
+    }
+
 
     void return_void() {
       m_state = TTG_DEVICE_CORO_COMPLETE;
@@ -346,47 +593,8 @@ namespace ttg {
 
   bool device_task::completed() { return base_type::promise().state() == TTG_DEVICE_CORO_COMPLETE; }
 
-  /// std::span mirrored between host and device memory
-  struct HDSpan {
-    HDSpan() = default;
-    HDSpan(std::byte* ptr, std::size_t nbytes) {
-      ptrs_[0] = ptr;
-      nbytes_ = nbytes;
-      last_touched_space_ = 0;
-    }
-
-    std::size_t nbytes() const { return nbytes_; }
-
-    const std::byte* host_data() const { return ptrs_[0]; }
-
-    std::byte* host_data() {
-      last_touched_space_ = 0;
-      return ptrs_[0];
-    }
-
-    const std::byte* device_data() const { return ptrs_[1]; }
-
-    std::byte* device_data() {
-      last_touched_space_ = 1;
-      return ptrs_[1];
-    }
-
-    void mark_synched() { last_touched_space_ = 2; }
-
-   private:
-    std::array<std::byte*, 2> ptrs_ = {nullptr, nullptr};
-    std::size_t nbytes_ = 0;
-    std::size_t last_touched_space_ = 2;
-  };
-
-  /// set of std::span's mirrored between host and device memory
-  template <std::size_t N = 10>
-  struct HDSpans {
-    HDSpans() = default;
-
-   private:
-    std::array<HDSpan, N> spans_;
-  };
+  struct device_wait_kernel
+  { };
 
 }  // namespace ttg
 
