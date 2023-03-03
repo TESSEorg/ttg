@@ -127,10 +127,10 @@ namespace ttg_parsec {
   } // namespace detail
 
   template<typename T, typename... Args>
-  ptr<T> make_ptr(Args&&... args);
+  ptr<T> ttg_parsec::make_ptr(Args&&... args);
 
   template<typename T>
-  ptr<T> get_ptr(const T& obj);
+  ptr<std::decay_t<T>> ttg_parsec::get_ptr(T&& obj);
 
   template<typename T>
   struct ptr {
@@ -146,7 +146,7 @@ namespace ttg_parsec {
     template<typename... Args>
     friend ptr<T> make_ptr(Args&&... args);
     template<typename S>
-    friend ptr<S> get_ptr(const S& obj);
+    friend ptr<std::decay_t<S>> get_ptr(S&& obj);
     template<typename S>
     friend detail::ttg_data_copy_t* detail::get_copy(ptr<S>& p);
     friend ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC>;
@@ -196,6 +196,7 @@ namespace ttg_parsec {
     }
   };
 
+#if 0
   namespace detail {
     template<typename Arg>
     inline auto get_ptr(Arg&& obj) {
@@ -243,25 +244,25 @@ namespace ttg_parsec {
     std::tuple<ptr<std::decay_t<Args>>...> tpl = {(fn(std::forward<Args>(args)))...};
     return {ready, std::move(tpl)};
   }
+#endif // 0
 
-#if 0
   template<typename T>
-  ptr<T> get_ptr(const T& obj) {
+  inline ptr<std::decay_t<T>> get_ptr(T&& obj) {
+    using ptr_type = ptr<std::decay_t<T>>;
     if (nullptr != detail::parsec_ttg_caller) {
       for (int i = 0; i < detail::parsec_ttg_caller->data_count; ++i) {
         detail::ttg_data_copy_t *copy = detail::parsec_ttg_caller->copies[i];
         if (nullptr != copy) {
           if (copy->get_ptr() == &obj) {
-            return ptr<T>(copy);
+            return ptr_type(copy);
           }
         }
       }
     }
     /* object not tracked, make a new ptr that is now tracked */
     detail::ttg_data_copy_t *copy = detail::create_new_datacopy(obj);
-    return ptr<T>(copy);
+    return ptr_type(copy);
   }
-#endif // 0
 
   template<typename T, typename... Args>
   inline ptr<T> make_ptr(Args&&... args) {

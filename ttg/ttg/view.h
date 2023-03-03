@@ -593,6 +593,7 @@ namespace ttg {
       return {};
     }
 
+#if 0
     template<typename... Ts>
     auto await_transform(ttg::detail::get_ptr_tpl_t<Ts...>&& a) {
       return a;
@@ -602,7 +603,7 @@ namespace ttg {
     auto await_transform(ttg::detail::get_ptr_t<T>&& a) {
       return a;
     }
-
+#endif // 0
 
     void return_void() {
       m_state = TTG_DEVICE_CORO_COMPLETE;

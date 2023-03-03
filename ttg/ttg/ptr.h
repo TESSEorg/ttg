@@ -13,6 +13,11 @@ Ptr<T> make_ptr(Args&&... args) {
   return TTG_IMPL_NS::make_ptr(std::forward<Args>(args)...);
 }
 
+template<typename T>
+auto get_ptr(T&& obj) {
+  return TTG_IMPL_NS::get_ptr(std::forward<T>(obj));
+}
+
 namespace detail {
     template<typename T>
     struct is_ptr : std::false_type
@@ -25,6 +30,10 @@ namespace detail {
     template<typename T>
     constexpr bool is_ptr_v = is_ptr<T>::value;
 
+} // namespace detail
+
+#if 0
+namespace detail {
 
     /* awaiter for ttg::get_ptr with multiple arguments
      * operator co_wait will return the tuple of ttg::Ptr
@@ -80,7 +89,6 @@ namespace detail {
     };
   } // namespace detail
 
-
   /**
    * Get an awaiter that results in a ttg::Ptr to a task argument.
    * Must only be called inside a task on a value that was passed
@@ -104,7 +112,7 @@ namespace detail {
       return detail::get_ptr_t<std::decay_t<Arg>>(p.first, std::move(std::get<0>(p.second)));
     }
   }
-
+#endif // 0
 } // namespace ttg
 
 #endif // TTG_PTR_H
