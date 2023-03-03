@@ -124,6 +124,46 @@ auto make_project(functorT& f,
   return ttg::make_tt(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
 }
 
+
+/// Returns an std::unique_ptr to the object
+template <typename functorT, typename T, size_t K, Dimension NDIM>
+auto make_project_device(functorT& f,
+                         const T thresh,  /// should be scalar value not complex
+                         ctlEdge<NDIM>& ctl, rnodeEdge<T, K, NDIM>& result, const std::string& name = "project") {
+  auto F = [f, thresh](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>, rnodeOut<T, K, NDIM>>& out) {
+    FunctionReconstructedNode<T, K, NDIM> node(key);  // Our eventual result
+    auto& coeffs = node.coeffs;                       // Need to clean up OO design
+    bool is_leaf;
+
+    if (key.level() < initial_level(f)) {
+      for (auto child : children(key)) ttg::sendk<0>(child, out);
+      coeffs = T(1e7);  // set to obviously bad value to detect incorrect use
+      is_leaf = false;
+    } else if (is_negligible<functorT, T, NDIM>(f, Domain<NDIM>::template bounding_box<T>(key),
+                                                truncate_tol(key, thresh))) {
+      coeffs = T(0.0);
+      is_leaf = true;
+    } else {
+      auto node_view  = ttg::make_view(node, ttg::ViewScope::Out); // no need to move node onto the device
+      auto is_leaf_view = ttg::make_view(is_leaf, ttg::ViewScope::Out);
+      co_await ttg::device::wait_views{};
+      fcoeffs<functorT, T, K>(f, key, thresh,
+                              node_view.get_device_ptr<0>(),
+                              is_leaf_view.get_device_ptr<0>());  // cannot deduce K
+      co_await ttg::device::wait_kernel{};
+      if (!is_leaf) {
+        for (auto child : children(key)) ttg::sendk<0>(child, out);  // should be broadcast ?
+      }
+    }
+    node.is_leaf = is_leaf;
+    ttg::send<1>(key, node, out);  // always produce a result
+  };
+  ctlEdge<NDIM> refine("refine");
+  return ttg::make_tt(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
+}
+
+
+
 namespace detail {
   template <typename T, size_t K, Dimension NDIM>
   struct tree_types {};

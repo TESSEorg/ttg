@@ -5,6 +5,8 @@
 #include <type_traits>
 #include <span>
 
+#include "ttg/ptr.h"
+
 namespace ttg {
 
   enum class ViewScope {
@@ -389,7 +391,7 @@ namespace ttg {
   }
 
   template<typename... Args>
-  auto make_await(Args&&... args) {
+  inline auto make_await(Args&&... args) {
     return detail::await_t{std::tie(std::forward<Args>(args)...)};
   }
 
@@ -398,10 +400,10 @@ namespace ttg {
     struct to_device_t {
       std::tuple<Ts&...> ties;
     };
-  }
+  } // namespace detail
 
   template<typename... Args>
-  auto to_device(Args&&... args) {
+  inline auto to_device(Args&&... args) {
     return detail::to_device_t{std::tie(std::forward<Args>(args)...)};
   }
 
@@ -410,11 +412,37 @@ namespace ttg {
     struct to_host_t {
       std::tuple<Ts&...> ties;
     };
-  }
+  } // namespace detail
 
   template<typename... Args>
-  auto to_host(Args&&... args) {
+  inline auto to_host(Args&&... args) {
     return detail::to_host_t{std::tie(std::forward<Args>(args)...)};
+  }
+
+  namespace detail {
+    template<typename... T>
+    struct wait_kernel_t;
+    template<>
+    struct wait_kernel_t<>
+    { };
+    template<typename T, typename... Ts>
+    struct wait_kernel_t<T, Ts...> {
+      std::tuple<T&, Ts&...> ties;
+    };
+  } // namespace detail
+
+  /* Wait for the kernel to complete */
+  inline auto wait_kernel() {
+    return detail::wait_kernel_t<>{};
+  }
+
+  /* Wait for kernel to complete and provided ttg::buffer
+   * to be transferred back to host */
+  template<typename... Buffers>
+  inline auto wait_kernel_out(Buffers&&... args) {
+    static_assert((ttg::detail::is_buffer_v<std::decay_t<Buffers>>&&...),
+                  "Only ttg::buffer can be explicitly waited on!");
+    return detail::wait_kernel_t<std::decay_t<Buffers>...>{std::tie(std::forward<Buffers>(args)...)};
   }
 
   struct device_task_promise_type;
@@ -553,6 +581,26 @@ namespace ttg {
       /* TODO: are we allowed to not suspend here and launch the kernel directly? */
       m_state = TTG_DEVICE_CORO_WAIT_TRANSFER;
       return {};
+    }
+
+    template<typename... Ts>
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(detail::wait_kernel_t<ttg::buffer<Ts>...>&& a) {
+      std::cout << "yield_value: wait_kernel_t" << std::endl;
+      if constexpr (sizeof...(Ts) > 0) {
+        TTG_IMPL_NS::mark_device_out(a.ties);
+      }
+      m_state = TTG_DEVICE_CORO_WAIT_KERNEL;
+      return {};
+    }
+
+    template<typename... Ts>
+    auto await_transform(ttg::detail::get_ptr_tpl_t<Ts...>&& a) {
+      return a;
+    }
+
+    template<typename T>
+    auto await_transform(ttg::detail::get_ptr_t<T>&& a) {
+      return a;
     }
 
 

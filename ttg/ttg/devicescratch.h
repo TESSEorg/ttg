@@ -1,8 +1,8 @@
 #ifndef TTG_DEVICESCRATCH_H
 #define TTG_DEVICESCRATCH_H
 
-#include <ttg/devicescope.h>
-#include <ttg/parsec/devicescratch.h>
+#include "ttg/devicescope.h"
+#include "ttg/impl_selector.h"
 
 namespace ttg {
 

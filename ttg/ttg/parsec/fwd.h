@@ -22,7 +22,10 @@ namespace ttg_parsec {
   struct devicescratch;
 
   template<typename... Views>
-  bool register_device_memory(std::tuple<Views&...> &views);
+  inline bool register_device_memory(std::tuple<Views&...> &views);
+
+  template<typename... Buffer>
+  inline void mark_device_out(std::tuple<Buffer&...> &b);
 
   /// \internal the OG name
   template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
@@ -65,11 +68,11 @@ namespace ttg_parsec {
   template <typename T>
   static void ttg_broadcast(ttg::World world, T &data, int source_rank);
 
-  template<typename T>
-  ptr<T> get_ptr(const T& obj);
+  template<typename... Args>
+  inline std::pair<bool, std::tuple<ptr<std::decay_t<Args>>...>> get_ptr(Args&&... args);
 
   template<typename T, typename... Args>
-  ptr<T> make_ptr(Args&&... args);
+  inline ptr<T> make_ptr(Args&&... args);
 
 
 }  // namespace ttg_parsec

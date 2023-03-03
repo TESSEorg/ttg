@@ -35,7 +35,7 @@ struct devicescratch {
 
 private:
 
-  parsec_data_t m_data;
+  parsec_data_t* m_data = nullptr;
   parsec_data_copy_t m_data_copy;
   ttg::scope m_scope;
 
@@ -44,18 +44,17 @@ private:
     /* TODO: handle the scope */
     PARSEC_OBJ_CONSTRUCT(&m_data_copy, parsec_data_copy_t);
     m_data_copy.device_index    = 0;
-    m_data_copy.original        = &m_data;
-    m_data_copy.older           = NULL;
+    //m_data_copy.original        = &m_data;
+    //m_data_copy.older           = NULL;
     m_data_copy.flags           = PARSEC_DATA_FLAG_PARSEC_MANAGED;
     m_data_copy.dtt             = parsec_datatype_int8_t;
     m_data_copy.version         = 1;
     m_data_copy.device_private  = ptr;
     m_data_copy.coherency_state = PARSEC_DATA_COHERENCY_SHARED;
 
-    PARSEC_OBJ_CONSTRUCT(&m_data, parsec_data_t);
-    m_data.device_copies[0]     = &m_data_copy;
-    m_data.nb_elts              = count * sizeof(element_type);
-    m_data.owner_device         = 0;
+    m_data->nb_elts              = count * sizeof(element_type);
+    m_data->owner_device         = 0;
+    parsec_data_copy_attach(m_data, &m_data_copy, 0);
   }
 
   friend parsec_data_t* detail::get_parsec_data<T>(const ttg_parsec::devicescratch<T>&);
@@ -66,7 +65,8 @@ public:
    * The memory pointed to by ptr must be accessible during
    * the life-time of the devicescratch. */
   devicescratch(element_type* ptr, ttg::scope scope = ttg::scope::SyncIn, std::size_t count = 1)
-  : m_scope(scope) {
+  : m_data(parsec_data_new())
+  , m_scope(scope) {
     create_host_copy(ptr, count);
   }
 
@@ -82,26 +82,36 @@ public:
   /* don't allow copying */
   devicescratch& operator=(const devicescratch& db) = delete;
 
+  ~devicescratch() {
+    PARSEC_OBJ_DESTRUCT(&m_data_copy);
+    parsec_data_destroy(m_data);
+    m_data = nullptr;
+  }
+
   /* get the current device pointer */
   element_type* device_ptr() {
     assert(is_valid());
-    return static_cast<element_type*>(m_data.device_copies[m_data.owner_device]->device_private);
+    return static_cast<element_type*>(m_data->device_copies[m_data->owner_device]->device_private);
   }
 
   /* get the current device pointer */
   const element_type* device_ptr() const {
     assert(is_valid());
-    return static_cast<element_type*>(m_data.device_copies[m_data.owner_device]->device_private);
+    return static_cast<element_type*>(m_data->device_copies[m_data->owner_device]->device_private);
   }
 
   bool is_valid() const {
     // TODO: how to get the current device
-    // return (m_data.owner_device == parsec_current_device);
+    // return (m_data->owner_device == parsec_current_device);
     return true;
   }
 
   ttg::scope scope() const {
     return m_scope;
+  }
+
+  std::size_t size() const {
+    return (m_data->nb_elts / sizeof(element_type));
   }
 
 };
@@ -120,7 +130,7 @@ constexpr static const bool is_devicescratch_v = is_devicescratch<T>::value;
 namespace detail {
   template<typename T>
   parsec_data_t* get_parsec_data(const ttg_parsec::devicescratch<T>& scratch) {
-    return const_cast<parsec_data_t*>(&scratch.m_data);
+    return const_cast<parsec_data_t*>(scratch.m_data);
   }
 } // namespace detail
 

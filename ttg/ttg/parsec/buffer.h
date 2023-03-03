@@ -43,8 +43,10 @@ struct buffer {
 private:
   using delete_fn_t = std::add_pointer_t<void(element_type*)>;
 
-  std::unique_ptr<parsec_data_t, decltype(&parsec_data_destroy)> m_data;
-  std::unique_ptr<element_type[], delete_fn_t> m_host_data;
+  using parsec_data_ptr = std::unique_ptr<parsec_data_t, decltype(&parsec_data_destroy)>;
+  using host_data_ptr   = std::unique_ptr<element_type[], delete_fn_t>;
+  parsec_data_ptr m_data;
+  host_data_ptr m_host_data;
   std::size_t m_count = 0;
   detail::ttg_data_copy_t *m_ttg_copy = nullptr;
 
@@ -168,11 +170,11 @@ public:
   /* copy the host buffer content but leave the devices untouched */
   buffer& operator=(const buffer& db) {
     if (db.m_count == 0) {
-      m_data = std::unique_ptr<parsec_data_t>(nullptr, &delete_null_parsec_data);
-      m_host_data = std::unique_ptr<element_type>(nullptr, &delete_non_owned);
+      m_data = parsec_data_ptr(nullptr, &delete_null_parsec_data);
+      m_host_data = host_data_ptr(nullptr, &delete_non_owned);
     } else {
-      m_data = std::unique_ptr(parsec_data_new(), &parsec_data_destroy);
-      m_host_data = std::unique_ptr(new element_type[db.m_count], &delete_owned);
+      m_data = parsec_data_ptr(parsec_data_new(), &parsec_data_destroy);
+      m_host_data = host_data_ptr(new element_type[db.m_count], &delete_owned);
       /* copy host data */
       std::copy(db.m_host_data.get(),
                 db.m_host_data.get() + db.m_count,
@@ -227,6 +229,14 @@ public:
   const element_type* device_ptr_on(int device_id) const {
     assert(is_valid());
     return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id));
+  }
+
+  element_type* host_ptr() {
+    return device_ptr_on(cpu_device);
+  }
+
+  const element_type* host_ptr() const {
+    return device_ptr_on(cpu_device);
   }
 
   bool is_valid_on(int device_id) const {
@@ -285,11 +295,11 @@ public:
     /* drop the current data and reallocate */
     reset();
     if (count == 0) {
-      m_data = std::unique_ptr<parsec_data_t>(nullptr, &delete_null_parsec_data);
-      m_host_data = std::unique_ptr<element_type>(nullptr, &delete_non_owned);
+      m_data = parsec_data_ptr(nullptr, &delete_null_parsec_data);
+      m_host_data = host_data_ptr(nullptr, &delete_non_owned);
     } else {
-      m_data = std::unique_ptr(parsec_data_new(), &parsec_data_destroy);
-      m_host_data = std::unique_ptr(new element_type[count], &delete_owned);
+      m_data = parsec_data_ptr(parsec_data_new(), &parsec_data_destroy);
+      m_host_data = host_data_ptr(new element_type[count], &delete_owned);
       /* create the host copy with the allocated memory */
       create_host_copy();
     }
@@ -303,18 +313,55 @@ public:
     /* drop the current data and reallocate */
     reset();
     if (nullptr == ptr) {
-      m_data = std::unique_ptr<parsec_data_t>(nullptr, &delete_null_parsec_data);
-      m_host_data = std::unique_ptr<element_type>(nullptr, &delete_non_owned);
+      m_data = parsec_data_ptr(nullptr, &delete_null_parsec_data);
+      m_host_data = host_data_ptr(nullptr, &delete_non_owned);
       m_count = 0;
     } else {
-      m_data = std::unique_ptr(parsec_data_new(), &parsec_data_destroy);
-      m_host_data = std::unique_ptr(ptr, &delete_non_owned);
+      m_data = parsec_data_ptr(parsec_data_new(), &parsec_data_destroy);
+      m_host_data = host_data_ptr(ptr, &delete_non_owned);
       /* create the host copy with the allocated memory */
       create_host_copy();
       m_count = count;
     }
     /* don't touch the ttg_copy, we still belong to the same container */
   }
+
+  /* serialization support */
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
+  template <class Archive>
+  std::enable_if_t<std::is_base_of_v<cereal::detail::InputArchiveBase, Archive> ||
+                    std::is_base_of_v<cereal::detail::OutputArchiveBase, Archive>>
+  serialize(Archive& ar) {
+    if constexpr (ttg::detail::is_output_archive_v<Archive>)
+      std::size_t s = size();
+      ar(s);
+    else {
+      std::size_t s;
+      ar(s);
+      reset(s);
+    }
+    ar(value);
+  }
+#endif // TTG_SERIALIZATION_SUPPORTS_CEREAL
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+  template <typename Archive>
+  std::enable_if_t<std::is_base_of_v<madness::archive::BufferInputArchive, Archive> ||
+                   std::is_base_of_v<madness::archive::BufferOutputArchive, Archive>>
+  serialize(Archive& ar) {
+    if constexpr (ttg::detail::is_output_archive_v<Archive>)
+      ar& size();
+    else {
+      std::size_t s;
+      ar & s;
+      /* initialize internal pointers and then reset */
+
+      reset(s);
+    }
+  }
+#endif // TTG_SERIALIZATION_SUPPORTS_MADNESS
+
 
 };
 

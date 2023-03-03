@@ -10,6 +10,10 @@
 
 namespace ttg_parsec {
 
+  // fwd decl
+  template<typename T>
+  struct ptr;
+
   namespace detail {
     /* fwd decl */
     template <typename Value>
@@ -116,6 +120,10 @@ namespace ttg_parsec {
         }
       }
     };
+
+
+    template<typename T>
+    ttg_parsec::detail::ttg_data_copy_t* get_copy(ttg_parsec::ptr<T>& p);
   } // namespace detail
 
   template<typename T, typename... Args>
@@ -139,6 +147,8 @@ namespace ttg_parsec {
     friend ptr<T> make_ptr(Args&&... args);
     template<typename S>
     friend ptr<S> get_ptr(const S& obj);
+    template<typename S>
+    friend detail::ttg_data_copy_t* detail::get_copy(ptr<S>& p);
     friend ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC>;
 
     /* only accessible by get_ptr and make_ptr */
@@ -186,6 +196,55 @@ namespace ttg_parsec {
     }
   };
 
+  namespace detail {
+    template<typename Arg>
+    inline auto get_ptr(Arg&& obj) {
+
+      for (int i = 0; i < detail::parsec_ttg_caller->data_count; ++i) {
+        detail::ttg_data_copy_t *copy = detail::parsec_ttg_caller->copies[i];
+        if (nullptr != copy) {
+          if (copy->get_ptr() == &obj) {
+            bool is_ready = true;
+            /* TODO: how can we force-sync host and device? Current data could be on either. */
+#if 0
+            /* check all tracked device data for validity */
+            for (auto it : copy) {
+              parsec_data_t *data = *it;
+              for (int i = 0; i < parsec_nb_devices; ++i) {
+                if (nullptr != data->device_copies[i]) {
+
+                } else {
+                  is_ready = false;
+                }
+              }
+            }
+#endif // 0
+            return std::make_pair(is_ready, std::tuple{ttg_parsec::ptr<std::decay_t<Arg>>(copy)});
+          }
+        }
+      }
+
+      throw std::runtime_error("ttg::get_ptr called on an unknown object!");
+    }
+  }
+
+  template<typename... Args>
+  inline std::pair<bool, std::tuple<ptr<std::decay_t<Args>>...>> get_ptr(Args&&... args) {
+    if (nullptr == detail::parsec_ttg_caller) {
+      throw std::runtime_error("ttg::get_ptr called outside of a task!");
+    }
+
+    bool ready = true;
+    auto fn = [&](auto&& arg){
+      auto pair = get_ptr(std::forward<decltype(arg)>(arg));
+      ready &= pair.first;
+      return std::move(pair.second);
+    };
+    std::tuple<ptr<std::decay_t<Args>>...> tpl = {(fn(std::forward<Args>(args)))...};
+    return {ready, std::move(tpl)};
+  }
+
+#if 0
   template<typename T>
   ptr<T> get_ptr(const T& obj) {
     if (nullptr != detail::parsec_ttg_caller) {
@@ -202,12 +261,20 @@ namespace ttg_parsec {
     detail::ttg_data_copy_t *copy = detail::create_new_datacopy(obj);
     return ptr<T>(copy);
   }
+#endif // 0
 
   template<typename T, typename... Args>
-  ptr<T> make_ptr(Args&&... args) {
+  inline ptr<T> make_ptr(Args&&... args) {
     detail::ttg_data_copy_t *copy = detail::create_new_datacopy(T(std::forward<Args>(args)...));
     return ptr<T>(copy);
   }
+
+  namespace detail {
+    template<typename T>
+    detail::ttg_data_copy_t* get_copy(ttg_parsec::ptr<T>& p) {
+      return p.get_copy();
+    }
+  } // namespace detail
 
 } // namespace ttg_parsec
 

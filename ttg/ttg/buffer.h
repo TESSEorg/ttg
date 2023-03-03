@@ -2,56 +2,29 @@
 #define TTG_BUFFER_H
 
 #include <memory>
+#include "ttg/impl_selector.h"
+
 
 namespace ttg {
 
 template<typename T>
 using buffer = TTG_IMPL_NS::buffer<T>;
 
-template<typename T>
-struct hostbuf {
-private:
-  T* m_ptr = nullptr;
-  std::size_t m_count = 0;
+namespace detail {
+  template<typename T>
+  struct is_buffer : std::false_type
+  { };
 
-public:
-  hostbuf() = default;
+  template<typename T>
+  struct is_buffer<ttg::buffer<T>> : std::true_type
+  { };
 
-  hostbuf(T* ptr, std::size_t count)
-  : m_ptr(ptr)
-  , m_count(count)
-  { }
+  template<typename T>
+  constexpr bool is_buffer_v = is_buffer<T>::value;
 
-  T* ptr() const {
-    return m_ptr;
-  }
-
-  std::size_t count() const {
-    return m_count;
-  }
-
-  std::size_t size() const {
-    return m_count * sizeof(T);
-  }
-};
-
-/* Applications may override this trait to
- * expose device and host buffer members of
- * data structures. Example:
- * struct data_t {
- *   ttg::buffer<double> db;
- *   double *more_host_data;
- *   int size;
- * };
- * template<>
- * struct container_trait<data_t> {
- *   static auto buffers() {
- *     return std::make_tuple(db);
- *   }
- * };
- */
-template<typename T>
-struct container_trait;
+  static_assert(is_buffer_v<ttg::buffer<double>>);
+  static_assert(is_buffer_v<TTG_IMPL_NS::buffer<double>>);
+} // namespace detail
 
 } // namespace ttg
 

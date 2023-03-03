@@ -3,6 +3,8 @@
 #include "ttg.h"
 #include "ttg/view.h"
 
+#include "cuda_kernel.h"
+
 struct value_t {
   ttg::buffer<double> db; // TODO: rename
   int quark;
@@ -19,56 +21,109 @@ struct value_t {
 namespace madness::archive {
   template <class Archive>
   struct ArchiveSerializeImpl<Archive, value_t> {
-    static inline void serialize(const Archive& ar, value_t& obj) { ar& obj.quark; };
+    static inline void serialize(const Archive& ar, value_t& obj) { ar& obj.quark & obj.db; };
   };
 }  // namespace madness::archive
-
-/* announce that this type contains a device buffer */
-template<>
-struct ttg::container_trait<value_t> {
-  static auto devicebuf_members(value_t&& v) {
-    return std::tie(v.db);
-  }
-};
 
 
 
 TEST_CASE("Device", "coro") {
+
   SECTION("devicebuf") {
 
     ttg::Edge<int, value_t> edge;
-    ttg::ptr<value_t> ptr;
     auto fn = [&](const int& key, value_t&& val) -> ttg::device_task {
-      double scratch = 1.0;
-      ttg::devicescratch<double> scratch_view = ttg::make_scratch(&scratch, ttg::scope::SyncOut);
       ttg::print("device_task key ", key);
       /* wait for the view to be available on the device */
-      co_await ttg::to_device(scratch_view, val.db);
-      // co_yield std::tie(view1, view2);
-      // TTG_WAIT_VIEW(view);
+      co_await ttg::to_device(val.db);
       /* once we're back here the data has been transferred */
-      //CHECK(view.get_rw_device_ptr<0>()  != nullptr);
-      CHECK(scratch_view.device_ptr()  != nullptr);
+      CHECK(val.db.current_device_ptr() != nullptr);
 
-      ttg::print("device_task key ", key, ", device pointer ", scratch_view.device_ptr());
+      /* NO KERNEL */
 
       /* here we suspend to wait for a kernel to complete */
-      co_await ttg::device_op_wait_kernel{};
-      // TTG_WAIT_KERNEL();
-
-      /* force the data back to the host
-       * useful if the buffer tracks a non-owned pointer
-       * and we want to send on that pointer
-       * TODO: needs implementing, how does this interact with scratch?
-       */
-      //co_await ttg::to_host(val.db);
+      co_await ttg::wait_kernel();
 
       /* we're back, the kernel executed and we can send */
-      if (key < 1 || scratch < 0.0) {
+      if (key < 1) {
         /* TODO: should we move the view in here if we want to get the device side data */
+        ttg::send<0>(key+1, std::move(val));
+      }
+    };
+
+    //ptr.get_view<ttg::ExecutionSpace::CUDA>(device_id);
+
+    auto tt = ttg::make_tt<ttg::ExecutionSpace::CUDA>(fn, ttg::edges(edge), ttg::edges(edge),
+                                                      "device_task", {"edge_in"}, {"edge_out"});
+    make_graph_executable(tt);
+    if (ttg::default_execution_context().rank() == 0) tt->invoke(0, value_t{});
+    ttg::ttg_fence(ttg::default_execution_context());
+  }
+
+  SECTION("scratch") {
+
+    ttg::Edge<int, value_t> edge;
+    auto fn = [&](const int& key, value_t&& val) -> ttg::device_task {
+      double scratch = 0.0;
+      ttg::devicescratch<double> ds = ttg::make_scratch(&scratch, ttg::scope::SyncOut);
+
+      /* wait for the view to be available on the device */
+      co_await ttg::to_device(ds, val.db);
+      /* once we're back here the data has been transferred */
+      CHECK(ds.device_ptr()  != nullptr);
+
+      /* call a kernel */
+      increment_buffer(val.db.current_device_ptr(), val.db.size(), ds.device_ptr(), ds.size());
+
+      /* here we suspend to wait for a kernel to complete */
+      co_await ttg::wait_kernel();
+
+      /* buffer is increment once per task, so it should be the same as key */
+      CHECK(static_cast<int>(scratch) == key);
+
+      /* we're back, the kernel executed and we can send */
+      if (key < 10) {
+        /* TODO: should we move the view in here if we want to get the device side data */
+        ttg::send<0>(key+1, std::move(val));
+      }
+    };
+
+    auto tt = ttg::make_tt<ttg::ExecutionSpace::CUDA>(fn, ttg::edges(edge), ttg::edges(edge),
+                                                      "device_task", {"edge_in"}, {"edge_out"});
+    make_graph_executable(tt);
+    if (ttg::default_execution_context().rank() == 0) tt->invoke(0, value_t{});
+    ttg::ttg_fence(ttg::default_execution_context());
+  }
+
+  SECTION("ptr") {
+
+    ttg::Edge<int, value_t> edge;
+    ttg::Ptr<value_t> ptr;
+    auto fn = [&](const int& key, value_t&& val) -> ttg::device_task {
+      double scratch = 1.0;
+      ttg::devicescratch<double> ds = ttg::make_scratch(&scratch, ttg::scope::SyncOut);
+
+      /* wait for the view to be available on the device */
+      co_await ttg::to_device(ds, val.db);
+      /* once we're back here the data has been transferred */
+      CHECK(ds.device_ptr()  != nullptr);
+
+      /* KERNEL */
+      increment_buffer(val.db.current_device_ptr(), val.db.size(), ds.device_ptr(), ds.size());
+
+      /* here we suspend to wait for a kernel and the out-transfer to complete */
+      co_await ttg::wait_kernel_out(val.db);
+
+      /* buffer is increment once per task, so it should be the same as key */
+      CHECK(static_cast<int>(scratch) == key);
+      CHECK(static_cast<int>(*val.db.host_ptr()) == key);
+
+      /* we're back, the kernel executed and we can send */
+      if (key < 10 || scratch < 0.0) {
         ttg::send<0>(key+1, std::move(val));
       } else {
         /* exfiltrate the value */
+        /* TODO: what consistency do we expect from get_ptr? */
         ptr = ttg::get_ptr(val);
       }
     };
@@ -81,16 +136,13 @@ TEST_CASE("Device", "coro") {
     if (ttg::default_execution_context().rank() == 0) tt->invoke(0, value_t{});
     ttg::ttg_fence(ttg::default_execution_context());
     CHECK(ptr.is_valid());
+
+    /* feed the ptr back into a graph */
+    if (ttg::default_execution_context().rank() == 0) tt->invoke(11, ptr);
+    ttg::ttg_fence(ttg::default_execution_context());
+
     ptr.reset();
   }
-
-
-
-
-
-
-
-
 
 
 #if 0
