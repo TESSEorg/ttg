@@ -11,4 +11,6 @@
 /** the C++ namespace containing the coroutine API */
 #define TTG_CXX_COROUTINE_NAMESPACE @CXX_COROUTINE_NAMESPACE@
 
+#cmakedefine TTG_HAVE_CUDA
+
 #endif  // TTG_CONFIG_IN_H

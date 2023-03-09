@@ -27,6 +27,9 @@ namespace ttg_parsec {
   template<typename... Buffer>
   inline void mark_device_out(std::tuple<Buffer&...> &b);
 
+  template<typename... Buffer>
+  inline void post_device_out(std::tuple<Buffer&...> &b);
+
   /// \internal the OG name
   template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
   using Op [[deprecated("use TT instead")]] = TT<keyT, output_terminalsT, derivedT, ttg::typelist<input_valueTs...>>;

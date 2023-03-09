@@ -420,14 +420,22 @@ namespace ttg {
   }
 
   namespace detail {
-    template<typename... T>
-    struct wait_kernel_t;
-    template<>
-    struct wait_kernel_t<>
-    { };
-    template<typename T, typename... Ts>
-    struct wait_kernel_t<T, Ts...> {
-      std::tuple<T&, Ts&...> ties;
+    template<typename... Ts>
+    struct wait_kernel_t {
+      std::tuple<Ts&...> ties;
+
+      /* always suspend */
+      constexpr bool await_ready() const noexcept { return false; }
+
+      /* always suspend */
+      constexpr void await_suspend( std::coroutine_handle<> ) const noexcept {}
+
+      void await_resume() noexcept {
+        if constexpr (sizeof...(Ts) > 0) {
+          /* hook to allow the backend to handle the data after pushout */
+          TTG_IMPL_NS::post_device_out(ties);
+        }
+      }
     };
   } // namespace detail
 
@@ -442,7 +450,7 @@ namespace ttg {
   inline auto wait_kernel_out(Buffers&&... args) {
     static_assert((ttg::detail::is_buffer_v<std::decay_t<Buffers>>&&...),
                   "Only ttg::buffer can be explicitly waited on!");
-    return detail::wait_kernel_t<std::decay_t<Buffers>...>{std::tie(std::forward<Buffers>(args)...)};
+    return detail::wait_kernel_t<std::remove_reference_t<Buffers>...>{std::tie(std::forward<Buffers>(args)...)};
   }
 
   struct device_task_promise_type;
@@ -584,13 +592,13 @@ namespace ttg {
     }
 
     template<typename... Ts>
-    TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(detail::wait_kernel_t<ttg::buffer<Ts>...>&& a) {
+    auto await_transform(detail::wait_kernel_t<ttg::buffer<Ts>...>&& a) {
       std::cout << "yield_value: wait_kernel_t" << std::endl;
       if constexpr (sizeof...(Ts) > 0) {
         TTG_IMPL_NS::mark_device_out(a.ties);
       }
       m_state = TTG_DEVICE_CORO_WAIT_KERNEL;
-      return {};
+      return a;
     }
 
 #if 0

@@ -11,40 +11,47 @@
 #include <parsec.h>
 
 #include "ttg/parsec/thread_local.h"
+#include "ttg/util/span.h"
 
 
 namespace ttg_parsec {
 
   namespace detail {
 
+    template<typename T>
+    struct ttg_data_copy_container_setter {
+      ttg_data_copy_container_setter(T* ptr) {
+        /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
+        ttg_data_copy_container() = ptr;
+      }
+    };
+
     /* Non-owning copy-tracking wrapper, accounting for N readers or 1 writer.
      * Also counts external references, which are not treated as
      * readers or writers but merely prevent the object from being
      * destroyed once no readers/writers exist.
      */
-    struct ttg_data_copy_t {
+    struct ttg_data_copy_t : private ttg_data_copy_container_setter<ttg_data_copy_t> {
 
       /* special value assigned to parsec_data_copy_t::readers to mark the copy as
       * mutable, i.e., a task will modify it */
       static constexpr int mutable_tag = std::numeric_limits<int>::min();
 
       ttg_data_copy_t()
-      {
-        /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
-        ttg_data_copy_container() = this;
-      }
+      : ttg_data_copy_container_setter(this)
+      { }
 
-      ttg_data_copy_t(const ttg_data_copy_t& c) {
+      ttg_data_copy_t(const ttg_data_copy_t& c)
+      : ttg_data_copy_container_setter(this)
+      {
         /* we allow copying but do not copy any data over from the original
          * device copies will have to be allocated again
          * and it's a new object to reference */
-
-        /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
-        ttg_data_copy_container() = this;
       }
 
       ttg_data_copy_t(ttg_data_copy_t&& c)
-      : m_ptr(c.m_ptr)
+      : ttg_data_copy_container_setter(this)
+      , m_ptr(c.m_ptr)
       , m_next_task(c.m_next_task)
       , m_readers(c.m_readers)
       , m_refs(c.m_refs.load(std::memory_order_relaxed))
@@ -55,9 +62,6 @@ namespace ttg_parsec {
         c.m_num_dev_data = 0;
         c.m_readers = 0;
         c.m_single_dev_data = nullptr;
-
-        /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
-        ttg_data_copy_container() = this;
       }
 
       ttg_data_copy_t& operator=(ttg_data_copy_t&& c)
@@ -232,6 +236,32 @@ namespace ttg_parsec {
         }
       }
 
+      using iovec_iterator = typename std::vector<ttg::iovec>::iterator;
+
+      iovec_iterator iovec_begin() {
+        return m_iovecs.begin();
+      }
+
+      iovec_iterator iovec_end() {
+        return m_iovecs.end();
+      }
+
+      void iovec_reset() {
+        m_iovecs.clear();
+      }
+
+      void iovec_add(const ttg::iovec& iov) {
+        m_iovecs.push_back(iov);
+      }
+
+      ttg::span<ttg::iovec> iovec_span() {
+        return ttg::span<ttg::iovec>(m_iovecs.data(), m_iovecs.size());
+      }
+
+      std::size_t iovec_count() const {
+        return m_iovecs.size();
+      }
+
 #if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
       int64_t size;
       int64_t uid;
@@ -241,6 +271,8 @@ namespace ttg_parsec {
       parsec_task_t *m_next_task = nullptr;
       int32_t        m_readers  = 1;
       std::atomic<int32_t>  m_refs = 1; // number of entities referencing this copy (TTGs, external)
+
+      std::vector<ttg::iovec> m_iovecs;
 
       std::vector<parsec_data_t*> m_dev_data;   //< used if there are multiple device copies
                                                   //  that belong to this object

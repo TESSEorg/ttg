@@ -5,10 +5,12 @@
 #define TTG_PARSEC_MAX_NUM_DEVICES 4
 
 #include <array>
+#include <vector>
 #include <parsec.h>
 #include <parsec/data_internal.h>
 #include <parsec/mca/device/device.h>
 #include "ttg/parsec/ttg_data_copy.h"
+#include "ttg/util/iovec.h"
 
 namespace ttg_parsec {
 
@@ -136,11 +138,22 @@ public:
   : m_data(std::move(db.m_data))
   , m_host_data(std::move(db.m_host_data))
   , m_count(db.m_count)
+  , m_ttg_copy(db.m_ttg_copy)
   {
     db.m_count = 0;
-    /* don't update the ttg_copy, we keep the connection */
+
+    if (nullptr == m_ttg_copy && nullptr != detail::ttg_data_copy_container()) {
+      m_ttg_copy = detail::ttg_data_copy_container();
+      /* register with the new ttg_copy */
+      m_ttg_copy->add_device_data(m_data.get());
+    }
   }
 
+  /* explicitly disable copying of buffers
+   * TODO: should we allow this? What data to use?
+   */
+  buffer(const buffer& db) = delete;
+#if 0
   /* copy the host data but leave the devices untouched */
   buffer(const buffer& db)
   : m_data(db.m_count ? parsec_data_new() : nullptr,
@@ -157,6 +170,7 @@ public:
     /* create the host copy with the allocated memory */
     create_host_copy();
   }
+#endif // 0
 
   /* allow moving device buffers */
   buffer& operator=(buffer&& db) {
@@ -167,6 +181,12 @@ public:
     /* don't update the ttg_copy, we keep the connection */
   }
 
+  /* explicitly disable copying of buffers
+   * TODO: should we allow this? What data to use?
+   */
+  buffer& operator=(const buffer& db) = delete;
+
+#if 0
   /* copy the host buffer content but leave the devices untouched */
   buffer& operator=(const buffer& db) {
     if (db.m_count == 0) {
@@ -184,6 +204,7 @@ public:
     }
     m_count = db.m_count;
   }
+#endif // 0
 
   /* set the current device, useful when a device
    * buffer was modified outside of a TTG */
@@ -335,11 +356,15 @@ public:
   serialize(Archive& ar) {
     if constexpr (ttg::detail::is_output_archive_v<Archive>)
       std::size_t s = size();
+      assert(m_ttg_copy != nullptr); // only tracked objects allowed
+      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), current_device_ptr()});
       ar(s);
     else {
       std::size_t s;
       ar(s);
       reset(s);
+      assert(m_ttg_copy != nullptr); // only tracked objects allowed
+      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), current_device_ptr()});
     }
     ar(value);
   }
@@ -350,14 +375,18 @@ public:
   std::enable_if_t<std::is_base_of_v<madness::archive::BufferInputArchive, Archive> ||
                    std::is_base_of_v<madness::archive::BufferOutputArchive, Archive>>
   serialize(Archive& ar) {
-    if constexpr (ttg::detail::is_output_archive_v<Archive>)
-      ar& size();
-    else {
+    if constexpr (ttg::detail::is_output_archive_v<Archive>) {
+      std::size_t s = size();
+      ar& s;
+      assert(m_ttg_copy != nullptr); // only tracked objects allowed
+      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), current_device_ptr()});
+    } else {
       std::size_t s;
       ar & s;
       /* initialize internal pointers and then reset */
-
       reset(s);
+      assert(m_ttg_copy != nullptr); // only tracked objects allowed
+      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), current_device_ptr()});
     }
   }
 #endif // TTG_SERIALIZATION_SUPPORTS_MADNESS

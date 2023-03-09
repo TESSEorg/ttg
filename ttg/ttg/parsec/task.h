@@ -20,7 +20,7 @@ namespace ttg_parsec {
     {
       static constexpr bool support_device = false;
       static constexpr size_t num_flows = 0;
-      device_state_t(parsec_task_t *parsec_task)
+      device_state_t()
       { }
       static constexpr device_ptr_t* dev_ptr() {
         return nullptr;
