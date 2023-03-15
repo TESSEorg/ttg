@@ -30,6 +30,9 @@ namespace ttg_parsec {
   template<typename... Buffer>
   inline void post_device_out(std::tuple<Buffer&...> &b);
 
+  /* the query of the parsec backend only returns whether the data should be marked for pushout */
+  using query_result_type = bool;
+
   /// \internal the OG name
   template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
   using Op [[deprecated("use TT instead")]] = TT<keyT, output_terminalsT, derivedT, ttg::typelist<input_valueTs...>>;

@@ -155,6 +155,7 @@ namespace ttg {
     using broadcast_callback_type = meta::detail::broadcast_callback_t<keyT, std::decay_t<valueT>>;
     using setsize_callback_type = typename base_type::setsize_callback_type;
     using finalize_callback_type = typename base_type::finalize_callback_type;
+    using prepare_send_callback_type = meta::detail::prepare_send_callback_t<keyT, std::decay_t<valueT>>;
     static constexpr bool is_an_input_terminal = true;
     ttg::detail::ContainerWrapper<keyT, valueT> container;
 
@@ -162,6 +163,7 @@ namespace ttg {
     send_callback_type send_callback;
     move_callback_type move_callback;
     broadcast_callback_type broadcast_callback;
+    prepare_send_callback_type prepare_send_callback;
 
     // No moving, copying, assigning permitted
     In(In &&other) = delete;
@@ -189,10 +191,12 @@ namespace ttg {
     void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback,
                       const broadcast_callback_type &bcast_callback = broadcast_callback_type{},
                       const setsize_callback_type &setsize_callback = setsize_callback_type{},
-                      const finalize_callback_type &finalize_callback = finalize_callback_type{}) {
+                      const finalize_callback_type &finalize_callback = finalize_callback_type{},
+                      const prepare_send_callback_type &prepare_send_callback = prepare_send_callback_type{}) {
       this->send_callback = send_callback;
       this->move_callback = move_callback;
       this->broadcast_callback = bcast_callback;
+      this->prepare_send_callback = prepare_send_callback;
       base_type::set_callback(setsize_callback, finalize_callback);
     }
 
@@ -271,7 +275,7 @@ namespace ttg {
           for (auto &&key : keylist) send(key, v);
         } else {
           /* got something we cannot iterate over (single element?) so put one element in the span */
-          broadcast_callback(ttg::span<const keyT>(&keylist, 1), v);
+          send(ttg::span<const keyT>(&keylist, 1), v);
         }
       }
     }
@@ -291,7 +295,36 @@ namespace ttg {
           for (auto &&key : keylist) sendk(key);
         } else {
           /* got something we cannot iterate over (single element?) so put one element in the span */
-          broadcast_callback(ttg::span<const keyT>(&keylist, 1));
+          sendk(ttg::span<const keyT>(&keylist, 1));
+        }
+      }
+    }
+
+
+    template <typename rangeT, typename Value>
+    void prepare_send(const rangeT &keylist, Value &&value) {
+      const Value &v = value;
+      if (prepare_send_callback) {
+        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
+          prepare_send_callback(ttg::span<const keyT>(&(*std::begin(keylist)),
+                                                      std::distance(std::begin(keylist), std::end(keylist))),
+                                v);
+        } else {
+          /* got something we cannot iterate over (single element?) so put one element in the span */
+          prepare_send_callback(ttg::span<const keyT>(&keylist, 1), v);
+        }
+      }
+    }
+
+    template <typename rangeT, typename Value>
+    void prepare_send(Value &&value) {
+      const Value &v = value;
+      if (prepare_send_callback) {
+        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
+          prepare_send_callback(v);
+        } else {
+          /* got something we cannot iterate over (single element?) so put one element in the span */
+          prepare_send_callback(v);
         }
       }
     }
@@ -528,6 +561,32 @@ namespace ttg {
           static_cast<In<keyT, void> *>(successor)->broadcast(keylist);
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
           static_cast<In<keyT, void> *>(successor)->broadcast(keylist);
+        }
+      }
+    }
+
+    template <typename rangeT, typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<meta::is_none_void_v<Key> && !meta::is_void_v<valueT>, void>
+    prepare_send(const rangeT &keylist, const Value &value) {
+      for (auto &&successor : this->successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          return static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->prepare_send(keylist, value);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          return static_cast<In<keyT, valueT> *>(successor)->prepare_send(keylist, value);
+        }
+      }
+    }
+
+    template <typename rangeT, typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<meta::is_none_void_v<Key> && !meta::is_void_v<valueT>, void>
+    prepare_send(const Value &value) {
+      for (auto &&successor : this->successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          return static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->prepare_send(value);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          return static_cast<In<keyT, valueT> *>(successor)->prepare_send(value);
         }
       }
     }

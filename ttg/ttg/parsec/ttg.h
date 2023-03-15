@@ -62,6 +62,11 @@
 #include <tuple>
 #include <vector>
 
+// needed for MPIX_CUDA_AWARE_SUPPORT
+#include <mpi.h>
+#include <mpi-ext.h>
+
+
 /* TODO: remove once we use PaRSEC master */
 #ifndef PARSEC_HAVE_CUDA
 #define PARSEC_HAVE_CUDA 1
@@ -1219,6 +1224,8 @@ namespace ttg_parsec {
       // get the device task from the coroutine handle
       ttg::device_task dev_task = ttg::device_task_handle_type::from_address(task->suspended_task_address);
 
+      task->dev_ptr->stream = gpu_stream;
+
       std::cout << "device_static_submit task " << task << std::endl;
 
       // get the promise which contains the views
@@ -1227,28 +1234,23 @@ namespace ttg_parsec {
       /* we should still be waiting for the transfer to complete */
       assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_TRANSFER);
 
-#if 0
-      /* update the device pointers in the device views */
-      int i = 0;
-      for (auto& view : dev_data) {
-        /* iterate over all viewspans of this view (i.e., all memory ranges in this view) */
-        for (auto& view_span : view) {
-          view_span.set_data(task->parsec_task.data[i].data_out);
-          ++i;
-        }
-      }
-#endif // 0
-
       /* Here we call back into the coroutine again after the transfers have completed */
       static_op<Space>(&task->parsec_task);
 
+      /* Get a new handle for the promise*/
       dev_task = ttg::device_task_handle_type::from_address(task->suspended_task_address);
       dev_data = dev_task.promise();
-      /* for now make sure we're waiting for the kernel to complete and the coro hasn't skipped this step */
-      assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL);
 
-      /* next time we will come back into complete_task_and_release */
-      return PARSEC_HOOK_RETURN_DONE;
+      assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL ||
+             dev_data.state() == ttg::TTG_DEVICE_CORO_COMPLETE);
+
+      /* we will come back into this function once the kernel and transfers are */
+      int rc = PARSEC_HOOK_RETURN_AGAIN;
+      if (ttg::TTG_DEVICE_CORO_COMPLETE == dev_data.state()) {
+        /* the task started sending so we won't come back here */
+        rc = PARSEC_HOOK_RETURN_DONE;
+      }
+      return rc;
     }
 
     template <ttg::ExecutionSpace Space>
@@ -1584,9 +1586,14 @@ namespace ttg_parsec {
     }
 
     template <typename T>
-    uint64_t pack(T &obj, void *bytes, uint64_t pos) {
+    uint64_t pack(T &obj, void *bytes, uint64_t pos, detail::ttg_data_copy_t *copy = nullptr) {
       const ttg_data_descriptor *dObj = ttg::get_data_descriptor<ttg::meta::remove_cvr_t<T>>();
       uint64_t payload_size = dObj->payload_size(&obj);
+      if (copy) {
+        /* reset any tracked data, we don't care about the packing from the payload size */
+        copy->iovec_reset();
+      }
+
       if constexpr (!ttg::default_data_descriptor<ttg::meta::remove_cvr_t<T>>::serialize_size_is_const) {
         const ttg_data_descriptor *dSiz = ttg::get_data_descriptor<uint64_t>();
         dSiz->pack_payload(&payload_size, sizeof(uint64_t), pos, bytes);
@@ -1738,6 +1745,7 @@ namespace ttg_parsec {
             copy = detail::create_new_datacopy(decvalueT{});
             /* unpack the object, potentially discovering iovecs */
             pos = unpack(*static_cast<decvalueT *>(copy->get_ptr()), msg->bytes, pos);
+            std::cout << "num_iovecs " << num_iovecs << " distance " << std::distance(copy->iovec_begin(), copy->iovec_end()) << std::endl;
             assert(std::distance(copy->iovec_begin(), copy->iovec_end()) == num_iovecs);
           }
 
@@ -2077,17 +2085,6 @@ namespace ttg_parsec {
             copy = detail::create_new_datacopy(std::forward<Value>(value));
           }
 
-          /* if this is a host task make sure tracked buffers get copied to the host */
-          if constexpr(!derived_has_cuda_op()) {
-            int c = 0;
-            for (auto data : *copy) {
-              if (data->owner_device != 0) {
-                task->parsec_task.data[c].data_in = data->device_copies[0];
-                task->parsec_task.data[c].source_repo_entry = NULL;
-                ++c;
-              }
-            }
-          }
           /* if we registered as a writer and were the first to register with this copy
            * we need to defer the release of this task to give other tasks a chance to
            * make a copy of the original data */
@@ -2283,8 +2280,10 @@ namespace ttg_parsec {
           handle_iovec_fn(iovs);
         } else if constexpr (!ttg::has_split_metadata<std::decay_t<Value>>::value) {
           /* serialize the object */
-          pos = pack(value, msg->bytes, pos);
+          std::cout << "PRE pack num_iovecs " << std::distance(copy->iovec_begin(), copy->iovec_end()) << std::endl;
+          pos = pack(value, msg->bytes, pos, copy);
           num_iovecs = std::distance(copy->iovec_begin(), copy->iovec_end());
+          std::cout << "POST pack num_iovecs " << num_iovecs << std::endl;
           /* handle any iovecs contained in it */
           handle_iovec_fn(copy->iovec_span());
           copy->iovec_reset();
@@ -2432,7 +2431,7 @@ namespace ttg_parsec {
           pos = pack(metadata, msg->bytes, pos);
         } else if constexpr (!ttg::has_split_metadata<std::decay_t<Value>>::value) {
           /* serialize the object once */
-          pos = pack(value, msg->bytes, pos);
+          pos = pack(value, msg->bytes, pos, copy);
           num_iovs = std::distance(copy->iovec_begin(), copy->iovec_end());
           register_iovs_fn(copy->iovec_span());
           copy->iovec_reset();
@@ -2778,6 +2777,84 @@ namespace ttg_parsec {
       }
     }
 
+    void copy_mark_pushout(detail::ttg_data_copy_t *copy) {
+
+      assert(detail::parsec_ttg_caller->dev_ptr && detail::parsec_ttg_caller->dev_ptr->gpu_task);
+      parsec_gpu_task_t *gpu_task = detail::parsec_ttg_caller->dev_ptr->gpu_task;
+      for (auto data : *copy) {
+        if (data->owner_device != 0 &&
+            data->device_copies[0]->version < data->device_copies[data->owner_device]->version) {
+          /* find the flow */
+          int flowidx = 0;
+          while (flowidx < MAX_PARAM_COUNT &&
+                gpu_task->flow[flowidx]->flow_flags != PARSEC_FLOW_ACCESS_NONE) {
+            if (detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in->original == data) {
+              /* found the right data, set the corresponding flow as pushout */
+              break;
+            }
+            ++flowidx;
+          }
+          if (flowidx == MAX_PARAM_COUNT) {
+            throw std::runtime_error("Cannot add more than MAX_PARAM_COUNT flows to a task!");
+          }
+          if (gpu_task->flow[flowidx]->flow_flags == PARSEC_FLOW_ACCESS_NONE) {
+            /* no flow found, add one and mark it pushout */
+            detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in = data->device_copies[0];
+            ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_RW;
+            gpu_task->flow_nb_elts[flowidx] = data->nb_elts;
+          }
+          gpu_task->pushout |= 1<<flowidx;
+        }
+      }
+    }
+
+    template <std::size_t i, typename Key, typename Value>
+    std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>,
+                     void>
+    prepare_send(const ttg::span<const Key> &keylist, const Value &value) {
+      using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;
+
+      /* get the copy */
+      detail::ttg_data_copy_t *copy;
+      copy = detail::find_copy_in_task(detail::parsec_ttg_caller, &value);
+      assert(nullptr != copy);
+
+      /* check if there are non-local successors if it's a cuda task */
+      bool have_remote = false;
+      if constexpr (derived_has_cuda_op()) {
+        auto world = ttg_default_execution_context();
+        int rank = world.rank();
+        uint64_t pos = 0;
+        bool have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
+                                                        [&](const Key &key) { return keymap(key) != rank; });
+      }
+      if (!derived_has_cuda_op() || have_remote) {
+        /* non-gpu task, check if we need to push back to the host */
+        copy_mark_pushout(copy);
+      }
+    }
+
+    template <std::size_t i, typename Key, typename Value>
+    std::enable_if_t<ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>,
+                     void>
+    prepare_send(const Value &value) {
+      using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;
+
+      /* get the copy */
+      detail::ttg_data_copy_t *copy;
+      copy = detail::find_copy_in_task(detail::parsec_ttg_caller, &value);
+      assert(nullptr != copy);
+
+      /* check if there are non-local successors if it's a cuda task */
+      auto world = ttg_default_execution_context();
+      int rank = world.rank();
+      bool have_remote = (keymap() != rank);
+      if (!derived_has_cuda_op() || have_remote) {
+        /* non-gpu task, check if we need to push back to the host */
+        copy_mark_pushout(copy);
+      }
+    }
+
    private:
     // Copy/assign/move forbidden ... we could make it work using
     // PIMPL for this base class.  However, this instance of the base
@@ -2813,9 +2890,13 @@ namespace ttg_parsec {
         auto broadcast_callback = [this](const ttg::span<const keyT> &keylist, const valueT &value) {
             broadcast_arg<i, keyT, valueT>(keylist, value);
         };
+        auto prepare_send_callback = [this](const ttg::span<const keyT> &keylist, const valueT &value) {
+            prepare_send<i, keyT, valueT>(keylist, value);
+        };
         auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
         auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
-        input.set_callback(send_callback, move_callback, broadcast_callback, setsize_callback, finalize_callback);
+        input.set_callback(send_callback, move_callback, broadcast_callback,
+                           setsize_callback, finalize_callback, prepare_send_callback);
       }
       //////////////////////////////////////////////////////////////////
       // case 2: nonvoid key, void value, mixed inputs
@@ -2838,7 +2919,10 @@ namespace ttg_parsec {
         auto send_callback = [this](const valueT &value) { set_arg<i, keyT, const valueT &>(value); };
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
         auto finalize_callback = [this]() { finalize_argstream<i>(); };
-        input.set_callback(send_callback, move_callback, {}, setsize_callback, finalize_callback);
+        auto prepare_send_callback = [this](const valueT &value) {
+            prepare_send<i, void>(value);
+        };
+        input.set_callback(send_callback, move_callback, {}, setsize_callback, finalize_callback, prepare_send_callback);
       }
       //////////////////////////////////////////////////////////////////
       // case 5: void key, void value, mixed inputs
@@ -3465,9 +3549,22 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
  private:
   ttg_parsec::detail::ttg_data_copy_t *copy_to_remove = nullptr;
 
-
-
  public:
+  value_copy_handler() = default;
+  value_copy_handler(const value_copy_handler& h) = delete;
+  value_copy_handler(value_copy_handler&& h)
+  : copy_to_remove(h.copy_to_remove)
+  {
+    h.copy_to_remove = nullptr;
+  }
+
+  value_copy_handler& operator=(const value_copy_handler& h) = delete;
+  value_copy_handler& operator=(value_copy_handler&& h)
+  {
+    std::swap(copy_to_remove, h.copy_to_remove);
+    return *this;
+  }
+
   ~value_copy_handler() {
     if (nullptr != copy_to_remove) {
       ttg_parsec::detail::remove_data_copy(copy_to_remove, ttg_parsec::detail::parsec_ttg_caller);

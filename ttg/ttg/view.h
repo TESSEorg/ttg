@@ -5,6 +5,8 @@
 #include <type_traits>
 #include <span>
 
+#include "ttg/fwd.h"
+#include "ttg/impl_selector.h"
 #include "ttg/ptr.h"
 
 namespace ttg {
@@ -439,19 +441,298 @@ namespace ttg {
     };
   } // namespace detail
 
-  /* Wait for the kernel to complete */
-  inline auto wait_kernel() {
-    return detail::wait_kernel_t<>{};
-  }
-
-  /* Wait for kernel to complete and provided ttg::buffer
+  /* Wait for kernel to complete and provided ttg::buffer and ttg::devicescratch
    * to be transferred back to host */
   template<typename... Buffers>
-  inline auto wait_kernel_out(Buffers&&... args) {
-    static_assert((ttg::detail::is_buffer_v<std::decay_t<Buffers>>&&...),
-                  "Only ttg::buffer can be explicitly waited on!");
+  inline auto wait_kernel(Buffers&&... args) {
+    static_assert(((ttg::detail::is_buffer_v<std::decay_t<Buffers>>
+                    ||ttg::detail::is_devicescratch_v<std::decay_t<Buffers>>)&&...),
+                  "Only ttg::buffer and ttg::devicescratch can be waited on!");
     return detail::wait_kernel_t<std::remove_reference_t<Buffers>...>{std::tie(std::forward<Buffers>(args)...)};
   }
+
+
+  /* TODO: move all device code into ttg::device */
+  namespace device {
+
+    /******************************
+     * Send/Broadcast handling
+     * We pass the value returned by the backend's copy handler into a coroutine
+     * and execute the first part (prepare), before suspending it.
+     * The second part (send/broadcast) is executed after the task completed.
+     ******************************/
+
+    namespace detail {
+      struct send_coro_promise_type;
+
+      using send_coro_handle_type = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<send_coro_promise_type>;
+
+      /// task that can be resumed after some events occur
+      struct send_coro_state : public send_coro_handle_type {
+        using base_type = send_coro_handle_type;
+
+        /// these are members mandated by the promise_type concept
+        ///@{
+
+        using promise_type = send_coro_promise_type;
+
+        ///@}
+
+        send_coro_state(base_type base) : base_type(std::move(base)) {}
+
+        base_type& handle() { return *this; }
+
+        /// @return true if ready to resume
+        inline bool ready() {
+          return true;
+        }
+
+        /// @return true if task completed and can be destroyed
+        inline bool completed();
+      };
+
+      struct send_coro_promise_type {
+
+        /* do not suspend the coroutine on first invocation, we want to run
+        * the coroutine immediately and suspend only once.
+        */
+        TTG_CXX_COROUTINE_NAMESPACE::suspend_never initial_suspend() {
+          return {};
+        }
+
+        /* we don't suspend the coroutine at the end.
+        * it can be destroyed once the send/broadcast is done
+        */
+        TTG_CXX_COROUTINE_NAMESPACE::suspend_never final_suspend() noexcept {
+          return {};
+        }
+
+        send_coro_state get_return_object() { return send_coro_state{send_coro_handle_type::from_promise(*this)}; }
+
+        /* the send coros only have an empty co_await */
+        TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(ttg::Void) {
+          return {};
+        }
+
+        void unhandled_exception() {
+
+        }
+
+      };
+
+      template<typename Key, typename Value, ttg::Runtime Runtime = ttg::ttg_runtime>
+      inline send_coro_state send_coro (const Key& key, Value&& value, ttg::Out<Key, Value> &t,
+                                        ttg::detail::value_copy_handler<Runtime>& ch) {
+        ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
+        Key k = key;
+        t.prepare_send(k, std::forward<Value>(value));
+        co_await ttg::Void{}; // we'll come back once the task is done
+        t.send(k, std::forward<Value>(value));
+      };
+
+      template<typename Value, ttg::Runtime Runtime = ttg::ttg_runtime>
+      inline send_coro_state sendv_coro (Value&& value, ttg::Out<void, Value> &t,
+                                         ttg::detail::value_copy_handler<Runtime>& ch) {
+        ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
+        t.prepare_send(std::forward<Value>(value));
+        co_await ttg::Void{}; // we'll come back once the task is done
+        t.sendv(std::forward<Value>(value));
+      };
+    } // namespace detail
+
+
+    /* functionality to deal with sending/broadcasting */
+    namespace detail {
+      struct send_t {
+        send_coro_state coro;
+      };
+    } // namespace detail
+
+    template <size_t i, typename keyT, typename valueT, typename... out_keysT, typename... out_valuesT,
+              ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline detail::send_t send(const keyT &key, valueT &&value,
+                                        std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+      ttg::detail::value_copy_handler<Runtime> copy_handler;
+      return detail::send_t{detail::send_coro(key, copy_handler(std::forward<valueT>(value)), std::get<i>(t), copy_handler)};
+    }
+
+    template <size_t i, typename valueT, typename... out_keysT, typename... out_valuesT,
+              ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline detail::send_t sendv(
+        valueT &&value, std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+      ttg::detail::value_copy_handler<Runtime> copy_handler;
+      return detail::send_t{detail::sendv_coro(copy_handler(std::forward<valueT>(value)), std::get<i>(t), copy_handler)};
+    }
+
+
+    // clang-format off
+    /// \brief Sends a task id and a value to the template tasks attached to the output terminal of this template task
+    /// \param[in] i Identifies which output terminal of this template task to select for sending
+    /// \param[in] key: the id of the task(s) receiving the value
+    /// \param[in] value: the value to send to the receiving task(s)
+    // clang-format on
+    template <typename keyT, typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline detail::send_t send(size_t i, const keyT &key, valueT &&value) {
+      ttg::detail::value_copy_handler<Runtime> copy_handler;
+      auto *terminal_ptr = ttg::detail::get_out_terminal<keyT, valueT>(i, "ttg::device::send(i, key, value)");
+      return detail::send_t{detail::send_coro(key, copy_handler(std::forward<valueT>(value)), *terminal_ptr, copy_handler)};
+    }
+
+    // clang-format off
+    /// \brief Sends a task id and a value to the template tasks attached to the output terminal of this template task
+    /// \note this is provided to support `send<i>` with and without explicitly-passed terminal tuple
+    /// \tparam <i> Identifies which output terminal of this template task to select for sending
+    /// \param[in] key: the id of the task(s) receiving the value
+    /// \param[in] value: the value to send to the receiving task(s)
+    // clang-format on
+    template <size_t i, typename keyT, typename valueT>
+    inline auto send(const keyT &key, valueT &&value) {
+      return send(i, key, std::forward<valueT>(value));
+    }
+
+
+
+    namespace detail {
+
+      template<typename T, typename Enabler = void>
+      struct broadcast_keylist_trait {
+        using type = T;
+      };
+
+      /* overload for iterable types that extracts the type of the first element */
+      template<typename T>
+      struct broadcast_keylist_trait<T, std::enable_if_t<ttg::meta::is_iterable_v<T>>> {
+        using key_type = decltype(*std::begin(std::get<0>(std::declval<T>())));
+      };
+
+      template <size_t KeyId, size_t I, size_t... Is, typename... RangesT, typename valueT,
+                typename... out_keysT, typename... out_valuesT>
+      inline void prepare_broadcast(const std::tuple<RangesT...> &keylists, valueT &&value,
+                                    std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+        std::get<I>(t)->prepare_send(std::get<KeyId>(keylists), std::forward<valueT>(value));
+        if constexpr (sizeof...(Is) > 0) {
+          detail::prepare_broadcast<KeyId+1, Is...>(keylists, std::forward<valueT>(value), t);
+        }
+      }
+
+      template <size_t KeyId, size_t I, size_t... Is, typename... RangesT, typename valueT,
+                typename... out_keysT, typename... out_valuesT>
+      inline void prepare_broadcast(const std::tuple<RangesT...> &keylists, valueT &&value) {
+        using key_t = broadcast_keylist_trait<
+                        std::tuple_element_t<KeyId, std::tuple<std::remove_reference_t<RangesT>...>>
+                      >::key_type;
+        auto *terminal_ptr = ttg::detail::get_out_terminal<key_t, valueT>(I, "ttg::device::broadcast(keylists, value)");
+        terminal_ptr->prepare_send(std::get<KeyId>(keylists), value);
+        if constexpr (sizeof...(Is) > 0) {
+          detail::prepare_broadcast<KeyId+1, Is...>(keylists, std::forward<valueT>(value));
+        }
+      }
+
+      template <size_t KeyId, size_t I, size_t... Is, typename... RangesT, typename valueT,
+                typename... out_keysT, typename... out_valuesT>
+      inline void broadcast(const std::tuple<RangesT...> &keylists, valueT &&value,
+                                    std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+        std::get<I>(t)->broadcast(std::get<KeyId>(keylists), std::forward<valueT>(value));
+        if constexpr (sizeof...(Is) > 0) {
+          detail::broadcast<KeyId+1, Is...>(keylists, std::forward<valueT>(value), t);
+        }
+      }
+
+      template <size_t KeyId, size_t I, size_t... Is, typename... RangesT, typename valueT,
+                typename... out_keysT, typename... out_valuesT>
+      inline void broadcast(const std::tuple<RangesT...> &keylists, valueT &&value) {
+        using key_t = broadcast_keylist_trait<
+                        std::tuple_element_t<KeyId, std::tuple<std::remove_reference_t<RangesT>...>>
+                      >::key_type;
+        auto *terminal_ptr = ttg::detail::get_out_terminal<key_t, valueT>(I, "ttg::device::broadcast(keylists, value)");
+        terminal_ptr->broadcast(std::get<KeyId>(keylists), value);
+        if constexpr (sizeof...(Is) > 0) {
+          detail::broadcast<KeyId+1, Is...>(keylists, std::forward<valueT>(value));
+        }
+      }
+
+      /* overload with explicit terminals */
+      template <size_t I, size_t... Is, typename RangesT, typename valueT,
+                typename... out_keysT, typename... out_valuesT,
+                ttg::Runtime Runtime = ttg::ttg_runtime>
+      inline send_coro_state
+      broadcast_coro(RangesT &&keylists, valueT &&value,
+                     std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t,
+                     ttg::detail::value_copy_handler<Runtime>&& ch) {
+        ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
+        RangesT kl = std::forward<RangesT>(keylists); // capture the keylist(s)
+        if constexpr (ttg::meta::is_tuple_v<RangesT>) {
+          // treat as tuple
+          prepare_broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value), t);
+          co_await ttg::Void{}; // we'll come back once the task is done
+          broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value), t);
+        } else if constexpr (!ttg::meta::is_tuple_v<RangesT>) {
+          // create a tie to the captured keylist
+          prepare_broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value), t);
+          co_await ttg::Void{}; // we'll come back once the task is done
+          broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value), t);
+        }
+      }
+
+      /* overload with implicit terminals */
+      template <size_t I, size_t... Is, typename RangesT, typename valueT,
+                ttg::Runtime Runtime = ttg::ttg_runtime>
+      inline send_coro_state
+      broadcast_coro(RangesT &&keylists, valueT &&value,
+                     ttg::detail::value_copy_handler<Runtime>&& ch) {
+        ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
+        RangesT kl = std::forward<RangesT>(keylists); // capture the keylist(s)
+        if constexpr (ttg::meta::is_tuple_v<RangesT>) {
+          // treat as tuple
+          static_assert(sizeof...(Is)+1 == std::tuple_size_v<RangesT>,
+                        "Size of keylist tuple must match the number of output terminals");
+          prepare_broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value));
+          co_await ttg::Void{}; // we'll come back once the task is done
+          broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value));
+        } else if constexpr (!ttg::meta::is_tuple_v<RangesT>) {
+          // create a tie to the captured keylist
+          prepare_broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value));
+          co_await ttg::Void{}; // we'll come back once the task is done
+          broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value));
+        }
+      }
+    }  // namespace detail
+
+    /* overload with explicit terminals and keylist passed by const reference */
+    template <size_t I, size_t... Is, typename rangeT, typename valueT, typename... out_keysT, typename... out_valuesT,
+              ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline detail::send_t broadcast(rangeT &&keylist,
+                                    valueT &&value,
+                                    const std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+      ttg::detail::value_copy_handler<Runtime> copy_handler;
+      return detail::send_t{
+              broadcast_coro<0, I, Is...>(std::forward<rangeT>(keylist),
+                                          copy_handler(std::forward<valueT>(value)),
+                                          t, std::move(copy_handler))};
+
+    }
+
+    /* overload with implicit terminals and keylist passed by const reference */
+    template <size_t i, typename rangeT, typename valueT,
+              ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline detail::send_t broadcast(rangeT &&keylist, valueT &&value) {
+      ttg::detail::value_copy_handler<Runtime> copy_handler;
+      return detail::send_t{broadcast_coro<0, i>(std::tie(keylist), copy_handler(std::forward<valueT>(value)),
+                                                 std::move(copy_handler))};
+    }
+
+    template<typename... Args, ttg::Runtime Runtime = ttg::ttg_runtime>
+    std::vector<device::detail::send_t> forward(Args&&... args) {
+      // TODO: check the cost of this!
+      return std::vector{std::forward<Args>(args)...};
+    }
+
+  } // namespace device
+
+  /*******************************************
+   * Device task promise and coroutine handle
+   *******************************************/
+
 
   struct device_task_promise_type;
 
@@ -504,6 +785,7 @@ namespace ttg {
       return {};
     }
 
+#if 0
     /* waiting for transfers to complete should always suspend
      * TODO: as an optimization, we could check here if all data
      *       is already available and avoid suspending...
@@ -526,6 +808,7 @@ namespace ttg {
       m_state = TTG_DEVICE_CORO_WAIT_TRANSFER;
       return {};
     }
+#endif // 0
 
     /* convenience-function to yield a single view */
     template<typename HostT, typename... DeviceViewTs>
@@ -592,7 +875,7 @@ namespace ttg {
     }
 
     template<typename... Ts>
-    auto await_transform(detail::wait_kernel_t<ttg::buffer<Ts>...>&& a) {
+    auto await_transform(detail::wait_kernel_t<Ts...>&& a) {
       std::cout << "yield_value: wait_kernel_t" << std::endl;
       if constexpr (sizeof...(Ts) > 0) {
         TTG_IMPL_NS::mark_device_out(a.ties);
@@ -601,15 +884,16 @@ namespace ttg {
       return a;
     }
 
-#if 0
-    template<typename... Ts>
-    auto await_transform(ttg::detail::get_ptr_tpl_t<Ts...>&& a) {
-      return a;
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(std::vector<device::detail::send_t>&& v) {
+      m_sends = std::forward<std::vector<device::detail::send_t>>(v);
+      m_state = TTG_DEVICE_CORO_COMPLETE;
+      return {};
     }
 
-    template<typename T>
-    auto await_transform(ttg::detail::get_ptr_t<T>&& a) {
-      return a;
+#if 0
+    void return_value(std::vector<device::detail::send_t>&& sends) {
+      m_sends = std::forward<std::vector<device::detail::send_t>>(sends);
+      m_state = TTG_DEVICE_CORO_COMPLETE;
     }
 #endif // 0
 
@@ -629,12 +913,12 @@ namespace ttg {
 
     using iterator = std::vector<device_obj_view>::iterator;
 
-    auto begin() {
-      return m_spans.begin();
-    }
-
-    auto end() {
-      return m_spans.end();
+    /* execute all pending send and broadcast operations */
+    void do_sends() {
+      for (auto& send : m_sends) {
+        send.coro();
+      }
+      m_sends.clear();
     }
 
     auto state() {
@@ -642,8 +926,7 @@ namespace ttg {
     }
 
   private:
-
-    std::vector<device_obj_view> m_spans;
+    std::vector<device::detail::send_t> m_sends;
     ttg_device_coro_state m_state = TTG_DEVICE_CORO_STATE_NONE;
 
   };

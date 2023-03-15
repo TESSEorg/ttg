@@ -761,6 +761,8 @@ namespace ttg {
       template <typename Key, typename Value>
       using broadcast_callback_t = typename broadcast_callback<Key, Value>::type;
 
+
+
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       // setsize_callback_t<key> = std::function<void(const keyT &, std::size_t)> protected against void key
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -835,6 +837,31 @@ namespace ttg {
       };
       template <typename... valueTs>
       using input_reducers_t = typename input_reducers<valueTs...>::type;
+
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // prepare_send_callback_t<Key, Value> = std::function<int(const ttg::span<Key> &, const Value &)> protected against void key
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      template <typename Key, typename Value, typename Enabler = void>
+      struct prepare_send_callback;
+      template <typename Key, typename Value>
+      struct prepare_send_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
+        using type = std::function<void(const ttg::span<const Key> &, const Value &)>;
+      };
+      template <typename Key, typename Value>
+      struct prepare_send_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
+        using type = std::function<void(const ttg::span<const Key> &)>;
+      };
+      template <typename Key, typename Value>
+      struct prepare_send_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
+        using type = std::function<void(const Value &)>;
+      };
+      template <typename Key, typename Value>
+      struct prepare_send_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
+        using type = std::function<void()>;
+      };
+      template <typename Key, typename Value>
+      using prepare_send_callback_t = typename prepare_send_callback<Key, Value>::type;
+
 
     }  // namespace detail
 

@@ -13,6 +13,7 @@ namespace ttg_parsec {
     struct device_ptr_t {
       parsec_gpu_task_t* gpu_task = nullptr;
       parsec_flow_t* flows = nullptr;
+      parsec_gpu_exec_stream_t* stream = nullptr;
     };
 
     template<bool SupportDevice>
@@ -32,7 +33,7 @@ namespace ttg_parsec {
       static constexpr bool support_device = false;
       static constexpr size_t num_flows = MAX_PARAM_COUNT;
       parsec_flow_t m_flows[num_flows];
-      device_ptr_t m_dev_ptr = {nullptr, &m_flows[0]}; // gpu_task will be allocated in each task
+      device_ptr_t m_dev_ptr = {nullptr, &m_flows[0], nullptr}; // gpu_task will be allocated in each task
       device_ptr_t* dev_ptr() {
         return &m_dev_ptr;
       }
@@ -121,14 +122,16 @@ namespace ttg_parsec {
     struct parsec_ttg_task_t : public parsec_ttg_task_base_t {
       using key_type = typename TT::key_type;
       static constexpr size_t num_streams = TT::numins;
+      /* device tasks may have to store more copies than it's inputs as their sends are aggregated */
+      static constexpr size_t num_copies  = TT::derived_has_cuda_op() ? static_cast<size_t>(MAX_PARAM_COUNT)
+                                                                      : (num_streams+1);
       TT* tt;
       key_type key;
       size_goal_t stream[num_streams] = {};
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
 #endif
-      ttg_data_copy_t *copies[num_streams+1] = { nullptr };  // the data copies tracked by this task
-                                                             // +1 for the copy needed during send/bcast
+      ttg_data_copy_t *copies[num_copies] = { nullptr };  // the data copies tracked by this task
       device_state_t<TT::derived_has_cuda_op()> dev_state;
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)

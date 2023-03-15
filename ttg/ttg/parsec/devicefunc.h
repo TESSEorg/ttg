@@ -1,8 +1,16 @@
 #ifndef TTG_PARSEC_DEVICEFUNC_H
 #define TTG_PARSEC_DEVICEFUNC_H
 
+#if defined(TTG_HAVE_CUDART)
+#include <cuda.h>
+#endif
+
 #include "ttg/parsec/task.h"
 #include <parsec/mca/device/device_gpu.h>
+
+#if defined(PARSEC_HAVE_CUDA)
+#include <parsec/mca/device/cuda/device_cuda.h>
+#endif // PARSEC_HAVE_CUDA
 
 namespace ttg_parsec {
   namespace detail {
@@ -30,14 +38,6 @@ namespace ttg_parsec {
             break;
           case ttg::scope::SyncIn:
             flow_flags = PARSEC_FLOW_ACCESS_READ;
-            break;
-          case ttg::scope::SyncOut:
-            flow_flags = PARSEC_FLOW_ACCESS_WRITE;
-            pushout = true;
-            break;
-          case ttg::scope::SyncInOut:
-            flow_flags = PARSEC_FLOW_ACCESS_RW;
-            pushout = true;
             break;
         }
       }
@@ -105,7 +105,7 @@ namespace ttg_parsec {
   }
 
   namespace detail {
-    template<typename... Views, std::size_t I, std::size_t... Is>
+    template<typename... Views, std::size_t I, std::size_t... Is, bool DeviceAvail = false>
     inline void mark_device_out(std::tuple<Views&...> &views, std::index_sequence<I, Is...>) {
 
       using view_type = std::remove_reference_t<std::tuple_element_t<I, std::tuple<Views&...>>>;
@@ -116,6 +116,19 @@ namespace ttg_parsec {
       /* find the data copy and mark it as pushout */
       int i = 0;
       parsec_gpu_task_t *gpu_task = detail::parsec_ttg_caller->dev_ptr->gpu_task;
+      parsec_gpu_exec_stream_t *stream = detail::parsec_ttg_caller->dev_ptr->stream;
+      /* enqueue the transfer into the compute stream to come back once the compute and transfer are complete */
+
+#if defined(TTG_HAVE_CUDART) && defined(PARSEC_HAVE_CUDA)
+      parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)stream;
+      cudaMemcpyAsync(data->device_copies[0]->device_private,
+                      data->device_copies[data->owner_device]->device_private,
+                      data->nb_elts, cudaMemcpyDeviceToHost, cuda_stream->cuda_stream);
+#else
+      static_assert(DeviceAvail, "No device implementation detected!");
+#endif // defined(PARSEC_HAVE_CUDA)
+
+#if 0
       while (detail::parsec_ttg_caller->parsec_task.data[i].data_in != nullptr) {
         if (detail::parsec_ttg_caller->parsec_task.data[i].data_in == data->device_copies[0]) {
           gpu_task->pushout |= 1<<i;
@@ -123,10 +136,10 @@ namespace ttg_parsec {
         }
         ++i;
       }
-
+#endif // 0
       if constexpr (sizeof...(Is) > 0) {
         // recursion
-        return mark_device_out(views, std::index_sequence<Is...>{});
+        mark_device_out(views, std::index_sequence<Is...>{});
       }
     }
   } // namespace detail
@@ -164,7 +177,7 @@ namespace ttg_parsec {
 
       if constexpr (sizeof...(Is) > 0) {
         // recursion
-        return mark_device_out(views, std::index_sequence<Is...>{});
+        post_device_out(views, std::index_sequence<Is...>{});
       }
     }
   } // namespace detail
@@ -172,6 +185,7 @@ namespace ttg_parsec {
   inline void post_device_out(std::tuple<Buffer&...> &b) {
     detail::post_device_out(b, std::index_sequence_for<Buffer...>{});
   }
+
 
 } // namespace ttg_parsec
 

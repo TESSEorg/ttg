@@ -97,7 +97,10 @@ if(CMAKE_CUDA_COMPILER)
 endif(CMAKE_CUDA_COMPILER)
 set(TTG_HAVE_CUDA ${CMAKE_CUDA_COMPILER} CACHE BOOL "True if TTG supports compiling .cu files")
 
-
+find_package(CUDAToolkit)
+if (TARGET CUDA::cudart)
+  set(TTG_HAVE_CUDART True CACHE BOOL "True support for CUDART was found.")
+endif(TARGET CUDA::cudart)
 
 
 ##########################
