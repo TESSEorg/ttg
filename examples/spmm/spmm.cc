@@ -1332,10 +1332,8 @@ int main(int argc, char **argv) {
   bool timing;
   double gflops;
 
-  //  btas::Range R0()
-  //  btas::Range R1(1,5,0);
-  //  btas::Tensor<int> A(R1);
-
+  // warm up silicon by calling gemm a few times
+#ifdef BTAS_IS_USABLE
   for (int i = 0; i < 20; i++) {
     using baseT = typename btas::Tensor<double>;
     btas::Tensor<double, btas::Range, std::vector<double>> At(30, 30);
@@ -1344,12 +1342,9 @@ int main(int argc, char **argv) {
     At.fill(1.0);
     Bt.fill(2.0);
     Ct.fill(3.0);
-    //  btas::gemm<double, btas::Range, btas::Tensor<double>>(Ct, Bt, At);
-
-    // calling gemm code in loop to heat-up the silicon
-
     btas::gemm(std::move(Ct), Bt, At);
   }
+#endif  // BTAS_IS_USABLE
 
   int cores = -1;
   std::string nbCoreStr(getCmdOption(argv, argv + argc, "-c"));
