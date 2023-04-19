@@ -1,3 +1,4 @@
+#include <Eigen/SparseCore>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -8,8 +9,8 @@
 #include <utility>
 #include <vector>
 
-#include <Eigen/SparseCore>
 #if __has_include(<btas/features.h>)
+#pragma message("C Preprocessor got here!")
 #include <btas/features.h>
 #ifdef BTAS_IS_USABLE
 #include <btas/btas.h>
@@ -1406,8 +1407,9 @@ int main(int argc, char **argv) {
       P = parseOption(PStr, P);
       std::string QStr(getCmdOption(argv, argv + argc, "-Q"));
       Q = parseOption(QStr, Q);
+      // to make code behave like 2D summa if R not given
       std::string RStr(getCmdOption(argv, argv + argc, "-R"));
-      R = parseOption(RStr, R);
+      R = parseOption(RStr, 1);
 
       if (P * Q * R != mpi_size) {
         if (!cmdOptionExists(argv, argv + argc, "-Q") && (mpi_size % (P * R) == 0))
