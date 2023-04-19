@@ -157,6 +157,12 @@ install(FILES
         DESTINATION "${CMAKE_INSTALL_CMAKEDIR}/modules"
         COMPONENT ttg-config)
 
+# Install utilities
+install(PROGRAMS
+        "${PROJECT_SOURCE_DIR}/bin/pbt_to_ctf.py"
+        DESTINATION "${CMAKE_INSTALL_BINDIR}/"
+        COMPONENT ttg-utils)
+
 # Install config, version, and target files
 install(EXPORT ttg
         FILE "ttg-targets.cmake"

@@ -85,33 +85,6 @@ namespace ttg {
     }
   }
 
-  inline int rank() {
-    int me = -1;
-
-    try {
-      me = get_default_world().rank();
-    } catch(std::runtime_error&)
-    {
-      // no default world set, leave -1
-    }
-
-#if 0
-#if __has_include(<mpi.h>)
-    int inited;
-    MPI_Initialized(&inited);
-    if (inited) {
-      int fini;
-      MPI_Finalized(&fini);
-      if (!fini) {
-        auto errcod = MPI_Comm_rank(MPI_COMM_WORLD, &me);
-        assert(errcod == 0);
-      }
-    }
-#endif
-#endif
-    return me;
-  }
-
 } // namespace ttg
 
 #endif // TTG_WORLD_H

@@ -1,3 +1,4 @@
+#include <Eigen/SparseCore>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -8,8 +9,8 @@
 #include <utility>
 #include <vector>
 
-#include <Eigen/SparseCore>
 #if __has_include(<btas/features.h>)
+#pragma message("C Preprocessor got here!")
 #include <btas/features.h>
 #ifdef BTAS_IS_USABLE
 #include <btas/btas.h>
@@ -127,7 +128,6 @@ namespace btas {
 }  // namespace btas
 #endif  // BTAS_IS_USABLE
 double gemm(double C, double A, double B) { return C + A * B; }
-/////////////////////////////////////////////
 
 // template <typename _Scalar, int _Options, typename _StorageIndex>
 // struct colmajor_layout;
@@ -139,11 +139,23 @@ double gemm(double C, double A, double B) { return C + A * B; }
 template <std::size_t Rank>
 using Key = MultiIndex<Rank>;
 
-inline int tile2rank(int i, int j, int P, int Q) {
+/// maps {i,j} to rank within first (R=0) layer of the 3-d process grid
+inline int ij2rank(int i, int j, int P, int Q) {
+  std::vector<int> vec;
   int p = (i % P);
   int q = (j % Q);
-  int r = (q * P) + p;
-  return r;
+  int rank = (q * P) + p;
+  return rank;
+}
+
+/// maps {i,j,k} to rank within a 3-d process grid
+inline int ijk2rank(int i, int j, int k, int P, int Q, int R) {
+  std::vector<int> vec;
+  int p = (i % P);
+  int q = (j % Q);
+  int l = (k % R);
+  int rank = (l * P * Q) + (q * P) + p;
+  return rank;
 }
 
 // flow data from an existing SpMatrix on rank 0
@@ -151,19 +163,18 @@ template <typename Blk = blk_t, typename Keymap = std::function<int(const Key<2>
 class Read_SpMatrix : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk, Keymap>, ttg::typelist<void>> {
  public:
   using baseT = typename Read_SpMatrix::ttT;
-
   Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>> &ctl, Edge<Key<2>, Blk> &out,
-                Keymap &keymap)
+                Keymap &ij_keymap)
       : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
-              keymap)
+              ij_keymap)
       , matrix_(matrix) {}
 
-  void op(const Key<2> &key, std::tuple<Out<Key<2>, Blk>> &out) {
+  void op(const Key<2> &, std::tuple<Out<Key<2>, Blk>> &out) {
     auto rank = ttg::default_execution_context().rank();
     for (int k = 0; k < matrix_.outerSize(); ++k) {
       for (typename SpMatrix<Blk>::InnerIterator it(matrix_, k); it; ++it) {
-        if (rank == this->get_keymap()(Key<2>({it.row(), it.col()})))
-          ::send<0>(Key<2>({it.row(), it.col()}), it.value(), out);
+        if (rank == this->get_keymap()(Key<2>(std::initializer_list<long>({it.row(), it.col()}))))
+          ::send<0>(Key<2>(std::initializer_list<long>({it.row(), it.col()})), it.value(), out);
       }
     }
   }
@@ -178,9 +189,9 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, ttg:
  public:
   using baseT = typename Write_SpMatrix::ttT;
 
-  template <typename Keymap>
-  Write_SpMatrix(SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &in, Keymap &&keymap)
-      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, keymap), matrix_(matrix) {}
+  template <typename Keymap2>
+  Write_SpMatrix(SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &in, Keymap2 &&ij_keymap)
+      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, ij_keymap), matrix_(matrix) {}
 
   void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
     std::lock_guard<std::mutex> lock(mtx_);
@@ -214,53 +225,96 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, ttg:
   mutable std::shared_ptr<std::shared_future<void>> completion_status_;
 };
 
-// sparse mm
-template <typename Keymap = std::function<int(const Key<2> &)>, typename Blk = blk_t>
-class SpMM {
+/// sparse mm via 2.5D SUMMA
+
+/// @tparam KeyMap2 maps {i,j} to processor
+/// @tparam KeyMap3 maps {i,j,k} to processor
+template <typename Keymap2 = std::function<int(const Key<2> &)>, typename Keymap3 = std::function<int(const Key<3> &)>,
+          typename Blk = blk_t>
+class SpMM25D {
  public:
-  SpMM(Edge<Key<2>, Blk> &a, Edge<Key<2>, Blk> &b, Edge<Key<2>, Blk> &c, const SpMatrix<Blk> &a_mat,
-       const SpMatrix<Blk> &b_mat, const std::vector<std::vector<long>> &a_rowidx_to_colidx,
-       const std::vector<std::vector<long>> &a_colidx_to_rowidx,
-       const std::vector<std::vector<long>> &b_rowidx_to_colidx,
-       const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<int> &mTiles,
-       const std::vector<int> &nTiles, const std::vector<int> &kTiles, const Keymap &keymap)
-      : a_ijk_()
-      , local_a_ijk_()
-      , b_ijk_()
-      , local_b_ijk_()
-      , c_ijk_()
-      , a_rowidx_to_colidx_(a_rowidx_to_colidx)
+  /// @param ij_keymap maps {i,j} to process, specifies distribution of tiles of A, B, and C
+  /// @param ijk_keymap maps {i,j,k} to process, controls distribution of tasks performing C[i][j] += A[i][k]*B[k][j]
+  /// @param R the number of "layers" in the 3-D process grid
+  SpMM25D(Edge<Key<2>, Blk> &a, Edge<Key<2>, Blk> &b, Edge<Key<2>, Blk> &c, const SpMatrix<Blk> &a_mat,
+          const SpMatrix<Blk> &b_mat, const std::vector<std::vector<long>> &a_rowidx_to_colidx,
+          const std::vector<std::vector<long>> &a_colidx_to_rowidx,
+          const std::vector<std::vector<long>> &b_rowidx_to_colidx,
+          const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<int> &mTiles,
+          const std::vector<int> &nTiles, const std::vector<int> &kTiles, Keymap2 ij_keymap, Keymap3 ijk_keymap, long R)
+      : a_rowidx_to_colidx_(a_rowidx_to_colidx)
       , b_colidx_to_rowidx_(b_colidx_to_rowidx)
       , a_colidx_to_rowidx_(a_colidx_to_rowidx)
-      , b_rowidx_to_colidx_(b_rowidx_to_colidx) {
-    bcast_a_ = std::make_unique<BcastA>(a, local_a_ijk_, b_rowidx_to_colidx_, keymap);
-    local_bcast_a_ = std::make_unique<LocalBcastA>(local_a_ijk_, a_ijk_, b_rowidx_to_colidx_, keymap);
-    bcast_b_ = std::make_unique<BcastB>(b, local_b_ijk_, a_colidx_to_rowidx_, keymap);
-    local_bcast_b_ = std::make_unique<LocalBcastB>(local_b_ijk_, b_ijk_, a_colidx_to_rowidx_, keymap);
-    multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c, a_rowidx_to_colidx_, b_colidx_to_rowidx_,
-                                                 mTiles, nTiles, keymap);
+      , b_rowidx_to_colidx_(b_rowidx_to_colidx)
+      , ij_keymap_(std::move(ij_keymap))
+      , ijk_keymap_(std::move(ijk_keymap)) {
+    bcast_a_ = std::make_unique<BcastA>(a, local_a_ijk_, b_rowidx_to_colidx_, ij_keymap_, ijk_keymap_);
+    local_bcast_a_ = std::make_unique<LocalBcastA>(local_a_ijk_, a_ijk_, b_rowidx_to_colidx_, ijk_keymap_);
+    bcast_b_ = std::make_unique<BcastB>(b, local_b_ijk_, a_colidx_to_rowidx_, ij_keymap_, ijk_keymap_);
+    local_bcast_b_ = std::make_unique<LocalBcastB>(local_b_ijk_, b_ijk_, a_colidx_to_rowidx_, ijk_keymap_);
+    multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c_ij_p_, a_rowidx_to_colidx_,
+                                                 b_colidx_to_rowidx_, mTiles, nTiles, ijk_keymap_);
+    reduce_c_ = std::make_unique<ReduceC>(c_ij_p_, c, ij_keymap_);
+    reduce_c_->template set_input_reducer<0>([](Blk &c_ij, const Blk &c_ij_p) { c_ij = c_ij + c_ij_p; });
+    // compute how many contributions each C[i][j] should expect ... MultiplyAdd already does this, but need a way to
+    // send message from each process p to the process owning C[i][j] to expect a contribution from it for now replicate
+    // this logic ...
+    // TODO: do this in MultiplyAdd (need to allreduce this info so that everyone has it)
+    // N.B. only need to set stream size on the rank that will accumulate the C[i][j] contribution
+    const auto my_rank = ttg::default_execution_context().rank();
+    for (auto i = 0ul; i != a_rowidx_to_colidx_.size(); ++i) {
+      if (a_rowidx_to_colidx_[i].empty()) continue;
+      for (auto j = 0ul; j != b_colidx_to_rowidx_.size(); ++j) {
+        if (b_colidx_to_rowidx_[j].empty()) continue;
+
+        if (ij_keymap_(Key<2>{i, j}) == my_rank) {
+          decltype(i) k;
+          bool have_k;
+          std::tie(k, have_k) = multiplyadd_->compute_first_k(i, j);
+          std::vector<bool> c_ij_procmask(R, false);
+          if (have_k) {
+            const auto pR = k % R;  // k values are distributed round-robin among the layers of the 3-D grid
+            assert(pR < c_ij_procmask.size());
+            c_ij_procmask[pR] = true;
+            while (have_k) {
+              std::tie(k, have_k) = multiplyadd_->compute_next_k(i, j, k);
+              if (have_k) {
+                const auto pR = k % R;
+                assert(pR < c_ij_procmask.size());
+                c_ij_procmask[pR] = true;
+              }
+            }
+          }
+          const auto c_ij_nprocs = std::count_if(c_ij_procmask.begin(), c_ij_procmask.end(), [](bool b) { return b; });
+          if (c_ij_nprocs > 0) reduce_c_->template set_argstream_size<0>(Key<2>{i, j}, c_ij_nprocs);
+        }
+      }
+    }
+
     TTGUNUSED(bcast_a_);
     TTGUNUSED(bcast_b_);
     TTGUNUSED(multiplyadd_);
+    TTGUNUSED(reduce_c_);
   }
 
   /// Locally broadcast `A[i][k]` assigned to this processor `p` to matmul tasks `{i,j,k}` for all `j` such that
-  /// `B[k][j]` exists AND `C[i][j]` is assigned to this processor
+  /// `B[k][j]` exists AND `k` contribution to `C[i][j]` is assigned to this processor
   class LocalBcastA : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastA, ttg::typelist<Blk>> {
    public:
     using baseT = typename LocalBcastA::ttT;
 
     LocalBcastA(Edge<Key<3>, Blk> &a, Edge<Key<3>, Blk> &a_ijk,
-                const std::vector<std::vector<long>> &b_rowidx_to_colidx, Keymap ij_keymap)
-        : baseT(edges(a), edges(a_ijk), "SpMM::local_bcast_a", {"a_ikp"}, {"a_ijk"},
+                const std::vector<std::vector<long>> &b_rowidx_to_colidx, const Keymap3 &ijk_keymap)
+        : baseT(edges(a), edges(a_ijk), "SpMM25D::local_bcast_a", {"a_ikp"}, {"a_ijk"},
                 [](const Key<3> &ikp) { return ikp[2]; })
         , b_rowidx_to_colidx_(b_rowidx_to_colidx)
-        , ij_keymap_(ij_keymap) {}
+        , ijk_keymap_(ijk_keymap) {}
 
-    void op(const Key<3> &ikp, typename baseT::input_values_tuple_type &&a_ikp, std::tuple<Out<Key<3>, Blk>> &a_ijk) {
+    void op(const Key<3> &ikp, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, Blk>> &a_ijk) {
       const auto i = ikp[0];
       const auto k = ikp[1];
       const auto p = ikp[2];
+
       auto world = default_execution_context();
       assert(p == world.rank());
       ttg::trace("LocalBcastA(", i, ", ", k, ", ", p, ")");
@@ -268,17 +322,17 @@ class SpMM {
       // local broadcast a_ik to all {i,j,k} such that b_kj exists
       std::vector<Key<3>> ijk_keys;
       for (auto &j : b_rowidx_to_colidx_[k]) {
-        if (ij_keymap_(Key<2>({i, j})) == world.rank()) {
+        if (ijk_keymap_(Key<3>({i, j, k})) == world.rank()) {
           ttg::trace("Broadcasting A[", i, "][", k, "] on proc ", p, " to j=", j);
           ijk_keys.emplace_back(Key<3>({i, j, k}));
         }
       }
-      ::broadcast<0>(ijk_keys, baseT::template get<0>(a_ikp), a_ijk);
+      ::broadcast<0>(ijk_keys, baseT::template get<0>(a_ik), a_ijk);
     }
 
    private:
     const std::vector<std::vector<long>> &b_rowidx_to_colidx_;
-    Keymap ij_keymap_;
+    const Keymap3 &ijk_keymap_;
   };  // class LocalBcastA
 
   /// broadcast `A[i][k]` to all processors which will contain at least one `C[i][j]` such that `B[k][j]` exists
@@ -287,22 +341,23 @@ class SpMM {
     using baseT = typename BcastA::ttT;
 
     BcastA(Edge<Key<2>, Blk> &a_ik, Edge<Key<3>, Blk> &a_ikp, const std::vector<std::vector<long>> &b_rowidx_to_colidx,
-           Keymap keymap)
-        : baseT(edges(a_ik), edges(a_ikp), "SpMM::bcast_a", {"a_ik"}, {"a_ikp"}, keymap)
-        , b_rowidx_to_colidx_(b_rowidx_to_colidx) {}
+           const Keymap2 &ij_keymap, const Keymap3 &ijk_keymap)
+        : baseT(edges(a_ik), edges(a_ikp), "SpMM25D::bcast_a", {"a_ik"}, {"a_ikp"}, ij_keymap)
+        , b_rowidx_to_colidx_(b_rowidx_to_colidx)
+        , ijk_keymap_(ijk_keymap) {}
 
     void op(const Key<2> &ik, typename baseT::input_values_tuple_type &&a_ik, std::tuple<Out<Key<3>, Blk>> &a_ikp) {
       const auto i = ik[0];
       const auto k = ik[1];
       ttg::trace("BcastA(", i, ", ", k, ")");
-      // broadcast a_ik to all processors which will contain at least one c_ij such that b_kj exists
       std::vector<Key<3>> ikp_keys;
+
       if (k >= b_rowidx_to_colidx_.size()) return;
       auto world = default_execution_context();
       std::vector<bool> procmap(world.size());
-      auto keymap = baseT::get_keymap();
       for (auto &j : b_rowidx_to_colidx_[k]) {
-        const long p = keymap(Key<2>({i, j}));
+        const long p = ijk_keymap_(Key<3>(
+            {i, j, k}));  // N.B. in 2.5D SUMMA different k contributions to C[i][j] are computed on different nodes
         if (!procmap[p]) {
           ttg::trace("Broadcasting A[", i, "][", k, "] to proc ", p);
           ikp_keys.emplace_back(Key<3>({i, k, p}));
@@ -314,22 +369,23 @@ class SpMM {
 
    private:
     const std::vector<std::vector<long>> &b_rowidx_to_colidx_;
+    const Keymap3 &ijk_keymap_;
   };  // class BcastA
 
   /// Locally broadcast `B[k][j]` assigned to this processor `p` to matmul tasks `{i,j,k}` for all `k` such that
-  /// `A[i][k]` exists AND `C[i][j]` is assigned to this processor
+  /// `A[i][k]` exists AND `k` contribution to `C[i][j]` is assigned to this processor
   class LocalBcastB : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastB, ttg::typelist<Blk>> {
    public:
     using baseT = typename LocalBcastB::ttT;
 
     LocalBcastB(Edge<Key<3>, Blk> &b_kjp, Edge<Key<3>, Blk> &b_ijk,
-                const std::vector<std::vector<long>> &a_colidx_to_rowidx, Keymap ij_keymap)
-        : baseT(edges(b_kjp), edges(b_ijk), "SpMM::local_bcast_b", {"b_kjp"}, {"b_ijk"},
+                const std::vector<std::vector<long>> &a_colidx_to_rowidx, const Keymap3 &ijk_keymap)
+        : baseT(edges(b_kjp), edges(b_ijk), "SpMM25D::local_bcast_b", {"b_kjp"}, {"b_ijk"},
                 [](const Key<3> &kjp) { return kjp[2]; })
         , a_colidx_to_rowidx_(a_colidx_to_rowidx)
-        , ij_keymap_(ij_keymap) {}
+        , ijk_keymap_(ijk_keymap) {}
 
-    void op(const Key<3> &kjp, typename baseT::input_values_tuple_type &&b_kjp, std::tuple<Out<Key<3>, Blk>> &b_ijk) {
+    void op(const Key<3> &kjp, typename baseT::input_values_tuple_type &&b_kj, std::tuple<Out<Key<3>, Blk>> &b_ijk) {
       const auto k = kjp[0];
       const auto j = kjp[1];
       const auto p = kjp[2];
@@ -340,17 +396,17 @@ class SpMM {
       // broadcast b_kj to all ijk for which c_ij is on this processor and a_ik exists
       std::vector<Key<3>> ijk_keys;
       for (auto &i : a_colidx_to_rowidx_[k]) {
-        if (ij_keymap_(Key<2>({i, j})) == world.rank()) {
+        if (ijk_keymap_(Key<3>({i, j, k})) == world.rank()) {
           ttg::trace("Broadcasting B[", k, "][", j, "] on proc ", p, " to i=", i);
           ijk_keys.emplace_back(Key<3>({i, j, k}));
         }
       }
-      ::broadcast<0>(ijk_keys, baseT::template get<0>(b_kjp), b_ijk);
+      ::broadcast<0>(ijk_keys, baseT::template get<0>(b_kj), b_ijk);
     }
 
    private:
     const std::vector<std::vector<long>> &a_colidx_to_rowidx_;
-    Keymap ij_keymap_;
+    const Keymap3 &ijk_keymap_;
   };  // class LocalBcastB
 
   /// broadcast `B[k][j]` to all processors which will contain at least one `C[i][j]` such that `A[i][k]` exists
@@ -359,9 +415,10 @@ class SpMM {
     using baseT = typename BcastB::ttT;
 
     BcastB(Edge<Key<2>, Blk> &b_kj, Edge<Key<3>, Blk> &b_kjp, const std::vector<std::vector<long>> &a_colidx_to_rowidx,
-           Keymap keymap)
-        : baseT(edges(b_kj), edges(b_kjp), "SpMM::bcast_b", {"b_kj"}, {"b_kjp"}, keymap)
-        , a_colidx_to_rowidx_(a_colidx_to_rowidx) {}
+           const Keymap2 &ij_keymap, const Keymap3 &ijk_keymap)
+        : baseT(edges(b_kj), edges(b_kjp), "SpMM25D::bcast_b", {"b_kj"}, {"b_kjp"}, ij_keymap)
+        , a_colidx_to_rowidx_(a_colidx_to_rowidx)
+        , ijk_keymap_(ijk_keymap) {}
 
     void op(const Key<2> &kj, typename baseT::input_values_tuple_type &&b_kj, std::tuple<Out<Key<3>, Blk>> &b_kjp) {
       const auto k = kj[0];
@@ -373,7 +430,7 @@ class SpMM {
       auto world = default_execution_context();
       std::vector<bool> procmap(world.size());
       for (auto &i : a_colidx_to_rowidx_[k]) {
-        long p = baseT::get_keymap()(Key<2>({i, j}));
+        long p = ijk_keymap_(Key<3>({i, j, k}));
         if (!procmap[p]) {
           ttg::trace("Broadcasting B[", k, "][", j, "] to proc ", p);
           kjp_keys.emplace_back(Key<3>({k, j, p}));
@@ -385,9 +442,11 @@ class SpMM {
 
    private:
     const std::vector<std::vector<long>> &a_colidx_to_rowidx_;
+    const Keymap3 &ijk_keymap_;
   };  // class BcastB
 
-  /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total
+  /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total for this kayer of the
+  /// 3-D process grid only
   class MultiplyAdd : public TT<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd,
                                 ttg::typelist<const Blk, const Blk, Blk>> {
    public:
@@ -396,44 +455,35 @@ class SpMM {
     MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
                 const std::vector<std::vector<long>> &a_rowidx_to_colidx,
                 const std::vector<std::vector<long>> &b_colidx_to_rowidx, const std::vector<int> &mTiles,
-                const std::vector<int> &nTiles, Keymap keymap)
-        : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM::MultiplyAdd", {"a_ijk", "b_ijk", "c_ijk"},
-                {"c_ij", "c_ijk"},
-                [keymap](const Key<3> &ijk) {
-                  auto ij = Key<2>({ijk[0], ijk[1]});
-                  return keymap(ij);
-                })
+                const std::vector<int> &nTiles, const Keymap3 &ijk_keymap)
+        : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM25D::MultiplyAdd", {"a_ijk", "b_ijk", "c_ijk"},
+                {"c_ij", "c_ijk"}, ijk_keymap)
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
-      this->set_priomap([=](const Key<3> &ijk) { return this->prio(ijk); });
+      this->set_priomap([=](const Key<3> &ijk) { return this->prio(ijk); });  // map a key to an integral priority value
 
-      // for each i and j that belongs to this node
-      // determine first k that contributes, initialize input {i,j,first_k} flow to 0
+      // for each {i,j} determine first k that contributes AND belongs to this node,
+      // initialize input {i,j,first_k} flow to 0
       for (auto i = 0ul; i != a_rowidx_to_colidx_.size(); ++i) {
         if (a_rowidx_to_colidx_[i].empty()) continue;
         for (auto j = 0ul; j != b_colidx_to_rowidx_.size(); ++j) {
           if (b_colidx_to_rowidx_[j].empty()) continue;
 
-          // assuming here {i,j,k} for all k map to same node
-          auto owner = keymap(Key<2>({i, j}));
-          if (owner == ttg::default_execution_context().rank()) {
-            if (true) {
-              decltype(i) k;
-              bool have_k;
-              std::tie(k, have_k) = compute_first_k(i, j);
-              if (have_k) {
-                ttg::trace("Initializing C[", i, "][", j, "] to zero");
+          const auto p = ttg::default_execution_context().rank();
+          decltype(i) k;
+          bool have_k;
+          std::tie(k, have_k) = compute_first_k(i, j, p);
+          if (have_k) {
+            ttg::trace("Initializing C[", i, "][", j, "] on process ", p, " to zero");
 #if BLOCK_SPARSE_GEMM
-                Blk zero(btas::Range(mTiles[i], nTiles[j]), 0.0);
+            Blk zero(btas::Range(mTiles[i], nTiles[j]), 0.0);
 #else
-                Blk zero{0.0};
+            Blk zero{0.0};
 #endif
-                this->template in<2>()->send(Key<3>({i, j, k}), zero);
-              } else {
-                if (tracing() && a_rowidx_to_colidx_.size() * b_colidx_to_rowidx_.size() < 400)
-                  ttg::print("C[", i, "][", j, "] is empty");
-              }
-            }
+            this->template in<2>()->send(Key<3>({i, j, k}), zero);
+          } else {
+            if (tracing() && a_rowidx_to_colidx_.size() * b_colidx_to_rowidx_.size() < 400)
+              ttg::print("C[", i, "][", j, "] is empty");
           }
         }
       }
@@ -443,10 +493,11 @@ class SpMM {
             std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>> &result) {
       const auto i = ijk[0];
       const auto j = ijk[1];
-      const auto k = ijk[2];
+      const auto k = ijk[2];  // k==l same because 000 will always be on layer 0, 001 will be accessed on layer 1
+      const auto p = ttg::default_execution_context().rank();
       long next_k;
       bool have_next_k;
-      std::tie(next_k, have_next_k) = compute_next_k(i, j, k);
+      std::tie(next_k, have_next_k) = compute_next_k(i, j, k, p);
       ttg::trace("Rank ", ttg::default_execution_context().rank(),
                  " :"
                  " C[",
@@ -459,11 +510,13 @@ class SpMM {
             Key<3>({i, j, next_k}),
             gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
             result);
-      } else
+      } else {  // done with all local contributions to C[i][j], reduce with others on the process to which C[i][j]
+                // belongs
         ::send<0>(
             Key<2>({i, j}),
             gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
             result);
+      }
     }
 
    private:
@@ -471,7 +524,7 @@ class SpMM {
     const std::vector<std::vector<long>> &b_colidx_to_rowidx_;
 
     /* Compute the length of the remaining sequence on that tile */
-    int32_t prio(const Key<3> &key) {
+    int32_t prio(const Key<3> &key) const {
       const auto i = key[0];
       const auto j = key[1];
       const auto k = key[2];
@@ -479,14 +532,15 @@ class SpMM {
       long next_k = k;
       bool have_next_k;
       do {
-        std::tie(next_k, have_next_k) = compute_next_k(i, j, next_k);
+        std::tie(next_k, have_next_k) = compute_next_k(i, j, next_k);  // here I know how many 'k' I have with same ij
         ++len;
       } while (have_next_k);
       return len;
     }
 
+   public:  // to be able to reuse this logic in SpMM25D
     // given {i,j} return first k such that A[i][k] and B[k][j] exist
-    std::tuple<long, bool> compute_first_k(long i, long j) {
+    std::tuple<long, bool> compute_first_k(long i, long j) const {
       const auto &a_k_range = a_rowidx_to_colidx_.at(i);
       auto a_iter = a_k_range.begin();
       auto a_iter_fence = a_k_range.end();
@@ -497,7 +551,7 @@ class SpMM {
       if (b_iter == b_iter_fence) return std::make_tuple(-1, false);
 
       {
-        auto a_colidx = *a_iter;
+        auto a_colidx = *a_iter;  // pointing to next kth element
         auto b_rowidx = *b_iter;
         while (a_colidx != b_rowidx) {
           if (a_colidx < b_rowidx) {
@@ -510,14 +564,15 @@ class SpMM {
             b_rowidx = *b_iter;
           }
         }
-        return std::make_tuple(a_colidx, true);
+        return std::make_tuple(a_colidx, true);  // returned true for kth element exist and also returns next k since
+                                                 // a_colidx points to ++a_iter,  if not reaches to fence
       }
       assert(false);
     }
 
     // given {i,j,k} such that A[i][k] and B[k][j] exist
     // return next k such that this condition holds
-    std::tuple<long, bool> compute_next_k(long i, long j, long k) {
+    std::tuple<long, bool> compute_next_k(long i, long j, long k) const {
       const auto &a_k_range = a_rowidx_to_colidx_.at(i);
       auto a_iter_fence = a_k_range.end();
       auto a_iter = std::find(a_k_range.begin(), a_iter_fence, k);
@@ -548,7 +603,51 @@ class SpMM {
       ttg::abort();  // unreachable
       return std::make_tuple(0, false);
     }
-  };
+
+    // given {i,j} return first k such that A[i][k] and B[k][j] exist AND ijk_keymap_(i,j,k) == p
+    std::tuple<long, bool> compute_first_k(long i, long j, long p) const {
+      long first_k = 0;
+      bool have_k = false;
+      std::tie(first_k, have_k) = compute_first_k(i, j);
+      while (have_k) {
+        if (this->get_keymap()(Key<3>{i, j, first_k}) == p)
+          return {first_k, true};
+        else
+          std::tie(first_k, have_k) = compute_next_k(i, j, first_k);
+      }
+      return {0, false};
+    }
+
+    // given {i,j,k} such that A[i][k] and B[k][j] exist
+    // return next k such that this condition holds AND ijk_keymap_(i,j,k) == p
+    std::tuple<long, bool> compute_next_k(long i, long j, long k, long p) const {
+      long next_k = 0;
+      bool have_k = false;
+      std::tie(next_k, have_k) = compute_next_k(i, j, k);
+      while (have_k) {
+        if (this->get_keymap()(Key<3>{i, j, next_k}) == p)
+          return {next_k, true};
+        else
+          std::tie(next_k, have_k) = compute_next_k(i, j, next_k);
+      }
+      return {0, false};
+    }
+
+  };  // MultiplyAdd
+
+  /// reduces contributions to `C[i][j]` produced on different layers of the 3-d process grid
+  class ReduceC : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, ReduceC, ttg::typelist<Blk>> {
+   public:
+    using baseT = typename ReduceC::ttT;
+
+    ReduceC(Edge<Key<2>, Blk> &c_ij_p, Edge<Key<2>, Blk> &c_ij, const Keymap2 &ij_keymap)
+        : baseT(edges(c_ij_p), edges(c_ij), "SpMM25D::reduce_c", {"c_ij(p)"}, {"c_ij"}, ij_keymap) {}
+
+    void op(const Key<2> &ij, typename baseT::input_values_tuple_type &&c_ij_p, std::tuple<Out<Key<2>, Blk>> &c_ij) {
+      ttg::trace("ReduceC(", ij[0], ", ", ij[1], ")");
+      ::send<0>(ij, baseT::template get<0>(c_ij_p), c_ij);
+    }
+  };  // class ReduceC
 
  private:
   Edge<Key<3>, Blk> a_ijk_;
@@ -556,6 +655,7 @@ class SpMM {
   Edge<Key<3>, Blk> b_ijk_;
   Edge<Key<3>, Blk> local_b_ijk_;
   Edge<Key<3>, Blk> c_ijk_;
+  Edge<Key<2>, Blk> c_ij_p_;
   const std::vector<std::vector<long>> &a_rowidx_to_colidx_;
   const std::vector<std::vector<long>> &b_colidx_to_rowidx_;
   const std::vector<std::vector<long>> &a_colidx_to_rowidx_;
@@ -565,6 +665,9 @@ class SpMM {
   std::unique_ptr<BcastB> bcast_b_;
   std::unique_ptr<LocalBcastB> local_bcast_b_;
   std::unique_ptr<MultiplyAdd> multiplyadd_;
+  std::unique_ptr<ReduceC> reduce_c_;
+  Keymap2 ij_keymap_;
+  Keymap3 ijk_keymap_;
 };
 
 class Control : public TT<void, std::tuple<Out<Key<2>>>, Control> {
@@ -576,11 +679,10 @@ class Control : public TT<void, std::tuple<Out<Key<2>>>, Control> {
   explicit Control(Edge<Key<2>> &ctl) : baseT(edges(), edges(ctl), "Control", {}, {"ctl"}), P(0), Q(0) {}
 
   void op(std::tuple<Out<Key<2>>> &out) const {
-    for (int i = 0; i < P; i++) {
-      for (int j = 0; j < Q; j++) {
-        Key<2> k{i, j};
-        ttg::trace("Control: enable {", i, ", ", j, "}");
-        ::sendk<0>(k, out);
+    for (int p = 0; p < P; p++) {
+      for (int q = 0; q < Q; q++) {
+        ttg::trace("Control: start computing on process {", p, ", ", q, "}");
+        ::sendk<0>(Key<2>{p, q}, out);
       }
     }
   }
@@ -693,6 +795,7 @@ static void initSpMatrixMarket(const std::function<int(const Key<2> &)> &keymap,
                                SpMatrix<> &B, SpMatrix<> &C, int &M, int &N, int &K) {
   std::vector<int> sizes;
   // We load the entire matrix on each rank, but we only use the local part for the GEMM
+  // loadMarket() is the eigan fuction to load matrix from a file
   if (!loadMarket(A, filename)) {
     std::cerr << "Failed to load " << filename << ", bailing out..." << std::endl;
     ttg::ttg_abort();
@@ -706,6 +809,7 @@ static void initSpMatrixMarket(const std::function<int(const Key<2> &)> &keymap,
   } else {
     B = A;
   }
+
   C.resize(A.rows(), B.cols());
   M = (int)A.rows();
   N = (int)C.cols();
@@ -800,6 +904,7 @@ static void initSpHardCoded(const std::function<int(const Key<2> &)> &keymap, Sp
   B_elements.emplace_back(3, 2, 0.2);
   B.setFromTriplets(B_elements.begin(), B_elements.end());
 }
+
 #else
 static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, SpMatrix<> &A, SpMatrix<> &B,
                               SpMatrix<> &C, SpMatrix<> &Aref, SpMatrix<> &Bref, bool buildRefs,
@@ -892,6 +997,8 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
   a_colidx_to_rowidx[3].emplace_back(0);  // A[0][3]
 
   A.setFromTriplets(A_elements.begin(), A_elements.end());
+  std::cout << "A_elements.begin()" << A_elements.begin() << "A_elements.end()" << A_elements.end() << "\n";
+
   if (buildRefs && 0 == rank) {
     Aref.setFromTriplets(Aref_elements.begin(), Aref_elements.end());
   }
@@ -991,7 +1098,7 @@ static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, siz
   std::mt19937 gen(seed);
   std::mt19937 genv(seed + 1);
 
-  std::uniform_int_distribution<> dist(minTs, maxTs);
+  std::uniform_int_distribution<> dist(minTs, maxTs);  // randomly pick any value in the range minTs, maxTs
   using triplet_t = Eigen::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
   std::vector<triplet_t> B_elements;
@@ -1108,13 +1215,15 @@ static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, siz
 
 #endif
 
-static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<int(const Key<2> &)> &keymap,
-                              const std::string &tiling_type, double gflops, double avg_nb, double Adensity,
-                              double Bdensity, const std::vector<std::vector<long>> &a_rowidx_to_colidx,
+static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<int(const Key<2> &)> &ij_keymap,
+                              const std::function<int(const Key<3> &)> &ijk_keymap, const std::string &tiling_type,
+                              double gflops, double avg_nb, double Adensity, double Bdensity,
+                              const std::vector<std::vector<long>> &a_rowidx_to_colidx,
                               const std::vector<std::vector<long>> &a_colidx_to_rowidx,
                               const std::vector<std::vector<long>> &b_rowidx_to_colidx,
                               const std::vector<std::vector<long>> &b_colidx_to_rowidx, std::vector<int> &mTiles,
-                              std::vector<int> &nTiles, std::vector<int> &kTiles, int M, int N, int K, int P, int Q) {
+                              std::vector<int> &nTiles, std::vector<int> &kTiles, int M, int N, int K, int minTs,
+                              int maxTs, int P, int Q, int R) {
   int MT = (int)A.rows();
   int NT = (int)B.cols();
   int KT = (int)A.cols();
@@ -1126,16 +1235,17 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   // flow graph needs to exist on every node
   Edge<Key<2>> ctl("control");
   Control control(ctl);
-  Edge<Key<2>, blk_t> eA, eB, eC;
+  Edge<Key<2>, blk_t> eA, eB;
+  Edge<Key<2>, blk_t> eC;
 
-  Read_SpMatrix a("A", A, ctl, eA, keymap);
-  Read_SpMatrix b("B", B, ctl, eB, keymap);
-  Write_SpMatrix<> c(C, eC, keymap);
+  Read_SpMatrix a("A", A, ctl, eA, ij_keymap);
+  Read_SpMatrix b("B", B, ctl, eB, ij_keymap);
+  Write_SpMatrix<> c(C, eC, ij_keymap);
   auto &c_status = c.status();
   assert(!has_value(c_status));
-  //  SpMM a_times_b(world, eA, eB, eC, A, B);
-  SpMM<> a_times_b(eA, eB, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
-                   mTiles, nTiles, kTiles, keymap);
+  //  SpMM25D a_times_b(world, eA, eB, eC, A, B);
+  SpMM25D<> a_times_b(eA, eB, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
+                      mTiles, nTiles, kTiles, ij_keymap, ijk_keymap, R);
   TTGUNUSED(a);
   TTGUNUSED(b);
   TTGUNUSED(a_times_b);
@@ -1162,9 +1272,9 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   std::string rt("Unkown???");
 #endif
   if (ttg::default_execution_context().rank() == 0) {
-    std::cout << "TTG-" << rt << " PxQxg=   " << P << " " << Q << " 1 average_NB= " << avg_nb << " M= " << M
-              << " N= " << N << " K= " << K << " Tiling= " << tiling_type << " A_density= " << Adensity
-              << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
+    std::cout << "TTG-" << rt << " PxQxR=   " << P << " " << Q << " " << R << " 1 average_NB= " << avg_nb << " M= " << M
+              << " N= " << N << " K= " << K << " t= " << minTs << " T=" << maxTs << " Tiling= " << tiling_type
+              << " A_density= " << Adensity << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
               << " gflops/s= " << gflops / tc << std::endl;
   }
 }
@@ -1223,6 +1333,20 @@ int main(int argc, char **argv) {
   bool timing;
   double gflops;
 
+  // warm up silicon by calling gemm a few times
+#ifdef BTAS_IS_USABLE
+  for (int i = 0; i < 20; i++) {
+    using baseT = typename btas::Tensor<double>;
+    btas::Tensor<double, btas::Range, std::vector<double>> At(30, 30);
+    btas::Tensor<double, btas::Range, std::vector<double>> Bt(30, 30);
+    btas::Tensor<double, btas::Range, std::vector<double>> Ct(30, 30);
+    At.fill(1.0);
+    Bt.fill(2.0);
+    Ct.fill(3.0);
+    btas::gemm(std::move(Ct), Bt, At);
+  }
+#endif  // BTAS_IS_USABLE
+
   int cores = -1;
   std::string nbCoreStr(getCmdOption(argv, argv + argc, "-c"));
   cores = parseOption(nbCoreStr, cores);
@@ -1248,214 +1372,233 @@ int main(int argc, char **argv) {
 
   int mpi_size = ttg::default_execution_context().size();
   int mpi_rank = ttg::default_execution_context().rank();
-  int best_pq = mpi_size;
-  int P, Q;
-  for (int p = 1; p <= (int)sqrt(mpi_size); p++) {
-    if ((mpi_size % p) == 0) {
-      int q = mpi_size / p;
-      if (abs(p - q) < best_pq) {
-        best_pq = abs(p - q);
-        P = p;
-        Q = q;
-      }
-    }
-  }
-  // ttg::launch_lldb(ttg::default_execution_context().rank(), argv[0]);
-
-  {
-    if (debug & (1 << 0)) {
-      ttg::trace_on();
-      TTBase::set_trace_all(true);
-    }
-
-    SpMatrix<> A, B, C, Aref, Bref;
-    std::string tiling_type;
-    int M = 0, N = 0, K = 0;
-
-    double avg_nb = nan("undefined");
-    double Adensity = nan("undefined");
-    double Bdensity = nan("undefined");
-
-    std::string PStr(getCmdOption(argv, argv + argc, "-P"));
-    P = parseOption(PStr, P);
-    std::string QStr(getCmdOption(argv, argv + argc, "-Q"));
-    Q = parseOption(QStr, Q);
-
-    if (P * Q != mpi_size) {
-      if (!cmdOptionExists(argv, argv + argc, "-Q") && (mpi_size % P) == 0)
-        Q = mpi_size / P;
-      else if (!cmdOptionExists(argv, argv + argc, "-P") && (mpi_size % Q) == 0)
-        P = mpi_size / Q;
-      else {
-        if (0 == mpi_rank) {
-          std::cerr << P << "x" << Q << " is not a valid process grid -- bailing out" << std::endl;
-          MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  int best_pqc = mpi_size;
+  int P, Q, R;
+  for (int c = 1; c <= (int)cbrt(mpi_size); c++) {
+    for (int p = 1; p <= (int)sqrt(mpi_size / c); p++) {
+      if ((mpi_size % (p * c)) == 0) {
+        int q = mpi_size / (p * c);
+        if (abs(c - p - q) <= best_pqc) {
+          best_pqc = abs(c - p - q);
+          P = p;
+          Q = q;
+          R = c;
         }
       }
     }
+    // ttg::launch_lldb(ttg::default_execution_context().rank(), argv[0]);
 
-    const auto &keymap = [P, Q](const Key<2> &key) {
-      int i = (int)key[0];
-      int j = (int)key[1];
-      int r = tile2rank(i, j, P, Q);
-      return r;
-    };
+    {
+      if (debug & (1 << 0)) {
+        ttg::trace_on();
+        TTBase::set_trace_all(true);
+      }
 
-    std::string seedStr(getCmdOption(argv, argv + argc, "-s"));
-    unsigned int seed = parseOption(seedStr, 0);
-    if (seed == 0) {
-      std::random_device rd;
-      seed = rd();
-      if (0 == ttg::default_execution_context().rank()) std::cerr << "#Random seeded with " << seed << std::endl;
-    }
-    ttg_broadcast(ttg::default_execution_context(), seed, 0);
+      SpMatrix<> A, B, C, Aref, Bref;
+      std::string tiling_type;
+      int M = 0, N = 0, K = 0;
+      int minTs = 0, maxTs = 0;
 
-    std::vector<int> mTiles;
-    std::vector<int> nTiles;
-    std::vector<int> kTiles;
-    std::vector<std::vector<long>> a_rowidx_to_colidx;
-    std::vector<std::vector<long>> a_colidx_to_rowidx;
-    std::vector<std::vector<long>> b_rowidx_to_colidx;
-    std::vector<std::vector<long>> b_colidx_to_rowidx;
+      double avg_nb = nan("undefined");
+      double Adensity = nan("undefined");
+      double Bdensity = nan("undefined");
 
-    std::string checkStr(getCmdOption(argv, argv + argc, "-x"));
-    int check = parseOption(checkStr, !(argc >= 2));
-    timing = (check == 0);
+      std::string PStr(getCmdOption(argv, argv + argc, "-P"));
+      P = parseOption(PStr, P);
+      std::string QStr(getCmdOption(argv, argv + argc, "-Q"));
+      Q = parseOption(QStr, Q);
+      // to make code behave like 2D summa if R not given
+      std::string RStr(getCmdOption(argv, argv + argc, "-R"));
+      R = parseOption(RStr, 1);
+
+      if (P * Q * R != mpi_size) {
+        if (!cmdOptionExists(argv, argv + argc, "-Q") && (mpi_size % (P * R) == 0))
+          Q = mpi_size / (P * R);
+        else if (!cmdOptionExists(argv, argv + argc, "-P") && (mpi_size % (Q * R)) == 0)
+          P = mpi_size / (Q * R);
+        else if (!cmdOptionExists(argv, argv + argc, "-R") && (mpi_size % (Q * P)) == 0)
+          R = mpi_size / (Q * P);
+        else {
+          if (0 == mpi_rank) {
+            std::cerr << P << "x" << Q << "x" << R << " is not a valid process grid -- bailing out" << std::endl;
+            MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+          }
+        }
+      }
+
+      auto ij_keymap = [P, Q](const Key<2> &ij) {
+        int i = (int)ij[0];
+        int j = (int)ij[1];
+        int r = ij2rank(i, j, P, Q);
+        return r;
+      };
+
+      auto ijk_keymap = [P, Q, R](const Key<3> &ijk) {
+        int i = (int)ijk[0];
+        int j = (int)ijk[1];
+        int k = (int)ijk[2];
+        int r = ijk2rank(i, j, k, P, Q, R);
+        return r;
+      };
+
+      std::string seedStr(getCmdOption(argv, argv + argc, "-s"));
+      unsigned int seed = parseOption(seedStr, 0);
+      if (seed == 0) {
+        std::random_device rd;
+        seed = rd();
+        if (0 == ttg::default_execution_context().rank()) std::cerr << "#Random seeded with " << seed << std::endl;
+      }
+      ttg_broadcast(ttg::default_execution_context(), seed, 0);
+
+      std::vector<int> mTiles;
+      std::vector<int> nTiles;
+      std::vector<int> kTiles;
+      std::vector<std::vector<long>> a_rowidx_to_colidx;
+      std::vector<std::vector<long>> a_colidx_to_rowidx;
+      std::vector<std::vector<long>> b_rowidx_to_colidx;
+      std::vector<std::vector<long>> b_colidx_to_rowidx;
+
+      std::string checkStr(getCmdOption(argv, argv + argc, "-x"));
+      int check = parseOption(checkStr, !(argc >= 2));
+      timing = (check == 0);
 
 #if !defined(BLOCK_SPARSE_GEMM)
-    if (cmdOptionExists(argv, argv + argc, "-mm")) {
-      char *filename = getCmdOption(argv, argv + argc, "-mm");
-      tiling_type = filename;
-      initSpMatrixMarket(keymap, filename, A, B, C, M, N, K);
-    } else if (cmdOptionExists(argv, argv + argc, "-rmat")) {
-      char *opt = getCmdOption(argv, argv + argc, "-rmat");
-      tiling_type = "RandomSparseMatrix";
-      initSpRmat(keymap, opt, A, B, C, M, N, K, seed);
-    } else {
-      tiling_type = "HardCodedSparseMatrix";
-      initSpHardCoded(keymap, A, B, C, M, N, K);
-    }
+      if (cmdOptionExists(argv, argv + argc, "-mm")) {
+        char *filename = getCmdOption(argv, argv + argc, "-mm");
+        tiling_type = filename;
+        initSpMatrixMarket(ij_keymap, filename, A, B, C, M, N, K);
+      } else if (cmdOptionExists(argv, argv + argc, "-rmat")) {
+        char *opt = getCmdOption(argv, argv + argc, "-rmat");
+        tiling_type = "RandomSparseMatrix";
+        initSpRmat(ij_keymap, opt, A, B, C, M, N, K, seed);
+      } else {
+        tiling_type = "HardCodedSparseMatrix";
+        initSpHardCoded(ij_keymap, A, B, C, M, N, K);
+      }
 
-    if (check) {
-      // We don't generate the sparse matrices in distributed, so Aref and Bref can
-      // just point to the same matrix, or be a local copy.
-      Aref = A;
-      Bref = B;
-    }
+      if (check) {
+        // We don't generate the sparse matrices in distributed, so Aref and Bref can
+        // just point to the same matrix, or be a local copy.
+        Aref = A;
+        Bref = B;
+      }
 
-    // We still need to build the metadata from the  matrices.
-    make_rowidx_to_colidx_from_eigen(A, a_rowidx_to_colidx);
-    make_colidx_to_rowidx_from_eigen(A, a_colidx_to_rowidx);
-    make_rowidx_to_colidx_from_eigen(B, b_rowidx_to_colidx);
-    make_colidx_to_rowidx_from_eigen(B, b_colidx_to_rowidx);
-    // This is only needed to compute the flops
-    for (int mt = 0; mt < M; mt++) mTiles.emplace_back(1);
-    for (int nt = 0; nt < N; nt++) nTiles.emplace_back(1);
-    for (int kt = 0; kt < K; kt++) kTiles.emplace_back(1);
+      // We still need to build the metadata from the  matrices.
+      make_rowidx_to_colidx_from_eigen(A, a_rowidx_to_colidx);
+      make_colidx_to_rowidx_from_eigen(A, a_colidx_to_rowidx);
+      make_rowidx_to_colidx_from_eigen(B, b_rowidx_to_colidx);
+      make_colidx_to_rowidx_from_eigen(B, b_colidx_to_rowidx);
+      // This is only needed to compute the flops
+      for (int mt = 0; mt < M; mt++) mTiles.emplace_back(1);
+      for (int nt = 0; nt < N; nt++) nTiles.emplace_back(1);
+      for (int kt = 0; kt < K; kt++) kTiles.emplace_back(1);
 #else
-    if (argc >= 2) {
-      std::string Mstr(getCmdOption(argv, argv + argc, "-M"));
-      M = parseOption(Mstr, 1200);
-      std::string Nstr(getCmdOption(argv, argv + argc, "-N"));
-      N = parseOption(Nstr, 1200);
-      std::string Kstr(getCmdOption(argv, argv + argc, "-K"));
-      K = parseOption(Kstr, 1200);
-      std::string minTsStr(getCmdOption(argv, argv + argc, "-t"));
-      int minTs = parseOption(minTsStr, 32);
-      std::string maxTsStr(getCmdOption(argv, argv + argc, "-T"));
-      int maxTs = parseOption(maxTsStr, 256);
-      std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
-      double avg = parseOption(avgStr, 0.3);
-      timing = (check == 0);
-      tiling_type = "RandomIrregularTiling";
-      initBlSpRandom(keymap, M, N, K, minTs, maxTs, avg, A, B, Aref, Bref, check, mTiles, nTiles, kTiles,
-                     a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, avg_nb, Adensity,
-                     Bdensity, seed);
-      C.resize(mTiles.size(), nTiles.size());
-    } else {
-      tiling_type = "HardCodedBlockSparseMatrix";
-      initBlSpHardCoded(keymap, A, B, C, Aref, Bref, true, mTiles, nTiles, kTiles, a_rowidx_to_colidx,
-                        a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, M, N, K);
-    }
+      if (argc >= 2) {
+        std::string Mstr(getCmdOption(argv, argv + argc, "-M"));
+        M = parseOption(Mstr, 1200);
+        std::string Nstr(getCmdOption(argv, argv + argc, "-N"));
+        N = parseOption(Nstr, 1200);
+        std::string Kstr(getCmdOption(argv, argv + argc, "-K"));
+        K = parseOption(Kstr, 1200);
+        std::string minTsStr(getCmdOption(argv, argv + argc, "-t"));
+        minTs = parseOption(minTsStr, 32);
+        std::string maxTsStr(getCmdOption(argv, argv + argc, "-T"));
+        maxTs = parseOption(maxTsStr, 256);
+        std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
+        double avg = parseOption(avgStr, 0.3);
+        timing = (check == 0);
+        tiling_type = "RandomIrregularTiling";
+        initBlSpRandom(ij_keymap, M, N, K, minTs, maxTs, avg, A, B, Aref, Bref, check, mTiles, nTiles, kTiles,
+                       a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, avg_nb, Adensity,
+                       Bdensity, seed);
+
+        C.resize(mTiles.size(), nTiles.size());
+      } else {
+        tiling_type = "HardCodedBlockSparseMatrix";
+        initBlSpHardCoded(ij_keymap, A, B, C, Aref, Bref, true, mTiles, nTiles, kTiles, a_rowidx_to_colidx,
+                          a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, M, N, K);
+      }
 #endif  // !defined(BLOCK_SPARSE_GEMM)
 
-    gflops = compute_gflops(a_rowidx_to_colidx, b_rowidx_to_colidx, mTiles, nTiles, kTiles);
+      gflops = compute_gflops(a_rowidx_to_colidx, b_rowidx_to_colidx, mTiles, nTiles, kTiles);
 
-    std::string nbrunStr(getCmdOption(argv, argv + argc, "-n"));
-    int nb_runs = parseOption(nbrunStr, 1);
+      std::string nbrunStr(getCmdOption(argv, argv + argc, "-n"));
+      int nb_runs = parseOption(nbrunStr, 1);
 
-    if (timing) {
-      // Start up engine
-      execute();
-      for (int nrun = 0; nrun < nb_runs; nrun++) {
-        timed_measurement(A, B, keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity, a_rowidx_to_colidx,
-                          a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles, nTiles, kTiles, M, N, K,
-                          P, Q);
-      }
-    } else {
-      // flow graph needs to exist on every node
-      auto keymap_write = [](const Key<2> &key) { return 0; };
-      Edge<Key<2>> ctl("control");
-      Control control(ctl);
-      Edge<Key<2>, blk_t> eA, eB, eC;
-      Read_SpMatrix a("A", A, ctl, eA, keymap);
-      Read_SpMatrix b("B", B, ctl, eB, keymap);
-      Write_SpMatrix<> c(C, eC, keymap_write);
-      auto &c_status = c.status();
-      assert(!has_value(c_status));
-      //  SpMM a_times_b(world, eA, eB, eC, A, B);
-      SpMM<> a_times_b(eA, eB, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx,
-                       mTiles, nTiles, kTiles, keymap);
-      TTGUNUSED(a_times_b);
-      // calling the Dot constructor with 'true' argument disables the type
-      if (default_execution_context().rank() == 0) std::cout << Dot{/*disable_type=*/true}(&control) << std::endl;
-
-      // ready to run!
-      auto connected = make_graph_executable(&control);
-      assert(connected);
-      TTGUNUSED(connected);
-
-      // ready, go! need only 1 kick, so must be done by 1 thread only
-      if (ttg::default_execution_context().rank() == 0) control.start(P, Q);
-
-      execute();
-      fence();
-
-      // validate C=A*B against the reference output
-      assert(has_value(c_status));
-      if (ttg::default_execution_context().rank() == 0) {
-        SpMatrix<> Cref = Aref * Bref;
-
-        double norm_2_square, norm_inf;
-        std::tie(norm_2_square, norm_inf) = norms<blk_t>(Cref - C);
-        std::cout << "||Cref - C||_2      = " << std::sqrt(norm_2_square) << std::endl;
-        std::cout << "||Cref - C||_\\infty = " << norm_inf << std::endl;
-        if (norm_inf > 1e-9) {
-          std::cout << "Cref:\n" << Cref << std::endl;
-          std::cout << "C:\n" << C << std::endl;
-          ttg_abort();
+      if (timing) {
+        // Start up engine
+        execute();
+        for (int nrun = 0; nrun < nb_runs; nrun++) {
+          timed_measurement(A, B, ij_keymap, ijk_keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity,
+                            a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles,
+                            nTiles, kTiles, M, N, K, minTs, maxTs, P, Q, R);
         }
+      } else {
+        // flow graph needs to exist on every node
+        // N.B. to validate C we need it on node 0!
+        auto keymap_write = [](const Key<2> &key) { return 0; };
+        Edge<Key<2>> ctl("control");
+        Control control(ctl);
+        Edge<Key<2>, blk_t> eA, eB, eC;
+        Read_SpMatrix a("A", A, ctl, eA, ij_keymap);
+        Read_SpMatrix b("B", B, ctl, eB, ij_keymap);
+        Write_SpMatrix<> c(C, eC, keymap_write);
+        auto &c_status = c.status();
+        assert(!has_value(c_status));
+        //  SpMM25D a_times_b(world, eA, eB, eC, A, B);
+        SpMM25D<> a_times_b(eA, eB, eC, A, B, a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx,
+                            b_colidx_to_rowidx, mTiles, nTiles, kTiles, ij_keymap, ijk_keymap, R);
+        TTGUNUSED(a_times_b);
+        // calling the Dot constructor with 'true' argument disables the type
+        if (default_execution_context().rank() == 0) std::cout << Dot{/*disable_type=*/true}(&control) << std::endl;
+
+        // ready to run!
+        auto connected = make_graph_executable(&control);
+        assert(connected);
+        TTGUNUSED(connected);
+
+        // ready, go! need only 1 kick, so must be done by 1 thread only
+        if (ttg::default_execution_context().rank() == 0) control.start(P, Q);
+
+        execute();
+        fence();
+
+        // validate C=A*B against the reference output
+        assert(has_value(c_status));
+        if (ttg::default_execution_context().rank() == 0) {
+          SpMatrix<> Cref = Aref * Bref;
+
+          double norm_2_square, norm_inf;
+          std::tie(norm_2_square, norm_inf) = norms<blk_t>(Cref - C);
+          std::cout << "||Cref - C||_2      = " << std::sqrt(norm_2_square) << std::endl;
+          std::cout << "||Cref - C||_\\infty = " << norm_inf << std::endl;
+          if (norm_inf > 1e-9) {
+            std::cout << "Cref:\n" << Cref << std::endl;
+            std::cout << "C:\n" << C << std::endl;
+            ttg_abort();
+          }
+        }
+
+        // validate Acopy=A against the reference output
+        //      assert(has_value(copy_status));
+        //      if (ttg::default_execution_context().rank() == 0) {
+        //        double norm_2_square, norm_inf;
+        //        std::tie(norm_2_square, norm_inf) = norms<blk_t>(Acopy - A);
+        //        std::cout << "||Acopy - A||_2      = " << std::sqrt(norm_2_square) << std::endl;
+        //        std::cout << "||Acopy - A||_\\infty = " << norm_inf << std::endl;
+        //        if (::ttg::tracing()) {
+        //          std::cout << "Acopy (" << static_cast<void *>(&Acopy) << "):\n" << Acopy << std::endl;
+        //          std::cout << "A (" << static_cast<void *>(&A) << "):\n" << A << std::endl;
+        //        }
+        //        if (norm_inf != 0) {
+        //          ttg_abort();
+        //        }
+        //      }
       }
-
-      // validate Acopy=A against the reference output
-      //      assert(has_value(copy_status));
-      //      if (ttg::default_execution_context().rank() == 0) {
-      //        double norm_2_square, norm_inf;
-      //        std::tie(norm_2_square, norm_inf) = norms<blk_t>(Acopy - A);
-      //        std::cout << "||Acopy - A||_2      = " << std::sqrt(norm_2_square) << std::endl;
-      //        std::cout << "||Acopy - A||_\\infty = " << norm_inf << std::endl;
-      //        if (::ttg::tracing()) {
-      //          std::cout << "Acopy (" << static_cast<void *>(&Acopy) << "):\n" << Acopy << std::endl;
-      //          std::cout << "A (" << static_cast<void *>(&A) << "):\n" << A << std::endl;
-      //        }
-      //        if (norm_inf != 0) {
-      //          ttg_abort();
-      //        }
-      //      }
     }
+
+    ttg_finalize();
+
+    return 0;
   }
-
-  ttg_finalize();
-
-  return 0;
 }

@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
 cmake_minimum_required(VERSION 3.19)
 project(TTG-HW CXX)
 
-find_package(ttg) # check if TTG is already available
+find_package(ttg QUIET) # check if TTG is already available
 if (NOT TARGET ttg-parsec) # else build from source
   include(FetchContent)
   FetchContent_Declare(ttg GIT_REPOSITORY https://github.com/TESSEorg/ttg.git)
@@ -184,13 +184,16 @@ int main(int argc, char *argv[]) {
         } else
           ttg::sendv<2>(F_n);
       },
-      ttg::edges(f2f_nm1, f2f_nm2), ttg::edges(f2f_nm1, f2f_nm2, f2p));
+      ttg::edges(f2f_nm1, f2f_nm2), ttg::edges(f2f_nm1, f2f_nm2, f2p),
+      "fib");
   auto print = ttg::make_tt([](int64_t F_N) { std::cout << N << "th Fibonacci number is " << F_N << std::endl; },
-                            ttg::edges(f2p));
+                            ttg::edges(f2p),
+                            ttg::edges(),
+                            "print");
 
   ttg::make_graph_executable(fib);
   ttg::execute();
-  if (ttg::rank() == 0) fib->invoke(2, 1, 0);
+  if (ttg::rank() == 0) fib->invoke(2, std::make_tuple(1, 0));
   ttg::fence();
 
   ttg::finalize();
@@ -245,14 +248,49 @@ To simplify debugging of multirank TTG programs it is possible to automate the p
 - If an X11 server is not running the set `TTG_DEBUGGER` to empty value; upon receiving a signal the program will print instructions for how to attach a debugger to a running process from another terminal.
 - run the ttg program and if it receives any signal the xterm windows should pop up to display debugging results
 
-# TTG performance
+# TTG Performance
 
 Competitive performance of TTG for several paradigmatic scientific applications on shared- and distributed-memory machines (CPU only)
 will be discussed in [manuscript ``Generalized Flow-Graph Programming Using Template Task-Graphs: Initial Implementation and Assessment''](https://www.ipdps.org/ipdps2022/2022-accepted-papers.html) to be presented at [IPDPS'22](https://www.ipdps.org/ipdps2022/).
 Stay tuned!
 
+# TTG Performance Tracing
+
+There are several ways to trace execution of a TTG program. The easiest way is to use the PaRSEC-based TTG backend to
+produce binary traces in PaRSEC Binary Trace (PBT) format and then convert them to
+a Chrome Trace Format (CTF) JSON file that can be visuzalized using built-in browser
+in Chrome browser or using web-based [Perfetto trace viewer](https://ui.perfetto.dev/).
+To generate the trace results of any TTG program follow the process discussed below:
+
+- For simplicity we assume here that TTG will build PaRSEC from source. Make sure PaRSEC Python tools prerequisites have been installed, namely Python3 (version 3.8 is recommended) and the following Python packages (e.g., using `pip`):
+  - `cython`
+  - `2to3`
+  - `numpy`
+  - `pandas`
+  - `tables`
+- Configure and build TTG:
+  - Configure TTG with `-DPARSEC_PROF_TRACE=ON` (this turns on PaRSEC task tracing) and `-DBUILD_SHARED_LIBS=ON` (to support PaRSEC Python tools). Also make sure that CMake discovers the Python3 interpreter and the `cython` package.
+  - Build and install TTG
+- Build the TTG program to be traced.
+- Run the TTG program with tracing turned on:
+  - Create file `${HOME}/.parsec/mca-params.conf` and add line `mca_pins = task_profiler` to it
+  - Set the environment variable `PARSEC_MCA_profile_filename` to the PBT file name _prefix_, e.g. `/tmp/ttg`.
+  - Run the program and make sure the trace files (in PBT format) have been generated; e.g., if you set `PARSEC_MCA_profile_filename` to `/tmp/ttg` you should find file `/tmp/ttg-0.prof-...` containing the trace from MPI rank 0, `/tmp/ttg-1.prof-...` from rank 1, and so on.
+- Convert the traces from PaRSEC Binary Trace (PBT) format to the Chrome Trace Format (CTF):
+  - Add `{TTG build directory}/_deps/parsec-build/tools/profiling/python/build/{lib folder for your version of Python}` (currently it is not possible to use PaRSEC Python module from the install tree, only from its build tree)
+ to the `PYTHONPATH` environment variable so that the Python  interpreter can find the modules for reading the PaRSEC trace files.
+  - Convert the PBT files to a CTF file by running the conversion script:
+```
+ {TTG install prefix}/bin/pbt_to_ctf.py {PBT file name prefix} {CTF filename}
+```
+- Open the `chrome://tracing` URL in the Chrome browser and load the resulting trace; alternatively you can use the [Perfetto trace viewer](https://ui.perfetto.dev/) from any browser.
+
+For example, executing the Fibonacci program described above using 2 MPI processes and with 2 threads each will produce a trace that looks like this:
+
+![Fibonacci_traces_example](doc/images/nth-fib-trace-2proc-2thr.png) 
+
 # TTG reference documentation
-TTG API documentation is available for the following versions:
+TTG API documentation is available for the following versions:0
 - [master branch](https://tesseorg.github.io/ttg/dox-master) .
 
 # Cite
