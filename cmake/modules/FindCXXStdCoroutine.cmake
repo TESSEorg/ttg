@@ -164,7 +164,7 @@ foreach(component IN LISTS CXXStdCoroutines_want_components_ordered)
         add_library(std::coroutine INTERFACE IMPORTED GLOBAL)
         target_compile_features(std::coroutine INTERFACE cxx_std_20)
         if (option)
-          target_compile_options(std::coroutine INTERFACE "${option}")
+          target_compile_options(std::coroutine INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:${option}>")
         endif()
         set(CXX_COROUTINE_COMPONENT "${component}" CACHE STRING "The component of CXXStdCoroutine package found")
         # break out of this loop
