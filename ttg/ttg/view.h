@@ -156,12 +156,12 @@ namespace ttg {
 
     template<std::size_t i>
     auto get_device_ptr() {
-      return static_cast<std::tuple_element_t<i, span_tuple_type>::value_type*>(std::get<i>(m_spans).data());
+      return static_cast<typename std::tuple_element_t<i, span_tuple_type>::value_type*>(std::get<i>(m_spans).data());
     }
 
     template<std::size_t i>
     const auto get_device_ptr() const {
-      return static_cast<std::tuple_element_t<i, span_tuple_type>::value_type>(std::get<i>(m_spans).data());
+      return static_cast<typename std::tuple_element_t<i, span_tuple_type>::value_type>(std::get<i>(m_spans).data());
     }
 
     template<std::size_t i>
@@ -311,12 +311,12 @@ namespace ttg {
 
     template<std::size_t i>
     auto get_device_ptr() {
-      return static_cast<std::tuple_element_t<i, span_tuple_type>::value_type*>(std::get<i>(m_spans).data());
+      return static_cast<typename std::tuple_element_t<i, span_tuple_type>::value_type*>(std::get<i>(m_spans).data());
     }
 
     template<std::size_t i>
     const auto get_device_ptr() const {
-      return static_cast<std::tuple_element_t<i, span_tuple_type>::value_type>(std::get<i>(m_spans).data());
+      return static_cast<typename std::tuple_element_t<i, span_tuple_type>::value_type>(std::get<i>(m_spans).data());
     }
 
     template<std::size_t i>
@@ -430,7 +430,7 @@ namespace ttg {
       constexpr bool await_ready() const noexcept { return false; }
 
       /* always suspend */
-      constexpr void await_suspend( std::coroutine_handle<> ) const noexcept {}
+      constexpr void await_suspend( TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<> ) const noexcept {}
 
       void await_resume() noexcept {
         if constexpr (sizeof...(Ts) > 0) {
@@ -618,7 +618,7 @@ namespace ttg {
       template <size_t KeyId, size_t I, size_t... Is, typename... RangesT, typename valueT,
                 typename... out_keysT, typename... out_valuesT>
       inline void prepare_broadcast(const std::tuple<RangesT...> &keylists, valueT &&value) {
-        using key_t = broadcast_keylist_trait<
+        using key_t = typename broadcast_keylist_trait<
                         std::tuple_element_t<KeyId, std::tuple<std::remove_reference_t<RangesT>...>>
                       >::key_type;
         auto *terminal_ptr = ttg::detail::get_out_terminal<key_t, valueT>(I, "ttg::device::broadcast(keylists, value)");
@@ -641,7 +641,7 @@ namespace ttg {
       template <size_t KeyId, size_t I, size_t... Is, typename... RangesT, typename valueT,
                 typename... out_keysT, typename... out_valuesT>
       inline void broadcast(const std::tuple<RangesT...> &keylists, valueT &&value) {
-        using key_t = broadcast_keylist_trait<
+        using key_t = typename broadcast_keylist_trait<
                         std::tuple_element_t<KeyId, std::tuple<std::remove_reference_t<RangesT>...>>
                       >::key_type;
         auto *terminal_ptr = ttg::detail::get_out_terminal<key_t, valueT>(I, "ttg::device::broadcast(keylists, value)");

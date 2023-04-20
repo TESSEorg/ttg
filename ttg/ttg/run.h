@@ -9,6 +9,7 @@
 
 #include "ttg/util/bug.h"
 #include "ttg/util/env.h"
+#include "ttg/world.h"
 
 namespace ttg {
 
