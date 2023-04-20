@@ -3,6 +3,8 @@
 #include "ttg.h"
 #include "ttg/view.h"
 
+#include "ttg/serialization.h"
+
 #include "cuda_kernel.h"
 
 struct value_t {
@@ -10,12 +12,13 @@ struct value_t {
   int quark;
 
   template<typename Archive>
-  void ttg_serialize(Archive& ar) {
+  void serialize(Archive& ar, const unsigned int version) {
     ar& quark;
     ar& db; // input:
   }
 };
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
 /* devicebuf is non-POD so provide serialization
  * information for members not a devicebuf */
 namespace madness::archive {
@@ -24,7 +27,7 @@ namespace madness::archive {
     static inline void serialize(const Archive& ar, value_t& obj) { ar& obj.quark & obj.db; };
   };
 }  // namespace madness::archive
-
+#endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
 
 TEST_CASE("Device", "coro") {
 

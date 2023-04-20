@@ -349,6 +349,25 @@ public:
 
   /* serialization support */
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
+  template <typename Archive>
+  void serialize(Archive& ar, const unsigned int version) {
+    if constexpr (ttg::detail::is_output_archive_v<Archive>) {
+      std::size_t s = size();
+      ar& s;
+      assert(m_ttg_copy != nullptr); // only tracked objects allowed
+      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), current_device_ptr()});
+    } else {
+      std::size_t s;
+      ar & s;
+      /* initialize internal pointers and then reset */
+      reset(s);
+      assert(m_ttg_copy != nullptr); // only tracked objects allowed
+      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), current_device_ptr()});
+    }
+  }
+#endif // TTG_SERIALIZATION_SUPPORTS_BOOST
+
 #ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
   template <class Archive>
   std::enable_if_t<std::is_base_of_v<cereal::detail::InputArchiveBase, Archive> ||
