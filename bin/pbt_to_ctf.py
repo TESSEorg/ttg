@@ -76,7 +76,7 @@ def pbt_to_ctf(pbt_files_list, ctf_filename, skip_parsec_events, skip_mpi_events
 
 if __name__ == "__main__":
 
-    pbt_file_prefix = sys.argv[1]
+    pbt_filename = sys.argv[1]
     ctf_file_name = sys.argv[2]
     skip_parsec_events = True
     skip_mpi_events = True
@@ -87,14 +87,18 @@ if __name__ == "__main__":
     if len(sys.argv) >= 5:
         skip_mpi_events = bool(sys.argv[4])
 
-    # iterate over all files within the directory that start with sys.argv[1]
+    # iterate over all files within the directory that start with pbt_file_prefix
     pbt_files_list=[]
-    dirname = os.path.dirname(pbt_file_prefix)
+    dirname = os.path.dirname(pbt_filename)
+
+    pbt_file_prefix = pbt_filename[:sys.argv[1].index('.prof')-1]
+
     for file in os.listdir(dirname):
         file_fullname = os.path.join(dirname,file)
         if file_fullname.startswith(pbt_file_prefix) and ".prof-" in file_fullname and file_fullname != ctf_file_name:
             print("found file ", file_fullname)
             pbt_files_list.append(file_fullname)
 
+    print(pbt_files_list)
     # to debug: read_pbt(pbt_files_list[0]), etc.
     pbt_to_ctf(pbt_files_list, ctf_file_name, skip_parsec_events, skip_mpi_events)
