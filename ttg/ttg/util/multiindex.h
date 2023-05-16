@@ -75,4 +75,27 @@ namespace ttg {
 
 }  // namespace ttg
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+namespace madness {
+  namespace archive {
+    template <class Archive, std::size_t Rank>
+    struct ArchiveStoreImpl<Archive, ttg::MultiIndex<Rank>> {
+      static inline void store(const Archive& ar, const ttg::MultiIndex<Rank>& mi) {
+        for (size_t i = 0; i != Rank; ++i) ar << mi[i];
+      }
+    };
+
+    template <class Archive, std::size_t Rank>
+    struct ArchiveLoadImpl<Archive, ttg::MultiIndex<Rank>> {
+      static inline void load(const Archive& ar, ttg::MultiIndex<Rank>& mi) {
+        for (size_t i = 0; i != Rank; ++i) ar >> mi[i];
+      }
+    };
+  }  // namespace archive
+}  // namespace madness
+
+static_assert(madness::is_serializable_v<madness::archive::BufferOutputArchive, ttg::MultiIndex<3>>);
+
+#endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
+
 #endif  // TTG_UTIL_MULTIINDEX_H

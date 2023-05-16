@@ -71,6 +71,10 @@
 
 #include "ttg/parsec/ttg_data_copy.h"
 
+/* This is missing in the parsec_comm_engine.h interface... But we are discussing
+   if this execution stream should be exposed. Workaround this for now. */
+extern "C" parsec_execution_stream_t parsec_comm_es;
+
 #undef TTG_PARSEC_DEBUG_TRACK_DATA_COPIES
 
 #if defined(TTG_PARSEC_DEBUG_TRACK_DATA_COPIES)
@@ -167,9 +171,6 @@ namespace ttg_parsec {
   }  // namespace detail
 
   class WorldImpl : public ttg::base::WorldImplBase {
-    static constexpr const int _PARSEC_TTG_TAG = 10;      // This TAG should be 'allocated' at the PaRSEC level
-    static constexpr const int _PARSEC_TTG_RMA_TAG = 11;  // This TAG should be 'allocated' at the PaRSEC level
-
     ttg::Edge<> m_ctl_edge;
     bool _dag_profiling;
     bool _task_profiling;
@@ -228,19 +229,21 @@ namespace ttg_parsec {
 
       es = ctx->virtual_processes[0]->execution_streams[0];
 
-      parsec_ce.tag_register(_PARSEC_TTG_TAG, &detail::static_unpack_msg, this, PARSEC_TTG_MAX_AM_SIZE);
-      parsec_ce.tag_register(_PARSEC_TTG_RMA_TAG, &detail::get_remote_complete_cb, this, 128);
-
+      if( NULL != parsec_ce.tag_register) {
+        parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, this, PARSEC_TTG_MAX_AM_SIZE);
+        parsec_ce.tag_register(WorldImpl::parsec_ttg_rma_tag(), &detail::get_remote_complete_cb, this, 128);
+      }
+      
       create_tpool();
     }
 
     void create_tpool() {
       assert(nullptr == tpool);
-      tpool = (parsec_taskpool_t *)calloc(1, sizeof(parsec_taskpool_t));
+      tpool = PARSEC_OBJ_NEW(parsec_taskpool_t);
       tpool->taskpool_id = -1;
       tpool->update_nb_runtime_task = parsec_add_fetch_runtime_task;
       tpool->taskpool_type = PARSEC_TASKPOOL_TYPE_TTG;
-      tpool->taskpool_name = (char*)"TTG Taskpool";
+      tpool->taskpool_name = strdup("TTG Taskpool");
       parsec_taskpool_reserve_id(tpool);
 
 #ifdef TTG_USE_USER_TERMDET
@@ -254,7 +257,7 @@ namespace ttg_parsec {
       // be added by the main thread. It should then be initialized
       // to 0, execute will set it to 1 and mark the tpool as ready,
       // and the fence() will decrease it back to 0.
-      tpool->tdm.module->taskpool_set_nb_pa(tpool, 0);
+      tpool->tdm.module->taskpool_set_runtime_actions(tpool, 0);
       parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
 
 #if defined(PARSEC_PROF_TRACE)
@@ -284,15 +287,15 @@ namespace ttg_parsec {
 
     ~WorldImpl() { destroy(); }
 
-    static constexpr int parsec_ttg_tag() { return _PARSEC_TTG_TAG; }
-    static constexpr int parsec_ttg_rma_tag() { return _PARSEC_TTG_RMA_TAG; }
+    static constexpr int parsec_ttg_tag() { return PARSEC_DSL_TTG_TAG; }
+    static constexpr int parsec_ttg_rma_tag() { return PARSEC_DSL_TTG_RMA_TAG; }
 
     MPI_Comm comm() const { return MPI_COMM_WORLD; }
 
     virtual void execute() override {
       if (!parsec_taskpool_started) {
         parsec_enqueue(ctx, tpool);
-        tpool->tdm.module->taskpool_addto_nb_pa(tpool, 1);
+        tpool->tdm.module->taskpool_addto_runtime_actions(tpool, 1);
         tpool->tdm.module->taskpool_ready(tpool);
         [[maybe_unused]] auto ret = parsec_context_start(ctx);
         // ignore ret since all of its nonzero values are OK (e.g. -1 due to ctx already being active)
@@ -317,7 +320,7 @@ namespace ttg_parsec {
       if (is_valid()) {
         if (parsec_taskpool_started) {
           // We are locally ready (i.e. we won't add new tasks)
-          tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
+          tpool->tdm.module->taskpool_addto_runtime_actions(tpool, -1);
           ttg::trace("ttg_parsec(", this->rank(), "): final waiting for completion");
           if (own_ctx)
             parsec_context_wait(ctx);
@@ -354,8 +357,8 @@ namespace ttg_parsec {
 
     void increment_created() { taskpool()->tdm.module->taskpool_addto_nb_tasks(taskpool(), 1); }
 
-    void increment_inflight_msg() { taskpool()->tdm.module->taskpool_addto_nb_pa(taskpool(), 1); }
-    void decrement_inflight_msg() { taskpool()->tdm.module->taskpool_addto_nb_pa(taskpool(), -1); }
+    void increment_inflight_msg() { taskpool()->tdm.module->taskpool_addto_runtime_actions(taskpool(), 1); }
+    void decrement_inflight_msg() { taskpool()->tdm.module->taskpool_addto_runtime_actions(taskpool(), -1); }
 
     bool dag_profiling() override { return _dag_profiling; }
 
@@ -456,7 +459,7 @@ namespace ttg_parsec {
       }
       ttg::trace("ttg_parsec::(", rank, "): parsec taskpool is ready for completion");
       // We are locally ready (i.e. we won't add new tasks)
-      tpool->tdm.module->taskpool_addto_nb_pa(tpool, -1);
+      tpool->tdm.module->taskpool_addto_runtime_actions(tpool, -1);
       ttg::trace("ttg_parsec(", rank, "): waiting for completion");
       parsec_taskpool_wait(tpool);
 
@@ -484,8 +487,10 @@ namespace ttg_parsec {
 
   static void unregister_parsec_tags(void *_)
   {
-    parsec_ce.tag_unregister(WorldImpl::parsec_ttg_tag());
-    parsec_ce.tag_unregister(WorldImpl::parsec_ttg_rma_tag());
+    if(NULL != parsec_ce.tag_unregister) {
+      parsec_ce.tag_unregister(WorldImpl::parsec_ttg_tag());
+      parsec_ce.tag_unregister(WorldImpl::parsec_ttg_rma_tag());
+    }
   }
 
   namespace detail {
@@ -586,7 +591,7 @@ namespace ttg_parsec {
         parsec_task.status = PARSEC_TASK_STATUS_HOOK;
         parsec_task.taskpool = taskpool;
         parsec_task.priority = priority;
-        parsec_task.chore_id = 0;
+        parsec_task.chore_mask = 1<<0;
       }
 
     public:
@@ -1467,7 +1472,8 @@ namespace ttg_parsec {
 
       if (nullptr != task_ring) {
         auto &world_impl = world.impl();
-        __parsec_schedule(world_impl.execution_stream(), task_ring, 0);
+        parsec_task_t *vp_task_ring[1] = { task_ring };
+        __parsec_schedule_vp(world_impl.execution_stream(), vp_task_ring, 0);
       }
 
       /* restore the previous task */
@@ -1907,7 +1913,8 @@ namespace ttg_parsec {
         }
         if (task->remove_from_hash) parsec_hash_table_remove(&tasks_table, hk);
         if (nullptr == task_ring) {
-          __parsec_schedule(es, &task->parsec_task, 0);
+          parsec_task_t *vp_task_rings[1] = { &task->parsec_task };
+          __parsec_schedule_vp(es, vp_task_rings, 0);
         } else if (*task_ring == nullptr) {
           /* the first task is set directly */
           *task_ring = &task->parsec_task;
@@ -2110,7 +2117,8 @@ namespace ttg_parsec {
       }
       /* submit all ready tasks at once */
       if (nullptr != task_ring) {
-        __parsec_schedule(world.impl().execution_stream(), task_ring, 0);
+        parsec_task_t *vp_task_ring[1] = { task_ring };
+        __parsec_schedule_vp(world.impl().execution_stream(), vp_task_ring, 0);
       }
 #if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
       if(world.impl().profiling()) {
