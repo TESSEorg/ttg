@@ -708,10 +708,6 @@ namespace ttg_parsec {
       }
     }
 
-    static parsec_key_fn_t parsec_tasks_hash_fcts = {.key_equal = parsec_hash_table_generic_64bits_key_equal,
-                                                     .key_print = parsec_hash_table_generic_64bits_key_print,
-                                                     .key_hash = parsec_hash_table_generic_64bits_key_hash};
-
     template <typename KeyT, typename ActivationCallbackT>
     class rma_delayed_activate {
       std::vector<KeyT> _keylist;
@@ -1916,11 +1912,11 @@ namespace ttg_parsec {
       char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
       int32_t priority = 0;
       if constexpr (!keyT_is_Void) {
-        //priority = priomap(key);
+        priority = priomap(key);
         /* placement-new the task */
         newtask = new (taskobj) task_t(key, mempool, &this->self, world_impl.taskpool(), this, priority);
       } else {
-        //priority = priomap();
+        priority = priomap();
         /* placement-new the task */
         newtask = new (taskobj) task_t(mempool, &this->self, world_impl.taskpool(), this, priority);
       }
