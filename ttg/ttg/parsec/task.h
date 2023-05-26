@@ -82,11 +82,36 @@ namespace ttg_parsec {
       ttg_data_copy_t **copies;    //< pointer to the fixed copies array of the derived task
       parsec_hash_table_item_t tt_ht_item = {};
 
-      typedef struct {
+      struct stream_info_t {
         std::size_t goal;
         std::size_t size;
-      } size_goal_t;
+        parsec_lifo_t reduce_copies;
+        std::atomic<std::size_t> reduce_count;
+      };
 
+    protected:
+      template<std::size_t i = 0, typename TT>
+      void init_stream_info_impl(TT *tt, std::array<stream_info_t, TT::numins>& streams) {
+        if constexpr (TT::numins > i) {
+          if (std::get<i>(tt->input_reducers)) {
+            streams[i].goal = tt->static_stream_goal[i];
+            streams[i].size = 0;
+            PARSEC_OBJ_CONSTRUCT(&streams[i].reduce_copies, parsec_lifo_t);
+            streams[i].reduce_count.store(0, std::memory_order_relaxed);
+          }
+          /* recursion */
+          if constexpr((i + 1) < TT::numins) {
+            init_stream_info_impl<i+1>(tt, streams);
+          }
+        }
+      }
+
+      template<typename TT>
+      void init_stream_info(TT *tt, std::array<stream_info_t, TT::numins>& streams) {
+        init_stream_info_impl<0>(tt, streams);
+      }
+
+    public:
       typedef void (release_task_fn)(parsec_ttg_task_base_t*);
       /* Poor-mans virtual function
        * We cannot use virtual inheritance or private visibility because we
@@ -188,6 +213,8 @@ namespace ttg_parsec {
         uint64_t hv = ttg::hash<std::decay_t<decltype(key)>>{}(key);
         *(uintptr_t*)&(parsec_task.locals[0]) = hv;
         *(uintptr_t*)&(parsec_task.locals[2]) = reinterpret_cast<uintptr_t>(&this->key);
+
+        init_stream_info(tt, streams);
       }
 
       static void release_task(parsec_ttg_task_base_t* task_base) {
@@ -232,6 +259,8 @@ namespace ttg_parsec {
                                    &release_task, tt_ptr->m_defer_writer)
           , tt(tt_ptr) {
         tt_ht_item.key = pkey();
+
+        init_stream_info(tt, streams);
       }
 
       static void release_task(parsec_ttg_task_base_t* task_base) {
