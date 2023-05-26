@@ -30,18 +30,30 @@ namespace ttg_parsec {
       }
     };
 
+    /* special type: stores a pointer to the ttg_data_copy_t. This is necessary
+     * because ttg_data_copy_t has virtual functions so we cannot cast from parsec_data_copy_t
+     * to ttg_data_copy_t (offsetof is not supported for virtual classes).
+     * The self pointer is a back-pointer to the ttg_data_copy_t. */
+    struct ttg_data_copy_self_t : public parsec_data_copy_t {
+      ttg_data_copy_t *self;
+      ttg_data_copy_self_t(ttg_data_copy_t* dc)
+      : self(dc)
+      { }
+    };
+
     /* Non-owning copy-tracking wrapper, accounting for N readers or 1 writer.
      * Also counts external references, which are not treated as
      * readers or writers but merely prevent the object from being
      * destroyed once no readers/writers exist.
      */
-    struct ttg_data_copy_t {
+    struct ttg_data_copy_t : public ttg_data_copy_self_t {
 
       /* special value assigned to parsec_data_copy_t::readers to mark the copy as
       * mutable, i.e., a task will modify it */
       static constexpr int mutable_tag = std::numeric_limits<int>::min();
 
       ttg_data_copy_t()
+      : ttg_data_copy_self_t(this)
       { }
 
       ttg_data_copy_t(const ttg_data_copy_t& c)
@@ -52,7 +64,8 @@ namespace ttg_parsec {
       }
 
       ttg_data_copy_t(ttg_data_copy_t&& c)
-      : m_next_task(c.m_next_task)
+      : ttg_data_copy_self_t(this)
+      , m_next_task(c.m_next_task)
       , m_readers(c.m_readers)
       , m_refs(c.m_refs.load(std::memory_order_relaxed))
       , m_dev_data(std::move(c.m_dev_data))
