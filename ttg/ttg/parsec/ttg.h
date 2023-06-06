@@ -2958,7 +2958,7 @@ namespace ttg_parsec {
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
 
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *t) {
-      auto *task = (detail::parsec_ttg_task_base_t *)t;
+      task_t *task = (task_t *)t;
       for (int i = 0; i < task->data_count; i++) {
         detail::ttg_data_copy_t *copy = static_cast<detail::ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
         if (nullptr == copy) continue;
