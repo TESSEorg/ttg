@@ -6,6 +6,7 @@ set(ut_src
         #ranges.cc
         #tt.cc
         unit_main.cpp
+		streams.cc
     )
 set(ut_libs Catch2::Catch2)
 #if (TARGET std::coroutine)
@@ -17,7 +18,6 @@ set(ut_libs Catch2::Catch2)
     list(APPEND ut_libs std::coroutine)
 #endif()
 add_ttg_executable(core-unittests-ttg "${ut_src}" LINK_LIBRARIES "${ut_libs}" COMPILE_DEFINITIONS "-DCATCH_CONFIG_NO_POSIX_SIGNALS=1" )
-
 
 # serialization test: probes serialization via all supported serialization methods (MADNESS, Boost::serialization, cereal) that are available
 add_executable(serialization "serialization.cc;unit_main.cpp")
