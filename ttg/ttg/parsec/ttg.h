@@ -1391,7 +1391,9 @@ namespace ttg_parsec {
       target_copy = static_cast<detail::ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
       assert(val_is_void || nullptr != target_copy);
       /* once we hit 0 we have to stop since another thread might enqueue a new reduction task */
-      std::size_t c;
+      std::size_t c = 0;
+      std::size_t size = 0;
+      assert(task->streams[i].reduce_count > 0);
       do {
         if constexpr(!val_is_void) {
           /* the copies to reduce out of */
@@ -1399,7 +1401,8 @@ namespace ttg_parsec {
           parsec_list_item_t *item;
           item = parsec_lifo_pop(&task->streams[i].reduce_copies);
           if (nullptr == item) {
-            break; // maybe someone is changing the goal right now
+            // maybe someone is changing the goal right now
+            break;
           }
           source_copy = ((detail::ttg_data_copy_self_t *)(item))->self;
           reducer(*reinterpret_cast<std::decay_t<value_t> *>(target_copy->device_private),
@@ -1409,13 +1412,16 @@ namespace ttg_parsec {
           reducer(); // invoke control reducer
         }
         // there is only one task working on this stream, so no need to be atomic here
-        task->streams[i].size++;
-      } while ((c = task->streams[i].reduce_count.fetch_sub(1, std::memory_order_acq_rel)) > 1);
+        size = ++task->streams[i].size;
+        //std::cout << "static_reducer_op key " << task->key << " size " << size << " of " << task->streams[i].goal << std::endl;
+      } while ((c = (task->streams[i].reduce_count.fetch_sub(1, std::memory_order_acq_rel)-1)) > 0);
+      //} while ((c = (--task->streams[i].reduce_count)) > 0);
 
       /* finalize_argstream sets goal to 1, so size may be larger than goal */
-      bool complete = (task->streams[i].size >= task->streams[i].goal);
+      bool complete = (size >= task->streams[i].goal);
 
-      if (complete && c == 1) {
+
+      if (complete && c == 0) {
         /* task is still in the hash table, have release_task remove it */
         task->remove_from_hash = true;
         task->release_task(task);
@@ -1878,7 +1884,10 @@ namespace ttg_parsec {
           parsec_hash_table_nolock_remove(&tasks_table, hk);
           remove_from_hash = false;
         }
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        /* if we have a reducer, we need to hold on to the lock for just a little longer */
+        if (!reducer) {
+          parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        }
       } else {
         task = create_new_task(key);
         world_impl.increment_created();
@@ -1913,14 +1922,13 @@ namespace ttg_parsec {
       }
 
       if (reducer) {  // is this a streaming input? reduce the received value
-        // N.B. Right now reductions are done eagerly, without spawning tasks
-        //      this means we must lock
-        //parsec_hash_table_lock_bucket(&tasks_table, hk);
-
         auto submit_reducer_task = [&](auto *task){
           /* check if we need to create a task */
           std::size_t c = task->streams[i].reduce_count.fetch_add(1, std::memory_order_release);
+          //std::size_t c = task->streams[i].reduce_count++;
           if (0 == c) {
+            //std::cout << "submit reducer task for task " << task->key
+            //          << " size " << task->streams[i].size << " of " << task->streams[i].goal << std::endl;
             /* we are responsible for creating the reduction task */
             reducer_task_t *reduce_task;
             reduce_task = create_new_reducer_task<i>(task);
@@ -1943,13 +1951,17 @@ namespace ttg_parsec {
             if (task->streams[i].size == task->streams[i].goal) {
               release = true;
             }
+            /* now we can unlock the bucket */
+            parsec_hash_table_unlock_bucket(&tasks_table, hk);
           } else {
+            /* unlock the bucket, the lock is not needed anymore */
+            parsec_hash_table_unlock_bucket(&tasks_table, hk);
             if (nullptr != parsec_ttg_caller) {
               copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
             }
             if (nullptr != copy) {
               /* retain the data copy */
-              copy = detail::register_data_copy<valueT>(copy, task, input_is_const);
+              copy = detail::register_data_copy<valueT>(copy, task, true);
             } else {
               /* create a new copy */
               copy = detail::create_new_datacopy(std::forward<Value>(value));
@@ -1957,9 +1969,10 @@ namespace ttg_parsec {
             /* enqueue the data copy to be reduced */
             parsec_lifo_push(&task->streams[i].reduce_copies, &copy->super);
             submit_reducer_task(task);
-            //reducer(*reinterpret_cast<std::decay_t<valueT> *>(copy->device_private), value);
           }
         } else {
+          /* unlock the bucket, the lock is not needed anymore */
+          parsec_hash_table_unlock_bucket(&tasks_table, hk);
           /* submit reducer for void values to handle side effects */
           submit_reducer_task(task);
         }
