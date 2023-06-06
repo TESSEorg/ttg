@@ -2706,7 +2706,7 @@ namespace ttg_parsec {
       this->trace(world.rank(), ":", get_name(), ": setting global stream size for terminal ", i);
 
       // Check if stream is already bounded
-      if (static_stream_goal[i] > std::numeric_limits<std::size_t>::max()) {
+      if (static_stream_goal[i] < std::numeric_limits<std::size_t>::max()) {
         ttg::print_error(world.rank(), ":", get_name(), " : error stream is already bounded : ", i);
         throw std::runtime_error("TT::set_static_argstream_size called for a bounded stream");
       }
