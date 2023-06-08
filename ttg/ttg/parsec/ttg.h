@@ -93,8 +93,6 @@ int parsec_add_fetch_runtime_task(parsec_taskpool_t *tp, int tasks);
 }
 
 namespace ttg_parsec {
-  inline thread_local parsec_execution_stream_t *parsec_ttg_es;
-
   typedef void (*static_set_arg_fct_type)(void *, size_t, ttg::TTBase *);
   typedef std::pair<static_set_arg_fct_type, ttg::TTBase *> static_set_arg_fct_call_t;
   inline std::map<uint64_t, static_set_arg_fct_call_t> static_id_to_op_map;
@@ -125,12 +123,6 @@ namespace ttg_parsec {
       parsec_taskpool_t *tp = NULL;
       msg_header_t *msg = static_cast<msg_header_t *>(data);
       uint64_t op_id = msg->op_id;
-      bool reset_es = false;
-      // this callback is likely invoked by the comm thread so set the execution stream
-      if (nullptr == parsec_ttg_es) {
-        parsec_ttg_es = &parsec_comm_es;
-        reset_es = true;
-      }
       tp = parsec_taskpool_lookup(msg->taskpool_id);
       assert(NULL != tp);
       static_map_mutex.lock();
@@ -141,9 +133,6 @@ namespace ttg_parsec {
         static_set_arg_fct = op_pair.first;
         static_set_arg_fct(data, size, op_pair.second);
         tp->tdm.module->incoming_message_end(tp, NULL);
-        if (reset_es) {
-          parsec_ttg_es = nullptr;
-        }
         return 0;
       } catch (const std::out_of_range &e) {
         void *data_cpy = malloc(size);
@@ -153,9 +142,6 @@ namespace ttg_parsec {
                    ", ", op_id, ", ", data_cpy, ", ", size, ")");
         delayed_unpack_actions.insert(std::make_pair(op_id, std::make_tuple(src_rank, data_cpy, size)));
         static_map_mutex.unlock();
-        if (reset_es) {
-          parsec_ttg_es = nullptr;
-        }
         return 1;
       }
     }
@@ -227,15 +213,18 @@ namespace ttg_parsec {
       }
 #endif
 
-      es = ctx->virtual_processes[0]->execution_streams[0];
-
       if( NULL != parsec_ce.tag_register) {
         parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, this, PARSEC_TTG_MAX_AM_SIZE);
         parsec_ce.tag_register(WorldImpl::parsec_ttg_rma_tag(), &detail::get_remote_complete_cb, this, 128);
       }
-      
+
       create_tpool();
     }
+
+
+    auto *context() { return ctx; }
+    auto *execution_stream() { return parsec_my_execution_stream(); }
+    auto *taskpool() { return tpool; }
 
     void create_tpool() {
       assert(nullptr == tpool);
@@ -258,7 +247,7 @@ namespace ttg_parsec {
       // to 0, execute will set it to 1 and mark the tpool as ready,
       // and the fence() will decrease it back to 0.
       tpool->tdm.module->taskpool_set_runtime_actions(tpool, 0);
-      parsec_taskpool_enable(tpool, NULL, NULL, es, size() > 1);
+      parsec_taskpool_enable(tpool, NULL, NULL, execution_stream(), size() > 1);
 
 #if defined(PARSEC_PROF_TRACE)
       tpool->profiling_array = profiling_array;
@@ -350,10 +339,6 @@ namespace ttg_parsec {
     ttg::Edge<> &ctl_edge() { return m_ctl_edge; }
 
     const ttg::Edge<> &ctl_edge() const { return m_ctl_edge; }
-
-    auto *context() { return ctx; }
-    auto *execution_stream() { return parsec_ttg_es == nullptr ? es : parsec_ttg_es; }
-    auto *taskpool() { return tpool; }
 
     void increment_created() { taskpool()->tdm.module->taskpool_addto_nb_tasks(taskpool(), 1); }
 
@@ -476,7 +461,6 @@ namespace ttg_parsec {
    private:
     parsec_context_t *ctx = nullptr;
     bool own_ctx = false;  //< whether I own the context
-    parsec_execution_stream_t *es = nullptr;
     parsec_taskpool_t *tpool = nullptr;
     bool parsec_taskpool_started = false;
 #if defined(PARSEC_PROF_TRACE)
@@ -779,20 +763,14 @@ namespace ttg_parsec {
     }
 
     inline parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
-      parsec_execution_stream_t *safe_es = parsec_ttg_es;
-      parsec_ttg_es = es;
       parsec_ttg_task_base_t *me = (parsec_ttg_task_base_t *)parsec_task;
       me->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::Host)](parsec_task);
-      parsec_ttg_es = safe_es;
       return PARSEC_HOOK_RETURN_DONE;
     }
 
     inline parsec_hook_return_t hook_cuda(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
-      parsec_execution_stream_t *safe_es = parsec_ttg_es;
-      parsec_ttg_es = es;
       parsec_ttg_task_base_t *me = (parsec_ttg_task_base_t *)parsec_task;
       me->function_template_class_ptr[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)](parsec_task);
-      parsec_ttg_es = safe_es;
       return PARSEC_HOOK_RETURN_DONE;
     }
 
@@ -825,57 +803,30 @@ namespace ttg_parsec {
     static int get_complete_cb(parsec_comm_engine_t *comm_engine, parsec_ce_mem_reg_handle_t lreg, ptrdiff_t ldispl,
                                parsec_ce_mem_reg_handle_t rreg, ptrdiff_t rdispl, size_t size, int remote,
                                void *cb_data) {
-      bool reset_es = false;
-      // this callback is likely invoked by the comm thread so set the execution stream
-      if (nullptr == parsec_ttg_es) {
-        parsec_ttg_es = &parsec_comm_es;
-        reset_es = true;
-      }
       parsec_ce.mem_unregister(&lreg);
       ActivationT *activation = static_cast<ActivationT *>(cb_data);
       if (activation->complete_transfer()) {
         delete activation;
-      }
-      if (reset_es) {
-        parsec_ttg_es = nullptr;
       }
       return PARSEC_SUCCESS;
     }
 
     static int get_remote_complete_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg, size_t msg_size,
                                       int src, void *cb_data) {
-      bool reset_es = false;
-      // this callback is likely invoked by the comm thread so set the execution stream
-      if (nullptr == parsec_ttg_es) {
-        parsec_ttg_es = &parsec_comm_es;
-        reset_es = true;
-      }
       std::intptr_t *fn_ptr = static_cast<std::intptr_t *>(msg);
       std::function<void(void)> *fn = reinterpret_cast<std::function<void(void)> *>(*fn_ptr);
       (*fn)();
       delete fn;
-      if (reset_es) {
-        parsec_ttg_es = nullptr;
-      }
       return PARSEC_SUCCESS;
     }
 
     template <typename FuncT>
     static int invoke_get_remote_complete_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg, size_t msg_size,
                                              int src, void *cb_data) {
-      bool reset_es = false;
-      // this callback is likely invoked by the comm thread so set the execution stream
-      if (nullptr == parsec_ttg_es) {
-        parsec_ttg_es = &parsec_comm_es;
-        reset_es = true;
-      }
       std::intptr_t *iptr = static_cast<std::intptr_t *>(msg);
       FuncT *fn_ptr = reinterpret_cast<FuncT *>(*iptr);
       (*fn_ptr)();
       delete fn_ptr;
-      if (reset_es) {
-        parsec_ttg_es = nullptr;
-      }
       return PARSEC_SUCCESS;
     }
 
@@ -2810,8 +2761,6 @@ namespace ttg_parsec {
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
 
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *t) {
-      parsec_execution_stream_t *safe_es = parsec_ttg_es;
-      parsec_ttg_es = es;
       auto *task = (detail::parsec_ttg_task_base_t *)t;
       for (int i = 0; i < task->data_count; i++) {
         detail::ttg_data_copy_t *copy = static_cast<detail::ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
@@ -2819,7 +2768,6 @@ namespace ttg_parsec {
         detail::release_data_copy(copy);
         task->parsec_task.data[i].data_in = nullptr;
       }
-      parsec_ttg_es = safe_es;
       return PARSEC_HOOK_RETURN_DONE;
     }
 
