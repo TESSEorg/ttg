@@ -62,7 +62,7 @@ namespace ttg {
               std::cout << "ttg::Traverse: got a null predecessor!\n";
               status = false;
             } else {
-              status = status && traverse(predecessor->get_tt());
+              status &= traverse(predecessor->get_tt());
             }
           }
         }
@@ -91,7 +91,7 @@ namespace ttg {
                 std::cout << "ttg::Traverse: got a null successor!\n";
                 status = false;
               } else {
-                status = status && traverse(successor->get_tt());
+                status &= traverse(successor->get_tt());
               }
             }
           }
@@ -172,8 +172,7 @@ namespace ttg {
         operator()(
         TTBasePtr&& op, TTBasePtrs && ... ops) {
       reset();
-      bool result = traverse(op);
-      result &= (traverse(std::forward<TTBasePtrs>(ops)) && ... );
+      bool result = traverse_all(std::forward<TTBasePtr>(op), std::forward<TTBasePtrs>(ops)...);
       reset();
       return result;
     }
@@ -182,6 +181,15 @@ namespace ttg {
     TTVisitor tt_visitor_;
     InVisitor in_visitor_;
     OutVisitor out_visitor_;
+
+    template <typename TTBasePtr, typename ... TTBasePtrs>
+    bool traverse_all(TTBasePtr&& op, TTBasePtrs && ... ops) {
+      bool result = traverse(op);
+      if constexpr(sizeof...(ops) > 0) {
+        result &= traverse_all(std::forward<TTBasePtrs>(ops)...);
+      }
+      return result;
+    }
 
     void ttfunc(TTBase *tt) { tt_visitor_(tt); }
 
