@@ -187,6 +187,7 @@ namespace ttg_madness {
 
    public:
     using ttT = TT;
+    using key_type = keyT;
     /// preconditions
     static_assert((ttg::meta::none_has_reference_v<input_valueTs>), "input_valueTs cannot contain reference types");
 
@@ -1144,11 +1145,16 @@ namespace ttg_madness {
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>, void> invoke(
         const Key &key, const input_values_tuple_type &args) {
       TTG_OP_ASSERT_EXECUTABLE();
-      /* trigger non-void inputs */
-      set_args(ttg::meta::nonvoid_index_seq<actual_input_tuple_type>{}, key, args);
-      /* trigger void inputs */
-      using void_index_seq = ttg::meta::void_index_seq<actual_input_tuple_type>;
-      set_args(void_index_seq{}, key, ttg::detail::make_void_tuple<void_index_seq::size()>());
+      if constexpr(!std::is_same_v<Key, key_type>) {
+        key_type k = key; /* cast that type into the key type we know */
+        invoke(k, args);
+      } else {
+        /* trigger non-void inputs */
+        set_args(ttg::meta::nonvoid_index_seq<actual_input_tuple_type>{}, key, args);
+        /* trigger void inputs */
+        using void_index_seq = ttg::meta::void_index_seq<actual_input_tuple_type>;
+        set_args(void_index_seq{}, key, ttg::detail::make_void_tuple<void_index_seq::size()>());
+      }
     }
 
     /// Manual injection of a key-free task with all input arguments specified as a tuple
@@ -1168,9 +1174,14 @@ namespace ttg_madness {
     std::enable_if_t<!ttg::meta::is_void_v<Key> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>, void> invoke(
         const Key &key) {
       TTG_OP_ASSERT_EXECUTABLE();
-      /* trigger void inputs */
-      using void_index_seq = ttg::meta::void_index_seq<actual_input_tuple_type>;
-      set_args(void_index_seq{}, key, ttg::detail::make_void_tuple<void_index_seq::size()>());
+      if constexpr(!std::is_same_v<Key, key_type>) {
+        key_type k = key; /* cast that type into the key type we know */
+        invoke(k);
+      } else {
+        /* trigger void inputs */
+        using void_index_seq = ttg::meta::void_index_seq<actual_input_tuple_type>;
+        set_args(void_index_seq{}, key, ttg::detail::make_void_tuple<void_index_seq::size()>());
+      }
     }
 
     /// Manual injection of a task that has no key or arguments
