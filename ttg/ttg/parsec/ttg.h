@@ -2172,8 +2172,7 @@ namespace ttg_parsec {
             using decay_valueT = std::decay_t<valueT>;
             /* For now, we always create a copy because we cannot rely on the task_release
              * mechanism (it would release the task, not the reduction value). */
-            copy = detail::create_new_datacopy(std::forward<Value>(value));
-            task->parsec_task.data[i].data_in = copy;
+            task->parsec_task.data[i].data_in = detail::create_new_datacopy(std::forward<Value>(value));
             task->streams[i].size++;
             if (task->streams[i].size == task->streams[i].goal) {
               release = true;
@@ -2181,6 +2180,7 @@ namespace ttg_parsec {
             /* now we can unlock the bucket */
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
           } else {
+            detail::ttg_data_copy_t *copy = nullptr;
             /* unlock the bucket, the lock is not needed anymore */
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
             if (nullptr != parsec_ttg_caller) {
@@ -2713,7 +2713,7 @@ namespace ttg_parsec {
     /// \param size positive integer that specifies the default stream size
     template <std::size_t i>
     void set_static_argstream_size(std::size_t size) {
-      assert(std::get<i>(input_reducers) && "TT::set_argstream_size called on nonstreaming input terminal");
+      assert(std::get<i>(input_reducers) && "TT::set_static_argstream_size called on nonstreaming input terminal");
       assert(size > 0 && "TT::set_static_argstream_size(key,size) called with size=0");
 
       this->trace(world.rank(), ":", get_name(), ": setting global stream size for terminal ", i);
