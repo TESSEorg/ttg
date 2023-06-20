@@ -45,10 +45,10 @@ struct buffer {
 private:
   using delete_fn_t = std::add_pointer_t<void(element_type*)>;
 
-  using parsec_data_ptr = std::unique_ptr<parsec_data_t, decltype(&parsec_data_destroy)>;
   using host_data_ptr   = std::unique_ptr<element_type[], delete_fn_t>;
-  parsec_data_ptr m_data;
+  using parsec_data_ptr = std::unique_ptr<parsec_data_t, decltype(&parsec_data_destroy)>;
   host_data_ptr m_host_data;
+  parsec_data_ptr m_data;
   std::size_t m_count = 0;
   detail::ttg_data_copy_t *m_ttg_copy = nullptr;
 
@@ -61,7 +61,8 @@ private:
   }
 
   static void delete_parsec_data(parsec_data_t *data) {
-    std::cout << "delete parsec_data " << data << std::endl;
+    //std::cout << "delete parsec_data " << data << std::endl;
+    //assert(0);
     parsec_data_destroy(data);
   }
 
@@ -69,19 +70,15 @@ private:
     // nothing to be done, only used for nullptr
   }
 
-  void create_host_copy() {
-    /* create a new copy for the host object */
-    parsec_data_copy_t* copy;
-    copy = parsec_data_copy_new(m_data.get(), 0, parsec_datatype_int8_t, PARSEC_DATA_FLAG_PARSEC_MANAGED);
-    copy->device_private = m_host_data.get();
-    copy->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-    copy->version = 1; // this version is valid
-    m_data->nb_elts = sizeof(element_type)*m_count;
-    m_data->owner_device = 0;
-    /* register the new data with the host copy */
-    if (nullptr != m_ttg_copy) {
-      m_ttg_copy->add_device_data(m_data.get());
-    }
+  static parsec_data_t* create_parsec_data(void *ptr, size_t count) {
+    assert(ptr != nullptr);
+    parsec_data_t *data = parsec_data_create_with_type(nullptr, 0, ptr,
+                                                       sizeof(element_type)*count,
+                                                       parsec_datatype_int8_t);
+    data->device_copies[0]->flags |= PARSEC_DATA_FLAG_PARSEC_MANAGED;
+    data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+    data->device_copies[0]->version = 1;
+    return data;
   }
 
   void reset() {
@@ -105,25 +102,21 @@ public:
   { }
 
   buffer(std::size_t count)
-  : m_data(parsec_data_new(), &delete_parsec_data)
-  , m_host_data(new element_type[count](), &delete_owned)
+  : m_host_data(new element_type[count](), &delete_owned)
+  , m_data(create_parsec_data(m_host_data.get(), count), &delete_parsec_data)
   , m_count(count)
   , m_ttg_copy(detail::ttg_data_copy_container())
-  {
-    create_host_copy();
-  }
+  { }
 
   /* Constructing a buffer using application-managed memory.
    * The memory pointed to by ptr must be accessible during
    * the life-time of the buffer. */
   buffer(element_type* ptr, std::size_t count = 1)
-  : m_data(parsec_data_new(), &parsec_data_destroy)
-  , m_host_data(ptr, &delete_non_owned)
+  : m_host_data(ptr, &delete_non_owned)
+  , m_data(create_parsec_data(ptr, count), &delete_parsec_data)
   , m_count(count)
   , m_ttg_copy(detail::ttg_data_copy_container())
-  {
-    create_host_copy();
-  }
+  { }
 
   ~buffer() {
     unpin(); // make sure the copies are not pinned
@@ -135,15 +128,25 @@ public:
 
   /* allow moving device buffers */
   buffer(buffer&& db)
-  : m_data(std::move(db.m_data))
-  , m_host_data(std::move(db.m_host_data))
+  : m_host_data(std::move(db.m_host_data))
+  , m_data(std::move(db.m_data))
   , m_count(db.m_count)
-  , m_ttg_copy(db.m_ttg_copy)
+  , m_ttg_copy(detail::ttg_data_copy_container())
   {
     db.m_count = 0;
 
-    if (nullptr == m_ttg_copy && nullptr != detail::ttg_data_copy_container()) {
-      m_ttg_copy = detail::ttg_data_copy_container();
+    //std::cout << "buffer::move-ctor from " << &db << " ttg-copy " << db.m_ttg_copy
+    //          << " to " << this << " ttg-copy " << m_ttg_copy
+    //          << " parsec-data " << m_data.get()
+    //          << std::endl;
+
+    if (nullptr != db.m_ttg_copy) {
+      /* remove from old ttg copy */
+      db.m_ttg_copy->remove_device_data(m_data.get());
+      db.m_ttg_copy = nullptr;
+    }
+
+    if (nullptr != m_ttg_copy) {
       /* register with the new ttg_copy */
       m_ttg_copy->add_device_data(m_data.get());
     }
@@ -153,24 +156,6 @@ public:
    * TODO: should we allow this? What data to use?
    */
   buffer(const buffer& db) = delete;
-#if 0
-  /* copy the host data but leave the devices untouched */
-  buffer(const buffer& db)
-  : m_data(db.m_count ? parsec_data_new() : nullptr,
-           db.m_count ? &parsec_data_destroy : &delete_null_parsec_data)
-  , m_host_data(db.m_count ? new element_type[db.m_count] : nullptr,
-                db.m_count ? &delete_owned : delete_non_owned)
-  , m_count(db.m_count)
-  , m_ttg_copy(detail::ttg_data_copy_container())
-  {
-    /* copy host data */
-    std::copy(db.m_host_data.get(),
-              db.m_host_data.get() + m_count,
-              m_host_data.get());
-    /* create the host copy with the allocated memory */
-    create_host_copy();
-  }
-#endif // 0
 
   /* allow moving device buffers */
   buffer& operator=(buffer&& db) {
@@ -178,6 +163,10 @@ public:
     m_host_data = std::move(db.m_host_data);
     m_count = db.m_count;
     db.m_count = 0;
+    //std::cout << "buffer::move-assign from " << &db << " ttg-copy " << db.m_ttg_copy
+    //          << " to " << this << " ttg-copy " << m_ttg_copy
+    //          << " parsec-data " << m_data.get()
+    //          << std::endl;
     /* don't update the ttg_copy, we keep the connection */
   }
 
@@ -185,26 +174,6 @@ public:
    * TODO: should we allow this? What data to use?
    */
   buffer& operator=(const buffer& db) = delete;
-
-#if 0
-  /* copy the host buffer content but leave the devices untouched */
-  buffer& operator=(const buffer& db) {
-    if (db.m_count == 0) {
-      m_data = parsec_data_ptr(nullptr, &delete_null_parsec_data);
-      m_host_data = host_data_ptr(nullptr, &delete_non_owned);
-    } else {
-      m_data = parsec_data_ptr(parsec_data_new(), &parsec_data_destroy);
-      m_host_data = host_data_ptr(new element_type[db.m_count], &delete_owned);
-      /* copy host data */
-      std::copy(db.m_host_data.get(),
-                db.m_host_data.get() + db.m_count,
-                m_host_data.get());
-      /* create the host copy with the allocated memory */
-      create_host_copy();
-    }
-    m_count = db.m_count;
-  }
-#endif // 0
 
   /* set the current device, useful when a device
    * buffer was modified outside of a TTG */
@@ -319,10 +288,11 @@ public:
       m_data = parsec_data_ptr(nullptr, &delete_null_parsec_data);
       m_host_data = host_data_ptr(nullptr, &delete_non_owned);
     } else {
-      m_data = parsec_data_ptr(parsec_data_new(), &parsec_data_destroy);
       m_host_data = host_data_ptr(new element_type[count], &delete_owned);
-      /* create the host copy with the allocated memory */
-      create_host_copy();
+      m_data = parsec_data_ptr(create_parsec_data(m_host_data.get(), count), &delete_parsec_data);
+      if (nullptr != m_ttg_copy) {
+        m_ttg_copy->add_device_data(m_data.get());
+      }
     }
     m_count = count;
     /* don't touch the ttg_copy, we still belong to the same container */
@@ -331,17 +301,21 @@ public:
   /* Reset the buffer to use the ptr to count elements */
   void reset(T* ptr, std::size_t count = 1) {
     /* TODO: can we resize if count is smaller than m_count? */
+    if (count == m_count) {
+      return;
+    }
     /* drop the current data and reallocate */
     reset();
     if (nullptr == ptr) {
-      m_data = parsec_data_ptr(nullptr, &delete_null_parsec_data);
       m_host_data = host_data_ptr(nullptr, &delete_non_owned);
+      m_data = parsec_data_ptr(nullptr, &delete_null_parsec_data);
       m_count = 0;
     } else {
-      m_data = parsec_data_ptr(parsec_data_new(), &parsec_data_destroy);
       m_host_data = host_data_ptr(ptr, &delete_non_owned);
-      /* create the host copy with the allocated memory */
-      create_host_copy();
+      m_data = parsec_data_ptr(create_parsec_data(m_host_data.get()), &delete_parsec_data);
+      if (nullptr != m_ttg_copy) {
+        m_ttg_copy->add_device_data(m_data.get());
+      }
       m_count = count;
     }
     /* don't touch the ttg_copy, we still belong to the same container */
@@ -402,6 +376,7 @@ public:
     } else {
       std::size_t s;
       ar & s;
+      //std::cout << "serialize(IN) buffer " << this << " size " << s << std::endl;
       /* initialize internal pointers and then reset */
       reset(s);
       assert(m_ttg_copy != nullptr); // only tracked objects allowed

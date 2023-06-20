@@ -232,6 +232,7 @@ namespace ttg {
     TTG_DEVICE_CORO_INIT,
     TTG_DEVICE_CORO_WAIT_TRANSFER,
     TTG_DEVICE_CORO_WAIT_KERNEL,
+    TTG_DEVICE_CORO_SENDOUT,
     TTG_DEVICE_CORO_COMPLETE
   };
 
@@ -383,20 +384,6 @@ namespace ttg {
     };
   } // namespace detail
 
-
-  namespace detail {
-    /* TODO: is this still needed? */
-    template<typename... Ts>
-    struct await_t {
-      std::tuple<Ts&...> ties;
-    };
-  }
-
-  template<typename... Args>
-  inline auto make_await(Args&&... args) {
-    return detail::await_t{std::tie(std::forward<Args>(args)...)};
-  }
-
   namespace detail {
     template<typename... Ts>
     struct to_device_t {
@@ -405,20 +392,9 @@ namespace ttg {
   } // namespace detail
 
   template<typename... Args>
+  [[nodiscard]]
   inline auto to_device(Args&&... args) {
     return detail::to_device_t{std::tie(std::forward<Args>(args)...)};
-  }
-
-  namespace detail {
-    template<typename... Ts>
-    struct to_host_t {
-      std::tuple<Ts&...> ties;
-    };
-  } // namespace detail
-
-  template<typename... Args>
-  inline auto to_host(Args&&... args) {
-    return detail::to_host_t{std::tie(std::forward<Args>(args)...)};
   }
 
   namespace detail {
@@ -444,6 +420,7 @@ namespace ttg {
   /* Wait for kernel to complete and provided ttg::buffer and ttg::devicescratch
    * to be transferred back to host */
   template<typename... Buffers>
+  [[nodiscard]]
   inline auto wait_kernel(Buffers&&... args) {
     static_assert(((ttg::detail::is_buffer_v<std::decay_t<Buffers>>
                     ||ttg::detail::is_devicescratch_v<std::decay_t<Buffers>>)&&...),
@@ -701,6 +678,7 @@ namespace ttg {
     /* overload with explicit terminals and keylist passed by const reference */
     template <size_t I, size_t... Is, typename rangeT, typename valueT, typename... out_keysT, typename... out_valuesT,
               ttg::Runtime Runtime = ttg::ttg_runtime>
+    [[nodiscard]]
     inline detail::send_t broadcast(rangeT &&keylist,
                                     valueT &&value,
                                     const std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
@@ -722,6 +700,7 @@ namespace ttg {
     }
 
     template<typename... Args, ttg::Runtime Runtime = ttg::ttg_runtime>
+    [[nodiscard]]
     std::vector<device::detail::send_t> forward(Args&&... args) {
       // TODO: check the cost of this!
       return std::vector{std::forward<Args>(args)...};
@@ -859,14 +838,6 @@ namespace ttg {
     }
 
     template<typename... Ts>
-    TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(detail::await_t<Ts...>&& a) {
-      bool need_transfer = !(TTG_IMPL_NS::register_device_memory(a.ties));
-      /* TODO: are we allowed to not suspend here and launch the kernel directly? */
-      m_state = TTG_DEVICE_CORO_WAIT_TRANSFER;
-      return {};
-    }
-
-    template<typename... Ts>
     TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(detail::to_device_t<Ts...>&& a) {
       bool need_transfer = !(TTG_IMPL_NS::register_device_memory(a.ties));
       /* TODO: are we allowed to not suspend here and launch the kernel directly? */
@@ -886,14 +857,14 @@ namespace ttg {
 
     TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(std::vector<device::detail::send_t>&& v) {
       m_sends = std::forward<std::vector<device::detail::send_t>>(v);
-      m_state = TTG_DEVICE_CORO_COMPLETE;
+      m_state = TTG_DEVICE_CORO_SENDOUT;
       return {};
     }
 
 #if 0
     void return_value(std::vector<device::detail::send_t>&& sends) {
       m_sends = std::forward<std::vector<device::detail::send_t>>(sends);
-      m_state = TTG_DEVICE_CORO_COMPLETE;
+      m_state = TTG_DEVICE_CORO_SENDOUT;
     }
 #endif // 0
 

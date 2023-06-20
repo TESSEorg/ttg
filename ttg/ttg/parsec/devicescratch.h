@@ -8,7 +8,9 @@
 #include <parsec.h>
 #include <parsec/data_internal.h>
 #include <parsec/mca/device/device.h>
+#include <parsec/mca/device/device_gpu.h>
 #include <ttg/devicescope.h>
+#include "ttg/parsec/task.h"
 
 namespace ttg_parsec {
 
@@ -36,25 +38,29 @@ struct devicescratch {
 private:
 
   parsec_data_t* m_data = nullptr;
-  parsec_data_copy_t m_data_copy;
   ttg::scope m_scope;
 
-  void create_host_copy(element_type *ptr, std::size_t count) {
-    /* TODO: is the construction call necessary? */
-    /* TODO: handle the scope */
-    PARSEC_OBJ_CONSTRUCT(&m_data_copy, parsec_data_copy_t);
-    m_data_copy.device_index    = 0;
-    //m_data_copy.original        = &m_data;
-    //m_data_copy.older           = NULL;
-    m_data_copy.flags           = PARSEC_DATA_FLAG_PARSEC_MANAGED;
-    m_data_copy.dtt             = parsec_datatype_int8_t;
-    m_data_copy.version         = 1;
-    m_data_copy.device_private  = ptr;
-    m_data_copy.coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+  static parsec_data_t* create_parsec_data(void *ptr, size_t count) {
 
-    m_data->nb_elts              = count * sizeof(element_type);
-    m_data->owner_device         = 0;
-    parsec_data_copy_attach(m_data, &m_data_copy, 0);
+    parsec_data_t *data = parsec_data_create_with_type(nullptr, 0, ptr,
+                                                       sizeof(element_type)*count,
+                                                       parsec_datatype_int8_t);
+    data->device_copies[0]->flags |= PARSEC_DATA_FLAG_PARSEC_MANAGED;
+    data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+    return data;
+  }
+
+  void remove_from_flow() {
+    /* remove the scratch from the gpu-task flow */
+    assert(nullptr != detail::parsec_ttg_caller);
+    parsec_task_t *parsec_task = &detail::parsec_ttg_caller->parsec_task;
+    parsec_flow_t *flows = detail::parsec_ttg_caller->dev_ptr->flows;
+    for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
+      if (nullptr != parsec_task->data[i].data_in && parsec_task->data[i].data_in->original == m_data) {
+        flows[i].flow_flags = PARSEC_FLOW_ACCESS_NONE; // disable this flow
+        break;
+      }
+    }
   }
 
   friend parsec_data_t* detail::get_parsec_data<T>(const ttg_parsec::devicescratch<T>&);
@@ -65,9 +71,13 @@ public:
    * The memory pointed to by ptr must be accessible during
    * the life-time of the devicescratch. */
   devicescratch(element_type* ptr, ttg::scope scope = ttg::scope::SyncIn, std::size_t count = 1)
-  : m_data(parsec_data_new())
-  , m_scope(scope) {
-    create_host_copy(ptr, count);
+  : m_data(create_parsec_data(ptr, count))
+  , m_scope(scope)
+  {
+    if (ttg::scope::SyncIn == scope) {
+      /* increment the version to force the first initial transfer */
+      m_data->device_copies[0]->version = 1;
+    }
   }
 
   /* don't allow moving */
@@ -83,8 +93,12 @@ public:
   devicescratch& operator=(const devicescratch& db) = delete;
 
   ~devicescratch() {
-    PARSEC_OBJ_DESTRUCT(&m_data_copy);
-    parsec_data_destroy(m_data);
+    /* remove data from flow */
+    remove_from_flow();
+    if (nullptr != m_data) {
+      parsec_data_destroy(m_data);
+    }
+    //parsec_data_destroy(m_data);
     m_data = nullptr;
   }
 

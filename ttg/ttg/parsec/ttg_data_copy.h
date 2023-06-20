@@ -176,6 +176,28 @@ namespace ttg_parsec {
         return m_refs.load(std::memory_order_relaxed);
       }
 
+      /* increment the version of the current copy */
+      void inc_current_version() {
+        if (m_num_dev_data == 1) {
+          //std::cout << "data-copy " << this << " inc version " << m_single_dev_data << std::endl;
+          assert(m_single_dev_data->device_copies[m_single_dev_data->owner_device] != nullptr);
+          m_single_dev_data->device_copies[m_single_dev_data->owner_device]->version++;
+          //std::cout << "Incrementing version of data " << m_single_dev_data << " copy "
+          //          << m_single_dev_data->device_copies[m_single_dev_data->owner_device]
+          //          << " on device " << (int)m_single_dev_data->owner_device << " to "
+          //          << m_single_dev_data->device_copies[m_single_dev_data->owner_device]->version << std::endl;
+        } else if (m_num_dev_data > 1) {
+          std::for_each(m_dev_data.begin(), m_dev_data.end(),
+                        [](parsec_data_t *data){
+                           assert(data->device_copies[data->owner_device] != nullptr);
+                           data->device_copies[data->owner_device]->version++;
+                           //std::cout << "Incrementing version of copy "
+                           //          << " on device " << (int)data->owner_device << data->device_copies[data->owner_device] << " to "
+                           //          << data->device_copies[data->owner_device]->version << std::endl;
+                        });
+        }
+      }
+
       /* manage device copies owned by this object
        * we only touch the vector if we have more than one copies to track
        * and otherwise use the single-element member.
@@ -183,7 +205,7 @@ namespace ttg_parsec {
       using iterator = parsec_data_t**;
 
       void add_device_data(parsec_data_t* data) {
-        // TODO: properly release again!
+        //std::cout << "data-copy " << this << " add data " << data << std::endl;
         PARSEC_OBJ_RETAIN(data);
         switch (m_num_dev_data) {
           case 0:
@@ -202,7 +224,10 @@ namespace ttg_parsec {
       }
 
       void remove_device_data(parsec_data_t* data) {
+        //std::cout << "data-copy " << this << " remove data " << data << std::endl;
+        assert(m_num_dev_data >= 1);
         if (m_num_dev_data == 1) {
+          assert(m_single_dev_data == data);
           m_single_dev_data = nullptr;
         } else if (m_num_dev_data > 1) {
           auto it = std::find(m_dev_data.begin(), m_dev_data.end(), data);
@@ -211,6 +236,12 @@ namespace ttg_parsec {
           }
         }
         --m_num_dev_data;
+        /* make single-entry if needed */
+        if (m_num_dev_data == 1) {
+          m_single_dev_data = m_dev_data[0];
+          m_dev_data.clear();
+        }
+        PARSEC_OBJ_RELEASE(data);
       }
 
       int num_dev_data() const {
@@ -275,8 +306,8 @@ namespace ttg_parsec {
       std::vector<ttg::iovec> m_iovecs;
 
       std::vector<parsec_data_t*> m_dev_data;   //< used if there are multiple device copies
-                                                  //  that belong to this object
-      parsec_data_t *m_single_dev_data;           //< used if there is a single device copy
+                                                //  that belong to this object
+      parsec_data_t *m_single_dev_data;         //< used if there is a single device copy
       int m_num_dev_data = 0;                   //< number of device copies
     };
 
