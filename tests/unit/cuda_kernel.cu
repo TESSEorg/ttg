@@ -9,7 +9,7 @@ static __global__ void cu_increment_buffer(double* buffer, double* scratch) {
 
   buffer[tx] += 1.0;
   if (tx == 0 && scratch != nullptr) {
-    *scratch = buffer[tx];
+    *scratch += 1.0;
   }
 }
 
