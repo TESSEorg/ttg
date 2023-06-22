@@ -78,8 +78,12 @@ namespace ttg {
   template <typename... TTBasePtrs>
   inline std::enable_if_t<(std::is_convertible_v<decltype(*(std::declval<TTBasePtrs>())), TTBase &> && ...), bool>
   make_graph_executable(TTBasePtrs &&...tts) {
-    return ttg::make_traverse([](auto &&x) { std::forward<decltype(x)>(x)->make_executable(); })(
-        std::forward<TTBasePtrs>(tts)...);
+    auto traverse = ttg::make_traverse([](auto &&x) { std::forward<decltype(x)>(x)->make_executable(); });
+    auto ret = traverse(std::forward<TTBasePtrs>(tts)...);
+    // make sure everyone has traversed the TT
+    auto world = [&](auto&& tt0, auto&&... tts) { return tt0->get_world(); }(std::forward<TTBasePtrs>(tts)...);
+    TTG_IMPL_NS::make_executable_hook(world);
+    return ret;
   }
 
   /// \brief Connect output terminal to successor input terminal

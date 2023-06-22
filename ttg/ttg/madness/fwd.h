@@ -20,6 +20,8 @@ namespace ttg_madness {
 
   class WorldImpl;
 
+  inline void make_executable_hook(ttg::World&);
+
   inline void ttg_initialize(int argc, char **argv, int num_threads = -1);
 
   inline void ttg_finalize();

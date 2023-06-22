@@ -469,7 +469,7 @@ namespace ttg_parsec {
 #endif
   };
 
-  static void unregister_parsec_tags(void *_)
+  inline void unregister_parsec_tags(void *_)
   {
     if(NULL != parsec_ce.tag_unregister) {
       parsec_ce.tag_unregister(WorldImpl::parsec_ttg_tag());
@@ -1033,6 +1033,10 @@ namespace ttg_parsec {
     double result = 0.0;
     MPI_Allreduce(&value, &result, 1, MPI_DOUBLE, MPI_SUM, world.impl().comm());
     value = result;
+  }
+
+  inline void make_executable_hook(ttg::World& world) {
+    MPI_Barrier(world.impl().comm());
   }
 
   /// broadcast

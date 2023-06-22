@@ -22,6 +22,8 @@ namespace ttg_parsec {
 
   class WorldImpl;
 
+  inline void make_executable_hook(ttg::World&);
+
   inline void ttg_initialize(int argc, char **argv, int num_threads = -1, parsec_context_s * = nullptr);
 
   inline void ttg_finalize();

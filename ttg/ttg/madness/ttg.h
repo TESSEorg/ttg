@@ -116,6 +116,8 @@ namespace ttg_madness {
 #endif
   };
 
+  inline void make_executable_hook(ttg::World& world) { }
+
   inline void ttg_initialize(int argc, char **argv, int num_threads) {
     if (num_threads < 1) num_threads = ttg::detail::num_threads();
     ::madness::World &madworld = ::madness::initialize(argc, argv, num_threads, /* quiet = */ true);
