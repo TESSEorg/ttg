@@ -21,6 +21,11 @@ namespace ttg_parsec {
                     "PaRSEC only supports MAX_PARAM_COUNT device input/outputs. "
                     "Increase MAX_PARAM_COUNT and recompile PaRSEC/TTG.");
       using view_type = std::remove_reference_t<std::tuple_element_t<I, std::tuple<Views&...>>>;
+      parsec_ttg_task_base_t *caller = detail::parsec_ttg_caller;
+      assert(nullptr != caller->dev_ptr);
+      parsec_gpu_task_t *gpu_task = caller->dev_ptr->gpu_task;
+      parsec_flow_t *flows = caller->dev_ptr->flows;
+
       auto& view = std::get<I>(views);
       bool is_current = false;
       static_assert(ttg::is_buffer_v<view_type> || ttg_parsec::is_devicescratch_v<view_type>);
@@ -28,27 +33,17 @@ namespace ttg_parsec {
       parsec_data_t* data = detail::get_parsec_data(view);
       /* TODO: check whether the device is current */
 
-      auto flow_flags = PARSEC_FLOW_ACCESS_RW;
+      auto access = PARSEC_FLOW_ACCESS_RW;
       if constexpr (std::is_const_v<view_type>) {
-        flow_flags = PARSEC_FLOW_ACCESS_READ;
+        // keep the flow at RW if it was RW to make sure we pull the data back out eventually
+        if (flows[I].flow_flags != PARSEC_FLOW_ACCESS_RW) {
+          access = PARSEC_FLOW_ACCESS_READ;
+        }
       } else if constexpr (ttg_parsec::is_devicescratch_v<view_type>) {
         if (view.scope() == ttg::scope::Allocate) {
-          flow_flags = PARSEC_FLOW_ACCESS_WRITE;
+          access = PARSEC_FLOW_ACCESS_WRITE;
         }
-#if 0
-        switch(view.scope()) {
-          case ttg::scope::Allocate:
-            flow_flags = PARSEC_FLOW_ACCESS_WRITE;
-            break;
-          case ttg::scope::SyncIn:
-            flow_flags = PARSEC_FLOW_ACCESS_READ;
-            break;
-        }
-#endif // 0
       }
-      assert(nullptr != detail::parsec_ttg_caller->dev_ptr);
-      parsec_gpu_task_t *gpu_task = detail::parsec_ttg_caller->dev_ptr->gpu_task;
-      parsec_flow_t *flows = detail::parsec_ttg_caller->dev_ptr->flows;
 
       //std::cout << "register_device_memory task " << detail::parsec_ttg_caller << " data " << I << " "
       //          << data << " size " << data->nb_elts << std::endl;
@@ -57,7 +52,7 @@ namespace ttg_parsec {
       /* TODO: reuse the flows of the task class? How can we control the sync direction then? */
       flows[I] = parsec_flow_t{.name = nullptr,
                                .sym_type = PARSEC_SYM_INOUT,
-                               .flow_flags = static_cast<uint8_t>(flow_flags),
+                               .flow_flags = static_cast<uint8_t>(access),
                                .flow_index = I,
                                .flow_datatype_mask = ~0 };
 
@@ -67,8 +62,8 @@ namespace ttg_parsec {
       /* set the input data copy, parsec will take care of the transfer
        * and the buffer will look at the parsec_data_t for the current pointer */
       //detail::parsec_ttg_caller->parsec_task.data[I].data_in = data->device_copies[data->owner_device];
-      detail::parsec_ttg_caller->parsec_task.data[I].data_in = data->device_copies[0];
-      detail::parsec_ttg_caller->parsec_task.data[I].source_repo_entry = NULL;
+      caller->parsec_task.data[I].data_in = data->device_copies[0];
+      caller->parsec_task.data[I].source_repo_entry = NULL;
 
       if constexpr (sizeof...(Is) > 0) {
         is_current |= register_device_memory(views, std::index_sequence<Is...>{});
@@ -127,17 +122,6 @@ namespace ttg_parsec {
       static_assert(DeviceAvail, "No device implementation detected!");
 #endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
 
-#if 0
-      /* find the data copy and mark it as pushout */
-      int i = 0;
-      while (detail::parsec_ttg_caller->parsec_task.data[i].data_in != nullptr) {
-        if (detail::parsec_ttg_caller->parsec_task.data[i].data_in == data->device_copies[0]) {
-          gpu_task->pushout |= 1<<i;
-          break;
-        }
-        ++i;
-      }
-#endif // 0
       if constexpr (sizeof...(Is) > 0) {
         // recursion
         mark_device_out(views, std::index_sequence<Is...>{});
@@ -185,30 +169,6 @@ namespace ttg_parsec {
   inline void post_device_out(std::tuple<Buffer&...> &b) {
     detail::post_device_out(b, std::index_sequence_for<Buffer...>{});
   }
-
-  namespace detail {
-
-    template<typename Value>
-    void send_inc_version(Value&& value) {
-      if constexpr(!std::is_const_v<Value>) {
-        assert(nullptr != detail::parsec_ttg_caller);
-        /* increment the version of the copy, needed for potential pushout */
-        parsec_task_t *parsec_task = &detail::parsec_ttg_caller->parsec_task;
-        int i = 0;
-        bool found = false;
-        while (parsec_task->data[i].data_in != nullptr) {
-          parsec_data_copy_t *copy = parsec_task->data[i].data_in;
-          if (copy->device_private == &value) {
-            copy->version++;
-            found = true;
-            break;
-          }
-        }
-        assert(found);
-      }
-    }
-
-  } // namespace detail
 
 } // namespace ttg_parsec
 

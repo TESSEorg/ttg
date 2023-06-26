@@ -51,7 +51,6 @@ namespace ttg_parsec {
 
       ttg_data_copy_t(ttg_data_copy_t&& c)
       : ttg_data_copy_container_setter(this)
-      , m_ptr(c.m_ptr)
       , m_next_task(c.m_next_task)
       , m_readers(c.m_readers)
       , m_refs(c.m_refs.load(std::memory_order_relaxed))
@@ -66,8 +65,6 @@ namespace ttg_parsec {
 
       ttg_data_copy_t& operator=(ttg_data_copy_t&& c)
       {
-        m_ptr = c.m_ptr;
-        c.m_ptr = nullptr;
         m_next_task = c.m_next_task;
         c.m_next_task = nullptr;
         m_readers = c.m_readers;
@@ -148,9 +145,8 @@ namespace ttg_parsec {
         return m_readers;
       }
 
-      void *get_ptr() const {
-        return m_ptr;
-      }
+      /* Returns the pointer to the user data wrapped by the the copy object */
+      virtual void* get_ptr() = 0;
 
       parsec_task_t* get_next_task() const {
         return m_next_task;
@@ -180,8 +176,8 @@ namespace ttg_parsec {
       void inc_current_version() {
         if (m_num_dev_data == 1) {
           //std::cout << "data-copy " << this << " inc version " << m_single_dev_data << std::endl;
-          assert(m_single_dev_data->device_copies[m_single_dev_data->owner_device] != nullptr);
-          m_single_dev_data->device_copies[m_single_dev_data->owner_device]->version++;
+          assert(m_single_dev_data->device_copies[0] != nullptr);
+          m_single_dev_data->device_copies[0]->version++;
           //std::cout << "Incrementing version of data " << m_single_dev_data << " copy "
           //          << m_single_dev_data->device_copies[m_single_dev_data->owner_device]
           //          << " on device " << (int)m_single_dev_data->owner_device << " to "
@@ -189,11 +185,23 @@ namespace ttg_parsec {
         } else if (m_num_dev_data > 1) {
           std::for_each(m_dev_data.begin(), m_dev_data.end(),
                         [](parsec_data_t *data){
-                           assert(data->device_copies[data->owner_device] != nullptr);
-                           data->device_copies[data->owner_device]->version++;
+                           assert(data->device_copies[0] != nullptr);
+                           data->device_copies[0]->version++;
                            //std::cout << "Incrementing version of copy "
                            //          << " on device " << (int)data->owner_device << data->device_copies[data->owner_device] << " to "
                            //          << data->device_copies[data->owner_device]->version << std::endl;
+                        });
+        }
+      }
+
+      void transfer_ownership(int access, int device = 0) {
+
+        if (m_num_dev_data == 1) {
+          parsec_data_transfer_ownership_to_copy(m_single_dev_data, device, access);
+        } else if (m_num_dev_data > 1) {
+          std::for_each(m_dev_data.begin(), m_dev_data.end(),
+                        [&](parsec_data_t *data){
+                          parsec_data_transfer_ownership_to_copy(data, device, access);
                         });
         }
       }
@@ -298,7 +306,6 @@ namespace ttg_parsec {
       int64_t uid;
 #endif
     protected:
-      void          *m_ptr;
       parsec_task_t *m_next_task = nullptr;
       int32_t        m_readers  = 1;
       std::atomic<int32_t>  m_refs = 1; // number of entities referencing this copy (TTGs, external)
@@ -327,7 +334,6 @@ namespace ttg_parsec {
       : ttg_data_copy_t()
       , m_value(std::forward<T>(value))
       {
-        this->m_ptr = const_cast<value_type*>(&m_value);
         /* reset the container tracker */
         ttg_data_copy_container() = nullptr;
       }
@@ -374,6 +380,10 @@ namespace ttg_parsec {
 
       /* will destruct the value */
       virtual ~ttg_data_value_copy_t() = default;
+
+      virtual void* get_ptr() override final {
+        return &m_value;
+      }
     };
 
   } // namespace detail

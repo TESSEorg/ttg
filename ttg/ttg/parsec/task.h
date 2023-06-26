@@ -39,6 +39,40 @@ namespace ttg_parsec {
       }
     };
 
+    enum class ttg_parsec_data_flags : uint8_t {
+      NONE           = 0,
+      SINGLE_READER  = 1 << 0,
+      MULTIPLE_READER   = 1 << 1,
+      SINGLE_WRITER  = 1 << 2,
+      MULTIPLE_WRITER   = 1 << 3,
+      MARKED_PUSHOUT = 1 << 4
+    };
+
+    inline
+    ttg_parsec_data_flags operator|(ttg_parsec_data_flags lhs, ttg_parsec_data_flags rhs) {
+        using flags_type = std::underlying_type<ttg_parsec_data_flags>::type;
+        return ttg_parsec_data_flags(static_cast<flags_type>(lhs) | static_cast<flags_type>(rhs));
+    }
+
+    inline
+    ttg_parsec_data_flags operator|=(ttg_parsec_data_flags lhs, ttg_parsec_data_flags rhs) {
+        using flags_type = std::underlying_type<ttg_parsec_data_flags>::type;
+        return ttg_parsec_data_flags(static_cast<flags_type>(lhs) | static_cast<flags_type>(rhs));
+    }
+
+    inline
+    uint8_t operator&(ttg_parsec_data_flags lhs, ttg_parsec_data_flags rhs) {
+        using flags_type = std::underlying_type<ttg_parsec_data_flags>::type;
+        return static_cast<flags_type>(lhs) & static_cast<flags_type>(rhs);
+    }
+
+    inline
+    bool operator!(ttg_parsec_data_flags lhs) {
+        using flags_type = std::underlying_type<ttg_parsec_data_flags>::type;
+        return lhs == ttg_parsec_data_flags::NONE;
+    }
+
+
     typedef parsec_hook_return_t (*parsec_static_op_t)(void *);  // static_op will be cast to this type
 
     struct parsec_ttg_task_base_t {
@@ -47,8 +81,6 @@ namespace ttg_parsec {
       int32_t data_count = 0;      //< number of data elements in the copies array
       ttg_data_copy_t **copies;    //< pointer to the fixed copies array of the derived task
       parsec_hash_table_item_t tt_ht_item = {};
-      parsec_static_op_t function_template_class_ptr[ttg::runtime_traits<ttg::Runtime::PaRSEC>::num_execution_spaces] =
-          {nullptr};
 
       typedef struct {
         std::size_t goal;
@@ -65,7 +97,7 @@ namespace ttg_parsec {
       bool remove_from_hash = true;
       bool is_dummy = false;
       bool defer_writer = TTG_PARSEC_DEFER_WRITER; // whether to defer writer instead of creating a new copy
-
+      ttg_parsec_data_flags data_flags; // HACKY: flags set by prepare_send and reset by the copy_handler
 
       /*
       virtual void release_task() = 0;
@@ -164,6 +196,15 @@ namespace ttg_parsec {
         tt->release_task(task);
       }
 
+      template<ttg::ExecutionSpace Space>
+      parsec_hook_return_t invoke_op() {
+        if constexpr (Space == ttg::ExecutionSpace::Host) {
+          return TT::template static_op<Space>(&this->parsec_task);
+        } else {
+          return TT::template device_static_op<Space>(&this->parsec_task);
+        }
+      }
+
       parsec_key_t pkey() { return reinterpret_cast<parsec_key_t>(&key); }
     };
 
@@ -197,6 +238,15 @@ namespace ttg_parsec {
         parsec_ttg_task_t *task = static_cast<parsec_ttg_task_t*>(task_base);
         TT *tt = task->tt;
         tt->release_task(task);
+      }
+
+      template<ttg::ExecutionSpace Space>
+      parsec_hook_return_t invoke_op() {
+        if constexpr (Space == ttg::ExecutionSpace::Host) {
+          return TT::template static_op<Space>(&this->parsec_task);
+        } else {
+          return TT::template device_static_op<Space>(&this->parsec_task);
+        }
       }
 
       parsec_key_t pkey() { return 0; }

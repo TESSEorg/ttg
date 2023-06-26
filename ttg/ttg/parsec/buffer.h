@@ -71,7 +71,9 @@ private:
   }
 
   static parsec_data_t* create_parsec_data(void *ptr, size_t count) {
-    assert(ptr != nullptr);
+    if (ptr == nullptr) {
+
+    }
     parsec_data_t *data = parsec_data_create_with_type(nullptr, 0, ptr,
                                                        sizeof(element_type)*count,
                                                        parsec_datatype_int8_t);
@@ -106,17 +108,28 @@ public:
   , m_data(create_parsec_data(m_host_data.get(), count), &delete_parsec_data)
   , m_count(count)
   , m_ttg_copy(detail::ttg_data_copy_container())
-  { }
+  {
+    if (nullptr != m_ttg_copy) {
+      /* register with the new ttg_copy */
+      m_ttg_copy->add_device_data(m_data.get());
+    }
+  }
 
   /* Constructing a buffer using application-managed memory.
    * The memory pointed to by ptr must be accessible during
    * the life-time of the buffer. */
   buffer(element_type* ptr, std::size_t count = 1)
   : m_host_data(ptr, &delete_non_owned)
-  , m_data(create_parsec_data(ptr, count), &delete_parsec_data)
+  , m_data(nullptr == ptr ? nullptr : create_parsec_data(ptr, count),
+           nullptr == ptr ? &delete_null_parsec_data : &delete_parsec_data)
   , m_count(count)
   , m_ttg_copy(detail::ttg_data_copy_container())
-  { }
+  {
+    if (nullptr != m_ttg_copy) {
+      /* register with the new ttg_copy */
+      m_ttg_copy->add_device_data(m_data.get());
+    }
+  }
 
   ~buffer() {
     unpin(); // make sure the copies are not pinned
@@ -168,6 +181,7 @@ public:
     //          << " parsec-data " << m_data.get()
     //          << std::endl;
     /* don't update the ttg_copy, we keep the connection */
+    return *this;
   }
 
   /* explicitly disable copying of buffers
@@ -312,7 +326,7 @@ public:
       m_count = 0;
     } else {
       m_host_data = host_data_ptr(ptr, &delete_non_owned);
-      m_data = parsec_data_ptr(create_parsec_data(m_host_data.get()), &delete_parsec_data);
+      m_data = parsec_data_ptr(create_parsec_data(m_host_data.get(), count), &delete_parsec_data);
       if (nullptr != m_ttg_copy) {
         m_ttg_copy->add_device_data(m_data.get());
       }
@@ -372,7 +386,8 @@ public:
       std::size_t s = size();
       ar& s;
       assert(m_ttg_copy != nullptr); // only tracked objects allowed
-      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), current_device_ptr()});
+      /* TODO: move to device pointer once we are sure we can send from the device */
+      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), host_ptr()});
     } else {
       std::size_t s;
       ar & s;
@@ -380,7 +395,8 @@ public:
       /* initialize internal pointers and then reset */
       reset(s);
       assert(m_ttg_copy != nullptr); // only tracked objects allowed
-      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), current_device_ptr()});
+      /* TODO: move to device pointer once we are sure we can send from the device */
+      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), host_ptr()});
     }
   }
 #endif // TTG_SERIALIZATION_SUPPORTS_MADNESS
@@ -394,6 +410,10 @@ struct is_buffer : std::false_type
 
 template<typename T>
 struct is_buffer<buffer<T>> : std::true_type
+{ };
+
+template<typename T>
+struct is_buffer<const buffer<T>> : std::true_type
 { };
 
 template<typename T>

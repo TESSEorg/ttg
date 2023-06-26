@@ -12,6 +12,12 @@ if (TARGET eigen3)
     if (TARGET BTAS::BTAS)
         # since only need to use matrices, limit BTAS_TARGET_MAX_INDEX_RANK to 2
         add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES eigen3 BTAS Boost::boost COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2)
+        if (TARGET CUDA::cublas)
+          add_ttg_executable(bspmm-cuda spmm/spmm_cuda.cc spmm/cuda_gemm.cc
+                             LINK_LIBRARIES eigen3 BTAS Boost::boost CUDA::cublas
+                             COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
+                             RUNTIMES "parsec")
+        endif (TARGET CUDA::cublas)
     endif (TARGET BTAS::BTAS)
 endif(TARGET eigen3)
 

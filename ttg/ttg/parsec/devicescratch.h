@@ -94,9 +94,12 @@ public:
 
   ~devicescratch() {
     /* remove data from flow */
-    remove_from_flow();
+    //remove_from_flow();
     if (nullptr != m_data) {
-      parsec_data_destroy(m_data);
+      //parsec_data_destroy(m_data);
+      //parsec_data_copy_detach(m_data, parsec_data_get_copy(m_data, 0), 0);
+      //auto *copy = parsec_data_get_copy(m_data, 0);
+      //PARSEC_OBJ_RELEASE(copy);
     }
     //parsec_data_destroy(m_data);
     m_data = nullptr;
@@ -136,6 +139,10 @@ struct is_devicescratch : std::false_type
 
 template<typename T>
 struct is_devicescratch<devicescratch<T>> : std::true_type
+{ };
+
+template<typename T>
+struct is_devicescratch<const devicescratch<T>> : std::true_type
 { };
 
 template<typename T>
