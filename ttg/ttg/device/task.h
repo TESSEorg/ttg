@@ -490,7 +490,7 @@ namespace ttg {
 
     template<typename... Ts>
     auto await_transform(detail::wait_kernel_t<Ts...>&& a) {
-      std::cout << "yield_value: wait_kernel_t" << std::endl;
+      //std::cout << "yield_value: wait_kernel_t" << std::endl;
       if constexpr (sizeof...(Ts) > 0) {
         TTG_IMPL_NS::mark_device_out(a.ties);
       }

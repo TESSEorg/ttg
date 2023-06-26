@@ -217,32 +217,19 @@ using blk_t = DeviceTensor<double, btas::DEFAULT::range,
 
 /* TODO: call CUDA gemm here */
 static void cuda_gemm(blk_t &C, const blk_t &A, const blk_t &B) {
-  using array = btas::DEFAULT::index<int>;
-  array aA = array{1, 2};
-  array aB = array{2, 3};
-  array aC = array{1, 3};
-  bool conjgA = false;
-  bool conjgB = false;
   double alpha = 1.0;
   double beta  = 1.0;
-  const bool notransA = aA.front() == aC.front();
-  const bool notransB = aB.front() != aC.back();
-  const auto   cA     = notransA ? 'N' : (conjgA ? 'C' : 'T');
-  const size_t condim = notransA ? A.extent(1) : A.extent(0);
-  const auto   cB     = notransB ? 'N' : (conjgB ? 'C' : 'T');
   // make sure all memory is on the device
   // TODO: A and B are read-only so the owner device will be 0. How to fix?
   //assert(A.b.get_current_device() != 0);
   //assert(B.b.get_current_device() != 0);
-  assert(C.b.get_current_device() != 0);
-  // NOTE: A and B are swapped due to the ColMajor layout, see btas/generic/gemm_impl.h
+  int device = C.b.get_current_device();
+  assert(device != 0);
   my_cublas_dgemm_because_cublas_is_stupid(
-              cB, cA, C.extent(0), C.extent(1), condim, alpha,
-              &*B.b.device_ptr_on(C.b.get_current_device()), B.extent(0),
-              &*A.b.device_ptr_on(C.b.get_current_device()), A.extent(0), beta,
-              &*C.b.current_device_ptr(), C.extent(0));
-  //gemm_impl<true>::call(blas::Layout::ColMajor, cA, cB, C.extent(0), C.extent(1), condim,
-  //                      alpha, &*A.begin(), A.extent(0), &*B.begin(), B.extent(0), beta, &*C.begin(), C.extent(0));
+              'N', 'N', C.extent(0), C.extent(1), A.extent(1), alpha,
+              A.b.device_ptr_on(device), A.extent(0),
+              B.b.device_ptr_on(device), B.extent(0), beta,
+              C.b.current_device_ptr(), C.extent(0));
 }
 
 //using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
@@ -728,7 +715,6 @@ class SpMM25D {
                  (have_next_k ? std::to_string(next_k) : "does not exist"));
 
       /* wait for the kernel to complete */
-
       co_await ttg::wait_kernel();
 
 

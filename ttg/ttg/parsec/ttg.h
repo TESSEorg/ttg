@@ -3643,7 +3643,11 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
       copy->inc_current_version();
     }
     caller->data_flags = ttg_parsec::detail::ttg_parsec_data_flags::NONE;
-    return std::move(*value_ptr);
+    if constexpr (std::is_rvalue_reference_v<decltype(value)>) {
+      return std::move(*value_ptr);
+    } else {
+      return *value_ptr;
+    }
   }
 
   template <typename Value>
