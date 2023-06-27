@@ -327,7 +327,7 @@ class SpMM25D {
           ijk_keys.emplace_back(Key<3>({i, j, k}));
         }
       }
-      ::broadcast<0>(ijk_keys, baseT::template get<0>(a_ik), a_ijk);
+      ::broadcast<0>(ijk_keys, std::move(baseT::template get<0>(a_ik)), a_ijk);
     }
 
    private:
@@ -364,7 +364,7 @@ class SpMM25D {
           procmap[p] = true;
         }
       }
-      ::broadcast<0>(ikp_keys, baseT::template get<0>(a_ik), a_ikp);
+      ::broadcast<0>(ikp_keys, std::move(baseT::template get<0>(a_ik)), a_ikp);
     }
 
    private:
@@ -401,7 +401,7 @@ class SpMM25D {
           ijk_keys.emplace_back(Key<3>({i, j, k}));
         }
       }
-      ::broadcast<0>(ijk_keys, baseT::template get<0>(b_kj), b_ijk);
+      ::broadcast<0>(ijk_keys, std::move(baseT::template get<0>(b_kj)), b_ijk);
     }
 
    private:
@@ -437,7 +437,7 @@ class SpMM25D {
           procmap[p] = true;
         }
       }
-      ::broadcast<0>(kjp_keys, baseT::template get<0>(b_kj), b_kjp);
+      ::broadcast<0>(kjp_keys, std::move(baseT::template get<0>(b_kj)), b_kjp);
     }
 
    private:
@@ -645,7 +645,7 @@ class SpMM25D {
 
     void op(const Key<2> &ij, typename baseT::input_refs_tuple_type &&c_ij_p, std::tuple<Out<Key<2>, Blk>> &c_ij) {
       ttg::trace("ReduceC(", ij[0], ", ", ij[1], ")");
-      ::send<0>(ij, baseT::template get<0>(c_ij_p), c_ij);
+      ::send<0>(ij, std::move(baseT::template get<0>(c_ij_p)), c_ij);
     }
   };  // class ReduceC
 
