@@ -696,6 +696,36 @@ namespace ttg_parsec {
       parsec_key_t pkey() { return 0; }
     };
 
+    /**
+     * Reducer task representing one or more stream reductions.
+     * A reducer task may be deferred on its first input (the object into which
+     * all other inputs are folded). Once that input becomes available the task
+     * is submitted and reduces all available inputs. Additional reducer tasks may
+     * be submitted until all required inputs have been processed.
+     */
+    struct reducer_task_t : public parsec_ttg_task_base_t {
+      parsec_ttg_task_base_t *parent_task;
+      bool is_first;
+
+      reducer_task_t(parsec_ttg_task_base_t* task, parsec_thread_mempool_t *mempool,
+                     parsec_task_class_t *task_class, parsec_taskpool_t *taskpool,
+                     int32_t priority, bool is_first)
+      : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
+                               0, &release_task,
+                               true /* deferred until other readers have completed */)
+      , parent_task(task)
+      , is_first(is_first)
+      { }
+
+      static void release_task(parsec_ttg_task_base_t* task_base) {
+        /* reducer tasks have one mutable input so the task can be submitted on the first release */
+        parsec_task_t *vp_task_rings[1] = { &task_base->parsec_task };
+        parsec_execution_stream_t *es = ttg::default_execution_context().impl().execution_stream();
+        __parsec_schedule_vp(es, vp_task_rings, 0);
+      }
+    };
+
+
     inline ttg_data_copy_t *find_copy_in_task(parsec_ttg_task_base_t *task, const void *ptr) {
       ttg_data_copy_t *res = nullptr;
       if (task == nullptr || ptr == nullptr) {
@@ -1345,61 +1375,56 @@ namespace ttg_parsec {
       parsec_ttg_caller = NULL;
     }
 
-    struct reducer_task_t {
-      parsec_task_t parsec_task;
-      task_t *task;
-
-      reducer_task_t(task_t* task, parsec_thread_mempool_t *mempool,
-                     parsec_task_class_t *task_class, parsec_taskpool_t *taskpool,
-                     int32_t priority)
-      : task(task)
-      {
-        PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
-        parsec_task.mempool_owner = mempool;
-        parsec_task.task_class = task_class;
-        parsec_task.status = PARSEC_TASK_STATUS_HOOK;
-        parsec_task.taskpool = taskpool;
-        parsec_task.priority = priority;
-        parsec_task.chore_mask = 1<<0;
-      }
-    };
-
     template <std::size_t i>
     static parsec_hook_return_t static_reducer_op(parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
-      using rtask_t = reducer_task_t;
+      using rtask_t = detail::reducer_task_t;
       using value_t = std::tuple_element_t<i, actual_input_tuple_type>;
       constexpr const bool val_is_void = ttg::meta::is_void_v<value_t>;
       rtask_t *rtask = (rtask_t*)parsec_task;
-      task_t *task = rtask->task;
-      ttT *baseobj = task->tt;
+      task_t *parent_task = static_cast<task_t*>(rtask->parent_task);
+      ttT *baseobj = parent_task->tt;
       derivedT *obj = static_cast<derivedT *>(baseobj);
 
       auto& reducer = std::get<i>(baseobj->input_reducers);
 
-      assert(parsec_ttg_caller == NULL);
-      parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
-
       if (obj->tracing()) {
         if constexpr (!ttg::meta::is_void_v<keyT>)
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": reducer executing");
+          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", parent_task->key, ": reducer executing");
         else
           ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : reducer executing");
       }
 
       /* the copy to reduce into */
       detail::ttg_data_copy_t *target_copy;
-      target_copy = static_cast<detail::ttg_data_copy_t *>(task->parsec_task.data[i].data_in);
+      target_copy = static_cast<detail::ttg_data_copy_t *>(parent_task->parsec_task.data[i].data_in);
       assert(val_is_void || nullptr != target_copy);
       /* once we hit 0 we have to stop since another thread might enqueue a new reduction task */
       std::size_t c = 0;
       std::size_t size = 0;
-      assert(task->streams[i].reduce_count > 0);
+      assert(parent_task->streams[i].reduce_count > 0);
+      if (rtask->is_first) {
+        if (0 == (parent_task->streams[i].reduce_count.fetch_sub(1, std::memory_order_acq_rel)-1)) {
+          /* we were the first and there is nothing to be done */
+          if (obj->tracing()) {
+            if constexpr (!ttg::meta::is_void_v<keyT>)
+              ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", parent_task->key, ": first reducer empty");
+            else
+              ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : first reducer empty");
+          }
+
+          return PARSEC_HOOK_RETURN_DONE;
+        }
+      }
+
+      assert(parsec_ttg_caller == NULL);
+      parsec_ttg_caller = rtask->parent_task;
+
       do {
         if constexpr(!val_is_void) {
           /* the copies to reduce out of */
           detail::ttg_data_copy_t *source_copy;
           parsec_list_item_t *item;
-          item = parsec_lifo_pop(&task->streams[i].reduce_copies);
+          item = parsec_lifo_pop(&parent_task->streams[i].reduce_copies);
           if (nullptr == item) {
             // maybe someone is changing the goal right now
             break;
@@ -1412,26 +1437,28 @@ namespace ttg_parsec {
           reducer(); // invoke control reducer
         }
         // there is only one task working on this stream, so no need to be atomic here
-        size = ++task->streams[i].size;
-        //std::cout << "static_reducer_op key " << task->key << " size " << size << " of " << task->streams[i].goal << std::endl;
-      } while ((c = (task->streams[i].reduce_count.fetch_sub(1, std::memory_order_acq_rel)-1)) > 0);
+        size = ++parent_task->streams[i].size;
+        //std::cout << "static_reducer_op size " << size << " of " << parent_task->streams[i].goal << std::endl;
+      } while ((c = (parent_task->streams[i].reduce_count.fetch_sub(1, std::memory_order_acq_rel)-1)) > 0);
       //} while ((c = (--task->streams[i].reduce_count)) > 0);
 
       /* finalize_argstream sets goal to 1, so size may be larger than goal */
-      bool complete = (size >= task->streams[i].goal);
+      bool complete = (size >= parent_task->streams[i].goal);
 
-
+      //std::cout << "static_reducer_op size " << size
+      //          << " of " << parent_task->streams[i].goal << " complete " << complete
+      //          << " c " << c << std::endl;
       if (complete && c == 0) {
         /* task is still in the hash table, have release_task remove it */
-        task->remove_from_hash = true;
-        task->release_task(task);
+        parent_task->remove_from_hash = true;
+        parent_task->release_task(parent_task);
       }
 
       parsec_ttg_caller = NULL;
 
       if (obj->tracing()) {
         if constexpr (!ttg::meta::is_void_v<keyT>)
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": done executing");
+          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", parent_task->key, ": done executing");
         else
           ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
       }
@@ -1811,12 +1838,12 @@ namespace ttg_parsec {
 
 
     template <std::size_t i>
-    reducer_task_t *create_new_reducer_task(task_t *task) {
+    detail::reducer_task_t *create_new_reducer_task(task_t *task, bool is_first) {
       /* make sure we can reuse the existing memory pool and don't have to create a new one */
-      static_assert(sizeof(task_t) >= sizeof(reducer_task_t));
+      static_assert(sizeof(task_t) >= sizeof(detail::reducer_task_t));
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       auto &world_impl = world.impl();
-      reducer_task_t *newtask;
+      detail::reducer_task_t *newtask;
       parsec_thread_mempool_t *mempool = get_task_mempool();
       char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
       // use the priority of the task we stream into
@@ -1829,8 +1856,8 @@ namespace ttg_parsec {
         ttg::trace(world.rank(), ":", get_name(), ": creating reducer task");
       }
       /* placement-new the task */
-      newtask = new (taskobj) reducer_task_t(task, mempool, inpute_reducers_taskclass[i],
-                                                    world_impl.taskpool(), priority);
+      newtask = new (taskobj) detail::reducer_task_t(task, mempool, inpute_reducers_taskclass[i],
+                                                     world_impl.taskpool(), priority, is_first);
 
       return newtask;
     }
@@ -1921,20 +1948,30 @@ namespace ttg_parsec {
 #endif
       }
 
-      if (reducer) {  // is this a streaming input? reduce the received value
-        auto submit_reducer_task = [&](auto *task){
+      auto get_copy_fn = [&](detail::parsec_ttg_task_base_t *task, auto&& value, bool is_const){
+        detail::ttg_data_copy_t *copy = copy_in;
+        if (nullptr != parsec_ttg_caller) {
+          copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
+        }
+        if (nullptr != copy) {
+          /* retain the data copy */
+          copy = detail::register_data_copy<valueT>(copy, task, true);
+        } else {
+          /* create a new copy */
+          copy = detail::create_new_datacopy(std::forward<Value>(value));
+        }
+        return copy;
+      };
+
+      if (reducer && 1 != task->streams[i].goal) {  // is this a streaming input? reduce the received value
+        auto submit_reducer_task = [&](auto *parent_task){
           /* check if we need to create a task */
-          std::size_t c = task->streams[i].reduce_count.fetch_add(1, std::memory_order_release);
-          //std::size_t c = task->streams[i].reduce_count++;
+          std::size_t c = parent_task->streams[i].reduce_count.fetch_add(1, std::memory_order_release);
           if (0 == c) {
-            //std::cout << "submit reducer task for task " << task->key
-            //          << " size " << task->streams[i].size << " of " << task->streams[i].goal << std::endl;
             /* we are responsible for creating the reduction task */
-            reducer_task_t *reduce_task;
-            reduce_task = create_new_reducer_task<i>(task);
-            parsec_task_t *vp_task_rings[1] = { &reduce_task->parsec_task };
-            parsec_execution_stream_t *es = world_impl.execution_stream();
-            __parsec_schedule_vp(es, vp_task_rings, 0);
+            detail::reducer_task_t *reduce_task;
+            reduce_task = create_new_reducer_task<i>(parent_task, false);
+            reduce_task->release_task(reduce_task); // release immediately
           }
         };
 
@@ -1942,29 +1979,34 @@ namespace ttg_parsec {
           // have a value already? if not, set, otherwise reduce
           if (nullptr == static_cast<detail::ttg_data_copy_t *>(task->parsec_task.data[i].data_in)) {
             using decay_valueT = std::decay_t<valueT>;
-            /* For now, we always create a copy because we cannot rely on the task_release
-             * mechanism (it would release the task, not the reduction value). */
-            task->parsec_task.data[i].data_in = detail::create_new_datacopy(std::forward<Value>(value));
-            task->streams[i].size++;
-            if (task->streams[i].size == task->streams[i].goal) {
-              release = true;
+
+            /* first input value, create a task and bind it to the copy */
+            detail::reducer_task_t *reduce_task;
+            reduce_task = create_new_reducer_task<i>(task, true);
+
+            /* get the copy to use as input for this task */
+            detail::ttg_data_copy_t *copy = get_copy_fn(reduce_task, std::forward<Value>(value), false);
+
+            /* put the copy into the task */
+            task->parsec_task.data[i].data_in = copy;
+
+            /* protected by the bucket lock */
+            task->streams[i].size = 1;
+            task->streams[i].reduce_count.store(1, std::memory_order_relaxed);
+
+            if (copy->push_task != &reduce_task->parsec_task) {
+              reduce_task->release_task(reduce_task);
             }
+
             /* now we can unlock the bucket */
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
           } else {
-            detail::ttg_data_copy_t *copy = nullptr;
             /* unlock the bucket, the lock is not needed anymore */
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
-            if (nullptr != parsec_ttg_caller) {
-              copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
-            }
-            if (nullptr != copy) {
-              /* retain the data copy */
-              copy = detail::register_data_copy<valueT>(copy, task, true);
-            } else {
-              /* create a new copy */
-              copy = detail::create_new_datacopy(std::forward<Value>(value));
-            }
+
+            /* get the copy to use as input for this task */
+            detail::ttg_data_copy_t *copy = get_copy_fn(task, std::forward<Value>(value), true);
+
             /* enqueue the data copy to be reduced */
             parsec_lifo_push(&task->streams[i].reduce_copies, &copy->super);
             submit_reducer_task(task);
@@ -1988,17 +2030,9 @@ namespace ttg_parsec {
             throw std::logic_error("bad set arg");
           }
 
-          detail::ttg_data_copy_t *copy = copy_in;
-          if (nullptr == copy_in && nullptr != parsec_ttg_caller) {
-            copy = detail::find_copy_in_task(parsec_ttg_caller, &value);
-          }
+          /* get the copy to use as input for this task */
+          detail::ttg_data_copy_t *copy = get_copy_fn(task, std::forward<Value>(value), input_is_const);
 
-          if (nullptr != copy) {
-            /* register_data_copy might provide us with a different copy if !input_is_const */
-            copy = detail::register_data_copy<valueT>(copy, task, input_is_const);
-          } else {
-            copy = detail::create_new_datacopy(std::forward<Value>(value));
-          }
           /* if we registered as a writer and were the first to register with this copy
            * we need to defer the release of this task to give other tasks a chance to
            * make a copy of the original data */

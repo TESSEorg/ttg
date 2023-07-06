@@ -60,6 +60,7 @@ TEST_CASE("streams", "[streams][core]") {
       CHECK(b == VALUE);
       reduce_ops++;
     }, SLICE);
+
     make_graph_executable(op);
     ttg::ttg_fence(ttg::default_execution_context());
     if (ttg::default_execution_context().rank() == 0) {
@@ -67,7 +68,7 @@ TEST_CASE("streams", "[streams][core]") {
         op->invoke(i, VALUE);
       }
     }
-    auto &sink_op_real = *sink_op;
+
     ttg::ttg_fence(ttg::default_execution_context());
     CHECK(reduce_ops == N);
   }
