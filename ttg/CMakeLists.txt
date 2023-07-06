@@ -10,7 +10,6 @@ configure_file(
 set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/bug.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/cublas_helper.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/demangle.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/diagnose.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/dot.h
@@ -80,6 +79,7 @@ set(ttg-sources
         ${ttg-impl-headers}
         ${ttg-base-headers}
         ${ttg-util-headers}
+        ${ttg_device_headers}
         ${ttg-external-headers}
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/cublas_helper.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.cpp
@@ -120,7 +120,7 @@ if (TARGET CUDA::cudart)
   list(APPEND ttg-deps CUDA::cudart)
 endif (TARGET CUDA::cudart)
 
-set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers})
+set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers};${ttg_device_headers})
 if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
   list(APPEND ttg-sources ${ttg-external-headers})
   list(APPEND ttg-public-headers ${ttg-external-headers})

@@ -184,7 +184,7 @@ namespace ttg_parsec {
                                                                       : (num_streams+1);
       TT* tt;
       key_type key;
-      size_goal_t stream[num_streams] = {};
+      stream_info_t streams[num_streams] = {};
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
 #endif
@@ -239,7 +239,7 @@ namespace ttg_parsec {
     struct parsec_ttg_task_t<TT, true> : public parsec_ttg_task_base_t {
       static constexpr size_t num_streams = TT::numins;
       TT* tt;
-      size_goal_t stream[num_streams] = {};
+      stream_info_t streams[num_streams] = {};
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
 #endif
@@ -281,6 +281,36 @@ namespace ttg_parsec {
       parsec_key_t pkey() { return 0; }
     };
 
+
+    /**
+     * Reducer task representing one or more stream reductions.
+     * A reducer task may be deferred on its first input (the object into which
+     * all other inputs are folded). Once that input becomes available the task
+     * is submitted and reduces all available inputs. Additional reducer tasks may
+     * be submitted until all required inputs have been processed.
+     */
+    struct reducer_task_t : public parsec_ttg_task_base_t {
+      parsec_ttg_task_base_t *parent_task;
+      bool is_first;
+
+      reducer_task_t(parsec_ttg_task_base_t* task, parsec_thread_mempool_t *mempool,
+                     parsec_task_class_t *task_class, parsec_taskpool_t *taskpool,
+                     int32_t priority, bool is_first)
+      : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
+                               0, nullptr, nullptr,
+                               &release_task,
+                               true /* deferred until other readers have completed */)
+      , parent_task(task)
+      , is_first(is_first)
+      { }
+
+      static void release_task(parsec_ttg_task_base_t* task_base) {
+        /* reducer tasks have one mutable input so the task can be submitted on the first release */
+        parsec_task_t *vp_task_rings[1] = { &task_base->parsec_task };
+        parsec_execution_stream_t *es = parsec_my_execution_stream();
+        __parsec_schedule_vp(es, vp_task_rings, 0);
+      }
+    };
 
   } // namespace detail
 

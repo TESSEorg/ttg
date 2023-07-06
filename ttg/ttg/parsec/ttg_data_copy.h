@@ -34,11 +34,14 @@ namespace ttg_parsec {
      * because ttg_data_copy_t has virtual functions so we cannot cast from parsec_data_copy_t
      * to ttg_data_copy_t (offsetof is not supported for virtual classes).
      * The self pointer is a back-pointer to the ttg_data_copy_t. */
-    struct ttg_data_copy_self_t : public parsec_data_copy_t {
+    struct ttg_data_copy_self_t {
+      parsec_list_item_t super;
       ttg_data_copy_t *self;
       ttg_data_copy_self_t(ttg_data_copy_t* dc)
       : self(dc)
-      { }
+      {
+        PARSEC_OBJ_CONSTRUCT(&super, parsec_list_item_t);
+      }
     };
 
     /* Non-owning copy-tracking wrapper, accounting for N readers or 1 writer.
@@ -57,6 +60,7 @@ namespace ttg_parsec {
       { }
 
       ttg_data_copy_t(const ttg_data_copy_t& c)
+      : ttg_data_copy_self_t(this)
       {
         /* we allow copying but do not copy any data over from the original
          * device copies will have to be allocated again
