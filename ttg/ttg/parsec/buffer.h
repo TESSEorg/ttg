@@ -1,16 +1,18 @@
 #ifndef TTG_PARSEC_BUFFER_H
 #define TTG_PARSEC_BUFFER_H
 
-// TODO: replace with short vector
-#define TTG_PARSEC_MAX_NUM_DEVICES 4
-
 #include <array>
 #include <vector>
 #include <parsec.h>
 #include <parsec/data_internal.h>
 #include <parsec/mca/device/device.h>
 #include "ttg/parsec/ttg_data_copy.h"
+#include "ttg/parsec/parsec-ext.h"
 #include "ttg/util/iovec.h"
+
+#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
+#include <cuda_runtime.h>
+#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
 
 namespace ttg_parsec {
 
@@ -61,8 +63,15 @@ private:
   }
 
   static void delete_parsec_data(parsec_data_t *data) {
-    //std::cout << "delete parsec_data " << data << std::endl;
-    //assert(0);
+#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
+    if (data->device_copies[0]->flags & TTG_PARSEC_DATA_FLAG_REGISTERED) {
+      // register the memory for faster access
+      cudaError_t status;
+      status = cudaHostUnregister(data->device_copies[0]->device_private);
+      assert(cudaSuccess == status);
+      data->device_copies[0]->flags ^= TTG_PARSEC_DATA_FLAG_REGISTERED;
+    }
+#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
     parsec_data_destroy(data);
   }
 
@@ -71,9 +80,6 @@ private:
   }
 
   static parsec_data_t* create_parsec_data(void *ptr, size_t count) {
-    if (ptr == nullptr) {
-
-    }
     parsec_data_t *data = parsec_data_create_with_type(nullptr, 0, ptr,
                                                        sizeof(element_type)*count,
                                                        parsec_datatype_int8_t);
@@ -81,6 +87,10 @@ private:
     data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
     data->device_copies[0]->version = 1;
     return data;
+  }
+
+  static void register_memory(void *ptr, size_t count) {
+
   }
 
   void reset() {
@@ -100,7 +110,7 @@ public:
   /* The device ID of the CPU. */
   static constexpr int cpu_device = 0;
 
-  buffer() : buffer(1)
+  buffer() : buffer(nullptr, 0)
   { }
 
   buffer(std::size_t count)
@@ -109,6 +119,7 @@ public:
   , m_count(count)
   , m_ttg_copy(detail::ttg_data_copy_container())
   {
+    //std::cout << "buffer " << this << " ctor ttg_copy " << m_ttg_copy << std::endl;
     if (nullptr != m_ttg_copy) {
       /* register with the new ttg_copy */
       m_ttg_copy->add_device_data(m_data.get());
@@ -125,7 +136,8 @@ public:
   , m_count(count)
   , m_ttg_copy(detail::ttg_data_copy_container())
   {
-    if (nullptr != m_ttg_copy) {
+    //std::cout << "buffer " << this << " ctor ttg_copy " << m_ttg_copy << std::endl;
+    if (nullptr != m_ttg_copy && m_data) {
       /* register with the new ttg_copy */
       m_ttg_copy->add_device_data(m_data.get());
     }
@@ -146,6 +158,7 @@ public:
   , m_count(db.m_count)
   , m_ttg_copy(detail::ttg_data_copy_container())
   {
+    //std::cout << "buffer " << this << " other " << &db << " mv ctor ttg_copy " << m_ttg_copy << std::endl;
     db.m_count = 0;
 
     //std::cout << "buffer::move-ctor from " << &db << " ttg-copy " << db.m_ttg_copy
@@ -153,6 +166,7 @@ public:
     //          << " parsec-data " << m_data.get()
     //          << std::endl;
 
+#if 0 // This is erroneous: the ttg copy will move its content over by itself
     if (nullptr != db.m_ttg_copy) {
       /* remove from old ttg copy */
       db.m_ttg_copy->remove_device_data(m_data.get());
@@ -163,6 +177,7 @@ public:
       /* register with the new ttg_copy */
       m_ttg_copy->add_device_data(m_data.get());
     }
+#endif // 0
   }
 
   /* explicitly disable copying of buffers
@@ -176,6 +191,7 @@ public:
     m_host_data = std::move(db.m_host_data);
     m_count = db.m_count;
     db.m_count = 0;
+    //std::cout << "buffer " << this << " other " << &db << " mv op ttg_copy " << m_ttg_copy << std::endl;
     //std::cout << "buffer::move-assign from " << &db << " ttg-copy " << db.m_ttg_copy
     //          << " to " << this << " ttg-copy " << m_ttg_copy
     //          << " parsec-data " << m_data.get()

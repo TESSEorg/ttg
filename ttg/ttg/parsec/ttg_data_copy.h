@@ -18,7 +18,11 @@ namespace ttg_parsec {
 
   namespace detail {
 
-    template<typename T>
+    // fwd-decl
+    struct ttg_data_copy_t;
+
+    /* templated to break cyclic dependency with ttg_data_copy_container */
+    template<typename T = ttg_data_copy_t>
     struct ttg_data_copy_container_setter {
       ttg_data_copy_container_setter(T* ptr) {
         /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
@@ -31,18 +35,16 @@ namespace ttg_parsec {
      * readers or writers but merely prevent the object from being
      * destroyed once no readers/writers exist.
      */
-    struct ttg_data_copy_t : private ttg_data_copy_container_setter<ttg_data_copy_t> {
+    struct ttg_data_copy_t {
 
       /* special value assigned to parsec_data_copy_t::readers to mark the copy as
       * mutable, i.e., a task will modify it */
       static constexpr int mutable_tag = std::numeric_limits<int>::min();
 
       ttg_data_copy_t()
-      : ttg_data_copy_container_setter(this)
       { }
 
       ttg_data_copy_t(const ttg_data_copy_t& c)
-      : ttg_data_copy_container_setter(this)
       {
         /* we allow copying but do not copy any data over from the original
          * device copies will have to be allocated again
@@ -50,8 +52,7 @@ namespace ttg_parsec {
       }
 
       ttg_data_copy_t(ttg_data_copy_t&& c)
-      : ttg_data_copy_container_setter(this)
-      , m_next_task(c.m_next_task)
+      : m_next_task(c.m_next_task)
       , m_readers(c.m_readers)
       , m_refs(c.m_refs.load(std::memory_order_relaxed))
       , m_dev_data(std::move(c.m_dev_data))
@@ -76,8 +77,6 @@ namespace ttg_parsec {
         c.m_single_dev_data = nullptr;
         m_num_dev_data = c.m_num_dev_data;
         c.m_num_dev_data = 0;
-        /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
-        ttg_data_copy_container() = this;
         return *this;
       }
 
@@ -86,8 +85,6 @@ namespace ttg_parsec {
          * device copies will have to be allocated again
          * and it's a new object to reference */
 
-        /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
-        ttg_data_copy_container() = this;
         return *this;
       }
 
@@ -122,7 +119,9 @@ namespace ttg_parsec {
       * Reset the number of readers to read-only with a single reader.
       */
       void reset_readers() {
-        m_readers = 1;
+        if (mutable_tag == m_readers) {
+          m_readers = 1;
+        }
       }
 
       /* Decrement the reader counter and return previous value.
@@ -325,13 +324,15 @@ namespace ttg_parsec {
     * the destructor of ttg_data_copy_t base class is called.
     */
     template<typename ValueT>
-    struct ttg_data_value_copy_t final : public ttg_data_copy_t {
+    struct ttg_data_value_copy_t final : private ttg_data_copy_container_setter<ttg_data_copy_t>
+                                       , public ttg_data_copy_t {
       using value_type = ValueT;
       value_type m_value;
 
       template<typename T>
       ttg_data_value_copy_t(T&& value)
-      : ttg_data_copy_t()
+      : ttg_data_copy_container_setter(this)
+      , ttg_data_copy_t()
       , m_value(std::forward<T>(value))
       {
         /* reset the container tracker */
@@ -340,7 +341,8 @@ namespace ttg_parsec {
 
       ttg_data_value_copy_t(ttg_data_value_copy_t&& c)
         noexcept(std::is_nothrow_move_constructible_v<value_type>)
-      : ttg_data_copy_t(std::move(c))
+      : ttg_data_copy_container_setter(this)
+      , ttg_data_copy_t(std::move(c))
       , m_value(std::move(c.m_value))
       {
         /* reset the container tracker */
@@ -349,7 +351,8 @@ namespace ttg_parsec {
 
       ttg_data_value_copy_t(const ttg_data_value_copy_t& c)
         noexcept(std::is_nothrow_copy_constructible_v<value_type>)
-      : ttg_data_copy_t(c)
+      : ttg_data_copy_container_setter(this)
+      , ttg_data_copy_t(c)
       , m_value(c.m_value)
       {
         /* reset the container tracker */
@@ -359,6 +362,8 @@ namespace ttg_parsec {
       ttg_data_value_copy_t& operator=(ttg_data_value_copy_t&& c)
         noexcept(std::is_nothrow_move_assignable_v<value_type>)
       {
+        /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
+        ttg_data_copy_container() = this;
         ttg_data_copy_t::operator=(std::move(c));
         m_value = std::move(c.m_value);
         /* reset the container tracker */
@@ -368,6 +373,8 @@ namespace ttg_parsec {
       ttg_data_value_copy_t& operator=(const ttg_data_value_copy_t& c)
         noexcept(std::is_nothrow_copy_assignable_v<value_type>)
       {
+        /* set the container ptr here, will be reset in the the ttg_data_value_copy_t ctor */
+        ttg_data_copy_container() = this;
         ttg_data_copy_t::operator=(c);
         m_value = c.m_value;
         /* reset the container tracker */

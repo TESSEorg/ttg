@@ -51,9 +51,10 @@ using namespace ttg;
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 
 template <typename _T, class _Range, class _Storage>
-struct DeviceTensor : public btas::Tensor<_T, _Range, _Storage> {
+struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
+                    , public btas::Tensor<_T, _Range, _Storage> {
   using tensor_type = btas::Tensor<_T, _Range, _Storage>;
-  tensor_type t;
+  using ttvalue_type = ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>;
   ttg::buffer<_T> b; // does not own the host buffer
 
   using value_type = tensor_type::value_type;
@@ -69,28 +70,32 @@ struct DeviceTensor : public btas::Tensor<_T, _Range, _Storage> {
     /// constructor with index extent
     template <typename... _args>
     explicit DeviceTensor(const size_type& first, const _args&... rest)
-    : tensor_type(first, rest...)
+    : ttvalue_type()
+    , tensor_type(first, rest...)
     , b(this->size() ? this->data() : nullptr, this->size())
     { }
 
     /// construct from \c range, allocate data, but not initialized
     template <typename Range>
     explicit DeviceTensor(const Range& range, typename std::enable_if<btas::is_boxrange<Range>::value>::type* = 0)
-    : tensor_type(range)
+    : ttvalue_type()
+    , tensor_type(range)
     , b(this->size() ? this->data() : nullptr, this->size())
     { }
 
     /// construct from \c range object, set all elements to \c v
     template <typename Range>
     DeviceTensor(const Range& range, value_type v, typename std::enable_if<btas::is_boxrange<Range>::value>::type* = 0)
-    : tensor_type(range)
+    : ttvalue_type()
+    , tensor_type(range)
     , b(this->size() ? this->data() : nullptr, this->size())
     { }
 
     /// construct from \c range object, copy elements from \c vec
     template <typename Range, typename U>
     DeviceTensor(const Range& range, U* vec, typename std::enable_if<btas::is_boxrange<Range>::value>::type* = 0)
-    : tensor_type(range, vec)
+    : ttvalue_type()
+    , tensor_type(range, vec)
     , b(this->size() ? this->data() : nullptr, this->size())
     { }
 
@@ -99,25 +104,29 @@ struct DeviceTensor : public btas::Tensor<_T, _Range, _Storage> {
     DeviceTensor(const Range& range, const Storage& storage,
            typename std::enable_if<btas::is_boxrange<Range>::value & not std::is_same<Range, range_type>::value &
                                    not std::is_same<Storage, storage_type>::value>::type* = 0)
-    : tensor_type(range, storage)
+    : ttvalue_type()
+    , tensor_type(range, storage)
     , b(this->size() ? this->data() : nullptr, this->size())
     { }
 
     /// copy-copy-construct from \c range and \c storage
     DeviceTensor(const range_type& range, const storage_type& storage)
-    : tensor_type(range, storage)
+    : ttvalue_type()
+    , tensor_type(range, storage)
     , b(this->size() ? this->data() : nullptr, this->size())
     { }
 
     /// copy-move-construct from \c range and \c storage
     DeviceTensor(const range_type& range, storage_type&& storage)
-    : tensor_type(range, std::forward<storage_type>(storage))
+    : ttvalue_type()
+    , tensor_type(range, std::forward<storage_type>(storage))
     , b(this->size() ? this->data() : nullptr, this->size())
     { }
 
     /// move-construct from \c range and \c storage
     DeviceTensor(range_type&& range, storage_type&& storage)
-    : tensor_type(std::forward<range_type>(range), std::forward<storage_type>(storage))
+    : ttvalue_type()
+    , tensor_type(std::forward<range_type>(range), std::forward<storage_type>(storage))
     , b(this->size() ? this->data() : nullptr, this->size())
     { }
 
@@ -138,42 +147,56 @@ struct DeviceTensor : public btas::Tensor<_T, _Range, _Storage> {
     template <typename Range, typename InIter, typename Op>
     DeviceTensor(const Range& range, InIter it, const Op& op,
            typename std::enable_if<btas::is_boxrange<Range>::value>::type* = 0)
-    : tensor_type(range, it, op)
+    : ttvalue_type()
+    , tensor_type(range, it, op)
     , b(this->size() ? this->data() : nullptr, this->size())
     { }
 
     /// copy constructor
     /// It will accept Tensors and TensorViews
     template <class _Tensor, class = typename std::enable_if<btas::is_boxtensor<_Tensor>::value>::type>
-    DeviceTensor(const _Tensor& x)
-    : tensor_type(x)
+    DeviceTensor(const _Tensor& x) noexcept
+    : ttvalue_type()
+    , tensor_type(x.clone())
     , b(this->size() ? this->data() : nullptr, this->size())
-    { }
+    {
+      //std::cout << "DeviceTensor tensor_type copy ctor" << std::endl;
+    }
 
     /// copy constructor: devicebuf cannot be copied, so deleted
-    DeviceTensor(const DeviceTensor& x)
-    : tensor_type(x)
+    DeviceTensor(const DeviceTensor& x) noexcept
+    : ttvalue_type(x)
+    , tensor_type(x.clone())
     , b(this->size() ? this->data() : nullptr, this->size())
-    { }
+    {
+      //std::cout << "DeviceTensor copy ctor" << std::endl;
+    }
 
     /// move constructor
-    DeviceTensor(tensor_type&& x)
-    : tensor_type(std::forward<tensor_type>(x))
+    DeviceTensor(tensor_type&& x) noexcept
+    : ttvalue_type()
+    , tensor_type(std::move(x))
     , b(this->size() ? this->data() : nullptr, this->size())
-    { }
+    {
+      //std::cout << "DeviceTensor tensor_type move ctor" << std::endl;
+    }
 
-    DeviceTensor(DeviceTensor&& x)
-    : tensor_type(std::forward<tensor_type>(x))
+    DeviceTensor(DeviceTensor&& x) noexcept
+    : ttvalue_type(std::move(x))
+    , tensor_type(std::move(x))
     , b(std::move(x.b))
-    { }
+    {
+      //std::cout << "DeviceTensor move ctor" << std::endl;
+    }
 
     /// copy assignment operator
     template <class _Tensor, class = typename std::enable_if<
                                  btas::is_boxtensor<_Tensor>::value &&
                                  not std::is_same<typename _Tensor::storage_type, storage_type>::value>::type>
-    DeviceTensor& operator=(const _Tensor& x) {
-      tensor_type::operator=(x);
+    DeviceTensor& operator=(const _Tensor& x) noexcept {
+      tensor_type::operator=(x.clone());
       b.reset(this->size() ? this->data() : nullptr, this->size());
+      //std::cout << "DeviceTensor tensor_type copy operator" << std::endl;
       return *this;
     }
 
@@ -181,25 +204,35 @@ struct DeviceTensor : public btas::Tensor<_T, _Range, _Storage> {
     template <class _Tensor, class = typename std::enable_if<btas::is_boxtensor<_Tensor>::value>::type,
               class = typename std::enable_if<
                   std::is_same<typename _Tensor::storage_type, storage_type>::value>::type>
-    DeviceTensor& operator=(const _Tensor& x) {
-      tensor_type::operator=(x);
+    DeviceTensor& operator=(const _Tensor& x) noexcept {
+      tensor_type::operator=(x.clone());
       b.reset(this->size() ? this->data() : nullptr, this->size());
+      //std::cout << "DeviceTensor tensor_type copy operator" << std::endl;
       return *this;
     }
 
     /// copy assignment: devicebuf cannot be copied, deleted
-    DeviceTensor& operator=(const DeviceTensor& x) {
-      tensor_type::operator=(x);
+    DeviceTensor& operator=(const DeviceTensor& x) noexcept {
+      ttvalue_type::operator=(x);
+      tensor_type::operator=(x.clone());
       b.reset(this->size() ? this->data() : nullptr, this->size());
+      //std::cout << "DeviceTensor copy operator" << std::endl;
       return *this;
     }
 
     /// move assignment operator
-    DeviceTensor& operator=(DeviceTensor&& x) {
-      tensor_type::operator=(std::forward<tensor_type>(x));
+    DeviceTensor& operator=(DeviceTensor&& x) noexcept {
+      ttvalue_type::operator=(std::move(x));
+      tensor_type::operator=(std::move(x));
       std::swap(x.b, b);
+      //std::cout << "DeviceTensor move ctor" << std::endl;
       return *this;
     }
+
+    using tensor_type::begin;
+    using tensor_type::cbegin;
+    using tensor_type::end;
+    using tensor_type::cend;
 
 };
 
@@ -366,7 +399,7 @@ class Read_SpMatrix : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read_SpMat
     for (int k = 0; k < matrix_.outerSize(); ++k) {
       for (typename SpMatrix<Blk>::InnerIterator it(matrix_, k); it; ++it) {
         if (rank == this->get_keymap()(Key<2>(std::initializer_list<long>({it.row(), it.col()}))))
-          ::send<0>(Key<2>(std::initializer_list<long>({it.row(), it.col()})), it.value(), out);
+          ::send<0>(Key<2>(std::initializer_list<long>({it.row(), it.col()})), ttg::persistent(it.value()), out);
       }
     }
   }
@@ -386,12 +419,14 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, ttg:
       : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, ij_keymap), matrix_(matrix) {}
 
   void op(const Key<2> &key, typename baseT::input_refs_tuple_type &&elem, std::tuple<> &) {
+#if 0
     std::lock_guard<std::mutex> lock(mtx_);
     ttg::trace("rank =", default_execution_context().rank(),
                "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.cc Write_SpMatrix wrote {",
                key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
                " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
-    values_.emplace_back(key[0], key[1], baseT::template get<0>(elem));
+    values_.emplace_back(key[0], key[1], std::move(baseT::template get<0>(elem)));
+#endif // 0
   }
 
   /// grab completion status as a future<void>
@@ -491,7 +526,7 @@ class SpMM25D {
 
   /// Locally broadcast `A[i][k]` assigned to this processor `p` to matmul tasks `{i,j,k}` for all `j` such that
   /// `B[k][j]` exists AND `k` contribution to `C[i][j]` is assigned to this processor
-  class LocalBcastA : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastA, ttg::typelist<Blk>> {
+  class LocalBcastA : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastA, ttg::typelist<const Blk>> {
    public:
     using baseT = typename LocalBcastA::ttT;
 
@@ -528,7 +563,7 @@ class SpMM25D {
   };  // class LocalBcastA
 
   /// broadcast `A[i][k]` to all processors which will contain at least one `C[i][j]` such that `B[k][j]` exists
-  class BcastA : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, ttg::typelist<Blk>> {
+  class BcastA : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, ttg::typelist<const Blk>> {
    public:
     using baseT = typename BcastA::ttT;
 
@@ -566,7 +601,7 @@ class SpMM25D {
 
   /// Locally broadcast `B[k][j]` assigned to this processor `p` to matmul tasks `{i,j,k}` for all `k` such that
   /// `A[i][k]` exists AND `k` contribution to `C[i][j]` is assigned to this processor
-  class LocalBcastB : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastB, ttg::typelist<Blk>> {
+  class LocalBcastB : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastB, ttg::typelist<const Blk>> {
    public:
     using baseT = typename LocalBcastB::ttT;
 
@@ -602,7 +637,7 @@ class SpMM25D {
   };  // class LocalBcastB
 
   /// broadcast `B[k][j]` to all processors which will contain at least one `C[i][j]` such that `A[i][k]` exists
-  class BcastB : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, ttg::typelist<Blk>> {
+  class BcastB : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, ttg::typelist<const Blk>> {
    public:
     using baseT = typename BcastB::ttT;
 

@@ -1,4 +1,5 @@
 cmake_minimum_required (VERSION 3.14) # supports FetchContent_MakeAvailable
+cmake_policy(SET CMP0104 OLD)
 
 # Set TTG version =======================================================
 

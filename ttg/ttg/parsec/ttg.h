@@ -45,6 +45,7 @@
 #include "ttg/parsec/devicescratch.h"
 #include "ttg/parsec/thread_local.h"
 #include "ttg/parsec/devicefunc.h"
+#include "ttg/parsec/ttvalue.h"
 
 #include <algorithm>
 #include <array>
@@ -99,6 +100,8 @@
 #include "ttg/parsec/thread_local.h"
 #include "ttg/parsec/ptr.h"
 #include "ttg/parsec/task.h"
+#include "ttg/device/cublas_helper.h"
+#include "ttg/parsec/parsec-ext.h"
 
 #undef TTG_PARSEC_DEBUG_TRACK_DATA_COPIES
 
@@ -633,8 +636,10 @@ namespace ttg_parsec {
     inline ttg_data_copy_t *create_new_datacopy(Value &&value) {
       using value_type = std::decay_t<Value>;
       ttg_data_copy_t *copy;
-      if constexpr (std::is_rvalue_reference_v<decltype(value)> ||
-                    std::is_copy_constructible_v<std::decay_t<Value>>) {
+      if constexpr (std::is_base_of_v<ttg::TTValue<value_type>, value_type>) {
+        copy = new value_type(std::forward<Value>(value));
+      } else if constexpr (std::is_rvalue_reference_v<decltype(value)> ||
+                           std::is_copy_constructible_v<std::decay_t<Value>>) {
         copy = new ttg_data_value_copy_t<value_type>(std::forward<Value>(value));
       } else {
         throw std::logic_error("Trying to copy-construct data that is not copy-constructible!");
@@ -1256,6 +1261,11 @@ namespace ttg_parsec {
       assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_TRANSFER ||
              dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL);
 
+#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
+      parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu_stream;
+      ttg::detail::cublas_set_kernel_stream(cuda_stream->cuda_stream);
+#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
+
       /* Here we call back into the coroutine again after the transfers have completed */
       static_op<Space>(&task->parsec_task);
 
@@ -1289,6 +1299,22 @@ namespace ttg_parsec {
     static_cuda_stage_in(parsec_gpu_task_t        *gtask,
                          uint32_t                  flow_mask,
                          parsec_gpu_exec_stream_t *gpu_stream) {
+      /* register any memory that hasn't been registered yet */
+      for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
+        if (flow_mask & (1<<i)) {
+          task_t *task = (task_t*)gtask->ec;
+          parsec_data_copy_t *copy = task->parsec_task.data[i].data_in;
+          if (0 == (copy->flags & TTG_PARSEC_DATA_FLAG_REGISTERED)) {
+#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
+            // register host memory for faster device access
+            cudaError_t status;
+            status = cudaHostRegister(copy->device_private, gtask->flow_nb_elts[i], cudaHostRegisterPortable);
+            assert(cudaSuccess == status);
+#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
+            copy->flags |= TTG_PARSEC_DATA_FLAG_REGISTERED;
+          }
+        }
+      }
       return parsec_default_cuda_stage_in(gtask, flow_mask, gpu_stream);
     }
 
@@ -3586,6 +3612,7 @@ template <>
 struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
  private:
   ttg_parsec::detail::ttg_data_copy_t *copy_to_remove = nullptr;
+  bool do_release = true;
 
  public:
   value_copy_handler() = default;
@@ -3606,19 +3633,21 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
   ~value_copy_handler() {
     if (nullptr != copy_to_remove) {
       ttg_parsec::detail::remove_data_copy(copy_to_remove, ttg_parsec::detail::parsec_ttg_caller);
-      ttg_parsec::detail::release_data_copy(copy_to_remove);
+      if (do_release) {
+        ttg_parsec::detail::release_data_copy(copy_to_remove);
+      }
     }
   }
 
   template <typename Value>
-  inline Value &&operator()(Value &&value) {
+  inline std::add_lvalue_reference_t<Value> operator()(Value &&value) {
     static_assert(std::is_rvalue_reference_v<decltype(value)> ||
                   std::is_copy_constructible_v<std::decay_t<Value>>,
                   "Data sent without being moved must be copy-constructible!");
 
     auto caller = ttg_parsec::detail::parsec_ttg_caller;
     if (nullptr == caller) {
-      ttg::print("ERROR: ttg_send or ttg_broadcast called outside of a task!\n");
+      ttg::print("ERROR: ttg::send or ttg::broadcast called outside of a task!\n");
     }
     using value_type = std::remove_reference_t<Value>;
     ttg_parsec::detail::ttg_data_copy_t *copy;
@@ -3643,11 +3672,27 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
       copy->inc_current_version();
     }
     caller->data_flags = ttg_parsec::detail::ttg_parsec_data_flags::NONE;
-    if constexpr (std::is_rvalue_reference_v<decltype(value)>) {
-      return std::move(*value_ptr);
-    } else {
-      return *value_ptr;
+    return *value_ptr;
+  }
+
+  template<typename Value>
+  inline std::add_lvalue_reference_t<Value> operator()(ttg::detail::persistent_value_ref<Value> vref) {
+    auto caller = ttg_parsec::detail::parsec_ttg_caller;
+    if (nullptr == caller) {
+      ttg::print("ERROR: ttg::send or ttg::broadcast called outside of a task!\n");
     }
+    ttg_parsec::detail::ttg_data_copy_t *copy;
+    copy = ttg_parsec::detail::find_copy_in_task(caller, &vref.value_ref);
+    if (nullptr == copy) {
+      // no need to create a new copy since it's derived from the copy already
+      copy = const_cast<ttg_parsec::detail::ttg_data_copy_t *>(static_cast<const ttg_parsec::detail::ttg_data_copy_t *>(&vref.value_ref));
+      bool inserted = ttg_parsec::detail::add_copy_to_task(copy, caller);
+      assert(inserted);
+      copy_to_remove = copy; // we want to remove the copy from the task once done sending
+      do_release = false; // we don't release the copy since we didn't allocate it
+      copy->add_ref(); // add a reference so that TTG does not attempt to delete this object
+    }
+    return vref.value_ref;
   }
 
   template <typename Value>
@@ -3656,7 +3701,7 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
                   "Data sent without being moved must be copy-constructible!");
     auto caller = ttg_parsec::detail::parsec_ttg_caller;
     if (nullptr == caller) {
-      ttg::print("ERROR: ttg_send or ttg_broadcast called outside of a task!\n");
+      ttg::print("ERROR: ttg::send or ttg::broadcast called outside of a task!\n");
     }
     ttg_parsec::detail::ttg_data_copy_t *copy;
     copy = ttg_parsec::detail::find_copy_in_task(caller, &value);

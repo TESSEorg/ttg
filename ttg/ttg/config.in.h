@@ -13,4 +13,6 @@
 
 #cmakedefine TTG_HAVE_CUDA
 
+#cmakedefine TTG_HAVE_CUDART
+
 #endif  // TTG_CONFIG_IN_H

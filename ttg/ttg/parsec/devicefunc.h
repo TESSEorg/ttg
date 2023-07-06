@@ -36,9 +36,9 @@ namespace ttg_parsec {
       auto access = PARSEC_FLOW_ACCESS_RW;
       if constexpr (std::is_const_v<view_type>) {
         // keep the flow at RW if it was RW to make sure we pull the data back out eventually
-        if (flows[I].flow_flags != PARSEC_FLOW_ACCESS_RW) {
+        //if (flows[I].flow_flags != PARSEC_FLOW_ACCESS_RW) {
           access = PARSEC_FLOW_ACCESS_READ;
-        }
+        //}
       } else if constexpr (ttg_parsec::is_devicescratch_v<view_type>) {
         if (view.scope() == ttg::scope::Allocate) {
           access = PARSEC_FLOW_ACCESS_WRITE;
@@ -62,6 +62,7 @@ namespace ttg_parsec {
       /* set the input data copy, parsec will take care of the transfer
        * and the buffer will look at the parsec_data_t for the current pointer */
       //detail::parsec_ttg_caller->parsec_task.data[I].data_in = data->device_copies[data->owner_device];
+      assert(nullptr != data->device_copies[0]->original);
       caller->parsec_task.data[I].data_in = data->device_copies[0];
       caller->parsec_task.data[I].source_repo_entry = NULL;
 

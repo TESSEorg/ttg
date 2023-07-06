@@ -140,7 +140,7 @@ namespace ttg {
       };
 
       template<typename Key, typename Value, ttg::Runtime Runtime = ttg::ttg_runtime>
-      inline send_coro_state send_coro (const Key& key, Value&& value, ttg::Out<Key, Value> &t,
+      inline send_coro_state send_coro (const Key& key, Value&& value, ttg::Out<Key, std::decay_t<Value>> &t,
                                         ttg::detail::value_copy_handler<Runtime>& ch) {
         ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
         Key k = key;
@@ -150,7 +150,7 @@ namespace ttg {
       };
 
       template<typename Value, ttg::Runtime Runtime = ttg::ttg_runtime>
-      inline send_coro_state sendv_coro (Value&& value, ttg::Out<void, Value> &t,
+      inline send_coro_state sendv_coro (Value&& value, ttg::Out<void, std::decay_t<Value>> &t,
                                          ttg::detail::value_copy_handler<Runtime>& ch) {
         ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
         t.prepare_send(std::forward<Value>(value));

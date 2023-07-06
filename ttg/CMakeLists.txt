@@ -10,6 +10,7 @@ configure_file(
 set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/bug.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/cublas_helper.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/demangle.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/diagnose.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/dot.h
@@ -67,6 +68,10 @@ set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/task.h
         ${CMAKE_CURRENT_BINARY_DIR}/ttg/config.h
     )
+set(ttg_device_headers
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/cublas_helper.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/task.h
+    )
 set(ttg-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg.h
     )
@@ -76,6 +81,7 @@ set(ttg-sources
         ${ttg-base-headers}
         ${ttg-util-headers}
         ${ttg-external-headers}
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/cublas_helper.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/bug.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/env.cpp
@@ -112,7 +118,6 @@ if (TARGET std::coroutine)
 endif ()
 if (TARGET CUDA::cudart)
   list(APPEND ttg-deps CUDA::cudart)
-  list(APPEND ttg-defs "TTG_HAVE_CUDART=1")
 endif (TARGET CUDA::cudart)
 
 set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers})
@@ -217,10 +222,12 @@ if (TARGET PaRSEC::parsec)
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/fwd.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/import.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ptr.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/parsec-ext.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/task.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/thread_local.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttg.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttg_data_copy.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttvalue.h
           )
   find_package(MPI)
   set(ttg-parsec-deps "ttg;MPI::MPI_CXX;PaRSEC::parsec")
