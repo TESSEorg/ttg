@@ -13,10 +13,11 @@ TEST_CASE("streams", "[streams][core]") {
   SECTION("concurrent-stream-size") {
     ttg::Edge<int, int> I2O;
     ttg::Edge<int, int> O2S;
-    const auto nranks = ttg::default_execution_context().size();
+    auto world = ttg::default_execution_context();
+    const auto nranks = world.size();
 
-    constexpr std::size_t N = 10000;
-    constexpr std::size_t SLICE = 500;
+    constexpr std::size_t SLICE = 20;
+    std::size_t N = SLICE * 2 * world.size();
     constexpr const timespec ts = { .tv_sec = 0, .tv_nsec = 10000 };
     constexpr int VALUE = 1;
     std::atomic<std::size_t> reduce_ops = 0;
@@ -33,7 +34,6 @@ TEST_CASE("streams", "[streams][core]") {
             // set the size of the last reducer
             if (N%SLICE > 0) {
               ttg::set_size<0>(key, N%SLICE, outs);
-              std::cout << "set_size key " << key << " size " << N%SLICE << std::endl;
             }
             // forward the value
             ttg::send<0>(key, std::forward<int>(i), outs);
@@ -62,14 +62,15 @@ TEST_CASE("streams", "[streams][core]") {
     }, SLICE);
 
     make_graph_executable(op);
-    ttg::ttg_fence(ttg::default_execution_context());
-    if (ttg::default_execution_context().rank() == 0) {
+    ttg::ttg_fence(world);
+    if (world.rank() == 0) {
       for (std::size_t i = 0; i < N; ++i) {
         op->invoke(i, VALUE);
       }
     }
 
-    ttg::ttg_fence(ttg::default_execution_context());
-    CHECK(reduce_ops == N);
+    ttg::execute(world);
+    ttg::ttg_fence(world);
+    CHECK(reduce_ops == (N/world.size()));
   }
 }  // TEST_CASE("streams")

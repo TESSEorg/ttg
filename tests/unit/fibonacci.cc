@@ -30,6 +30,7 @@ TEST_CASE("Fibonacci", "[fib][core]") {
     if (ttg::default_execution_context().size() == 1) {
       ttg::Edge<int, int> F2F;
       ttg::Edge<void, int> F2P;
+      auto world = ttg::default_execution_context();
 
       auto fib_op = ttg::make_tt(
           // computes next value: F_{n+2} = F_{n+1} + F_{n}, seeded by F_1 = 1, F_0 = 0
@@ -62,8 +63,9 @@ TEST_CASE("Fibonacci", "[fib][core]") {
           ttg::edges(F2P), ttg::edges());
       print_op->set_input_reducer<0>([](int &a, const int &b) { a = a + b; });
       make_graph_executable(fib_op);
-      if (ttg::default_execution_context().rank() == 0) fib_op->invoke(1, 0);
-      ttg::ttg_fence(ttg::default_execution_context());
+      if (world.rank() == 0) fib_op->invoke(1, 0);
+      ttg::execute(world);
+      ttg::ttg_fence(world);
     }
   }
 
@@ -71,7 +73,8 @@ TEST_CASE("Fibonacci", "[fib][core]") {
   SECTION("distributed-memory") {
     ttg::Edge<int, std::pair<int, int>> F2F;
     ttg::Edge<void, int> F2P;
-    const auto nranks = ttg::default_execution_context().size();
+    auto world = ttg::default_execution_context();
+    const auto nranks = world.size();
 
     auto fib_op = ttg::make_tt(
         // computes next value: F_{n+2} = F_{n+1} + F_{n}, seeded by F_1 = 1, F_0 = 0
@@ -104,8 +107,9 @@ TEST_CASE("Fibonacci", "[fib][core]") {
       a = a + b;
     });
     make_graph_executable(fib_op);
-    ttg::ttg_fence(ttg::default_execution_context());
-    if (ttg::default_execution_context().rank() == 0) fib_op->invoke(0, std::make_pair(1, 0));
-    ttg::ttg_fence(ttg::default_execution_context());
+    ttg::ttg_fence(world);
+    if (world.rank() == 0) fib_op->invoke(0, std::make_pair(1, 0));
+    ttg::execute(world);
+    ttg::ttg_fence(world);
   }
 }  // TEST_CAST("Fibonacci")
