@@ -100,7 +100,9 @@
 #include "ttg/parsec/thread_local.h"
 #include "ttg/parsec/ptr.h"
 #include "ttg/parsec/task.h"
+#ifdef TTG_HAVE_CUDART
 #include "ttg/device/cublas_helper.h"
+#endif  // TTG_HAVE_CUDART
 #include "ttg/parsec/parsec-ext.h"
 
 #undef TTG_PARSEC_DEBUG_TRACK_DATA_COPIES

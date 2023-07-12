@@ -81,7 +81,6 @@ set(ttg-sources
         ${ttg-util-headers}
         ${ttg_device_headers}
         ${ttg-external-headers}
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/cublas_helper.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/bug.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/env.cpp
@@ -117,6 +116,9 @@ if (TARGET std::coroutine)
           )
 endif ()
 if (TARGET CUDA::cudart)
+  list(APPEND ttg-sources
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/cublas_helper.cpp
+          )
   list(APPEND ttg-deps CUDA::cudart CUDA::cublas)
 endif (TARGET CUDA::cudart)
 

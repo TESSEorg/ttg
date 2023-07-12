@@ -69,11 +69,11 @@ namespace ttg {
 
   namespace detail {
 
-    template<typename T, bool Enabler = false>
+    template<typename T, typename Enabler = void>
     struct is_ttvalue_base : std::false_type {};
 
     template<typename T>
-    struct is_ttvalue_base<T, std::is_base_of_v<TTValue<std::decay_t<T>>, std::decay_t<T>>>
+    struct is_ttvalue_base<T, std::is_base_of<TTValue<std::decay_t<T>>, std::decay_t<T>>>
     : std::true_type
     { };
 

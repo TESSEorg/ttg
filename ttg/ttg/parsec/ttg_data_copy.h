@@ -210,9 +210,9 @@ namespace ttg_parsec {
       template<bool Atomic = true>
       int increment_readers() {
         if constexpr(Atomic) {
-          //return parsec_atomic_fetch_inc_int32(&m_readers);
-          std::atomic_ref<int32_t> a{m_readers};
-          return a.fetch_add(1, std::memory_order_relaxed);
+          return parsec_atomic_fetch_inc_int32(&m_readers);
+//          std::atomic_ref<int32_t> a{m_readers};
+//          return a.fetch_add(1, std::memory_order_relaxed);
         } else {
           return m_readers++;
         }
@@ -233,9 +233,9 @@ namespace ttg_parsec {
       template<bool Atomic = true>
       int decrement_readers() {
         if constexpr(Atomic) {
-          //return parsec_atomic_fetch_dec_int32(&m_readers);
-          std::atomic_ref<int32_t> a{m_readers};
-          return a.fetch_sub(1, std::memory_order_relaxed);
+          return parsec_atomic_fetch_dec_int32(&m_readers);
+//          std::atomic_ref<int32_t> a{m_readers};
+//          return a.fetch_sub(1, std::memory_order_relaxed);
         } else {
           return m_readers--;
         }
