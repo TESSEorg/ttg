@@ -184,7 +184,7 @@ namespace ttg_parsec {
                                                                       : (num_streams+1);
       TT* tt;
       key_type key;
-      stream_info_t streams[num_streams] = {};
+      std::array<stream_info_t, num_streams> streams;
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
 #endif
@@ -239,7 +239,7 @@ namespace ttg_parsec {
     struct parsec_ttg_task_t<TT, true> : public parsec_ttg_task_base_t {
       static constexpr size_t num_streams = TT::numins;
       TT* tt;
-      stream_info_t streams[num_streams] = {};
+      std::array<stream_info_t, num_streams> streams;
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
 #endif

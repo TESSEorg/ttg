@@ -117,7 +117,7 @@ if (TARGET std::coroutine)
           )
 endif ()
 if (TARGET CUDA::cudart)
-  list(APPEND ttg-deps CUDA::cudart)
+  list(APPEND ttg-deps CUDA::cudart CUDA::cublas)
 endif (TARGET CUDA::cudart)
 
 set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers};${ttg_device_headers})

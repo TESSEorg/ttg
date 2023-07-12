@@ -8,9 +8,14 @@
 #include <atomic>
 #include <type_traits>
 
+#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
+#include <cuda_runtime.h>
+#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
+
 #include <parsec.h>
 
 #include "ttg/parsec/thread_local.h"
+#include "ttg/parsec/parsec-ext.h"
 #include "ttg/util/span.h"
 
 
@@ -20,6 +25,78 @@ namespace ttg_parsec {
 
     // fwd-decl
     struct ttg_data_copy_t;
+
+    /* Wrapper managing the relationship between a ttg data copy and the parsec_data_t object */
+    struct ttg_parsec_data_wrapper_t {
+
+    protected:
+      using parsec_data_ptr = std::unique_ptr<parsec_data_t, decltype(&parsec_data_destroy)>;
+
+      ttg_data_copy_t *m_ttg_copy = nullptr;
+      parsec_data_ptr m_data;
+
+      friend ttg_data_copy_t;
+
+      static parsec_data_t* create_parsec_data(void *ptr, size_t size) {
+        parsec_data_t *data = parsec_data_create_with_type(nullptr, 0, ptr, size,
+                                                          parsec_datatype_int8_t);
+        data->device_copies[0]->flags |= PARSEC_DATA_FLAG_PARSEC_MANAGED;
+        data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+        data->device_copies[0]->version = 1;
+        return data;
+      }
+
+      parsec_data_t* parsec_data() {
+        return m_data.get();
+      }
+
+      const parsec_data_t* parsec_data() const {
+        return m_data.get();
+      }
+
+      static void delete_parsec_data(parsec_data_t *data) {
+#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
+        if (data->device_copies[0]->flags & TTG_PARSEC_DATA_FLAG_REGISTERED) {
+          // register the memory for faster access
+          cudaError_t status;
+          status = cudaHostUnregister(data->device_copies[0]->device_private);
+          assert(cudaSuccess == status);
+          data->device_copies[0]->flags ^= TTG_PARSEC_DATA_FLAG_REGISTERED;
+      }
+#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
+        parsec_data_destroy(data);
+      }
+
+      static void delete_null_parsec_data(parsec_data_t *) {
+        // nothing to be done, only used for nullptr
+      }
+
+    protected:
+
+      /* remove the the data from the owning data copy */
+      void remove_from_owner();
+
+      /* add the data to the owning data copy */
+      void reset_parsec_data(void *ptr, size_t size);
+
+      ttg_parsec_data_wrapper_t();
+
+      ttg_parsec_data_wrapper_t(const ttg_parsec_data_wrapper_t& other) = delete;
+
+      ttg_parsec_data_wrapper_t(ttg_parsec_data_wrapper_t&& other);
+
+      ttg_parsec_data_wrapper_t& operator=(const ttg_parsec_data_wrapper_t& other) = delete;
+
+      ttg_parsec_data_wrapper_t& operator=(ttg_parsec_data_wrapper_t&& other);
+
+      virtual ~ttg_parsec_data_wrapper_t();
+
+      /* set a new owning data copy object */
+      void set_owner(ttg_data_copy_t& new_copy) {
+        m_ttg_copy = &new_copy;
+      }
+    };
+
 
     /* templated to break cyclic dependency with ttg_data_copy_container */
     template<typename T = ttg_data_copy_t>
@@ -79,6 +156,10 @@ namespace ttg_parsec {
         c.m_num_dev_data = 0;
         c.m_readers = 0;
         c.m_single_dev_data = nullptr;
+
+        foreach_wrapper([&](ttg_parsec_data_wrapper_t* data){
+          data->set_owner(*this);
+        });
       }
 
       ttg_data_copy_t& operator=(ttg_data_copy_t&& c)
@@ -94,6 +175,11 @@ namespace ttg_parsec {
         c.m_single_dev_data = nullptr;
         m_num_dev_data = c.m_num_dev_data;
         c.m_num_dev_data = 0;
+
+        /* move all data to the new owner */
+        foreach_wrapper([&](ttg_parsec_data_wrapper_t* data){
+          data->set_owner(*this);
+        });
         return *this;
       }
 
@@ -190,47 +276,28 @@ namespace ttg_parsec {
 
       /* increment the version of the current copy */
       void inc_current_version() {
-        if (m_num_dev_data == 1) {
-          //std::cout << "data-copy " << this << " inc version " << m_single_dev_data << std::endl;
-          assert(m_single_dev_data->device_copies[0] != nullptr);
-          m_single_dev_data->device_copies[0]->version++;
-          //std::cout << "Incrementing version of data " << m_single_dev_data << " copy "
-          //          << m_single_dev_data->device_copies[m_single_dev_data->owner_device]
-          //          << " on device " << (int)m_single_dev_data->owner_device << " to "
-          //          << m_single_dev_data->device_copies[m_single_dev_data->owner_device]->version << std::endl;
-        } else if (m_num_dev_data > 1) {
-          std::for_each(m_dev_data.begin(), m_dev_data.end(),
-                        [](parsec_data_t *data){
-                           assert(data->device_copies[0] != nullptr);
-                           data->device_copies[0]->version++;
-                           //std::cout << "Incrementing version of copy "
-                           //          << " on device " << (int)data->owner_device << data->device_copies[data->owner_device] << " to "
-                           //          << data->device_copies[data->owner_device]->version << std::endl;
-                        });
-        }
+        //std::cout << "data-copy " << this << " inc_current_version " << " count " << m_num_dev_data << std::endl;
+        foreach_parsec_data([](parsec_data_t* data){
+          assert(data->device_copies[0] != nullptr);
+          data->device_copies[0]->version++;
+        });
       }
 
       void transfer_ownership(int access, int device = 0) {
-
-        if (m_num_dev_data == 1) {
-          parsec_data_transfer_ownership_to_copy(m_single_dev_data, device, access);
-        } else if (m_num_dev_data > 1) {
-          std::for_each(m_dev_data.begin(), m_dev_data.end(),
-                        [&](parsec_data_t *data){
-                          parsec_data_transfer_ownership_to_copy(data, device, access);
-                        });
-        }
+        foreach_parsec_data([&](parsec_data_t* data){
+          parsec_data_transfer_ownership_to_copy(data, device, access);
+        });
       }
 
       /* manage device copies owned by this object
        * we only touch the vector if we have more than one copies to track
        * and otherwise use the single-element member.
        */
-      using iterator = parsec_data_t**;
+      using iterator = ttg_parsec_data_wrapper_t**;
 
-      void add_device_data(parsec_data_t* data) {
-        //std::cout << "data-copy " << this << " add data " << data << std::endl;
-        PARSEC_OBJ_RETAIN(data);
+      void add_device_data(ttg_parsec_data_wrapper_t* data) {
+        // TODO: REMOVE AFTER DEBUG
+        //assert(m_num_dev_data == 0);
         switch (m_num_dev_data) {
           case 0:
             m_single_dev_data = data;
@@ -238,18 +305,23 @@ namespace ttg_parsec {
           case 1:
             /* move single copy into vector and add new copy below */
             m_dev_data.push_back(m_single_dev_data);
+            m_single_dev_data = nullptr;
             /* fall-through */
           default:
             /* store in multi-copy vector */
             m_dev_data.push_back(data);
             break;
         }
+        //std::cout << "data-copy " << this << " add data " << data << " count " << m_num_dev_data << std::endl;
         m_num_dev_data++;
       }
 
-      void remove_device_data(parsec_data_t* data) {
-        //std::cout << "data-copy " << this << " remove data " << data << std::endl;
-        assert(m_num_dev_data >= 1);
+      void remove_device_data(ttg_parsec_data_wrapper_t* data) {
+        //std::cout << "data-copy " << this << " remove data " << data << " count " << m_num_dev_data << std::endl;
+        if (m_num_dev_data == 0) {
+          /* this may happen if we're integrated into the object and have been moved */
+          return;
+        }
         if (m_num_dev_data == 1) {
           assert(m_single_dev_data == data);
           m_single_dev_data = nullptr;
@@ -265,13 +337,42 @@ namespace ttg_parsec {
           m_single_dev_data = m_dev_data[0];
           m_dev_data.clear();
         }
-        PARSEC_OBJ_RELEASE(data);
+        // TODO: REMOVE AFTER DEBUG
+        //assert(m_num_dev_data == 0);
       }
 
       int num_dev_data() const {
         return m_num_dev_data;
       }
 
+      template<typename Fn>
+      void foreach_wrapper(Fn&& fn) {
+        if (m_num_dev_data == 1) {
+          fn(m_single_dev_data);
+        } else if (m_num_dev_data > 1) {
+          std::for_each(m_dev_data.begin(), m_dev_data.end(), fn);
+        }
+      }
+
+      template<typename Fn>
+      void foreach_parsec_data(Fn&& fn) {
+        if (m_num_dev_data == 1) {
+          if (m_single_dev_data->parsec_data()) {
+            fn(m_single_dev_data->parsec_data());
+          }
+        } else if (m_num_dev_data > 1) {
+          std::for_each(m_dev_data.begin(), m_dev_data.end(),
+            [&](ttg_parsec_data_wrapper_t* data){
+              if (data->parsec_data()) {
+                fn(data->parsec_data());
+              }
+            }
+          );
+        }
+      }
+
+
+#if 0
       iterator begin() {
         switch(m_num_dev_data) {
           // no device copies
@@ -290,6 +391,7 @@ namespace ttg_parsec {
             return m_dev_data.data() + m_dev_data.size();
         }
       }
+#endif // 0
 
       using iovec_iterator = typename std::vector<ttg::iovec>::iterator;
 
@@ -324,14 +426,14 @@ namespace ttg_parsec {
     protected:
       parsec_task_t *m_next_task = nullptr;
       int32_t        m_readers  = 1;
-      std::atomic<int32_t>  m_refs = 1; // number of entities referencing this copy (TTGs, external)
+      std::atomic<int32_t>  m_refs = 1;                     //< number of entities referencing this copy (TTGs, external)
 
       std::vector<ttg::iovec> m_iovecs;
 
-      std::vector<parsec_data_t*> m_dev_data;   //< used if there are multiple device copies
-                                                //  that belong to this object
-      parsec_data_t *m_single_dev_data;         //< used if there is a single device copy
-      int m_num_dev_data = 0;                   //< number of device copies
+      std::vector<ttg_parsec_data_wrapper_t*> m_dev_data;   //< used if there are multiple device copies
+                                                            //  that belong to this object
+      ttg_parsec_data_wrapper_t *m_single_dev_data;         //< used if there is a single device copy
+      int m_num_dev_data = 0;                               //< number of device copies
     };
 
 
@@ -409,6 +511,75 @@ namespace ttg_parsec {
         return &m_value;
       }
     };
+
+    /**
+     * definition of ttg_parsec_data_wrapper_t members that depend on ttg_data_copy_t
+     */
+
+    void ttg_parsec_data_wrapper_t::remove_from_owner() {
+      if (nullptr != m_ttg_copy) {
+        m_ttg_copy->remove_device_data(this);
+        m_ttg_copy = nullptr;
+      }
+    }
+
+    void ttg_parsec_data_wrapper_t::reset_parsec_data(void *ptr, size_t size) {
+      if (ptr == m_data.get()) return;
+
+      if (nullptr == ptr) {
+        m_data = parsec_data_ptr(nullptr, &delete_null_parsec_data);
+      } else {
+        m_data = parsec_data_ptr(create_parsec_data(ptr, size), &delete_parsec_data);
+      }
+    }
+
+    ttg_parsec_data_wrapper_t::ttg_parsec_data_wrapper_t()
+    : m_data(nullptr, delete_null_parsec_data)
+    , m_ttg_copy(detail::ttg_data_copy_container())
+    {
+      if (m_ttg_copy) {
+        m_ttg_copy->add_device_data(this);
+      }
+    }
+    ttg_parsec_data_wrapper_t::ttg_parsec_data_wrapper_t(ttg_parsec_data_wrapper_t&& other)
+    : m_data(std::move(other.m_data))
+    , m_ttg_copy(detail::ttg_data_copy_container())
+    {
+      /* the ttg_data_copy may have moved us already */
+      if (other.m_ttg_copy != m_ttg_copy) {
+        // try to remove the old buffer from the *old* ttg_copy
+        other.remove_from_owner();
+
+        // register with the new ttg_copy
+        if (nullptr != m_ttg_copy) {
+          m_ttg_copy->add_device_data(this);
+        }
+      }
+    }
+
+    ttg_parsec_data_wrapper_t& ttg_parsec_data_wrapper_t::operator=(ttg_parsec_data_wrapper_t&& other) {
+      m_data = std::move(other.m_data);
+      /* check whether the owning ttg_data_copy has already moved us */
+      if (other.m_ttg_copy != m_ttg_copy) {
+        /* remove from old ttg copy */
+        other.remove_from_owner();
+
+        if (nullptr != m_ttg_copy) {
+          /* register with the new ttg_copy */
+          m_ttg_copy->add_device_data(this);
+        }
+      }
+      return *this;
+    }
+
+
+    ttg_parsec_data_wrapper_t::~ttg_parsec_data_wrapper_t() {
+      if (nullptr != m_ttg_copy) {
+        m_ttg_copy->remove_device_data(this);
+        m_ttg_copy = nullptr;
+      }
+    }
+
 
   } // namespace detail
 

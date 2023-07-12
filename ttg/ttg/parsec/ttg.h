@@ -1571,7 +1571,7 @@ namespace ttg_parsec {
 
       /* the copy to reduce into */
       detail::ttg_data_copy_t *target_copy;
-      target_copy = static_cast<detail::ttg_data_copy_t *>(parent_task->parsec_task.data[i].data_in);
+      target_copy = parent_task->copies[i];
       assert(val_is_void || nullptr != target_copy);
       /* once we hit 0 we have to stop since another thread might enqueue a new reduction task */
       std::size_t c = 0;
@@ -1591,7 +1591,7 @@ namespace ttg_parsec {
         }
       }
 
-      assert(parsec_ttg_caller == NULL);
+      assert(detail::parsec_ttg_caller == NULL);
       detail::parsec_ttg_caller = rtask->parent_task;
 
       do {
@@ -1813,12 +1813,14 @@ namespace ttg_parsec {
             metadata_t metadata;
             pos = unpack(metadata, msg->bytes, pos);
 
+            //std::cout << "set_arg_from_msg splitmd num_iovecs " << num_iovecs << std::endl;
+
             copy = detail::create_new_datacopy(descr.create_from_metadata(metadata));
           } else if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
             copy = detail::create_new_datacopy(decvalueT{});
             /* unpack the object, potentially discovering iovecs */
             pos = unpack(*static_cast<decvalueT *>(copy->get_ptr()), msg->bytes, pos);
-            //std::cout << "num_iovecs " << num_iovecs << " distance " << std::distance(copy->iovec_begin(), copy->iovec_end()) << std::endl;
+            //std::cout << "set_arg_from_msg iovec_begin num_iovecs " << num_iovecs << " distance " << std::distance(copy->iovec_begin(), copy->iovec_end()) << std::endl;
             assert(std::distance(copy->iovec_begin(), copy->iovec_end()) == num_iovecs);
           }
 
@@ -2016,7 +2018,7 @@ namespace ttg_parsec {
       }
 
       for (int i = 0; i < static_stream_goal.size(); ++i) {
-        newtask->stream[i].goal = static_stream_goal[i];
+        newtask->streams[i].goal = static_stream_goal[i];
       }
 
       ttg::trace(world.rank(), ":", get_name(), " : ", key, ": creating task");
@@ -2176,7 +2178,7 @@ namespace ttg_parsec {
             detail::ttg_data_copy_t *copy = get_copy_fn(reduce_task, std::forward<Value>(value), false);
 
             /* put the copy into the task */
-            task->parsec_task.data[i].data_in = copy;
+            task->copies[i] = copy;
 
             /* protected by the bucket lock */
             task->streams[i].size = 1;
@@ -2211,6 +2213,8 @@ namespace ttg_parsec {
         //}
         //parsec_hash_table_unlock_bucket(&tasks_table, hk);
       } else {
+        /* unlock the bucket, the lock is not needed anymore */
+        parsec_hash_table_unlock_bucket(&tasks_table, hk);
         /* whether the task needs to be deferred or not */
         if constexpr (!valueT_is_Void) {
           if (nullptr != task->copies[i]) {
@@ -2419,6 +2423,7 @@ namespace ttg_parsec {
           auto metadata = descr.get_metadata(*const_cast<decvalueT *>(value_ptr));
           size_t metadata_size = sizeof(metadata);
           pos = pack(metadata, msg->bytes, pos);
+          //std::cout << "set_arg_impl splitmd num_iovecs " << num_iovecs << std::endl;
           handle_iovec_fn(iovs);
         } else if constexpr (!ttg::has_split_metadata<std::decay_t<Value>>::value) {
           /* serialize the object */
@@ -2571,6 +2576,7 @@ namespace ttg_parsec {
           auto metadata = descr.get_metadata(value);
           size_t metadata_size = sizeof(metadata);
           pos = pack(metadata, msg->bytes, pos);
+          //std::cout << "broadcast_arg splitmd num_iovecs " << num_iovs << std::endl;
         } else if constexpr (!ttg::has_split_metadata<std::decay_t<Value>>::value) {
           /* serialize the object once */
           pos = pack(value, msg->bytes, pos, copy);
@@ -2946,7 +2952,7 @@ namespace ttg_parsec {
 
       assert(detail::parsec_ttg_caller->dev_ptr && detail::parsec_ttg_caller->dev_ptr->gpu_task);
       parsec_gpu_task_t *gpu_task = detail::parsec_ttg_caller->dev_ptr->gpu_task;
-      for (auto data : *copy) {
+      auto check_parsec_data = [&](parsec_data_t* data) {
         if (data->owner_device != 0) {
           /* find the flow */
           int flowidx = 0;
@@ -2970,7 +2976,8 @@ namespace ttg_parsec {
           ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_RW;
           gpu_task->pushout |= 1<<flowidx;
         }
-      }
+      };
+      copy->foreach_parsec_data(check_parsec_data);
     }
 
 
@@ -3400,12 +3407,14 @@ namespace ttg_parsec {
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CUDA;
         ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_cuda<TT>;
+#if 0
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_CPU;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[1].hook = &detail::hook<TT>;
-        ((__parsec_chore_t *)self.incarnations)[2].type = PARSEC_DEV_NONE;
-        ((__parsec_chore_t *)self.incarnations)[2].evaluate = NULL;
-        ((__parsec_chore_t *)self.incarnations)[2].hook = NULL;
+#endif // 0
+        ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
+        ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
+        ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
       } else {
         self.incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CPU;

@@ -184,8 +184,14 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     DeviceTensor(DeviceTensor&& x) noexcept
     : ttvalue_type(std::move(x))
     , tensor_type(std::move(x))
-    , b(std::move(x.b))
+    /* Grrrr, moving a Tensor does not guarantee to move the pointer */
+    , b((this->size() == 0 ||
+         this->data() == x.b.host_ptr()) ? std::move(x.b)
+                                         : ttg::buffer<_T>(this->size() ? this->data()
+                                                                        : nullptr,
+                                                           this->size()))
     {
+      assert(this->data() == b.host_ptr());
       //std::cout << "DeviceTensor move ctor" << std::endl;
     }
 
@@ -224,7 +230,12 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     DeviceTensor& operator=(DeviceTensor&& x) noexcept {
       ttvalue_type::operator=(std::move(x));
       tensor_type::operator=(std::move(x));
-      std::swap(x.b, b);
+      if (this->size() == 0 || this->data() == x.b.host_ptr()){
+        b = std::move(x.b);
+      } else  {
+        b = ttg::buffer<_T>(this->size() ? this->data() : nullptr, this->size());
+      }
+      //std::swap(x.b, b);
       //std::cout << "DeviceTensor move ctor" << std::endl;
       return *this;
     }
@@ -1510,6 +1521,9 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   gettimeofday(&start, nullptr);
   // ready, go! need only 1 kick, so must be done by 1 thread only
   if (ttg::default_execution_context().rank() == 0) control.start(P, Q);
+  static volatile int debug_signal = 0;
+  std::cout << "Waiting on debug signal (int*)" << &debug_signal << std::endl;
+  //while (!debug_signal) {}
   fence();
   gettimeofday(&end, nullptr);
   timersub(&end, &start, &diff);
