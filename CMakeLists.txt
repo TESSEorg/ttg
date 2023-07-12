@@ -132,8 +132,8 @@ if (TTG_EXAMPLES)
         set_property(TARGET eigen3 PROPERTY
                 INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
     endif (EIGEN3_FOUND)
-    # BTAS brings in linear algebra (BLAS++/LAPACK++)
-    include(FindOrFetchBTAS)
+    # TiledArray brings in BTAS AND linear algebra (BLAS++/LAPACK++)
+    include(FindOrFetchTiledArray)
     # OpenMP may also be used by some examples
     find_package(OpenMP COMPONENTS CXX)
     # std::execution may also be used by some examples
