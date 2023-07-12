@@ -239,7 +239,7 @@ namespace ttg {
     std::enable_if_t<!meta::is_void_v<Value>, void> broadcast(const rangeT &keylist, const Value &value) {
       if (broadcast_callback) {
         if constexpr (ttg::meta::is_iterable_v<rangeT>) {
-          broadcast_callback(ttg::span(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))),
+          broadcast_callback(ttg::span<const keyT>(&(*std::begin(keylist)), std::distance(std::begin(keylist), std::end(keylist))),
                              value);
         } else {
           /* got something we cannot iterate over (single element?) so put one element in the span */
