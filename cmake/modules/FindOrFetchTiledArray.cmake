@@ -42,7 +42,7 @@ else (TARGET tiledarray)
   FetchContent_Declare(
       TILEDARRAY
       GIT_REPOSITORY      https://github.com/ValeevGroup/tiledarray.git
-      GIT_TAG             ${MPQC_TRACKED_TILEDARRAY_TAG}
+      GIT_TAG             ${TTG_TRACKED_TILEDARRAY_TAG}
   )
   FetchContent_MakeAvailable(TILEDARRAY)
   FetchContent_GetProperties(TILEDARRAY
