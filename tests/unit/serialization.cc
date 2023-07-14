@@ -40,6 +40,7 @@ class POD {
   bool operator==(const POD& other) const { return value == other.value; }
 };
 static_assert(std::is_trivially_copyable_v<POD>);
+static_assert(ttg::detail::is_memcpyable_v<POD>);
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
 // WTF?! std::array of non-Serializable is Serializable
@@ -91,7 +92,17 @@ class NonPOD {
 
   int get() const { return value; }
 };
+// non-default ctor breaks trivial copyability
 static_assert(!std::is_trivially_copyable_v<NonPOD>);
+static_assert(!ttg::detail::is_memcpyable_v<NonPOD>);
+
+// but can allow use of std::memcpy on type
+class MemcpyableNonPOD : public NonPOD {};
+namespace ttg::detail {
+  template<> inline constexpr bool is_memcpyable_override_v<MemcpyableNonPOD> = true;
+}  // namespace ttg::detail
+static_assert(!std::is_trivially_copyable_v<MemcpyableNonPOD>);
+static_assert(ttg::detail::is_memcpyable_v<MemcpyableNonPOD>);
 
 namespace intrusive::symmetric::mc {
 
@@ -470,6 +481,11 @@ static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_user_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_user_buffer_serializable_v<std::array<int, 4>>);
+
+// default_data_descriptor<std::pair<int,int>> should be defined but std::is_trivially_copyable_v<std::pair<int,int>> is false
+// is_memcpyable_v<std::pair<int,int>> is true
+static_assert(!std::is_trivially_copyable_v<std::pair<int,int>>);
+static_assert(ttg::detail::is_memcpyable_v<std::pair<int,int>>);
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
 

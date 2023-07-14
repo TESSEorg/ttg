@@ -44,7 +44,7 @@ namespace ttg {
   /// @tparam T a trivially-copyable type
   template <typename T>
   struct default_data_descriptor<
-      T, std::enable_if_t<std::is_trivially_copyable_v<T> && !detail::is_user_buffer_serializable_v<T> &&
+      T, std::enable_if_t<detail::is_memcpyable_v<T> && !detail::is_user_buffer_serializable_v<T> &&
                           !ttg::has_split_metadata<T>::value>> {
     static constexpr const bool serialize_size_is_const = true;
 
@@ -154,7 +154,7 @@ namespace ttg {
   /// and support MADNESS serialization
   template <typename T>
   struct default_data_descriptor<
-      T, std::enable_if_t<((!std::is_trivially_copyable_v<T> && detail::is_madness_buffer_serializable_v<T>) ||
+      T, std::enable_if_t<((!detail::is_memcpyable_v<T> && detail::is_madness_buffer_serializable_v<T>) ||
                            detail::is_madness_user_buffer_serializable_v<T>)&&!ttg::has_split_metadata<T>::value>> {
     static constexpr const bool serialize_size_is_const = false;
 
@@ -200,7 +200,7 @@ namespace ttg {
   /// do not support MADNESS serialization, and support Boost serialization
   template <typename T>
   struct default_data_descriptor<
-      T, std::enable_if_t<(!std::is_trivially_copyable_v<T> && !detail::is_madness_buffer_serializable_v<T> &&
+      T, std::enable_if_t<(!detail::is_memcpyable_v<T> && !detail::is_madness_buffer_serializable_v<T> &&
                            detail::is_boost_buffer_serializable_v<T>) ||
                           (!detail::is_madness_user_buffer_serializable_v<T> &&
                            detail::is_boost_user_buffer_serializable_v<T>)>> {
@@ -244,7 +244,7 @@ namespace ttg {
   /// do not support MADNESS or Boost serialization, and support Cereal serialization
   template <typename T>
   struct default_data_descriptor<
-      T, std::enable_if_t<(!std::is_trivially_copyable_v<T> && !detail::is_madness_buffer_serializable_v<T> &&
+      T, std::enable_if_t<(!detail::is_memcpyable_v<T> && !detail::is_madness_buffer_serializable_v<T> &&
                            !detail::is_boost_buffer_serializable_v<T> && detail::is_cereal_buffer_serializable_v<T>) ||
                           (!detail::is_madness_user_buffer_serializable_v<T> &&
                            !detail::is_boost_user_buffer_serializable_v<T> &&
