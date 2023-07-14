@@ -16,7 +16,7 @@ if (TARGET eigen3)
           if (NOT TARGET tiledarray)
               message(FATAL_ERROR "TiledArray is not found; it is required for CUDA-based block-sparse SPMM")
           endif()
-          add_ttg_executable(bspmm-cuda spmm/spmm_cuda.cc spmm/cuda_gemm.cc
+          add_ttg_executable(bspmm-cuda spmm/spmm_cuda.cc
                              LINK_LIBRARIES tiledarray eigen3 BTAS Boost::boost CUDA::cublas
                              COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
                              RUNTIMES "parsec")

@@ -14,8 +14,9 @@
 #include <btas/features.h>
 #ifdef BTAS_IS_USABLE
 #include <btas/btas.h>
-#include <btas/optimize/contract.h>
 #include <btas/util/mohndle.h>
+#include <btas/optimize/contract.h>
+#include <TiledArray/cuda/allocators.h>
 #else
 #warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
 #endif
@@ -40,7 +41,7 @@ using namespace ttg;
 #include "ttg/util/bug.h"
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
-using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
+using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double, TiledArray::cuda_pinned_allocator<double>>, btas::Handle::shared_ptr>>;
 
 #if defined(TTG_USE_PARSEC)
 namespace ttg {

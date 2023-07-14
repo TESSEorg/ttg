@@ -4,10 +4,11 @@
 #include "ttg/config.h"
 
 #ifdef TTG_HAVE_CUDART
-#include <cublas.h>
+#include <cublas_v2.h>
 
 namespace ttg::detail {
 
+/// \brief Returns the current CUDA stream used by cuBLAS
 void cublas_set_kernel_stream(cudaStream_t stream);
 
 } // namespace ttg::detail

@@ -1362,8 +1362,8 @@ namespace ttg_parsec {
       /* TODO: is this the right place to set the mask? */
       task->parsec_task.chore_mask = PARSEC_DEV_ALL;
       /* get a device and come back if we need another one */
-      int64_t task_load = 1;
-      dev_index = parsec_get_best_device(parsec_task, &task_load);
+      double task_load = 1.;
+      dev_index = parsec_get_best_device(parsec_task, task_load);
       assert(dev_index >= 0);
       if (dev_index < 2) {
           return PARSEC_HOOK_RETURN_NEXT; /* Fall back */
