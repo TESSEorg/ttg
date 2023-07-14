@@ -16,7 +16,6 @@
 #include <btas/btas.h>
 #include <btas/util/mohndle.h>
 #include <btas/optimize/contract.h>
-#include <TiledArray/cuda/allocators.h>
 #else
 #warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
 #endif
@@ -41,7 +40,7 @@ using namespace ttg;
 #include "ttg/util/bug.h"
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
-using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double, TiledArray::cuda_pinned_allocator<double>>, btas::Handle::shared_ptr>>;
+using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
 
 #if defined(TTG_USE_PARSEC)
 namespace ttg {
@@ -461,7 +460,7 @@ class SpMM25D {
                 {"c_ij", "c_ijk"}, ijk_keymap)
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
-      this->set_priomap([=](const Key<3> &ijk) { return this->prio(ijk); });  // map a key to an integral priority value
+      this->set_priomap([=,this](const Key<3> &ijk) { return this->prio(ijk); });  // map a key to an integral priority value
 
       // for each {i,j} determine first k that contributes AND belongs to this node,
       // initialize input {i,j,first_k} flow to 0

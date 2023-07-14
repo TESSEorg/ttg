@@ -17,6 +17,7 @@
 #include <btas/btas.h>
 #include <btas/optimize/contract.h>
 #include <btas/util/mohndle.h>
+#include <TiledArray/cuda/allocators.h>
 #else
 #warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
 #endif
@@ -248,7 +249,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
 };
 
 using blk_t = DeviceTensor<double, btas::DEFAULT::range,
-                           btas::mohndle<btas::varray<double>,
+                           btas::mohndle<btas::varray<double, TiledArray::cuda_pinned_allocator<double>>,
                                          btas::Handle::shared_ptr>>;
 
 
