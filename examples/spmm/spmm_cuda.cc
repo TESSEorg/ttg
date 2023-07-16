@@ -18,6 +18,7 @@
 #include <btas/optimize/contract.h>
 #include <btas/util/mohndle.h>
 #include <TiledArray/cuda/allocators.h>
+#include <ttg/device/cublas_helper.h>
 #else
 #warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
 #endif
@@ -42,12 +43,6 @@ using namespace ttg;
 #include "ttg/util/bug.h"
 
 #include "ttg/serialization/std/pair.h"
-
-#include "cuda_gemm.h"
-
-#ifdef CUBLAS_V2_H_
-#define CUBLAS_V2_H_ 1
-#endif
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 
@@ -270,10 +265,10 @@ static void cuda_gemm(blk_t &C, const blk_t &A, const blk_t &B) {
   //assert(B.b.get_current_device() != 0);
   int device = C.b.get_current_device();
   assert(device != 0);
-  my_cublas_dgemm_because_cublas_is_stupid(
-              'N', 'N', C.extent(0), C.extent(1), A.extent(1), alpha,
+  cublasDgemm(ttg::detail::cublas_get_handle(),
+              CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1), &alpha,
               A.b.device_ptr_on(device), A.extent(0),
-              B.b.device_ptr_on(device), B.extent(0), beta,
+              B.b.device_ptr_on(device), B.extent(0), &beta,
               C.b.current_device_ptr(), C.extent(0));
 }
 
@@ -1598,8 +1593,6 @@ int main(int argc, char **argv) {
   bool timing;
   double gflops;
 
-  my_cublas_init_because_cublas_is_stupid();
-
   // warm up silicon by calling gemm a few times
 #ifdef BTAS_IS_USABLE
   for (int i = 0; i < 20; i++) {
@@ -1623,6 +1616,9 @@ int main(int argc, char **argv) {
   } else {
     initialize(1, argv, cores);
   }
+
+  // initialize MADNESS so that TA allocators can be created
+  madness::initialize(argc, argv, /* nthread = */ 0, /* quiet = */ true);
 
   std::string debugStr(getCmdOption(argv, argv + argc, "-d"));
   auto debug = (unsigned int)parseOption(debugStr, 0);
@@ -1864,10 +1860,8 @@ int main(int argc, char **argv) {
       }
     }
 
+    madness::finalize();
     ttg_finalize();
-
-    my_cublas_shutdown_because_cublas_is_stupid();
-
     return 0;
   }
 }

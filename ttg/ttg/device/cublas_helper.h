@@ -8,7 +8,10 @@
 
 namespace ttg::detail {
 
-/// \brief Returns the current CUDA stream used by cuBLAS
+/// \brief Returns the cuBLAS context used by this thread
+const cublasHandle_t& cublas_get_handle();
+
+/// associates the given CUDA stream with the cuBLAS context used by this thread
 void cublas_set_kernel_stream(cudaStream_t stream);
 
 } // namespace ttg::detail

@@ -4,25 +4,20 @@ add_ttg_executable(test test/test.cc)
 add_ttg_executable(t9 t9/t9.cc)
 add_ttg_executable(t9-streaming t9/t9_streaming.cc)
 
-# sparse matmul
-if (TARGET eigen3)
+# sparse matmul need Eigen ... it's always provided by TA
+if (TARGET tiledarray)
     # MADworld used for MADNESS serialization
-    add_ttg_executable(spmm spmm/spmm.cc LINK_LIBRARIES eigen3)
-    # block-sparse needs BTAS
-    if (TARGET BTAS::BTAS)
-        # since only need to use matrices, limit BTAS_TARGET_MAX_INDEX_RANK to 2
-        add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES tiledarray eigen3 BTAS Boost::boost COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2)
-        if (TARGET CUDA::cublas)
-          if (NOT TARGET tiledarray)
-              message(FATAL_ERROR "TiledArray is not found; it is required for CUDA-based block-sparse SPMM")
-          endif()
-          add_ttg_executable(bspmm-cuda spmm/spmm_cuda.cc
-                             LINK_LIBRARIES tiledarray eigen3 BTAS Boost::boost CUDA::cublas
-                             COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
-                             RUNTIMES "parsec")
-        endif (TARGET CUDA::cublas)
-    endif (TARGET BTAS::BTAS)
-endif(TARGET eigen3)
+    add_ttg_executable(spmm spmm/spmm.cc LINK_LIBRARIES TiledArray_Eigen)
+    # block-sparse needs BTAS ... it's always provided by TA
+    # since only need to use matrices, limit BTAS_TARGET_MAX_INDEX_RANK to 2
+    add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2)
+    if (TARGET CUDA::cublas)
+      add_ttg_executable(bspmm-cuda spmm/spmm_cuda.cc
+                         LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost CUDA::cublas
+                         COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
+                         RUNTIMES "parsec")
+    endif (TARGET CUDA::cublas)
+endif()
 
 if (TARGET MADworld)
   add_ttg_executable(madness-1d madness/madness-1d/madness-1d.cc RUNTIMES "mad")

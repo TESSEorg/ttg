@@ -10,7 +10,7 @@ namespace ttg::detail {
 #ifdef TTG_HAVE_CUDART
 /// \brief Returns the cuBLAS handle to be used for launching cuBLAS kernels from the current thread
 /// \return the cuBLAS handle for the current thread
-inline const cublasHandle_t& cublas_get_handle() {
+const cublasHandle_t& cublas_get_handle() {
   static thread_local std::optional<cublasHandle_t> handle;
   if (!handle.has_value()) {
     auto status = cublasCreate_v2(&handle.emplace());

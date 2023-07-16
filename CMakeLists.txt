@@ -103,7 +103,6 @@ if (TARGET CUDA::cudart)
   set(TTG_HAVE_CUDART True CACHE BOOL "True support for CUDART was found.")
 endif(TARGET CUDA::cudart)
 
-
 ##########################
 #### prerequisite runtimes
 ##########################
@@ -124,14 +123,6 @@ endif(TARGET MADworld)
 ##########################
 # N.B. discover last so that we do not affect core dependencies
 if (TTG_EXAMPLES)
-    # sparse tensor algorithms need Eigen
-    find_package(Eigen3)
-    message (STATUS "EIGEN3_FOUND=${EIGEN3_FOUND}")
-    if (EIGEN3_FOUND)
-        add_library(eigen3 INTERFACE IMPORTED)
-        set_property(TARGET eigen3 PROPERTY
-                INTERFACE_INCLUDE_DIRECTORIES ${EIGEN3_INCLUDE_DIR})
-    endif (EIGEN3_FOUND)
     # TiledArray brings in BTAS AND linear algebra (BLAS++/LAPACK++)
     include(FindOrFetchTiledArray)
     # OpenMP may also be used by some examples
