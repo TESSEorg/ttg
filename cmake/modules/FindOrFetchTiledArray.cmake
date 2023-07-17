@@ -17,9 +17,7 @@ if (TARGET tiledarray)
 else (TARGET tiledarray)
 
   # enable CUDA if TTG has it
-  if (TTG_HAVE_CUDA)
-    set(ENABLE_CUDA ON CACHE BOOL "Enable CUDA")
-  endif()
+  set(ENABLE_CUDA ${TTG_HAVE_CUDA} CACHE BOOL "Enable CUDA")
 
   # update CMake cache for TA
   if (DEFINED MADNESS_CMAKE_EXTRA_ARGS)

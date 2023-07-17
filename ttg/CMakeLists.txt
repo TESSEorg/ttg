@@ -115,12 +115,12 @@ if (TARGET std::coroutine)
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/coroutine.h
           )
 endif ()
-if (TARGET CUDA::cudart)
+if (TTG_HAVE_CUDA)
   list(APPEND ttg-sources
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/cublas_helper.cpp
           )
   list(APPEND ttg-deps CUDA::cudart CUDA::cublas)
-endif (TARGET CUDA::cudart)
+endif ()
 
 set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers};${ttg_device_headers})
 if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)

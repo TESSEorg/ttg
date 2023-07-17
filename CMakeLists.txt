@@ -51,6 +51,7 @@ set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
 #### user-defined configuration options
 ########################################
 option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" ON)
+option(TTG_ENABLE_CUDA "Whether to TTG will look for CUDA" OFF)
 option(TTG_EXAMPLES "Whether to build examples" OFF)
 
 option(TTG_FETCH_BOOST "Whether to fetch+build Boost, if missing" OFF)
@@ -91,17 +92,19 @@ find_package(CXXStdCoroutine MODULE REQUIRED COMPONENTS Final Experimental)
 ##########################
 #### CUDA: must come before PaRSEC
 ##########################
-include(CheckLanguage)
-check_language(CUDA)
-if(CMAKE_CUDA_COMPILER)
+if (TTG_ENABLE_CUDA)
+  include(CheckLanguage)
+  check_language(CUDA)
+  if(CMAKE_CUDA_COMPILER)
     enable_language(CUDA)
-endif(CMAKE_CUDA_COMPILER)
-set(TTG_HAVE_CUDA ${CMAKE_CUDA_COMPILER} CACHE BOOL "True if TTG supports compiling .cu files")
+  endif(CMAKE_CUDA_COMPILER)
+  set(TTG_HAVE_CUDA ${CMAKE_CUDA_COMPILER} CACHE BOOL "True if TTG supports compiling .cu files")
 
-find_package(CUDAToolkit)
-if (TARGET CUDA::cudart)
-  set(TTG_HAVE_CUDART True CACHE BOOL "True support for CUDART was found.")
-endif(TARGET CUDA::cudart)
+  find_package(CUDAToolkit)
+  if (TARGET CUDA::cudart)
+    set(TTG_HAVE_CUDART True CACHE BOOL "TTG supports execution on CUDA devices")
+  endif()
+endif()
 
 ##########################
 #### prerequisite runtimes
