@@ -19,6 +19,7 @@
 #include <btas/util/mohndle.h>
 #include <TiledArray/cuda/allocators.h>
 #include <ttg/device/cublas_helper.h>
+#include <madness/world/parsec.h>  // need to initialize MADNESS purely for the purposes of TA allocators
 #else
 #warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
 #endif
@@ -1617,8 +1618,11 @@ int main(int argc, char **argv) {
     initialize(1, argv, cores);
   }
 
+#ifdef BTAS_IS_USABLE
   // initialize MADNESS so that TA allocators can be created
-  madness::initialize(argc, argv, /* nthread = */ 0, /* quiet = */ true);
+  madness::ParsecRuntime::initialize_with_existing_context(ttg::default_execution_context().impl().context());
+  madness::initialize(argc, argv, /* nthread = */ 1, /* quiet = */ true);
+#endif  // BTAS_IS_USABLE
 
   std::string debugStr(getCmdOption(argv, argv + argc, "-d"));
   auto debug = (unsigned int)parseOption(debugStr, 0);
@@ -1860,7 +1864,9 @@ int main(int argc, char **argv) {
       }
     }
 
+#ifdef BTAS_IS_USABLE
     madness::finalize();
+#endif  // BTAS_IS_USABLE
     ttg_finalize();
     return 0;
   }
