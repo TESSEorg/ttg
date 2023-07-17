@@ -23,7 +23,6 @@ def read_pbt(pbt_files_list):
     print('The columns of the DataFrame (or data labels) and their datatypes are:')
     print(trace.events.dtypes)
 
-
     print('the types are:\n', trace.event_types)
     print('the streams are:\n', trace.streams)
 
@@ -40,8 +39,9 @@ def bool(str):
     return str.lower() in ["true", "yes", "y", "1", "t"]
 
 def pbt_to_ctf(pbt_files_list, ctf_filename, skip_parsec_events, skip_mpi_events):
-
     ctf_data = {"traceEvents": []}
+    # Dictionary to store aggregated durations
+    aggregated_durations = {}    
 
     ptt_filename = pbt2ptt.convert(pbt_files_list, multiprocess=False)
     trace = ptt.from_hdf(ptt_filename)
@@ -71,11 +71,28 @@ def pbt_to_ctf(pbt_files_list, ctf_filename, skip_parsec_events, skip_mpi_events
 
         ctf_data["traceEvents"].append(ctf_event)
 
+    for event_trace in ctf_data["traceEvents"]:
+        # Get the index of the first occurrence of '<'
+        index_of_open_bracket = event_trace["name"].find('<')
+        # Extract the substring before '<' and assign it to the name variable
+        if index_of_open_bracket != -1:
+            name = event_trace["name"][:index_of_open_bracket]
+            duration = event_trace["dur"]
+            seconds = duration / 1000
+            
+            if name in aggregated_durations:
+                aggregated_durations[name] += duration
+            else:
+                aggregated_durations[name] = duration
+
+    # Print aggregated durations
+    for name, duration in aggregated_durations.items():
+        print(f"{name}: {duration} ms, equivalent to: {seconds} seconds")
+
     with open(ctf_filename, "w") as chrome_trace:
         json.dump(ctf_data, chrome_trace)
 
 if __name__ == "__main__":
-
     pbt_file_prefix = sys.argv[1]
     ctf_file_name = sys.argv[2]
     skip_parsec_events = True
@@ -92,7 +109,7 @@ if __name__ == "__main__":
     dirname = os.path.dirname(pbt_file_prefix)
     for file in os.listdir(dirname):
         file_fullname = os.path.join(dirname,file)
-        if file_fullname.startswith(pbt_file_prefix) and ".prof-" in file_fullname and file_fullname != ctf_file_name:
+        if file_fullname.startswith(pbt_file_prefix) and ".prof" in file_fullname and file_fullname != ctf_file_name:
             print("found file ", file_fullname)
             pbt_files_list.append(file_fullname)
 
