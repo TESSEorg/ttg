@@ -6,6 +6,7 @@ try:
     import time
     import pandas
     import sys
+    import statistics
 except ModuleNotFoundError:
     print("Did not find a system module, use pip to install it")
 
@@ -43,6 +44,8 @@ def pbt_to_ctf(pbt_files_list, ctf_filename, skip_parsec_events, skip_mpi_events
     # Dictionary to store aggregated durations
     aggregated_durations = {}
 
+    # Initialize lists to store duration values for each name
+    duration_values = []
     ptt_filename = pbt2ptt.convert(pbt_files_list, multiprocess=False)
     trace = ptt.from_hdf(ptt_filename)
 
@@ -57,8 +60,8 @@ def pbt_to_ctf(pbt_files_list, ctf_filename, skip_parsec_events, skip_mpi_events
 
         ctf_event = {}
         ctf_event["ph"] = "X"  # complete event type
-        ctf_event["ts"] = 0.001 * trace.events.begin[e] # when we started, in ms
-        ctf_event["dur"] = 0.001 * (trace.events.end[e] - trace.events.begin[e]) # when we started, in ms
+        ctf_event["ts"] = 0.001 * trace.events.begin[e]  # when we started, in ms
+        ctf_event["dur"] = 0.001 * (trace.events.end[e] - trace.events.begin[e])  # when we started, in ms
         ctf_event["name"] = trace.event_names[trace.events.type[e]]
 
         if trace.events.key[e] is not None:
@@ -71,25 +74,31 @@ def pbt_to_ctf(pbt_files_list, ctf_filename, skip_parsec_events, skip_mpi_events
 
         ctf_data["traceEvents"].append(ctf_event)
 
-    for event_trace in ctf_data["traceEvents"]:
         # Get the index of the first occurrence of '<'
-        index_of_open_bracket = event_trace["name"].find('<')
+        index_of_open_bracket = ctf_event["name"].find('<')
         # Extract the substring before '<' and assign it to the name variable
         if index_of_open_bracket != -1:
-            name = event_trace["name"][:index_of_open_bracket]
-            duration = event_trace["dur"]
-
+            name = ctf_event["name"][:index_of_open_bracket]
+            duration = ctf_event["dur"]
             if name in aggregated_durations:
                 aggregated_durations[name]["duration"] += duration
                 aggregated_durations[name]["count"] += 1
             else:
                 # If name doesn't exist, create a new entry
                 aggregated_durations[name] = {"duration": duration, "count": 1}
+            # Add duration value to the list
+            duration_values.append(duration)
 
-    # Calculate the averages for each name
-    averages = {name: data["duration"] / data["count"] for name, data in aggregated_durations.items()}
-    print(averages)
-
+    # Calculate the mean, median, max, min, and standard deviation for each aggregated duration
+    for name, data in aggregated_durations.items():
+        mean_duration = data["duration"] / data["count"]
+        individual_durations = [ctf_event["dur"] for ctf_event in ctf_data["traceEvents"] if ctf_event["name"].startswith(name)]
+        median_duration = statistics.median(individual_durations) if len(individual_durations) > 1 else 0.0
+        max_duration = max(individual_durations)
+        min_duration = min(individual_durations)
+        std_deviation = statistics.stdev(individual_durations) if len(individual_durations) > 1 else 0.0
+        print(f"Name: {name}, Mean: {mean_duration:.2f} μs, Median: {median_duration:.2f} μs, Max: {max_duration:.2f} μs, Min: {min_duration:.2f} μs, Std Deviation: {std_deviation:.2f} μs")
+    
     with open(ctf_filename, "w") as chrome_trace:
         json.dump(ctf_data, chrome_trace)
 
