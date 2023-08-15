@@ -25,6 +25,29 @@ import math
 def bool(str):
     return str.lower() in ["true", "yes", "y", "1", "t"]
 
+def validate_event_assignments(ctf_data):
+    pid_to_function_map = {}
+
+    # Iterate over the trace events and group function names by PID
+    for event in ctf_data["traceEvents"]:
+        pid = event["pid"]
+        name = event["name"]
+        
+        if pid not in pid_to_function_map:
+            pid_to_function_map[pid] = []
+        
+        pid_to_function_map[pid].append(name)
+    
+    # Print the grouped function names for each PID and event count
+    for pid, functions in pid_to_function_map.items():
+        print(f"PID: {pid}")
+        for idx, function_name in enumerate(functions, start=1):
+            print(f"{idx}. {function_name}")
+        event_count = sum(1 for event in ctf_data["traceEvents"] if event.get("pid") == pid)
+        print(f"Number of events with PID {pid}: {event_count}\n")
+
+       
+        
 def pbt_to_ctf(pbt_files_list, ctf_filename, skip_parsec_events, skip_mpi_events, skip_fn_events):
     ctf_data = {"traceEvents": []}
     # Dictionary to store aggregated durations
@@ -74,7 +97,8 @@ def pbt_to_ctf(pbt_files_list, ctf_filename, skip_parsec_events, skip_mpi_events
             print("above event started on", round(ctf_event["ts"], 3), "and took duration of", round(ctf_event["dur"], 3))
             # Get the end time of the current MultiplyAdd operation
             multiplyadd_end_time = 0.001 * trace.events.end[e]
-
+       
+        
         # Get the index of the first occurrence of '<'
         index_of_open_bracket = ctf_event["name"].find('<')
         # Extract the substring before '<' and assign it to the name variable
@@ -89,6 +113,7 @@ def pbt_to_ctf(pbt_files_list, ctf_filename, skip_parsec_events, skip_mpi_events
                 aggregated_durations[name] = {"duration": duration, "count": 1}
             # Add duration value to the list
             duration_values.append(duration)
+    print("\n") 
 
     # Calculate the mean, median, max, min, and standard deviation for each aggregated duration
     for name, data in aggregated_durations.items():
@@ -99,12 +124,16 @@ def pbt_to_ctf(pbt_files_list, ctf_filename, skip_parsec_events, skip_mpi_events
         min_duration = min(individual_durations)
         std_deviation = statistics.stdev(individual_durations) if len(individual_durations) > 1 else 0.0
         print(f"Name: {name}, Mean: {mean_duration:.2f} μs, Median: {median_duration:.2f} μs, Max: {max_duration:.2f} μs, Min: {min_duration:.2f} μs, Std Deviation: {std_deviation:.2f} μs")
-
+    print("\n")
+    
     print("End time of MultiplyAdd operation:", multiplyadd_end_time, "ms")
     print("Last MultiplyAdd operation:", ctf_event["name"])
 
     # Print the name of the function with the maximum value
-    print("Last MultiplyAdd Function with Maximum Duration Value:", maximum_name, " taking - ", maximum_val, "ms")
+    print("Last MultiplyAdd Function with Maximum Duration Value:", maximum_name, " taking - ", maximum_val, "ms \n")
+
+    # Run the validation function
+    validate_event_assignments(ctf_data)
 
     with open(ctf_filename, "w") as chrome_trace:
         json.dump(ctf_data, chrome_trace)
