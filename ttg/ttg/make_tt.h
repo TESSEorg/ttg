@@ -374,6 +374,21 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
+namespace detail {
+  template<typename funcT>
+  struct key_type_from_func
+  {
+    static_assert(!ttg::meta::is_generic_callable_v<funcT>);
+    using func_args_t = decltype(ttg::meta::compute_arg_binding_types_r<void>(std::declval<funcT>(), ttg::typelist<>{}));
+    /* select the first argument as key type or Void if there are none */
+    using type = std::conditional_t<0 < std::tuple_size_v<func_args_t>, std::tuple_element_t<0, func_args_t>, ttg::Void>;
+  };
+
+  template<typename funcT>
+  using key_type_from_func_t = typename key_type_from_func<funcT>::type;
+
+} // namespace detail
+
 // clang-format off
 /// @brief Factory function to assist in wrapping a callable with signature
 ///
@@ -421,9 +436,70 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
 /// @warning Although generic arguments annotated by `const auto&` are also permitted, their use is discouraged to avoid confusion;
 ///          namely, `const auto&` denotes a _consumable_ argument, NOT read-only, despite the `const`.
 // clang-format on
+template <typename keyT = ttg::Void, typename funcT>
+auto make_tt(funcT &&func) {
+
+  using key_type = std::conditional_t<ttg::meta::is_Void_v<keyT>, detail::key_type_from_func_t<funcT>, keyT>;
+  static_assert(!ttg::meta::is_Void_v<key_type>,
+                "Failed to determine key type (no arguments given and no key type provided?)");
+
+  constexpr auto void_key = ttg::meta::is_void_v<key_type>;
+
+  // gross argument typelist for invoking func, can include void for optional args
+  constexpr static auto func_is_generic = ttg::meta::is_generic_callable_v<funcT>;
+
+  static_assert(!func_is_generic, "Generic functions not supported without edges specified!");
+
+  using gross_func_args_t = decltype(ttg::meta::compute_arg_binding_types_r<void>(func, ttg::typelist<>{}));
+
+  // ensure input types do not contain Void
+  static_assert(ttg::meta::is_none_Void_v<gross_func_args_t>, "ttg::Void is for internal use only, do not use it");
+
+  // net argument typelist
+  using func_args_t = gross_func_args_t;
+  constexpr auto num_args = std::tuple_size_v<func_args_t>;
+
+  // if given task id, make sure it's passed via const lvalue ref
+  constexpr bool TASK_ID_PASSED_AS_CONST_LVALUE_REF =
+      !void_key ? ttg::meta::probe_first_v<ttg::meta::is_const_lvalue_reference, true, func_args_t> : true;
+  constexpr bool TASK_ID_PASSED_AS_NONREF =
+      !void_key ? !ttg::meta::probe_first_v<std::is_reference, true, func_args_t> : true;
+  static_assert(
+      TASK_ID_PASSED_AS_CONST_LVALUE_REF || TASK_ID_PASSED_AS_NONREF,
+      "ttg::make_tt(func, ...): if given to func, the task id must be passed by const lvalue ref or by value");
+
+  // if given out-terminal tuple, make sure it's passed via nonconst lvalue ref
+  constexpr bool have_outterm_tuple =
+      func_is_generic ? !ttg::meta::is_last_void_v<gross_func_args_t>
+                      : ttg::meta::probe_last_v<ttg::meta::decays_to_output_terminal_tuple, false, gross_func_args_t>;
+  constexpr bool OUTTERM_TUPLE_PASSED_AS_NONCONST_LVALUE_REF =
+      have_outterm_tuple ? ttg::meta::probe_last_v<ttg::meta::is_nonconst_lvalue_reference, false, func_args_t> : true;
+  static_assert(
+      OUTTERM_TUPLE_PASSED_AS_NONCONST_LVALUE_REF,
+      "ttg::make_tt(func, ...): if given to func, the output terminal tuple must be passed by nonconst lvalue ref");
+
+  // input_args_t = {input_valuesT&&...}
+  using input_args_t = typename ttg::meta::take_first_n<
+      typename ttg::meta::drop_first_n<func_args_t, std::size_t(void_key ? 0 : 1)>::type,
+      std::tuple_size_v<func_args_t> - (void_key ? 0 : 1) - (have_outterm_tuple ? 1 : 0)>::type;
+  constexpr auto NO_ARGUMENTS_PASSED_AS_NONCONST_LVALUE_REF =
+      !ttg::meta::is_any_nonconst_lvalue_reference_v<input_args_t>;
+  static_assert(
+      NO_ARGUMENTS_PASSED_AS_NONCONST_LVALUE_REF,
+      "ttg::make_tt(func, inedges, outedges): one or more arguments to func can only be passed by nonconst lvalue "
+      "ref; this is illegal, should only pass arguments as const lvalue ref or (nonconst) rvalue ref");
+  /* using empty output terminals */
+  using output_terminals_type = std::tuple<>;
+  using wrapT = typename CallableWrapTTArgsAsTypelist<funcT, have_outterm_tuple, key_type, output_terminals_type,
+                                                      input_args_t>::type;
+  std::size_t num_value_args = have_outterm_tuple ? num_args - 1 : num_args;
+  const std::vector<std::string> &innames = std::vector<std::string>(num_value_args, "input");
+  return std::make_unique<wrapT>(std::forward<funcT>(func), "DynamicTT", innames, std::vector<std::string>{});
+}
+
 template <typename keyT = void, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
-auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges = std::tuple<>{},
-             const std::tuple<output_edgesT...> &outedges = std::tuple<>{}, const std::string &name = "wrapper",
+auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges,
+             const std::tuple<output_edgesT...> &outedges, const std::string &name = "wrapper",
              const std::vector<std::string> &innames = std::vector<std::string>(sizeof...(input_edge_valuesT), "input"),
              const std::vector<std::string> &outnames = std::vector<std::string>(sizeof...(output_edgesT), "output")) {
   // ensure input types do not contain Void
@@ -447,6 +523,7 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
 
   // gross argument typelist for invoking func, can include void for optional args
   constexpr static auto func_is_generic = ttg::meta::is_generic_callable_v<funcT>;
+
   using gross_func_args_t = decltype(ttg::meta::compute_arg_binding_types_r<void>(func, candidate_func_args_t{}));
   constexpr auto DETECTED_HOW_TO_INVOKE_GENERIC_FUNC =
       func_is_generic ? !std::is_same_v<gross_func_args_t, ttg::typelist<>> : true;
@@ -498,6 +575,7 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
 
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
+
 
 template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
 [[deprecated("use make_tt_tpl instead")]] inline auto wrapt(

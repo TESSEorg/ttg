@@ -58,7 +58,7 @@ namespace ttg::meta {
   }
 
   template <std::size_t Ordinal, typename Func, typename... Typelists, std::size_t... ArgIdx>
-  auto compute_arg_binding_types_impl(Func& func, typelist<Typelists...> argument_type_lists,
+  auto compute_arg_binding_types_impl(Func&& func, typelist<Typelists...> argument_type_lists,
                                       std::index_sequence<ArgIdx...> arg_idx = {}) {
     using arg_typelists_t = typelist<Typelists...>;
     constexpr auto Order = sizeof...(Typelists);
@@ -80,7 +80,7 @@ namespace ttg::meta {
   }
 
   template <std::size_t Ordinal, typename ReturnType, typename Func, typename... Typelists, std::size_t... ArgIdx>
-  auto compute_arg_binding_types_r_impl(Func& func, typelist<Typelists...> argument_type_lists,
+  auto compute_arg_binding_types_r_impl(Func&& func, typelist<Typelists...> argument_type_lists,
                                         std::index_sequence<ArgIdx...> arg_idx = {}) {
     using arg_typelists_t = typelist<Typelists...>;
     constexpr auto Order = sizeof...(Typelists);
@@ -110,7 +110,7 @@ namespace ttg::meta {
   ///         - the first invocable combination of argument types discovered by row-major iteration, if @p func is a
   ///         generic callable
   template <typename Func, typename... Typelists>
-  auto compute_arg_binding_types(Func& func, typelist<Typelists...> argument_type_lists) {
+  auto compute_arg_binding_types(Func&& func, typelist<Typelists...> argument_type_lists) {
     constexpr auto is_generic__args = callable_args<Func&>;
     constexpr bool is_generic = is_generic__args.first;
     if constexpr (is_generic) {
@@ -131,7 +131,7 @@ namespace ttg::meta {
   ///         - the first invocable combination of argument types discovered by row-major iteration, if @p func is a
   ///         generic callable
   template <typename ReturnType, typename Func, typename... Typelists>
-  auto compute_arg_binding_types_r(Func& func, typelist<Typelists...> argument_type_lists) {
+  auto compute_arg_binding_types_r(Func&& func, typelist<Typelists...> argument_type_lists) {
     constexpr auto is_generic__args = callable_args<Func&>;
     constexpr bool is_generic = is_generic__args.first;
     if constexpr (is_generic) {

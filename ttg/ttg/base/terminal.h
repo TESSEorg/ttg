@@ -88,6 +88,11 @@ namespace ttg {
       return name;
     }
 
+    TerminalBase& set_name(const std::string& name) {
+      this->name = name;
+      return *this;
+    }
+
     /// Returns string representation of key type
     const std::string &get_key_type_str() const {
       if (!tt) throw "ttg::TerminalBase:get_key_type_str() but tt is null";

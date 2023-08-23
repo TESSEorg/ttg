@@ -1156,6 +1156,8 @@ namespace ttg_parsec {
 
     input_terminals_type input_terminals;
     output_terminalsT output_terminals;
+    std::vector<std::unique_ptr<ttg::TerminalBase>> dynamic_outterms; // used for split construction TTs
+
 
    protected:
     const auto &get_output_terminals() const { return output_terminals; }
@@ -3016,7 +3018,8 @@ namespace ttg_parsec {
     }
 
     // Returns reference to output terminal for purpose of connection --- terminal
-    // cannot be copied, moved or assigned
+    // cannot be copied, moved or assigned.
+    // Only valid if terminals are provided during construction.
     template <std::size_t i>
     std::tuple_element_t<i, output_terminalsT> *out() {
       return &std::get<i>(output_terminals);
@@ -3105,8 +3108,9 @@ namespace ttg_parsec {
 
     /// keymap setter
     template <typename Keymap>
-    void set_keymap(Keymap &&km) {
+    auto& set_keymap(Keymap &&km) {
       keymap = km;
+      return *this;
     }
 
     /// priority map accessor
@@ -3116,8 +3120,43 @@ namespace ttg_parsec {
     /// priomap setter
     /// @arg pm a function that maps a key to an integral priority value.
     template <typename Priomap>
-    void set_priomap(Priomap &&pm) {
+    auto& set_priomap(Priomap &&pm) {
       priomap = std::forward<Priomap>(pm);
+      return *this;
+    }
+
+    template<std::size_t i>
+    auto& set_input(ttg::Edge<keyT, std::tuple_element_t<i, input_values_tuple_type>>& edge,
+                    const std::string name = {}) {
+
+      edge.set_out(&std::get<i>(input_terminals));
+      if (!name.empty()) {
+        std::get<i>(input_terminals).set_name(name);
+      }
+      return *this;
+    }
+
+    template<std::size_t i, typename Key, typename Value>
+    auto& set_output(ttg::Edge<Key, Value>& edge,
+                     const std::string name = {}) {
+      {
+        /* check whether the terminal is already set */
+        auto& outputs = this->get_outputs();
+        if (outputs.size() > i && nullptr != outputs[i]) {
+          throw(this->get_name() + ": output terminal " + std::to_string(i) + " already set");
+        }
+      }
+      std::string auto_name;
+      if (name.empty()) {
+        auto_name = "DynamicOut" + std::to_string(i);
+      }
+      //std::get<i>(input_terminals).set_name(name);
+      using term_t = typename ttg::Edge<Key, Value>::output_terminal_type;
+      term_t *term = new term_t();
+      dynamic_outterms.push_back(std::unique_ptr<ttg::TerminalBase>(term));
+      register_terminal<true, term_t, i>(*term, name.empty() ? auto_name : name, &ttT::set_output_dynamic);
+      edge.set_in(term);
+      return *this;
     }
 
     // Register the static_op function to associate it to instance_id
