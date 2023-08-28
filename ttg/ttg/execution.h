@@ -17,6 +17,7 @@ enum class Execution {
 enum class ExecutionSpace {
   Host,   // a CPU
   CUDA,   // an NVIDIA CUDA device
+  HIP,    // an AMD HIP device
   Invalid
 };
 

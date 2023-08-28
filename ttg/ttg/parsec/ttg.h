@@ -79,8 +79,14 @@
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
 #include <parsec/remote_dep.h>
-/* TODO: once we use parsec master we need to switch this include */
+
+#ifdef PARSEC_HAVE_DEV_CUDA_SUPPORT
 #include <parsec/mca/device/cuda/device_cuda.h>
+#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
+#ifdef PARSEC_HAVE_DEV_HIP_SUPPORT
+#include <parsec/mca/device/hip/device_hip.h>
+#endif // PARSEC_HAVE_DEV_HIP_SUPPORT
+
 #include <parsec/mca/device/device_gpu.h>
 #if defined(PARSEC_PROF_TRACE)
 #include <parsec/profiling.h>
@@ -706,7 +712,17 @@ namespace ttg_parsec {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_op<ttg::ExecutionSpace::CUDA>();
       } else {
-        assert(TT::derived_has_cuda_op());
+        throw std::runtime_error("PaRSEC CUDA hook invoked on a TT that does not support CUDA operations!");
+      }
+    }
+
+    template<typename TT>
+    inline parsec_hook_return_t hook_hip(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+      if constexpr(TT::derived_has_hip_op()) {
+        parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
+        return me->template invoke_op<ttg::ExecutionSpace::HIP>();
+      } else {
+        throw std::runtime_error("PaRSEC HIP hook invoked on a TT that does not support HIP operations!");
       }
     }
 
@@ -1042,6 +1058,9 @@ namespace ttg_parsec {
     template <typename T>
     using have_cuda_op_non_type_t = decltype(T::have_cuda_op);
 
+    template <typename T>
+    using have_hip_op_non_type_t = decltype(T::have_hip_op);
+
     bool alive = true;
 
     static constexpr int numinedges = std::tuple_size_v<input_tuple_type>;     // number of input edges
@@ -1057,6 +1076,20 @@ namespace ttg_parsec {
       } else {
         return false;
       }
+    }
+
+    /// @return true if derivedT::have_hip_op exists and is defined to true
+    static constexpr bool derived_has_hip_op() {
+      if constexpr (ttg::meta::is_detected_v<have_hip_op_non_type_t, derivedT>) {
+        return derivedT::have_hip_op;
+      } else {
+        return false;
+      }
+    }
+
+    /// @return true if the TT supports device execution
+    static constexpr bool derived_has_device_op() {
+      return (derived_has_cuda_op() || derived_has_hip_op());
     }
 
     using ttT = TT;
@@ -1266,6 +1299,11 @@ namespace ttg_parsec {
       ttg::detail::cublas_set_kernel_stream(cuda_stream->cuda_stream);
 #endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
 
+#if defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
+      parsec_hip_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)gpu_stream;
+      ttg::detail::hipblas_set_kernel_stream(hip_stream->hip_stream);
+#endif // PARSEC_HAVE_DEV_HIP_SUPPORT
+
       /* Here we call back into the coroutine again after the transfers have completed */
       static_op<Space>(&task->parsec_task);
 
@@ -1295,8 +1333,8 @@ namespace ttg_parsec {
       return rc;
     }
 
-    static int
-    static_cuda_stage_in(parsec_gpu_task_t        *gtask,
+    static void
+    static_device_stage_in(parsec_gpu_task_t        *gtask,
                          uint32_t                  flow_mask,
                          parsec_gpu_exec_stream_t *gpu_stream) {
       /* register any memory that hasn't been registered yet */
@@ -1308,19 +1346,36 @@ namespace ttg_parsec {
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
             // register host memory for faster device access
             cudaError_t status;
-            status = cudaHostRegister(copy->device_private, gtask->flow_nb_elts[i], cudaHostRegisterPortable);
-            assert(cudaSuccess == status);
+            //status = cudaHostRegister(copy->device_private, gtask->flow_nb_elts[i], cudaHostRegisterPortable);
+            //assert(cudaSuccess == status);
 #endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
-            copy->flags |= TTG_PARSEC_DATA_FLAG_REGISTERED;
+            //copy->flags |= TTG_PARSEC_DATA_FLAG_REGISTERED;
           }
         }
       }
+    }
+#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
+    static int
+    static_cuda_stage_in(parsec_gpu_task_t        *gtask,
+                         uint32_t                  flow_mask,
+                         parsec_gpu_exec_stream_t *gpu_stream) {
+      static_device_stage_in(gtask, flow_mask, gpu_stream);
       return parsec_default_cuda_stage_in(gtask, flow_mask, gpu_stream);
     }
+#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
+#if defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
+    static int
+    static_hip_stage_in(parsec_gpu_task_t        *gtask,
+                         uint32_t                  flow_mask,
+                         parsec_gpu_exec_stream_t *gpu_stream) {
+      static_device_stage_in(gtask, flow_mask, gpu_stream);
+      return parsec_default_hip_stage_in(gtask, flow_mask, gpu_stream);
+    }
+#endif
 
     template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t device_static_op(parsec_task_t* parsec_task) {
-      static_assert(derived_has_cuda_op());
+      static_assert(derived_has_device_op());
 
       int dev_index;
       double ratio = 1.0;
@@ -1362,8 +1417,8 @@ namespace ttg_parsec {
       /* TODO: is this the right place to set the mask? */
       task->parsec_task.chore_mask = PARSEC_DEV_ALL;
       /* get a device and come back if we need another one */
-      double task_load = 1.;
-      dev_index = parsec_get_best_device(parsec_task, task_load);
+      int64_t task_load = 1;
+      dev_index = parsec_get_best_device(parsec_task, &task_load);
       assert(dev_index >= 0);
       if (dev_index < 2) {
           return PARSEC_HOOK_RETURN_NEXT; /* Fall back */
@@ -1384,10 +1439,19 @@ namespace ttg_parsec {
           }
           break;
 #endif
+#if defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
+        case PARSEC_DEV_HIP:
+          if constexpr (Space == ttg::ExecutionSpace::HIP) {
+            gpu_task->stage_in  = static_hip_stage_in;
+            gpu_task->stage_out = parsec_default_hip_stage_out;
+            return parsec_hip_kernel_scheduler(es, gpu_task, dev_index);
+          }
+          break;
+#endif // PARSEC_HAVE_DEV_HIP_SUPPORT
         default:
           break;
       }
-      ttg::print_error(task->tt->get_name(), " : received mismatching device type ", device->type, " from PaRSEC");
+      ttg::print_error(task->tt->get_name(), " : received mismatching device type ", (int)device->type, " from PaRSEC");
       ttg::abort();
       return PARSEC_HOOK_RETURN_DONE; // will not be reacehed
     }
@@ -3042,7 +3106,7 @@ namespace ttg_parsec {
         }
       }
 
-      if constexpr (!derived_has_cuda_op()) {
+      if constexpr (!derived_has_device_op()) {
         need_pushout = true;
       }
 
@@ -3409,11 +3473,15 @@ namespace ttg_parsec {
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CUDA;
         ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_cuda<TT>;
-#if 0
-        ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_CPU;
+        ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
-        ((__parsec_chore_t *)self.incarnations)[1].hook = &detail::hook<TT>;
-#endif // 0
+        ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
+      } else if (derived_has_hip_op()) {
+        self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
+        ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_HIP;
+        ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
+        ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_hip<TT>;
+
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;

@@ -52,6 +52,7 @@ set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
 ########################################
 option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" ON)
 option(TTG_ENABLE_CUDA "Whether to TTG will look for CUDA" OFF)
+option(TTG_ENABLE_HIP "Whether to TTG will look for HIP" OFF)
 option(TTG_EXAMPLES "Whether to build examples" OFF)
 
 option(TTG_FETCH_BOOST "Whether to fetch+build Boost, if missing" OFF)
@@ -67,6 +68,7 @@ if (FORCE_COLORED_OUTPUT)
     endif ()
 endif (FORCE_COLORED_OUTPUT)
 
+set(TTG_HIP_PLATFORM "__HIP_PLATFORM_AMD__" CACHE STRING "Which platform to use when compiling HIP-related code (default: __HIP_PLATFORM_AMD__)")
 ##########################
 #### prerequisites
 ##########################
@@ -104,7 +106,22 @@ if (TTG_ENABLE_CUDA)
   if (TARGET CUDA::cudart)
     set(TTG_HAVE_CUDART True CACHE BOOL "TTG supports execution on CUDA devices")
   endif()
-endif()
+endif(TTG_ENABLE_CUDA)
+
+if (TTG_ENABLE_HIP)
+  include(CheckLanguage)
+  check_language(HIP)
+  if(CMAKE_HIP_COMPILER)
+    enable_language(HIP)
+  endif(CMAKE_HIP_COMPILER)
+  set(TTG_HAVE_HIP ${CMAKE_HIP_COMPILER} CACHE BOOL "True if TTG supports compiling .hip files")
+
+  find_package(hipblas)
+  if (TARGET roc::hipblas)
+    set(TTG_HAVE_HIPBLAS True CACHE BOOL "TTG detected support for hipBLAS")
+  endif()
+  add_compile_definitions(${TTG_HIP_PLATFORM})
+endif(TTG_ENABLE_HIP)
 
 ##########################
 #### prerequisite runtimes

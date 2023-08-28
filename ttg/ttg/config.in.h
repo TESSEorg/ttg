@@ -15,4 +15,6 @@
 
 #cmakedefine TTG_HAVE_CUDART
 
+#cmakedefine TTG_HAVE_HIPBLAS
+
 #endif  // TTG_CONFIG_IN_H

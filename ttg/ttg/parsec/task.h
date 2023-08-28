@@ -180,7 +180,7 @@ namespace ttg_parsec {
       using key_type = typename TT::key_type;
       static constexpr size_t num_streams = TT::numins;
       /* device tasks may have to store more copies than it's inputs as their sends are aggregated */
-      static constexpr size_t num_copies  = TT::derived_has_cuda_op() ? static_cast<size_t>(MAX_PARAM_COUNT)
+      static constexpr size_t num_copies  = TT::derived_has_device_op() ? static_cast<size_t>(MAX_PARAM_COUNT)
                                                                       : (num_streams+1);
       TT* tt;
       key_type key;
@@ -189,7 +189,7 @@ namespace ttg_parsec {
       void* suspended_task_address = nullptr;  // if not null the function is suspended
 #endif
       ttg_data_copy_t *copies[num_copies] = { nullptr };  // the data copies tracked by this task
-      device_state_t<TT::derived_has_cuda_op()> dev_state;
+      device_state_t<TT::derived_has_device_op()> dev_state;
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
           : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies, dev_state.dev_ptr()) {
@@ -245,7 +245,7 @@ namespace ttg_parsec {
 #endif
       ttg_data_copy_t *copies[num_streams+1] = { nullptr };  // the data copies tracked by this task
                                                              // +1 for the copy needed during send/bcast
-      device_state_t<TT::derived_has_cuda_op()> dev_state;
+      device_state_t<TT::derived_has_device_op()> dev_state;
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
           : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies, dev_state.dev_ptr()) {

@@ -20,17 +20,37 @@ const cublasHandle_t& cublas_get_handle() {
   }
   return *handle;
 }
-#endif // TTG_HAVE_CUDART
 
 void cublas_set_kernel_stream(cudaStream_t stream) {
-#ifdef TTG_HAVE_CUDART
     cublasStatus_t status = cublasSetStream_v2(cublas_get_handle(), stream);
     if (CUBLAS_STATUS_SUCCESS != status) {
         throw std::runtime_error("cublasSetStream_v2 failed");
     }
-#else
-    throw std::runtime_error("Support for cublas missing during installation!");
-#endif // TTG_HAVE_CUDART
 }
+#endif // TTG_HAVE_CUDART
+
+#ifdef TTG_HAVE_HIPBLAS
+/// \brief Returns the rocBLAS handle to be used for launching rocBLAS kernels from the current thread
+/// \return the rocBLAS handle for the current thread
+const hipblasHandle_t& hipblas_get_handle() {
+  static thread_local std::optional<hipblasHandle_t> handle;
+  if (!handle.has_value()) {
+    hipblasStatus_t status = hipblasCreate(&handle.emplace());
+    if (HIPBLAS_STATUS_SUCCESS != status) {
+      throw std::runtime_error("hipblasCreate failed");
+    }
+  }
+  return *handle;
+}
+
+void hipblas_set_kernel_stream(hipStream_t stream) {
+    hipblasStatus_t status = hipblasSetStream(hipblas_get_handle(), stream);
+    if (HIPBLAS_STATUS_SUCCESS != status) {
+        throw std::runtime_error("hipblasSetStream failed");
+    }
+}
+
+#endif // TTG_HAVE_HIPBLAS
+
 
 } // namespace

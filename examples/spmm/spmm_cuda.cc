@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include <madness/world/world.h>
+
 #if __has_include(<btas/features.h>)
 #pragma message("C Preprocessor got here!")
 #include <btas/features.h>
@@ -244,10 +246,15 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
 
 };
 
+#if defined(TTG_HAVE_CUDA)
 using blk_t = DeviceTensor<double, btas::DEFAULT::range,
                            btas::mohndle<btas::varray<double, TiledArray::cuda_pinned_allocator<double>>,
                                          btas::Handle::shared_ptr>>;
-
+#else
+// TODO: no hip pinned allocator in TA?
+using blk_t = DeviceTensor<double, btas::DEFAULT::range,
+                           btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
+#endif
 
 
 //inline blk_t operator*(const blk_t &A, const blk_t &B) {
@@ -257,7 +264,7 @@ using blk_t = DeviceTensor<double, btas::DEFAULT::range,
 //}
 
 /* TODO: call CUDA gemm here */
-static void cuda_gemm(blk_t &C, const blk_t &A, const blk_t &B) {
+static void device_gemm(blk_t &C, const blk_t &A, const blk_t &B) {
   double alpha = 1.0;
   double beta  = 1.0;
   // make sure all memory is on the device
@@ -266,11 +273,20 @@ static void cuda_gemm(blk_t &C, const blk_t &A, const blk_t &B) {
   //assert(B.b.get_current_device() != 0);
   int device = C.b.get_current_device();
   assert(device != 0);
+#if defined(TTG_HAVE_CUDA)
   cublasDgemm(ttg::detail::cublas_get_handle(),
               CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1), &alpha,
               A.b.device_ptr_on(device), A.extent(0),
               B.b.device_ptr_on(device), B.extent(0), &beta,
               C.b.current_device_ptr(), C.extent(0));
+#elif defined(TTG_HAVE_HIPBLAS)
+  hipblasDgemm(ttg::detail::hipblas_get_handle(),
+                HIPBLAS_OP_N, HIPBLAS_OP_N,
+                C.extent(0), C.extent(1), A.extent(1), &alpha,
+                A.b.device_ptr_on(device), A.extent(0),
+                B.b.device_ptr_on(device), B.extent(0), &beta,
+                C.b.current_device_ptr(), C.extent(0));
+#endif
 }
 
 //using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
@@ -687,7 +703,13 @@ class SpMM25D {
    public:
     using baseT = typename MultiplyAdd::ttT;
 
+#if defined(TTG_HAVE_CUDA)
     static constexpr bool have_cuda_op = true;
+#elif defined(TTG_HAVE_HIPBLAS)
+    static constexpr bool have_hip_op  = true;
+#endif
+
+    static_assert(have_hip_op);
 
     MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
                 const std::vector<std::vector<long>> &a_rowidx_to_colidx,
@@ -747,7 +769,7 @@ class SpMM25D {
       co_await ttg::to_device(A.b, B.b, C.b);
 
       /* everything is on the device, call the gemm */
-      cuda_gemm(C, A, B);
+      device_gemm(C, A, B);
 
       /* compute next k while the kernel is running */
       std::tie(next_k, have_next_k) = compute_next_k(i, j, k, p);
@@ -1518,9 +1540,6 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   gettimeofday(&start, nullptr);
   // ready, go! need only 1 kick, so must be done by 1 thread only
   if (ttg::default_execution_context().rank() == 0) control.start(P, Q);
-  static volatile int debug_signal = 0;
-  std::cout << "Waiting on debug signal (int*)" << &debug_signal << std::endl;
-  //while (!debug_signal) {}
   fence();
   gettimeofday(&end, nullptr);
   timersub(&end, &start, &diff);
@@ -1607,6 +1626,11 @@ int main(int argc, char **argv) {
     btas::gemm(std::move(Ct), Bt, At);
   }
 #endif  // BTAS_IS_USABLE
+
+//  static volatile int debug_signal = 0;
+//  std::cout << "Waiting on debug signal (int*)" << &debug_signal << std::endl;
+//  while (!debug_signal) {}
+
 
   int cores = -1;
   std::string nbCoreStr(getCmdOption(argv, argv + argc, "-c"));
