@@ -129,18 +129,21 @@ namespace ttg_parsec {
 
   struct msg_header_t {
     typedef enum fn_id : std::int8_t {
+      MSG_INVALID = -1,
       MSG_SET_ARG = 0,
       MSG_SET_ARGSTREAM_SIZE = 1,
       MSG_FINALIZE_ARGSTREAM_SIZE = 2,
       MSG_GET_FROM_PULL = 3 } fn_id_t;
-    uint32_t taskpool_id;
-    uint64_t op_id;
+    uint32_t taskpool_id = -1;
+    uint64_t op_id = -1;
     std::size_t key_offset = 0;
-    fn_id_t fn_id;
+    fn_id_t fn_id = MSG_INVALID;
     std::int8_t num_iovecs = 0;
-    int32_t param_id;
+    int32_t param_id = -1;
     int num_keys = 0;
-    int sender;
+    int sender = -1;
+
+    msg_header_t() = default;
 
     msg_header_t(fn_id_t fid, uint32_t tid, uint64_t oid, int32_t pid, int sender, int nk)
     : fn_id(fid)
@@ -2147,8 +2150,10 @@ namespace ttg_parsec {
       bool remove_from_hash = true;
       bool discover_task = true;
       bool get_pull_data = false;
+      bool has_lock = false;
       /* If we have only one input and no reducer on that input we can skip the hash table */
       if (numins > 1 || reducer) {
+        has_lock = true;
         parsec_hash_table_lock_bucket(&tasks_table, hk);
         if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
           task = create_new_task(key);
@@ -2169,6 +2174,7 @@ namespace ttg_parsec {
         /* if we have a reducer, we need to hold on to the lock for just a little longer */
         if (!reducer) {
           parsec_hash_table_unlock_bucket(&tasks_table, hk);
+          has_lock = false;
         }
       } else {
         task = create_new_task(key);
@@ -2280,7 +2286,9 @@ namespace ttg_parsec {
         //parsec_hash_table_unlock_bucket(&tasks_table, hk);
       } else {
         /* unlock the bucket, the lock is not needed anymore */
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        if (has_lock) {
+          parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        }
         /* whether the task needs to be deferred or not */
         if constexpr (!valueT_is_Void) {
           if (nullptr != task->copies[i]) {

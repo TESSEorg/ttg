@@ -29,14 +29,14 @@ namespace ttg {
   namespace detail {
     template<typename... Ts>
     struct to_device_t {
-      std::tuple<Ts&...> ties;
+      std::tuple<std::add_lvalue_reference_t<Ts>...> ties;
     };
   } // namespace detail
 
   template<typename... Args>
   [[nodiscard]]
   inline auto to_device(Args&&... args) {
-    return detail::to_device_t{std::tie(std::forward<Args>(args)...)};
+    return detail::to_device_t<std::remove_reference_t<Args>...>{std::tie(std::forward<Args>(args)...)};
   }
 
   namespace detail {

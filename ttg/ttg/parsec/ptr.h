@@ -126,11 +126,13 @@ namespace ttg_parsec {
     ttg_parsec::detail::ttg_data_copy_t* get_copy(ttg_parsec::ptr<T>& p);
   } // namespace detail
 
+  // fwd decl
   template<typename T, typename... Args>
-  ptr<T> ttg_parsec::make_ptr(Args&&... args);
+  ptr<T> make_ptr(Args&&... args);
 
+  // fwd decl
   template<typename T>
-  ptr<std::decay_t<T>> ttg_parsec::get_ptr(T&& obj);
+  ptr<std::decay_t<T>> get_ptr(T&& obj);
 
   template<typename T>
   struct ptr {

@@ -56,10 +56,10 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
   using ttvalue_type = ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>;
   ttg::buffer<_T> b; // does not own the host buffer
 
-  using value_type = tensor_type::value_type;
-  using size_type = tensor_type::size_type;
-  using storage_type = tensor_type::storage_type;
-  using range_type = tensor_type::range_type;
+  using value_type = typename tensor_type::value_type;
+  using size_type = typename tensor_type::size_type;
+  using storage_type = typename tensor_type::storage_type;
+  using range_type = typename tensor_type::range_type;
 
 
    public:

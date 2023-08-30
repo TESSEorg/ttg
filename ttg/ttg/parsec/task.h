@@ -139,11 +139,10 @@ namespace ttg_parsec {
        */
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
-                             int data_count, ttg_data_copy_t **copies, device_ptr_t *dev_ptr,
+                             int data_count, ttg_data_copy_t **copies,
                              bool defer_writer = TTG_PARSEC_DEFER_WRITER)
           : data_count(data_count)
           , copies(copies)
-          , dev_ptr(dev_ptr)
           , defer_writer(defer_writer) {
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
@@ -153,13 +152,12 @@ namespace ttg_parsec {
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
                              parsec_taskpool_t *taskpool, int32_t priority,
-                             int data_count, ttg_data_copy_t **copies, device_ptr_t *dev_ptr,
+                             int data_count, ttg_data_copy_t **copies,
                              release_task_fn *release_fn,
                              bool defer_writer = TTG_PARSEC_DEFER_WRITER)
           : data_count(data_count)
           , copies(copies)
           , release_task_cb(release_fn)
-          , dev_ptr(dev_ptr)
           , defer_writer(defer_writer) {
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
@@ -182,19 +180,19 @@ namespace ttg_parsec {
       /* device tasks may have to store more copies than it's inputs as their sends are aggregated */
       static constexpr size_t num_copies  = TT::derived_has_device_op() ? static_cast<size_t>(MAX_PARAM_COUNT)
                                                                       : (num_streams+1);
-      TT* tt;
+      TT* tt = nullptr;
       key_type key;
       std::array<stream_info_t, num_streams> streams;
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
 #endif
-      ttg_data_copy_t *copies[num_copies] = { nullptr };  // the data copies tracked by this task
       device_state_t<TT::derived_has_device_op()> dev_state;
+      ttg_data_copy_t *copies[num_copies] = { nullptr };  // the data copies tracked by this task
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
-          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies, dev_state.dev_ptr()) {
+          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies) {
         tt_ht_item.key = pkey();
-
+        this->dev_ptr = this->dev_state.dev_ptr();
         // We store the hash of the key and the address where it can be found in locals considered as a scratchpad
         *(uintptr_t*)&(parsec_task.locals[0]) = 0; //there is no key
         *(uintptr_t*)&(parsec_task.locals[2]) = 0; //there is no key
@@ -204,10 +202,11 @@ namespace ttg_parsec {
                         parsec_task_class_t *task_class, parsec_taskpool_t *taskpool,
                         TT *tt_ptr, int32_t priority)
           : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
-                                   num_streams, copies, dev_state.dev_ptr(),
+                                   num_streams, copies,
                                    &release_task, tt_ptr->m_defer_writer)
           , tt(tt_ptr), key(key) {
         tt_ht_item.key = pkey();
+        this->dev_ptr = this->dev_state.dev_ptr();
 
         // We store the hash of the key and the address where it can be found in locals considered as a scratchpad
         uint64_t hv = ttg::hash<std::decay_t<decltype(key)>>{}(key);
@@ -243,23 +242,24 @@ namespace ttg_parsec {
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
 #endif
+      device_state_t<TT::derived_has_device_op()> dev_state;
       ttg_data_copy_t *copies[num_streams+1] = { nullptr };  // the data copies tracked by this task
                                                              // +1 for the copy needed during send/bcast
-      device_state_t<TT::derived_has_device_op()> dev_state;
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
-          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies, dev_state.dev_ptr()) {
+          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies) {
         tt_ht_item.key = pkey();
+        this->dev_ptr = this->dev_state.dev_ptr();
       }
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
                         parsec_taskpool_t *taskpool, TT *tt_ptr, int32_t priority)
           : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
-                                   num_streams, copies, dev_state.dev_ptr(),
+                                   num_streams, copies,
                                    &release_task, tt_ptr->m_defer_writer)
           , tt(tt_ptr) {
         tt_ht_item.key = pkey();
-
+        this->dev_ptr = this->dev_state.dev_ptr();
         init_stream_info(tt, streams);
       }
 

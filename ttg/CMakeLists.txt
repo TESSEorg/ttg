@@ -122,7 +122,7 @@ if (TTG_HAVE_CUDA)
   list(APPEND ttg-deps CUDA::cudart CUDA::cublas)
 endif (TTG_HAVE_CUDA)
 
-if (TTG_HAVE_HIP)
+if (TTG_HAVE_HIPBLAS)
   # add the helper file if not added already
   if (NOT TTG_HAVE_CUDA)
     list(APPEND ttg-sources
@@ -130,7 +130,7 @@ if (TTG_HAVE_HIP)
     )
   endif (NOT TTG_HAVE_CUDA)
   list(APPEND ttg-deps roc::hipblas)
-endif (TTG_HAVE_HIP)
+endif (TTG_HAVE_HIPBLAS)
 
 set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers};${ttg_device_headers})
 if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
