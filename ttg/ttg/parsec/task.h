@@ -297,7 +297,7 @@ namespace ttg_parsec {
                      parsec_task_class_t *task_class, parsec_taskpool_t *taskpool,
                      int32_t priority, bool is_first)
       : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
-                               0, nullptr, nullptr,
+                               0, nullptr,
                                &release_task,
                                true /* deferred until other readers have completed */)
       , parent_task(task)

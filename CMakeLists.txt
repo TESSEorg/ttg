@@ -137,6 +137,20 @@ if (TARGET MADworld)
   message(STATUS "MADNESS_FOUND=1")
 endif(TARGET MADworld)
 
+####################################################
+#### Check for MPIX_Query_[cuda|rocm]_support
+#### Open MPI provides mpi-ext.h for such extensions
+#### so check for that first.
+####################################################
+find_package(MPI)
+set(TTG_HAVE_MPI MPI_FOUND)
+if (MPI_FOUND)
+  include(CheckIncludeFiles)
+  set(CMAKE_REQUIRED_INCLUDES ${MPI_C_INCLUDE_DIRS})
+  check_include_file("mpi-ext.h" TTG_HAVE_MPIEXT)
+else(MPI_FOUND)
+  set(TTG_HAVE_MPIEXT $<BOOL:false>)
+endif(MPI_FOUND)
 
 ##########################
 #### Examples

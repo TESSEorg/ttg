@@ -17,4 +17,7 @@
 
 #cmakedefine TTG_HAVE_HIPBLAS
 
+#cmakedefine TTG_HAVE_MPI
+#cmakedefine TTG_HAVE_MPIEXT
+
 #endif  // TTG_CONFIG_IN_H

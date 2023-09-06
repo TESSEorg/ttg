@@ -333,8 +333,10 @@ public:
       std::size_t s = size();
       ar& s;
       assert(m_ttg_copy != nullptr); // only tracked objects allowed
-      /* TODO: move to device pointer once we are sure we can send from the device */
-      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), host_ptr()});
+      /* transfer from the current device
+       * note: if the transport layer (MPI) does not support device transfers
+       *       the data will have been pushed out */
+      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), current_device_ptr()});
     } else {
       std::size_t s;
       ar & s;
@@ -342,8 +344,9 @@ public:
       /* initialize internal pointers and then reset */
       reset(s);
       assert(m_ttg_copy != nullptr); // only tracked objects allowed
-      /* TODO: move to device pointer once we are sure we can send from the device */
-      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), host_ptr()});
+      /* transfer to the current device
+       * TODO: how can we make sure the device copy is not evicted? */
+      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), current_device_ptr()});
     }
   }
 #endif // TTG_SERIALIZATION_SUPPORTS_MADNESS

@@ -65,8 +65,12 @@
 #include <vector>
 
 // needed for MPIX_CUDA_AWARE_SUPPORT
+#if defined(TTG_HAVE_MPI)
 #include <mpi.h>
+#if defined(TTG_HAVE_MPIEXT)
 #include <mpi-ext.h>
+#endif // TTG_HAVE_MPIEXT
+#endif // TTG_HAVE_MPI
 
 
 #include <parsec.h>
@@ -202,6 +206,8 @@ namespace ttg_parsec {
     ttg::Edge<> m_ctl_edge;
     bool _dag_profiling;
     bool _task_profiling;
+    std::array<bool, static_cast<std::size_t>(ttg::ExecutionSpace::Invalid)>
+               mpi_space_support = {true, false, false};
 
     int query_comm_size() {
       int comm_size;
@@ -248,6 +254,19 @@ namespace ttg_parsec {
     {
       ttg::detail::register_world(*this);
       if (own_ctx) ctx = parsec_init(ncores, argc, argv);
+
+      /* query MPI device support */
+#if defined(MPIX_CUDA_AWARE_SUPPORT) && MPIX_CUDA_AWARE_SUPPORT
+      if (MPIX_Query_cuda_support()) {
+        mpi_space_support[static_cast<ttg::ExecutionSpace::CUDA>] = true;
+      }
+#endif // MPIX_CUDA_AWARE_SUPPORT
+
+#if defined(MPIX_HIP_AWARE_SUPPORT) && MPIX_HIP_AWARE_SUPPORT
+      if (MPIX_Query_hip_support()) {
+        mpi_space_support[static_cast<ttg::ExecutionSpace::HIP>] = true;
+      }
+#endif // MPIX_HIP_AWARE_SUPPORT
 
 #if defined(PARSEC_PROF_TRACE)
       if(parsec_profile_enabled) {
@@ -446,6 +465,10 @@ namespace ttg_parsec {
     }
 
     virtual bool profiling() override { return _task_profiling; }
+
+    bool mpi_support(ttg::ExecutionSpace space) {
+      return mpi_space_support[static_cast<std::size_t>(space)];
+    }
 
     virtual void final_task() override {
 #ifdef TTG_USE_USER_TERMDET
@@ -1420,8 +1443,9 @@ namespace ttg_parsec {
       /* TODO: is this the right place to set the mask? */
       task->parsec_task.chore_mask = PARSEC_DEV_ALL;
       /* get a device and come back if we need another one */
-      int64_t task_load = 1;
-      dev_index = parsec_get_best_device(parsec_task, &task_load);
+      //int64_t task_load = 1;
+      gpu_task->load = 1.0;
+      dev_index = parsec_get_best_device(parsec_task, &gpu_task->load);
       assert(dev_index >= 0);
       if (dev_index < 2) {
           return PARSEC_HOOK_RETURN_NEXT; /* Fall back */
@@ -1887,6 +1911,30 @@ namespace ttg_parsec {
             copy = detail::create_new_datacopy(descr.create_from_metadata(metadata));
           } else if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
             copy = detail::create_new_datacopy(decvalueT{});
+#if 0
+            // TODO: first attempt at sending directly to the device
+            parsec_gpu_data_copy_t* gpu_elem;
+            gpu_elem = PARSEC_DATA_GET_COPY(master, gpu_device->super.device_index);
+            int i = 2; // 0: cpu, 1: recursive -> start with 2 (first accelerator)
+            int devid = 2;
+            while (i < parsec_nb_devices) {
+              if (nullptr == gpu_elem) {
+                gpu_elem = PARSEC_OBJ_NEW(parsec_data_copy_t);
+                gpu_elem->flags = PARSEC_DATA_FLAG_PARSEC_OWNED | PARSEC_DATA_FLAG_PARSEC_MANAGED;
+                gpu_elem->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
+                gpu_elem->version = 0;
+                gpu_elem->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
+              }
+              if (nullptr == gpu_elem->device_private) {
+                gpu_elem->device_private = zone_malloc(gpu_device->memory, gpu_task->flow_nb_elts[i]);
+                if (nullptr == gpu_elem->device_private) {
+                  devid++;
+                  continue;
+                }
+                break;
+              }
+            }
+#endif // 0
             /* unpack the object, potentially discovering iovecs */
             pos = unpack(*static_cast<decvalueT *>(copy->get_ptr()), msg->bytes, pos);
             //std::cout << "set_arg_from_msg iovec_begin num_iovecs " << num_iovecs << " distance " << std::distance(copy->iovec_begin(), copy->iovec_end()) << std::endl;
@@ -3083,7 +3131,7 @@ namespace ttg_parsec {
       /* TODO: remove this once we support reductions on the GPU */
       auto &reducer = std::get<i>(input_reducers);
       if (reducer) {
-        /* non-gpu task, check if we need to push back to the host */
+        /* reductions are currently done only on the host so push out */
         copy_mark_pushout(copy);
         caller->data_flags |= detail::ttg_parsec_data_flags::MARKED_PUSHOUT;
         return;
@@ -3118,13 +3166,22 @@ namespace ttg_parsec {
         need_pushout = true;
       }
 
-      /* check if there are non-local successors if it's a cuda task */
+      /* check if there are non-local successors if it's a device task */
       if (!need_pushout) {
-        need_pushout = remote_check();
+        bool device_supported = false;
+        if constexpr (derived_has_cuda_op()) {
+          device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::CUDA);
+        } else if constexpr (derived_has_hip_op()) {
+          device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::HIP);
+        }
+        /* if MPI supports the device we don't care whether we have remote peers
+         * because we can send from the device directly */
+        if (!device_supported) {
+          need_pushout = remote_check();
+        }
       }
 
       if (need_pushout) {
-        /* non-gpu task, check if we need to push back to the host */
         copy_mark_pushout(copy);
         caller->data_flags |= detail::ttg_parsec_data_flags::MARKED_PUSHOUT;
       }

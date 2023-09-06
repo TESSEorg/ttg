@@ -705,11 +705,13 @@ class SpMM25D {
 
 #if defined(TTG_HAVE_CUDA)
     static constexpr bool have_cuda_op = true;
+#warning SPMM using CUDA implementation
 #elif defined(TTG_HAVE_HIPBLAS)
     static constexpr bool have_hip_op  = true;
+#warning SPMM using HIP implementation
+#else
+#error No valid device implementation found!
 #endif
-
-    static_assert(have_hip_op);
 
     MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
                 const std::vector<std::vector<long>> &a_rowidx_to_colidx,
