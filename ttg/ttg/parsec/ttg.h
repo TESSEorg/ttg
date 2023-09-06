@@ -110,9 +110,7 @@
 #include "ttg/parsec/thread_local.h"
 #include "ttg/parsec/ptr.h"
 #include "ttg/parsec/task.h"
-#ifdef TTG_HAVE_CUDART
 #include "ttg/device/cublas_helper.h"
-#endif  // TTG_HAVE_CUDART
 #include "ttg/parsec/parsec-ext.h"
 
 #undef TTG_PARSEC_DEBUG_TRACK_DATA_COPIES
@@ -1320,12 +1318,12 @@ namespace ttg_parsec {
       assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_TRANSFER ||
              dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL);
 
-#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
+#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDART)
       parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu_stream;
       ttg::detail::cublas_set_kernel_stream(cuda_stream->cuda_stream);
 #endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
 
-#if defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
+#if defined(PARSEC_HAVE_DEV_HIP_SUPPORT) && defined(TTG_HAVE_HIPBLAS)
       parsec_hip_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)gpu_stream;
       ttg::detail::hipblas_set_kernel_stream(hip_stream->hip_stream);
 #endif // PARSEC_HAVE_DEV_HIP_SUPPORT
