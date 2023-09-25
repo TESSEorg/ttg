@@ -19,7 +19,7 @@
 #include <btas/btas.h>
 #include <btas/optimize/contract.h>
 #include <btas/util/mohndle.h>
-#include <TiledArray/cuda/allocators.h>
+#include <TiledArray/device/allocators.h>
 #include <ttg/device/cublas_helper.h>
 #include <madness/world/parsec.h>  // need to initialize MADNESS purely for the purposes of TA allocators
 #else
@@ -52,8 +52,8 @@ using namespace ttg;
 template <typename _T, class _Range, class _Storage>
 struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
                     , public btas::Tensor<_T, _Range, _Storage> {
-  using tensor_type = btas::Tensor<_T, _Range, _Storage>;
-  using ttvalue_type = ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>;
+  using tensor_type = typename btas::Tensor<_T, _Range, _Storage>;
+  using ttvalue_type = typename ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>;
   ttg::buffer<_T> b; // does not own the host buffer
 
   using value_type = typename tensor_type::value_type;
@@ -246,12 +246,11 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
 
 };
 
-#if defined(TTG_HAVE_CUDA)
+#if defined(TTG_HAVE_CUDA) || defined(TTG_HAVE_HIPBLAS)
 using blk_t = DeviceTensor<double, btas::DEFAULT::range,
-                           btas::mohndle<btas::varray<double, TiledArray::cuda_pinned_allocator<double>>,
+                           btas::mohndle<btas::varray<double, TiledArray::device_pinned_allocator<double>>,
                                          btas::Handle::shared_ptr>>;
 #else
-// TODO: no hip pinned allocator in TA?
 using blk_t = DeviceTensor<double, btas::DEFAULT::range,
                            btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
 #endif
