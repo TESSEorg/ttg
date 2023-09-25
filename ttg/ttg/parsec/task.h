@@ -118,7 +118,7 @@ namespace ttg_parsec {
        * need offsetof for the mempool and scheduling.
        */
       release_task_fn* release_task_cb = nullptr;
-      device_ptr_t* dev_ptr;
+      device_ptr_t* dev_ptr = nullptr;
       bool remove_from_hash = true;
       bool is_dummy = false;
       bool defer_writer = TTG_PARSEC_DEFER_WRITER; // whether to defer writer instead of creating a new copy
@@ -237,7 +237,7 @@ namespace ttg_parsec {
     template <typename TT>
     struct parsec_ttg_task_t<TT, true> : public parsec_ttg_task_base_t {
       static constexpr size_t num_streams = TT::numins;
-      TT* tt;
+      TT* tt = nullptr;
       std::array<stream_info_t, num_streams> streams;
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended

@@ -254,17 +254,21 @@ namespace ttg_parsec {
       if (own_ctx) ctx = parsec_init(ncores, argc, argv);
 
       /* query MPI device support */
+      if (ttg::detail::force_device_comm()
 #if defined(MPIX_CUDA_AWARE_SUPPORT) && MPIX_CUDA_AWARE_SUPPORT
-      if (MPIX_Query_cuda_support()) {
+          || MPIX_Query_cuda_support()
+#endif // MPIX_CUDA_AWARE_SUPPORT
+         ) {
         mpi_space_support[static_cast<ttg::ExecutionSpace::CUDA>] = true;
       }
-#endif // MPIX_CUDA_AWARE_SUPPORT
 
+      if (ttg::detail::force_device_comm()
 #if defined(MPIX_HIP_AWARE_SUPPORT) && MPIX_HIP_AWARE_SUPPORT
-      if (MPIX_Query_hip_support()) {
+          || MPIX_Query_hip_support()
+#endif // MPIX_HIP_AWARE_SUPPORT
+         ) {
         mpi_space_support[static_cast<ttg::ExecutionSpace::HIP>] = true;
       }
-#endif // MPIX_HIP_AWARE_SUPPORT
 
 #if defined(PARSEC_PROF_TRACE)
       if(parsec_profile_enabled) {
@@ -1416,7 +1420,7 @@ namespace ttg_parsec {
       PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_list_item_t);
       gpu_task->ec = parsec_task;
       gpu_task->task_type = 0; // user task
-      gpu_task->load = 1.0;    // TODO: can we do better?
+      gpu_task->load = 1;    // TODO: can we do better?
       gpu_task->last_data_check_epoch = -1; // used internally
       gpu_task->pushout = 0;
       gpu_task->submit = &TT::device_static_submit<Space>;
@@ -1441,9 +1445,9 @@ namespace ttg_parsec {
       /* TODO: is this the right place to set the mask? */
       task->parsec_task.chore_mask = PARSEC_DEV_ALL;
       /* get a device and come back if we need another one */
-      //int64_t task_load = 1;
-      gpu_task->load = 1.0;
-      dev_index = parsec_get_best_device(parsec_task, &gpu_task->load);
+      int64_t task_load = 1;
+      dev_index = parsec_get_best_device(parsec_task, &task_load);
+      gpu_task->load = task_load;
       assert(dev_index >= 0);
       if (dev_index < 2) {
           return PARSEC_HOOK_RETURN_NEXT; /* Fall back */

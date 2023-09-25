@@ -16,6 +16,14 @@ namespace ttg {
     /// @post `num_threads()>0`
     int num_threads();
 
+    /// Override whether TTG should attempt to communicate to and from device buffers.
+    /// TTG will attempt to query device support from the underlying MPI implementation (e.g.,
+    /// using the unofficial extension MPIX_Query_cuda_support). However, since not all MPI implementations
+    /// support this extension, users can force the use of device buffers in communication by setting
+    /// `TTG_FORCE_DEVICE_COMM` to a non-negative number.
+    /// @return true if the user wants to force the use of device-side buffers in communicaton.
+    bool enable_device_comm();
+
   }  // namespace detail
 }  // namespace ttg
 
