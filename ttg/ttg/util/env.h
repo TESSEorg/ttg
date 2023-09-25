@@ -22,7 +22,7 @@ namespace ttg {
     /// support this extension, users can force the use of device buffers in communication by setting
     /// `TTG_FORCE_DEVICE_COMM` to a non-negative number.
     /// @return true if the user wants to force the use of device-side buffers in communicaton.
-    bool enable_device_comm();
+    bool force_device_comm();
 
   }  // namespace detail
 }  // namespace ttg

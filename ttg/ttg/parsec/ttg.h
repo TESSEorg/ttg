@@ -259,7 +259,7 @@ namespace ttg_parsec {
           || MPIX_Query_cuda_support()
 #endif // MPIX_CUDA_AWARE_SUPPORT
          ) {
-        mpi_space_support[static_cast<ttg::ExecutionSpace::CUDA>] = true;
+        mpi_space_support[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)] = true;
       }
 
       if (ttg::detail::force_device_comm()
@@ -267,7 +267,7 @@ namespace ttg_parsec {
           || MPIX_Query_hip_support()
 #endif // MPIX_HIP_AWARE_SUPPORT
          ) {
-        mpi_space_support[static_cast<ttg::ExecutionSpace::HIP>] = true;
+        mpi_space_support[static_cast<std::size_t>(ttg::ExecutionSpace::HIP)] = true;
       }
 
 #if defined(PARSEC_PROF_TRACE)
