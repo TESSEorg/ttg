@@ -230,6 +230,7 @@ endif(TARGET MADworld)
 if (TARGET PaRSEC::parsec)
   set(ttg-parsec-headers
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/buffer.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/devicefunc.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/devicescratch.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/fwd.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/import.h
