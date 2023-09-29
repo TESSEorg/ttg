@@ -130,6 +130,9 @@ if (TTG_HAVE_HIPBLAS)
     )
   endif (NOT TTG_HAVE_CUDA)
   list(APPEND ttg-deps roc::hipblas)
+  find_package(hip REQUIRED)
+  list(APPEND ttg-deps hip::host)
+
 endif (TTG_HAVE_HIPBLAS)
 
 set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers};${ttg_device_headers})

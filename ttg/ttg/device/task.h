@@ -206,7 +206,7 @@ namespace ttg {
     // clang-format on
     template <size_t i, typename keyT, typename valueT>
     inline auto send(const keyT &key, valueT &&value) {
-      return send(i, key, std::forward<valueT>(value));
+      return ttg::device::send(i, key, std::forward<valueT>(value));
     }
 
 

@@ -15,6 +15,8 @@
 
 #cmakedefine TTG_HAVE_CUDART
 
+#cmakedefine TTG_HAVE_HIP
+
 #cmakedefine TTG_HAVE_HIPBLAS
 
 #cmakedefine TTG_HAVE_MPI
