@@ -157,6 +157,21 @@ namespace ttg {
         co_await ttg::Void{}; // we'll come back once the task is done
         t.sendv(std::forward<Value>(value));
       };
+
+      template<typename Key, ttg::Runtime Runtime = ttg::ttg_runtime>
+      inline send_coro_state sendk_coro (const Key& key, ttg::Out<Key, void> &t) {
+        // no need to prepare the send but we have to suspend once
+        Key k = key;
+        co_await ttg::Void{}; // we'll come back once the task is done
+        t.sendk(k);
+      };
+
+      template<ttg::Runtime Runtime = ttg::ttg_runtime>
+      inline send_coro_state send_coro (ttg::Out<void, void> &t) {
+        // no need to prepare the send but we have to suspend once
+        co_await ttg::Void{}; // we'll come back once the task is done
+        t.send();
+      };
     } // namespace detail
 
 
@@ -183,6 +198,12 @@ namespace ttg {
       return detail::send_t{detail::sendv_coro(copy_handler(std::forward<valueT>(value)), std::get<i>(t), copy_handler)};
     }
 
+    template <size_t i, typename Key, typename... out_keysT, typename... out_valuesT,
+              ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline detail::send_t sendk(
+        const Key& key, std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+      return detail::send_t{detail::sendk_coro(key, std::get<i>(t))};
+    }
 
     // clang-format off
     /// \brief Sends a task id and a value to the template tasks attached to the output terminal of this template task
@@ -210,6 +231,41 @@ namespace ttg {
     }
 
 
+    template <typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline detail::send_t sendv(std::size_t i, valueT &&value) {
+      auto *terminal_ptr = ttg::detail::get_out_terminal<void, valueT>(i, "ttg::device::send(i, key, value)");
+      ttg::detail::value_copy_handler<Runtime> copy_handler;
+      return detail::send_t{detail::sendv_coro(copy_handler(std::forward<valueT>(value)), *terminal_ptr, copy_handler)};
+    }
+
+    template <typename Key, ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline detail::send_t sendk(std::size_t i, const Key& key) {
+      auto *terminal_ptr = ttg::detail::get_out_terminal<Key, void>(i, "ttg::device::send(i, key, value)");
+      return detail::send_t{detail::sendk_coro(key, *terminal_ptr)};
+    }
+
+    template <ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline detail::send_t send(std::size_t i) {
+      auto *terminal_ptr = ttg::detail::get_out_terminal<void, void>(i, "ttg::device::send(i, key, value)");
+      return detail::send_t{detail::send_coro(*terminal_ptr)};
+    }
+
+
+    template <std::size_t i, typename valueT, typename... out_keysT, typename... out_valuesT,
+              ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline detail::send_t sendv(valueT &&value) {
+      return sendv(i, std::forward<valueT>(value));
+    }
+
+    template <size_t i, typename Key, ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline detail::send_t sendk(const Key& key) {
+      return sendk(i, key);
+    }
+
+    template <size_t i, ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline detail::send_t sendk() {
+      return send(i);
+    }
 
     namespace detail {
 
@@ -504,12 +560,12 @@ namespace ttg {
       return {};
     }
 
-#if 0
-    void return_value(std::vector<device::detail::send_t>&& sends) {
-      m_sends = std::forward<std::vector<device::detail::send_t>>(sends);
+    TTG_CXX_COROUTINE_NAMESPACE::suspend_always await_transform(device::detail::send_t&& v) {
+      m_sends.clear();
+      m_sends.push_back(std::forward<device::detail::send_t>(v));
       m_state = TTG_DEVICE_CORO_SENDOUT;
+      return {};
     }
-#endif // 0
 
     void return_void() {
       m_state = TTG_DEVICE_CORO_COMPLETE;
