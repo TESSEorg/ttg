@@ -6,12 +6,13 @@
 
 #include <ttg/serialization/splitmd_data_descriptor.h>
 
-template <typename T>
-class MatrixTile {
+template <typename T, class _Storage>
+class MatrixTile : public ttg::TTValue<MatrixTile<T, _Storage>> {
  public:
   using metadata_t = typename std::tuple<int, int, int>;
 
-  using pointer_t = typename std::shared_ptr<T>;
+  using pointer_t = typename ttg::buffer<T>;
+  using ttvalue_type = ttg::TTValue<MatrixTile<T, _Storage>>;
 
  private:
   pointer_t _data;
@@ -20,18 +21,18 @@ class MatrixTile {
   // (Re)allocate the tile memory
   void realloc() {
     // std::cout << "Reallocating new tile" << std::endl;
-    _data = std::shared_ptr<T>(new T[_lda * _cols], [](T* p) { delete[] p; });
+    _data = ttg::buffer<T>(_data, _lda * _cols);
   }
 
  public:
   MatrixTile() {}
 
-  MatrixTile(int rows, int cols, int lda) : _rows(rows), _cols(cols), _lda(lda) { realloc(); }
+  MatrixTile(int rows, int cols, int lda) : ttvalue_type(), _rows(rows), _cols(cols), _lda(lda) { realloc(); }
 
   MatrixTile(const metadata_t& metadata)
       : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::get<2>(metadata)) {}
 
-  MatrixTile(int rows, int cols, pointer_t data, int lda) : _data(data), _rows(rows), _cols(cols), _lda(lda) {}
+  MatrixTile(int rows, int cols, pointer_t data, int lda) : ttvalue_type(), _data(data), _rows(rows), _cols(cols), _lda(lda) {}
 
   MatrixTile(const metadata_t& metadata, pointer_t data)
       : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::forward(data), std::get<2>(metadata)) {}
@@ -40,38 +41,20 @@ class MatrixTile {
    * Constructor with outside memory. The tile will *not* delete this memory
    * upon destruction.
    */
-  MatrixTile(int rows, int cols, T* data, int lda) : _data(data, [](T*) {}), _rows(rows), _cols(cols), _lda(lda) {}
+  MatrixTile(int rows, int cols, T* data, int lda) : ttvalue_type(), _data(data), _rows(rows), _cols(cols), _lda(lda) {}
 
   MatrixTile(const metadata_t& metadata, T* data)
       : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), data, std::get<2>(metadata)) {}
-
-#if 0
-  /* Copy dtor and operator with a static_assert to catch unexpected copying */
-  MatrixTile(const MatrixTile& other) {
-    static_assert("Oops, copy ctor called?!");
-  }
-
-  MatrixTile& operator=(const MatrixTile& other) {
-    static_assert("Oops, copy ctor called?!");
-  }
-#endif
 
   MatrixTile(MatrixTile<T>&& other) = default;
 
   MatrixTile& operator=(MatrixTile<T>&& other) = default;
 
-#if 0
-  /* Defaulted copy ctor and op for shallow copies, see comment below */
-  MatrixTile(const MatrixTile<T>& other)  = default;
-
-  MatrixTile& operator=(const MatrixTile<T>& other)  = default;
-#endif  // 0
   /* Deep copy ctor und op are not needed for PO since tiles will never be read
    * and written concurrently. Hence shallow copies are enough, will all
    * receiving tasks sharing tile data. Re-enable this once the PaRSEC backend
    * can handle data sharing without excessive copying */
-#if 1
-  MatrixTile(const MatrixTile<T>& other) : _rows(other._rows), _cols(other._cols), _lda(other._lda) {
+  MatrixTile(const MatrixTile<T>& other) : ttvalue_type(), _rows(other._rows), _cols(other._cols), _lda(other._lda) {
     this->realloc();
     std::copy_n(other.data(), _lda * _cols, this->data());
   }
@@ -84,7 +67,6 @@ class MatrixTile {
     std::copy_n(other.data(), _lda * _cols, this->data());
     return *this;
   }
-#endif  // 1
 
   void set_metadata(metadata_t meta) {
     _rows = std::get<0>(meta);
@@ -143,6 +125,16 @@ class MatrixTile {
     return o;
   }
 };
+
+#if defined(TTG_HAVE_CUDA)
+using blk_t = DeviceTensor<double, btas::DEFAULT::range,
+                           btas::mohndle<btas::varray<double, TiledArray::cuda_pinned_allocator<double>>,
+                                         btas::Handle::shared_ptr>>;
+#else
+// TODO: no hip pinned allocator in TA?
+using blk_t = DeviceTensor<double, btas::DEFAULT::range,
+                           btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
+#endif
 
 namespace ttg {
 

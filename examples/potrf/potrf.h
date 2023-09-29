@@ -19,7 +19,90 @@ namespace potrf {
                   ttg::Edge<Key1, MatrixTile<typename MatrixT::element_type>>& input,
                   ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_trsm,
                   ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_result) {
-    using T = typename MatrixT::element_type;
+      using T = typename MatrixT::element_type;
+#if defined(TTG_HAS_CUDART) || defined(TTG_HAS_HIP)
+    static int device_potrf_workspace_size(blk_t &A) {
+      int Lwork;
+      #if defined(TTG_HAVE_CUDA)
+        cusolverDnDpotrf_bufferSize(ttg::detail::cublas_get_handle(),
+                                    CUBLAS_FILL_MODE_LOWER, A.extent(1),
+                                    nullptr, A.extent(0),
+                                    &Lwork);
+        return Lwork;
+      #elif defined(TTG_HAVE_HIPBLAS)
+        #error TBCoded
+      #else
+        return 0;
+      #endif
+    }
+
+    static void device_potrf(blk_t &A, double *workspace, int Lwork, int *devInfo) {
+      int device = A.b.get_current_device();
+      assert(device != 0);
+    #if defined(TTG_HAVE_CUDA)
+      cusolverDnDpotrf(ttg::detail::cublas_get_handle(),
+                       CUBLAS_FILL_MODE_LOWER, A.extent(1),
+                       A.b.device_ptr_on(device), A.extent(0),
+                       workspace, Lwork,
+                       devInfo);
+    #elif defined(TTG_HAVE_HIPBLAS)
+      hipsolverDpotrf(ttg::detail::hipblas_get_handle(),
+                       HIPSOLVER_FILL_MODE_LOWER, A.extent(1),
+                       A.b.device_ptr_on(device), A.extent(0),
+                       workspace, Lwork,
+                       devInfo);
+    #endif
+    }
+
+    auto f_dev = [=](const Key1& key, MatrixTile<T>&& A,
+                     std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out) -> ttg::device_task {
+      const auto K = key[0]; 
+
+      /* pull the matrix onto the device, as computing the workspace size might in theory depend on the data */
+      //TODO: extend MatrixTile<T> to be heterogeneous-aware. Look at spmm-cuda.cc 50-253
+      //       Need to include a ttg::buffer<T> _data instead of a shared_ptr;
+      //       Check pmw.h: when we generate the MatrixTile
+      //       Also check pinned allocator at the end of DeviceTensor (250-253)
+
+      int Lwork = device_potrf_workspace_size(A);
+
+      // Instead of using scratch here, we should have hostWS and hostInfo globals and use to_device
+      // this would reduce the number of I/O operations to devices
+      double hostWS[Lwork];
+      ttg::devicescratch<double> devWS = ttg::make_scratch(hostWS, ttg::scope::Allocate);
+      int hostInfo = -1;
+      ttg::devicescratch<int> devInfo = ttg::make_scratch(&hostInfo, ttg::scope::Allocate);
+
+      /* the workspace and the devInfo must be device-level pointers */
+      co_await ttg::to_device(A._data, devWS, devInfo);
+
+      /* everything is on the device, call the POTRF */
+      device_potrf(A, devWS, Lwork, devInfo);
+
+      /* compute successors while the kernel is running */
+      std::vector<Key2> keylist;
+      keylist.reserve(A.rows() - K);
+      /* TODO: reverse order of arrays */
+      for (int m = K + 1; m < A.rows(); ++m) {
+        /* send tile to trsm */
+        keylist.push_back(Key2(m, K));
+      }
+
+      /* wait for the kernel to complete */
+      co_await ttg::wait_kernel(devInfo);
+
+      if( hostInfo == 0 ) {
+        co_await ttg::device::forward(ttg::device::broadcast<0, 1>(std::make_tuple(Key2(K, K), keylist), std::move(A), out));
+        // Anything after this co_await is never executed
+        // co_return would look better, but co_return would destroy keylist before the runtime can handle it
+      } else {
+        // Well... Here we should interrupt the DAG of tasks, there is an error. Raise?
+        std::cerr << "Factorization is SUSPICIOUS (the matrix might not be diagonal dominant)" << std::endl;
+      }
+    }
+    return ttg::make_tt<ttg::ExecutionSpace::CUDA>(f_dev, ttg::edges(ttg::fuse(input, input_disp)), ttg::edges(output_result, output_trsm), "POTRF",
+                        {"tile_kk/dispatcher"}, {"output_result", "output_trsm"});
+#else /* defined(TTG_HAS_CUDART) || defined(TTG_HAS_HIP) */
     auto f = [=](const Key1& key, MatrixTile<T>&& tile_kk,
                  std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out) {
       const int K = key[0];
@@ -49,6 +132,7 @@ namespace potrf {
     };
     return ttg::make_tt(f, ttg::edges(ttg::fuse(input, input_disp)), ttg::edges(output_result, output_trsm), "POTRF",
                         {"tile_kk/dispatcher"}, {"output_result", "output_trsm"});
+#endif
   }
 
   template <typename MatrixT>
