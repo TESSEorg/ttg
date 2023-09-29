@@ -1826,9 +1826,11 @@ int main(int argc, char **argv) {
         // Start up engine
         execute();
         for (int nrun = 0; nrun < nb_runs; nrun++) {
+          parsec_devices_release_memory();
           timed_measurement(A, B, ij_keymap, ijk_keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity,
                             a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles,
                             nTiles, kTiles, M, N, K, minTs, maxTs, P, Q, R);
+          parsec_devices_reset_load(default_execution_context().impl().context());
         }
       } else {
         // flow graph needs to exist on every node
