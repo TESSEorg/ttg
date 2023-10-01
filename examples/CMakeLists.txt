@@ -22,6 +22,8 @@ if (TARGET tiledarray)
                         COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
                         RUNTIMES "parsec")
     endif()
+
+    add_ttg_executable(chain-ttg-dev task-benchmarks/chain-ttg-dev.cc LINK_LIBRARIES tiledarray RUNTIMES "parsec")
 endif()
 
 if (TARGET MADworld)
@@ -61,3 +63,4 @@ add_ttg_executable(sw sw/sw.cc)
 if (TARGET MADworld)
   add_ttg_executable(randomaccess randomaccess/randomaccess.cc RUNTIMES "mad")
 endif (TARGET MADworld)
+

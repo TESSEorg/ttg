@@ -165,49 +165,50 @@ public:
 
 protected:
 
+  template<typename ReturnT>
+  auto process_return(ReturnT&& ret, output_terminalsT &out) {
+    static_assert(std::is_same_v<std::remove_reference_t<decltype(ret)>, returnT>,
+                  "CallableWrapTTArgs<funcT,returnT,...>: returnT does not match the actual return type of funcT");
+    if constexpr (!std::is_void_v<returnT>) {  // protect from compiling for void returnT
+#ifdef TTG_HAS_COROUTINE
+      if constexpr (std::is_same_v<returnT, ttg::resumable_task>) {
+        ttg::coroutine_handle<> coro_handle;
+        // if task completed destroy it
+        if (ret.completed()) {
+          ret.destroy();
+        } else {  // if task is suspended return the coroutine promise ptr
+          coro_handle = ret;
+        }
+        return coro_handle;
+      } else if constexpr (std::is_same_v<returnT, ttg::device_task>) {
+        ttg::device_task::base_type coro_handle = ret;
+        return coro_handle;
+      }
+      if constexpr (!(std::is_same_v<returnT, ttg::resumable_task> || std::is_same_v<returnT, ttg::device_task>))
+#endif
+      {
+        static_assert(std::tuple_size_v<std::remove_reference_t<decltype(out)>> == 1,
+                      "CallableWrapTTArgs<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
+                      "value only if there is only 1 out terminal");
+        static_assert(std::tuple_size_v<returnT> <= 2,
+                      "CallableWrapTTArgs<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
+                      "value only if it is a plain value (then sent with null key), a tuple-like containing a single "
+                      "key (hence value is void), or a tuple-like containing a key and a value");
+        if constexpr (std::tuple_size_v<returnT> == 0)
+          std::get<0>(out).sendv(std::move(ret));
+        else if constexpr (std::tuple_size_v<returnT> == 1)
+          std::get<0>(out).sendk(std::move(std::get<0>(ret)));
+        else if constexpr (std::tuple_size_v<returnT> == 2)
+          std::get<0>(out).send(std::move(std::get<0>(ret)), std::move(std::get<1>(ret)));
+        return;
+      }
+    }
+  }
+
   /// @return coroutine handle<> (if funcT is a coroutine), else void
   template <typename Key, typename Tuple, std::size_t... S>
   auto call_func(Key &&key, Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
     using func_args_t = ttg::meta::tuple_concat_t<std::tuple<const Key &>, input_refs_tuple_type, output_edges_type>;
-
-    auto process_return = [&out](auto &&ret) {
-      static_assert(std::is_same_v<std::remove_reference_t<decltype(ret)>, returnT>,
-                    "CallableWrapTTArgs<funcT,returnT,...>: returnT does not match the actual return type of funcT");
-      if constexpr (!std::is_void_v<returnT>) {  // protect from compiling for void returnT
-#ifdef TTG_HAS_COROUTINE
-        if constexpr (std::is_same_v<returnT, ttg::resumable_task>) {
-          ttg::coroutine_handle<> coro_handle;
-          // if task completed destroy it
-          if (ret.completed()) {
-            ret.destroy();
-          } else {  // if task is suspended return the coroutine promise ptr
-            coro_handle = ret;
-          }
-          return coro_handle;
-        } else if constexpr (std::is_same_v<returnT, ttg::device_task>) {
-          ttg::device_task::base_type coro_handle = ret;
-          return coro_handle;
-        }
-        if constexpr (!(std::is_same_v<returnT, ttg::resumable_task> || std::is_same_v<returnT, ttg::device_task>))
-#endif
-        {
-          static_assert(std::tuple_size_v<std::remove_reference_t<decltype(out)>> == 1,
-                        "CallableWrapTTArgs<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
-                        "value only if there is only 1 out terminal");
-          static_assert(std::tuple_size_v<returnT> <= 2,
-                        "CallableWrapTTArgs<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
-                        "value only if it is a plain value (then sent with null key), a tuple-like containing a single "
-                        "key (hence value is void), or a tuple-like containing a key and a value");
-          if constexpr (std::tuple_size_v<returnT> == 0)
-            std::get<0>(out).sendv(std::move(ret));
-          else if constexpr (std::tuple_size_v<returnT> == 1)
-            std::get<0>(out).sendk(std::move(std::get<0>(ret)));
-          else if constexpr (std::tuple_size_v<returnT> == 2)
-            std::get<0>(out).send(std::move(std::get<0>(ret)), std::move(std::get<1>(ret)));
-          return;
-        }
-      }
-    };
 
     if constexpr (funcT_receives_outterm_tuple) {
       if constexpr (std::is_void_v<returnT>) {
@@ -219,7 +220,7 @@ protected:
             std::forward<Key>(key),
             baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
 
-        return process_return(std::move(ret));
+        return process_return(std::move(ret), out);
       }
     } else {
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
@@ -234,45 +235,78 @@ protected:
             func(std::forward<Key>(key),
                  baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))...);
         this->set_outputs_tls_ptr(old_output_tls_ptr);
-        return process_return(std::move(ret));
+        return process_return(std::move(ret), out);
       }
     }
   }
 
   template <typename Tuple, std::size_t... S>
-  void call_func(Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
+  auto call_func(Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
     using func_args_t = ttg::meta::tuple_concat_t<input_refs_tuple_type, output_edges_type>;
-    if constexpr (funcT_receives_outterm_tuple)
-      func(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
-    else {
+    if constexpr (funcT_receives_outterm_tuple) {
+      if constexpr (std::is_void_v<returnT>) {
+        func(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
+      } else {
+        auto ret = func(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
+        return process_return(std::move(ret), out);
+      }
+    } else {
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
-      func(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))...);
-      this->set_outputs_tls_ptr(old_output_tls_ptr);
+      if constexpr (std::is_void_v<returnT>) {
+        func(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))...);
+        this->set_outputs_tls_ptr(old_output_tls_ptr);
+      } else {
+        auto ret = func(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))...);
+        this->set_outputs_tls_ptr(old_output_tls_ptr);
+        return process_return(std::move(ret), out);
+      }
     }
   }
 
   template <typename Key>
-  void call_func(Key &&key, output_terminalsT &out) {
-    if constexpr (funcT_receives_outterm_tuple)
-      func(std::forward<Key>(key), out);
-    else {
+  auto call_func(Key &&key, output_terminalsT &out) {
+    if constexpr (funcT_receives_outterm_tuple) {
+      if constexpr (std::is_void_v<returnT>) {
+        func(std::forward<Key>(key), out);
+      } else {
+        auto ret = func(std::forward<Key>(key), out);
+        return process_return(std::move(ret), out);
+      }
+    } else {
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
-      func(std::forward<Key>(key));
-      this->set_outputs_tls_ptr(old_output_tls_ptr);
+      if constexpr (std::is_void_v<returnT>) {
+        func(std::forward<Key>(key));
+        this->set_outputs_tls_ptr(old_output_tls_ptr);
+      } else {
+        auto ret = func(std::forward<Key>(key));
+        this->set_outputs_tls_ptr(old_output_tls_ptr);
+        return process_return(std::move(ret), out);
+      }
     }
   }
 
   template <typename OutputTerminals>
-  void call_func(OutputTerminals &out) {
-    if constexpr (funcT_receives_outterm_tuple)
-      func(out);
-    else {
+  auto call_func(OutputTerminals &out) {
+    if constexpr (funcT_receives_outterm_tuple) {
+      if constexpr (std::is_void_v<returnT>) {
+        func(out);
+      } else {
+        auto ret = func(out);
+        return process_return(std::move(ret), out);
+      }
+    } else {
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
-      func();
-      this->set_outputs_tls_ptr(old_output_tls_ptr);
+      if constexpr (std::is_void_v<returnT>) {
+        func();
+        this->set_outputs_tls_ptr(old_output_tls_ptr);
+      } else {
+        auto ret = func(out);
+        this->set_outputs_tls_ptr(old_output_tls_ptr);
+        return process_return(std::move(ret), out);
+      }
     }
   }
 

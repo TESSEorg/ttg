@@ -78,6 +78,7 @@ namespace ttg_parsec {
    * is current on the target device, false if transfers are required. */
   template<typename... Views>
   inline bool register_device_memory(std::tuple<Views&...> &views) {
+    bool is_current = true;
     if (nullptr == detail::parsec_ttg_caller) {
       throw std::runtime_error("register_device_memory may only be invoked from inside a task!");
     }
@@ -86,7 +87,9 @@ namespace ttg_parsec {
       throw std::runtime_error("register_device_memory called inside a non-gpu task!");
     }
 
-    bool is_current = detail::register_device_memory(views, std::index_sequence_for<Views...>{});
+    if constexpr (sizeof...(Views) > 0) {
+      is_current = detail::register_device_memory(views, std::index_sequence_for<Views...>{});
+    }
 
     /* reset all entries in the current task */
     for (int i = sizeof...(Views); i < MAX_PARAM_COUNT; ++i) {
