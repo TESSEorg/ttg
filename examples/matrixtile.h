@@ -6,33 +6,37 @@
 
 #include <ttg/serialization/splitmd_data_descriptor.h>
 
-template <typename T, class _Storage>
+template <typename T, class _Storage = TiledArray::cuda_pinned_allocator<double>>
 class MatrixTile : public ttg::TTValue<MatrixTile<T, _Storage>> {
  public:
   using metadata_t = typename std::tuple<int, int, int>;
 
-  using pointer_t = typename ttg::buffer<T>;
+  using buffer_t  = typename ttg::buffer<T>;
   using ttvalue_type = ttg::TTValue<MatrixTile<T, _Storage>>;
 
  private:
-  pointer_t _data;
+  buffer_t b;
   int _rows = 0, _cols = 0, _lda = 0;
 
   // (Re)allocate the tile memory
   void realloc() {
     // std::cout << "Reallocating new tile" << std::endl;
-    _data = ttg::buffer<T>(_data, _lda * _cols);
+    b.reset(_lda * _cols);
   }
 
  public:
   MatrixTile() {}
 
-  MatrixTile(int rows, int cols, int lda) : ttvalue_type(), _rows(rows), _cols(cols), _lda(lda) { realloc(); }
+  MatrixTile(int rows, int cols, int lda)
+  : ttvalue_type()
+  , b(lda*cols)
+  , _rows(rows)
+  , _cols(cols)
+  , _lda(lda)
+  { }
 
   MatrixTile(const metadata_t& metadata)
       : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::get<2>(metadata)) {}
-
-  MatrixTile(int rows, int cols, pointer_t data, int lda) : ttvalue_type(), _data(data), _rows(rows), _cols(cols), _lda(lda) {}
 
   MatrixTile(const metadata_t& metadata, pointer_t data)
       : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::forward(data), std::get<2>(metadata)) {}
@@ -41,7 +45,13 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, _Storage>> {
    * Constructor with outside memory. The tile will *not* delete this memory
    * upon destruction.
    */
-  MatrixTile(int rows, int cols, T* data, int lda) : ttvalue_type(), _data(data), _rows(rows), _cols(cols), _lda(lda) {}
+  MatrixTile(int rows, int cols, T* data, int lda)
+  : ttvalue_type()
+  , _data(data, lda*cols)
+  , _rows(rows)
+  , _cols(cols)
+  , _lda(lda)
+  { }
 
   MatrixTile(const metadata_t& metadata, T* data)
       : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), data, std::get<2>(metadata)) {}
@@ -54,8 +64,12 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, _Storage>> {
    * and written concurrently. Hence shallow copies are enough, will all
    * receiving tasks sharing tile data. Re-enable this once the PaRSEC backend
    * can handle data sharing without excessive copying */
-  MatrixTile(const MatrixTile<T>& other) : ttvalue_type(), _rows(other._rows), _cols(other._cols), _lda(other._lda) {
-    this->realloc();
+  MatrixTile(const MatrixTile<T>& other)
+  : ttvalue_type()
+  , b(other._lda*other._cols)
+  , _rows(other._rows)
+  , _cols(other._cols)
+  , _lda(other._lda) {
     std::copy_n(other.data(), _lda * _cols, this->data());
   }
 
@@ -77,22 +91,9 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, _Storage>> {
   metadata_t get_metadata(void) const { return metadata_t{_rows, _cols, _lda}; }
 
   // Accessing the raw data
-  T* data() { return _data.get(); }
+  T* data() { return b.host_ptr(); }
 
-  const T* data() const { return _data.get(); }
-
-  /// @return shared_ptr to data
-  pointer_t data_shared() & { return _data; }
-
-  /// @return shared_ptr to data
-  pointer_t data_shared() const& { return _data; }
-
-  /// yields data and resets this object to a default-constucted state
-  pointer_t yield_data() && {
-    pointer_t result = _data;
-    *this = MatrixTile();
-    return std::move(result);
-  }
+  const T* data() const { return b.host_ptr(); }
 
   size_t size() const { return _cols * _lda; }
 
@@ -103,7 +104,8 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, _Storage>> {
   int lda() const { return _lda; }
 
   auto& fill(T value) {
-    std::fill(_data.get(), _data.get() + size(), value);
+    std::fill(data().get(), data().get() + size(), value);
+    b.set_current_device(0);
     return *this;
   }
 
@@ -125,16 +127,6 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, _Storage>> {
     return o;
   }
 };
-
-#if defined(TTG_HAVE_CUDA)
-using blk_t = DeviceTensor<double, btas::DEFAULT::range,
-                           btas::mohndle<btas::varray<double, TiledArray::cuda_pinned_allocator<double>>,
-                                         btas::Handle::shared_ptr>>;
-#else
-// TODO: no hip pinned allocator in TA?
-using blk_t = DeviceTensor<double, btas::DEFAULT::range,
-                           btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
-#endif
 
 namespace ttg {
 
