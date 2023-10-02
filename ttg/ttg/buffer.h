@@ -7,16 +7,16 @@
 
 namespace ttg {
 
-template<typename T>
-using buffer = TTG_IMPL_NS::buffer<T>;
+template<typename T, typename Allocator = std::allocator<T>>
+using buffer = TTG_IMPL_NS::buffer<T, Allocator>;
 
 namespace detail {
   template<typename T>
   struct is_buffer : std::false_type
   { };
 
-  template<typename T>
-  struct is_buffer<ttg::buffer<T>> : std::true_type
+  template<typename T, typename A>
+  struct is_buffer<ttg::buffer<T, A>> : std::true_type
   { };
 
   template<typename T>

@@ -6,13 +6,15 @@
 
 #include <ttg/serialization/splitmd_data_descriptor.h>
 
-template <typename T, class _Storage = TiledArray::cuda_pinned_allocator<double>>
-class MatrixTile : public ttg::TTValue<MatrixTile<T, _Storage>> {
+#include <TiledArray/device/allocators.h>
+
+template <typename T, class Allocator = TiledArray::device_pinned_allocator<double>>
+class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
  public:
   using metadata_t = typename std::tuple<int, int, int>;
 
-  using buffer_t  = typename ttg::buffer<T>;
-  using ttvalue_type = ttg::TTValue<MatrixTile<T, _Storage>>;
+  using buffer_t  = typename ttg::buffer<T, Allocator>;
+  using ttvalue_type = ttg::TTValue<MatrixTile<T, Allocator>>;
 
  private:
   buffer_t b;
@@ -38,7 +40,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, _Storage>> {
   MatrixTile(const metadata_t& metadata)
       : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::get<2>(metadata)) {}
 
-  MatrixTile(const metadata_t& metadata, pointer_t data)
+  MatrixTile(const metadata_t& metadata, T* data)
       : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::forward(data), std::get<2>(metadata)) {}
 
   /**
@@ -47,24 +49,21 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, _Storage>> {
    */
   MatrixTile(int rows, int cols, T* data, int lda)
   : ttvalue_type()
-  , _data(data, lda*cols)
+  , b(data, lda*cols)
   , _rows(rows)
   , _cols(cols)
   , _lda(lda)
   { }
 
-  MatrixTile(const metadata_t& metadata, T* data)
-      : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), data, std::get<2>(metadata)) {}
+  MatrixTile(MatrixTile<T, Allocator>&& other) = default;
 
-  MatrixTile(MatrixTile<T>&& other) = default;
-
-  MatrixTile& operator=(MatrixTile<T>&& other) = default;
+  MatrixTile& operator=(MatrixTile<T, Allocator>&& other) = default;
 
   /* Deep copy ctor und op are not needed for PO since tiles will never be read
    * and written concurrently. Hence shallow copies are enough, will all
    * receiving tasks sharing tile data. Re-enable this once the PaRSEC backend
    * can handle data sharing without excessive copying */
-  MatrixTile(const MatrixTile<T>& other)
+  MatrixTile(const MatrixTile<T, Allocator>& other)
   : ttvalue_type()
   , b(other._lda*other._cols)
   , _rows(other._rows)
@@ -73,7 +72,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, _Storage>> {
     std::copy_n(other.data(), _lda * _cols, this->data());
   }
 
-  MatrixTile& operator=(const MatrixTile<T>& other) {
+  MatrixTile& operator=(const MatrixTile<T, Allocator>& other) {
     this->_rows = other._rows;
     this->_cols = other._cols;
     this->_lda = other._lda;
