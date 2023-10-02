@@ -17,13 +17,13 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
   using ttvalue_type = ttg::TTValue<MatrixTile<T, Allocator>>;
 
  private:
-  buffer_t b;
+  buffer_t _buffer;
   int _rows = 0, _cols = 0, _lda = 0;
 
   // (Re)allocate the tile memory
   void realloc() {
     // std::cout << "Reallocating new tile" << std::endl;
-    b.reset(_lda * _cols);
+    _buffer.reset(_lda * _cols);
   }
 
  public:
@@ -31,7 +31,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
 
   MatrixTile(int rows, int cols, int lda)
   : ttvalue_type()
-  , b(lda*cols)
+  , _buffer(lda*cols)
   , _rows(rows)
   , _cols(cols)
   , _lda(lda)
@@ -49,7 +49,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
    */
   MatrixTile(int rows, int cols, T* data, int lda)
   : ttvalue_type()
-  , b(data, lda*cols)
+  , _buffer(data, lda*cols)
   , _rows(rows)
   , _cols(cols)
   , _lda(lda)
@@ -65,7 +65,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
    * can handle data sharing without excessive copying */
   MatrixTile(const MatrixTile<T, Allocator>& other)
   : ttvalue_type()
-  , b(other._lda*other._cols)
+  , _buffer(other._lda*other._cols)
   , _rows(other._rows)
   , _cols(other._cols)
   , _lda(other._lda) {
@@ -85,14 +85,15 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
     _rows = std::get<0>(meta);
     _cols = std::get<1>(meta);
     _lda = std::get<2>(meta);
+    this->realloc();
   }
 
   metadata_t get_metadata(void) const { return metadata_t{_rows, _cols, _lda}; }
 
   // Accessing the raw data
-  T* data() { return b.host_ptr(); }
+  T* data() { return _buffer.host_ptr(); }
 
-  const T* data() const { return b.host_ptr(); }
+  const T* data() const { return _buffer.host_ptr(); }
 
   size_t size() const { return _cols * _lda; }
 
@@ -102,9 +103,17 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
 
   int lda() const { return _lda; }
 
+  buffer_t& buffer() {
+    return _buffer;
+  }
+
+  const buffer_t& buffer() const {
+    return _buffer;
+  }
+
   auto& fill(T value) {
     std::fill(data().get(), data().get() + size(), value);
-    b.set_current_device(0);
+    _buffer.set_current_device(0);
     return *this;
   }
 

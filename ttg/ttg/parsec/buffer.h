@@ -19,8 +19,8 @@ namespace ttg_parsec {
 
 namespace detail {
   // fwd decl
-  template<typename T>
-  parsec_data_t* get_parsec_data(const ttg_parsec::buffer<T>& db);
+  template<typename T, typename A>
+  parsec_data_t* get_parsec_data(const ttg_parsec::buffer<T, A>& db);
 } // namespace detail
 
 /**
@@ -59,7 +59,7 @@ private:
     // nothing to be done, we don't own the memory
   }
 
-  friend parsec_data_t* detail::get_parsec_data<T>(const ttg_parsec::buffer<T>&);
+  friend parsec_data_t* detail::get_parsec_data<T, Allocator>(const ttg_parsec::buffer<T, Allocator>&);
 
   allocator_type& get_allocator_reference() { return static_cast<allocator_type&>(*this); }
 
@@ -74,7 +74,7 @@ private:
 public:
 
   /* The device ID of the CPU. */
-  static constexpr int cpu_device = 0;
+  static constexpr int cpu_device = -2;
 
   buffer() : buffer(nullptr, 0)
   { }
@@ -151,15 +151,16 @@ public:
     /* make sure it's a valid device */
     assert(parsec_nb_devices > device_id);
     /* make sure it's a valid copy */
-    assert(m_data->device_copies[device_id] != nullptr);
-    m_data->owner_device = device_id;
+    assert(m_data->device_copies[device_id+2] != nullptr);
+    m_data->owner_device = device_id+2;
   }
 
   /* get the current device ID, i.e., the last updated
-   * device buffer.  */
+   * device buffer. A value of -2 designates the host
+   * as the current device. */
   int get_current_device() const {
     assert(is_valid());
-    return m_data->owner_device;
+    return m_data->owner_device - 2; // 0: host, 1: recursive, 2: first device
   }
 
   /* get the current device pointer */
@@ -179,7 +180,7 @@ public:
    */
   element_type* device_ptr_on(int device_id) {
     assert(is_valid());
-    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id));
+    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id + 2));
   }
 
   /* get the device pointer at the given device
@@ -187,20 +188,20 @@ public:
    */
   const element_type* device_ptr_on(int device_id) const {
     assert(is_valid());
-    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id));
+    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id + 2)); // GPUs start at 2
   }
 
   element_type* host_ptr() {
-    return device_ptr_on(cpu_device);
+    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), 0));
   }
 
   const element_type* host_ptr() const {
-    return device_ptr_on(cpu_device);
+    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), 0));
   }
 
   bool is_valid_on(int device_id) const {
     assert(is_valid());
-    return (parsec_data_get_ptr(m_data.get(), device_id) != nullptr);
+    return (parsec_data_get_ptr(m_data.get(), device_id+2) != nullptr);
   }
 
   void allocate_on(int device_id) {
@@ -222,7 +223,7 @@ public:
   /* Unpin the memory on all devices we currently track. */
   void unpin() {
     if (!is_valid()) return;
-    for (int i = 1; i < parsec_nb_devices; ++i) {
+    for (int i = 0; i < parsec_nb_devices-2; ++i) {
       unpin_on(i);
     }
   }
@@ -362,20 +363,20 @@ template<typename T>
 struct is_buffer : std::false_type
 { };
 
-template<typename T>
-struct is_buffer<buffer<T>> : std::true_type
+template<typename T, typename A>
+struct is_buffer<buffer<T, A>> : std::true_type
 { };
 
-template<typename T>
-struct is_buffer<const buffer<T>> : std::true_type
+template<typename T, typename A>
+struct is_buffer<const buffer<T, A>> : std::true_type
 { };
 
 template<typename T>
 constexpr static const bool is_buffer_v = is_buffer<T>::value;
 
 namespace detail {
-  template<typename T>
-  parsec_data_t* get_parsec_data(const ttg_parsec::buffer<T>& db) {
+  template<typename T, typename A>
+  parsec_data_t* get_parsec_data(const ttg_parsec::buffer<T, A>& db) {
     return const_cast<parsec_data_t*>(db.m_data.get());
   }
 } // namespace detail

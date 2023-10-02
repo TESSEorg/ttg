@@ -113,6 +113,8 @@
 #include "ttg/device/cublas_helper.h"
 #include "ttg/parsec/parsec-ext.h"
 
+#include "ttg/device/device.h"
+
 #undef TTG_PARSEC_DEBUG_TRACK_DATA_COPIES
 
 /* PaRSEC function declarations */
@@ -1323,14 +1325,34 @@ namespace ttg_parsec {
              dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL);
 
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDART)
-      parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu_stream;
-      ttg::detail::cublas_set_kernel_stream(cuda_stream->cuda_stream);
+      {
+        parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu_stream;
+        ttg::detail::cublas_set_kernel_stream(cuda_stream->cuda_stream);
+      }
 #endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
 
+#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
+      {
+        parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu_stream;
+        int device = gpu_device->super.device_index - 2; // 0: host, 1: recursive, 2: first GPU
+        ttg::device::detail::set_current(device, cuda_stream->cuda_stream);
+      }
+#endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
+
 #if defined(PARSEC_HAVE_DEV_HIP_SUPPORT) && defined(TTG_HAVE_HIPBLAS)
-      parsec_hip_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)gpu_stream;
-      ttg::detail::hipblas_set_kernel_stream(hip_stream->hip_stream);
+      {
+        parsec_hip_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)gpu_stream;
+        ttg::detail::hipblas_set_kernel_stream(hip_stream->hip_stream);
+      }
 #endif // PARSEC_HAVE_DEV_HIP_SUPPORT
+
+#if defined(PARSEC_HAVE_DEV_HIP_SUPPORT) && defined(TTG_HAVE_HIP)
+      {
+        parsec_cuda_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)gpu_stream;
+        int device = gpu_device->super.device_index - 2; // 0: host, 1: recursive, 2: first GPU
+        ttg::device::detail::set_current(device, hip_stream->hip_stream);
+      }
+#endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
 
       /* Here we call back into the coroutine again after the transfers have completed */
       static_op<Space>(&task->parsec_task);

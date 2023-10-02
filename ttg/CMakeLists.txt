@@ -69,6 +69,7 @@ set(ttg-impl-headers
     )
 set(ttg_device_headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/cublas_helper.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/device.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/task.h
     )
 set(ttg-headers

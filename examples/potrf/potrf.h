@@ -4,21 +4,23 @@
 #include <ttg/config.h>
 #include "lapack.hh"
 #include "pmw.h"
+#include "../devblas_helper.h"
 
 #undef DEBUG_TILES_VALUES
 
 #if defined(TTG_HAVE_CUDART)
 #define ES ttg::ExecutionSpace::CUDA
 #define TASKRET -> ttg::device_task
+#include <cusolverDn.h>
 #elif defined(TTG_HAVE_HIP)
 #define ES ttg::ExecutionSpace::HIP
 #define TASKRET -> ttg::device_task
+#include <hip/hipsolver.h>
+#include <hip/hipblas.h>
 #else
 #define ES ttg::ExecutionSpace::Host
 #define TASKRET -> void
 #endif
-
-
 
 namespace potrf {
 
@@ -31,9 +33,9 @@ namespace potrf {
   static int device_potrf_workspace_size(MatrixTile<double> &A) {
     int Lwork;
     #if defined(TTG_HAVE_CUDA)
-      cusolverDnDpotrf_bufferSize(ttg::detail::cublas_get_handle(),
-                                  CUBLAS_FILL_MODE_LOWER, A.extent(1),
-                                  nullptr, A.extent(0),
+      cusolverDnDpotrf_bufferSize(cusolver_handle(),
+                                  CUBLAS_FILL_MODE_LOWER, A.cols(),
+                                  nullptr, A.lda(),
                                   &Lwork);
       return Lwork;
     #elif defined(TTG_HAVE_HIPBLAS)
@@ -44,18 +46,21 @@ namespace potrf {
   }
 
   static void device_potrf(MatrixTile<double> &A, double *workspace, int Lwork, int *devInfo) {
-    int device = A.b.get_current_device();
-    assert(device != 0);
+    int device = ttg::device::current_device();
+    assert(device >= 0);
   #if defined(TTG_HAVE_CUDA)
-    cusolverDnDpotrf(ttg::detail::cublas_get_handle(),
-                      CUBLAS_FILL_MODE_LOWER, A.extent(1),
-                      A.b.device_ptr_on(device), A.extent(0),
+    //std::cout << "POTRF A " << A.buffer().device_ptr_on(device) << " device " << device << " cols " << A.cols() << " lda " << A.lda() << " Lwork " << Lwork << " WS " << workspace << " devInfo " << devInfo << std::endl;
+    auto handle = cusolver_handle();
+    std::cout << "POTRF handle  " << handle << " device " << device << " stream " << ttg::device::current_stream() << std::endl;
+    cusolverDnDpotrf(handle,
+                      CUBLAS_FILL_MODE_LOWER, A.cols(),
+                      A.buffer().device_ptr_on(device), A.lda(),
                       workspace, Lwork,
                       devInfo);
   #elif defined(TTG_HAVE_HIPBLAS)
-    hipsolverDpotrf(ttg::detail::hipblas_get_handle(),
-                      HIPSOLVER_FILL_MODE_LOWER, A.extent(1),
-                      A.b.device_ptr_on(device), A.extent(0),
+    hipsolverDpotrf(hipsolver_handle(),
+                      HIPSOLVER_FILL_MODE_LOWER, A.cols(),
+                      A.buffer().device_ptr_on(device), A.lda(),
                       workspace, Lwork,
                       devInfo);
   #endif
@@ -69,9 +74,11 @@ namespace potrf {
                   ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_trsm,
                   ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_result) {
       using T = typename MatrixT::element_type;
+      auto iallocator = std::make_shared<TiledArray::device_pinned_allocator<int>>();
 #if defined(TTG_HAVE_CUDART) || defined(TTG_HAVE_HIP)
-    std::cout << "Creating CUDA POTRF task " << std::endl;
-    auto f_dev = [=](const Key1& key, MatrixTile<T>&& A,
+    //std::cout << "Creating CUDA POTRF task " << std::endl;
+    auto f_dev = [=, iallocator = std::move(iallocator)]
+                    (const Key1& key, MatrixTile<T>&& tile_kk,
                      std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out) TASKRET {
       const auto K = key[0];
 
@@ -81,8 +88,10 @@ namespace potrf {
       std::vector<Key2> keylist;
       keylist.reserve(A.rows() - K);
       /* TODO: reverse order of arrays */
+      //std::cout << "POTRF K " << K << " A.rows " << A.rows() << std::endl;
       for (int m = K + 1; m < A.rows(); ++m) {
         /* send tile to trsm */
+        //std::cout << "POTRF successor " << Key2(m, K) << std::endl;
         keylist.push_back(Key2(m, K));
       }
 
@@ -92,34 +101,43 @@ namespace potrf {
       //       Check pmw.h: when we generate the MatrixTile
       //       Also check pinned allocator at the end of DeviceTensor (250-253)
 
-      int Lwork = device_potrf_workspace_size(A);
+      int Lwork = device_potrf_workspace_size(tile_kk);
 
       // Instead of using scratch here, we should have hostWS and hostInfo globals and use to_device
       // this would reduce the number of I/O operations to devices
-      double hostWS[Lwork];
-      ttg::devicescratch<double> devWS = ttg::make_scratch(hostWS, ttg::scope::Allocate);
-      int hostInfo = -1;
-      ttg::devicescratch<int> devInfo = ttg::make_scratch(&hostInfo, ttg::scope::Allocate);
+      double *hostWS = new double[Lwork];
+      ttg::devicescratch<double> devWS = ttg::make_scratch(hostWS, ttg::scope::Allocate, Lwork);
+      int *hostInfo = iallocator->allocate(1);
+      ttg::devicescratch<int> devInfo = ttg::make_scratch(hostInfo, ttg::scope::Allocate);
+
+      *hostInfo = -32;
 
       /* the workspace and the devInfo must be device-level pointers */
-      co_await ttg::to_device(A._data, devWS, devInfo);
+      co_await ttg::to_device(tile_kk.buffer(), devWS, devInfo);
+
+      //std::cout << "devWS host ptr " << hostWS << " device ptr " << devWS.device_ptr() << " size " <<  devWS.size()
+      //          << " devInfo host ptr " << hostInfo << " device ptr " << devInfo.device_ptr() << "size "  << devInfo.size() << std::endl;
 
       /* everything is on the device, call the POTRF */
-      device_potrf(A, devWS, Lwork, devInfo);
+      device_potrf(tile_kk, devWS.device_ptr(), Lwork, devInfo.device_ptr());
 
       /* wait for the kernel to complete */
       co_await ttg::wait_kernel(devInfo);
 
-      if( hostInfo == 0 ) {
-        co_await ttg::device::forward(ttg::device::broadcast<0, 1>(std::make_tuple(Key2(K, K), std::move(keylist)), std::move(A), out));
+      delete[] hostWS;
+      int info = *hostInfo;
+      assert(info == 0);
+      iallocator->deallocate(hostInfo, 1);
+      if( info == 0 ) {
+        co_await ttg::device::forward(ttg::device::broadcast<0, 1>(std::make_tuple(Key2(K, K), std::move(keylist)), std::move(tile_kk), out));
         // Anything after this co_await is never executed
         // co_return would look better, but co_return would destroy keylist before the runtime can handle it
       } else {
         // Well... Here we should interrupt the DAG of tasks, there is an error. Raise?
-        std::cerr << "Factorization is SUSPICIOUS (the matrix might not be diagonally dominant)" << std::endl;
+        std::cerr << "Factorization of tile " << K << " failed: " << info << std::endl;
         ttg::abort();
       }
-    }
+    };
     return ttg::make_tt<ES>(f_dev, ttg::edges(ttg::fuse(input, input_disp)), ttg::edges(output_result, output_trsm), "POTRF",
                         {"tile_kk/dispatcher"}, {"output_result", "output_trsm"});
 #else /* defined(TTG_HAVE_CUDART) || defined(TTG_HAVE_HIP) */
@@ -202,23 +220,23 @@ namespace potrf {
       }
 
 
-      co_await ttg::to_device(tile_kk.b, tile_mk.b);
-      int device = tile_kk.b.get_current_device();
+      co_await ttg::to_device(tile_kk.buffer(), tile_mk.buffer());
+      int device = ttg::device::current_device();
       double alpha = 1.0;
 #if defined(TTG_HAVE_CUDA)
-      cublasDtrsm(ttg::detail::cublas_get_handle(),
+      cublasDtrsm(cublas_handle(),
                   CUBLAS_SIDE_RIGHT, CUBLAS_FILL_MODE_LOWER,
                   CUBLAS_OP_T, CUBLAS_DIAG_NON_UNIT,
                   mb, nb, &alpha,
-                  tile_kk.b.device_ptr_on(device), tile_kk.lda(),
-                  tile_mk.b.device_ptr_on(device), tile_mk.lda());
+                  tile_kk.buffer().device_ptr_on(device), tile_kk.lda(),
+                  tile_mk.buffer().device_ptr_on(device), tile_mk.lda());
 #elif defined(TTG_HAVE_HIPBLAS)
-      hipblasDtrsm(ttg::detail:hipblas_get_handle(),
+      hipblasDtrsm(hipblas_handle(),
                    HIPBLAS_SIDE_RIGHT, HIPBLAS_FILL_MODE_LOWER,
                    HIPBLAS_OP_T, HIPBLAS_DIAG_NON_UNIT,
                    mb, nb, &alpha,
-                   tile_kk.b.device_ptr_on(device), tile_kk.lda(),
-                   tile_mk.b.device_ptr_on(device), tile_mk.lda());
+                   tile_kk.buffer().device_ptr_on(device), tile_kk.lda(),
+                   tile_mk.buffer().device_ptr_on(device), tile_mk.lda());
 #endif
 
       co_await ttg::device::forward(ttg::device::broadcast<0, 1, 2, 3>(std::make_tuple(key, Key2(K, M), keylist_row, keylist_col),
@@ -304,24 +322,26 @@ namespace potrf {
 
       if (ttg::tracing()) ttg::print("SYRK(", key, ")");
 
-      co_await ttg::to_device(tile_kk.b, tile_mk.b);
+      co_await ttg::to_device(tile_kk.buffer(), tile_mk.buffer());
+
+      int device = ttg::device::current_device();
 
       double alpha = -1.0;
       double beta  =  1.0;
 #if defined(TTG_HAVE_CUDA)
-      cublasDsyrk(ttg::detail::cublas_get_handle(),
+      cublasDsyrk(cublas_handle(),
                   CUBLAS_FILL_MODE_LOWER,
                   CUBLAS_OP_N,
                   mb, nb, &alpha,
-                  tile_nk.b.device_ptr_on(device), tile_mk.lda(), &beta,
-                  tile_kk.b.device_ptr_on(device), tile_kk.lda());
+                  tile_mk.buffer().device_ptr_on(device), tile_mk.lda(), &beta,
+                  tile_kk.buffer().device_ptr_on(device), tile_kk.lda());
 #elif defined(TTG_HAVE_HIPBLAS)
-      hipblasDsyrk(ttg::detail:hipblas_get_handle(),
+      hipblasDsyrk(hipblas_handle(),
                    HIPBLAS_FILL_MODE_LOWER,
                    HIPBLAS_OP_N,
                    mb, nb, &alpha,
-                   tile_kk.b.device_ptr_on(device), tile_kk.lda(), &beta,
-                   tile_mk.b.device_ptr_on(device), tile_mk.lda());
+                   tile_mk.buffer().device_ptr_on(device), tile_mk.lda(), &beta,
+                   tile_kk.buffer().device_ptr_on(device), tile_kk.lda());
 #endif
 
       if (M == K + 1) {
@@ -404,26 +424,27 @@ namespace potrf {
                 << N << ") is " << tile_nk << " and A(" << M << ", " << N << ") is " << tile_mn;
 #endif
 
-      co_await ttg::to_device(tile_mk.b, tile_nk.b, tile_mn.b);
+      co_await ttg::to_device(tile_mk.buffer(), tile_nk.buffer(), tile_mn.buffer());
 
+      int device = ttg::device::current_device();
       double alpha = -1.0;
       double beta  =  1.0;
 #if defined(TTG_HAVE_CUDA)
-      cublasDgemm(ttg::detail:cublas_get_handle(),
+      cublasDgemm(cublas_handle(),
                   CUBLAS_OP_N, CUBLAS_OP_T,
                   tile_mk.rows(), tile_nk.rows(),
                   tile_nk.cols(), &alpha,
-                  tile_mk.data(), tile_mk.lda(),
-                  tile_nk.data(), tile_nk.lda(), &beta,
-                  tile_mn.data(), tile_mn.lda());
+                  tile_mk.buffer().device_ptr_on(device), tile_mk.lda(),
+                  tile_nk.buffer().device_ptr_on(device), tile_nk.lda(), &beta,
+                  tile_mn.buffer().device_ptr_on(device), tile_mn.lda());
 #elif defined(TTG_HAVE_HIPBLAS)
-      hipblasDgemm(ttg::detail:hipblas_get_handle(),
+      hipblasDgemm(hipblas_handle(),
                    HIPBLAS_OP_N, HIPBLAS_OP_T,
                    tile_mk.rows(), tile_nk.rows(),
                    tile_nk.cols(), &alpha,
-                   tile_mk.data(), tile_mk.lda(),
-                   tile_nk.data(), tile_nk.lda(), &beta,
-                   tile_mn.data(), tile_mn.lda());
+                   tile_mk.buffer().device_ptr_on(device), tile_mk.lda(),
+                   tile_nk.buffer().device_ptr_on(device), tile_nk.lda(), &beta,
+                   tile_mn.buffer().device_ptr_on(device), tile_mn.lda());
 #endif
 
       if (N == K + 1) {
