@@ -14,13 +14,21 @@ if (TARGET tiledarray)
     if (TARGET CUDA::cublas)
       add_ttg_executable(bspmm-cuda spmm/spmm_cuda.cc
                          LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost CUDA::cublas
-                         COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2;TTG_HAVE_CUDA=1
+                         COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
+                         RUNTIMES "parsec")
+
+      add_ttg_executable(testing_dpotrf_cuda potrf/testing_dpotrf.cc
+                         LINK_LIBRARIES lapackpp tiledarray CUDA::cublas
+                         COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
                          RUNTIMES "parsec")
     elseif (TARGET roc::hipblas)
       add_ttg_executable(bspmm-hip spmm/spmm_cuda.cc
                         LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost roc::hipblas
                         COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
                         RUNTIMES "parsec")
+      add_ttg_executable(testing_dpotrf_hip potrf/testing_dpotrf.cc
+                         LINK_LIBRARIES lapackpp tiledarray roc::hipblas
+                         RUNTIMES "parsec")
     endif()
 
     add_ttg_executable(chain-ttg-dev task-benchmarks/chain-ttg-dev.cc LINK_LIBRARIES tiledarray RUNTIMES "parsec")

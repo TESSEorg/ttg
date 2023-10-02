@@ -56,7 +56,12 @@ int main(int argc, char **argv)
   bool check = !cmdOptionExists(argv+1, argv+argc, "-x");
   bool cow_hint = !cmdOptionExists(argv+1, argv+argc, "-w");
 
-  ttg::initialize(argc, argv, nthreads);
+  // TODO: need to filter out our arguments to make parsec happy
+  ttg::initialize(1, argv, nthreads);
+
+  // initialize MADNESS so that TA allocators can be created
+  madness::ParsecRuntime::initialize_with_existing_context(ttg::default_execution_context().impl().context());
+  madness::initialize(argc, argv, /* nthread = */ 1, /* quiet = */ true);
 
   auto world = ttg::default_execution_context();
   if(nullptr != prof_filename) {
@@ -207,6 +212,7 @@ int main(int argc, char **argv)
 
   world.profile_off();
 
+  madness::finalize();
   ttg::finalize();
   return ret;
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ttg.h>
+#include <ttg/config.h>
 #include "lapack.hh"
 #include "pmw.h"
 
@@ -34,6 +35,7 @@ namespace potrf {
                   ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_result) {
       using T = typename MatrixT::element_type;
 #if defined(TTG_HAS_CUDART) || defined(TTG_HAS_HIP)
+    std::cout << "Creating CUDA POTRF task " << std::endl;
     static int device_potrf_workspace_size(blk_t &A) {
       int Lwork;
       #if defined(TTG_HAVE_CUDA)
@@ -420,10 +422,6 @@ namespace potrf {
                    tile_mk.data(), tile_mk.lda(),
                    tile_nk.data(), tile_nk.lda(), &beta,
                    tile_mn.data(), tile_mn.lda());
-#endif
-
-#if defined(DEBUG_TILES_VALUES)
-      std::cout << "After GEMM(" << key << "), A(" << M << ", " << N << ") is " << tile_mn << std::endl;
 #endif
 
       if (N == K + 1) {
