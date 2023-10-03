@@ -117,7 +117,7 @@ namespace ttg_parsec {
       /* enqueue the transfer into the compute stream to come back once the compute and transfer are complete */
 
 #if defined(TTG_HAVE_CUDART) && defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
-      std::cout << "cudaMemcpyAsync of " << data->nb_elts << "B" << std::endl;
+      //std::cout << "cudaMemcpyAsync of " << data->nb_elts << "B from " << data->device_copies[data->owner_device]->device_private << " device " << (int)data->owner_device << " to " << data->device_copies[0]->device_private << std::endl;
       parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)stream;
       cudaMemcpyAsync(data->device_copies[0]->device_private,
                       data->device_copies[data->owner_device]->device_private,
