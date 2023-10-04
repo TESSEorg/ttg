@@ -11,6 +11,8 @@
 
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
 #include <parsec/mca/device/cuda/device_cuda.h>
+#elif defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
+#include <parsec/mca/device/hip/device_hip.h>
 #endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
 
 namespace ttg_parsec {

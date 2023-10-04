@@ -11,42 +11,10 @@
 #include <cublas_v2.h>
 #include <cusolverDn.h>
 
-namespace detail {
-  template<typename Stream>
-  struct device_stream_t {
-    int device;
-    Stream stream;
-    device_stream_t(int device, Stream stream)
-    : device(device)
-    , stream(stream)
-    { }
-
-    bool operator<(const device_stream_t& ds) const {
-      bool result = ((device < ds.device) && (reinterpret_cast<uintptr_t>(stream) < reinterpret_cast<uintptr_t>(ds.stream)));
-      std::cout << *this << " < " << ds << ": " << result << std::endl;
-      return result;
-    }
-
-    bool operator==(const device_stream_t& ds) const {
-      bool result = ((device == ds.device) && (stream == ds.stream));
-      std::cout << *this << " == " << ds << ": " << result << std::endl;
-      return result;
-    }
-  };
-} // namespace detail
-
-namespace std {
-template<typename Stream>
-  std::ostream& operator<<(std::ostream& os, const ::detail::device_stream_t<Stream>& ds) {
-    os << "[" << ds.device << ", " << ds.stream << "]";
-    return os;
-  }
-
-} //namespace std
-
 /// \brief Returns the cuBLAS handle to be used for launching cuBLAS kernels from the current thread
 /// \return the cuBLAS handle for the current thread
-inline const cublasHandle_t& cublas_handle() {
+template<typename T = int>
+inline const cublasHandle_t& cublas_handle(T _ = 0) {
   using map_type = std::map<std::pair<int, cudaStream_t>, cublasHandle_t>;
   static thread_local map_type handles;
 
@@ -72,9 +40,9 @@ inline const cublasHandle_t& cublas_handle() {
   return it->second;
 }
 
-inline const cusolverDnHandle_t& cusolver_handle() {
+template<typename T = int>
+inline const cusolverDnHandle_t& cusolver_handle(T _ = 0) {
 
-  //using map_type = std::map<detail::device_stream_t<cudaStream_t>, cusolverDnHandle_t>;
   using map_type = std::map<std::pair<int, cudaStream_t>, cusolverDnHandle_t>;
   static thread_local map_type handles;
 
@@ -114,7 +82,8 @@ inline const cusolverDnHandle_t& cusolver_handle() {
 
 /// \brief Returns the rocBLAS handle to be used for launching rocBLAS kernels from the current thread
 /// \return the rocBLAS handle for the current thread
-const hipblasHandle_t& hipblas_handle() {
+template<typename T = int>
+const hipblasHandle_t& hipblas_handle(T _ = 0) {
   static thread_local std::map<int, hipblasHandle_t> handles;
   int device = ttg::device::current_device();
   std::map<int, hipblasHandle_t>::iterator it;
@@ -136,7 +105,8 @@ const hipblasHandle_t& hipblas_handle() {
 
 /// \brief Returns the hipsolver handle to be used for launching rocBLAS kernels from the current thread
 /// \return the hipsolver handle for the current thread
-const hipsolverDnHandle_t& hipsolver_handle() {
+template<typename T = int>
+const hipsolverDnHandle_t& hipsolver_handle(T _ = 0) {
   static thread_local std::map<int, hipsolverDnHandle_t> handles;
   int device = ttg::device::current_device();
   std::map<int, hipsolverDnHandle_t>::iterator it;

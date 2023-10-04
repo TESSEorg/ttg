@@ -1352,7 +1352,7 @@ namespace ttg_parsec {
 
 #if defined(PARSEC_HAVE_DEV_HIP_SUPPORT) && defined(TTG_HAVE_HIP)
       {
-        parsec_cuda_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)gpu_stream;
+        parsec_hip_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)gpu_stream;
         int device = gpu_device->super.device_index - 2; // 0: host, 1: recursive, 2: first GPU
         ttg::device::detail::set_current(device, hip_stream->hip_stream);
       }
