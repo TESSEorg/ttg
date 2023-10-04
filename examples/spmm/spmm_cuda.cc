@@ -37,6 +37,8 @@
 
 #include "ttg.h"
 
+#include "../devblas_helper.h"
+
 using namespace ttg;
 
 #include "ttg/util/future.h"
@@ -273,13 +275,13 @@ static void device_gemm(blk_t &C, const blk_t &A, const blk_t &B) {
   int device = C.b.get_current_device();
   assert(device != 0);
 #if defined(TTG_HAVE_CUDA)
-  cublasDgemm(ttg::detail::cublas_get_handle(),
+  cublasDgemm(cublas_handle(),
               CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1), &alpha,
               A.b.device_ptr_on(device), A.extent(0),
               B.b.device_ptr_on(device), B.extent(0), &beta,
               C.b.current_device_ptr(), C.extent(0));
 #elif defined(TTG_HAVE_HIPBLAS)
-  hipblasDgemm(ttg::detail::hipblas_get_handle(),
+  hipblasDgemm(hipblas_handle(),
                 HIPBLAS_OP_N, HIPBLAS_OP_N,
                 C.extent(0), C.extent(1), A.extent(1), &alpha,
                 A.b.device_ptr_on(device), A.extent(0),

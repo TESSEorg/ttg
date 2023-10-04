@@ -122,6 +122,11 @@ namespace ttg_parsec {
       cudaMemcpyAsync(data->device_copies[0]->device_private,
                       data->device_copies[data->owner_device]->device_private,
                       data->nb_elts, cudaMemcpyDeviceToHost, cuda_stream->cuda_stream);
+#elif defined(TTG_HAVE_HIP) && defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
+      parsec_hip_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)stream;
+      hipMemcpyAsync(data->device_copies[0]->device_private,
+                      data->device_copies[data->owner_device]->device_private,
+                      data->nb_elts, hipMemcpyDeviceToHost, hip_stream->hip_stream);
 #else
       static_assert(DeviceAvail, "No device implementation detected!");
 #endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)

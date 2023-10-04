@@ -108,9 +108,9 @@ inline const cusolverDnHandle_t& cusolver_handle() {
 
 #ifdef TTG_HAVE_HIPBLAS
 
-#include <hip_runtime.h>
-#include <hipblas.h>
-#include <hipsolverDn.h>
+#include <hip/hip_runtime.h>
+#include <hipblas/hipblas.h>
+#include <hipsolver/hipsolver.h>
 
 /// \brief Returns the rocBLAS handle to be used for launching rocBLAS kernels from the current thread
 /// \return the rocBLAS handle for the current thread

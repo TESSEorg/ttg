@@ -120,6 +120,11 @@ if (TTG_ENABLE_HIP)
   if (TARGET roc::hipblas)
     set(TTG_HAVE_HIPBLAS True CACHE BOOL "TTG detected support for hipBLAS")
   endif()
+
+  find_package(hipsolver)
+  if (TARGET roc::hipsolver)
+    set(TTG_HAVE_HIPSOLVER True CACHE BOOL "TTG detected support for hipSolver")
+  endif()
   add_compile_definitions(${TTG_HIP_PLATFORM})
 endif(TTG_ENABLE_HIP)
 

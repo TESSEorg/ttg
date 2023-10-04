@@ -10,7 +10,7 @@
 #endif // TTG_HAVE_CUDART
 
 #ifdef TTG_HAVE_HIPBLAS
-#include <hip_runtime.h>
+#include <hip/hip_runtime.h>
 #endif // TTG_HAVE_HIPBLAS
 
 namespace ttg::detail {

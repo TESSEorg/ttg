@@ -15,8 +15,8 @@
 #elif defined(TTG_HAVE_HIP)
 #define ES ttg::ExecutionSpace::HIP
 #define TASKRET -> ttg::device_task
-#include <hip/hipsolver.h>
-#include <hip/hipblas.h>
+#include <hipsolver/hipsolver.h>
+#include <hipblas/hipblas.h>
 #else
 #define ES ttg::ExecutionSpace::Host
 #define TASKRET -> void
@@ -39,7 +39,11 @@ namespace potrf {
                                   &Lwork);
       return Lwork;
     #elif defined(TTG_HAVE_HIPBLAS)
-      #error TBCoded
+      hipsolverDnDpotrf_bufferSize(hipsolver_handle(),
+                                   HIPSOLVER_FILL_MODE_LOWER, A.cols(),
+                                   nullptr, A.lda(),
+                                   &Lwork);
+      return Lwork;
     #else
       return 0;
     #endif
@@ -48,7 +52,7 @@ namespace potrf {
   static void device_potrf(MatrixTile<double> &A, double *workspace, int Lwork, int *devInfo) {
     int device = ttg::device::current_device();
     assert(device >= 0);
-  #if defined(TTG_HAVE_CUDA)
+#if defined(TTG_HAVE_CUDA)
     //std::cout << "POTRF A " << A.buffer().device_ptr_on(device) << " device " << device << " cols " << A.cols() << " lda " << A.lda() << " Lwork " << Lwork << " WS " << workspace << " devInfo " << devInfo << std::endl;
     auto handle = cusolver_handle();
     std::cout << "POTRF handle  " << handle << " device " << device << " stream " << ttg::device::current_stream() << std::endl;
