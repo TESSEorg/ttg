@@ -36,6 +36,7 @@ int main(int argc, char **argv)
   const char* prof_filename = nullptr;
   char *opt = nullptr;
   int ret = EXIT_SUCCESS;
+  int niter = 3;
 
   if( (opt = getCmdOption(argv+1, argv+argc, "-N")) != nullptr ) {
     N = M = atoi(opt);
@@ -51,6 +52,10 @@ int main(int argc, char **argv)
 
   if( (opt = getCmdOption(argv+1, argv+argc, "-dag")) != nullptr ) {
     prof_filename = opt;
+  }
+
+  if( (opt = getCmdOption(argv+1, argv+argc, "-n")) != nullptr) {
+    niter = atoi(opt);
   }
 
   bool check = !cmdOptionExists(argv+1, argv+argc, "-x");
@@ -128,16 +133,23 @@ int main(int argc, char **argv)
       std::cout << "==== end dot ====\n";
       beg = std::chrono::high_resolution_clock::now();
     }
-    init_tt->invoke();
 
-    ttg::execute(world);
-    ttg::fence(world);
-    if (world.rank() == 0) {
-      end = std::chrono::high_resolution_clock::now();
-      auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
-      end = std::chrono::high_resolution_clock::now();
-      std::cout << "TTG Execution Time (milliseconds) : "
-                << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+    for (int i = 0; i < niter; ++i) {
+      if (world.rank() == 0) {
+        beg = std::chrono::high_resolution_clock::now();
+      }
+
+      init_tt->invoke();
+      ttg::execute(world);
+      ttg::fence(world);
+
+      if (world.rank() == 0) {
+        end = std::chrono::high_resolution_clock::now();
+        auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
+        end = std::chrono::high_resolution_clock::now();
+        std::cout << "TTG Execution Time (milliseconds) : "
+                  << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+      }
     }
 
     world.dag_off();
