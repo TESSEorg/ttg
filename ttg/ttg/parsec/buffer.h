@@ -51,9 +51,10 @@ struct buffer : public detail::ttg_parsec_data_wrapper_t
 private:
   using delete_fn_t = std::function<void(element_type*)>;
 
-  using host_data_ptr   = std::unique_ptr<element_type[], delete_fn_t>;
-  host_data_ptr m_host_data;
+  using host_data_ptr   = std::add_pointer_t<element_type>;
+  host_data_ptr m_host_data = nullptr;
   std::size_t m_count = 0;
+  bool m_owned= false;
 
   static void delete_non_owned(element_type *ptr) {
     // nothing to be done, we don't own the memory
@@ -67,8 +68,8 @@ private:
     return allocator_traits::allocate(get_allocator_reference(), n);
   }
 
-  void deallocate(element_type *ptr, std::size_t n) {
-    allocator_traits::deallocate(get_allocator_reference(), ptr, n);
+  void deallocate() {
+    allocator_traits::deallocate(get_allocator_reference(), m_host_data, m_count);
   }
 
 public:
@@ -82,14 +83,15 @@ public:
   buffer(std::size_t n)
   : ttg_parsec_data_wrapper_t()
   , allocator_type()
-  , m_host_data(allocate(n), [this, n](element_type* ptr){ deallocate(ptr, n); })
+  , m_host_data(allocate(n))
   , m_count(n)
+  , m_owned(true)
   {
     //std::cout << "buffer " << this << " ctor count "
     //          << count << "(" << m_host_data.get() << ") ttg_copy "
     //          << m_ttg_copy
     //          << " parsec_data " << m_data.get() << std::endl;
-    this->reset_parsec_data(m_host_data.get(), n*sizeof(element_type));
+    this->reset_parsec_data(m_host_data, n*sizeof(element_type));
   }
 
   /* Constructing a buffer using application-managed memory.
@@ -98,13 +100,18 @@ public:
   buffer(element_type* ptr, std::size_t n = 1)
   : ttg_parsec_data_wrapper_t()
   , allocator_type()
-  , m_host_data(ptr, &delete_non_owned)
+  , m_host_data(ptr)
   , m_count(n)
+  , m_owned(false)
   {
-    this->reset_parsec_data(m_host_data.get(), n*sizeof(element_type));
+    this->reset_parsec_data(m_host_data, n*sizeof(element_type));
   }
 
   virtual ~buffer() {
+    if (m_owned) {
+      deallocate();
+      m_owned = false;
+    }
     unpin(); // make sure the copies are not pinned
   }
 
@@ -112,10 +119,13 @@ public:
   buffer(buffer&& db)
   : ttg_parsec_data_wrapper_t(std::move(db))
   , allocator_type(std::move(db))
-  , m_host_data(std::move(db.m_host_data))
+  , m_host_data(db.m_host_data)
   , m_count(db.m_count)
+  , m_owned(db.m_owned)
   {
+    db.m_host_data = nullptr;
     db.m_count = 0;
+    db.m_owned = false;
   }
 
   /* explicitly disable copying of buffers
@@ -127,9 +137,9 @@ public:
   buffer& operator=(buffer&& db) {
     ttg_parsec_data_wrapper_t::operator=(std::move(db));
     allocator_type::operator=(std::move(db));
-    m_host_data = std::move(db.m_host_data);
-    m_count = db.m_count;
-    db.m_count = 0;
+    std::swap(m_host_data, db.m_host_data);
+    std::swap(m_count, db.m_count);
+    std::swap(m_owned, db.m_owned);
     //std::cout << "buffer " << this << " other " << &db << " mv op ttg_copy " << m_ttg_copy << std::endl;
     //std::cout << "buffer::move-assign from " << &db << " ttg-copy " << db.m_ttg_copy
     //          << " to " << this << " ttg-copy " << m_ttg_copy
@@ -255,12 +265,20 @@ public:
     /* TODO: can we resize if count is smaller than m_count? */
     /* drop the current data and reallocate */
     reset();
-    if (n == 0) {
-      m_host_data = host_data_ptr(nullptr, &delete_non_owned);
-    } else {
-      m_host_data = host_data_ptr(allocate(n), [this, n](element_type* ptr){ deallocate(ptr, n); });
+
+    if (m_owned) {
+      deallocate();
+      m_owned = false;
     }
-    reset_parsec_data(m_host_data.get(), n*sizeof(element_type));
+
+    if (n == 0) {
+      m_host_data = nullptr;
+      m_owned = false;
+    } else {
+      m_host_data = allocate(n);
+      m_owned = true;
+    }
+    reset_parsec_data(m_host_data, n*sizeof(element_type));
     //std::cout << "buffer::reset(" << count << ") ptr " << m_host_data.get()
     //          << " ttg_copy " << m_ttg_copy
     //          << " parsec_data " << m_data.get() << std::endl;
@@ -274,14 +292,20 @@ public:
       return;
     }
 
-    if (nullptr == ptr) {
-      m_host_data = host_data_ptr(nullptr, &delete_non_owned);
-      m_count = 0;
-    } else {
-      m_host_data = host_data_ptr(ptr, &delete_non_owned);
-      m_count = n;
+    if (m_owned) {
+      deallocate();
     }
-    reset_parsec_data(m_host_data.get(), n*sizeof(element_type));
+
+    if (nullptr == ptr) {
+      m_host_data = nullptr;
+      m_count = 0;
+      m_owned = false;
+    } else {
+      m_host_data = ptr;
+      m_count = n;
+      m_owned = false;
+    }
+    reset_parsec_data(m_host_data, n*sizeof(element_type));
     //std::cout << "buffer::reset(" << ptr << ", " << count << ") ptr " << m_host_data.get()
     //          << " ttg_copy " << m_ttg_copy
     //          << " parsec_data " << m_data.get() << std::endl;
