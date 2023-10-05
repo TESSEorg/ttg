@@ -96,45 +96,46 @@ int main(int argc, char **argv)
   parsec_data_collection_set_key((parsec_data_collection_t*)&dcA, (char*)"Matrix A");
 
   if(!check) {
-    ttg::Edge<Key2, void> startup("startup");
-    ttg::Edge<Key2, MatrixTile<double>> topotrf("To POTRF");
-    ttg::Edge<Key2, MatrixTile<double>> result("To result");
+    for (int i = 0; i < niter; ++i) {
+      parsec_devices_release_memory();
+      ttg::Edge<Key2, void> startup("startup");
+      ttg::Edge<Key2, MatrixTile<double>> topotrf("To POTRF");
+      ttg::Edge<Key2, MatrixTile<double>> result("To result");
 
-    //Matrix<double>* A = new Matrix<double>(n_rows, n_cols, NB, NB);
-    MatrixT<double> A{&dcA};
-    /* TODO: initialize the matrix */
-    /* This works only with the parsec backend! */
-    int random_seed = 3872;
+      //Matrix<double>* A = new Matrix<double>(n_rows, n_cols, NB, NB);
+      MatrixT<double> A{&dcA};
+      /* TODO: initialize the matrix */
+      /* This works only with the parsec backend! */
+      int random_seed = 3872;
 
-    auto init_tt =  ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, void>>& out) {
-      for(int i = 0; i < A.rows(); i++) {
-        for(int j = 0; j <= i && j < A.cols(); j++) {
-          if(A.is_local(i, j)) {
-            if(ttg::tracing()) ttg::print("init(", Key2{i, j}, ")");
-            ttg::sendk<0>(Key2{i, j}, out);
+      auto init_tt =  ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, void>>& out) {
+        for(int i = 0; i < A.rows(); i++) {
+          for(int j = 0; j <= i && j < A.cols(); j++) {
+            if(A.is_local(i, j)) {
+              if(ttg::tracing()) ttg::print("init(", Key2{i, j}, ")");
+              ttg::sendk<0>(Key2{i, j}, out);
+            }
           }
         }
+      }, ttg::edges(), ttg::edges(startup), "Startup Trigger", {}, {"startup"});
+      init_tt->set_keymap([&]() {return world.rank();});
+
+      auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, topotrf, cow_hint);
+      auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, result, cow_hint);
+      auto result_ttg = make_result_ttg(A, result, cow_hint);
+
+      auto connected = make_graph_executable(init_tt.get());
+      assert(connected);
+      TTGUNUSED(connected);
+      std::cout << "Graph is connected: " << connected << std::endl;
+
+      if (world.rank() == 0) {
+        std::cout << "==== begin dot ====\n";
+        std::cout << ttg::Dot()(init_tt.get()) << std::endl;
+        std::cout << "==== end dot ====\n";
+        beg = std::chrono::high_resolution_clock::now();
       }
-    }, ttg::edges(), ttg::edges(startup), "Startup Trigger", {}, {"startup"});
-    init_tt->set_keymap([&]() {return world.rank();});
 
-    auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, topotrf, cow_hint);
-    auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, result, cow_hint);
-    auto result_ttg = make_result_ttg(A, result, cow_hint);
-
-    auto connected = make_graph_executable(init_tt.get());
-    assert(connected);
-    TTGUNUSED(connected);
-    std::cout << "Graph is connected: " << connected << std::endl;
-
-    if (world.rank() == 0) {
-      std::cout << "==== begin dot ====\n";
-      std::cout << ttg::Dot()(init_tt.get()) << std::endl;
-      std::cout << "==== end dot ====\n";
-      beg = std::chrono::high_resolution_clock::now();
-    }
-
-    for (int i = 0; i < niter; ++i) {
       if (world.rank() == 0) {
         beg = std::chrono::high_resolution_clock::now();
       }
@@ -150,6 +151,7 @@ int main(int argc, char **argv)
         std::cout << "TTG Execution Time (milliseconds) : "
                   << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
       }
+      parsec_devices_reset_load(ttg::default_execution_context().impl().context());
     }
 
     world.dag_off();
