@@ -11,7 +11,7 @@
 #error "Either CUDA OR HIP is required to build this test!"
 #endif // 0
 
-#define NUM_TASKS 10000
+#define NUM_TASKS 100000
 
 using namespace ttg;
 
@@ -56,7 +56,7 @@ auto make_ttg<1>(bool do_move) {
   auto next = make_tt<ES, int>([=](const int &key, auto&& value) -> ttg::device_task {
     //++task_counter;
     co_await ttg::to_device(value.b);
-    co_await ttg::wait_kernel(); // empty kernel
+    //co_await ttg::wait_kernel(); // empty kernel
     if (key < NUM_TASKS) {
       if (do_move) {
         co_await ttg::device::forward(ttg::device::send<0>(key+1, std::move(value)));
@@ -83,7 +83,7 @@ auto make_ttg<2>(bool do_move) {
 
   auto next = make_tt<ES, int>([=](const int &key, A&& v1, A&& v2) -> ttg::device_task {
     co_await ttg::to_device(v1.b, v2.b);
-    co_await ttg::wait_kernel(); // empty kernel
+    //co_await ttg::wait_kernel(); // empty kernel
     if (key < NUM_TASKS) {
       if (do_move) {
         co_await ttg::device::forward(ttg::device::send<0>(key+1, std::move(v1)),
@@ -114,7 +114,7 @@ auto make_ttg<4>(bool do_move) {
 
   auto next = make_tt<ES, int>([=](const int &key, A&& v1, A&& v2, A&& v3, A&& v4) -> ttg::device_task {
     co_await ttg::to_device(v1.b, v2.b, v3.b, v4.b);
-    co_await ttg::wait_kernel(); // empty kernel
+    //co_await ttg::wait_kernel(); // empty kernel
     if (key < NUM_TASKS) {
       if (do_move) {
         co_await ttg::device::forward(ttg::device::send<0>(key+1, std::move(v1)),
@@ -155,7 +155,7 @@ auto make_ttg<8>(bool do_move) {
 
   auto next = make_tt<ES, int>([=](const int &key, auto&& v1, auto&& v2, auto&& v3, auto&& v4, auto&& v5, auto&& v6, auto&& v7, auto&& v8) -> ttg::device_task {
     co_await ttg::to_device(v1.b, v2.b, v3.b, v4.b, v5.b, v6.b, v7.b, v8.b);
-    co_await ttg::wait_kernel(); // empty kernel
+    //co_await ttg::wait_kernel(); // empty kernel
     if (key < NUM_TASKS) {
       if (do_move) {
         co_await ttg::device::forward(ttg::device::send<0>(key+1, std::move(v1)),
@@ -193,7 +193,7 @@ auto make_ttg<0>(bool do_move) {
 
   auto next = make_tt<ES>([](const int& key) -> ttg::device_task {
     co_await ttg::to_device();
-    co_await ttg::wait_kernel();
+    //co_await ttg::wait_kernel();
     if (key < NUM_TASKS) {
       co_await ttg::device::forward(ttg::device::sendk<0>(key+1));
     }
@@ -211,6 +211,11 @@ void run_bench(bool do_move)
   assert(connected);
   std::cout << "Graph " << num_flows << " is connected.\n";
 
+  if (ttg::default_execution_context().rank() == 0) init->invoke();
+
+  ttg_execute(ttg_default_execution_context());
+  ttg_fence(ttg_default_execution_context());
+
   auto t0 = now();
   if (ttg::default_execution_context().rank() == 0) init->invoke();
 
@@ -218,8 +223,8 @@ void run_bench(bool do_move)
   ttg_fence(ttg_default_execution_context());
   auto t1 = now();
 
-  std::cout << "# of tasks = " << task_counter.load() << std::endl;
-  std::cout << "time elapsed (microseconds) = " << duration_in_mus(t0, t1) << std::endl;
+  std::cout << "# of tasks = " << NUM_TASKS << std::endl;
+  std::cout << "time elapsed (microseconds) = " << duration_in_mus(t0, t1) << ", avg " << duration_in_mus(t0, t1) / (double)NUM_TASKS << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -242,7 +247,7 @@ int main(int argc, char* argv[]) {
   case 2: run_bench<2>(do_move); break;
   case 4: run_bench<4>(do_move); break;
   case 8: run_bench<8>(do_move); break;
-  default: std::cout << "Unsupported number of flows: " << num_flows << std::endl;
+  default: std::cout << "Unsupported number of flows: " << NUM_TASKS << std::endl;
   }
 
   ttg_finalize();
