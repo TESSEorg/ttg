@@ -110,7 +110,6 @@
 #include "ttg/parsec/thread_local.h"
 #include "ttg/parsec/ptr.h"
 #include "ttg/parsec/task.h"
-#include "ttg/device/cublas_helper.h"
 #include "ttg/parsec/parsec-ext.h"
 
 #include "ttg/device/device.h"
@@ -1324,15 +1323,6 @@ namespace ttg_parsec {
       assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_TRANSFER ||
              dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL);
 
-#if 0
-#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDART)
-      {
-        parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu_stream;
-        ttg::detail::cublas_set_kernel_stream(cuda_stream->cuda_stream);
-      }
-#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
-#endif //0
-
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
       {
         parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu_stream;
@@ -1340,15 +1330,6 @@ namespace ttg_parsec {
         ttg::device::detail::set_current(device, cuda_stream->cuda_stream);
       }
 #endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
-
-#if 0
-#if defined(PARSEC_HAVE_DEV_HIP_SUPPORT) && defined(TTG_HAVE_HIPBLAS)
-      {
-        parsec_hip_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)gpu_stream;
-        ttg::detail::hipblas_set_kernel_stream(hip_stream->hip_stream);
-      }
-#endif // PARSEC_HAVE_DEV_HIP_SUPPORT
-#endif // 0
 
 #if defined(PARSEC_HAVE_DEV_HIP_SUPPORT) && defined(TTG_HAVE_HIP)
       {

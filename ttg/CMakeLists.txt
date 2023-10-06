@@ -68,7 +68,6 @@ set(ttg-impl-headers
         ${CMAKE_CURRENT_BINARY_DIR}/ttg/config.h
     )
 set(ttg_device_headers
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/cublas_helper.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/device.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/task.h
     )
@@ -117,23 +116,11 @@ if (TARGET std::coroutine)
           )
 endif ()
 if (TTG_HAVE_CUDA)
-  list(APPEND ttg-sources
-          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/cublas_helper.cpp
-          )
-  list(APPEND ttg-deps CUDA::cudart CUDA::cublas)
+  list(APPEND ttg-deps CUDA::cudart)
 endif (TTG_HAVE_CUDA)
 
 if (TTG_HAVE_HIPBLAS)
-  # add the helper file if not added already
-  if (NOT TTG_HAVE_CUDA)
-    list(APPEND ttg-sources
-      ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/cublas_helper.cpp
-    )
-  endif (NOT TTG_HAVE_CUDA)
-  list(APPEND ttg-deps roc::hipblas)
-  find_package(hip REQUIRED)
   list(APPEND ttg-deps hip::host)
-
 endif (TTG_HAVE_HIPBLAS)
 
 set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers};${ttg_device_headers})
