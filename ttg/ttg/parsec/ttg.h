@@ -240,7 +240,7 @@ namespace ttg_parsec {
     int parsec_ttg_profile_backend_allocate_datacopy, parsec_ttg_profile_backend_free_datacopy;
 #endif
 
-    static constexpr const int PARSEC_TTG_MAX_AM_SIZE = 4 * 1024;
+    static constexpr const int PARSEC_TTG_MAX_AM_SIZE = 1 * 1024*1024;
     WorldImpl(int *argc, char **argv[], int ncores, parsec_context_t *c = nullptr)
         : WorldImplBase(query_comm_size(), query_comm_rank())
         , ctx(c)
