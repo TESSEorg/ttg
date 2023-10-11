@@ -134,6 +134,12 @@ if (TTG_ENABLE_HIP)
   add_compile_definitions(${TTG_HIP_PLATFORM})
 endif(TTG_ENABLE_HIP)
 
+set(_ttg_have_device FALSE)
+if (TTG_HAVE_CUDA OR TTG_HAVE_HIP)
+    set(_ttg_have_device TRUE)
+endif()
+set(TTG_HAVE_DEVICE ${_ttg_have_device} CACHE BOOL "True if TTG has support for any device programming model")
+
 ##########################
 #### prerequisite runtimes
 ##########################
