@@ -10,7 +10,6 @@
 #include <vector>
 
 #if __has_include(<btas/features.h>)
-#pragma message("C Preprocessor got here!")
 #include <btas/features.h>
 #ifdef BTAS_IS_USABLE
 #include <btas/btas.h>
@@ -41,7 +40,8 @@ using namespace ttg;
 #include "ttg/util/bug.h"
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
-using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
+using scalar_t = double;
+using blk_t = btas::Tensor<scalar_t, btas::DEFAULT::range, btas::mohndle<btas::varray<scalar_t>, btas::Handle::shared_ptr>>;
 
 #if defined(TTG_USE_PARSEC)
 namespace ttg {
@@ -695,32 +695,43 @@ class Control : public TT<void, std::tuple<Out<Key<2>>>, Control> {
   }
 };
 
+std::tuple<float, float> norms(float t) { return std::make_tuple(t * t, std::abs(t)); }
+std::tuple<double, double> norms(double t) { return std::make_tuple(t * t, std::abs(t)); }
+
+template <typename T>
+std::tuple<T, T> norms(std::complex<T> t) {
+  auto abs_t = std::abs(t);
+  return std::make_tuple(abs_t * abs_t, abs_t);
+}
+
 #ifdef BTAS_IS_USABLE
 template <typename T_, class Range_, class Store_>
-std::tuple<T_, T_> norms(const btas::Tensor<T_, Range_, Store_> &t) {
-  T_ norm_2_square = 0.0;
-  T_ norm_inf = 0.0;
-  for (auto k : t) {
-    norm_2_square += k * k;
-    norm_inf = std::max(norm_inf, std::abs(k));
+auto norms(const btas::Tensor<T_, Range_, Store_> &t) {
+  using T = decltype(std::abs(std::declval<T_>()));
+  T norm_2_square = 0.0;
+  T norm_inf = 0.0;
+  for (auto elem : t) {
+    T elem_norm_2_square, elem_norm_inf;
+    std::tie(elem_norm_2_square, elem_norm_inf) = norms(elem);
+    norm_2_square += elem_norm_2_square;
+    norm_inf = std::max(norm_inf, elem_norm_inf);
   }
   return std::make_tuple(norm_2_square, norm_inf);
 }
 #endif
 
-std::tuple<double, double> norms(double t) { return std::make_tuple(t * t, std::abs(t)); }
-
-template <typename Blk = blk_t>
-std::tuple<double, double> norms(const SpMatrix<Blk> &A) {
-  double norm_2_square = 0.0;
-  double norm_inf = 0.0;
+template <typename Blk>
+auto norms(const SpMatrix<Blk> &A) {
+  using T = decltype(std::abs(std::declval<typename Blk::value_type>()));
+  T norm_2_square = 0.0;
+  T norm_inf = 0.0;
   for (int i = 0; i < A.outerSize(); ++i) {
     for (typename SpMatrix<Blk>::InnerIterator it(A, i); it; ++it) {
       //  cout << 1+it.row() << "\t"; // row index
       //  cout << 1+it.col() << "\t"; // col index (here it is equal to k)
       //  cout << it.value() << endl;
       auto elem = it.value();
-      double elem_norm_2_square, elem_norm_inf;
+      T elem_norm_2_square, elem_norm_inf;
       std::tie(elem_norm_2_square, elem_norm_inf) = norms(elem);
       norm_2_square += elem_norm_2_square;
       norm_inf = std::max(norm_inf, elem_norm_inf);

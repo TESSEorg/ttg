@@ -246,13 +246,14 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
 
 };
 
+using scalar_t = double;
 #if defined(TTG_HAVE_CUDA) || defined(TTG_HAVE_HIPBLAS)
-using blk_t = DeviceTensor<double, btas::DEFAULT::range,
-                           btas::mohndle<btas::varray<double, TiledArray::device_pinned_allocator<double>>,
+using blk_t = DeviceTensor<scalar_t, btas::DEFAULT::range,
+                           btas::mohndle<btas::varray<scalar_t, TiledArray::device_pinned_allocator<scalar_t>>,
                                          btas::Handle::shared_ptr>>;
 #else
-using blk_t = DeviceTensor<double, btas::DEFAULT::range,
-                           btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
+using blk_t = DeviceTensor<scalar_t, btas::DEFAULT::range,
+                           btas::mohndle<btas::varray<scalar_t>, btas::Handle::shared_ptr>>;
 #endif
 
 
@@ -263,9 +264,13 @@ using blk_t = DeviceTensor<double, btas::DEFAULT::range,
 //}
 
 /* TODO: call CUDA gemm here */
-static void device_gemm(blk_t &C, const blk_t &A, const blk_t &B) {
-  static const double alpha = 1.0;
-  static const double beta  = 1.0;
+template <typename Blk>
+static void device_gemm(Blk &C, const Blk &A, const Blk &B) {
+  using blk_t = Blk;
+  using T = typename blk_t::value_type;
+  static_assert(std::is_same_v<T,double> || std::is_same_v<T,float>);
+  static const T alpha = 1.0;
+  static const T beta  = 1.0;
   // make sure all memory is on the device
   // TODO: A and B are read-only so the owner device will be 0. How to fix?
   //assert(A.b.get_current_device() != 0);
@@ -273,11 +278,16 @@ static void device_gemm(blk_t &C, const blk_t &A, const blk_t &B) {
   int device = C.b.get_current_device();
   assert(device != 0);
 #if defined(TTG_HAVE_CUDA)
-  cublasDgemm(ttg::detail::cublas_get_handle(),
-              CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1), &alpha,
-              A.b.device_ptr_on(device), A.extent(0),
-              B.b.device_ptr_on(device), B.extent(0), &beta,
-              C.b.current_device_ptr(), C.extent(0));
+  if constexpr (std::is_same_v<T,double>) {
+      cublasDgemm(ttg::detail::cublas_get_handle(), CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1),
+                  &alpha, A.b.device_ptr_on(device), A.extent(0), B.b.device_ptr_on(device), B.extent(0), &beta,
+                  C.b.current_device_ptr(), C.extent(0));
+  }
+  else if constexpr (std::is_same_v<T,float>) {
+      cublasSgemm(ttg::detail::cublas_get_handle(), CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1),
+                  &alpha, A.b.device_ptr_on(device), A.extent(0), B.b.device_ptr_on(device), B.extent(0), &beta,
+                  C.b.current_device_ptr(), C.extent(0));
+  }
 #elif defined(TTG_HAVE_HIPBLAS)
   hipblasDgemm(ttg::detail::hipblas_get_handle(),
                 HIPBLAS_OP_N, HIPBLAS_OP_N,
@@ -287,8 +297,6 @@ static void device_gemm(blk_t &C, const blk_t &A, const blk_t &B) {
                 C.b.current_device_ptr(), C.extent(0));
 #endif
 }
-
-//using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
 
 #if defined(TTG_USE_PARSEC)
 namespace ttg {
@@ -311,8 +319,9 @@ namespace ttg {
       return dim;
     }
     static auto get_data(blk_t &b) {
+      using T = typename blk_t::value_type;
       if (!b.empty())
-        return boost::container::small_vector<iovec, 1>(1, iovec{b.size() * sizeof(double), b.data()});
+        return boost::container::small_vector<iovec, 1>(1, iovec{b.size() * sizeof(T), b.data()});
       else
         return boost::container::small_vector<iovec, 1>{};
     }
