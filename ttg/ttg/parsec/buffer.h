@@ -19,8 +19,8 @@ namespace ttg_parsec {
 
 namespace detail {
   // fwd decl
-  template<typename T>
-  parsec_data_t* get_parsec_data(const ttg_parsec::buffer<T>& db);
+  template<typename T, typename A>
+  parsec_data_t* get_parsec_data(const ttg_parsec::buffer<T, A>& db);
 } // namespace detail
 
 /**
@@ -34,10 +34,14 @@ namespace detail {
  * in order for TTG to properly facilitate ownership
  * tracking of the containing object.
  */
-template<typename T>
-struct buffer : public detail::ttg_parsec_data_wrapper_t {
+template<typename T, typename Allocator>
+struct buffer : public detail::ttg_parsec_data_wrapper_t
+              , private Allocator {
 
   using element_type = std::decay_t<T>;
+
+  using allocator_traits = std::allocator_traits<Allocator>;
+  using allocator_type = typename  allocator_traits::allocator_type;
 
   static_assert(std::is_trivially_copyable_v<element_type>,
                 "Only trivially copyable types are supported for devices.");
@@ -45,75 +49,83 @@ struct buffer : public detail::ttg_parsec_data_wrapper_t {
                 "Only default constructible types are supported for devices.");
 
 private:
-  using delete_fn_t = std::add_pointer_t<void(element_type*)>;
+  using delete_fn_t = std::function<void(element_type*)>;
 
-  using host_data_ptr   = std::unique_ptr<element_type[], delete_fn_t>;
-  host_data_ptr m_host_data;
+  using host_data_ptr   = std::add_pointer_t<element_type>;
+  host_data_ptr m_host_data = nullptr;
   std::size_t m_count = 0;
-
-  static void delete_owned(element_type *ptr) {
-    delete[] ptr;
-  }
+  bool m_owned= false;
 
   static void delete_non_owned(element_type *ptr) {
     // nothing to be done, we don't own the memory
   }
 
-  friend parsec_data_t* detail::get_parsec_data<T>(const ttg_parsec::buffer<T>&);
+  friend parsec_data_t* detail::get_parsec_data<T, Allocator>(const ttg_parsec::buffer<T, Allocator>&);
+
+  allocator_type& get_allocator_reference() { return static_cast<allocator_type&>(*this); }
+
+  element_type* allocate(std::size_t n) {
+    return allocator_traits::allocate(get_allocator_reference(), n);
+  }
+
+  void deallocate() {
+    allocator_traits::deallocate(get_allocator_reference(), m_host_data, m_count);
+  }
 
 public:
 
   /* The device ID of the CPU. */
-  static constexpr int cpu_device = 0;
+  static constexpr int cpu_device = -2;
 
   buffer() : buffer(nullptr, 0)
   { }
 
-  buffer(std::size_t count)
+  buffer(std::size_t n)
   : ttg_parsec_data_wrapper_t()
-  , m_host_data(new element_type[count](), &delete_owned)
-  , m_count(count)
+  , allocator_type()
+  , m_host_data(allocate(n))
+  , m_count(n)
+  , m_owned(true)
   {
     //std::cout << "buffer " << this << " ctor count "
     //          << count << "(" << m_host_data.get() << ") ttg_copy "
     //          << m_ttg_copy
     //          << " parsec_data " << m_data.get() << std::endl;
-    this->reset_parsec_data(m_host_data.get(), count*sizeof(element_type));
+    this->reset_parsec_data(m_host_data, n*sizeof(element_type));
   }
 
   /* Constructing a buffer using application-managed memory.
    * The memory pointed to by ptr must be accessible during
    * the life-time of the buffer. */
-  buffer(element_type* ptr, std::size_t count = 1)
+  buffer(element_type* ptr, std::size_t n = 1)
   : ttg_parsec_data_wrapper_t()
-  , m_host_data(ptr, &delete_non_owned)
-  , m_count(count)
+  , allocator_type()
+  , m_host_data(ptr)
+  , m_count(n)
+  , m_owned(false)
   {
-    this->reset_parsec_data(m_host_data.get(), count*sizeof(element_type));
-    //std::cout << "buffer " << this << " ctor ptr " << ptr << " count " << count
-    //          << " ttg_copy " << m_ttg_copy
-    //          << " parsec_data " << m_data.get() << std::endl;
+    this->reset_parsec_data(m_host_data, n*sizeof(element_type));
   }
 
   virtual ~buffer() {
+    if (m_owned) {
+      deallocate();
+      m_owned = false;
+    }
     unpin(); // make sure the copies are not pinned
   }
 
   /* allow moving device buffers */
   buffer(buffer&& db)
   : ttg_parsec_data_wrapper_t(std::move(db))
-  , m_host_data(std::move(db.m_host_data))
+  , allocator_type(std::move(db))
+  , m_host_data(db.m_host_data)
   , m_count(db.m_count)
+  , m_owned(db.m_owned)
   {
-    //std::cout << "buffer " << this << " other " << &db << " mv ctor ttg_copy " << m_ttg_copy << std::endl;
+    db.m_host_data = nullptr;
     db.m_count = 0;
-
-    //std::cout << "buffer::move-ctor from " << &db << " ttg-copy " << db.m_ttg_copy
-    //          << " to " << this << " ttg-copy " << m_ttg_copy
-    //          << " parsec-data " << m_data.get()
-    //          << std::endl;
-
-//#endif // 0
+    db.m_owned = false;
   }
 
   /* explicitly disable copying of buffers
@@ -124,9 +136,10 @@ public:
   /* allow moving device buffers */
   buffer& operator=(buffer&& db) {
     ttg_parsec_data_wrapper_t::operator=(std::move(db));
-    m_host_data = std::move(db.m_host_data);
-    m_count = db.m_count;
-    db.m_count = 0;
+    allocator_type::operator=(std::move(db));
+    std::swap(m_host_data, db.m_host_data);
+    std::swap(m_count, db.m_count);
+    std::swap(m_owned, db.m_owned);
     //std::cout << "buffer " << this << " other " << &db << " mv op ttg_copy " << m_ttg_copy << std::endl;
     //std::cout << "buffer::move-assign from " << &db << " ttg-copy " << db.m_ttg_copy
     //          << " to " << this << " ttg-copy " << m_ttg_copy
@@ -148,15 +161,16 @@ public:
     /* make sure it's a valid device */
     assert(parsec_nb_devices > device_id);
     /* make sure it's a valid copy */
-    assert(m_data->device_copies[device_id] != nullptr);
-    m_data->owner_device = device_id;
+    assert(m_data->device_copies[device_id+2] != nullptr);
+    m_data->owner_device = device_id+2;
   }
 
   /* get the current device ID, i.e., the last updated
-   * device buffer.  */
+   * device buffer. A value of -2 designates the host
+   * as the current device. */
   int get_current_device() const {
     assert(is_valid());
-    return m_data->owner_device;
+    return m_data->owner_device - 2; // 0: host, 1: recursive, 2: first device
   }
 
   /* get the current device pointer */
@@ -176,7 +190,7 @@ public:
    */
   element_type* device_ptr_on(int device_id) {
     assert(is_valid());
-    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id));
+    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id + 2));
   }
 
   /* get the device pointer at the given device
@@ -184,24 +198,25 @@ public:
    */
   const element_type* device_ptr_on(int device_id) const {
     assert(is_valid());
-    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id));
+    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id + 2)); // GPUs start at 2
   }
 
   element_type* host_ptr() {
-    return device_ptr_on(cpu_device);
+    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), 0));
   }
 
   const element_type* host_ptr() const {
-    return device_ptr_on(cpu_device);
+    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), 0));
   }
 
   bool is_valid_on(int device_id) const {
     assert(is_valid());
-    return (parsec_data_get_ptr(m_data.get(), device_id) != nullptr);
+    return (parsec_data_get_ptr(m_data.get(), device_id+2) != nullptr);
   }
 
   void allocate_on(int device_id) {
     /* TODO: need exposed PaRSEC memory allocator */
+    throw std::runtime_error("not implemented yet");
   }
 
   /* TODO: can we do this automatically?
@@ -218,7 +233,7 @@ public:
   /* Unpin the memory on all devices we currently track. */
   void unpin() {
     if (!is_valid()) return;
-    for (int i = 1; i < parsec_nb_devices; ++i) {
+    for (int i = 0; i < parsec_nb_devices-2; ++i) {
       unpin_on(i);
     }
   }
@@ -246,37 +261,51 @@ public:
   }
 
   /* Reallocate the buffer with count elements */
-  void reset(std::size_t count) {
+  void reset(std::size_t n) {
     /* TODO: can we resize if count is smaller than m_count? */
     /* drop the current data and reallocate */
     reset();
-    if (count == 0) {
-      m_host_data = host_data_ptr(nullptr, &delete_non_owned);
-    } else {
-      m_host_data = host_data_ptr(new element_type[count], &delete_owned);
+
+    if (m_owned) {
+      deallocate();
+      m_owned = false;
     }
-    reset_parsec_data(m_host_data.get(), count*sizeof(element_type));
+
+    if (n == 0) {
+      m_host_data = nullptr;
+      m_owned = false;
+    } else {
+      m_host_data = allocate(n);
+      m_owned = true;
+    }
+    reset_parsec_data(m_host_data, n*sizeof(element_type));
     //std::cout << "buffer::reset(" << count << ") ptr " << m_host_data.get()
     //          << " ttg_copy " << m_ttg_copy
     //          << " parsec_data " << m_data.get() << std::endl;
-    m_count = count;
+    m_count = n;
   }
 
   /* Reset the buffer to use the ptr to count elements */
-  void reset(T* ptr, std::size_t count = 1) {
+  void reset(T* ptr, std::size_t n = 1) {
     /* TODO: can we resize if count is smaller than m_count? */
-    if (count == m_count) {
+    if (n == m_count) {
       return;
     }
 
-    if (nullptr == ptr) {
-      m_host_data = host_data_ptr(nullptr, &delete_non_owned);
-      m_count = 0;
-    } else {
-      m_host_data = host_data_ptr(ptr, &delete_non_owned);
-      m_count = count;
+    if (m_owned) {
+      deallocate();
     }
-    reset_parsec_data(m_host_data.get(), count*sizeof(element_type));
+
+    if (nullptr == ptr) {
+      m_host_data = nullptr;
+      m_count = 0;
+      m_owned = false;
+    } else {
+      m_host_data = ptr;
+      m_count = n;
+      m_owned = false;
+    }
+    reset_parsec_data(m_host_data, n*sizeof(element_type));
     //std::cout << "buffer::reset(" << ptr << ", " << count << ") ptr " << m_host_data.get()
     //          << " ttg_copy " << m_ttg_copy
     //          << " parsec_data " << m_data.get() << std::endl;
@@ -358,20 +387,20 @@ template<typename T>
 struct is_buffer : std::false_type
 { };
 
-template<typename T>
-struct is_buffer<buffer<T>> : std::true_type
+template<typename T, typename A>
+struct is_buffer<buffer<T, A>> : std::true_type
 { };
 
-template<typename T>
-struct is_buffer<const buffer<T>> : std::true_type
+template<typename T, typename A>
+struct is_buffer<const buffer<T, A>> : std::true_type
 { };
 
 template<typename T>
 constexpr static const bool is_buffer_v = is_buffer<T>::value;
 
 namespace detail {
-  template<typename T>
-  parsec_data_t* get_parsec_data(const ttg_parsec::buffer<T>& db) {
+  template<typename T, typename A>
+  parsec_data_t* get_parsec_data(const ttg_parsec::buffer<T, A>& db) {
     return const_cast<parsec_data_t*>(db.m_data.get());
   }
 } // namespace detail

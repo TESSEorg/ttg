@@ -54,6 +54,7 @@ option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization
 option(TTG_ENABLE_CUDA "Whether to TTG will look for CUDA" OFF)
 option(TTG_ENABLE_HIP "Whether to TTG will look for HIP" OFF)
 option(TTG_EXAMPLES "Whether to build examples" OFF)
+option(TTG_ENABLE_ASAN "Whether to enable address sanitizer" OFF)
 
 option(TTG_FETCH_BOOST "Whether to fetch+build Boost, if missing" OFF)
 option(TTG_IGNORE_BUNDLED_EXTERNALS "Whether to skip installation and use of bundled external depenedencies (Boost.CallableTraits)" OFF)
@@ -67,6 +68,11 @@ if (FORCE_COLORED_OUTPUT)
        add_compile_options ($<$<COMPILE_LANGUAGE:CXX,C>:-fcolor-diagnostics>)
     endif ()
 endif (FORCE_COLORED_OUTPUT)
+
+if (TTG_ENABLE_ASAN)
+    add_compile_options(-fsanitize=address)
+    add_link_options(-fsanitize=address)
+endif (TTG_ENABLE_ASAN)
 
 set(TTG_HIP_PLATFORM "__HIP_PLATFORM_AMD__" CACHE STRING "Which platform to use when compiling HIP-related code (default: __HIP_PLATFORM_AMD__)")
 ##########################
@@ -119,6 +125,11 @@ if (TTG_ENABLE_HIP)
   find_package(hipblas)
   if (TARGET roc::hipblas)
     set(TTG_HAVE_HIPBLAS True CACHE BOOL "TTG detected support for hipBLAS")
+  endif()
+
+  find_package(hipsolver)
+  if (TARGET roc::hipsolver)
+    set(TTG_HAVE_HIPSOLVER True CACHE BOOL "TTG detected support for hipSolver")
   endif()
   add_compile_definitions(${TTG_HIP_PLATFORM})
 endif(TTG_ENABLE_HIP)

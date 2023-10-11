@@ -62,9 +62,16 @@ namespace ttg_parsec {
           status = cudaHostUnregister(data->device_copies[0]->device_private);
           assert(cudaSuccess == status);
           data->device_copies[0]->flags ^= TTG_PARSEC_DATA_FLAG_REGISTERED;
-      }
+        }
 #endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
-        parsec_data_destroy(data);
+        //std::fprintf(stderr, "parsec_data_destroy %p device_copy[0] %p\n", data, data->device_copies[0]);
+        //parsec_data_destroy(data);
+        assert(data->device_copies[0] != nullptr);
+        auto copy = data->device_copies[0];
+        parsec_data_copy_detach(data, data->device_copies[0], 0);
+        PARSEC_OBJ_RELEASE(copy);
+        PARSEC_OBJ_RELEASE(data);
+
       }
 
       static void delete_null_parsec_data(parsec_data_t *) {

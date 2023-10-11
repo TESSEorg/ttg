@@ -11,6 +11,8 @@
 
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
 #include <parsec/mca/device/cuda/device_cuda.h>
+#elif defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
+#include <parsec/mca/device/hip/device_hip.h>
 #endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
 
 namespace ttg_parsec {
@@ -117,11 +119,16 @@ namespace ttg_parsec {
       /* enqueue the transfer into the compute stream to come back once the compute and transfer are complete */
 
 #if defined(TTG_HAVE_CUDART) && defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
-      std::cout << "cudaMemcpyAsync of " << data->nb_elts << "B" << std::endl;
+      //std::cout << "cudaMemcpyAsync of " << data->nb_elts << "B from " << data->device_copies[data->owner_device]->device_private << " device " << (int)data->owner_device << " to " << data->device_copies[0]->device_private << std::endl;
       parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)stream;
       cudaMemcpyAsync(data->device_copies[0]->device_private,
                       data->device_copies[data->owner_device]->device_private,
                       data->nb_elts, cudaMemcpyDeviceToHost, cuda_stream->cuda_stream);
+#elif defined(TTG_HAVE_HIP) && defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
+      parsec_hip_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)stream;
+      hipMemcpyAsync(data->device_copies[0]->device_private,
+                      data->device_copies[data->owner_device]->device_private,
+                      data->nb_elts, hipMemcpyDeviceToHost, hip_stream->hip_stream);
 #else
       static_assert(DeviceAvail, "No device implementation detected!");
 #endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)

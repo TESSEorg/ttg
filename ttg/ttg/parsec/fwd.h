@@ -16,7 +16,7 @@ namespace ttg_parsec {
   template<typename T>
   struct ptr;
 
-  template<typename T>
+  template<typename T, typename Allocator = std::allocator<T>>
   struct buffer;
   template<typename T>
   struct devicescratch;

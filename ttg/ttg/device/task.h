@@ -134,7 +134,8 @@ namespace ttg {
         }
 
         void unhandled_exception() {
-
+          std::cerr << "Send coroutine caught an unhandled exception!" << std::endl;
+          throw; // fwd
         }
 
       };
@@ -284,9 +285,9 @@ namespace ttg {
                 typename... out_keysT, typename... out_valuesT>
       inline void prepare_broadcast(const std::tuple<RangesT...> &keylists, valueT &&value,
                                     std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
-        std::get<I>(t)->prepare_send(std::get<KeyId>(keylists), std::forward<valueT>(value));
+        std::get<I>(t).prepare_send(std::get<KeyId>(keylists), std::forward<valueT>(value));
         if constexpr (sizeof...(Is) > 0) {
-          detail::prepare_broadcast<KeyId+1, Is...>(keylists, std::forward<valueT>(value), t);
+          prepare_broadcast<KeyId+1, Is...>(keylists, std::forward<valueT>(value), t);
         }
       }
 
@@ -299,7 +300,7 @@ namespace ttg {
         auto *terminal_ptr = ttg::detail::get_out_terminal<key_t, valueT>(I, "ttg::device::broadcast(keylists, value)");
         terminal_ptr->prepare_send(std::get<KeyId>(keylists), value);
         if constexpr (sizeof...(Is) > 0) {
-          detail::prepare_broadcast<KeyId+1, Is...>(keylists, std::forward<valueT>(value));
+          prepare_broadcast<KeyId+1, Is...>(keylists, std::forward<valueT>(value));
         }
       }
 
@@ -307,7 +308,7 @@ namespace ttg {
                 typename... out_keysT, typename... out_valuesT>
       inline void broadcast(const std::tuple<RangesT...> &keylists, valueT &&value,
                                     std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
-        std::get<I>(t)->broadcast(std::get<KeyId>(keylists), std::forward<valueT>(value));
+        std::get<I>(t).broadcast(std::get<KeyId>(keylists), std::forward<valueT>(value));
         if constexpr (sizeof...(Is) > 0) {
           detail::broadcast<KeyId+1, Is...>(keylists, std::forward<valueT>(value), t);
         }
@@ -322,7 +323,7 @@ namespace ttg {
         auto *terminal_ptr = ttg::detail::get_out_terminal<key_t, valueT>(I, "ttg::device::broadcast(keylists, value)");
         terminal_ptr->broadcast(std::get<KeyId>(keylists), value);
         if constexpr (sizeof...(Is) > 0) {
-          detail::broadcast<KeyId+1, Is...>(keylists, std::forward<valueT>(value));
+          ttg::device::detail::broadcast<KeyId+1, Is...>(keylists, std::forward<valueT>(value));
         }
       }
 
@@ -340,12 +341,12 @@ namespace ttg {
           // treat as tuple
           prepare_broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value), t);
           co_await ttg::Void{}; // we'll come back once the task is done
-          broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value), t);
+          ttg::device::detail::broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value), t);
         } else if constexpr (!ttg::meta::is_tuple_v<RangesT>) {
           // create a tie to the captured keylist
           prepare_broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value), t);
           co_await ttg::Void{}; // we'll come back once the task is done
-          broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value), t);
+          ttg::device::detail::broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value), t);
         }
       }
 
@@ -363,12 +364,12 @@ namespace ttg {
                         "Size of keylist tuple must match the number of output terminals");
           prepare_broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value));
           co_await ttg::Void{}; // we'll come back once the task is done
-          broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value));
+          ttg::device::detail::broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value));
         } else if constexpr (!ttg::meta::is_tuple_v<RangesT>) {
           // create a tie to the captured keylist
           prepare_broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value));
           co_await ttg::Void{}; // we'll come back once the task is done
-          broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value));
+          ttg::device::detail::broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value));
         }
       }
     }  // namespace detail
@@ -379,12 +380,12 @@ namespace ttg {
     [[nodiscard]]
     inline detail::send_t broadcast(rangeT &&keylist,
                                     valueT &&value,
-                                    const std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+                                    std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
       ttg::detail::value_copy_handler<Runtime> copy_handler;
       return detail::send_t{
-              broadcast_coro<0, I, Is...>(std::forward<rangeT>(keylist),
-                                          copy_handler(std::forward<valueT>(value)),
-                                          t, std::move(copy_handler))};
+             detail::broadcast_coro<I, Is...>(std::forward<rangeT>(keylist),
+                                              copy_handler(std::forward<valueT>(value)),
+                                              t, std::move(copy_handler))};
     }
 
     /* overload with implicit terminals and keylist passed by const reference */
@@ -392,8 +393,8 @@ namespace ttg {
               ttg::Runtime Runtime = ttg::ttg_runtime>
     inline detail::send_t broadcast(rangeT &&keylist, valueT &&value) {
       ttg::detail::value_copy_handler<Runtime> copy_handler;
-      return detail::send_t{broadcast_coro<0, i>(std::tie(keylist), copy_handler(std::forward<valueT>(value)),
-                                                 std::move(copy_handler))};
+      return detail::send_t{broadcast_coro<i>(std::tie(keylist), copy_handler(std::forward<valueT>(value)),
+                                              std::move(copy_handler))};
     }
 
     template<typename... Args, ttg::Runtime Runtime = ttg::ttg_runtime>
@@ -577,7 +578,10 @@ namespace ttg {
 
     device_task get_return_object() { return device_task{device_task_handle_type::from_promise(*this)}; }
 
-    void unhandled_exception() { }
+    void unhandled_exception() {
+      std::cerr << "Task coroutine caught an unhandled exception!" << std::endl;
+      throw; // fwd
+    }
 
     //using iterator = std::vector<device_obj_view>::iterator;
 

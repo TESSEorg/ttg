@@ -1,6 +1,7 @@
 #ifndef TTG_H_INCLUDED
 #define TTG_H_INCLUDED
 
+#include "ttg/config.h"
 #include "ttg/fwd.h"
 
 #include "ttg/runtimes.h"

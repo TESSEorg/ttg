@@ -6,6 +6,7 @@
 #endif  // TTG_USE_PARSEC
 
 #include <ttg.h>
+#include <ttg/serialization/std/tuple.h>
 
 #include "plgsy.h"
 #include "pmw.h"

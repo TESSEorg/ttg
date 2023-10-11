@@ -37,6 +37,8 @@
 
 #include "ttg.h"
 
+#include "../devblas_helper.h"
+
 using namespace ttg;
 
 #include "ttg/util/future.h"
@@ -289,12 +291,22 @@ static void device_gemm(Blk &C, const Blk &A, const Blk &B) {
                   C.b.current_device_ptr(), C.extent(0));
   }
 #elif defined(TTG_HAVE_HIPBLAS)
-  hipblasDgemm(ttg::detail::hipblas_get_handle(),
-                HIPBLAS_OP_N, HIPBLAS_OP_N,
-                C.extent(0), C.extent(1), A.extent(1), &alpha,
-                A.b.device_ptr_on(device), A.extent(0),
-                B.b.device_ptr_on(device), B.extent(0), &beta,
-                C.b.current_device_ptr(), C.extent(0));
+  if constexpr (std::is_same_v<T,double>) {
+    hipblasDgemm(hipblas_handle(),
+                 HIPBLAS_OP_N, HIPBLAS_OP_N,
+                 C.extent(0), C.extent(1), A.extent(1), &alpha,
+                 A.b.device_ptr_on(device), A.extent(0),
+                 B.b.device_ptr_on(device), B.extent(0), &beta,
+                 C.b.current_device_ptr(), C.extent(0));
+  } else if constexpr (std::is_same_v<T,float>) {
+    hipblasSgemm(hipblas_handle(),
+                 HIPBLAS_OP_N, HIPBLAS_OP_N,
+                 C.extent(0), C.extent(1), A.extent(1), &alpha,
+                 A.b.device_ptr_on(device), A.extent(0),
+                 B.b.device_ptr_on(device), B.extent(0), &beta,
+                 C.b.current_device_ptr(), C.extent(0));
+  }
+  
 #endif
 }
 
