@@ -33,7 +33,9 @@
 #include "ttg/util/print.h"
 #include "ttg/util/trace.h"
 #include "ttg/util/typelist.h"
+#ifdef TTG_HAVE_DEVICE
 #include "ttg/device/task.h"
+#endif  // TTG_HAVE_DEVICE
 
 #include "ttg/serialization/data_descriptor.h"
 
@@ -1299,6 +1301,7 @@ namespace ttg_parsec {
               task->copies[IS]->get_ptr()))...};
     }
 
+#ifdef TTG_HAVE_DEVICE
     /**
      * Submit callback called by PaRSEC once all input transfers have completed.
      */
@@ -1484,6 +1487,7 @@ namespace ttg_parsec {
       ttg::abort();
       return PARSEC_HOOK_RETURN_DONE; // will not be reacehed
     }
+#endif  // TTG_HAVE_DEVICE
 
     template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t static_op(parsec_task_t *parsec_task) {
@@ -1525,6 +1529,7 @@ namespace ttg_parsec {
         detail::parsec_ttg_caller = nullptr;
       }
       else {  // resume the suspended coroutine
+#ifdef TTG_HAVE_DEVICE
         auto coro = static_cast<ttg::device_task>(ttg::device_task_handle_type::from_address(suspended_task_address));
         assert(detail::parsec_ttg_caller == nullptr);
         detail::parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
@@ -1552,9 +1557,12 @@ namespace ttg_parsec {
         }
         task->suspended_task_address = suspended_task_address;
 #else
-#endif // 0
+#endif  // TTG_HAS_COROUTINE
         ttg::abort();  // should not happen
-#endif
+#endif  // 0
+#else  // TTG_HAVE_DEVICE
+ttg::abort();  // should not happen
+#endif  // TTG_HAVE_DEVICE
       }
       task->suspended_task_address = suspended_task_address;
 
@@ -3437,6 +3445,7 @@ namespace ttg_parsec {
 
       /* if we still have a coroutine handle we invoke it one more time to get the sends/broadcasts */
       if (task->suspended_task_address) {
+#ifdef TTG_HAVE_DEVICE
         // get the device task from the coroutine handle
         auto dev_task = ttg::device_task_handle_type::from_address(task->suspended_task_address);
 
@@ -3453,7 +3462,9 @@ namespace ttg_parsec {
           dev_data.do_sends();
           detail::parsec_ttg_caller = nullptr;
         }
-
+#else // TTG_HAVE_DEVICE
+        ttg::abort();  // should not happen
+#endif // TTG_HAVE_DEVICE
         /* the coroutine should have completed and we cannot access the promise anymore */
         task->suspended_task_address = nullptr;
       }
