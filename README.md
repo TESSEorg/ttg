@@ -542,7 +542,7 @@ To generate the trace results of any TTG program follow the process discussed be
   - Set the environment variable `PARSEC_MCA_profile_filename` to the PBT file name _prefix_, e.g. `/tmp/ttg`.
   - Run the program and make sure the trace files (in PBT format) have been generated; e.g., if you set `PARSEC_MCA_profile_filename` to `/tmp/ttg` you should find file `/tmp/ttg-0.prof-...` containing the trace from MPI rank 0, `/tmp/ttg-1.prof-...` from rank 1, and so on.
 - Convert the traces from PaRSEC Binary Trace (PBT) format to the Chrome Trace Format (CTF):
-  - Add `{TTG build directory}/_deps/parsec-build/tools/profiling/python/build/{lib folder for your version of Python}` (currently it is not possible to use PaRSEC Python module from the install tree, only from its build tree)
+  - Add `{TTG build directory}/_deps/parsec-build/tools/profiling/python/python.test` (currently it is not possible to use PaRSEC Python module from the install tree, only from its build tree)
  to the `PYTHONPATH` environment variable so that the Python  interpreter can find the modules for reading the PaRSEC trace files.
   - Convert the PBT files to a CTF file by running the conversion script:
 ```
