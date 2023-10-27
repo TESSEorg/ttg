@@ -205,7 +205,7 @@ namespace ttg_madness {
     std::array<std::size_t, std::tuple_size_v<actual_input_tuple_type>> static_streamsize;
 
    public:
-    ttg::World get_world() const { return world; }
+    ttg::World get_world() const override final { return world; }
 
    protected:
     using worldobjT = ::madness::WorldObject<ttT>;

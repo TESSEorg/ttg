@@ -81,6 +81,8 @@ namespace ttg {
 
     TTBase *get_op(std::size_t i) { return tts.at(i).get(); }
 
+    ttg::World get_world() const override final { return tts[0]->get_world(); }
+
     void fence() { tts[0]->fence(); }
 
     void make_executable() {
