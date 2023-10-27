@@ -153,6 +153,8 @@ namespace ttg {
 
     void make_executable() { TTBase::make_executable(); }
 
+    World get_world() const override final { return get_default_world(); }
+
     /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned
     template <std::size_t i>
     std::tuple_element_t<i, input_terminals_type> *in() {
