@@ -149,9 +149,9 @@ namespace ttg {
 
     virtual ~SinkTT() {}
 
-    void fence() {}
+    void fence() override final {}
 
-    void make_executable() { TTBase::make_executable(); }
+    void make_executable() override final { TTBase::make_executable(); }
 
     World get_world() const override final { return get_default_world(); }
 
