@@ -81,6 +81,8 @@ namespace ttg {
 
     TTBase *get_op(std::size_t i) { return tts.at(i).get(); }
 
+    ttg::World get_world() const override final { return tts[0]->get_world(); }
+
     void fence() { tts[0]->fence(); }
 
     void make_executable() {
@@ -147,9 +149,11 @@ namespace ttg {
 
     virtual ~SinkTT() {}
 
-    void fence() {}
+    void fence() override final {}
 
-    void make_executable() { TTBase::make_executable(); }
+    void make_executable() override final { TTBase::make_executable(); }
+
+    World get_world() const override final { return get_default_world(); }
 
     /// Returns pointer to input terminal i to facilitate connection --- terminal cannot be copied, moved or assigned
     template <std::size_t i>

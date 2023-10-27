@@ -1205,7 +1205,7 @@ namespace ttg_parsec {
     bool m_defer_writer = TTG_PARSEC_DEFER_WRITER;
 
    public:
-    ttg::World get_world() const { return world; }
+    ttg::World get_world() const override final { return world; }
 
    private:
     /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
