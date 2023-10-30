@@ -1,4 +1,8 @@
+#pragma once
+
 #include "ttg/config.h"
+
+#include "ttg/device/device.h"
 
 #include <memory>
 #include <stdexcept>

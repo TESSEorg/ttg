@@ -32,6 +32,8 @@
 #include "ttg/buffer.h"
 #include "ttg/devicescratch.h"
 #include "ttg/devicescope.h"
+#include "ttg/device/device.h"
+#include "ttg/device/task.h"
 
 #if defined(TTG_USE_PARSEC)
 #include "ttg/parsec/ttg.h"

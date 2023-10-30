@@ -20,7 +20,7 @@
 #include <btas/optimize/contract.h>
 #include <btas/util/mohndle.h>
 #include <TiledArray/device/allocators.h>
-#include <ttg/device/cublas_helper.h>
+#include "../devblas_helper.h"
 #include <madness/world/parsec.h>  // need to initialize MADNESS purely for the purposes of TA allocators
 #else
 #warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
@@ -277,17 +277,17 @@ static void device_gemm(Blk &C, const Blk &A, const Blk &B) {
   // TODO: A and B are read-only so the owner device will be 0. How to fix?
   //assert(A.b.get_current_device() != 0);
   //assert(B.b.get_current_device() != 0);
-  int device = C.b.get_current_device();
-  assert(device != 0);
+  auto device = ttg::device::current_device();
+  assert(device.is_device());
 #if defined(TTG_HAVE_CUDA)
   if constexpr (std::is_same_v<T,double>) {
-      cublasDgemm(ttg::detail::cublas_get_handle(), CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1),
-                  &alpha, A.b.device_ptr_on(device), A.extent(0), B.b.device_ptr_on(device), B.extent(0), &beta,
+      cublasDgemm(cublas_handle(), CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1),
+                  &alpha, A.b.current_device_ptr(), A.extent(0), B.b.current_device_ptr(), B.extent(0), &beta,
                   C.b.current_device_ptr(), C.extent(0));
   }
   else if constexpr (std::is_same_v<T,float>) {
-      cublasSgemm(ttg::detail::cublas_get_handle(), CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1),
-                  &alpha, A.b.device_ptr_on(device), A.extent(0), B.b.device_ptr_on(device), B.extent(0), &beta,
+      cublasSgemm(cublas_handle(), CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1),
+                  &alpha, A.b.current_device_ptr(), A.extent(0), B.b.current_device_ptr(), B.extent(0), &beta,
                   C.b.current_device_ptr(), C.extent(0));
   }
 #elif defined(TTG_HAVE_HIPBLAS)
@@ -295,18 +295,18 @@ static void device_gemm(Blk &C, const Blk &A, const Blk &B) {
     hipblasDgemm(hipblas_handle(),
                  HIPBLAS_OP_N, HIPBLAS_OP_N,
                  C.extent(0), C.extent(1), A.extent(1), &alpha,
-                 A.b.device_ptr_on(device), A.extent(0),
-                 B.b.device_ptr_on(device), B.extent(0), &beta,
+                 A.b.current_device_ptr(), A.extent(0),
+                 B.b.current_device_ptr(), B.extent(0), &beta,
                  C.b.current_device_ptr(), C.extent(0));
   } else if constexpr (std::is_same_v<T,float>) {
     hipblasSgemm(hipblas_handle(),
                  HIPBLAS_OP_N, HIPBLAS_OP_N,
                  C.extent(0), C.extent(1), A.extent(1), &alpha,
-                 A.b.device_ptr_on(device), A.extent(0),
-                 B.b.device_ptr_on(device), B.extent(0), &beta,
+                 A.b.current_device_ptr(), A.extent(0),
+                 B.b.current_device_ptr(), B.extent(0), &beta,
                  C.b.current_device_ptr(), C.extent(0));
   }
-  
+
 #endif
 }
 
