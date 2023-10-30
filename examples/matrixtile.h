@@ -19,11 +19,17 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
  private:
   buffer_t _buffer;
   int _rows = 0, _cols = 0, _lda = 0;
+#ifdef DEBUG_TILES_VALUES
+  T _norm = 0.0;
+#endif // DEBUG_TILES_VALUES
 
   // (Re)allocate the tile memory
   void realloc() {
     // std::cout << "Reallocating new tile" << std::endl;
     _buffer.reset(_lda * _cols);
+#ifdef DEBUG_TILES_VALUES
+    std::fill(_buffer.host_ptr(), _lda * _cols, T{});
+#endif // DEBUG_TILES_VALUES
   }
 
  public:
@@ -53,6 +59,9 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
   , _rows(rows)
   , _cols(cols)
   , _lda(lda)
+#ifdef DEBUG_TILES_VALUES
+  , _norm(blas::nrm2(cols*rows, data, 1))
+#endif // DEBUG_TILES_VALUES
   { }
 
   MatrixTile(MatrixTile<T, Allocator>&& other) = default;
@@ -68,7 +77,11 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
   , _buffer(other._lda*other._cols)
   , _rows(other._rows)
   , _cols(other._cols)
-  , _lda(other._lda) {
+  , _lda(other._lda)
+#ifdef DEBUG_TILES_VALUES
+  , _norm(other._norm)
+#endif // DEBUG_TILES_VALUES
+  {
     std::copy_n(other.data(), _lda * _cols, this->data());
   }
 
@@ -117,21 +130,33 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
     return *this;
   }
 
+#ifdef DEBUG_TILES_VALUES
+  /* Only available if debugging is enabled. Norm must be
+   * set by application and is not computed automatically. */
+  T norm() const {
+    return _norm;
+  }
+
+  void set_norm(T norm) {
+    _norm = norm;
+  }
+#endif // DEBUG_TILES_VALUES
+
   friend std::ostream& operator<<(std::ostream& o, MatrixTile<T> const& tt) {
     auto ptr = tt.data();
     o << std::endl << " ";
     o << "MatrixTile<" << typeid(T).name() << ">{ rows=" << tt.rows() << " cols=" << tt.cols() << " ld=" << tt.lda();
 #if DEBUG_TILES_VALUES
-    o << " data=[ " for (int i = 0; i < tt.rows(); i++) {
+    o << " data=[ ";
+    for (int i = 0; i < tt.rows(); i++) {
       for (int j = 0; j < tt.cols(); j++) {
         o << ptr[i + j * tt.lda()] << " ";
       }
       o << std::endl << " ";
     }
-    o << " ] "
+    o << " ] ";
 #endif
-        o
-      << " } ";
+    o << " } ";
     return o;
   }
 };

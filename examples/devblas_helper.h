@@ -18,7 +18,12 @@ inline const cublasHandle_t& cublas_handle(T _ = 0) {
   using map_type = std::map<std::pair<int, cudaStream_t>, cublasHandle_t>;
   static thread_local map_type handles;
 
-  int device = ttg::device::current_device();
+  auto d = ttg::device::current_device();
+  int device = 0; // assume 0 if we don't have a device
+  if (d.is_device()) {
+    device = d;
+  }
+
   cudaStream_t stream = ttg::device::current_stream();
 
   map_type::iterator it;
@@ -46,12 +51,18 @@ inline const cusolverDnHandle_t& cusolver_handle(T _ = 0) {
   using map_type = std::map<std::pair<int, cudaStream_t>, cusolverDnHandle_t>;
   static thread_local map_type handles;
 
-  int device = ttg::device::current_device();
+  auto d = ttg::device::current_device();
+  int device = 0; // assume 0 if we don't have a device
+  if (d.is_device()) {
+    device = d;
+  }
   cudaStream_t stream = ttg::device::current_stream();
 
   map_type::iterator it;
   if ((it = handles.find({device, stream})) == handles.end()){
     cusolverDnHandle_t handle;
+    std::cout << "Creating cusolver handle " << handle << " for device " << device << " stream " << stream << std::endl;
+
     auto status = cusolverDnCreate(&handle);
     if (CUSOLVER_STATUS_SUCCESS != status) {
       std::cerr << "cusolverDnCreate failed: " << status << std::endl;
@@ -63,7 +74,6 @@ inline const cusolverDnHandle_t& cusolver_handle(T _ = 0) {
       throw std::runtime_error("cusolverDnSetStream failed");
     }
 
-    std::cout << "Creating cusolver handle " << handle << " for device " << device << " stream " << stream << std::endl;
     auto [iterator, success] = handles.insert({{device, stream}, handle});
     it = iterator;
   } else {

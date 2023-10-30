@@ -4,9 +4,9 @@
 #include <ttg/config.h>
 #include "lapack.hh"
 #include "pmw.h"
+#include "util.h"
 #include "../devblas_helper.h"
 
-#undef DEBUG_TILES_VALUES
 
 #if defined(TTG_HAVE_CUDART)
 #define ES ttg::ExecutionSpace::CUDA
@@ -69,6 +69,19 @@ namespace potrf {
                       devInfo);
   #endif
   }
+
+  static void device_norm(const MatrixTile<double> &A, double *norm) {
+    auto size = A.size();
+    auto buffer = A.buffer().current_device_ptr();
+    std::cout << "device_norm ptr " << buffer << " device " << ttg::device::current_device() << std::endl;
+#if defined(TTG_HAVE_CUDA)
+    auto handle = cublas_handle();
+    //double n = 1.0;
+    cublasDnrm2(handle, size, buffer, 1, norm);
+  #elif defined(TTG_HAVE_HIPBLAS)
+    hipblasDnrm2(hipblas_handle(), size, buffer, 1, norm);
+  #endif
+  }
 #endif // defined(TTG_HAVE_CUDART) || defined(TTG_HAVE_HIP)
 
   template <typename MatrixT>
@@ -77,16 +90,16 @@ namespace potrf {
                   ttg::Edge<Key1, MatrixTile<typename MatrixT::element_type>>& input,
                   ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_trsm,
                   ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_result) {
-      using T = typename MatrixT::element_type;
-      auto iallocator = std::make_shared<TiledArray::device_pinned_allocator<int>>();
+    using T = typename MatrixT::element_type;
 #if defined(TTG_HAVE_CUDART) || defined(TTG_HAVE_HIP)
+    auto iallocator = std::make_shared<TiledArray::device_pinned_allocator<int>>();
     //std::cout << "Creating CUDA POTRF task " << std::endl;
     auto f_dev = [=, iallocator = std::move(iallocator)]
                     (const Key1& key, MatrixTile<T>&& tile_kk,
                      std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out) TASKRET {
       const auto K = key[0];
 
-      /* compute successors before submitting the kernel running
+      /* compute successors before submitting the kernel
        * TODO: this is parsec specific since this code is still executing on the worker threads
        */
       std::vector<Key2> keylist;
@@ -116,8 +129,25 @@ namespace potrf {
 
       *hostInfo = -32;
 
+#ifdef DEBUG_TILES_VALUES
+      std::array<T, 2> norms;
+      //auto norms_s  = ttg::make_scratch(norms.data(), ttg::scope::Allocate, norms.size());
+      /* the workspace and the devInfo must be device-level pointers */
+      //co_await ttg::to_device(tile_kk.buffer(), devWS, devInfo, norms_s);
+      co_await ttg::to_device(tile_kk.buffer(), devWS, devInfo);
+
+      /* compute the norm at input */
+      static_assert(std::is_same_v<double, T>, "Norm debugging only implementation for T=double");
+      device_norm(tile_kk, &norms[0]);
+#else
       /* the workspace and the devInfo must be device-level pointers */
       co_await ttg::to_device(tile_kk.buffer(), devWS, devInfo);
+#endif // DEBUG_TILES_VALUES
+
+      int device = ttg::device::current_device();
+      std::cout << "POTRF [" << K << "] tile kk "
+                << tile_kk.buffer().device_ptr_on(device) << std::endl;
+
 
       //std::cout << "devWS host ptr " << hostWS << " device ptr " << devWS.device_ptr() << " size " <<  devWS.size()
       //          << " devInfo host ptr " << hostInfo << " device ptr " << devInfo.device_ptr() << "size "  << devInfo.size() << std::endl;
@@ -125,8 +155,20 @@ namespace potrf {
       /* everything is on the device, call the POTRF */
       device_potrf(tile_kk, devWS.device_ptr(), Lwork, devInfo.device_ptr());
 
+#ifdef DEBUG_TILES_VALUES
+      /* compute the norm at input */
+      static_assert(std::is_same_v<double, T>, "Verification only implementation for T=double");
+      device_norm(tile_kk, &norms[1]);
       /* wait for the kernel to complete */
       co_await ttg::wait_kernel(devInfo);
+      // check that we got the input tile we expected
+     assert(check_norm(tile_kk.norm(), norms[0]));
+      // set the new norm
+      tile_kk.set_norm(norms[1]);
+#else
+      /* wait for the kernel to complete */
+      co_await ttg::wait_kernel(devInfo);
+#endif // DEBUG_TILES_VALUES
 
       delete[] hostWS;
       int info = *hostInfo;
@@ -224,9 +266,28 @@ namespace potrf {
       }
 
 
+#ifdef DEBUG_TILES_VALUES
+      std::array<T, 3> norms; // input for tile_kk & tile_mk and output
+      //auto norms_s = ttg::make_scratch(norms.data(), ttg::scope::Allocate, norms.size());
       co_await ttg::to_device(tile_kk.buffer(), tile_mk.buffer());
+#else
+      co_await ttg::to_device(tile_kk.buffer(), tile_mk.buffer());
+#endif // DEBUG_TILES_VALUES
+
       int device = ttg::device::current_device();
       double alpha = 1.0;
+
+#ifdef DEBUG_TILES_VALUES
+      /* compute the norms at input */
+      device_norm(tile_kk, &norms[0]);
+      device_norm(tile_mk, &norms[1]);
+#endif // DEBUG_TILES_VALUES
+
+
+      std::cout << "TRSM [" << K << ", " << M << "] tile mk "
+                << tile_mk.buffer().device_ptr_on(device)
+                << " tile kk " << tile_kk.buffer().device_ptr_on(device) << std::endl;
+
 #if defined(TTG_HAVE_CUDA)
       cublasDtrsm(cublas_handle(),
                   CUBLAS_SIDE_RIGHT, CUBLAS_FILL_MODE_LOWER,
@@ -241,7 +302,20 @@ namespace potrf {
                    mb, nb, &alpha,
                    tile_kk.buffer().device_ptr_on(device), tile_kk.lda(),
                    tile_mk.buffer().device_ptr_on(device), tile_mk.lda());
+
 #endif
+
+#ifdef DEBUG_TILES_VALUES
+      /* compute the norms at input */
+      device_norm(tile_mk, &norms[2]);
+      /* wait for the kernel to complete */
+      co_await ttg::wait_kernel();
+      // check that we got the input tiles we expected
+      assert(check_norm(tile_kk.norm(), norms[0]));
+      assert(check_norm(tile_mk.norm(), norms[1]));
+      // set the new norm
+      tile_mk.set_norm(norms[2]);
+#endif // DEBUG_TILES_VALUES
 
       co_await ttg::device::forward(ttg::device::broadcast<0, 1, 2, 3>(std::make_tuple(key, Key2(K, M), keylist_row, keylist_col),
                                                                        std::move(tile_mk), out));
@@ -326,12 +400,26 @@ namespace potrf {
 
       if (ttg::tracing()) ttg::print("SYRK(", key, ")");
 
+#ifdef DEBUG_TILES_VALUES
+      std::array<T, 3> norms; // input for tile_kk & tile_mk and output
+      //auto norms_s  = ttg::make_scratch(norms.data(), ttg::scope::Allocate, norms.size());
       co_await ttg::to_device(tile_kk.buffer(), tile_mk.buffer());
+      /* compute the norms at input */
+      device_norm(tile_mk, &norms[0]);
+      device_norm(tile_kk, &norms[1]);
+#else
+      co_await ttg::to_device(tile_kk.buffer(), tile_mk.buffer());
+#endif // DEBUG_TILES_VALUES
 
       int device = ttg::device::current_device();
 
       double alpha = -1.0;
       double beta  =  1.0;
+
+      std::cout << "SYRK [" << K << ", " << M << "] tile mk "
+                << tile_mk.buffer().device_ptr_on(device)
+                << " tile kk " << tile_kk.buffer().device_ptr_on(device) << std::endl;
+
 #if defined(TTG_HAVE_CUDA)
       cublasDsyrk(cublas_handle(),
                   CUBLAS_FILL_MODE_LOWER,
@@ -347,6 +435,18 @@ namespace potrf {
                    tile_mk.buffer().device_ptr_on(device), tile_mk.lda(), &beta,
                    tile_kk.buffer().device_ptr_on(device), tile_kk.lda());
 #endif
+
+#ifdef DEBUG_TILES_VALUES
+      /* compute the norm at output */
+      device_norm(tile_kk, &norms[2]);
+      /* wait for the kernel to complete */
+      co_await ttg::wait_kernel();
+      // check that we got the input tiles we expected
+      assert(check_norm(tile_mk.norm(), norms[0]));
+      assert(check_norm(tile_kk.norm(), norms[1]));
+      // set the new norm
+      tile_kk.set_norm(norms[2]);
+#endif // DEBUG_TILES_VALUES
 
       if (M == K + 1) {
         /* send the tile to potrf */
@@ -428,11 +528,23 @@ namespace potrf {
                 << N << ") is " << tile_nk << " and A(" << M << ", " << N << ") is " << tile_mn;
 #endif
 
+#ifdef DEBUG_TILES_VALUES
+      std::array<T, 4> norms; // input for tile_mk & tile_nk & tile_mn and output
+      //auto norms_s  = ttg::make_scratch(norms.data(), ttg::scope::Allocate, norms.size());
       co_await ttg::to_device(tile_mk.buffer(), tile_nk.buffer(), tile_mn.buffer());
+
+      /* compute the norms at input */
+      device_norm(tile_mk, &norms[0]);
+      device_norm(tile_nk, &norms[1]);
+      device_norm(tile_mn, &norms[2]);
+#else
+      co_await ttg::to_device(tile_mk.buffer(), tile_nk.buffer(), tile_mn.buffer());
+#endif // DEBUG_TILES_VALUES
 
       int device = ttg::device::current_device();
       double alpha = -1.0;
       double beta  =  1.0;
+
 #if defined(TTG_HAVE_CUDA)
       cublasDgemm(cublas_handle(),
                   CUBLAS_OP_N, CUBLAS_OP_T,
@@ -450,6 +562,20 @@ namespace potrf {
                    tile_nk.buffer().device_ptr_on(device), tile_nk.lda(), &beta,
                    tile_mn.buffer().device_ptr_on(device), tile_mn.lda());
 #endif
+
+
+#ifdef DEBUG_TILES_VALUES
+      /* compute the norm at output */
+      device_norm(tile_mn, &norms[3]);
+      /* wait for the kernel to complete */
+      co_await ttg::wait_kernel();
+      // check that we got the input tiles we expected
+      assert(check_norm(tile_mk.norm(), norms[0]));
+      assert(check_norm(tile_nk.norm(), norms[1]));
+      assert(check_norm(tile_mn.norm(), norms[2]));
+      // set the new norm
+      tile_mn.set_norm(norms[3]);
+#endif // DEBUG_TILES_VALUES
 
       if (N == K + 1) {
         /* send the tile to trsm */

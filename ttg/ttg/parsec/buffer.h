@@ -9,6 +9,7 @@
 #include "ttg/parsec/ttg_data_copy.h"
 #include "ttg/parsec/parsec-ext.h"
 #include "ttg/util/iovec.h"
+#include "ttg/device/device.h"
 
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
 #include <cuda_runtime.h>
@@ -88,7 +89,7 @@ public:
   , m_owned(true)
   {
     //std::cout << "buffer " << this << " ctor count "
-    //          << count << "(" << m_host_data.get() << ") ttg_copy "
+    //          << m_count << "(" << m_host_data << ") ttg_copy "
     //          << m_ttg_copy
     //          << " parsec_data " << m_data.get() << std::endl;
     this->reset_parsec_data(m_host_data, n*sizeof(element_type));
@@ -104,6 +105,10 @@ public:
   , m_count(n)
   , m_owned(false)
   {
+    //std::cout << "buffer " << this << " ctor ptr " << ptr << "count "
+    //          << m_count << "(" << m_host_data << ") ttg_copy "
+    //          << m_ttg_copy
+    //          << " parsec_data " << m_data.get() << std::endl;
     this->reset_parsec_data(m_host_data, n*sizeof(element_type));
   }
 
@@ -165,22 +170,36 @@ public:
     m_data->owner_device = device_id+2;
   }
 
-  /* get the current device ID, i.e., the last updated
+  /* Get the owner device ID, i.e., the last updated
    * device buffer. A value of -2 designates the host
    * as the current device. */
-  int get_current_device() const {
+  int get_owner_device() const {
     assert(is_valid());
     return m_data->owner_device - 2; // 0: host, 1: recursive, 2: first device
   }
 
-  /* get the current device pointer */
+  /* Get the pointer on the currently active device. */
   element_type* current_device_ptr() {
+    assert(is_valid());
+    return static_cast<element_type*>(m_data->device_copies[ttg::device::current_device()+2]->device_private);
+  }
+
+  /* Get the pointer on the currently active device. */
+  const element_type* current_device_ptr() const {
+    assert(is_valid());
+    return static_cast<element_type*>(m_data->device_copies[ttg::device::current_device()+2]->device_private);
+  }
+
+  /* Get the pointer on the owning device.
+   * @note: This may not be the device assigned to the currently executing task.
+   *        See \ref ttg::device::current_device for that. */
+  element_type* owner_device_ptr() {
     assert(is_valid());
     return static_cast<element_type*>(m_data->device_copies[m_data->owner_device]->device_private);
   }
 
   /* get the current device pointer */
-  const element_type* current_device_ptr() const {
+  const element_type* owner_device_ptr() const {
     assert(is_valid());
     return static_cast<element_type*>(m_data->device_copies[m_data->owner_device]->device_private);
   }

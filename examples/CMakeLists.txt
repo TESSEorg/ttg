@@ -11,6 +11,12 @@ if (TARGET tiledarray)
     # block-sparse needs BTAS ... it's always provided by TA
     # since only need to use matrices, limit BTAS_TARGET_MAX_INDEX_RANK to 2
     add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2)
+
+    add_ttg_executable(testing_dpotrf potrf/testing_dpotrf.cc LINK_LIBRARIES tiledarray lapackpp)
+    add_ttg_executable(testing_dtrtri potrf/testing_dtrtri.cc LINK_LIBRARIES tiledarray lapackpp)
+    add_ttg_executable(testing_dlauum potrf/testing_dlauum.cc LINK_LIBRARIES tiledarray lapackpp)
+    add_ttg_executable(testing_dpoinv potrf/testing_dpoinv.cc LINK_LIBRARIES tiledarray lapackpp)
+
     if (TARGET CUDA::cublas)
       add_ttg_executable(bspmm-cuda spmm/spmm_cuda.cc
                          LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost CUDA::cublas
@@ -20,17 +26,18 @@ if (TARGET tiledarray)
       if (TARGET CUDA::cusolver)
         add_ttg_executable(testing_dpotrf_cuda potrf/testing_dpotrf.cc
                           LINK_LIBRARIES lapackpp tiledarray CUDA::cublas CUDA::cusolver
-                          COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2;TTG_ENABLE_CUDA=1
+                          COMPILE_DEFINITIONS TTG_ENABLE_CUDA=1 #;DEBUG_TILES_VALUES=1
                           RUNTIMES "parsec")
       endif(TARGET CUDA::cusolver)
     elseif (TARGET roc::hipblas)
       add_ttg_executable(bspmm-hip spmm/spmm_cuda.cc
-                        LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost roc::hipblas
-                        COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
-                        RUNTIMES "parsec")
+                          LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost roc::hipblas
+                          COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
+                          RUNTIMES "parsec")
       if (TARGET roc::hipsolver)
         add_ttg_executable(testing_dpotrf_hip potrf/testing_dpotrf.cc
                            LINK_LIBRARIES lapackpp tiledarray roc::hipblas roc::hipsolver
+                           COMPILE_DEFINITIONS TTG_ENABLE_HIP=1;DEBUG_TILES_VALUES=1
                            RUNTIMES "parsec")
       endif(TARGET roc::hipsolver)
     endif()
@@ -54,11 +61,6 @@ add_ttg_executable(wavefront-pull wavefront/wavefront-pull.cc LINK_LIBRARIES MAD
 add_ttg_executable(fw-apsp floyd-warshall/floyd_warshall.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
 add_ttg_executable(helloworld helloworld/helloworld.cpp)
 add_ttg_executable(simplegenerator simplegenerator/simplegenerator.cc RUNTIMES "mad")
-
-add_ttg_executable(testing_dpotrf potrf/testing_dpotrf.cc LINK_LIBRARIES lapackpp)
-add_ttg_executable(testing_dtrtri potrf/testing_dtrtri.cc LINK_LIBRARIES lapackpp)
-add_ttg_executable(testing_dlauum potrf/testing_dlauum.cc LINK_LIBRARIES lapackpp)
-add_ttg_executable(testing_dpoinv potrf/testing_dpoinv.cc LINK_LIBRARIES lapackpp)
 
 add_ttg_executable(device_mock device_mock/device_mock.cc LINK_LIBRARIES MADworld)
 

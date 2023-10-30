@@ -21,6 +21,18 @@ enum class ExecutionSpace {
   Invalid
 };
 
+namespace detail {
+  inline const char *execution_space_name(ExecutionSpace space) noexcept {
+    switch (space) {
+      case ExecutionSpace::Host: return "Host";
+      case ExecutionSpace::CUDA: return "CUDA";
+      case ExecutionSpace::HIP: return "HIP";
+      case ExecutionSpace::Invalid: return "INVALID";
+      default: return "UNKNOWN";
+    }
+  }
+} // namespace detail
+
 };
 
 #endif //TTG_EXECUTION_H

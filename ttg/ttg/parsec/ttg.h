@@ -1345,6 +1345,8 @@ namespace ttg_parsec {
       /* Here we call back into the coroutine again after the transfers have completed */
       static_op<Space>(&task->parsec_task);
 
+      ttg::device::detail::reset_current();
+
       /* we will come back into this function once the kernel and transfers are done */
       int rc = PARSEC_HOOK_RETURN_DONE;
       if (nullptr != task->suspended_task_address) {
