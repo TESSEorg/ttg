@@ -133,7 +133,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
    * set by application and is not computed automatically. */
   T norm() const {
     if (!_norm) _norm = blas::nrm2(size(), data(), 1);
-    return _norm;
+    return _norm.value();
   }
 
   void set_norm(T norm) {

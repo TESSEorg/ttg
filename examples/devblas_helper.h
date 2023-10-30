@@ -99,7 +99,7 @@ inline const hipblasHandle_t& hipblas_handle(T _ = 0) {
     device = d;
   }
 
-  cudaStream_t stream = ttg::device::current_stream();
+  hipStream_t stream = ttg::device::current_stream();
 
   map_type::iterator it;
   if ((it = handles.find({device, stream})) == handles.end()){
@@ -108,7 +108,7 @@ inline const hipblasHandle_t& hipblas_handle(T _ = 0) {
     if (HIPBLAS_STATUS_SUCCESS != status) {
       throw std::runtime_error("hipblasCreate failed");
     }
-    hipblasStatus_t status = hipblasSetStream(handle, stream);
+    status = hipblasSetStream(handle, stream);
     if (HIPBLAS_STATUS_SUCCESS != status) {
       throw std::runtime_error("hipblasSetStream failed");
     }
@@ -131,7 +131,7 @@ inline const hipsolverDnHandle_t& hipsolver_handle(T _ = 0) {
     device = d;
   }
 
-  cudaStream_t stream = ttg::device::current_stream();
+  hipStream_t stream = ttg::device::current_stream();
 
   std::map<int, hipsolverDnHandle_t>::iterator it;
   if ((it = handles.find({device, stream})) == handles.end()){
@@ -140,7 +140,7 @@ inline const hipsolverDnHandle_t& hipsolver_handle(T _ = 0) {
     if (HIPSOLVER_STATUS_SUCCESS != status) {
       throw std::runtime_error("hipsolverCreate failed");
     }
-    hipsolverStatus_t status = hipsolverDnSetStream(handle, stream);
+    status = hipsolverDnSetStream(handle, stream);
     if (HIPSOLVER_STATUS_SUCCESS != status) {
       throw std::runtime_error("hipsolverSetStream failed");
     }
