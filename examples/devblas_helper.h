@@ -133,7 +133,7 @@ inline const hipsolverDnHandle_t& hipsolver_handle(T _ = 0) {
 
   hipStream_t stream = ttg::device::current_stream();
 
-  std::map<int, hipsolverDnHandle_t>::iterator it;
+  map_type::iterator it;
   if ((it = handles.find({device, stream})) == handles.end()){
     hipsolverDnHandle_t handle;
     auto status = hipsolverDnCreate(&handle);
