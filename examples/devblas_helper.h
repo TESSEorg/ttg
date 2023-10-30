@@ -34,7 +34,7 @@ inline const cublasHandle_t& cublas_handle(T _ = 0) {
       std::cerr << "cublasCreate_v2 failed: " << status << std::endl;
       throw std::runtime_error("cublasCreate_v2 failed");
     }
-    status = cublasSetStream_v2(handle, ttg::device::current_stream());
+    status = cublasSetStream_v2(handle, stream);
     if (CUBLAS_STATUS_SUCCESS != status) {
       std::cerr << "cublasSetStream_v2 failed: " << status << std::endl;
       throw std::runtime_error("cublasSetStream_v2 failed");
@@ -61,8 +61,6 @@ inline const cusolverDnHandle_t& cusolver_handle(T _ = 0) {
   map_type::iterator it;
   if ((it = handles.find({device, stream})) == handles.end()){
     cusolverDnHandle_t handle;
-    std::cout << "Creating cusolver handle " << handle << " for device " << device << " stream " << stream << std::endl;
-
     auto status = cusolverDnCreate(&handle);
     if (CUSOLVER_STATUS_SUCCESS != status) {
       std::cerr << "cusolverDnCreate failed: " << status << std::endl;
@@ -76,8 +74,6 @@ inline const cusolverDnHandle_t& cusolver_handle(T _ = 0) {
 
     auto [iterator, success] = handles.insert({{device, stream}, handle});
     it = iterator;
-  } else {
-    std::cout << "Found cusolver handle " << it->second << " for device " << device << " stream " << stream << std::endl;
   }
 
   return it->second;
@@ -93,45 +89,63 @@ inline const cusolverDnHandle_t& cusolver_handle(T _ = 0) {
 /// \brief Returns the rocBLAS handle to be used for launching rocBLAS kernels from the current thread
 /// \return the rocBLAS handle for the current thread
 template<typename T = int>
-const hipblasHandle_t& hipblas_handle(T _ = 0) {
-  static thread_local std::map<int, hipblasHandle_t> handles;
-  int device = ttg::device::current_device();
-  std::map<int, hipblasHandle_t>::iterator it;
-  if ((it = handles.find(device)) == handles.end()){
+inline const hipblasHandle_t& hipblas_handle(T _ = 0) {
+  using map_type = std::map<std::pair<int, hipStream_t>, hipblasHandle_t>;
+  static thread_local map_type handles;
+
+  auto d = ttg::device::current_device();
+  int device = 0; // assume 0 if we don't have a device
+  if (d.is_device()) {
+    device = d;
+  }
+
+  cudaStream_t stream = ttg::device::current_stream();
+
+  map_type::iterator it;
+  if ((it = handles.find({device, stream})) == handles.end()){
     hipblasHandle_t handle;
     auto status = hipblasCreate(&handle);
     if (HIPBLAS_STATUS_SUCCESS != status) {
       throw std::runtime_error("hipblasCreate failed");
     }
-    auto [iterator, success] = handles.insert({device, handle});
+    hipblasStatus_t status = hipblasSetStream(handle, stream);
+    if (HIPBLAS_STATUS_SUCCESS != status) {
+      throw std::runtime_error("hipblasSetStream failed");
+    }
+    auto [iterator, success] = handles.insert({{device, stream}, handle});
     it = iterator;
   }
-  hipblasStatus_t status = hipblasSetStream(it->second, ttg::device::current_stream());
-  if (HIPBLAS_STATUS_SUCCESS != status) {
-    throw std::runtime_error("hipblasSetStream failed");
-  }
+
   return it->second;
 }
 
 /// \brief Returns the hipsolver handle to be used for launching rocBLAS kernels from the current thread
 /// \return the hipsolver handle for the current thread
 template<typename T = int>
-const hipsolverDnHandle_t& hipsolver_handle(T _ = 0) {
-  static thread_local std::map<int, hipsolverDnHandle_t> handles;
-  int device = ttg::device::current_device();
+inline const hipsolverDnHandle_t& hipsolver_handle(T _ = 0) {
+  using map_type = std::map<std::pair<int, hipStream_t>, hipsolverDnHandle_t>;
+  static thread_local map_type handles;
+  auto d = ttg::device::current_device();
+  int device = 0; // assume 0 if we don't have a device
+  if (d.is_device()) {
+    device = d;
+  }
+
+  cudaStream_t stream = ttg::device::current_stream();
+
   std::map<int, hipsolverDnHandle_t>::iterator it;
-  if ((it = handles.find(device)) == handles.end()){
+  if ((it = handles.find({device, stream})) == handles.end()){
     hipsolverDnHandle_t handle;
     auto status = hipsolverDnCreate(&handle);
     if (HIPSOLVER_STATUS_SUCCESS != status) {
       throw std::runtime_error("hipsolverCreate failed");
     }
-    auto [iterator, success] = handles.insert({device, handle});
+    hipsolverStatus_t status = hipsolverDnSetStream(handle, stream);
+    if (HIPSOLVER_STATUS_SUCCESS != status) {
+      throw std::runtime_error("hipsolverSetStream failed");
+    }
+    auto [iterator, success] = handles.insert({{device, stream}, handle});
     it = iterator;
-  }
-  hipsolverStatus_t status = hipsolverDnSetStream(it->second, ttg::device::current_stream());
-  if (HIPSOLVER_STATUS_SUCCESS != status) {
-    throw std::runtime_error("hipsolverSetStream failed");
   }
   return it->second;
 }
