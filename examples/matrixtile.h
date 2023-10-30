@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <memory>
+#include <optional>
 
 #include <ttg/serialization/splitmd_data_descriptor.h>
 
@@ -20,7 +21,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
   buffer_t _buffer;
   int _rows = 0, _cols = 0, _lda = 0;
 #ifdef DEBUG_TILES_VALUES
-  T _norm = 0.0;
+  mutable std::optional<T> _norm;
 #endif // DEBUG_TILES_VALUES
 
   // (Re)allocate the tile memory
@@ -59,9 +60,6 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
   , _rows(rows)
   , _cols(cols)
   , _lda(lda)
-#ifdef DEBUG_TILES_VALUES
-  , _norm(blas::nrm2(cols*rows, data, 1))
-#endif // DEBUG_TILES_VALUES
   { }
 
   MatrixTile(MatrixTile<T, Allocator>&& other) = default;
@@ -134,6 +132,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
   /* Only available if debugging is enabled. Norm must be
    * set by application and is not computed automatically. */
   T norm() const {
+    if (!_norm) _norm = blas::nrm2(size(), data(), 1);
     return _norm;
   }
 
