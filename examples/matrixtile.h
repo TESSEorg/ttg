@@ -9,9 +9,9 @@
 template <typename T>
 class MatrixTile {
  public:
-  using metadata_t = typename std::tuple<int, int, int>;
+  using metadata_t = std::tuple<int, int, int>;
 
-  using pointer_t = typename std::shared_ptr<T>;
+  using pointer_t = std::shared_ptr<T[]>;
 
  private:
   pointer_t _data;
@@ -19,8 +19,7 @@ class MatrixTile {
 
   // (Re)allocate the tile memory
   void realloc() {
-    // std::cout << "Reallocating new tile" << std::endl;
-    _data = std::shared_ptr<T>(new T[_lda * _cols], [](T* p) { delete[] p; });
+    _data = std::shared_ptr<T[]>(new T[_lda * _cols]);
   }
 
  public:
