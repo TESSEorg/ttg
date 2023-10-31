@@ -636,20 +636,20 @@ namespace potrf {
   auto make_dispatcher(ttg::Edge<Key2, MatrixTile<T>>& input, ttg::Edge<Key1, MatrixTile<T>>& to_potrf,
                        ttg::Edge<Key2, MatrixTile<T>>& to_trsm, ttg::Edge<Key2, MatrixTile<T>>& to_syrk,
                        ttg::Edge<Key3, MatrixTile<T>>& to_gemm) {
-    auto f = [=](const Key2& key, MatrixTile<T>&& tile,
+    auto f = [=](const Key2& key, const MatrixTile<T>& tile,
                  std::tuple<ttg::Out<Key1, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>,
                             ttg::Out<Key3, MatrixTile<T>>>& out) {
       if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ")");
       if (0 == key[0] && 0 == key[1]) {
         // First element goes to POTRF
         if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to POTRF(", Key1{key[0]}, ")");
-        ttg::send<0>(Key1{key[0]}, std::move(tile), out);
+        ttg::send<0>(Key1{key[0]}, tile, out);
         return;
       }
       if (key[0] == key[1]) {
         // Other diagonal elements go to SYRK
         if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to SYRK(", Key2{0, key[0]}, ")");
-        ttg::send<2>(Key2{0, key[0]}, std::move(tile), out);
+        ttg::send<2>(Key2{0, key[0]}, tile, out);
         return;
       }
       // We only consider the lower triangular
@@ -657,12 +657,12 @@ namespace potrf {
       if (0 == key[1]) {
         // First column goes to TRSM
         if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to TRSM(", key, ")");
-        ttg::send<1>(key, std::move(tile), out);
+        ttg::send<1>(key, tile, out);
         return;
       }
       // Rest goes to GEMM
       if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to GEMM(", Key3{key[0], key[1], 0}, ")");
-      ttg::send<3>(Key3{key[0], key[1], 0}, std::move(tile), out);
+      ttg::send<3>(Key3{key[0], key[1], 0}, tile, out);
     };
 
     return ttg::make_tt(f, ttg::edges(input), ttg::edges(to_potrf, to_trsm, to_syrk, to_gemm), "POTRF Dispatch",
