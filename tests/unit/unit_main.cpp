@@ -26,7 +26,11 @@ int main(int argc, char** argv) {
 #ifdef TTG_EXECUTABLE
   // ttg::launch_lldb();
   // ttg::launch_gdb();
+  assert(!ttg::initialized());
+  assert(!ttg::finalized());
   ttg::initialize(argc, argv);
+  assert(ttg::initialized());
+  assert(!ttg::finalized());
   ttg::diagnose_off();  // turn off diagnostics
 
   const auto nranks = ttg::default_execution_context().size();
@@ -41,6 +45,8 @@ int main(int argc, char** argv) {
 #ifdef TTG_EXECUTABLE
   ttg::fence();
   ttg::finalize();
+  assert(!ttg::initialized());
+  assert(ttg::finalized());
 #endif
 
   return result;
