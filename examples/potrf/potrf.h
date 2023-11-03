@@ -55,7 +55,7 @@ namespace potrf {
 #if defined(TTG_HAVE_CUDA)
     //std::cout << "POTRF A " << A.buffer().device_ptr_on(device) << " device " << device << " cols " << A.cols() << " lda " << A.lda() << " Lwork " << Lwork << " WS " << workspace << " devInfo " << devInfo << std::endl;
     auto handle = cusolver_handle();
-    std::cout << "POTRF handle  " << handle << " device " << device << " stream " << ttg::device::current_stream() << std::endl;
+    //std::cout << "POTRF handle  " << handle << " device " << device << " stream " << ttg::device::current_stream() << std::endl;
     cusolverDnDpotrf(handle,
                       CUBLAS_FILL_MODE_LOWER, A.cols(),
                       A.buffer().device_ptr_on(device), A.lda(),
@@ -73,7 +73,7 @@ namespace potrf {
   static void device_norm(const MatrixTile<double> &A, double *norm) {
     auto size = A.size();
     auto buffer = A.buffer().current_device_ptr();
-    std::cout << "device_norm ptr " << buffer << " device " << ttg::device::current_device() << std::endl;
+    //std::cout << "device_norm ptr " << buffer << " device " << ttg::device::current_device() << std::endl;
 #if defined(TTG_HAVE_CUDA)
     auto handle = cublas_handle();
     //double n = 1.0;
@@ -145,8 +145,7 @@ namespace potrf {
 #endif // DEBUG_TILES_VALUES
 
       int device = ttg::device::current_device();
-      std::cout << "POTRF [" << K << "] tile kk "
-                << tile_kk.buffer().device_ptr_on(device) << std::endl;
+      //std::cout << "POTRF [" << K << "] on " << device << std::endl;
 
 
       //std::cout << "devWS host ptr " << hostWS << " device ptr " << devWS.device_ptr() << " size " <<  devWS.size()
@@ -162,7 +161,7 @@ namespace potrf {
       /* wait for the kernel to complete */
       co_await ttg::wait_kernel(devInfo);
       // check that we got the input tile we expected
-     assert(check_norm(tile_kk.norm(), norms[0]));
+      assert(check_norm(tile_kk.norm(), norms[0]));
       // set the new norm
       tile_kk.set_norm(norms[1]);
 #else
@@ -193,14 +192,14 @@ namespace potrf {
 
       if (ttg::tracing()) ttg::print("POTRF(", key, ")");
 #if defined(DEBUG_TILES_VALUES)
-      std::cout << "Before POTRF(" << key << "), A(" << K << ", " << K << ") is " << tile_kk;
+      //std::cout << "Before POTRF(" << key << "), A(" << K << ", " << K << ") is " << tile_kk;
 #endif
 
       auto info = lapack::potrf(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.lda());
       assert(info == 0);
 
 #if defined(DEBUG_TILES_VALUES)
-      std::cout << "After POTRF(" << key << "), A(" << K << ", " << K << ") is " << tile_kk << std::endl;
+      //std::cout << "After POTRF(" << key << "), A(" << K << ", " << K << ") is " << tile_kk << std::endl;
 #endif
 
       /* send the tile to outputs */
@@ -284,9 +283,7 @@ namespace potrf {
 #endif // DEBUG_TILES_VALUES
 
 
-      std::cout << "TRSM [" << K << ", " << M << "] tile mk "
-                << tile_mk.buffer().device_ptr_on(device)
-                << " tile kk " << tile_kk.buffer().device_ptr_on(device) << std::endl;
+      //std::cout << "TRSM [" << K << ", " << M << "] on " << device << std::endl;
 
 #if defined(TTG_HAVE_CUDA)
       cublasDtrsm(cublas_handle(),
@@ -338,15 +335,15 @@ namespace potrf {
 
       if (ttg::tracing()) ttg::print("TRSM(", key, ")");
 #if defined(DEBUG_TILES_VALUES)
-      std::cout << "Before TRSM(" << key << "), A(" << K << ", " << K << ") is " << tile_kk << " and A(" << M << ", "
-                << K << ") is " << tile_mk;
+      //std::cout << "Before TRSM(" << key << "), A(" << K << ", " << K << ") is " << tile_kk << " and A(" << M << ", "
+      //          << K << ") is " << tile_mk;
 #endif
 
       blas::trsm(blas::Layout::ColMajor, blas::Side::Right, lapack::Uplo::Lower, blas::Op::Trans, blas::Diag::NonUnit,
                  mb, nb, 1.0, tile_kk.data(), tile_kk.lda(), tile_mk.data(), tile_mk.lda());
 
 #if defined(DEBUG_TILES_VALUES)
-      std::cout << "After TRSM(" << key << "), A(" << K << ", " << K << ") is " << tile_mk << std::endl;
+      //std::cout << "After TRSM(" << key << "), A(" << K << ", " << K << ") is " << tile_mk << std::endl;
 #endif
 
       std::vector<Key3> keylist_row;
@@ -416,9 +413,7 @@ namespace potrf {
       double alpha = -1.0;
       double beta  =  1.0;
 
-      std::cout << "SYRK [" << K << ", " << M << "] tile mk "
-                << tile_mk.buffer().device_ptr_on(device)
-                << " tile kk " << tile_kk.buffer().device_ptr_on(device) << std::endl;
+      //std::cout << "SYRK [" << K << ", " << M << "] on " << device << std::endl;
 
 #if defined(TTG_HAVE_CUDA)
       cublasDsyrk(cublas_handle(),
@@ -475,15 +470,15 @@ namespace potrf {
 
       if (ttg::tracing()) ttg::print("SYRK(", key, ")");
 #if defined(DEBUG_TILES_VALUES)
-      std::cout << "Before SYRK(" << key << "), A(" << M << ", " << K << ") is " << tile_mk << " and A(" << K << ", "
-                << K << ") is " << tile_kk;
+      //std::cout << "Before SYRK(" << key << "), A(" << M << ", " << K << ") is " << tile_mk << " and A(" << K << ", "
+      //          << K << ") is " << tile_kk;
 #endif
 
       blas::syrk(blas::Layout::ColMajor, lapack::Uplo::Lower, blas::Op::NoTrans, mb, nb, -1.0, tile_mk.data(),
                  tile_mk.lda(), 1.0, tile_kk.data(), tile_kk.lda());
 
 #if defined(DEBUG_TILES_VALUES)
-      std::cout << "After SYRK(" << key << "), A(" << K << ", " << K << ") is " << tile_kk << std::endl;
+      //std::cout << "After SYRK(" << key << "), A(" << K << ", " << K << ") is " << tile_kk << std::endl;
 #endif
 
       if (M == K + 1) {
@@ -523,9 +518,9 @@ namespace potrf {
       assert(tile_nk.rows() == tile_mn.cols());
 
       if (ttg::tracing()) ttg::print("GEMM(", key, ")");
-#if defined(DEBUG_TILES_VALUES)
-      std::cout << "Before GEMM(" << key << "), A(" << M << ", " << K << ") is " << tile_mk << " and A(" << K << ", "
-                << N << ") is " << tile_nk << " and A(" << M << ", " << N << ") is " << tile_mn;
+#if defined(DEBUG_TILES_VALUES) && 0
+      //std::cout << "Before GEMM(" << key << "), A(" << M << ", " << K << ") is " << tile_mk << " and A(" << K << ", "
+      //          << N << ") is " << tile_nk << " and A(" << M << ", " << N << ") is " << tile_mn;
 #endif
 
 #ifdef DEBUG_TILES_VALUES
@@ -604,8 +599,8 @@ namespace potrf {
 
       if (ttg::tracing()) ttg::print("GEMM(", key, ")");
 #if defined(DEBUG_TILES_VALUES)
-      std::cout << "Before GEMM(" << key << "), A(" << M << ", " << K << ") is " << tile_mk << " and A(" << K << ", "
-                << N << ") is " << tile_nk << " and A(" << M << ", " << N << ") is " << tile_mn;
+      //std::cout << "Before GEMM(" << key << "), A(" << M << ", " << K << ") is " << tile_mk << " and A(" << K << ", "
+      //          << N << ") is " << tile_nk << " and A(" << M << ", " << N << ") is " << tile_mn;
 #endif
 
       blas::gemm(blas::Layout::ColMajor, blas::Op::NoTrans, blas::Op::Trans, tile_mk.rows(), tile_nk.rows(),
@@ -613,7 +608,7 @@ namespace potrf {
                  tile_mn.data(), tile_mn.lda());
 
 #if defined(DEBUG_TILES_VALUES)
-      std::cout << "After GEMM(" << key << "), A(" << M << ", " << N << ") is " << tile_mn << std::endl;
+      //std::cout << "After GEMM(" << key << "), A(" << M << ", " << N << ") is " << tile_mn << std::endl;
 #endif
 
       if (N == K + 1) {

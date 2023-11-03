@@ -45,7 +45,8 @@ namespace ttg_parsec {
       MULTIPLE_READER   = 1 << 1,
       SINGLE_WRITER  = 1 << 2,
       MULTIPLE_WRITER   = 1 << 3,
-      MARKED_PUSHOUT = 1 << 4
+      IS_MODIFIED    = 1 << 4,
+      MARKED_PUSHOUT = 1 << 5
     };
 
     inline

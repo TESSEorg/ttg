@@ -716,7 +716,7 @@ namespace ttg_parsec {
 
     template<typename TT, std::size_t I>
     inline void transfer_ownership_impl(ttg_data_copy_t *copy, int device) {
-      if constexpr(!std::is_const_v<std::tuple_element_t<I, typename TT::input_args_type>>) {
+      if constexpr(!std::is_const_v<std::tuple_element_t<I, typename TT::input_values_tuple_type>>) {
         copy->transfer_ownership(PARSEC_FLOW_ACCESS_RW, device);
       }
     }
@@ -732,7 +732,7 @@ namespace ttg_parsec {
     inline parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
       parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
       if constexpr(std::tuple_size_v<typename TT::input_values_tuple_type> > 0) {
-        transfer_ownership<TT>(me, 0, std::index_sequence_for<typename TT::input_values_tuple_type>{});
+        transfer_ownership<TT>(me, 0, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
       }
       return me->template invoke_op<ttg::ExecutionSpace::Host>();
     }
@@ -1454,11 +1454,30 @@ namespace ttg_parsec {
       /* for now make sure we're waiting for transfers and the coro hasn't skipped this step */
       assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_TRANSFER);
 
+      /* set up a temporary task-class to correctly specify the flows */
+      parsec_task_class_t tc = *task->parsec_task.task_class;
+
+      tc.name = task->parsec_task.task_class->name;
+      // input flows are set up during register_device_memory as part of the first invocation above
+      for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
+        tc.in[i]  = gpu_task->flow[i];
+        tc.out[i] = gpu_task->flow[i];
+      }
+      tc.nb_flows = MAX_PARAM_COUNT;
+
+      /* swap in the new task class */
+      const parsec_task_class_t* tmp = task->parsec_task.task_class;
+      *const_cast<parsec_task_class_t**>(&task->parsec_task.task_class) = &tc;
+
       /* TODO: is this the right place to set the mask? */
       task->parsec_task.chore_mask = PARSEC_DEV_ALL;
       /* get a device and come back if we need another one */
       int64_t task_load = 1;
       dev_index = parsec_get_best_device(parsec_task, &task_load);
+
+      /* swap back the original task class */
+      task->parsec_task.task_class = tmp;
+
       gpu_task->load = task_load;
       assert(dev_index >= 0);
       if (dev_index < 2) {
@@ -3157,6 +3176,12 @@ ttg::abort();  // should not happen
       }
 
       if constexpr (value_is_const) {
+        if (caller->data_flags & detail::ttg_parsec_data_flags::IS_MODIFIED) {
+          /* The data has been modified previously. PaRSEC requires us to pushout
+           * data if we transition from a writer to one or more readers. */
+          need_pushout = true;
+        }
+
         /* check for multiple readers */
         if (caller->data_flags & detail::ttg_parsec_data_flags::SINGLE_READER) {
           caller->data_flags |= detail::ttg_parsec_data_flags::MULTIPLE_READER;
@@ -3341,6 +3366,7 @@ ttg::abort();  // should not happen
       junk[0]++;
     }
 
+#if 0
     template <typename input_terminals_tupleT, std::size_t... IS, typename flowsT>
     void _initialize_flows(std::index_sequence<IS...>, flowsT &&flows) {
       int junk[] = {0,
@@ -3356,6 +3382,7 @@ ttg::abort();  // should not happen
       _initialize_flows<input_terminals_tupleT>(
           std::make_index_sequence<std::tuple_size<input_terminals_tupleT>::value>{}, flows);
     }
+#endif // 0
 
     void fence() override { ttg::default_execution_context().impl().fence(); }
 
@@ -3446,15 +3473,39 @@ ttg::abort();  // should not happen
 
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
 
+    template<std::size_t I>
+    inline static void increment_data_version_impl(task_t *task) {
+      if constexpr (!std::is_const_v<std::tuple_element_t<I, typename TT::input_values_tuple_type>>) {
+        if (task->copies[I] != nullptr){
+          task->copies[I]->inc_current_version();
+        }
+      }
+    }
+
+    template<std::size_t... Is>
+    inline static void increment_data_versions(task_t *task, std::index_sequence<Is...>) {
+      /* increment version of each mutable data */
+      int junk[] = {0, (increment_data_version_impl<Is>(task), 0)...};
+      junk[0]++;
+    }
+
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *parsec_task) {
 
       //std::cout << "complete_task_and_release: task " << parsec_task << std::endl;
 
       task_t *task = (task_t*)parsec_task;
 
+      if constexpr (derived_has_device_op()) {
+        assert(nullptr != task->suspended_task_address);
+      }
+
       /* if we still have a coroutine handle we invoke it one more time to get the sends/broadcasts */
       if (task->suspended_task_address) {
 #ifdef TTG_HAVE_DEVICE
+        /* increment versions of all data we might have modified
+         * this must happen before we issue the sends */
+        //increment_data_versions(task, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
+
         // get the device task from the coroutine handle
         auto dev_task = ttg::device_task_handle_type::from_address(task->suspended_task_address);
 
@@ -4085,7 +4136,9 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
       /* the value was potentially changed, so increment version */
       copy->inc_current_version();
     }
-    caller->data_flags = ttg_parsec::detail::ttg_parsec_data_flags::NONE;
+    /* We're coming from a writer so mark the data as modified.
+     * That way we can force a pushout in prepare_send if we move to read-only tasks (needed by PaRSEC). */
+    caller->data_flags = ttg_parsec::detail::ttg_parsec_data_flags::IS_MODIFIED;
     return *value_ptr;
   }
 
