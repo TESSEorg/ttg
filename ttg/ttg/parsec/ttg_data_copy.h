@@ -15,7 +15,22 @@ namespace ttg_parsec {
     * to facilitate the ref-counting of the data copy.
     * TODO: create abstractions for all fields in parsec_data_copy_t that we access.
     */
-    struct ttg_data_copy_t : public parsec_data_copy_t {
+
+    /* fwd decl */
+    struct ttg_data_copy_t;
+
+    /* special type: stores a pointer to the ttg_data_copy_t. This is necessary
+     * because ttg_data_copy_t has virtual functions so we cannot cast from parsec_data_copy_t
+     * to ttg_data_copy_t (offsetof is not supported for virtual classes).
+     * The self pointer is a back-pointer to the ttg_data_copy_t. */
+    struct ttg_data_copy_self_t : public parsec_data_copy_t {
+      ttg_data_copy_t *self;
+      ttg_data_copy_self_t(ttg_data_copy_t* dc)
+      : self(dc)
+      { }
+    };
+
+    struct ttg_data_copy_t : public ttg_data_copy_self_t {
 #if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
       int64_t size;
       int64_t uid;
@@ -73,6 +88,7 @@ namespace ttg_parsec {
       }
 
       ttg_data_copy_t()
+      : ttg_data_copy_self_t(this)
       {
         /* TODO: do we need this construction? */
         PARSEC_OBJ_CONSTRUCT(this, parsec_data_copy_t);
