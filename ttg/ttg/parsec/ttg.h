@@ -760,6 +760,16 @@ namespace ttg_parsec {
       }
     }
 
+    template<typename TT>
+    inline parsec_hook_return_t hook_level_zero(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+      if constexpr(TT::derived_has_level_zero_op()) {
+        parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
+        return me->template invoke_op<ttg::ExecutionSpace::L0>();
+      } else {
+        throw std::runtime_error("PaRSEC HIP hook invoked on a TT that does not support HIP operations!");
+      }
+    }
+
     template <typename KeyT, typename ActivationCallbackT>
     class rma_delayed_activate {
       std::vector<KeyT> _keylist;
@@ -1129,9 +1139,18 @@ namespace ttg_parsec {
       }
     }
 
+    /// @return true if derivedT::have_hip_op exists and is defined to true
+    static constexpr bool derived_has_level_zero_op() {
+      if constexpr (ttg::meta::is_detected_v<have_level_zero_op_non_type_t, derivedT>) {
+        return derivedT::have_level_zero_op;
+      } else {
+        return false;
+      }
+    }
+
     /// @return true if the TT supports device execution
     static constexpr bool derived_has_device_op() {
-      return (derived_has_cuda_op() || derived_has_hip_op());
+      return (derived_has_cuda_op() || derived_has_hip_op() || derived_has_level_zero_op());
     }
 
     using ttT = TT;
@@ -3239,6 +3258,8 @@ ttg::abort();  // should not happen
           device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::CUDA);
         } else if constexpr (derived_has_hip_op()) {
           device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::HIP);
+        } else if constexpr (derived_has_level_zero_op()) {
+          device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::L0);
         }
         /* if MPI supports the device we don't care whether we have remote peers
          * because we can send from the device directly */
@@ -3641,6 +3662,15 @@ ttg::abort();  // should not happen
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_HIP;
         ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_hip<TT>;
+
+        ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
+        ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
+        ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
+      } else if (derived_has_level_zero_op()) {
+        self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
+        ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_LEVEL_ZERO;
+        ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
+        ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_level_zero<TT>;
 
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;

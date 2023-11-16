@@ -167,6 +167,7 @@ class CallableWrapTTArgs
 public:
   static constexpr bool have_cuda_op = (space == ttg::ExecutionSpace::CUDA);
   static constexpr bool have_hip_op  = (space == ttg::ExecutionSpace::HIP);
+  static constexpr bool have_level_zero_op = (space == ttg::ExecutionSpace::L0);
 
 protected:
 
