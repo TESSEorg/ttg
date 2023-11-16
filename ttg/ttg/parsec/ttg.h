@@ -1113,6 +1113,9 @@ namespace ttg_parsec {
     template <typename T>
     using have_hip_op_non_type_t = decltype(T::have_hip_op);
 
+    template <typename T>
+    using have_level_zero_op_non_type_t = decltype(T::have_hip_op);
+
     bool alive = true;
 
     static constexpr int numinedges = std::tuple_size_v<input_tuple_type>;     // number of input edges
