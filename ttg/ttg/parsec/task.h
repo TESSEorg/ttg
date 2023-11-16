@@ -14,7 +14,7 @@ namespace ttg_parsec {
       parsec_gpu_task_t* gpu_task = nullptr;
       parsec_flow_t* flows = nullptr;
       parsec_gpu_exec_stream_t* stream = nullptr;
-      parsec_device_module_t* device = nullptr;
+      parsec_device_gpu_module_t* device = nullptr;
     };
 
     template<bool SupportDevice>

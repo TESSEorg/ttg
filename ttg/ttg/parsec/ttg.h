@@ -1491,7 +1491,7 @@ namespace ttg_parsec {
           return PARSEC_HOOK_RETURN_NEXT; /* Fall back */
       }
 
-      parsec_device_module_t *device = parsec_mca_device_get(dev_index);
+      parsec_device_gpu_module_t *device = (parsec_device_gpu_module_t*)parsec_mca_device_get(dev_index);
       assert(NULL != device);
 
       task->dev_ptr->device = device;
