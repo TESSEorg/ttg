@@ -92,6 +92,9 @@
 #ifdef PARSEC_HAVE_DEV_HIP_SUPPORT
 #include <parsec/mca/device/hip/device_hip.h>
 #endif // PARSEC_HAVE_DEV_HIP_SUPPORT
+#ifdef PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT
+#include <parsec/mca/device/level_zero/device_level_zero.h>
+#endif //PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT
 
 #include <parsec/mca/device/device_gpu.h>
 #if defined(PARSEC_PROF_TRACE)
