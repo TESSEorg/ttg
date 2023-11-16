@@ -60,6 +60,7 @@ namespace ttg::device {
 } // namespace ttg::device
 
 namespace std {
+  inline
   std::ostream& operator<<(std::ostream& os, ttg::device::Device device) {
     os << ttg::detail::execution_space_name(device.space());
     if (device.is_device()) {
@@ -77,12 +78,12 @@ namespace ttg::device {
     inline thread_local ttg::device::Device current_device_ts = {};
     inline thread_local cudaStream_t current_stream_ts = 0; // default stream
 
-    void reset_current() {
+    inline void reset_current() {
       current_device_ts = {};
       current_stream_ts = 0;
     }
 
-    void set_current(int device, cudaStream_t stream) {
+    inline void set_current(int device, cudaStream_t stream) {
       current_device_ts = ttg::device::Device(device, ttg::ExecutionSpace::CUDA);
       current_stream_ts = stream;
     }
@@ -108,12 +109,12 @@ namespace ttg::device {
     inline thread_local ttg::device::Device current_device_ts = {};
     inline thread_local hipStream_t current_stream_ts = 0; // default stream
 
-    void reset_current() {
+    inline void reset_current() {
       current_device_ts = {};
       current_stream_ts = 0;
     }
 
-    void set_current(int device, hipStream_t stream) {
+    inline void set_current(int device, hipStream_t stream) {
       current_device_ts = ttg::device::Device(device, ttg::ExecutionSpace::HIP);
       current_stream_ts = stream;
     }
@@ -139,12 +140,13 @@ namespace ttg::device {
     inline thread_local ttg::device::Device current_device_ts = {};
     inline thread_local sycl::queue* current_stream_ts = nullptr; // default stream
 
-    void reset_current() {
+
+    inline void reset_current() {
       current_device_ts = {};
       current_stream_ts = nullptr;
     }
 
-    void set_current(int device, sycl::queue& stream) {
+    inline void set_current(int device, sycl::queue& stream) {
       current_device_ts = ttg::device::Device(device, ttg::ExecutionSpace::HIP);
       current_stream_ts = &stream;
     }
@@ -164,14 +166,12 @@ namespace ttg::device {
 #else
 
 namespace ttg::device {
-  inline
-  Device current_device() {
+  inline Device current_device() {
     return {};
   }
 
   template<ttg::ExecutionSpace Space = ttg::ExecutionSpace::Invalid>
-  inline
-  const void* current_stream() {
+  inline const void* current_stream() {
     static_assert(ttg::ExecutionSpace Space != ttg::ExecutionSpace::Invalid,
                   "TTG was built without any known device support so we cannot provide a current stream!");
     return nullptr;
