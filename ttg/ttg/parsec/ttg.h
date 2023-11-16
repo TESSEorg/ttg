@@ -1512,7 +1512,7 @@ namespace ttg_parsec {
 
       gpu_task->load = task_load;
       assert(dev_index >= 0);
-      if (dev_index < 2) {
+      if (dev_index < detail::first_device_id) {
           return PARSEC_HOOK_RETURN_NEXT; /* Fall back */
       }
 
@@ -1997,8 +1997,8 @@ ttg::abort();  // should not happen
             // TODO: first attempt at sending directly to the device
             parsec_gpu_data_copy_t* gpu_elem;
             gpu_elem = PARSEC_DATA_GET_COPY(master, gpu_device->super.device_index);
-            int i = 2; // 0: cpu, 1: recursive -> start with 2 (first accelerator)
-            int devid = 2;
+            int i = detail::first_device_id;ß
+            int devid = detail::first_device_id;
             while (i < parsec_nb_devices) {
               if (nullptr == gpu_elem) {
                 gpu_elem = PARSEC_OBJ_NEW(parsec_data_copy_t);
