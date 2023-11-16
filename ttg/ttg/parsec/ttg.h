@@ -1499,7 +1499,7 @@ namespace ttg_parsec {
 
       task->dev_ptr->device = device;
 
-      switch(device->type) {
+      switch(device->super.type) {
 
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
         case PARSEC_DEV_CUDA:
@@ -1508,7 +1508,7 @@ namespace ttg_parsec {
              *       task-class to determine the number of flows. */
             gpu_task->stage_in  = static_device_stage_in_hook;
             gpu_task->stage_out = parsec_default_gpu_stage_out;
-            return parsec_device_kernel_scheduler(device, es, gpu_task);
+            return parsec_device_kernel_scheduler(&device->super, es, gpu_task);
           }
           break;
 #endif
@@ -1517,7 +1517,7 @@ namespace ttg_parsec {
           if constexpr (Space == ttg::ExecutionSpace::HIP) {
             gpu_task->stage_in  = static_device_stage_in_hook;
             gpu_task->stage_out = parsec_default_gpu_stage_out;
-            return parsec_device_kernel_scheduler(device, es, gpu_task);
+            return parsec_device_kernel_scheduler(&device->super, es, gpu_task);
           }
           break;
 #endif // PARSEC_HAVE_DEV_HIP_SUPPORT
@@ -1526,14 +1526,14 @@ namespace ttg_parsec {
           if constexpr (Space == ttg::ExecutionSpace::L0) {
             gpu_task->stage_in  = static_device_stage_in_hook;
             gpu_task->stage_out = parsec_default_gpu_stage_out;
-            return parsec_device_kernel_scheduler(device, es, gpu_task);
+            return parsec_device_kernel_scheduler(&device->super, es, gpu_task);
           }
           break;
 #endif // PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT
         default:
           break;
       }
-      ttg::print_error(task->tt->get_name(), " : received mismatching device type ", (int)device->type, " from PaRSEC");
+      ttg::print_error(task->tt->get_name(), " : received mismatching device type ", (int)device->super.type, " from PaRSEC");
       ttg::abort();
       return PARSEC_HOOK_RETURN_DONE; // will not be reacehed
     }
