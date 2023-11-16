@@ -1114,7 +1114,7 @@ namespace ttg_parsec {
     using have_hip_op_non_type_t = decltype(T::have_hip_op);
 
     template <typename T>
-    using have_level_zero_op_non_type_t = decltype(T::have_hip_op);
+    using have_level_zero_op_non_type_t = decltype(T::have_level_zero_op);
 
     bool alive = true;
 
