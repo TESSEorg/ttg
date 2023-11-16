@@ -17,6 +17,8 @@
 
 #cmakedefine TTG_HAVE_HIP
 
+#cmakedefine TTG_HAVE_LEVEL_ZERO
+
 #cmakedefine TTG_HAVE_HIPBLAS
 
 #cmakedefine TTG_HAVE_DEVICE
