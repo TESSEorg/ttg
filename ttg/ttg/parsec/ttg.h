@@ -1493,6 +1493,9 @@ namespace ttg_parsec {
 
       parsec_device_module_t *device = parsec_mca_device_get(dev_index);
       assert(NULL != device);
+
+      task->dev_ptr->device = device;
+
       switch(device->type) {
 
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)

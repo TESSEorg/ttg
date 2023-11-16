@@ -116,22 +116,13 @@ namespace ttg_parsec {
       parsec_data_t* data = detail::get_parsec_data(view);
       parsec_gpu_task_t *gpu_task = detail::parsec_ttg_caller->dev_ptr->gpu_task;
       parsec_gpu_exec_stream_t *stream = detail::parsec_ttg_caller->dev_ptr->stream;
-      /* enqueue the transfer into the compute stream to come back once the compute and transfer are complete */
 
-#if defined(TTG_HAVE_CUDART) && defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
-      //std::cout << "cudaMemcpyAsync of " << data->nb_elts << "B from " << data->device_copies[data->owner_device]->device_private << " device " << (int)data->owner_device << " to " << data->device_copies[0]->device_private << std::endl;
-      parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)stream;
-      cudaMemcpyAsync(data->device_copies[0]->device_private,
-                      data->device_copies[data->owner_device]->device_private,
-                      data->nb_elts, cudaMemcpyDeviceToHost, cuda_stream->cuda_stream);
-#elif defined(TTG_HAVE_HIP) && defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
-      parsec_hip_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)stream;
-      hipMemcpyAsync(data->device_copies[0]->device_private,
-                      data->device_copies[data->owner_device]->device_private,
-                      data->nb_elts, hipMemcpyDeviceToHost, hip_stream->hip_stream);
-#else
-      static_assert(DeviceAvail, "No device implementation detected!");
-#endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
+      /* enqueue the transfer into the compute stream to come back once the compute and transfer are complete */
+      parsec_device_gpu_module_t *device_module = detail::parsec_ttg_caller->dev_ptr->device;
+      device_module->memcpy_async(device_module, stream,
+                                  data->device_copies[0]->device_private,
+                                  data->device_copies[data->owner_device]->device_private,
+                                  data->nb_elts, parsec_device_gpu_transfer_direction_d2h);
 
       if constexpr (sizeof...(Is) > 0) {
         // recursion

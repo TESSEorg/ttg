@@ -13,6 +13,8 @@ namespace ttg::device {
   constexpr ttg::ExecutionSpace available_execution_space = ttg::ExecutionSpace::HIP;
 #elif defined(TTG_HAVE_LEVEL_ZERO)
   constexpr ttg::ExecutionSpace available_execution_space = ttg::ExecutionSpace::L0;
+#else
+  constexpr ttg::ExecutionSpace available_execution_space = ttg::ExecutionSpace::Invalid;
 #endif
   class Device {
     int m_id = 0;
@@ -159,5 +161,20 @@ namespace ttg::device {
   }
 } // namespace ttg
 
+#else
 
+namespace ttg::device {
+  inline
+  Device current_device() {
+    return {};
+  }
+
+  template<ttg::ExecutionSpace Space = ttg::ExecutionSpace::Invalid>
+  inline
+  const void* current_stream() {
+    static_assert(ttg::ExecutionSpace Space != ttg::ExecutionSpace::Invalid,
+                  "TTG was built without any known device support so we cannot provide a current stream!");
+    return nullptr;
+  }
+} // namespace ttg
 #endif // defined(TTG_HAVE_HIP)
