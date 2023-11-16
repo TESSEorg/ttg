@@ -156,7 +156,7 @@ namespace ttg::device {
   }
 
   inline
-  const sycl::queue& current_stream() {
+  sycl::queue& current_stream() {
     return *detail::current_stream_ts;
   }
 } // namespace ttg
