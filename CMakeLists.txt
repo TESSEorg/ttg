@@ -145,6 +145,8 @@ if (TTG_ENABLE_LEVEL_ZERO)
       set(TTG_HAVE_DPCPP TRUE CACHE BOOL "True if TTG knows how to compile DPCPP code")
       message(STATUS "Found Intel level-zero ${LEVEL_ZERO_VERSION} in -I${LEVEL_ZERO_INCLUDE_DIR} / -L${LEVEL_ZERO_LIBRARY_DIR}")
       message(STATUS "Found dpcpp in ${DPCPP_EXECUTABLE}")
+
+      find_package(MKL)
     else(DPCPP_EXECUTABLE)
       set(TTG_HAVE_DPCPP FALSE CACHE BOOL "True if TTG knows how to compile DPCPP code")
     endif(DPCPP_EXECUTABLE)
