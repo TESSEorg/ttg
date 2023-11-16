@@ -6,6 +6,14 @@
 
 
 namespace ttg::device {
+
+#if defined(TTG_HAVE_CUDA)
+  constexpr ttg::ExecutionSpace available_execution_space = ttg::ExecutionSpace::CUDA;
+#elif defined(TTG_HAVE_HIP)
+  constexpr ttg::ExecutionSpace available_execution_space = ttg::ExecutionSpace::HIP;
+#elif defined(TTG_HAVE_LEVEL_ZERO)
+  constexpr ttg::ExecutionSpace available_execution_space = ttg::ExecutionSpace::L0;
+#endif
   class Device {
     int m_id = 0;
     ttg::ExecutionSpace m_space = ttg::ExecutionSpace::Host;
@@ -36,11 +44,11 @@ namespace ttg::device {
     }
 
     bool is_device() const {
-      return ((!is_invalid()) && (m_space != ttg::ExecutionSpace::Host));
+      return !is_host();
     }
 
     bool is_host() const {
-      return (m_space == ttg::ExecutionSpace::Host);
+      return !is_invalid() && (m_space == ttg::ExecutionSpace::Host);
     }
 
     bool is_invalid() const {
@@ -119,5 +127,37 @@ namespace ttg::device {
     return detail::current_stream_ts;
   }
 } // namespace ttg
+
+#elif defined(TTG_HAVE_LEVEL_ZERO)
+
+#include <CL/sycl.hpp>
+
+namespace ttg::device {
+  namespace detail {
+    inline thread_local ttg::device::Device current_device_ts = {};
+    inline thread_local sycl::queue* current_stream_ts = nullptr; // default stream
+
+    void reset_current() {
+      current_device_ts = {};
+      current_stream_ts = nullptr;
+    }
+
+    void set_current(int device, sycl::queue& stream) {
+      current_device_ts = ttg::device::Device(device, ttg::ExecutionSpace::HIP);
+      current_stream_ts = &stream;
+    }
+  } // namespace detail
+
+  inline
+  Device current_device() {
+    return detail::current_device_ts;
+  }
+
+  inline
+  const sycl::queue& current_stream() {
+    return *detail::current_stream_ts;
+  }
+} // namespace ttg
+
 
 #endif // defined(TTG_HAVE_HIP)

@@ -974,6 +974,14 @@ namespace ttg_parsec {
     std::shared_ptr<ttg::base::WorldImplBase> world_sptr{static_cast<ttg::base::WorldImplBase *>(world_ptr)};
     ttg::World world{std::move(world_sptr)};
     ttg::detail::set_default_world(std::move(world));
+
+    // query the first device ID
+    for (int i = 0; i < parsec_nb_devices; ++i) {
+      if (parsec_mca_device_is_gpu(i)) {
+        detail::first_device_id = i;
+        break;
+      }
+    }
   }
   inline void ttg_finalize() {
     // We need to notify the current taskpool of termination if we are in user termination detection mode
@@ -1329,7 +1337,7 @@ namespace ttg_parsec {
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
       {
         parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu_stream;
-        int device = gpu_device->super.device_index - 2; // 0: host, 1: recursive, 2: first GPU
+        int device = gpu_device->super.device_index - detail::first_device_id;
         ttg::device::detail::set_current(device, cuda_stream->cuda_stream);
       }
 #endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
@@ -1337,8 +1345,17 @@ namespace ttg_parsec {
 #if defined(PARSEC_HAVE_DEV_HIP_SUPPORT) && defined(TTG_HAVE_HIP)
       {
         parsec_hip_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)gpu_stream;
-        int device = gpu_device->super.device_index - 2; // 0: host, 1: recursive, 2: first GPU
+        int device = gpu_device->super.device_index - detail::first_device_id;
         ttg::device::detail::set_current(device, hip_stream->hip_stream);
+      }
+#endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
+
+#if defined(PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT) && defined(TTG_HAVE_LEVEL_ZERO)
+      {
+        parsec_level_zero_exec_stream_t *stream;
+        stream = (parsec_level_zero_exec_stream_t *)gpu_stream;
+        int device = gpu_device->super.device_index - detail::first_device_id;
+        ttg::device::detail::set_current(device, stream->swq->queue);
       }
 #endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
 
@@ -1394,24 +1411,14 @@ namespace ttg_parsec {
         }
       }
     }
-#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
+
     static int
-    static_cuda_stage_in(parsec_gpu_task_t        *gtask,
-                         uint32_t                  flow_mask,
-                         parsec_gpu_exec_stream_t *gpu_stream) {
+    static_device_stage_in_hook(parsec_gpu_task_t        *gtask,
+                                uint32_t                  flow_mask,
+                                parsec_gpu_exec_stream_t *gpu_stream) {
       static_device_stage_in(gtask, flow_mask, gpu_stream);
-      return parsec_default_cuda_stage_in(gtask, flow_mask, gpu_stream);
+      return parsec_default_gpu_stage_in(gtask, flow_mask, gpu_stream);
     }
-#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
-#if defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
-    static int
-    static_hip_stage_in(parsec_gpu_task_t        *gtask,
-                         uint32_t                  flow_mask,
-                         parsec_gpu_exec_stream_t *gpu_stream) {
-      static_device_stage_in(gtask, flow_mask, gpu_stream);
-      return parsec_default_hip_stage_in(gtask, flow_mask, gpu_stream);
-    }
-#endif
 
     template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t device_static_op(parsec_task_t* parsec_task) {
@@ -1493,21 +1500,30 @@ namespace ttg_parsec {
           if constexpr (Space == ttg::ExecutionSpace::CUDA) {
             /* TODO: we need custom staging functions because PaRSEC looks at the
              *       task-class to determine the number of flows. */
-            gpu_task->stage_in  = static_cuda_stage_in;
-            gpu_task->stage_out = parsec_default_cuda_stage_out;
-            return parsec_cuda_kernel_scheduler(es, gpu_task, dev_index);
+            gpu_task->stage_in  = static_device_stage_in_hook;
+            gpu_task->stage_out = parsec_default_gpu_stage_out;
+            return parsec_device_kernel_scheduler(device, es, gpu_task);
           }
           break;
 #endif
 #if defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
         case PARSEC_DEV_HIP:
           if constexpr (Space == ttg::ExecutionSpace::HIP) {
-            gpu_task->stage_in  = static_hip_stage_in;
-            gpu_task->stage_out = parsec_default_hip_stage_out;
-            return parsec_hip_kernel_scheduler(es, gpu_task, dev_index);
+            gpu_task->stage_in  = static_device_stage_in_hook;
+            gpu_task->stage_out = parsec_default_gpu_stage_out;
+            return parsec_device_kernel_scheduler(device, es, gpu_task);
           }
           break;
 #endif // PARSEC_HAVE_DEV_HIP_SUPPORT
+#if defined(PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT)
+        case PARSEC_DEV_LEVEL_ZERO:
+          if constexpr (Space == ttg::ExecutionSpace::L0) {
+            gpu_task->stage_in  = static_device_stage_in_hook;
+            gpu_task->stage_out = parsec_default_gpu_stage_out;
+            return parsec_device_kernel_scheduler(device, es, gpu_task);
+          }
+          break;
+#endif // PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT
         default:
           break;
       }
