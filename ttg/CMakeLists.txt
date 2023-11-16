@@ -123,6 +123,10 @@ if (TTG_HAVE_HIPBLAS)
   list(APPEND ttg-deps hip::host)
 endif (TTG_HAVE_HIPBLAS)
 
+if (TTG_HAVE_LEVEL_ZERO)
+  list(APPEND ttg-deps level_zero::ze_loader)
+endif (TTG_HAVE_LEVEL_ZERO)
+
 set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers};${ttg_device_headers})
 if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
   list(APPEND ttg-sources ${ttg-external-headers})
