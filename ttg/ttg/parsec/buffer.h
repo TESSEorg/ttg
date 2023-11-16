@@ -10,6 +10,7 @@
 #include "ttg/parsec/parsec-ext.h"
 #include "ttg/util/iovec.h"
 #include "ttg/device/device.h"
+#include "ttg/parsec/device.h"
 
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
 #include <cuda_runtime.h>
@@ -74,9 +75,6 @@ private:
   }
 
 public:
-
-  /* The device ID of the CPU. */
-  static constexpr int cpu_device = -2;
 
   buffer() : buffer(nullptr, 0)
   { }
@@ -161,33 +159,35 @@ public:
 
   /* set the current device, useful when a device
    * buffer was modified outside of a TTG */
-  void set_current_device(int device_id) {
+  void set_current_device(const ttg::device::Device& device) {
     assert(is_valid());
     /* make sure it's a valid device */
     assert(parsec_nb_devices > device_id);
     /* make sure it's a valid copy */
-    assert(m_data->device_copies[device_id+2] != nullptr);
-    m_data->owner_device = device_id+2;
+    int parsec_id = detail::device_to_parsec_device(device);
+    assert(m_data->device_copies[parsec_id] != nullptr);
+    m_data->owner_device = parsec_id;
   }
 
   /* Get the owner device ID, i.e., the last updated
-   * device buffer. A value of -2 designates the host
-   * as the current device. */
-  int get_owner_device() const {
+   * device buffer. */
+  ttg::device::Device get_owner_device() const {
     assert(is_valid());
-    return m_data->owner_device - 2; // 0: host, 1: recursive, 2: first device
+    return detail::parsec_device_to_device(m_data->owner_device);
   }
 
   /* Get the pointer on the currently active device. */
   element_type* current_device_ptr() {
     assert(is_valid());
-    return static_cast<element_type*>(m_data->device_copies[ttg::device::current_device()+2]->device_private);
+    int device_id = ttg::device::current_device()+detail::first_device_id;
+    return static_cast<element_type*>(m_data->device_copies[device_id]->device_private);
   }
 
   /* Get the pointer on the currently active device. */
   const element_type* current_device_ptr() const {
     assert(is_valid());
-    return static_cast<element_type*>(m_data->device_copies[ttg::device::current_device()+2]->device_private);
+    int device_id = ttg::device::current_device()+detail::first_device_id;
+    return static_cast<element_type*>(m_data->device_copies[device_id]->device_private);
   }
 
   /* Get the pointer on the owning device.
@@ -205,19 +205,19 @@ public:
   }
 
   /* get the device pointer at the given device
-   * \sa cpu_device
    */
-  element_type* device_ptr_on(int device_id) {
+  element_type* device_ptr_on(const ttg::device::Device& device) {
     assert(is_valid());
-    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id + 2));
+    int device_id = detail::device_to_parsec_device(device);
+    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id));
   }
 
   /* get the device pointer at the given device
-   * \sa cpu_device
    */
-  const element_type* device_ptr_on(int device_id) const {
+  const element_type* device_ptr_on(const ttg::device::Device& device) const {
     assert(is_valid());
-    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id + 2)); // GPUs start at 2
+    int device_id = detail::device_to_parsec_device(device);
+    return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id));
   }
 
   element_type* host_ptr() {
@@ -228,12 +228,13 @@ public:
     return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), 0));
   }
 
-  bool is_valid_on(int device_id) const {
+  bool is_valid_on(const ttg::device::Device& device) const {
     assert(is_valid());
-    return (parsec_data_get_ptr(m_data.get(), device_id+2) != nullptr);
+    int device_id = detail::device_to_parsec_device(device);
+    return (parsec_data_get_ptr(m_data.get(), device_id) != nullptr);
   }
 
-  void allocate_on(int device_id) {
+  void allocate_on(const ttg::device::Device& device_id) {
     /* TODO: need exposed PaRSEC memory allocator */
     throw std::runtime_error("not implemented yet");
   }
@@ -252,7 +253,7 @@ public:
   /* Unpin the memory on all devices we currently track. */
   void unpin() {
     if (!is_valid()) return;
-    for (int i = 0; i < parsec_nb_devices-2; ++i) {
+    for (int i = 0; i < parsec_nb_devices-detail::first_device_id; ++i) {
       unpin_on(i);
     }
   }
