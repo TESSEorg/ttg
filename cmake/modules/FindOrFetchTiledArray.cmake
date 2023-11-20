@@ -28,13 +28,6 @@ else (TARGET tiledarray)
   if (NOT DEFINED TA_ASSUMES_ASLR_DISABLED)
     set(TA_ASSUMES_ASLR_DISABLED ${MPQC_ASSUMES_ASLR_DISABLED} CACHE BOOL "TA assumes the Address Space Layout Randomization (ASLR) to be disabled")
   endif(NOT DEFINED TA_ASSUMES_ASLR_DISABLED)
-  if (NOT DEFINED TA_ASSERT_POLICY)
-    string(REPLACE "MPQC_" "TA_" TA_ASSERT_POLICY "${MPQC_ASSERT_POLICY}")
-    set(TA_ASSERT_POLICY ${TA_ASSERT_POLICY} CACHE STRING "Controls the behavior of TA_ASSERT")
-  endif (NOT DEFINED TA_ASSERT_POLICY)
-  if (NOT DEFINED TA_BUILD_UNITTEST)
-    set(TA_BUILD_UNITTEST FALSE CACHE BOOL "Whether to build TA unit tests")
-  endif (NOT DEFINED TA_BUILD_UNITTEST)
 
   include(FetchContent)
   FetchContent_Declare(
