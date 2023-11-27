@@ -437,4 +437,35 @@ TEST_CASE("TemplateTask", "[core]") {
       static_assert(!ttg::meta::is_generic_callable_v<decltype(&args_pmf::X::g<int>)>);
     }
   }
+
+#if 0
+  SECTION("split_construction") {
+    ttg::Edge<int, float> a2b, b2a;
+    /* construct without edges */
+    auto tta = ttg::make_tt([](int key, float value){});
+    tta->set_input<0>(b2a)
+       .set_output<0>(a2b)
+       .set_name("A");
+
+    auto ttb = ttg::make_tt([](int key, float value){});
+    ttb->set_input<0>(a2b)
+       .set_output<0>(b2a)
+       .set_name("B");
+
+    bool is_executable = ttg::make_graph_executable(tta);
+    CHECK(is_executable);
+  }
+#endif // 0
+
+
+  SECTION("make_connect") {
+    ttg::Edge<int, float> a2b, b2a;
+    /* construct without edges */
+    auto tta = ttg::make_tt([](int key, float value){});
+    auto ttb = ttg::make_tt([](int key, float value){});
+    ttg::connect<0, 0>(ttb, tta); // B -> A
+    ttg::connect<0, 0>(tta, ttb); // A -> B
+    bool is_executable = ttg::make_graph_executable(tta);
+    CHECK(is_executable);
+  }
 }

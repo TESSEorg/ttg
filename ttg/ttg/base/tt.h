@@ -60,6 +60,13 @@ namespace ttg {
       outputs[i] = t;
     }
 
+    void set_output_dynamic(size_t i, TerminalBase *t) {
+      if (i >= outputs.size()) {
+        outputs.resize(i+1);
+      }
+      outputs[i] = t;
+    }
+
     template <bool out, typename terminalT, std::size_t i, typename setfuncT>
     void register_terminal(terminalT &term, const std::string &name, const setfuncT setfunc) {
       term.set(this, i, name, detail::demangled_type_name<typename terminalT::key_type>(),
@@ -211,7 +218,10 @@ namespace ttg {
     }
 
     /// Sets the name of this operation
-    void set_name(const std::string &name) { this->name = name; }
+    TTBase& set_name(const std::string &name) {
+      this->name = name;
+      return *this;
+    }
 
     /// Gets the name of this operation
     const std::string &get_name() const { return name; }
