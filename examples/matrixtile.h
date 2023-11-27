@@ -12,14 +12,14 @@
 template <typename T, class Allocator = TiledArray::device_pinned_allocator<double>>
 class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
  public:
-  using metadata_t = typename std::tuple<int, int, int>;
+  using metadata_t = typename std::tuple<std::size_t, std::size_t, std::size_t>;
 
   using buffer_t  = typename ttg::buffer<T, Allocator>;
   using ttvalue_type = ttg::TTValue<MatrixTile<T, Allocator>>;
 
  private:
   buffer_t _buffer;
-  int _rows = 0, _cols = 0, _lda = 0;
+  std::size_t _rows = 0, _cols = 0, _lda = 0;
 #ifdef DEBUG_TILES_VALUES
   mutable std::optional<T> _norm;
 #endif // DEBUG_TILES_VALUES
@@ -36,7 +36,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
  public:
   MatrixTile() {}
 
-  MatrixTile(int rows, int cols, int lda)
+  MatrixTile(std::size_t rows, std::size_t cols, std::size_t lda)
   : ttvalue_type()
   , _buffer(lda*cols)
   , _rows(rows)
@@ -54,7 +54,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
    * Constructor with outside memory. The tile will *not* delete this memory
    * upon destruction.
    */
-  MatrixTile(int rows, int cols, T* data, int lda)
+  MatrixTile(std::size_t rows, std::size_t cols, T* data, std::size_t lda)
   : ttvalue_type()
   , _buffer(data, lda*cols)
   , _rows(rows)
@@ -108,11 +108,11 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
 
   size_t size() const { return _cols * _lda; }
 
-  int rows() const { return _rows; }
+  std::size_t rows() const { return _rows; }
 
-  int cols() const { return _cols; }
+  std::size_t cols() const { return _cols; }
 
-  int lda() const { return _lda; }
+  std::size_t lda() const { return _lda; }
 
   buffer_t& buffer() {
     return _buffer;
@@ -145,10 +145,10 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
     auto ptr = tt.data();
     o << std::endl << " ";
     o << "MatrixTile<" << typeid(T).name() << ">{ rows=" << tt.rows() << " cols=" << tt.cols() << " ld=" << tt.lda();
-#if DEBUG_TILES_VALUES
+#if DEBUG_TILES_VALUES && 0
     o << " data=[ ";
-    for (int i = 0; i < tt.rows(); i++) {
-      for (int j = 0; j < tt.cols(); j++) {
+    for (std::size_t i = 0; i < tt.rows(); i++) {
+      for (std::size_t j = 0; j < tt.cols(); j++) {
         o << ptr[i + j * tt.lda()] << " ";
       }
       o << std::endl << " ";
@@ -187,7 +187,7 @@ namespace madness {
     template <class Archive, typename T>
     struct ArchiveLoadImpl<Archive, MatrixTile<T>> {
       static inline void load(const Archive& ar, MatrixTile<T>& tile) {
-        int rows, cols, lda;
+        std::size_t rows, cols, lda;
         ar >> rows >> cols >> lda;
         tile = MatrixTile<T>(rows, cols, lda);
         ar >> wrap(tile.data(), tile.rows() * tile.cols());  // MatrixTile<T>(bm.rows(), bm.cols());
