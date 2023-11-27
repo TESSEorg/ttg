@@ -161,10 +161,10 @@ public:
    * buffer was modified outside of a TTG */
   void set_current_device(const ttg::device::Device& device) {
     assert(is_valid());
-    /* make sure it's a valid device */
-    assert(parsec_nb_devices > device_id);
-    /* make sure it's a valid copy */
     int parsec_id = detail::ttg_device_to_parsec_device(device);
+    /* make sure it's a valid device */
+    assert(parsec_nb_devices > device);
+    /* make sure it's a valid copy */
     assert(m_data->device_copies[parsec_id] != nullptr);
     m_data->owner_device = parsec_id;
   }
