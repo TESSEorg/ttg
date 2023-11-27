@@ -40,9 +40,9 @@ if (TARGET tiledarray)
                            COMPILE_DEFINITIONS TTG_ENABLE_HIP=1;DEBUG_TILES_VALUES=1
                            RUNTIMES "parsec")
       endif(TARGET roc::hipsolver)
-    elseif (TARGET MKL::MKL)
+    elseif (TARGET MKL::MKL_DPCPP)
       add_ttg_executable(bspmm-lz spmm/spmm_cuda.cc
-	                  LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost MKL::MKL
+                          LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost MKL::MKL_DPCPP level_zero::ze_loader m
                           COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
                           RUNTIMES "parsec")
     endif()
