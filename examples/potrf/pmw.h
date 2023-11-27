@@ -49,7 +49,7 @@ public:
     //}
   }
 
-  MatrixTile<ValueT> operator()(int row, int col) const {
+  MatrixTile<ValueT> operator()(std::size_t row, std::size_t col) const {
     ValueT* ptr = static_cast<ValueT*>(parsec_data_copy_get_ptr(
                       parsec_data_get_copy(pm->super.super.data_of(&pm->super.super, row, col), 0)));
     auto mb = (row < pm->super.mt - 1) ? pm->super.mb : pm->super.m - row * pm->super.mb;
@@ -58,45 +58,45 @@ public:
   }
 
   /** Number of tiled rows **/
-  int rows(void) const {
+  std::size_t rows(void) const {
     return pm->super.mt;
   }
 
   /** Number of rows in tile */
-  int rows_in_tile(void) const {
+  std::size_t rows_in_tile(void) const {
     return pm->super.mb;
   }
 
   /** Number of rows in the matrix */
-  int rows_in_matrix(void) const {
+  std::size_t rows_in_matrix(void) const {
     return pm->super.m;
   }
 
   /** Number of tiled columns **/
-  int cols(void) const {
+  std::size_t cols(void) const {
     return pm->super.nt;
   }
 
   /** Number of columns in tile */
-  int cols_in_tile(void) const {
+  std::size_t cols_in_tile(void) const {
     return pm->super.nb;
   }
 
   /** Number of columns in the matrix */
-  int cols_in_matrix(void) const {
+  std::size_t cols_in_matrix(void) const {
     return pm->super.n;
   }
 
   /* The rank storing the tile at {row, col} */
-  int rank_of(int row, int col) const {
+  std::size_t rank_of(std::size_t row, std::size_t col) const {
     return pm->super.super.rank_of(&pm->super.super, row, col);
   }
 
-  bool is_local(int row, int col) const {
+  bool is_local(std::size_t row, std::size_t col) const {
     return ttg::default_execution_context().rank() == rank_of(row, col);
   }
 
-  bool in_matrix(int row, int col) const {
+  bool in_matrix(std::size_t row, std::size_t col) const {
     return (pm->uplo == PARSEC_MATRIX_LOWER && col <= row) ||
            (pm->uplo == PARSEC_MATRIX_UPPER && col >= row);
   }
@@ -112,8 +112,8 @@ public:
   /* Copy entire input matrix (which is local) into a single LAPACK format matrix */
   ValueT *getLAPACKMatrix() const {
     ValueT *ret = new ValueT[rows_in_matrix()*cols_in_matrix()];
-    for(auto i = 0; i < rows_in_matrix(); i++) {
-      for(auto j = 0; j < cols_in_matrix(); j++) {
+    for(std::size_t i = 0; i < rows_in_matrix(); i++) {
+      for(std::size_t j = 0; j < cols_in_matrix(); j++) {
         if( in_matrix(i/rows_in_tile(), j/cols_in_tile()) ) {
           auto m = i/rows_in_tile();
           auto n = j/cols_in_tile();
@@ -136,8 +136,8 @@ using MatrixT = PaRSECMatrixWrapper<sym_two_dim_block_cyclic_t, ValueT>;
 static auto make_load_tt(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>> &toop, bool defer_write)
 {
   auto load_tt = ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, MatrixTile<double>>>& out) {
-      for(int i = 0; i < A.rows(); i++) {
-        for(int j = 0; j < A.cols() && A.in_matrix(i, j); j++) {
+      for(std::size_t i = 0; i < A.rows(); i++) {
+        for(std::size_t j = 0; j < A.cols() && A.in_matrix(i, j); j++) {
           if(A.is_local(i, j)) {
             if(ttg::tracing()) ttg::print("load(", Key2{i, j}, ")");
             ttg::send<0>(Key2{i, j}, std::move(A(i, j)), out);
@@ -154,9 +154,9 @@ static auto make_load_tt(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>>
 static void print_LAPACK_matrix( const double *A, int N, const char *label)
 {
   std::cout << label << std::endl;
-  for(int i = 0; i < N; i++) {
+  for(std::size_t i = 0; i < N; i++) {
     std::cout << " ";
-    for(int j = 0; j < N; j++) {
+    for(std::size_t j = 0; j < N; j++) {
       std::cout << std::setw(11) << std::setprecision(5) << A[i+j*N] << " ";
     }
     std::cout << std::endl;
