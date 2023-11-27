@@ -164,7 +164,7 @@ public:
     /* make sure it's a valid device */
     assert(parsec_nb_devices > device_id);
     /* make sure it's a valid copy */
-    int parsec_id = detail::device_to_parsec_device(device);
+    int parsec_id = detail::ttg_device_to_parsec_device(device);
     assert(m_data->device_copies[parsec_id] != nullptr);
     m_data->owner_device = parsec_id;
   }
@@ -173,20 +173,20 @@ public:
    * device buffer. */
   ttg::device::Device get_owner_device() const {
     assert(is_valid());
-    return detail::parsec_device_to_device(m_data->owner_device);
+    return detail::parsec_device_to_ttg_device(m_data->owner_device);
   }
 
   /* Get the pointer on the currently active device. */
   element_type* current_device_ptr() {
     assert(is_valid());
-    int device_id = ttg::device::current_device()+detail::first_device_id;
+    int device_id = detail::ttg_device_to_parsec_device(ttg::device::current_device());
     return static_cast<element_type*>(m_data->device_copies[device_id]->device_private);
   }
 
   /* Get the pointer on the currently active device. */
   const element_type* current_device_ptr() const {
     assert(is_valid());
-    int device_id = ttg::device::current_device()+detail::first_device_id;
+    int device_id = detail::ttg_device_to_parsec_device(ttg::device::current_device());
     return static_cast<element_type*>(m_data->device_copies[device_id]->device_private);
   }
 
@@ -208,7 +208,7 @@ public:
    */
   element_type* device_ptr_on(const ttg::device::Device& device) {
     assert(is_valid());
-    int device_id = detail::device_to_parsec_device(device);
+    int device_id = detail::ttg_device_to_parsec_device(device);
     return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id));
   }
 
@@ -216,7 +216,7 @@ public:
    */
   const element_type* device_ptr_on(const ttg::device::Device& device) const {
     assert(is_valid());
-    int device_id = detail::device_to_parsec_device(device);
+    int device_id = detail::ttg_device_to_parsec_device(device);
     return static_cast<element_type*>(parsec_data_get_ptr(m_data.get(), device_id));
   }
 
@@ -230,7 +230,7 @@ public:
 
   bool is_valid_on(const ttg::device::Device& device) const {
     assert(is_valid());
-    int device_id = detail::device_to_parsec_device(device);
+    int device_id = detail::ttg_device_to_parsec_device(device);
     return (parsec_data_get_ptr(m_data.get(), device_id) != nullptr);
   }
 

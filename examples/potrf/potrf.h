@@ -58,13 +58,13 @@ namespace potrf {
     //std::cout << "POTRF handle  " << handle << " device " << device << " stream " << ttg::device::current_stream() << std::endl;
     cusolverDnDpotrf(handle,
                       CUBLAS_FILL_MODE_LOWER, A.cols(),
-                      A.buffer().device_ptr_on(device), A.lda(),
+                      A.buffer().current_device_ptr(), A.lda(),
                       workspace, Lwork,
                       devInfo);
   #elif defined(TTG_HAVE_HIPBLAS)
     hipsolverDpotrf(hipsolver_handle(),
                       HIPSOLVER_FILL_MODE_LOWER, A.cols(),
-                      A.buffer().device_ptr_on(device), A.lda(),
+                      A.buffer().current_device_ptr(), A.lda(),
                       workspace, Lwork,
                       devInfo);
   #endif
@@ -290,15 +290,15 @@ namespace potrf {
                   CUBLAS_SIDE_RIGHT, CUBLAS_FILL_MODE_LOWER,
                   CUBLAS_OP_T, CUBLAS_DIAG_NON_UNIT,
                   mb, nb, &alpha,
-                  tile_kk.buffer().device_ptr_on(device), tile_kk.lda(),
-                  tile_mk.buffer().device_ptr_on(device), tile_mk.lda());
+                  tile_kk.buffer().current_device_ptr(), tile_kk.lda(),
+                  tile_mk.buffer().current_device_ptr(), tile_mk.lda());
 #elif defined(TTG_HAVE_HIPBLAS)
       hipblasDtrsm(hipblas_handle(),
                    HIPBLAS_SIDE_RIGHT, HIPBLAS_FILL_MODE_LOWER,
                    HIPBLAS_OP_T, HIPBLAS_DIAG_NON_UNIT,
                    mb, nb, &alpha,
-                   tile_kk.buffer().device_ptr_on(device), tile_kk.lda(),
-                   tile_mk.buffer().device_ptr_on(device), tile_mk.lda());
+                   tile_kk.buffer().current_device_ptr(), tile_kk.lda(),
+                   tile_mk.buffer().current_device_ptr(), tile_mk.lda());
 
 #endif
 
@@ -420,15 +420,15 @@ namespace potrf {
                   CUBLAS_FILL_MODE_LOWER,
                   CUBLAS_OP_N,
                   mb, nb, &alpha,
-                  tile_mk.buffer().device_ptr_on(device), tile_mk.lda(), &beta,
-                  tile_kk.buffer().device_ptr_on(device), tile_kk.lda());
+                  tile_mk.buffer().current_device_ptr(), tile_mk.lda(), &beta,
+                  tile_kk.buffer().current_device_ptr(), tile_kk.lda());
 #elif defined(TTG_HAVE_HIPBLAS)
       hipblasDsyrk(hipblas_handle(),
                    HIPBLAS_FILL_MODE_LOWER,
                    HIPBLAS_OP_N,
                    mb, nb, &alpha,
-                   tile_mk.buffer().device_ptr_on(device), tile_mk.lda(), &beta,
-                   tile_kk.buffer().device_ptr_on(device), tile_kk.lda());
+                   tile_mk.buffer().current_device_ptr(), tile_mk.lda(), &beta,
+                   tile_kk.buffer().current_device_ptr(), tile_kk.lda());
 #endif
 
 #ifdef DEBUG_TILES_VALUES
@@ -545,17 +545,17 @@ namespace potrf {
                   CUBLAS_OP_N, CUBLAS_OP_T,
                   tile_mk.rows(), tile_nk.rows(),
                   tile_nk.cols(), &alpha,
-                  tile_mk.buffer().device_ptr_on(device), tile_mk.lda(),
-                  tile_nk.buffer().device_ptr_on(device), tile_nk.lda(), &beta,
-                  tile_mn.buffer().device_ptr_on(device), tile_mn.lda());
+                  tile_mk.buffer().current_device_ptr(), tile_mk.lda(),
+                  tile_nk.buffer().current_device_ptr(), tile_nk.lda(), &beta,
+                  tile_mn.buffer().current_device_ptr(), tile_mn.lda());
 #elif defined(TTG_HAVE_HIPBLAS)
       hipblasDgemm(hipblas_handle(),
                    HIPBLAS_OP_N, HIPBLAS_OP_T,
                    tile_mk.rows(), tile_nk.rows(),
                    tile_nk.cols(), &alpha,
-                   tile_mk.buffer().device_ptr_on(device), tile_mk.lda(),
-                   tile_nk.buffer().device_ptr_on(device), tile_nk.lda(), &beta,
-                   tile_mn.buffer().device_ptr_on(device), tile_mn.lda());
+                   tile_mk.buffer().current_device_ptr(), tile_mk.lda(),
+                   tile_nk.buffer().current_device_ptr(), tile_nk.lda(), &beta,
+                   tile_mn.buffer().current_device_ptr(), tile_mn.lda());
 #endif
 
 

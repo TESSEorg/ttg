@@ -989,10 +989,13 @@ namespace ttg_parsec {
     ttg::detail::set_default_world(std::move(world));
 
     // query the first device ID
+    detail::first_device_id = -1;
     for (int i = 0; i < parsec_nb_devices; ++i) {
-      if (parsec_mca_device_is_gpu(i)) {
+      bool is_gpu = parsec_mca_device_is_gpu(i);
+      if (detail::first_device_id == -1 && is_gpu) {
         detail::first_device_id = i;
-        break;
+      } else if (detail::first_device_id > -1 && !is_gpu) {
+        throw std::runtime_error("PaRSEC: Found non-GPU device in GPU ID range!");
       }
     }
   }
@@ -1362,7 +1365,7 @@ namespace ttg_parsec {
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
       {
         parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu_stream;
-        int device = gpu_device->super.device_index - detail::first_device_id;
+        int device = detail::parsec_device_to_ttg_device(gpu_device->super.device_index);
         ttg::device::detail::set_current(device, cuda_stream->cuda_stream);
       }
 #endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
@@ -1370,7 +1373,7 @@ namespace ttg_parsec {
 #if defined(PARSEC_HAVE_DEV_HIP_SUPPORT) && defined(TTG_HAVE_HIP)
       {
         parsec_hip_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)gpu_stream;
-        int device = gpu_device->super.device_index - detail::first_device_id;
+        int device = detail::parsec_device_to_ttg_device(gpu_device->super.device_index);
         ttg::device::detail::set_current(device, hip_stream->hip_stream);
       }
 #endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
@@ -1379,7 +1382,7 @@ namespace ttg_parsec {
       {
         parsec_level_zero_exec_stream_t *stream;
         stream = (parsec_level_zero_exec_stream_t *)gpu_stream;
-        int device = gpu_device->super.device_index - detail::first_device_id;
+        int device = detail::parsec_device_to_ttg_device(gpu_device->super.device_index);
         ttg::device::detail::set_current(device, stream->swq->queue);
       }
 #endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
@@ -1512,7 +1515,7 @@ namespace ttg_parsec {
 
       gpu_task->load = task_load;
       assert(dev_index >= 0);
-      if (dev_index < detail::first_device_id) {
+      if (!parsec_mca_device_is_gpu(dev_index)) {
           return PARSEC_HOOK_RETURN_NEXT; /* Fall back */
       }
 
@@ -1997,7 +2000,7 @@ ttg::abort();  // should not happen
             // TODO: first attempt at sending directly to the device
             parsec_gpu_data_copy_t* gpu_elem;
             gpu_elem = PARSEC_DATA_GET_COPY(master, gpu_device->super.device_index);
-            int i = detail::first_device_id;ß
+            int i = detail::first_device_id;
             int devid = detail::first_device_id;
             while (i < parsec_nb_devices) {
               if (nullptr == gpu_elem) {
