@@ -2791,7 +2791,7 @@ namespace ttg_parsec {
         , priomap(decltype(keymap)(std::forward<priomapT>(priomap_)))
         , static_stream_goal() {
       // Cannot call these in base constructor since terminals not yet constructed
-      if (innames.size() != numinedges) throw std::logic_error("ttg_parsec::TT: #input names != #input terminals");
+      //if (innames.size() != numinedges) throw std::logic_error("ttg_parsec::TT: #input names != #input terminals");
       if (outnames.size() != numouts) throw std::logic_error("ttg_parsec::TT: #output names != #output terminals");
 
       auto &world_impl = world.impl();
@@ -3021,9 +3021,47 @@ namespace ttg_parsec {
     // cannot be copied, moved or assigned.
     // Only valid if terminals are provided during construction.
     template <std::size_t i>
-    std::tuple_element_t<i, output_terminalsT> *out() {
+    auto *out() {
+      static_assert(std::tuple_size_v<output_terminalsT> > 0,
+                    "TT::out<i>() only available for statically known output terminals. "
+                    "Use TT::out<i, K, V>() instead!");
       return &std::get<i>(output_terminals);
     }
+
+    template <std::size_t i, typename KeyT, typename ValueT>
+    auto *out(const std::string name = {}) {
+      using terminal_type = typename ttg::Out<KeyT, ValueT>;
+      if constexpr (std::tuple_size_v<output_terminalsT> == 0) {
+        auto& outputs = this->get_outputs();
+        terminal_type *terminal;
+        if (outputs.size() <= i || nullptr == outputs[i]) {
+          // create a new terminal
+          std::string auto_name;
+          if (name.empty()) {
+            auto_name = "DynamicOut" + std::to_string(i);
+          }
+          terminal = new terminal_type();
+          dynamic_outterms.push_back(std::unique_ptr<ttg::TerminalBase>(terminal));
+          register_terminal<true, terminal_type, i>(*terminal, name.empty() ? auto_name : name, &ttT::set_output_dynamic);
+        } else {
+#ifndef NDEBUG
+          // use dyanmic cast in debug builds
+          terminal = dynamic_cast<terminal_type*>(outputs[i]);
+          if (nullptr == terminal) {
+            throw std::runtime_error(std::string("TT::out<i, K, V>(): failed to cast existing output terminal ") + std::to_string(i));
+          }
+#else
+          terminal = static_cast<terminal_type*>(outputs[i]);
+#endif // NDEBUG
+        }
+        return terminal;
+      } else {
+        static_assert(std::is_same_v<terminal_type, std::tuple_element_t<i, output_terminalsT>>,
+                      "TT::out<i, K, V>() key/value types do not match compile-time output terminals.");
+        return &std::get<i>(output_terminals);
+      }
+    }
+
 
     // Manual injection of a task with all input arguments specified as a tuple
     template <typename Key = keyT>

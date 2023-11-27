@@ -438,7 +438,7 @@ TEST_CASE("TemplateTask", "[core]") {
     }
   }
 
-//#if 0
+#if 0
   SECTION("split_construction") {
     ttg::Edge<int, float> a2b, b2a;
     /* construct without edges */
@@ -455,5 +455,17 @@ TEST_CASE("TemplateTask", "[core]") {
     bool is_executable = ttg::make_graph_executable(tta);
     CHECK(is_executable);
   }
-//#endif // 0
+#endif // 0
+
+
+  SECTION("make_connect") {
+    ttg::Edge<int, float> a2b, b2a;
+    /* construct without edges */
+    auto tta = ttg::make_tt([](int key, float value){});
+    auto ttb = ttg::make_tt([](int key, float value){});
+    ttg::connect<0, 0>(ttb, tta); // B -> A
+    ttg::connect<0, 0>(tta, ttb); // A -> B
+    bool is_executable = ttg::make_graph_executable(tta);
+    CHECK(is_executable);
+  }
 }

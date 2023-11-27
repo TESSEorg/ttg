@@ -98,11 +98,25 @@ namespace ttg {
   inline void connect(ttg::TerminalBase *out, ttg::TerminalBase *in) { out->connect(in); }
 
   /// \brief Connect producer output terminal outindex to consumer input terminal inindex (via unique or otherwise
-  /// wrapped pointers to TTs) \tparam outindex The index of the output terminal on the producer. \tparam inindex  The
-  /// index of the input terminal on the consumer. \param p The producer TT \param c The consumer TT
+  /// wrapped pointers to TTs)
+  /// \tparam outindex The index of the output terminal on the producer.
+  /// \tparam inindex  The index of the input terminal on the consumer.
+  /// \param p The producer TT
+  /// \param c The consumer TT
   template <std::size_t outindex, std::size_t inindex, typename producer_tt_ptr, typename successor_tt_ptr>
   inline void connect(producer_tt_ptr &p, successor_tt_ptr &s) {
-    connect(p->template out<outindex>(), s->template in<inindex>());
+    // check whether the output terminal is available at compile time
+    using producer_type  = typename std::pointer_traits<producer_tt_ptr>::element_type;
+    if constexpr (std::tuple_size_v<typename producer_type::output_terminals_type> == 0) {
+      // need to make sure the output terminal is available
+      using successor_type = typename std::pointer_traits<successor_tt_ptr>::element_type;
+      using input_terminal_type = std::tuple_element_t<inindex, typename successor_type::input_terminals_type>;
+      using key_type   = typename input_terminal_type::key_type;
+      using value_type = typename input_terminal_type::value_type;
+      connect(p->template out<outindex, key_type, value_type>(), s->template in<inindex>());
+    } else {
+      connect(p->template out<outindex>(), s->template in<inindex>());
+    }
   }
 
   /// \brief Connect producer output terminal outindex to consumer input terminal inindex (via bare pointers to TTs)
