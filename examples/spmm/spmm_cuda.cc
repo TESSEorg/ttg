@@ -254,7 +254,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
 };
 
 using scalar_t = double;
-#if defined(TTG_HAVE_CUDA) || defined(TTG_HAVE_HIPBLAS) || defined(TTG_HAVE_LEVEL_ZERO)
+#if defined(TTG_HAVE_CUDA) || defined(TTG_HAVE_HIPBLAS)
 using blk_t = DeviceTensor<scalar_t, btas::DEFAULT::range,
                            btas::mohndle<btas::varray<scalar_t, TiledArray::device_pinned_allocator<scalar_t>>,
                                          btas::Handle::shared_ptr>>;
