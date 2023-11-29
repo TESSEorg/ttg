@@ -122,7 +122,7 @@ namespace ttg_parsec {
       release_task_fn* release_task_cb = nullptr;
       device_ptr_t* dev_ptr = nullptr;
       bool remove_from_hash = true;
-      bool is_dummy = false;
+      bool dummy = false;
       bool defer_writer = TTG_PARSEC_DEFER_WRITER; // whether to defer writer instead of creating a new copy
       ttg_parsec_data_flags data_flags; // HACKY: flags set by prepare_send and reset by the copy_handler
 
@@ -171,8 +171,8 @@ namespace ttg_parsec {
       }
 
     public:
-      void set_dummy(bool d) { is_dummy = d; }
-      bool dummy() { return is_dummy; }
+      void set_dummy(bool d) { dummy = d; }
+      bool is_dummy() { return dummy; }
     };
 
     template <typename TT, bool KeyIsVoid = ttg::meta::is_void_v<typename TT::key_type>>
