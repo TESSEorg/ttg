@@ -163,7 +163,7 @@ public:
     assert(is_valid());
     int parsec_id = detail::ttg_device_to_parsec_device(device);
     /* make sure it's a valid device */
-    assert(parsec_nb_devices > device);
+    assert(parsec_nb_devices > parsec_id);
     /* make sure it's a valid copy */
     assert(m_data->device_copies[parsec_id] != nullptr);
     m_data->owner_device = parsec_id;
