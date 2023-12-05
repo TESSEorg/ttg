@@ -2323,7 +2323,7 @@ ttg::abort();  // should not happen
 
       if( world_impl.dag_profiling() ) {
 #if defined(PARSEC_PROF_GRAPHER)
-        if(NULL != detail::parsec_ttg_caller && !detail::parsec_ttg_caller->dummy()) {
+        if(NULL != detail::parsec_ttg_caller && !detail::parsec_ttg_caller->is_dummy()) {
           int orig_index = detail::find_index_of_copy_in_task(detail::parsec_ttg_caller, &value);
           char orig_str[32];
           char dest_str[32];
@@ -2667,7 +2667,7 @@ ttg::abort();  // should not happen
       }
 #endif
 #if defined(PARSEC_PROF_GRAPHER)
-      if(NULL != detail::parsec_ttg_caller && !detail::parsec_ttg_caller->dummy()) {
+      if(NULL != detail::parsec_ttg_caller && !detail::parsec_ttg_caller->is_dummy()) {
         int orig_index = detail::find_index_of_copy_in_task(detail::parsec_ttg_caller, value_ptr);
         char orig_str[32];
         char dest_str[32];
@@ -3545,7 +3545,7 @@ ttg::abort();  // should not happen
       task_t *task = (task_t*)parsec_task;
 
       if constexpr (derived_has_device_op()) {
-        assert(nullptr != task->suspended_task_address);
+        assert(task->is_dummy() || nullptr != task->suspended_task_address);
       }
 
       /* if we still have a coroutine handle we invoke it one more time to get the sends/broadcasts */
