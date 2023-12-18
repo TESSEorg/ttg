@@ -61,7 +61,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
                     , public btas::Tensor<_T, _Range, _Storage> {
   using tensor_type = typename btas::Tensor<_T, _Range, _Storage>;
   using ttvalue_type = typename ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>;
-  ttg::buffer<_T> b; // does not own the host buffer
+  ttg::Buffer<_T> b; // does not own the host buffer
 
   using value_type = typename tensor_type::value_type;
   using size_type = typename tensor_type::size_type;
@@ -193,7 +193,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     /* Grrrr, moving a Tensor does not guarantee to move the pointer */
     , b((this->size() == 0 ||
          this->data() == x.b.host_ptr()) ? std::move(x.b)
-                                         : ttg::buffer<_T>(this->size() ? this->data()
+                                         : ttg::Buffer<_T>(this->size() ? this->data()
                                                                         : nullptr,
                                                            this->size()))
     {
@@ -239,7 +239,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
       if (this->size() == 0 || this->data() == x.b.host_ptr()){
         b = std::move(x.b);
       } else  {
-        b = ttg::buffer<_T>(this->size() ? this->data() : nullptr, this->size());
+        b = ttg::Buffer<_T>(this->size() ? this->data() : nullptr, this->size());
       }
       //std::swap(x.b, b);
       //std::cout << "DeviceTensor move ctor" << std::endl;

@@ -14,7 +14,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
  public:
   using metadata_t = typename std::tuple<std::size_t, std::size_t, std::size_t>;
 
-  using buffer_t  = typename ttg::buffer<T, Allocator>;
+  using buffer_t  = typename ttg::Buffer<T, Allocator>;
   using ttvalue_type = ttg::TTValue<MatrixTile<T, Allocator>>;
 
  private:

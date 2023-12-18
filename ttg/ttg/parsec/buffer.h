@@ -22,7 +22,7 @@ namespace ttg_parsec {
 namespace detail {
   // fwd decl
   template<typename T, typename A>
-  parsec_data_t* get_parsec_data(const ttg_parsec::buffer<T, A>& db);
+  parsec_data_t* get_parsec_data(const ttg_parsec::Buffer<T, A>& db);
 } // namespace detail
 
 /**
@@ -37,7 +37,7 @@ namespace detail {
  * tracking of the containing object.
  */
 template<typename T, typename Allocator>
-struct buffer : public detail::ttg_parsec_data_wrapper_t
+struct Buffer : public detail::ttg_parsec_data_wrapper_t
               , private Allocator {
 
   using element_type = std::decay_t<T>;
@@ -62,7 +62,7 @@ private:
     // nothing to be done, we don't own the memory
   }
 
-  friend parsec_data_t* detail::get_parsec_data<T, Allocator>(const ttg_parsec::buffer<T, Allocator>&);
+  friend parsec_data_t* detail::get_parsec_data<T, Allocator>(const ttg_parsec::Buffer<T, Allocator>&);
 
   allocator_type& get_allocator_reference() { return static_cast<allocator_type&>(*this); }
 
@@ -76,10 +76,10 @@ private:
 
 public:
 
-  buffer() : buffer(nullptr, 0)
+  Buffer() : Buffer(nullptr, 0)
   { }
 
-  buffer(std::size_t n)
+  Buffer(std::size_t n)
   : ttg_parsec_data_wrapper_t()
   , allocator_type()
   , m_host_data(allocate(n))
@@ -96,7 +96,7 @@ public:
   /* Constructing a buffer using application-managed memory.
    * The memory pointed to by ptr must be accessible during
    * the life-time of the buffer. */
-  buffer(element_type* ptr, std::size_t n = 1)
+  Buffer(element_type* ptr, std::size_t n = 1)
   : ttg_parsec_data_wrapper_t()
   , allocator_type()
   , m_host_data(ptr)
@@ -110,7 +110,7 @@ public:
     this->reset_parsec_data(m_host_data, n*sizeof(element_type));
   }
 
-  virtual ~buffer() {
+  virtual ~Buffer() {
     if (m_owned) {
       deallocate();
       m_owned = false;
@@ -119,7 +119,7 @@ public:
   }
 
   /* allow moving device buffers */
-  buffer(buffer&& db)
+  Buffer(Buffer&& db)
   : ttg_parsec_data_wrapper_t(std::move(db))
   , allocator_type(std::move(db))
   , m_host_data(db.m_host_data)
@@ -134,10 +134,10 @@ public:
   /* explicitly disable copying of buffers
    * TODO: should we allow this? What data to use?
    */
-  buffer(const buffer& db) = delete;
+  Buffer(const Buffer& db) = delete;
 
   /* allow moving device buffers */
-  buffer& operator=(buffer&& db) {
+  Buffer& operator=(Buffer&& db) {
     ttg_parsec_data_wrapper_t::operator=(std::move(db));
     allocator_type::operator=(std::move(db));
     std::swap(m_host_data, db.m_host_data);
@@ -155,7 +155,7 @@ public:
   /* explicitly disable copying of buffers
    * TODO: should we allow this? What data to use?
    */
-  buffer& operator=(const buffer& db) = delete;
+  Buffer& operator=(const Buffer& db) = delete;
 
   /* set the current device, useful when a device
    * buffer was modified outside of a TTG */
@@ -408,11 +408,11 @@ struct is_buffer : std::false_type
 { };
 
 template<typename T, typename A>
-struct is_buffer<buffer<T, A>> : std::true_type
+struct is_buffer<Buffer<T, A>> : std::true_type
 { };
 
 template<typename T, typename A>
-struct is_buffer<const buffer<T, A>> : std::true_type
+struct is_buffer<const Buffer<T, A>> : std::true_type
 { };
 
 template<typename T>
@@ -420,7 +420,7 @@ constexpr static const bool is_buffer_v = is_buffer<T>::value;
 
 namespace detail {
   template<typename T, typename A>
-  parsec_data_t* get_parsec_data(const ttg_parsec::buffer<T, A>& db) {
+  parsec_data_t* get_parsec_data(const ttg_parsec::Buffer<T, A>& db) {
     return const_cast<parsec_data_t*>(db.m_data.get());
   }
 } // namespace detail

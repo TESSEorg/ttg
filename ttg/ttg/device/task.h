@@ -59,14 +59,14 @@ namespace ttg {
     };
   } // namespace detail
 
-  /* Wait for kernel to complete and provided ttg::buffer and ttg::devicescratch
+  /* Wait for kernel to complete and provided ttg::Buffer and ttg::devicescratch
    * to be transferred back to host */
   template<typename... Buffers>
   [[nodiscard]]
   inline auto wait_kernel(Buffers&&... args) {
     static_assert(((ttg::detail::is_buffer_v<std::decay_t<Buffers>>
                     ||ttg::detail::is_devicescratch_v<std::decay_t<Buffers>>)&&...),
-                  "Only ttg::buffer and ttg::devicescratch can be waited on!");
+                  "Only ttg::Buffer and ttg::devicescratch can be waited on!");
     return detail::wait_kernel_t<std::remove_reference_t<Buffers>...>{std::tie(std::forward<Buffers>(args)...)};
   }
 
