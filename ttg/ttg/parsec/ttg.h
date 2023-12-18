@@ -1347,7 +1347,7 @@ namespace ttg_parsec {
 
       task_t *task = (task_t*)gpu_task->ec;
       // get the device task from the coroutine handle
-      ttg::device_task dev_task = ttg::device_task_handle_type::from_address(task->suspended_task_address);
+      ttg::device::Task dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
 
       task->dev_ptr->stream = gpu_stream;
 
@@ -1357,8 +1357,8 @@ namespace ttg_parsec {
       auto dev_data = dev_task.promise();
 
       /* we should still be waiting for the transfer to complete */
-      assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_TRANSFER ||
-             dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL);
+      assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_TRANSFER ||
+             dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_KERNEL);
 
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
       {
@@ -1394,15 +1394,15 @@ namespace ttg_parsec {
       int rc = PARSEC_HOOK_RETURN_DONE;
       if (nullptr != task->suspended_task_address) {
         /* Get a new handle for the promise*/
-        dev_task = ttg::device_task_handle_type::from_address(task->suspended_task_address);
+        dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
         dev_data = dev_task.promise();
 
-        assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL ||
-               dev_data.state() == ttg::TTG_DEVICE_CORO_SENDOUT     ||
-               dev_data.state() == ttg::TTG_DEVICE_CORO_COMPLETE);
+        assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_KERNEL ||
+               dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT     ||
+               dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_COMPLETE);
 
-        if (ttg::TTG_DEVICE_CORO_SENDOUT == dev_data.state() ||
-            ttg::TTG_DEVICE_CORO_COMPLETE == dev_data.state()) {
+        if (ttg::device::detail::TTG_DEVICE_CORO_SENDOUT == dev_data.state() ||
+            ttg::device::detail::TTG_DEVICE_CORO_COMPLETE == dev_data.state()) {
           /* the task started sending so we won't come back here */
           //std::cout << "device_static_submit task " << task << " complete" << std::endl;
         } else {
@@ -1479,13 +1479,13 @@ namespace ttg_parsec {
       /* when we come back here, the flows in gpu_task are set (see register_device_memory) */
 
       // get the device task from the coroutine handle
-      auto dev_task = ttg::device_task_handle_type::from_address(task->suspended_task_address);
+      auto dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
 
       // get the promise which contains the views
-      ttg::device_task_promise_type& dev_data = dev_task.promise();
+      ttg::device::detail::device_task_promise_type& dev_data = dev_task.promise();
 
       /* for now make sure we're waiting for transfers and the coro hasn't skipped this step */
-      assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_TRANSFER);
+      assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_TRANSFER);
 
       /* set up a temporary task-class to correctly specify the flows */
       parsec_task_class_t tc = *task->parsec_task.task_class;
@@ -1603,7 +1603,7 @@ namespace ttg_parsec {
       }
       else {  // resume the suspended coroutine
 #ifdef TTG_HAVE_DEVICE
-        auto coro = static_cast<ttg::device_task>(ttg::device_task_handle_type::from_address(suspended_task_address));
+        ttg::device::Task coro = ttg::device::detail::device_task_handle_type::from_address(suspended_task_address);
         assert(detail::parsec_ttg_caller == nullptr);
         detail::parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
         // TODO: unify the outputs tls handling
@@ -3554,16 +3554,16 @@ ttg::abort();  // should not happen
         //increment_data_versions(task, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
 
         // get the device task from the coroutine handle
-        auto dev_task = ttg::device_task_handle_type::from_address(task->suspended_task_address);
+        auto dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
 
         // get the promise which contains the views
         auto dev_data = dev_task.promise();
 
         /* for now make sure we're waiting for the kernel to complete and the coro hasn't skipped this step */
-        assert(dev_data.state() == ttg::TTG_DEVICE_CORO_SENDOUT);
+        assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT);
 
         /* execute the sends we stored */
-        if (dev_data.state() == ttg::TTG_DEVICE_CORO_SENDOUT) {
+        if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT) {
           /* set the current task, needed inside the sends */
           detail::parsec_ttg_caller = task;
           dev_data.do_sends();

@@ -812,7 +812,7 @@ class SpMM25D {
       }
     }
 
-    ttg::device_task op(const Key<3> &ijk, typename baseT::input_refs_tuple_type &&_ijk,
+    ttg::device::Task op(const Key<3> &ijk, typename baseT::input_refs_tuple_type &&_ijk,
             std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>> &result) {
       const auto i = ijk[0];
       const auto j = ijk[1];
@@ -830,7 +830,7 @@ class SpMM25D {
       }
 
       /* pull all buffers onto the device */
-      co_await ttg::to_device(A.b, B.b, C.b);
+      co_await ttg::device::select(A.b, B.b, C.b);
 
       /* everything is on the device, call the gemm */
       device_gemm(C, A, B);
@@ -844,7 +844,7 @@ class SpMM25D {
                  (have_next_k ? std::to_string(next_k) : "does not exist"));
 
       /* wait for the kernel to complete */
-      co_await ttg::wait_kernel();
+      co_await ttg::device::wait();
 
 
       // compute the contrib, pass the running total to the next flow, if needed

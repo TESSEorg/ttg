@@ -153,8 +153,8 @@ class CallableWrapTTArgs
       std::conditional_t<std::is_same_v<returnT, ttg::resumable_task>,
                          ttg::coroutine_handle<>,
 #ifdef TTG_HAVE_DEVICE
-                         std::conditional_t<std::is_same_v<returnT, ttg::device_task>,
-                                            ttg::device_task::base_type,
+                         std::conditional_t<std::is_same_v<returnT, ttg::device::Task>,
+                                            ttg::device::Task::base_type,
                                             void>
 #else  // TTG_HAVE_DEVICE
                            void
@@ -188,8 +188,8 @@ protected:
         return coro_handle;
       } else
 #ifdef TTG_HAVE_DEVICE
-          if constexpr (std::is_same_v<returnT, ttg::device_task>) {
-        ttg::device_task::base_type coro_handle = ret;
+          if constexpr (std::is_same_v<returnT, ttg::device::Task>) {
+        ttg::device::Task::base_type coro_handle = ret;
         return coro_handle;
       }
 #else  // TTG_HAVE_DEVICE
@@ -197,7 +197,7 @@ protected:
 #endif  // TTG_HAVE_DEVICE
       if constexpr (!(std::is_same_v<returnT, ttg::resumable_task>
 #ifdef TTG_HAVE_DEVICE
-          || std::is_same_v<returnT, ttg::device_task>
+          || std::is_same_v<returnT, ttg::device::Task>
 #endif  // TTG_HAVE_DEVICE
               ))
 #endif
