@@ -62,9 +62,6 @@ set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/traverse.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/world.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/make_tt.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/make_device_tt.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/view.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/task.h
         ${CMAKE_CURRENT_BINARY_DIR}/ttg/config.h
     )
 set(ttg_device_headers

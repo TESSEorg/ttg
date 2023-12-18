@@ -22,7 +22,6 @@
 #include "ttg/util/meta.h"
 #include "ttg/util/meta/callable.h"
 #include "ttg/util/void.h"
-#include "ttg/view.h"
 #include "ttg/world.h"
 #ifdef TTG_HAS_COROUTINE
 #include "ttg/util/coroutine.h"

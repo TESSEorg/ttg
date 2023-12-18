@@ -664,6 +664,4 @@ template <typename keyT, typename funcT, typename... input_edge_valuesT, typenam
   return make_tt<keyT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
-//#include "ttg/make_device_tt.h"
-
 #endif  // TTG_MAKE_TT_H

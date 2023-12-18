@@ -39,8 +39,6 @@
 
 #include "ttg/serialization/data_descriptor.h"
 
-//#include "ttg/view.h"
-
 #include "ttg/parsec/fwd.h"
 
 #include "ttg/parsec/buffer.h"
