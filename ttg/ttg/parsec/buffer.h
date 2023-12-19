@@ -403,21 +403,6 @@ public:
 
 };
 
-template<typename T>
-struct is_buffer : std::false_type
-{ };
-
-template<typename T, typename A>
-struct is_buffer<Buffer<T, A>> : std::true_type
-{ };
-
-template<typename T, typename A>
-struct is_buffer<const Buffer<T, A>> : std::true_type
-{ };
-
-template<typename T>
-constexpr static const bool is_buffer_v = is_buffer<T>::value;
-
 namespace detail {
   template<typename T, typename A>
   parsec_data_t* get_parsec_data(const ttg_parsec::Buffer<T, A>& db) {

@@ -6,7 +6,7 @@
 namespace ttg {
 
 template<typename T>
-using Ptr = TTG_IMPL_NS::ptr<T>;
+using Ptr = TTG_IMPL_NS::Ptr<T>;
 
 template<typename T, typename... Args>
 Ptr<T> make_ptr(Args&&... args) {
@@ -17,20 +17,6 @@ template<typename T>
 auto get_ptr(T&& obj) {
   return TTG_IMPL_NS::get_ptr(std::forward<T>(obj));
 }
-
-namespace detail {
-    template<typename T>
-    struct is_ptr : std::false_type
-    { };
-
-    template<typename T>
-    struct is_ptr<ttg::Ptr<T>> : std::true_type
-    { };
-
-    template<typename T>
-    constexpr bool is_ptr_v = is_ptr<T>::value;
-
-} // namespace detail
 
 #if 0
 namespace detail {

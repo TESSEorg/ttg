@@ -1003,7 +1003,7 @@ namespace ttg_parsec {
     if(0 == ttg::default_execution_context().rank())
       ttg::default_execution_context().impl().final_task();
     ttg::detail::set_default_world(ttg::World{});  // reset the default world
-    detail::ptr::drop_all_ptr();
+    detail::ptr_impl::drop_all_ptr();
     ttg::detail::destroy_worlds<ttg_parsec::WorldImpl>();
     if (detail::initialized_mpi()) MPI_Finalize();
   }
@@ -4004,7 +4004,7 @@ ttg::abort();  // should not happen
     template<typename Key, typename Arg, typename... Args, std::size_t I, std::size_t... Is>
     void invoke_arglist(std::index_sequence<I, Is...>, const Key& key, Arg&& arg, Args&&... args) {
       using arg_type = std::decay_t<Arg>;
-      if constexpr (ttg::detail::is_ptr_v<arg_type>) {
+      if constexpr (ttg::meta::is_ptr_v<arg_type>) {
         /* add a reference to the object */
         auto copy = ttg_parsec::detail::get_copy(arg);
         copy->add_ref();
@@ -4017,7 +4017,7 @@ ttg::abort();  // should not happen
           /* if the ptr was moved in we reset it */
           arg.reset();
         }
-      } else if constexpr (!ttg::detail::is_ptr_v<arg_type>) {
+      } else if constexpr (!ttg::meta::is_ptr_v<arg_type>) {
         set_arg<I>(key, std::forward<Arg>(arg));
       }
       if constexpr (sizeof...(Is) > 0) {

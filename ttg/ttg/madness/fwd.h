@@ -47,6 +47,32 @@ namespace ttg_madness {
   template <typename T>
   inline void ttg_broadcast(ttg::World world, T &data, int source_rank);
 
+
+  /* device definitions, not currently provided by this impl */
+  template<typename T, typename Allocator>
+  struct Buffer;
+
+  template<typename T>
+  struct Ptr;
+
+  template<typename T>
+  struct devicescratch;
+
+  template<typename T, typename... Args>
+  Ptr<T> make_ptr(Args&&... args);
+
+  template<typename T>
+  auto get_ptr(T&& obj);
+
+  template<typename... Views>
+  inline bool register_device_memory(std::tuple<Views&...> &views);
+
+  template<typename... Buffer>
+  inline void post_device_out(std::tuple<Buffer&...> &b);
+
+  template<typename... Buffer>
+  inline void mark_device_out(std::tuple<Buffer&...> &b);
+
 }  // namespace ttg_madness
 
 #endif  // TTG_MADNESS_FWD_H

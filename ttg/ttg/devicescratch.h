@@ -14,21 +14,6 @@ auto make_scratch(T* val, ttg::scope scope, std::size_t count = 1) {
   return devicescratch<T>(val, scope, count);
 }
 
-namespace detail {
-
-  template<typename T>
-  struct is_devicescratch : std::false_type
-  { };
-
-  template<typename T>
-  struct is_devicescratch<ttg::devicescratch<T>> : std::true_type
-  { };
-
-  template<typename T>
-  constexpr bool is_devicescratch_v = is_devicescratch<T>::value;
-
-} // namespace detail
-
 } // namespace ttg
 
 #endif // TTG_DEVICESCRATCH_H

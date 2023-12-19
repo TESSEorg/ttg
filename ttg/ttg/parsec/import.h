@@ -10,6 +10,7 @@
 #define TTG_SELECTED_DEFAULT_IMPL parsec
 #define TTG_PARSEC_IMPORTED 1
 #define TTG_IMPL_NS ttg_parsec
+#define TTG_IMPL_DEVICE_SUPPORT 1
 
 namespace ttg_parsec {}
 

@@ -19,11 +19,11 @@ namespace ttg_parsec {
     template <typename Value>
     inline ttg_data_copy_t *create_new_datacopy(Value &&value);
 
-    struct ptr {
+    struct ptr_impl {
       using copy_type = detail::ttg_data_copy_t;
 
     private:
-      static inline std::unordered_map<ptr*, bool> m_ptr_map;
+      static inline std::unordered_map<ptr_impl*, bool> m_ptr_map;
       static inline std::mutex m_ptr_map_mtx;
 
       copy_type *m_copy = nullptr;
@@ -51,7 +51,7 @@ namespace ttg_parsec {
       }
 
     public:
-      ptr(copy_type *copy)
+      ptr_impl(copy_type *copy)
       : m_copy(copy)
       {
         register_self();
@@ -63,7 +63,7 @@ namespace ttg_parsec {
         return m_copy;
       }
 
-      ptr(const ptr& p)
+      ptr_impl(const ptr_impl& p)
       : m_copy(p.m_copy)
       {
         register_self();
@@ -71,7 +71,7 @@ namespace ttg_parsec {
         std::cout << "ptr cpy " << m_copy << " ref " << m_copy->num_ref() << std::endl;
       }
 
-      ptr(ptr&& p)
+      ptr_impl(ptr_impl&& p)
       : m_copy(p.m_copy)
       {
         register_self();
@@ -79,12 +79,12 @@ namespace ttg_parsec {
         std::cout << "ptr mov " << m_copy << " ref " << m_copy->num_ref() << std::endl;
       }
 
-      ~ptr() {
+      ~ptr_impl() {
         deregister_self();
         drop_copy();
       }
 
-      ptr& operator=(const ptr& p)
+      ptr_impl& operator=(const ptr_impl& p)
       {
         drop_copy();
         m_copy = p.m_copy;
@@ -93,7 +93,7 @@ namespace ttg_parsec {
         return *this;
       }
 
-      ptr& operator=(ptr&& p) {
+      ptr_impl& operator=(ptr_impl&& p) {
         drop_copy();
         m_copy = p.m_copy;
         p.m_copy = nullptr;
@@ -128,34 +128,34 @@ namespace ttg_parsec {
 
   // fwd decl
   template<typename T, typename... Args>
-  ptr<T> make_ptr(Args&&... args);
+  Ptr<T> make_ptr(Args&&... args);
 
   // fwd decl
   template<typename T>
-  ptr<std::decay_t<T>> get_ptr(T&& obj);
+  Ptr<std::decay_t<T>> get_ptr(T&& obj);
 
   template<typename T>
-  struct ptr {
+  struct Ptr {
 
     using value_type = std::decay_t<T>;
 
   private:
     using copy_type = detail::ttg_data_value_copy_t<value_type>;
 
-    std::unique_ptr<detail::ptr> m_ptr;
+    std::unique_ptr<detail::ptr_impl> m_ptr;
 
     /* only PaRSEC backend functions are allowed to touch our private parts */
     template<typename... Args>
-    friend ptr<T> make_ptr(Args&&... args);
+    friend Ptr<T> make_ptr(Args&&... args);
     template<typename S>
-    friend ptr<std::decay_t<S>> get_ptr(S&& obj);
+    friend Ptr<std::decay_t<S>> get_ptr(S&& obj);
     template<typename S>
-    friend detail::ttg_data_copy_t* detail::get_copy(ptr<S>& p);
+    friend detail::ttg_data_copy_t* detail::get_copy(Ptr<S>& p);
     friend ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC>;
 
     /* only accessible by get_ptr and make_ptr */
-    ptr(detail::ptr::copy_type *copy)
-    : m_ptr(new detail::ptr(copy))
+    Ptr(detail::ptr_impl::copy_type *copy)
+    : m_ptr(new detail::ptr_impl(copy))
     { }
 
     copy_type* get_copy() const {
@@ -164,22 +164,22 @@ namespace ttg_parsec {
 
   public:
 
-    ptr() = default;
+    Ptr() = default;
 
-    ptr(const ptr& p)
-    : ptr(p.get_copy())
+    Ptr(const Ptr& p)
+    : Ptr(p.get_copy())
     { }
 
-    ptr(ptr&& p) = default;
+    Ptr(Ptr&& p) = default;
 
-    ~ptr() = default;
+    ~Ptr() = default;
 
-    ptr& operator=(const ptr& p) {
-      m_ptr.reset(new detail::ptr(p.get_copy()));
+    Ptr& operator=(const Ptr& p) {
+      m_ptr.reset(new detail::ptr_impl(p.get_copy()));
       return *this;
     }
 
-    ptr& operator=(ptr&& p) = default;
+    Ptr& operator=(Ptr&& p) = default;
 
     value_type& operator*() const {
       return **static_cast<copy_type*>(m_ptr->get_copy());

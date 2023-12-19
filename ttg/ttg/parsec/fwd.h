@@ -14,7 +14,7 @@ namespace ttg_parsec {
   class TT;
 
   template<typename T>
-  struct ptr;
+  struct Ptr;
 
   template<typename T, typename Allocator = std::allocator<T>>
   struct Buffer;
@@ -79,10 +79,10 @@ namespace ttg_parsec {
   inline std::pair<bool, std::tuple<ptr<std::decay_t<Args>>...>> get_ptr(Args&&... args);
 #endif
   template<typename T>
-  inline ptr<std::decay_t<T>> get_ptr(T&& obj);
+  inline Ptr<std::decay_t<T>> get_ptr(T&& obj);
 
   template<typename T, typename... Args>
-  inline ptr<T> make_ptr(Args&&... args);
+  inline Ptr<T> make_ptr(Args&&... args);
 
 
 }  // namespace ttg_parsec

@@ -30,7 +30,7 @@ namespace ttg_parsec {
 
       auto& view = std::get<I>(views);
       bool is_current = false;
-      static_assert(ttg::is_buffer_v<view_type> || ttg_parsec::is_devicescratch_v<view_type>);
+      static_assert(ttg::meta::is_buffer_v<view_type> || ttg::meta::is_devicescratch_v<view_type>);
       /* get_parsec_data is overloaded for buffer and devicescratch */
       parsec_data_t* data = detail::get_parsec_data(view);
       /* TODO: check whether the device is current */
@@ -41,7 +41,7 @@ namespace ttg_parsec {
         //if (flows[I].flow_flags != PARSEC_FLOW_ACCESS_RW) {
           access = PARSEC_FLOW_ACCESS_READ;
         //}
-      } else if constexpr (ttg_parsec::is_devicescratch_v<view_type>) {
+      } else if constexpr (ttg::meta::is_devicescratch_v<view_type>) {
         if (view.scope() == ttg::scope::Allocate) {
           access = PARSEC_FLOW_ACCESS_WRITE;
         }

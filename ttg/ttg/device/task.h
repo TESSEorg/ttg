@@ -70,8 +70,8 @@ namespace ttg::device {
   template<typename... Buffers>
   [[nodiscard]]
   inline auto wait(Buffers&&... args) {
-    static_assert(((ttg::detail::is_buffer_v<std::decay_t<Buffers>>
-                    ||ttg::detail::is_devicescratch_v<std::decay_t<Buffers>>)&&...),
+    static_assert(((ttg::meta::is_buffer_v<std::decay_t<Buffers>>
+                    ||ttg::meta::is_devicescratch_v<std::decay_t<Buffers>>)&&...),
                   "Only ttg::Buffer and ttg::devicescratch can be waited on!");
     return detail::wait_kernel_t<std::remove_reference_t<Buffers>...>{std::tie(std::forward<Buffers>(args)...)};
   }

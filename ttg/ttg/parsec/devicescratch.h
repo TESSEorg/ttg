@@ -133,21 +133,6 @@ public:
 
 };
 
-template<typename T>
-struct is_devicescratch : std::false_type
-{ };
-
-template<typename T>
-struct is_devicescratch<devicescratch<T>> : std::true_type
-{ };
-
-template<typename T>
-struct is_devicescratch<const devicescratch<T>> : std::true_type
-{ };
-
-template<typename T>
-constexpr static const bool is_devicescratch_v = is_devicescratch<T>::value;
-
 namespace detail {
   template<typename T>
   parsec_data_t* get_parsec_data(const ttg_parsec::devicescratch<T>& scratch) {
