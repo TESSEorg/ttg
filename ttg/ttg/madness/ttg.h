@@ -213,6 +213,26 @@ namespace ttg_madness {
    public:
     ttg::World get_world() const { return world; }
 
+    /// @return true if derivedT::have_cuda_op exists and is defined to true
+    static constexpr bool derived_has_cuda_op() {
+      return false;
+    }
+
+    /// @return true if derivedT::have_hip_op exists and is defined to true
+    static constexpr bool derived_has_hip_op() {
+      return false;
+    }
+
+    /// @return true if derivedT::have_hip_op exists and is defined to true
+    static constexpr bool derived_has_level_zero_op() {
+      return false;
+    }
+
+    /// @return true if the TT supports device execution
+    static constexpr bool derived_has_device_op() {
+      return false;
+    }
+
    protected:
     using worldobjT = ::madness::WorldObject<ttT>;
 
