@@ -14,7 +14,7 @@ Ptr<T> make_ptr(Args&&... args) {
 }
 
 template<typename T>
-auto get_ptr(T&& obj) {
+Ptr<std::decay_t<T>> get_ptr(T&& obj) {
   return TTG_IMPL_NS::get_ptr(std::forward<T>(obj));
 }
 

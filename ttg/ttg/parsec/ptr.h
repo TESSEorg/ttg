@@ -123,7 +123,7 @@ namespace ttg_parsec {
 
 
     template<typename T>
-    ttg_parsec::detail::ttg_data_copy_t* get_copy(ttg_parsec::ptr<T>& p);
+    ttg_parsec::detail::ttg_data_copy_t* get_copy(ttg_parsec::Ptr<T>& p);
   } // namespace detail
 
   // fwd decl
@@ -249,8 +249,8 @@ namespace ttg_parsec {
 #endif // 0
 
   template<typename T>
-  inline ptr<std::decay_t<T>> get_ptr(T&& obj) {
-    using ptr_type = ptr<std::decay_t<T>>;
+  inline auto get_ptr(T&& obj) {
+    using ptr_type = Ptr<std::decay_t<T>>;
     if (nullptr != detail::parsec_ttg_caller) {
       for (int i = 0; i < detail::parsec_ttg_caller->data_count; ++i) {
         detail::ttg_data_copy_t *copy = detail::parsec_ttg_caller->copies[i];
@@ -267,14 +267,14 @@ namespace ttg_parsec {
   }
 
   template<typename T, typename... Args>
-  inline ptr<T> make_ptr(Args&&... args) {
+  inline Ptr<T> make_ptr(Args&&... args) {
     detail::ttg_data_copy_t *copy = detail::create_new_datacopy(T(std::forward<Args>(args)...));
-    return ptr<T>(copy);
+    return Ptr<T>(copy);
   }
 
   namespace detail {
     template<typename T>
-    detail::ttg_data_copy_t* get_copy(ttg_parsec::ptr<T>& p) {
+    detail::ttg_data_copy_t* get_copy(ttg_parsec::Ptr<T>& p) {
       return p.get_copy();
     }
   } // namespace detail

@@ -6,7 +6,7 @@
 namespace ttg {
 
   template<typename T>
-  using TTValue = TTG_IMPL_NS::TTValue<T, Allocator>;
+  using TTValue = TTG_IMPL_NS::TTValue<T>;
 
 } // namespace ttg
 

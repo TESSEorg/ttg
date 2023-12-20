@@ -59,6 +59,9 @@ namespace ttg_madness {
   template<typename T>
   struct devicescratch;
 
+  template<typename T>
+  struct TTValue;
+
   template<typename T, typename... Args>
   Ptr<T> make_ptr(Args&&... args);
 

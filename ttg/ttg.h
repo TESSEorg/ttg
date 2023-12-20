@@ -31,6 +31,7 @@
 #include "ttg/ptr.h"
 #include "ttg/buffer.h"
 #include "ttg/devicescratch.h"
+#include "ttg/ttvalue.h"
 #include "ttg/devicescope.h"
 #include "ttg/device/device.h"
 #include "ttg/device/task.h"
