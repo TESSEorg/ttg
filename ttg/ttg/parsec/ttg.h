@@ -1478,6 +1478,11 @@ namespace ttg_parsec {
 
       /* when we come back here, the flows in gpu_task are set (see register_device_memory) */
 
+      if (nullptr == task->suspended_task_address) {
+        /* short-cut in case the task returned immediately */
+        return PARSEC_HOOK_RETURN_DONE;
+      }
+
       // get the device task from the coroutine handle
       auto dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
 
@@ -3541,10 +3546,6 @@ ttg::abort();  // should not happen
       //std::cout << "complete_task_and_release: task " << parsec_task << std::endl;
 
       task_t *task = (task_t*)parsec_task;
-
-      if constexpr (derived_has_device_op()) {
-        assert(task->is_dummy() || nullptr != task->suspended_task_address);
-      }
 
       /* if we still have a coroutine handle we invoke it one more time to get the sends/broadcasts */
       if (task->suspended_task_address) {
