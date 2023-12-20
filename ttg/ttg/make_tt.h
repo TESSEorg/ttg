@@ -643,7 +643,7 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
              const std::tuple<output_edgesT...> &outedges = std::tuple<>{}, const std::string &name = "wrapper",
              const std::vector<std::string> &innames = std::vector<std::string>(sizeof...(input_edge_valuesT), "input"),
              const std::vector<std::string> &outnames = std::vector<std::string>(sizeof...(output_edgesT), "output")) {
-  return make_tt<ttg::ExecutionSpace::Host>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+  return make_tt<ttg::ExecutionSpace::Host, keyT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
 template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>
