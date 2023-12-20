@@ -68,10 +68,10 @@ namespace ttg_parsec {
   struct TTValue;
 
   template<typename T, typename... Args>
-  Ptr<T> make_ptr(Args&&... args);
+  inline Ptr<T> make_ptr(Args&&... args);
 
   template<typename T>
-  Ptr<std::decay_t<T>> get_ptr(T&& obj);
+  inline Ptr<std::decay_t<T>> get_ptr(T&& obj);
 
   template<typename... Views>
   inline bool register_device_memory(std::tuple<Views&...> &views);

@@ -9,12 +9,12 @@ template<typename T>
 using Ptr = TTG_IMPL_NS::Ptr<T>;
 
 template<typename T, typename... Args>
-Ptr<T> make_ptr(Args&&... args) {
+inline Ptr<T> make_ptr(Args&&... args) {
   return TTG_IMPL_NS::make_ptr(std::forward<Args>(args)...);
 }
 
 template<typename T>
-Ptr<std::decay_t<T>> get_ptr(T&& obj) {
+inline Ptr<std::decay_t<T>> get_ptr(T&& obj) {
   return TTG_IMPL_NS::get_ptr(std::forward<T>(obj));
 }
 

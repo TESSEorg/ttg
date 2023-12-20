@@ -519,6 +519,7 @@ namespace ttg_parsec {
      * definition of ttg_parsec_data_wrapper_t members that depend on ttg_data_copy_t
      */
 
+    inline
     void ttg_parsec_data_wrapper_t::remove_from_owner() {
       if (nullptr != m_ttg_copy) {
         m_ttg_copy->remove_device_data(this);
@@ -526,6 +527,7 @@ namespace ttg_parsec {
       }
     }
 
+    inline
     void ttg_parsec_data_wrapper_t::reset_parsec_data(void *ptr, size_t size) {
       if (ptr == m_data.get()) return;
 
@@ -536,6 +538,7 @@ namespace ttg_parsec {
       }
     }
 
+    inline
     ttg_parsec_data_wrapper_t::ttg_parsec_data_wrapper_t()
     : m_data(nullptr, delete_null_parsec_data)
     , m_ttg_copy(detail::ttg_data_copy_container())
@@ -544,6 +547,8 @@ namespace ttg_parsec {
         m_ttg_copy->add_device_data(this);
       }
     }
+
+    inline
     ttg_parsec_data_wrapper_t::ttg_parsec_data_wrapper_t(ttg_parsec_data_wrapper_t&& other)
     : m_data(std::move(other.m_data))
     , m_ttg_copy(detail::ttg_data_copy_container())
@@ -562,6 +567,7 @@ namespace ttg_parsec {
       //}
     }
 
+    inline
     ttg_parsec_data_wrapper_t& ttg_parsec_data_wrapper_t::operator=(ttg_parsec_data_wrapper_t&& other) {
       m_data = std::move(other.m_data);
       /* check whether the owning ttg_data_copy has already moved us */
@@ -578,6 +584,7 @@ namespace ttg_parsec {
     }
 
 
+    inline
     ttg_parsec_data_wrapper_t::~ttg_parsec_data_wrapper_t() {
       if (nullptr != m_ttg_copy) {
         m_ttg_copy->remove_device_data(this);

@@ -132,7 +132,7 @@ namespace ttg_parsec {
 
   // fwd decl
   template<typename T>
-  Ptr<std::decay_t<T>> get_ptr(T&& obj);
+  inline Ptr<std::decay_t<T>> get_ptr(T&& obj);
 
   template<typename T>
   struct Ptr {
@@ -249,7 +249,7 @@ namespace ttg_parsec {
 #endif // 0
 
   template<typename T>
-  inline auto get_ptr(T&& obj) {
+  inline Ptr<std::decay_t<T>> get_ptr(T&& obj) {
     using ptr_type = Ptr<std::decay_t<T>>;
     if (nullptr != detail::parsec_ttg_caller) {
       for (int i = 0; i < detail::parsec_ttg_caller->data_count; ++i) {
@@ -274,7 +274,7 @@ namespace ttg_parsec {
 
   namespace detail {
     template<typename T>
-    detail::ttg_data_copy_t* get_copy(ttg_parsec::Ptr<T>& p) {
+    inline detail::ttg_data_copy_t* get_copy(ttg_parsec::Ptr<T>& p) {
       return p.get_copy();
     }
   } // namespace detail

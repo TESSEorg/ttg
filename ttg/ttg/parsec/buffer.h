@@ -283,8 +283,6 @@ public:
   /* Reallocate the buffer with count elements */
   void reset(std::size_t n) {
     /* TODO: can we resize if count is smaller than m_count? */
-    /* drop the current data and reallocate */
-    reset();
 
     if (m_owned) {
       deallocate();
