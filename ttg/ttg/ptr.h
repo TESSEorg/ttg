@@ -1,7 +1,7 @@
 #ifndef TTG_PTR_H
 #define TTG_PTR_H
 
-#include "ttg/impl_selector.h"
+#include "ttg/fwd.h"
 
 namespace ttg {
 

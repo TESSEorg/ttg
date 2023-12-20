@@ -2,7 +2,7 @@
 #define TTG_DEVICESCRATCH_H
 
 #include "ttg/devicescope.h"
-#include "ttg/impl_selector.h"
+#include "ttg/fwd.h"
 
 namespace ttg {
 
