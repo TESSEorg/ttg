@@ -172,7 +172,7 @@ namespace ttg::device {
 
   template<ttg::ExecutionSpace Space = ttg::ExecutionSpace::Invalid>
   inline const void* current_stream() {
-    static_assert(ttg::ExecutionSpace Space != ttg::ExecutionSpace::Invalid,
+    static_assert(Space != ttg::ExecutionSpace::Invalid,
                   "TTG was built without any known device support so we cannot provide a current stream!");
     return nullptr;
   }

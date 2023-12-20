@@ -140,6 +140,8 @@ namespace ttg::device {
         throw; // fwd
       }
 
+      void return_void() {}
+
     };
 
     template<typename Key, typename Value, ttg::Runtime Runtime = ttg::ttg_runtime>
