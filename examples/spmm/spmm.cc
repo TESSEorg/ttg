@@ -92,6 +92,7 @@ namespace ttg::detail {
 }  // namespace ttg::detail
 
 #else
+using scalar_t = double;
 using blk_t = double;
 #endif
 template <typename T = blk_t>
@@ -722,7 +723,7 @@ auto norms(const btas::Tensor<T_, Range_, Store_> &t) {
 
 template <typename Blk>
 auto norms(const SpMatrix<Blk> &A) {
-  using T = decltype(std::abs(std::declval<typename Blk::value_type>()));
+  using T = scalar_t;
   T norm_2_square = 0.0;
   T norm_inf = 0.0;
   for (int i = 0; i < A.outerSize(); ++i) {

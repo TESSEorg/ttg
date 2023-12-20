@@ -2,9 +2,9 @@ include(AddTTGExecutable)
 
 # TT unit test: core TTG ops
 set(ut_src
-        #fibonacci.cc
-        #ranges.cc
-        #tt.cc
+        fibonacci.cc
+        ranges.cc
+        tt.cc
         unit_main.cpp
 		streams.cc
     )
