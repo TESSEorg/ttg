@@ -65,7 +65,9 @@ int main(int argc, char **argv)
   ttg::initialize(1, argv, nthreads);
 
   // initialize MADNESS so that TA allocators can be created
+#if defined(TTG_PARSEC_IMPORTED)
   madness::ParsecRuntime::initialize_with_existing_context(ttg::default_execution_context().impl().context());
+#endif // TTG_PARSEC_IMPORTED
   madness::initialize(argc, argv, /* nthread = */ 1, /* quiet = */ true);
 
   auto world = ttg::default_execution_context();
@@ -151,7 +153,9 @@ int main(int argc, char **argv)
         std::cout << "TTG Execution Time (milliseconds) : "
                   << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
       }
+#if defined(TTG_PARSEC_IMPORTED)
       parsec_devices_reset_load(ttg::default_execution_context().impl().context());
+#endif // TTG_PARSEC_IMPORTED
     }
 
     world.dag_off();

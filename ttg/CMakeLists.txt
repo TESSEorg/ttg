@@ -208,9 +208,11 @@ endif(TARGET cereal::cereal)
 #########################
 if (TARGET MADworld)
   set(ttg-mad-headers
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/buffer.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/fwd.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/import.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/ttg.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/ttvalue.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/watch.h)
   # N.B. ttg-mad can use MADNESS serialization only
   add_ttg_library(ttg-mad "${ttg-mad-headers}" PUBLIC_HEADER "${ttg-mad-headers}" LINK_LIBRARIES "ttg;MADworld;ttg-serialization-madness" COMPILE_DEFINITIONS "WORLD_INSTANTIATE_STATIC_TEMPLATES=1")

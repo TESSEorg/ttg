@@ -21,7 +21,6 @@ namespace ttg {
 
   constexpr const ttg::Runtime ttg_runtime = ttg::Runtime::PaRSEC;
 
-
 }  // namespace ttg
 
 #endif  // TTG_PARSEC_IMPORT_H

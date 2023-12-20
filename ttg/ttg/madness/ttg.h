@@ -135,7 +135,10 @@ namespace ttg_madness {
     ::madness::finalize();
   }
   inline ttg::World ttg_default_execution_context() { return ttg::get_default_world(); }
-  inline void ttg_abort() { MPI_Abort(ttg_default_execution_context().impl().impl().mpi.Get_mpi_comm(), 1); }
+  inline void ttg_abort() {
+    MPI_Abort(ttg_default_execution_context().impl().impl().mpi.Get_mpi_comm(), 1);
+    assert(0); // make sure we abort
+  }
   inline void ttg_execute(ttg::World world) {
     // World executes tasks eagerly
   }
@@ -1292,5 +1295,7 @@ namespace ttg_madness {
 }  // namespace ttg_madness
 
 #include "ttg/madness/watch.h"
+#include "ttg/madness/buffer.h"
+#include "ttg/madness/ttvalue.h"
 
 #endif  // MADNESS_TTG_H_INCLUDED

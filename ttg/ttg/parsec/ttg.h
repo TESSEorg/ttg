@@ -4199,7 +4199,7 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
   }
 
   template<typename Value>
-  inline std::add_lvalue_reference_t<Value> operator()(ttg::detail::persistent_value_ref<Value> vref) {
+  inline std::add_lvalue_reference_t<Value> operator()(ttg_parsec::detail::persistent_value_ref<Value> vref) {
     auto caller = ttg_parsec::detail::parsec_ttg_caller;
     if (nullptr == caller) {
       ttg::print("ERROR: ttg::send or ttg::broadcast called outside of a task!\n");

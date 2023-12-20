@@ -5,7 +5,7 @@
 
 #include "ttg/parsec/ttg_data_copy.h"
 
-namespace ttg {
+namespace ttg_parsec {
 
   /**
    * Base class for data to moved into, through, and out of
@@ -96,6 +96,6 @@ namespace ttg {
     return detail::persistent_value_ref<ValueT>{value};
   }
 
-} // namespace ttg
+} // namespace ttg_parsec
 
 #endif // TTG_PARSEC_TTVALUE_H

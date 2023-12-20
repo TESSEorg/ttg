@@ -26,6 +26,7 @@ namespace ttg_madness {
 
   inline void ttg_finalize();
 
+  [[noreturn]]
   inline void ttg_abort();
 
   inline ttg::World ttg_default_execution_context();
@@ -49,7 +50,7 @@ namespace ttg_madness {
 
 
   /* device definitions, not currently provided by this impl */
-  template<typename T, typename Allocator>
+  template<typename T, typename Allocator = std::allocator<T>>
   struct Buffer;
 
   template<typename T>

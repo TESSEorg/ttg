@@ -7,6 +7,9 @@
 #include "util.h"
 #include "../devblas_helper.h"
 
+#if (defined(TTG_ENABLE_CUDA) || defined(TTG_ENABLE_HIP))
+#define ENABLE_DEVICE_KERNEL 1
+#endif
 
 #if defined(TTG_HAVE_CUDART)
 #define ES ttg::ExecutionSpace::CUDA
@@ -29,7 +32,7 @@ namespace potrf {
   inline double FADDS_POTRF(double __n) { return (__n * (((1. / 6.) * __n) * __n - (1. / 6.))); }
   inline double FLOPS_DPOTRF(double __n) { return FMULS_POTRF(__n) + FADDS_POTRF(__n); }
 
-#if defined(TTG_HAVE_CUDART) || defined(TTG_HAVE_HIP)
+#if defined(ENABLE_DEVICE_KERNEL)
   static int device_potrf_workspace_size(MatrixTile<double> &A) {
     int Lwork;
     #if defined(TTG_HAVE_CUDA)
@@ -82,7 +85,7 @@ namespace potrf {
     hipblasDnrm2(hipblas_handle(), size, buffer, 1, norm);
   #endif
   }
-#endif // defined(TTG_HAVE_CUDART) || defined(TTG_HAVE_HIP)
+#endif // ENABLE_DEVICE_KERNEL
 
   template <typename MatrixT>
   auto make_potrf(MatrixT& A,
@@ -91,7 +94,7 @@ namespace potrf {
                   ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_trsm,
                   ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_result) {
     using T = typename MatrixT::element_type;
-#if defined(TTG_HAVE_CUDART) || defined(TTG_HAVE_HIP)
+#if defined(ENABLE_DEVICE_KERNEL)
     auto iallocator = std::make_shared<TiledArray::device_pinned_allocator<int>>();
     //std::cout << "Creating CUDA POTRF task " << std::endl;
     auto f_dev = [=, iallocator = std::move(iallocator)]
@@ -185,7 +188,7 @@ namespace potrf {
     };
     return ttg::make_tt<ES>(f_dev, ttg::edges(ttg::fuse(input, input_disp)), ttg::edges(output_result, output_trsm), "POTRF",
                         {"tile_kk/dispatcher"}, {"output_result", "output_trsm"});
-#else /* defined(TTG_HAVE_CUDART) || defined(TTG_HAVE_HIP) */
+#else /* defined(ENABLE_DEVICE_KERNEL) */
     auto f = [=](const Key1& key, MatrixTile<T>&& tile_kk,
                  std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out) {
       const int K = key[0];
@@ -215,7 +218,7 @@ namespace potrf {
     };
     return ttg::make_tt(f, ttg::edges(ttg::fuse(input, input_disp)), ttg::edges(output_result, output_trsm), "POTRF",
                         {"tile_kk/dispatcher"}, {"output_result", "output_trsm"});
-#endif
+#endif // defined(ENABLE_DEVICE_KERNEL)
   }
 
   template <typename MatrixT>
@@ -228,7 +231,7 @@ namespace potrf {
                  ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& output_col,   // to GEMM
                  ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_result) {
     using T = typename MatrixT::element_type;
-#if defined(TTG_HAVE_CUDART) || defined(TTG_HAVE_HIP)
+#if defined(ENABLE_DEVICE_KERNEL)
     auto f = [=](const Key2& key, const MatrixTile<T>& tile_kk, MatrixTile<T>&& tile_mk,
                  std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key3, MatrixTile<T>>,
                             ttg::Out<Key3, MatrixTile<T>>>& out) TASKRET {
@@ -320,7 +323,7 @@ namespace potrf {
     return ttg::make_tt<ES>(f, ttg::edges(input_kk, ttg::fuse(input_mk, input_disp)),
                             ttg::edges(output_result, output_diag, output_row, output_col), "TRSM",
                             {"tile_kk", "tile_mk/dispatcher"}, {"output_result", "tile_mk", "output_row", "output_col"});
-#else
+#else // defined(ENABLE_DEVICE_KERNEL)
     auto f = [=](const Key2& key, const MatrixTile<T>& tile_kk, MatrixTile<T>&& tile_mk,
                  std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key3, MatrixTile<T>>,
                             ttg::Out<Key3, MatrixTile<T>>>& out) {
@@ -371,7 +374,7 @@ namespace potrf {
     return ttg::make_tt(f, ttg::edges(input_kk, ttg::fuse(input_mk, input_disp)),
                         ttg::edges(output_result, output_diag, output_row, output_col), "TRSM",
                         {"tile_kk", "tile_mk/dispatcher"}, {"output_result", "tile_mk", "output_row", "output_col"});
-#endif
+#endif // defined(ENABLE_DEVICE_KERNEL)
   }
 
   template <typename MatrixT>
@@ -382,7 +385,7 @@ namespace potrf {
                  ttg::Edge<Key1, MatrixTile<typename MatrixT::element_type>>& output_potrf,  // to POTRF
                  ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_syrk) {
     using T = typename MatrixT::element_type;
-#if defined(TTG_HAVE_CUDART) || defined(TTG_HAVE_HIP)
+#if defined(ENABLE_DEVICE_KERNEL)
     auto f = [=](const Key2& key, const MatrixTile<T>& tile_mk, MatrixTile<T>&& tile_kk,
                  std::tuple<ttg::Out<Key1, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out) TASKRET {
       const int K = key[0];
@@ -455,7 +458,7 @@ namespace potrf {
     };
     return ttg::make_tt<ES>(f, ttg::edges(input_mk, ttg::fuse(input_kk, input_disp)), ttg::edges(output_potrf, output_syrk),
                             "SYRK", {"tile_mk", "tile_kk/dispatcher"}, {"output_potrf", "output_syrk"});
-#else
+#else // defined(ENABLE_DEVICE_KERNEL)
     auto f = [=](const Key2& key, const MatrixTile<T>& tile_mk, MatrixTile<T>&& tile_kk,
                  std::tuple<ttg::Out<Key1, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out) {
       const int K = key[0];
@@ -494,7 +497,7 @@ namespace potrf {
     return ttg::make_tt(f, ttg::edges(input_mk, ttg::fuse(input_kk, input_disp)), ttg::edges(output_potrf, output_syrk),
                         "SYRK", {"tile_mk", "tile_kk/dispatcher"}, {"output_potrf", "output_syrk"});
 #endif
-  }
+  } // defined(ENABLE_DEVICE_KERNEL)
 
   template <typename MatrixT>
   auto make_gemm(MatrixT& A,
@@ -505,7 +508,7 @@ namespace potrf {
                  ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_trsm,  // to TRSM
                  ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& output_gemm) {
     using T = typename MatrixT::element_type;
-#if defined(TTG_HAVE_CUDART) || defined(TTG_HAVE_HIP)
+#if defined(ENABLE_DEVICE_KERNEL)
     auto f = [=](const Key3& key, const MatrixTile<T>& tile_mk, const MatrixTile<T>& tile_nk, MatrixTile<T>&& tile_mn,
                  std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key3, MatrixTile<T>>>& out) TASKRET {
       const int M = key[0];
@@ -585,7 +588,7 @@ namespace potrf {
     return ttg::make_tt<ES>(f, ttg::edges(input_mk, input_nk, ttg::fuse(input_disp, input_mn)),
                             ttg::edges(output_trsm, output_gemm), "GEMM", {"input_mk", "input_kn", "input_mn/dispatcher"},
                             {"output_trsm", "outout_gemm"});
-#else
+#else // defined(ENABLE_DEVICE_KERNEL)
     auto f = [=](const Key3& key, const MatrixTile<T>& tile_mk, const MatrixTile<T>& tile_nk, MatrixTile<T>&& tile_mn,
                  std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key3, MatrixTile<T>>>& out) {
       const int M = key[0];
@@ -624,7 +627,7 @@ namespace potrf {
     return ttg::make_tt(f, ttg::edges(input_mk, input_nk, ttg::fuse(input_disp, input_mn)),
                         ttg::edges(output_trsm, output_gemm), "GEMM", {"input_mk", "input_kn", "input_mn/dispatcher"},
                         {"output_trsm", "outout_gemm"});
-#endif
+#endif // defined(ENABLE_DEVICE_KERNEL)
   }
 
   template <typename T>
