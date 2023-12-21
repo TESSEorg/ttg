@@ -3480,24 +3480,22 @@ ttg::abort();  // should not happen
         return reinterpret_cast<parsec_key_t>(key);
     }
 
-    static char *parsec_ttg_task_snprintf(char *buffer, size_t buffer_size, const parsec_task_t *t) {
+    static char *parsec_ttg_task_snprintf(char *buffer, size_t buffer_size, const parsec_task_t *parsec_task) {
       if(buffer_size == 0)
         return buffer;
 
       if constexpr (ttg::meta::is_void_v<keyT>) {
-        snprintf(buffer, buffer_size, "%s()[]<%d>", t->task_class->name, t->priority);
+        snprintf(buffer, buffer_size, "%s()[]<%d>", parsec_task->task_class->name, parsec_task->priority);
       }  else {
-        // we use the locals array as a scratchpad to store the hash of the key and its actual address
-        // locals[0] amd locals[1] hold the hash, while locals[2] and locals[3] hold the key pointer
-        keyT *key = *(keyT**)&(t->locals[2]);
+        const task_t *task = reinterpret_cast<const task_t*>(parsec_task);
         std::stringstream ss;
-        ss << *key;
+        ss << task->key;
 
         std::string keystr = ss.str();
         std::replace(keystr.begin(), keystr.end(), '(', ':');
         std::replace(keystr.begin(), keystr.end(), ')', ':');
 
-        snprintf(buffer, buffer_size, "%s(%s)[]<%d>", t->task_class->name, keystr.c_str(), t->priority);
+        snprintf(buffer, buffer_size, "%s(%s)[]<%d>", parsec_task->task_class->name, keystr.c_str(), parsec_task->priority);
       }
       return buffer;
     }
@@ -3505,19 +3503,14 @@ ttg::abort();  // should not happen
 #if defined(PARSEC_PROF_TRACE)
     static void *parsec_ttg_task_info(void *dst, const void *data, size_t size)
     {
-      const parsec_task_t *t = reinterpret_cast<const parsec_task_t *>(data);
+      const task_t *task = reinterpret_cast<const task_t *>(data);
 
       if constexpr (ttg::meta::is_void_v<keyT>) {
         snprintf(reinterpret_cast<char*>(dst), size, "()");
       } else {
-        // we use the locals array as a scratchpad to store the hash of the key and its actual address
-        // locals[0] amd locals[1] hold the hash, while locals[2] and locals[3] hold the key pointer
-        keyT *key = *(keyT**)&(t->locals[2]);
         std::stringstream ss;
-        ss << *key;
-
-        std::string keystr = ss.str();
-        snprintf(reinterpret_cast<char*>(dst), size, "%s", keystr.c_str());
+        ss << task->key;
+        snprintf(reinterpret_cast<char*>(dst), size, "%s", keystr.str().c_str());
       }
       return dst;
     }
