@@ -124,7 +124,8 @@ auto make_project(functorT& f,
   return ttg::make_tt(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
 }
 
-
+/* below is a preliminary attempt at a device version, needs revisiting */
+#if 0
 /// Returns an std::unique_ptr to the object
 template <typename functorT, typename T, size_t K, Dimension NDIM>
 auto make_project_device(functorT& f,
@@ -161,7 +162,7 @@ auto make_project_device(functorT& f,
   ctlEdge<NDIM> refine("refine");
   return ttg::make_tt(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
 }
-
+#endif // 0
 
 
 namespace detail {
