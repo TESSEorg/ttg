@@ -64,11 +64,8 @@ int main(int argc, char **argv)
   // TODO: need to filter out our arguments to make parsec happy
   ttg::initialize(1, argv, nthreads);
 
-  // initialize MADNESS so that TA allocators can be created
-#if defined(TTG_PARSEC_IMPORTED)
-  madness::ParsecRuntime::initialize_with_existing_context(ttg::default_execution_context().impl().context());
-#endif // TTG_PARSEC_IMPORTED
-  madness::initialize(argc, argv, /* nthread = */ 1, /* quiet = */ true);
+  /* set up TA to get the allocator */
+  allocator_init();
 
   auto world = ttg::default_execution_context();
   if(nullptr != prof_filename) {
@@ -230,7 +227,7 @@ int main(int argc, char **argv)
 
   world.profile_off();
 
-  madness::finalize();
+  allocator_fini();
   ttg::finalize();
   return ret;
 }

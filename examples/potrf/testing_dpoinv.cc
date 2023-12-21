@@ -94,10 +94,13 @@ int main(int argc, char **argv)
   ttg::initialize(ttg_argc, ttg_argv, nthreads);
   delete[] ttg_argv;
 
+  /* set up TA to get the allocator */
+  allocator_init();
+
   ttg::trace_on();
 
   auto world = ttg::default_execution_context();
-  
+
   if(nullptr != prof_filename) {
     world.profile_on();
     world.dag_on(prof_filename);
@@ -118,12 +121,12 @@ int main(int argc, char **argv)
 
   parsec_matrix_sym_block_cyclic_t dcA;
   parsec_matrix_sym_block_cyclic_init(&dcA, parsec_matrix_type_t::PARSEC_MATRIX_DOUBLE,
-                                world.rank(), 
-                                NB, NB, 
+                                world.rank(),
+                                NB, NB,
                                 N, M,
-                                0, 0, 
-                                N, M, 
-                                P, Q, 
+                                0, 0,
+                                N, M,
+                                P, Q,
                                 PARSEC_MATRIX_LOWER);
   dcA.mat = parsec_data_allocate((size_t)dcA.super.nb_local_tiles *
                                  (size_t)dcA.super.bsiz *
@@ -248,15 +251,15 @@ int main(int argc, char **argv)
           end = endpotri;
 
           auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endpotrf - begpotrf).count());
-          std::cout << "POINV (POTRF+POTRI) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+          std::cout << "POINV (POTRF+POTRI) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads
                     << " POTRF TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
-          
+
           elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endpotri - begpotri).count());
-          std::cout << "POINV (POTRF+POTRI) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+          std::cout << "POINV (POTRF+POTRI) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads
                     << " POTRI TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (potri::FLOPS_DPOTRI(N)) << " " << (potri::FLOPS_DPOTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
 
           elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
-          std::cout << "POINV (POTRF+POTRI) (" << (defer_cow_hint ? "with" : "without") << " defer writer) N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+          std::cout << "POINV (POTRF+POTRI) (" << (defer_cow_hint ? "with" : "without") << " defer writer) N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads
                     << " TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N) + potri::FLOPS_DPOTRI(N)) << " " << ((potrf::FLOPS_DPOTRF(N)+potri::FLOPS_DPOTRI(N))/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
         }
       } else {
@@ -328,20 +331,20 @@ int main(int argc, char **argv)
           end = endlauum;
 
           auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endpotrf - begpotrf).count());
-          std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+          std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads
                     << " POTRF TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
-          
+
           elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endtrtri - begtrtri).count());
-          std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+          std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads
                     << " TRTRI TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (trtri_LOWER::FLOPS_DTRTRI(N)) << " " << (trtri_LOWER::FLOPS_DTRTRI(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
 
           elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(endlauum - beglauum).count());
-          std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
+          std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) -- N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads
                     << " LAUUM TTG Execution Time (milliseconds) : " << elapsed / 1E3 << " : Flops " << (lauum::FLOPS_DLAUUM(N)) << " " << (lauum::FLOPS_DLAUUM(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
 
           elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
-          std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
-                    << " TTG Execution Time (milliseconds) : " << elapsed / 1E3 
+          std::cout << "POINV (POTRF+TRTRI+LAUUM) (" << (defer_cow_hint ? "with" : "without") << " defer writer) N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads
+                    << " TTG Execution Time (milliseconds) : " << elapsed / 1E3
                     << " : Flops " << (potrf::FLOPS_DPOTRF(N) + potri::FLOPS_DPOTRI(N)) << " " << ((potrf::FLOPS_DPOTRF(N)+potri::FLOPS_DPOTRI(N))/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
         }
       }
@@ -379,8 +382,8 @@ int main(int argc, char **argv)
         end = std::chrono::high_resolution_clock::now();
         auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
         end = std::chrono::high_resolution_clock::now();
-        std::cout << "POINV (POINV) (" << (defer_cow_hint ? "with" : "without") << " defer writer) N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads 
-                  << " TTG Execution Time (milliseconds) : " << elapsed / 1E3 
+        std::cout << "POINV (POINV) (" << (defer_cow_hint ? "with" : "without") << " defer writer) N= " << N << " NB= " << NB <<  " P= " << P << " Q= " << Q << " nthreads= " << nthreads
+                  << " TTG Execution Time (milliseconds) : " << elapsed / 1E3
                   << " : Flops " << (potrf::FLOPS_DPOTRF(N) + potri::FLOPS_DPOTRI(N)) << " " << ((potrf::FLOPS_DPOTRF(N)+potri::FLOPS_DPOTRI(N))/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
       }
     }
@@ -395,6 +398,7 @@ int main(int argc, char **argv)
   parsec_data_free(dcA.mat); dcA.mat = NULL;
   parsec_tiled_matrix_destroy( (parsec_tiled_matrix_t*)&dcA);
 
+  allocator_fini();
   ttg::finalize();
   return ret;
 }

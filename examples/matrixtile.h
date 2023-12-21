@@ -5,11 +5,36 @@
 #include <memory>
 #include <optional>
 
+#include <ttg.h>
+
 #include <ttg/serialization/splitmd_data_descriptor.h>
 
-#include <TiledArray/device/allocators.h>
 
-template <typename T, class Allocator = TiledArray::device_pinned_allocator<double>>
+#include <TiledArray/device/allocators.h>
+#if defined(TILEDARRAY_HAS_DEVICE)
+#define ALLOCATOR TiledArray::device_pinned_allocator<T>
+
+inline void allocator_init() {
+  // initialize MADNESS so that TA allocators can be created
+#if defined(TTG_PARSEC_IMPORTED)
+  madness::ParsecRuntime::initialize_with_existing_context(ttg::default_execution_context().impl().context());
+#endif // TTG_PARSEC_IMPORTED
+  madness::initialize(argc, argv, /* nthread = */ 1, /* quiet = */ true);
+}
+
+inline void allocator_fini() {
+  madness::finalize();
+}
+#else  // TILEDARRAY_HAS_DEVICE
+#define ALLOCATOR std::allocator<T>
+
+inline void allocator_init() { }
+
+inline void allocator_fini() { }
+
+#endif // TILEDARRAY_HAS_DEVICE
+
+template <typename T, class Allocator = ALLOCATOR>
 class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
  public:
   using metadata_t = typename std::tuple<std::size_t, std::size_t, std::size_t>;
