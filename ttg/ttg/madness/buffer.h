@@ -1,7 +1,7 @@
 #ifndef TTG_MADNESS_BUFFER_H
 #define TTG_MADNESS_BUFFER_H
 
-//#include "ttg/serialization/backends.h"
+#include "ttg/serialization/traits.h"
 
 namespace ttg_madness {
 
@@ -291,7 +291,7 @@ public:
   }
 #endif // TTG_SERIALIZATION_SUPPORTS_CEREAL
 
-#if defined(TTG_SERIALIZATION_SUPPORTS_MADNESS) && 0
+#if defined(TTG_SERIALIZATION_SUPPORTS_MADNESS)
   template <typename Archive>
   std::enable_if_t<std::is_base_of_v<madness::archive::BufferInputArchive, Archive> ||
                    std::is_base_of_v<madness::archive::BufferOutputArchive, Archive>>
