@@ -67,8 +67,6 @@ add_ttg_executable(fw-apsp floyd-warshall/floyd_warshall.cc LINK_LIBRARIES MADwo
 add_ttg_executable(helloworld helloworld/helloworld.cpp)
 add_ttg_executable(simplegenerator simplegenerator/simplegenerator.cc RUNTIMES "mad")
 
-add_ttg_executable(device_mock device_mock/device_mock.cc LINK_LIBRARIES MADworld)
-
 if (OpenMP_CXX_FOUND AND TARGET std::execution)
         add_ttg_executable(fw-apsp-df floyd-warshall/floyd_warshall_df.cc LINK_LIBRARIES OpenMP::OpenMP_CXX std::execution MADworld)
 endif ()
