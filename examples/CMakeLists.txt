@@ -47,7 +47,13 @@ if (TARGET tiledarray)
                           RUNTIMES "parsec")
     endif()
 
-    add_ttg_executable(chain-ttg-dev task-benchmarks/chain-ttg-dev.cc LINK_LIBRARIES tiledarray RUNTIMES "parsec")
+    if (TTG_HAVE_CUDA)
+      add_ttg_executable(chain-ttg-cuda task-benchmarks/chain-ttg-dev.cc LINK_LIBRARIES tiledarray RUNTIMES "parsec")
+    endif(TTG_HAVE_CUDA)
+
+    if (TTG_HAVE_HIP)
+      add_ttg_executable(chain-ttg-hip task-benchmarks/chain-ttg-dev.cc LINK_LIBRARIES tiledarray RUNTIMES "parsec")
+    endif(TTG_HAVE_HIP)
 endif()
 
 if (TARGET MADworld)
