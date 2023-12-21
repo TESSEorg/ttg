@@ -28,7 +28,7 @@ namespace madness::archive {
 }  // namespace madness::archive
 #endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
 
-#if defined(TTG_IMPL_DEVICE_SUPPORT)
+#if defined(TTG_HAVE_DEVICE) && defined(TTG_IMPL_DEVICE_SUPPORT)
 
 TEST_CASE("Device", "coro") {
 
