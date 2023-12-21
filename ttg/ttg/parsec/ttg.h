@@ -3773,18 +3773,6 @@ ttg::abort();  // should not happen
         self.name = nullptr;
       }
 
-      for (int i = 0; i < MAX_PARAM_COUNT; i++) {
-        parsec_flow_t *flow = (parsec_flow_t *)(self.in[i]);
-        free(flow->name);
-        delete flow;
-        *((parsec_flow_t **)&(self.in[i])) = nullptr;
-
-        flow = (parsec_flow_t *)(self.out[i]);
-        free(flow->name);
-        delete flow;
-        *((parsec_flow_t **)&(self.out[i])) = nullptr;
-      }
-
       for (std::size_t i = 0; i < numins; ++i) {
         if (inpute_reducers_taskclass[i] != nullptr) {
           std::free(inpute_reducers_taskclass[i]);
@@ -3818,14 +3806,16 @@ ttg::abort();  // should not happen
       // uintptr_t addr = (uintptr_t)self.incarnations;
       // free((void *)addr);
       free((__parsec_chore_t *)self.incarnations);
-      for (int i = 0; i < numflows; i++) {
+      for (int i = 0; i < MAX_PARAM_COUNT; i++) {
         if (NULL != self.in[i]) {
           free(self.in[i]->name);
           delete self.in[i];
+          self.in[i] = nullptr;
         }
         if (NULL != self.out[i]) {
           free(self.out[i]->name);
           delete self.out[i];
+          self.out[i] = nullptr;
         }
       }
       world.impl().deregister_op(this);
