@@ -846,6 +846,7 @@ namespace ttg_parsec {
           parsec_task_t *next_task = copy->get_next_task();
           copy->set_next_task(nullptr);
           parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)next_task;
+          copy->mark_mutable();
           deferred_op->release_task();
         } else if ((1 == copy->num_ref()) || (1 == copy->drop_ref())) {
           /* we are the last reference, delete the copy */
@@ -1743,6 +1744,8 @@ ttg::abort();  // should not happen
 
       auto& reducer = std::get<i>(baseobj->input_reducers);
 
+      //std::cout << "static_reducer_op " << parent_task->key << std::endl;
+
       if (obj->tracing()) {
         if constexpr (!ttg::meta::is_void_v<keyT>)
           ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", parent_task->key, ": reducer executing");
@@ -2347,12 +2350,12 @@ ttg::abort();  // should not happen
 
       auto get_copy_fn = [&](detail::parsec_ttg_task_base_t *task, auto&& value, bool is_const){
         detail::ttg_data_copy_t *copy = copy_in;
-        if (nullptr != detail::parsec_ttg_caller) {
+        if (nullptr == copy && nullptr != detail::parsec_ttg_caller) {
           copy = detail::find_copy_in_task(detail::parsec_ttg_caller, &value);
         }
         if (nullptr != copy) {
           /* retain the data copy */
-          copy = detail::register_data_copy<valueT>(copy, task, true);
+          copy = detail::register_data_copy<valueT>(copy, task, is_const);
         } else {
           /* create a new copy */
           copy = detail::create_new_datacopy(std::forward<Value>(value));
@@ -2364,6 +2367,7 @@ ttg::abort();  // should not happen
         auto submit_reducer_task = [&](auto *parent_task){
           /* check if we need to create a task */
           std::size_t c = parent_task->streams[i].reduce_count.fetch_add(1, std::memory_order_release);
+          //std::cout << "submit_reducer_task " << key << " c " << c << std::endl;
           if (0 == c) {
             /* we are responsible for creating the reduction task */
             detail::reducer_task_t *reduce_task;
@@ -2379,6 +2383,7 @@ ttg::abort();  // should not happen
             using decay_valueT = std::decay_t<valueT>;
 
             /* first input value, create a task and bind it to the copy */
+            //std::cout << "Creating new reducer task for " << key << std::endl;
             detail::reducer_task_t *reduce_task;
             reduce_task = create_new_reducer_task<i>(task, true);
 
@@ -2392,6 +2397,9 @@ ttg::abort();  // should not happen
             task->streams[i].size = 1;
             task->streams[i].reduce_count.store(1, std::memory_order_relaxed);
 
+            /* release the task if we're not deferred
+             * TODO: can we delay that until we get the second value?
+             */
             if (copy->get_next_task() != &reduce_task->parsec_task) {
               reduce_task->release_task(reduce_task);
             }
@@ -3785,6 +3793,10 @@ ttg::abort();  // should not happen
       }
     }
 
+    void print_incomplete_tasks() {
+      parsec_hash_table_for_all(&tasks_table, ht_iter_cb, this);
+    }
+
     virtual void release() override { do_release(); }
 
     void do_release() {
@@ -3793,7 +3805,7 @@ ttg::abort();  // should not happen
       }
       alive = false;
       /* print all outstanding tasks */
-      parsec_hash_table_for_all(&tasks_table, ht_iter_cb, this);
+      print_incomplete_tasks();
       parsec_hash_table_fini(&tasks_table);
       parsec_mempool_destruct(&mempools);
       // uintptr_t addr = (uintptr_t)self.incarnations;
