@@ -15,8 +15,8 @@ TEST_CASE("streams", "[streams][core]") {
     ttg::Edge<int, int> O2S;
     const auto nranks = ttg::default_execution_context().size();
 
-    constexpr std::size_t N = 10000;
-    constexpr std::size_t SLICE = 500;
+    constexpr std::size_t N = 12000;
+    constexpr std::size_t SLICE = 600;
     constexpr const timespec ts = { .tv_sec = 0, .tv_nsec = 10000 };
     constexpr int VALUE = 1;
     std::atomic<std::size_t> reduce_ops = 0;
@@ -62,7 +62,7 @@ TEST_CASE("streams", "[streams][core]") {
     }, SLICE);
 
     make_graph_executable(op);
-    ttg::ttg_fence(ttg::default_execution_context());
+    ttg::execute(ttg::default_execution_context());
     if (ttg::default_execution_context().rank() == 0) {
       for (std::size_t i = 0; i < N; ++i) {
         op->invoke(i, VALUE);
@@ -70,6 +70,6 @@ TEST_CASE("streams", "[streams][core]") {
     }
 
     ttg::ttg_fence(ttg::default_execution_context());
-    CHECK(reduce_ops == N);
+    CHECK(reduce_ops == N/nranks);
   }
 }  // TEST_CASE("streams")
