@@ -60,6 +60,7 @@ set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/terminal.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/traverse.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/ttvalue.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/world.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/make_tt.h
         ${CMAKE_CURRENT_BINARY_DIR}/ttg/config.h
