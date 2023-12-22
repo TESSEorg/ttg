@@ -1737,6 +1737,7 @@ ttg::abort();  // should not happen
       using rtask_t = detail::reducer_task_t;
       using value_t = std::tuple_element_t<i, actual_input_tuple_type>;
       constexpr const bool val_is_void = ttg::meta::is_void_v<value_t>;
+      constexpr const bool input_is_const = std::is_const_v<value_t>;
       rtask_t *rtask = (rtask_t*)parsec_task;
       task_t *parent_task = static_cast<task_t*>(rtask->parent_task);
       ttT *baseobj = parent_task->tt;
@@ -1810,7 +1811,11 @@ ttg::abort();  // should not happen
       //          << " of " << parent_task->streams[i].goal << " complete " << complete
       //          << " c " << c << std::endl;
       if (complete && c == 0) {
-        /* task is still in the hash table, have release_task remove it */
+        if constexpr(input_is_const) {
+          /* make the consumer task a reader if its input is const */
+          target_copy->reset_readers();
+        }
+        /* task may not be runnable yet because other inputs are missing, have release_task decide */
         parent_task->remove_from_hash = true;
         parent_task->release_task(parent_task);
       }
