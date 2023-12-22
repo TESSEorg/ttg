@@ -1789,6 +1789,8 @@ ttg::abort();  // should not happen
             break;
           }
           source_copy = ((detail::ttg_data_copy_self_t *)(item))->self;
+          assert(target_copy->num_readers() == target_copy->mutable_tag);
+          assert(source_copy->num_readers() > 0);
           reducer(*reinterpret_cast<std::decay_t<value_t> *>(target_copy->get_ptr()),
                   *reinterpret_cast<std::decay_t<value_t> *>(source_copy->get_ptr()));
           detail::release_data_copy(source_copy);
@@ -2359,6 +2361,9 @@ ttg::abort();  // should not happen
         } else {
           /* create a new copy */
           copy = detail::create_new_datacopy(std::forward<Value>(value));
+          if (!is_const) {
+            copy->mark_mutable();
+          }
         }
         return copy;
       };
@@ -2387,15 +2392,15 @@ ttg::abort();  // should not happen
             detail::reducer_task_t *reduce_task;
             reduce_task = create_new_reducer_task<i>(task, true);
 
+            /* protected by the bucket lock */
+            task->streams[i].size = 1;
+            task->streams[i].reduce_count.store(1, std::memory_order_relaxed);
+
             /* get the copy to use as input for this task */
             detail::ttg_data_copy_t *copy = get_copy_fn(reduce_task, std::forward<Value>(value), false);
 
             /* put the copy into the task */
             task->copies[i] = copy;
-
-            /* protected by the bucket lock */
-            task->streams[i].size = 1;
-            task->streams[i].reduce_count.store(1, std::memory_order_relaxed);
 
             /* release the task if we're not deferred
              * TODO: can we delay that until we get the second value?
