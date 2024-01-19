@@ -3528,7 +3528,7 @@ ttg::abort();  // should not happen
       } else {
         std::stringstream ss;
         ss << task->key;
-        snprintf(reinterpret_cast<char*>(dst), size, "%s", keystr.str().c_str());
+        snprintf(reinterpret_cast<char*>(dst), size, "%s", ss.str().c_str());
       }
       return dst;
     }
