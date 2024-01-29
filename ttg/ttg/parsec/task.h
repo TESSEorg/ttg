@@ -304,7 +304,12 @@ namespace ttg_parsec {
                                true /* deferred until other readers have completed */)
       , parent_task(task)
       , is_first(is_first)
-      { }
+      {
+        /* store the first 4 integers from the parent task (needed for profiling) */
+        for (int i = 0; i < 4; ++i) {
+          parsec_task.locals[i] = task->parsec_task.locals[i];
+        }
+      }
 
       static void release_task(parsec_ttg_task_base_t* task_base) {
         /* reducer tasks have one mutable input so the task can be submitted on the first release */
