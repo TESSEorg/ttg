@@ -192,16 +192,21 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, ttg:
   using baseT = typename Write_SpMatrix::ttT;
 
   template <typename Keymap2>
-  Write_SpMatrix(SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &in, Keymap2 &&ij_keymap)
-      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, ij_keymap), matrix_(matrix) {}
+  Write_SpMatrix(SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &in, Keymap2 &&ij_keymap, bool write_back = true)
+      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, ij_keymap)
+      , matrix_(matrix)
+      , write_back_(write_back)
+  { }
 
   void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
-    std::lock_guard<std::mutex> lock(mtx_);
-    ttg::trace("rank =", default_execution_context().rank(),
-               "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.cc Write_SpMatrix wrote {",
-               key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
-               " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
-    values_.emplace_back(key[0], key[1], baseT::template get<0>(elem));
+    if (write_back_) {
+      std::lock_guard<std::mutex> lock(mtx_);
+      ttg::trace("rank =", default_execution_context().rank(),
+                "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.cc Write_SpMatrix wrote {",
+                key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
+                " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
+      values_.emplace_back(key[0], key[1], baseT::template get<0>(elem));
+    }
   }
 
   /// grab completion status as a future<void>
@@ -225,6 +230,7 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, ttg:
   SpMatrix<Blk> &matrix_;
   std::vector<SpMatrixTriplet<Blk>> values_;
   mutable std::shared_ptr<std::shared_future<void>> completion_status_;
+  bool write_back_;
 };
 
 /// sparse mm via 2.5D SUMMA
@@ -1254,6 +1260,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   Read_SpMatrix a("A", A, ctl, eA, ij_keymap);
   Read_SpMatrix b("B", B, ctl, eB, ij_keymap);
   Write_SpMatrix<> c(C, eC, ij_keymap);
+  Write_SpMatrix<> c(C, eC, ij_keymap, false);
   auto &c_status = c.status();
   assert(!has_value(c_status));
   //  SpMM25D a_times_b(world, eA, eB, eC, A, B);
