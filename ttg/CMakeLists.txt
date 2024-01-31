@@ -94,9 +94,13 @@ set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
         COMPILE_DEFINITIONS "TTG_GIT_REVISION=\"${TTG_GIT_REVISION}\";TTG_GIT_DESCRIPTION=\"${TTG_GIT_DESCRIPTION}\"")
 
 # optional dependencies
-if (TARGET Boost::boost)
-  list(APPEND ttg-deps Boost::boost)
-else () # if Boost::boost is missing must use bundled Boost.CallableTraits
+if (TARGET Boost::headers)
+  if (TARGET Boost::callable_traits)  # using modularized Boost?
+      list(APPEND ttg-deps Boost::callable_traits)
+  else()
+      list(APPEND ttg-deps Boost::headers)
+  endif()
+else () # if Boost::headers is missing must use bundled Boost.CallableTraits
   list(APPEND ttg-defs "$<BUILD_INTERFACE:TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1>")
   list(APPEND ttg-incs "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ttg/external>")
 endif ()
@@ -167,6 +171,11 @@ if (TARGET MADworld)
 endif(TARGET MADworld)
 if (TARGET Boost::serialization)
   list(APPEND ttg-serialization-deps Boost::serialization)
+  list(APPEND ttg-serialization-boost-deps Boost::serialization)
+  if (TARGET Boost::iostreams)  # using modularized Boost?
+      list(APPEND ttg-serialization-deps Boost::iostreams)
+      list(APPEND ttg-serialization-boost-deps Boost::iostreams)
+  endif()
   list(APPEND ttg-serialization-compile-definitions TTG_SERIALIZATION_SUPPORTS_BOOST=1)
 endif (TARGET Boost::serialization)
 if (TARGET cereal::cereal)
@@ -192,7 +201,7 @@ if (TARGET Boost::serialization)
   add_ttg_library(ttg-serialization-boost
           "${ttg-serialization-sources}"
           PUBLIC_HEADER "${ttg-serialization-headers}"
-          LINK_LIBRARIES "Boost::serialization"
+          LINK_LIBRARIES "${ttg-serialization-boost-deps}"
           COMPILE_DEFINITIONS "TTG_SERIALIZATION_SUPPORTS_BOOST=1")
 endif(TARGET Boost::serialization)
 # make cereal-only serialization target
