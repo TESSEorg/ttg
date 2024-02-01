@@ -1,15 +1,31 @@
 # Boost can be discovered by every (sub)package but only the top package can *build* it ...
-# in either case must declare the components used by TA
+# in either case must declare the components used by TTG
 set(required_components
         headers
         callable_traits
 )
+set(optional_components
+)
 if (TTG_PARSEC_USE_BOOST_SERIALIZATION)
-    list(APPEND required_components
+    list(APPEND optional_components
             serialization
             iostreams
     )
 endif()
+
+# if not allowed to fetch Boost make all Boost optional
+if (NOT DEFINED Boost_FETCH_IF_MISSING AND TTG_FETCH_BOOST)
+    set(Boost_FETCH_IF_MISSING 1)
+endif()
+if (NOT Boost_FETCH_IF_MISSING)
+    foreach(__component IN LISTS required_components)
+    list(APPEND optional_components
+            ${__component}
+    )
+    endforeach()
+    set(required_components )
+endif()
+
 if (DEFINED Boost_REQUIRED_COMPONENTS)
     list(APPEND Boost_REQUIRED_COMPONENTS
             ${required_components})
@@ -17,8 +33,6 @@ if (DEFINED Boost_REQUIRED_COMPONENTS)
 else()
     set(Boost_REQUIRED_COMPONENTS "${required_components}" CACHE STRING "Components of Boost to discovered or built")
 endif()
-set(optional_components
-)
 if (DEFINED Boost_OPTIONAL_COMPONENTS)
     list(APPEND Boost_OPTIONAL_COMPONENTS
             ${optional_components}
@@ -26,10 +40,6 @@ if (DEFINED Boost_OPTIONAL_COMPONENTS)
     list(REMOVE_DUPLICATES Boost_OPTIONAL_COMPONENTS)
 else()
     set(Boost_OPTIONAL_COMPONENTS "${optional_components}" CACHE STRING "Optional components of Boost to discovered or built")
-endif()
-
-if (NOT DEFINED Boost_FETCH_IF_MISSING AND TTG_FETCH_BOOST)
-    set(Boost_FETCH_IF_MISSING 1)
 endif()
 
 # Bring ValeevGroup cmake toolkit, if not yet available
@@ -53,3 +63,6 @@ if (NOT DEFINED vg_cmake_kit_SOURCE_DIR)
 endif()
 include(${vg_cmake_kit_SOURCE_DIR}/modules/FindOrFetchBoost.cmake)
 
+if (TARGET Boost::headers)
+    set(TTG_HAS_BOOST 1)
+endif()

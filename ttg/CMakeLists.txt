@@ -101,8 +101,10 @@ if (TARGET Boost::headers)
       list(APPEND ttg-deps Boost::headers)
   endif()
 else () # if Boost::headers is missing must use bundled Boost.CallableTraits
-  list(APPEND ttg-defs "$<BUILD_INTERFACE:TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1>")
-  list(APPEND ttg-incs "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ttg/external>")
+  list(APPEND ttg-defs "TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1")
+  list(APPEND ttg-incs
+          "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ttg/external>"
+          "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/ttg/external>")
 endif ()
 if (TARGET TTG_Libunwind)
   list(APPEND ttg-deps TTG_Libunwind)
