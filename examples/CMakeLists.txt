@@ -10,7 +10,7 @@ if (TARGET tiledarray)
     add_ttg_executable(spmm spmm/spmm.cc LINK_LIBRARIES TiledArray_Eigen)
     # block-sparse needs BTAS ... it's always provided by TA
     # since only need to use matrices, limit BTAS_TARGET_MAX_INDEX_RANK to 2
-    add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2)
+    add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2)
 
     add_ttg_executable(testing_dpotrf potrf/testing_dpotrf.cc LINK_LIBRARIES tiledarray lapackpp)
     add_ttg_executable(testing_dtrtri potrf/testing_dtrtri.cc LINK_LIBRARIES tiledarray lapackpp)
@@ -19,7 +19,7 @@ if (TARGET tiledarray)
 
     if (TARGET CUDA::cublas)
       add_ttg_executable(bspmm-cuda spmm/spmm_cuda.cc
-                         LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost CUDA::cublas
+                         LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS CUDA::cublas
                          COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
                          RUNTIMES "parsec")
 
@@ -31,7 +31,7 @@ if (TARGET tiledarray)
       endif(TARGET CUDA::cusolver)
     elseif (TARGET roc::hipblas)
       add_ttg_executable(bspmm-hip spmm/spmm_cuda.cc
-                          LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost roc::hipblas
+                          LINK_LIBRARIES tiledarray TiledArray_Eigen roc::hipblas
                           COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
                           RUNTIMES "parsec")
       if (TARGET roc::hipsolver)
@@ -42,7 +42,7 @@ if (TARGET tiledarray)
       endif(TARGET roc::hipsolver)
     elseif (TARGET MKL::MKL_DPCPP)
       add_ttg_executable(bspmm-lz spmm/spmm_cuda.cc
-                          LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS Boost::boost MKL::MKL_DPCPP level_zero::ze_loader m
+                          LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS MKL::MKL_DPCPP level_zero::ze_loader m
                           COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
                           RUNTIMES "parsec")
     endif()

@@ -38,7 +38,7 @@ namespace ttg_parsec {
 
       void register_self() {
         /* insert ourselves from the list of ptr */
-        std::lock_guard {m_ptr_map_mtx};
+        std::lock_guard _{m_ptr_map_mtx};
         m_ptr_map.insert(std::pair{this, true});
       }
 
