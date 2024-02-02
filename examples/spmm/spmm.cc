@@ -1384,8 +1384,13 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   Edge<Key<2>, blk_t> eA, eB;
   Edge<Key<2>, blk_t> eC;
 
-  Read_SpMatrix a("A", A, ctl, eA, ijk_keymap, ij_keymap);
-  Read_SpMatrix b("B", B, ctl, eB, ijk_keymap, ij_keymap);
+  /* the Read_SpMatrix tasks get process coordinates, not tile coordinates  */
+  auto read_keymap = [&](const Key<3>& key){
+      return ijk2rank(key[0], key[1], key[2], P, Q, R);
+    };
+
+  Read_SpMatrix a("A", A, ctl, eA, read_keymap, ij_keymap);
+  Read_SpMatrix b("B", B, ctl, eB, read_keymap, ij_keymap);
   Write_SpMatrix<> c(C, eC, ij_keymap, false);
   auto &c_status = c.status();
   assert(!has_value(c_status));
@@ -1423,7 +1428,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
               << " A_density= " << Adensity << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
               << " gflops/s= " << gflops / tc << std::endl;
   }
-  std::cout << "num reductions " << reduce_count.load() << " tiles " << MT*KT << std::endl;
+  //std::cout << "num reductions " << reduce_count.load() << " tiles " << MT*KT << std::endl;
 }
 
 #if !defined(BLOCK_SPARSE_GEMM)
@@ -1458,6 +1463,13 @@ static void make_rows_of_col_from_eigen(const SpMatrix<> &mat, std::vector<std::
   }
 }
 #endif
+
+/* where to distribute the work to */
+enum class WORKDIST {
+  A = 0, // distribute work based on A's distribution
+  B = 1, // distribute work based on B's distribution
+  C = 2, // distribute work based on C's distribution
+};
 
 static double compute_gflops(const std::vector<std::vector<long>> &a_r2c, const std::vector<std::vector<long>> &b_r2c,
                              const std::vector<int> &mTiles, const std::vector<int> &nTiles,
@@ -1545,7 +1557,7 @@ int main(int argc, char **argv) {
       std::string tiling_type;
       int M = 0, N = 0, K = 0;
       int minTs = 0, maxTs = 0;
-      int parallel_bcasts = 1;
+      int parallel_bcasts = std::numeric_limits<int>::max();
 
       double avg_nb = nan("undefined");
       double Adensity = nan("undefined");
@@ -1578,6 +1590,18 @@ int main(int argc, char **argv) {
         }
       }
 
+      WORKDIST dist = WORKDIST::C;
+      if (cmdOptionExists(argv, argv + argc, "-D")) {
+        std::string DStr(getCmdOption(argv, argv+argc, "-D"));
+        if (DStr == "a") {
+          dist = WORKDIST::A;
+        } else if (DStr == "b") {
+          dist = WORKDIST::B;
+        } else if (DStr == "c") {
+          dist = WORKDIST::C;
+        }
+      }
+
       auto ij_keymap = [P, Q, R](const Key<2> &ij) {
         int i = (int)ij[0];
         int j = (int)ij[1];
@@ -1585,16 +1609,33 @@ int main(int argc, char **argv) {
         return r;
       };
 
-      auto ijk_keymap = [P, Q, R](const Key<3> &ijk) {
-        int i = (int)ijk[0];
-        int j = (int)ijk[1];
-        int k = (int)ijk[2];
-        int r = ijk2rank(i, j, k, P, Q, R);
-        return r;
-      };
+      std::function<int(const Key<3> &ijk)> ijk_keymap;
+
+      if (dist == WORKDIST::A) {
+        ijk_keymap = [&](const Key<3> &ijk) {
+            int i = ijk[0], j = ijk[1], k = ijk[2];
+            return ij2rank(i, k, P, Q, R);
+          };
+      } else if (dist == WORKDIST::B) {
+        ijk_keymap = [&](const Key<3> &ijk) {
+            int i = ijk[0], j = ijk[1], k = ijk[2];
+            return ij2rank(k, j, P, Q, R);
+          };
+      } else if (dist == WORKDIST::C) {
+        ijk_keymap = [&](const Key<3> &ijk) {
+            int i = ijk[0], j = ijk[1], k = ijk[2];
+            return ij2rank(i, j, P, Q, R);
+          };
+      } else {
+        ijk_keymap = [&](const Key<3> &ijk) {
+            int i = ijk[0], j = ijk[1], k = ijk[2];
+            int r = ijk2rank(i, j, k, P, Q, R);
+            return r;
+          };
+      }
 
       std::string seedStr(getCmdOption(argv, argv + argc, "-s"));
-      unsigned int seed = parseOption(seedStr, 0);
+      unsigned long seed = parseOption(seedStr, 0L);
       if (seed == 0) {
         std::random_device rd;
         seed = rd();
@@ -1689,11 +1730,16 @@ int main(int argc, char **argv) {
         // flow graph needs to exist on every node
         // N.B. to validate C we need it on node 0!
         auto keymap_write = [](const Key<2> &key) { return 0; };
+
+        /* the Read_SpMatrix tasks get process coordinates, not tile coordinates  */
+        auto read_keymap = [&](const Key<3>& key){
+            return ijk2rank(key[0], key[1], key[2], P, Q, R);
+          };
         Edge<Key<3>> ctl("control");
         Control control(ctl);
         Edge<Key<2>, blk_t> eA, eB, eC;
-        Read_SpMatrix a("A", A, ctl, eA, ijk_keymap, ij_keymap);
-        Read_SpMatrix b("B", B, ctl, eB, ijk_keymap, ij_keymap);
+        Read_SpMatrix a("A", A, ctl, eA, read_keymap, ij_keymap);
+        Read_SpMatrix b("B", B, ctl, eB, read_keymap, ij_keymap);
         Write_SpMatrix<> c(C, eC, keymap_write);
         auto &c_status = c.status();
         assert(!has_value(c_status));
