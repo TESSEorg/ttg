@@ -88,7 +88,7 @@ namespace ttg::device {
 
     using send_coro_handle_type = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<send_coro_promise_type>;
 
-    /// task that can be resumed after some events occur
+    /// a coroutine for sending data from the device
     struct send_coro_state : public send_coro_handle_type {
       using base_type = send_coro_handle_type;
 
@@ -112,6 +112,7 @@ namespace ttg::device {
       inline bool completed();
     };
 
+    /// the promise type for the send coroutine
     struct send_coro_promise_type {
 
       /* do not suspend the coroutine on first invocation, we want to run
@@ -145,8 +146,8 @@ namespace ttg::device {
     };
 
     template<typename Key, typename Value, ttg::Runtime Runtime = ttg::ttg_runtime>
-    inline send_coro_state send_coro (const Key& key, Value&& value, ttg::Out<Key, std::decay_t<Value>> &t,
-                                      ttg::detail::value_copy_handler<Runtime>& ch) {
+    inline send_coro_state send_coro(const Key& key, Value&& value, ttg::Out<Key, std::decay_t<Value>> &t,
+                                     ttg::detail::value_copy_handler<Runtime>& ch) {
       ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
       Key k = key;
       t.prepare_send(k, std::forward<Value>(value));
@@ -155,8 +156,8 @@ namespace ttg::device {
     };
 
     template<typename Value, ttg::Runtime Runtime = ttg::ttg_runtime>
-    inline send_coro_state sendv_coro (Value&& value, ttg::Out<void, std::decay_t<Value>> &t,
-                                        ttg::detail::value_copy_handler<Runtime>& ch) {
+    inline send_coro_state sendv_coro(Value&& value, ttg::Out<void, std::decay_t<Value>> &t,
+                                      ttg::detail::value_copy_handler<Runtime>& ch) {
       ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
       t.prepare_send(std::forward<Value>(value));
       co_await ttg::Void{}; // we'll come back once the task is done
@@ -164,7 +165,7 @@ namespace ttg::device {
     };
 
     template<typename Key, ttg::Runtime Runtime = ttg::ttg_runtime>
-    inline send_coro_state sendk_coro (const Key& key, ttg::Out<Key, void> &t) {
+    inline send_coro_state sendk_coro(const Key& key, ttg::Out<Key, void> &t) {
       // no need to prepare the send but we have to suspend once
       Key k = key;
       co_await ttg::Void{}; // we'll come back once the task is done
@@ -172,7 +173,7 @@ namespace ttg::device {
     };
 
     template<ttg::Runtime Runtime = ttg::ttg_runtime>
-    inline send_coro_state send_coro (ttg::Out<void, void> &t) {
+    inline send_coro_state send_coro(ttg::Out<void, void> &t) {
       // no need to prepare the send but we have to suspend once
       co_await ttg::Void{}; // we'll come back once the task is done
       t.send();
@@ -415,7 +416,14 @@ namespace ttg::device {
     using device_task_handle_type = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<device_task_promise_type>;
   } // namespace detail
 
-  /// task that can be resumed after some events occur
+  /// A device::Task is a coroutine (a callable that can be suspended and resumed).
+
+  /// \note Since task execution in TTG is not preempable, tasks should not block.
+  /// The purpose of suspending a task is to yield control back to the runtime until some events occur;
+  /// in the meantime its executor (e.g., a user-space thread) can perform other work.
+  /// Once the task function reaches a point where further progress is pending completion of one or more asynchronous
+  /// actions the function needs to be suspended via a coroutine await (`co_await`).
+  /// Resumption will be handled by the runtime.
   struct Task : public detail::device_task_handle_type {
     using base_type = detail::device_task_handle_type;
 
