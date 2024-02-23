@@ -5,6 +5,7 @@
 
 namespace ttg_madness {
 
+/// A runtime-managed buffer mirrored between host and device memory
 template<typename T, typename Allocator>
 struct Buffer : private Allocator {
 
