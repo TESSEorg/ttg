@@ -59,6 +59,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <tuple>
