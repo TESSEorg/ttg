@@ -16,6 +16,8 @@ namespace ttg::device {
 #else
   constexpr ttg::ExecutionSpace available_execution_space = ttg::ExecutionSpace::Invalid;
 #endif
+
+  /// Represents a device in a specific execution space
   class Device {
     int m_id = 0;
     ttg::ExecutionSpace m_space = ttg::ExecutionSpace::Host;
