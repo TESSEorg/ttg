@@ -2817,6 +2817,7 @@ ttg::abort();  // should not happen
     broadcast_arg(const ttg::span<const Key> &keylist, const Value &value) {
       using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;
       auto world = ttg_default_execution_context();
+      auto np = world.size();
       int rank = world.rank();
       uint64_t pos = 0;
       bool have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
@@ -2830,7 +2831,10 @@ ttg::abort();  // should not happen
         std::sort(keylist_sorted.begin(), keylist_sorted.end(), [&](const Key &a, const Key &b) mutable {
           int rank_a = keymap(a);
           int rank_b = keymap(b);
-          return rank_a < rank_b;
+          // sort so that the keys for my rank are first, rank+1 next, ..., wrapping around to 0
+          int pos_a = (rank_a + np - rank) % np;
+          int pos_b = (rank_b + np - rank) % np;
+          return pos_a < pos_b;
         });
 
         /* Assuming there are no local keys, will be updated while iterating over the keys */
