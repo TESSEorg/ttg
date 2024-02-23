@@ -180,20 +180,23 @@ inline int ijk2rank(int i, int j, int k, int P, int Q, int R) {
 template <typename Blk = blk_t,
           typename Keymap = std::function<int(const Key<3> &)>,
           typename OutKeymap = std::function<int(const Key<2> &)>>
-class Read_SpMatrix : public TT<Key<3>, std::tuple<Out<Key<2>, Blk>>, Read_SpMatrix<Blk, Keymap>, ttg::typelist<void>> {
+class Read_SpMatrix : public TT<Key<3>,
+                                std::tuple<Out<Key<2>, Blk>>,
+                                Read_SpMatrix<Blk, Keymap, OutKeymap>,
+                                ttg::typelist<void>> {
  public:
   using baseT = typename Read_SpMatrix::ttT;
   Read_SpMatrix(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<3>> &ctl, Edge<Key<2>, Blk> &out,
-                Keymap &ijk_keymap, std::function<int(const Key<2> &)> ij_keymap)
+                Keymap &pqr_keymap, std::function<int(const Key<2> &)> ij_keymap)
       : baseT(edges(ctl), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl"}, {std::string(label) + "ij"},
-              ijk_keymap)
+              pqr_keymap)
       , matrix_(matrix)
-      , keymap_(ij_keymap) {}
+      , ij_keymap_(ij_keymap) {}
 
   // key is this process' coordinate in the 2-d grid of processes (managed by ij_keymap) ...
   // but it's not used at all since all this TT does is generate consuming tasks that use local tiles ...
   // the consumers better use same keymap (ij_keymap) as this TT to avoid for the data flow from this to be local
-  void op(const Key<3> & /* pq */, std::tuple<Out<Key<2>, Blk>> &out) {
+  void op(const Key<3> & /* pqr */, std::tuple<Out<Key<2>, Blk>> &out) {
     auto rank = ttg::default_execution_context().rank();
     // this code assumes col-major layout
     static_assert(SpMatrix<Blk>::IsRowMajor == false, "SpMatrix must be col-major");
@@ -202,7 +205,7 @@ class Read_SpMatrix : public TT<Key<3>, std::tuple<Out<Key<2>, Blk>>, Read_SpMat
         assert(j == it.col());
         const auto i = it.row();
         // IF the receiver uses the same keymap, these sends are local
-        if (rank == this->get_keymap()(Key<2>(std::initializer_list<long>({i, j})))) {
+        if (rank == this->ij_keymap_(Key<2>(std::initializer_list<long>({i, j})))) {
           ::send<0>(Key<2>(std::initializer_list<long>({i, j})), it.value(), out);
         }
       }
@@ -211,265 +214,7 @@ class Read_SpMatrix : public TT<Key<3>, std::tuple<Out<Key<2>, Blk>>, Read_SpMat
 
  private:
   const SpMatrix<Blk> &matrix_;
-  std::function<int(const Key<2> &)> keymap_;
-};
-
-enum class ReadSchedule {
-  SingleK,   // appropriate for 2D (see ReadA)
-  MultipleK  // appropriate for 3D (see ReadA)
-};
-// change this to control the schedule of sends (2-D vs 3-D)
-constexpr auto DefaultReadSchedule = ReadSchedule::SingleK;
-
-/// flow data from A distributed on a 2-d grid of processes in the order they are likely to be consumed
-
-/// The order of sends needs to tailored as follows:
-/// - for 2-D SUMMA (R=1): read A[i][k] for all i and k=0 first, then k=1, etc. Clearly, Read_SpMatrix is going to
-/// generate reads in the wrong (transposed) order (send all k for i=0, then for i=1, etc.).
-/// - for 2.5/3-D SUMMA (R>1): same order of sends as for 2-D SUMMA will be suboptimal since all k=0 will only
-/// generate work on the r=0 process plane. Instead we *may* want to one tile needed on each plane, then one more for
-/// each plane. Hence the need for ReadSchedule.
-template <ReadSchedule KSchedule = DefaultReadSchedule, typename Blk = blk_t, typename Keymap2 = std::function<int(const Key<2> &)>>
-class ReadA : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, ReadA<KSchedule, Blk, Keymap2>, ttg::typelist<void>> {
- public:
-  using baseT = typename ReadA::ttT;
-  ReadA(const SpMatrix<Blk> &matrix, Edge<Key<2>> &ctl, Edge<Key<2>, Blk> &out, const Keymap2 &ij_keymap, long R)
-      : baseT(edges(ctl), edges(out), std::string("SpMM25D::read_a"), {"ctl"}, {"a_ik"}, ij_keymap)
-      , matrix_(matrix)
-      , R_(R) {}
-
-  // key is this process' coordinate in the 2-d grid of processes (managed by ij_keymap) ...
-  // but it's not used at all since all this TT does is generate consuming tasks that use local tiles ...
-  // the consumers better use same keymap (ij_keymap) as this TT to avoid for the data flow from this to be local
-  void op(const Key<2> & /* pq */, std::tuple<Out<Key<2>, Blk>> &out) {
-    auto rank = ttg::default_execution_context().rank();
-    const int I = matrix_.rows();
-    const int K = matrix_.cols();
-
-    // this assumes col-major layout of SpMatrix
-    static_assert(SpMatrix<Blk>::IsRowMajor == false, "SpMatrix must be col-major");
-
-    // loop over blocks of k at a time, block size controlled by KSchedule
-    const int k_blk_size = (KSchedule == ReadSchedule::SingleK) ? 1 : R_;
-
-    // this keeps iterators over each k-column in this block
-    // there is only 1 task per process, so no need to synchronize access to this
-    static std::vector<typename SpMatrix<Blk>::InnerIterator> column_iterators;
-
-    for (std::pair<int, int> k_blk = {0, std::min(k_blk_size, K)}; k_blk.first < K;
-         k_blk = {k_blk.first + k_blk_size, std::min(k_blk.first + k_blk_size + k_blk_size, K)}) {
-
-      // for each k in the block send one A[i][k], then next i, etc. this means keep track of iterators over k-column
-      // for each k in the block
-      // N.B. : due to the CSC layout of A iterating over (blocks of) columns is efficient
-      column_iterators.resize(0);
-      for (int k = k_blk.first; k < k_blk.second; ++k) {
-        column_iterators.emplace_back(matrix_, k);
-      }
-
-      int k_remaining = k_blk.second - k_blk.first;
-      while(k_remaining != 0) {
-        for (int k = k_blk.first, k_in_blk = 0; k < k_blk.second; ++k, ++k_in_blk) {
-          if (auto& it = column_iterators[k_in_blk]) {
-            assert(k == it.col());
-            const auto i = it.row();
-            // IF the receiver uses the same keymap, these sends are local
-            if (rank == this->get_keymap()(Key<2>(std::initializer_list<long>({i, k})))) {
-              ::send<0>(Key<2>(std::initializer_list<long>({i, k})), it.value(), out);
-            }
-            ++it;
-          }
-          else { // this k is done
-            assert(k_remaining != 0);
-            --k_remaining;
-          }
-        }
-      }
-
-    }
-
-  }
-
- private:
-  const SpMatrix<Blk> &matrix_;
-  long R_;
-};
-
-// flow data from an existing SpMatrix on rank 0
-template <ReadSchedule KSchedule = DefaultReadSchedule, typename Blk = blk_t, typename Keymap2 = std::function<int(const Key<2> &)>>
-class ReadB : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, ReadB<KSchedule, Blk, Keymap2>, ttg::typelist<void>> {
- public:
-  using baseT = typename ReadB::ttT;
-  ReadB(const SpMatrix<Blk> &matrix, Edge<Key<2>> &ctl, Edge<Key<2>, Blk> &out, const Keymap2 &ij_keymap, long R)
-      : baseT(edges(ctl), edges(out), std::string("read_b"), {"ctl"}, {"b_kj"}, ij_keymap), matrix_(matrix), R_(R) {}
-
-  // key is this process' coordinate in the 2-d grid of processes (managed by ij_keymap) ...
-  // but it's not used at all since all this TT does is generate consuming tasks that use local tiles ...
-  // the consumers better use same keymap (ij_keymap) as this TT to avoid for the data flow from this to be local
-  void op(const Key<2> & /* pq */, std::tuple<Out<Key<2>, Blk>> &out) {
-    auto rank = ttg::default_execution_context().rank();
-    const int J = matrix_.cols();
-    const int K = matrix_.rows();
-
-    // this assumes col-major layout of SpMatrix
-    static_assert(SpMatrix<Blk>::IsRowMajor == false, "SpMatrix must be col-major");
-
-    // loop over blocks of k at a time, block size controlled by KSchedule
-    const int k_blk_size = (KSchedule == ReadSchedule::SingleK) ? 1 : R_;
-    for (std::pair<int, int> k_blk = {0, std::min(k_blk_size, K)}; k_blk.first < K;
-      k_blk = {k_blk.first + k_blk_size, std::min(k_blk.first + k_blk_size + k_blk_size, K)}) {
-
-      // WARNING : due to the CSC layout of B iterating over (blocks of) columns is inefficient
-      for (int j = 0; j < matrix_.outerSize(); ++j) {
-        for (typename SpMatrix<Blk>::InnerIterator it(matrix_, j); it; ++it) {
-          assert(j == it.col());
-          const auto k = it.row();
-          // if k past the k block, we are done with this i
-          if (k >= k_blk.second) break;
-          // continue iterating until k has not reached this k block
-          if (k < k_blk.first) continue;
-          // IF the receiver uses the same keymap, these sends are local
-          if (rank == this->get_keymap()(Key<2>(std::initializer_list<long>({k, j})))) {
-            ::send<0>(Key<2>(std::initializer_list<long>({k, j})), it.value(), out);
-          }
-        }
-
-      }
-    }
-  }
-
- private:
-  const SpMatrix<Blk> &matrix_;
-  long R_;
-};
-
-enum class ReadSchedule {
-  SingleK,   // appropriate for 2D (see ReadA)
-  MultipleK  // appropriate for 3D (see ReadA)
-};
-// change this to control the schedule of sends (2-D vs 3-D)
-constexpr auto DefaultReadSchedule = ReadSchedule::SingleK;
-
-/// flow data from A distributed on a 2-d grid of processes in the order they are likely to be consumed
-
-/// The order of sends needs to tailored as follows:
-/// - for 2-D SUMMA (R=1): read A[i][k] for all i and k=0 first, then k=1, etc. Clearly, Read_SpMatrix is going to
-/// generate reads in the wrong (transposed) order (send all k for i=0, then for i=1, etc.).
-/// - for 2.5/3-D SUMMA (R>1): same order of sends as for 2-D SUMMA will be suboptimal since all k=0 will only
-/// generate work on the r=0 process plane. Instead we *may* want to one tile needed on each plane, then one more for
-/// each plane. Hence the need for ReadSchedule.
-template <ReadSchedule KSchedule = DefaultReadSchedule, typename Blk = blk_t, typename Keymap2 = std::function<int(const Key<2> &)>>
-class ReadA : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, ReadA<KSchedule, Blk, Keymap2>, ttg::typelist<void>> {
- public:
-  using baseT = typename ReadA::ttT;
-  ReadA(const SpMatrix<Blk> &matrix, Edge<Key<2>> &ctl, Edge<Key<2>, Blk> &out, const Keymap2 &ij_keymap, long R)
-      : baseT(edges(ctl), edges(out), std::string("SpMM25D::read_a"), {"ctl"}, {"a_ik"}, ij_keymap)
-      , matrix_(matrix)
-      , R_(R) {}
-
-  // key is this process' coordinate in the 2-d grid of processes (managed by ij_keymap) ...
-  // but it's not used at all since all this TT does is generate consuming tasks that use local tiles ...
-  // the consumers better use same keymap (ij_keymap) as this TT to avoid for the data flow from this to be local
-  void op(const Key<2> & /* pq */, std::tuple<Out<Key<2>, Blk>> &out) {
-    auto rank = ttg::default_execution_context().rank();
-    const int I = matrix_.rows();
-    const int K = matrix_.cols();
-
-    // this assumes col-major layout of SpMatrix
-    static_assert(SpMatrix<Blk>::IsRowMajor == false, "SpMatrix must be col-major");
-
-    // loop over blocks of k at a time, block size controlled by KSchedule
-    const int k_blk_size = (KSchedule == ReadSchedule::SingleK) ? 1 : R_;
-
-    // this keeps iterators over each k-column in this block
-    // there is only 1 task per process, so no need to synchronize access to this
-    static std::vector<typename SpMatrix<Blk>::InnerIterator> column_iterators;
-
-    for (std::pair<int, int> k_blk = {0, std::min(k_blk_size, K)}; k_blk.first < K;
-         k_blk = {k_blk.first + k_blk_size, std::min(k_blk.first + k_blk_size + k_blk_size, K)}) {
-
-      // for each k in the block send one A[i][k], then next i, etc. this means keep track of iterators over k-column
-      // for each k in the block
-      // N.B. : due to the CSC layout of A iterating over (blocks of) columns is efficient
-      column_iterators.resize(0);
-      for (int k = k_blk.first; k < k_blk.second; ++k) {
-        column_iterators.emplace_back(matrix_, k);
-      }
-
-      int k_remaining = k_blk.second - k_blk.first;
-      while(k_remaining != 0) {
-        for (int k = k_blk.first, k_in_blk = 0; k < k_blk.second; ++k, ++k_in_blk) {
-          if (auto& it = column_iterators[k_in_blk]) {
-            assert(k == it.col());
-            const auto i = it.row();
-            // IF the receiver uses the same keymap, these sends are local
-            if (rank == this->get_keymap()(Key<2>(std::initializer_list<long>({i, k})))) {
-              ::send<0>(Key<2>(std::initializer_list<long>({i, k})), it.value(), out);
-            }
-            ++it;
-          }
-          else { // this k is done
-            assert(k_remaining != 0);
-            --k_remaining;
-          }
-        }
-      }
-
-    }
-
-  }
-
- private:
-  const SpMatrix<Blk> &matrix_;
-  long R_;
-};
-
-// flow data from an existing SpMatrix on rank 0
-template <ReadSchedule KSchedule = DefaultReadSchedule, typename Blk = blk_t, typename Keymap2 = std::function<int(const Key<2> &)>>
-class ReadB : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, ReadB<KSchedule, Blk, Keymap2>, ttg::typelist<void>> {
- public:
-  using baseT = typename ReadB::ttT;
-  ReadB(const SpMatrix<Blk> &matrix, Edge<Key<2>> &ctl, Edge<Key<2>, Blk> &out, const Keymap2 &ij_keymap, long R)
-      : baseT(edges(ctl), edges(out), std::string("read_b"), {"ctl"}, {"b_kj"}, ij_keymap), matrix_(matrix), R_(R) {}
-
-  // key is this process' coordinate in the 2-d grid of processes (managed by ij_keymap) ...
-  // but it's not used at all since all this TT does is generate consuming tasks that use local tiles ...
-  // the consumers better use same keymap (ij_keymap) as this TT to avoid for the data flow from this to be local
-  void op(const Key<2> & /* pq */, std::tuple<Out<Key<2>, Blk>> &out) {
-    auto rank = ttg::default_execution_context().rank();
-    const int J = matrix_.cols();
-    const int K = matrix_.rows();
-
-    // this assumes col-major layout of SpMatrix
-    static_assert(SpMatrix<Blk>::IsRowMajor == false, "SpMatrix must be col-major");
-
-    // loop over blocks of k at a time, block size controlled by KSchedule
-    const int k_blk_size = (KSchedule == ReadSchedule::SingleK) ? 1 : R_;
-    for (std::pair<int, int> k_blk = {0, std::min(k_blk_size, K)}; k_blk.first < K;
-      k_blk = {k_blk.first + k_blk_size, std::min(k_blk.first + k_blk_size + k_blk_size, K)}) {
-
-      // WARNING : due to the CSC layout of B iterating over (blocks of) columns is inefficient
-      for (int j = 0; j < matrix_.outerSize(); ++j) {
-        for (typename SpMatrix<Blk>::InnerIterator it(matrix_, j); it; ++it) {
-          assert(j == it.col());
-          const auto k = it.row();
-          // if k past the k block, we are done with this i
-          if (k >= k_blk.second) break;
-          // continue iterating until k has not reached this k block
-          if (k < k_blk.first) continue;
-          // IF the receiver uses the same keymap, these sends are local
-          if (rank == this->get_keymap()(Key<2>(std::initializer_list<long>({k, j})))) {
-            ::send<0>(Key<2>(std::initializer_list<long>({k, j})), it.value(), out);
-          }
-        }
-
-      }
-    }
-  }
-
- private:
-  const SpMatrix<Blk> &matrix_;
-  long R_;
+  std::function<int(const Key<2> &)> ij_keymap_;
 };
 
 // flow (move?) data into an existing SpMatrix on rank 0
@@ -1775,7 +1520,10 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   SpMatrix<> C;
   C.resize(MT, NT);
 
-  //reduce_count = 0;
+  /* the Read_SpMatrix tasks get process coordinates, not tile coordinates  */
+  auto read_keymap = [&](const Key<3>& key){
+    return ijk2rank(key[0], key[1], key[2], P, Q, R);
+  };
 
   // flow graph needs to exist on every node
   Edge<Key<3>> ctl("control");
@@ -1783,16 +1531,8 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   Edge<Key<2>, blk_t> eA, eB;
   Edge<Key<2>, blk_t> eC;
 
-  /* the Read_SpMatrix tasks get process coordinates, not tile coordinates  */
-  auto read_keymap = [&](const Key<3>& key){
-      return ijk2rank(key[0], key[1], key[2], P, Q, R);
-    };
-
   Read_SpMatrix a("A", A, ctl, eA, read_keymap, ij_keymap);
   Read_SpMatrix b("B", B, ctl, eB, read_keymap, ij_keymap);
-  // uncomment this to use more intelligent schedule of reads
-//  ReadA<> a(A, ctl, eA, ij_keymap, R);
-//  ReadB<> b(B, ctl, eB, ij_keymap, R);
   Write_SpMatrix<> c(C, eC, ij_keymap, false);
   auto &c_status = c.status();
   assert(!has_value(c_status));
@@ -2142,9 +1882,6 @@ int main(int argc, char **argv) {
         Edge<Key<2>, blk_t> eA, eB, eC;
         Read_SpMatrix a("A", A, ctl, eA, read_keymap, ij_keymap);
         Read_SpMatrix b("B", B, ctl, eB, read_keymap, ij_keymap);
-        // uncomment this to use more intelligent schedule of reads
-//        ReadA<> a(A, ctl, eA, ij_keymap, R);
-//        ReadB<> b(B, ctl, eB, ij_keymap, R);
         Write_SpMatrix<> c(C, eC, keymap_write);
         auto &c_status = c.status();
         assert(!has_value(c_status));
