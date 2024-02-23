@@ -75,7 +75,7 @@ Additional memory-related concerns common to both models:
 How should we map the following host task onto the device?
 ```cpp
 make_tt([](auto& key, auto& data1, auto& data2) -> void {
-    double data3 = blap::dot(data1.data(), data2.data());
+    double data3 = blas::dot(data1.data(), data2.data());
     if (data3 >= 0.)
         send<0>(data1);
     else
@@ -86,7 +86,7 @@ make_tt([](auto& key, auto& data1, auto& data2) -> void {
 Ideally the task will receive `data1` and `data2` already transferred to the memory space(s) accessible from the device execution space:
 ```cpp
 make_device_tt([](auto& key, auto& data1, auto& data2) -> void {
-    double data3 = blap::device_dot(data1.data(), data2.data());
+    double data3 = blas::device_dot(data1.data(), data2.data());
     if (data3 >= 0.)
         send<0>(data1);
     else
