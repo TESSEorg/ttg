@@ -250,6 +250,15 @@ namespace ttg {
 
   }  // namespace detail
 
+  /// @brief Initializes the floating point exceptions.
+  ///
+  /// Enables (if available) FE_DIVBYZERO, FE_INVALID, and FE_OVERFLOW;
+  /// FE_UNDERFLOW and FE_INEXACT are disabled (if available).
+  /// @warning This should be called from the main thread *before* any threads
+  /// have been created (i.e. before madness::initialize()),
+  ///          so that all threads inherit the same floating point environment.
+  void initialize_fpe();
+
   /**
    * The Debugger class describes what should be done when a catastrophic
    * error causes unexpected program termination.  It can try things such as

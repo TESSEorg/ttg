@@ -44,7 +44,7 @@ auto make_lauum(const MatrixT<T>& A,
         ttg::send<1>(Key2{K, K}, std::move(tile_kk), out);
     }
   };
-  return ttg::make_tt(f, ttg::edges(input_disp), ttg::edges(to_syrk_C, output_result), "LAUUM", 
+  return ttg::make_tt(f, ttg::edges(input_disp), ttg::edges(to_syrk_C, output_result), "LAUUM",
                       {"tile_kk"}, {"to_syrk_C", "output_result"});
 }
 
@@ -85,7 +85,7 @@ auto make_trmm(const MatrixT<T>& A,
       ttg::send<1>(Key2{K, N}, std::move(tile_kn), out);
     }
   };
-  return ttg::make_tt(f, ttg::edges(input_kk, input_kn), ttg::edges(to_gemm_C, output_result), "TRMM", 
+  return ttg::make_tt(f, ttg::edges(input_kk, input_kn), ttg::edges(to_gemm_C, output_result), "TRMM",
                       {"tile_kk", "tile_kn"}, {"to_GEMM_C", "output_result"});
 }
 
@@ -93,7 +93,7 @@ auto make_trmm(const MatrixT<T>& A,
 template <typename T>
 auto make_syrk(const MatrixT<T>& A,
                ttg::Edge<Key2, MatrixTile<T>>& input_kn, // will from the dispatcher
-               ttg::Edge<Key2, MatrixTile<T>>& input_nn, 
+               ttg::Edge<Key2, MatrixTile<T>>& input_nn,
                ttg::Edge<Key2, MatrixTile<T>>& to_syrk_nn,
                ttg::Edge<Key2, MatrixTile<T>>& output_result)
 {
@@ -116,7 +116,7 @@ auto make_syrk(const MatrixT<T>& A,
     blas::syrk(blas::Layout::ColMajor,
                lapack::Uplo::Lower,
                blas::Op::Trans,
-               m, k, 
+               m, k,
                1.0, tile_kn.data(), tile_kn.rows(),
                1.0, tile_nn.data(), tile_nn.rows());
 
@@ -127,8 +127,8 @@ auto make_syrk(const MatrixT<T>& A,
         ttg::send<1>(Key2{N, N}, tile_kn, out);
     }
   };
-  return ttg::make_tt(f, ttg::edges(input_kn, input_nn), 
-                         ttg::edges(to_syrk_nn, output_result), "SYRK", 
+  return ttg::make_tt(f, ttg::edges(input_kn, input_nn),
+                         ttg::edges(to_syrk_nn, output_result), "SYRK",
                       {"tile_kn", "tile_nn"}, {"SYRK_nn", "output_result"});
 }
 
@@ -162,7 +162,7 @@ auto make_gemm(const MatrixT<T>& A,
                blas::Op::NoTrans,
                input_A.rows(), input_B.cols(), input_A.cols(),
                1.0, input_A.data(), input_A.rows(),
-                    input_B.data(), input_B.rows(), 
+                    input_B.data(), input_B.rows(),
                1.0, input_C.data(), input_C.rows());
 
     if(K < A.rows()-1) {
@@ -172,8 +172,8 @@ auto make_gemm(const MatrixT<T>& A,
         ttg::send<1>(Key2{M, N}, std::move(input_C), out);
     }
   };
-  return ttg::make_tt(f, ttg::edges(input_A, input_B, input_C), 
-                         ttg::edges(to_gemm_C, output_result), "GEMM", 
+  return ttg::make_tt(f, ttg::edges(input_A, input_B, input_C),
+                         ttg::edges(to_gemm_C, output_result), "GEMM",
                       {"A", "B", "C"}, {"GEMM_C", "output result"});
 }
 
@@ -189,7 +189,7 @@ auto make_dispatcher(const MatrixT<T>& A,
                      ttg::Edge<Key3, MatrixTile<T>>& to_gemm_B)
 {
   auto f = [=](const Key2& key,
-               MatrixTile<T>&&tile,
+               const MatrixTile<T>& tile,
                std::tuple<ttg::Out<Key1, MatrixTile<T>>,
                           ttg::Out<Key2, MatrixTile<T>>,
                           ttg::Out<Key2, MatrixTile<T>>,
@@ -215,7 +215,7 @@ auto make_dispatcher(const MatrixT<T>& A,
                 keylist_trmm_A.push_back(Key2{key[1], n});
             }
         }
-    } 
+    }
     if(key[0] > key[1]) {
         keylist_syrk.reserve(1);
         if(ttg::tracing()) ttg::print("LAUUM_Dispatch(", key, ") sending to SYRK(", key, ")");
@@ -227,7 +227,7 @@ auto make_dispatcher(const MatrixT<T>& A,
             keylist_gemm_A.reserve(key[1]);
             for(int n = 0; n < key[1]; n++) {
                 if(ttg::tracing()) ttg::print("LAUUM_Dispatch(", key, ") sending to A of GEMM(", Key3{key[0], n, key[1]}, ")");
-                keylist_gemm_A.push_back(Key3{key[0], n, key[1]});      
+                keylist_gemm_A.push_back(Key3{key[0], n, key[1]});
             }
         }
     }
@@ -238,10 +238,16 @@ auto make_dispatcher(const MatrixT<T>& A,
             keylist_gemm_B.push_back(Key3{key[0], key[1], n});
         }
     }
-    ttg::broadcast<0, 1, 2, 3, 4, 5>(std::make_tuple(std::move(keylist_lauum), std::move(keylist_syrk), std::move(keylist_trmm_A), std::move(keylist_trmm_B), std::move(keylist_gemm_A), std::move(keylist_gemm_B)), std::move(tile), out);
+    ttg::broadcast<0, 1, 2, 3, 4, 5>(std::make_tuple(std::move(keylist_lauum),
+                                                     std::move(keylist_syrk),
+                                                     std::move(keylist_trmm_A),
+                                                     std::move(keylist_trmm_B),
+                                                     std::move(keylist_gemm_A),
+                                                     std::move(keylist_gemm_B)),
+                                                     tile, out);
   };
 
-  return ttg::make_tt(f, ttg::edges(input), ttg::edges(to_lauum, to_syrk, to_trmm_A, to_trmm_B, to_gemm_A, to_gemm_B), 
+  return ttg::make_tt(f, ttg::edges(input), ttg::edges(to_lauum, to_syrk, to_trmm_A, to_trmm_B, to_gemm_A, to_gemm_B),
                       "LAUUM Dispatch", {"Input"}, {"LAUUM", "SYRK", "TRMM_A", "TRMM_B", "GEMM_A", "GEMM_B"});
 }
 

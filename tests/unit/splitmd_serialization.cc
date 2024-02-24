@@ -3,7 +3,7 @@
 
 #include "ttg.h"
 
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 
 using value_t = int;
 constexpr const int N = 10, M = 10;

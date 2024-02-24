@@ -6,11 +6,10 @@ set(TTG_EXT_VERSION "@TTG_EXT_VERSION@")
 
 set(PaRSEC_CONFIG "@PaRSEC_CONFIG@")
 set(MADNESS_CONFIG "@MADNESS_CONFIG@")
-set(Boost_CONFIG "@Boost_CONFIG@")
 set(CXX_COROUTINE_COMPONENT "@CXX_COROUTINE_COMPONENT@")
 
 set(TTG_TRACKED_BOOST_VERSION "@TTG_TRACKED_BOOST_VERSION@")
-
+set(TTG_HAS_BOOST @TTG_HAS_BOOST@)
 set(TTG_IGNORE_BUNDLED_EXTERNALS @TTG_IGNORE_BUNDLED_EXTERNALS@)
 
 # make TTG CMake modules discoverable + load AddTTGExecutable by default
@@ -18,6 +17,10 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/modules")
 include(AddTTGExecutable)
 
 @PACKAGE_INIT@
+
+if (TTG_HAS_BOOST)
+@Boost_CONFIG_FILE_CONTENTS@
+endif(TTG_HAS_BOOST)
 
 if (NOT TARGET MADworld AND MADNESS_CONFIG)
   get_filename_component(MADNESS_CONFIG_DIR "${MADNESS_CONFIG}" DIRECTORY)
@@ -27,12 +30,6 @@ endif()
 if (NOT TARGET PaRSEC::parsec AND PaRSEC_CONFIG)
   get_filename_component(PaRSEC_CONFIG_DIR "${PaRSEC_CONFIG}" DIRECTORY)
   find_package(PaRSEC CONFIG QUIET REQUIRED COMPONENTS parsec PATHS "${PaRSEC_CONFIG_DIR}" NO_DEFAULT_PATH)
-endif()
-
-# if Boost was discovered and used at TTG configure time discover Boost at the same path
-if (NOT TARGET Boost::boost AND Boost_CONFIG)
-  get_filename_component(Boost_CONFIG_DIR "${Boost_CONFIG}" DIRECTORY)
-  find_package(Boost ${TTG_TRACKED_BOOST_VERSION} CONFIG QUIET REQUIRED OPTIONAL_COMPONENTS serialization PATHS "${Boost_CONFIG_DIR}" NO_DEFAULT_PATH)
 endif()
 
 # if C++ coroutines were used discover same version of them
@@ -45,15 +42,6 @@ if(NOT TARGET ttg)
   include("${CMAKE_CURRENT_LIST_DIR}/ttg-targets.cmake")
   if(NOT TARGET ttg)
     message(FATAL_ERROR "expected ttg among imported TTG targets")
-  endif()
-endif()
-
-# if don't have Boost, use bundled Boost.CallableTraits
-if (NOT TARGET Boost::boost)
-  if (TTG_IGNORE_BUNDLED_EXTERNALS)
-    find_package(Boost ${TTG_TRACKED_BOOST_VERSION} QUIET REQUIRED)
-  else()
-    target_compile_definitions(ttg INTERFACE TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1)
   endif()
 endif()
 

@@ -1,50 +1,81 @@
-if (NOT TARGET Boost::boost)
-  find_package(Boost ${TTG_TRACKED_BOOST_VERSION} QUIET CONFIG OPTIONAL_COMPONENTS serialization)
-endif(NOT TARGET Boost::boost)
-
-if (TARGET Boost::boost)
-  set(_msg "Found Boost at ${Boost_CONFIG}")
-  if (TARGET Boost::serialization)
-    list(APPEND _msg " includes Boost::serialization")
-  endif(TARGET Boost::serialization)
-  message(STATUS "${_msg}")
-
-  # Boost::* targets by default are not GLOBAL, so to allow users of TTG to safely use them we need to make them global
-  # more discussion here: https://gitlab.kitware.com/cmake/cmake/-/issues/17256
-  foreach(tgt boost;headers;${Boost_BTAS_DEPS_LIBRARIES})
-    if (TARGET Boost::${tgt})
-      get_target_property(_boost_tgt_${tgt}_is_imported_global Boost::${tgt} IMPORTED_GLOBAL)
-      if (NOT _boost_tgt_${tgt}_is_imported_global)
-        set_target_properties(Boost::${tgt} PROPERTIES IMPORTED_GLOBAL TRUE)
-      endif()
-      unset(_boost_tgt_${tgt}_is_imported_global)
+# update the Boost version that we can tolerate
+if (NOT DEFINED Boost_OLDEST_BOOST_VERSION)
+    set(Boost_OLDEST_BOOST_VERSION ${TTG_OLDEST_BOOST_VERSION})
+else()
+    if (${Boost_OLDEST_BOOST_VERSION} VERSION_LESS ${TTG_OLDEST_BOOST_VERSION})
+        if (DEFINED CACHE{Boost_OLDEST_BOOST_VERSION})
+            set(Boost_OLDEST_BOOST_VERSION "${TTG_OLDEST_BOOST_VERSION}" CACHE STRING "Oldest Boost version to use" FORCE)
+        else()
+            set(Boost_OLDEST_BOOST_VERSION ${TTG_OLDEST_BOOST_VERSION})
+        endif()
     endif()
-  endforeach()
+endif()
 
-elseif (TTG_FETCH_BOOST)
+# Boost can be discovered by every (sub)package but only the top package can *build* it ...
+# in either case must declare the components used by TTG
+set(required_components
+        headers
+        callable_traits
+)
+set(optional_components
+)
+if (TTG_PARSEC_USE_BOOST_SERIALIZATION)
+    list(APPEND optional_components
+            serialization
+            iostreams
+    )
+endif()
 
-  FetchContent_Declare(
-          CMAKEBOOST
-          GIT_REPOSITORY      https://github.com/Orphis/boost-cmake
-  )
-  FetchContent_MakeAvailable(CMAKEBOOST)
-  FetchContent_GetProperties(CMAKEBOOST
-          SOURCE_DIR CMAKEBOOST_SOURCE_DIR
-          BINARY_DIR CMAKEBOOST_BINARY_DIR
-          )
+# if not allowed to fetch Boost make all Boost optional
+if (NOT DEFINED Boost_FETCH_IF_MISSING AND TTG_FETCH_BOOST)
+    set(Boost_FETCH_IF_MISSING 1)
+endif()
+if (NOT Boost_FETCH_IF_MISSING)
+    foreach(__component IN LISTS required_components)
+    list(APPEND optional_components
+            ${__component}
+    )
+    endforeach()
+    set(required_components )
+endif()
 
-  # current boost-cmake/master does not install boost correctly, so warn that installed TTG will not be usable
-  # boost-cmake/install_rules https://github.com/Orphis/boost-cmake/pull/45 is supposed to fix it but is inactive
-  message(WARNING "Building Boost from source makes TTG unusable from the install location! Install Boost using package manager or manually and reconfigure/reinstall TTG to fix this")
+if (DEFINED Boost_REQUIRED_COMPONENTS)
+    list(APPEND Boost_REQUIRED_COMPONENTS
+            ${required_components})
+    list(REMOVE_DUPLICATES Boost_REQUIRED_COMPONENTS)
+else()
+    set(Boost_REQUIRED_COMPONENTS "${required_components}" CACHE STRING "Components of Boost to discovered or built")
+endif()
+if (DEFINED Boost_OPTIONAL_COMPONENTS)
+    list(APPEND Boost_OPTIONAL_COMPONENTS
+            ${optional_components}
+    )
+    list(REMOVE_DUPLICATES Boost_OPTIONAL_COMPONENTS)
+else()
+    set(Boost_OPTIONAL_COMPONENTS "${optional_components}" CACHE STRING "Optional components of Boost to discovered or built")
+endif()
 
-  if (TARGET Boost::serialization AND TARGET Boost_serialization)
-    install(TARGETS Boost_serialization EXPORT boost)
-    export(EXPORT boost
-           FILE "${PROJECT_BINARY_DIR}/boost-targets.cmake")
-    install(EXPORT boost
-            FILE "boost-targets.cmake"
-            DESTINATION "${CMAKE_INSTALL_CMAKEDIR}"
-            COMPONENT boost-libs)
-  endif()
+# Bring ValeevGroup cmake toolkit, if not yet available
+if (NOT DEFINED vg_cmake_kit_SOURCE_DIR)
+    include(FetchContent)
+    if (DEFINED PROJECT_BINARY_DIR)
+        set(VG_CMAKE_KIT_PREFIX_DIR PROJECT_BINARY_DIR)
+    else ()
+        set(VG_CMAKE_KIT_PREFIX_DIR CMAKE_CURRENT_BINARY_DIR)
+    endif()
+    FetchContent_Declare(
+            vg_cmake_kit
+            QUIET
+            GIT_REPOSITORY      https://github.com/ValeevGroup/kit-cmake.git
+            GIT_TAG             ${TTG_TRACKED_VG_CMAKE_KIT_TAG}
+            SOURCE_DIR ${${VG_CMAKE_KIT_PREFIX_DIR}}/cmake/vg
+            BINARY_DIR ${${VG_CMAKE_KIT_PREFIX_DIR}}/cmake/vg-build
+            SUBBUILD_DIR ${${VG_CMAKE_KIT_PREFIX_DIR}}/cmake/vg-subbuild
+    )
+    FetchContent_MakeAvailable(vg_cmake_kit)
+endif()
+include(${vg_cmake_kit_SOURCE_DIR}/modules/FindOrFetchBoost.cmake)
 
+if (TARGET Boost::headers)
+    set(TTG_HAS_BOOST 1)
 endif()

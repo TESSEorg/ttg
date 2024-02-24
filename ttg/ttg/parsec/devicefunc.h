@@ -11,6 +11,8 @@
 
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
 #include <parsec/mca/device/cuda/device_cuda.h>
+#elif defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
+#include <parsec/mca/device/hip/device_hip.h>
 #endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
 
 namespace ttg_parsec {
@@ -28,7 +30,7 @@ namespace ttg_parsec {
 
       auto& view = std::get<I>(views);
       bool is_current = false;
-      static_assert(ttg::is_buffer_v<view_type> || ttg_parsec::is_devicescratch_v<view_type>);
+      static_assert(ttg::meta::is_buffer_v<view_type> || ttg::meta::is_devicescratch_v<view_type>);
       /* get_parsec_data is overloaded for buffer and devicescratch */
       parsec_data_t* data = detail::get_parsec_data(view);
       /* TODO: check whether the device is current */
@@ -39,7 +41,7 @@ namespace ttg_parsec {
         //if (flows[I].flow_flags != PARSEC_FLOW_ACCESS_RW) {
           access = PARSEC_FLOW_ACCESS_READ;
         //}
-      } else if constexpr (ttg_parsec::is_devicescratch_v<view_type>) {
+      } else if constexpr (ttg::meta::is_devicescratch_v<view_type>) {
         if (view.scope() == ttg::scope::Allocate) {
           access = PARSEC_FLOW_ACCESS_WRITE;
         }
@@ -78,6 +80,7 @@ namespace ttg_parsec {
    * is current on the target device, false if transfers are required. */
   template<typename... Views>
   inline bool register_device_memory(std::tuple<Views&...> &views) {
+    bool is_current = true;
     if (nullptr == detail::parsec_ttg_caller) {
       throw std::runtime_error("register_device_memory may only be invoked from inside a task!");
     }
@@ -86,7 +89,9 @@ namespace ttg_parsec {
       throw std::runtime_error("register_device_memory called inside a non-gpu task!");
     }
 
-    bool is_current = detail::register_device_memory(views, std::index_sequence_for<Views...>{});
+    if constexpr (sizeof...(Views) > 0) {
+      is_current = detail::register_device_memory(views, std::index_sequence_for<Views...>{});
+    }
 
     /* reset all entries in the current task */
     for (int i = sizeof...(Views); i < MAX_PARAM_COUNT; ++i) {
@@ -111,17 +116,13 @@ namespace ttg_parsec {
       parsec_data_t* data = detail::get_parsec_data(view);
       parsec_gpu_task_t *gpu_task = detail::parsec_ttg_caller->dev_ptr->gpu_task;
       parsec_gpu_exec_stream_t *stream = detail::parsec_ttg_caller->dev_ptr->stream;
-      /* enqueue the transfer into the compute stream to come back once the compute and transfer are complete */
 
-#if defined(TTG_HAVE_CUDART) && defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
-      std::cout << "cudaMemcpyAsync of " << data->nb_elts << "B" << std::endl;
-      parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)stream;
-      cudaMemcpyAsync(data->device_copies[0]->device_private,
-                      data->device_copies[data->owner_device]->device_private,
-                      data->nb_elts, cudaMemcpyDeviceToHost, cuda_stream->cuda_stream);
-#else
-      static_assert(DeviceAvail, "No device implementation detected!");
-#endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
+      /* enqueue the transfer into the compute stream to come back once the compute and transfer are complete */
+      parsec_device_gpu_module_t *device_module = detail::parsec_ttg_caller->dev_ptr->device;
+      device_module->memcpy_async(device_module, stream,
+                                  data->device_copies[0]->device_private,
+                                  data->device_copies[data->owner_device]->device_private,
+                                  data->nb_elts, parsec_device_gpu_transfer_direction_d2h);
 
       if constexpr (sizeof...(Is) > 0) {
         // recursion

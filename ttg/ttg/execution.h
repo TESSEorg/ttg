@@ -17,8 +17,22 @@ enum class Execution {
 enum class ExecutionSpace {
   Host,   // a CPU
   CUDA,   // an NVIDIA CUDA device
+  HIP,    // an AMD HIP device
+  L0,     // an Intel L0 device
   Invalid
 };
+
+namespace detail {
+  inline const char *execution_space_name(ExecutionSpace space) noexcept {
+    switch (space) {
+      case ExecutionSpace::Host: return "Host";
+      case ExecutionSpace::CUDA: return "CUDA";
+      case ExecutionSpace::HIP: return "HIP";
+      case ExecutionSpace::Invalid: return "INVALID";
+      default: return "UNKNOWN";
+    }
+  }
+} // namespace detail
 
 };
 

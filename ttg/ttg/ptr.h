@@ -1,36 +1,22 @@
 #ifndef TTG_PTR_H
 #define TTG_PTR_H
 
-#include "ttg/impl_selector.h"
+#include "ttg/fwd.h"
 
 namespace ttg {
 
 template<typename T>
-using Ptr = TTG_IMPL_NS::ptr<T>;
+using Ptr = TTG_IMPL_NS::Ptr<T>;
 
 template<typename T, typename... Args>
-Ptr<T> make_ptr(Args&&... args) {
+inline Ptr<T> make_ptr(Args&&... args) {
   return TTG_IMPL_NS::make_ptr(std::forward<Args>(args)...);
 }
 
 template<typename T>
-auto get_ptr(T&& obj) {
+inline Ptr<std::decay_t<T>> get_ptr(T&& obj) {
   return TTG_IMPL_NS::get_ptr(std::forward<T>(obj));
 }
-
-namespace detail {
-    template<typename T>
-    struct is_ptr : std::false_type
-    { };
-
-    template<typename T>
-    struct is_ptr<ttg::Ptr<T>> : std::true_type
-    { };
-
-    template<typename T>
-    constexpr bool is_ptr_v = is_ptr<T>::value;
-
-} // namespace detail
 
 #if 0
 namespace detail {

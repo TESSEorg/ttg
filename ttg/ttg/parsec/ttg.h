@@ -33,11 +33,11 @@
 #include "ttg/util/print.h"
 #include "ttg/util/trace.h"
 #include "ttg/util/typelist.h"
+#ifdef TTG_HAVE_DEVICE
 #include "ttg/device/task.h"
+#endif  // TTG_HAVE_DEVICE
 
 #include "ttg/serialization/data_descriptor.h"
-
-//#include "ttg/view.h"
 
 #include "ttg/parsec/fwd.h"
 
@@ -59,14 +59,19 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <tuple>
 #include <vector>
 
 // needed for MPIX_CUDA_AWARE_SUPPORT
+#if defined(TTG_HAVE_MPI)
 #include <mpi.h>
+#if defined(TTG_HAVE_MPIEXT)
 #include <mpi-ext.h>
+#endif // TTG_HAVE_MPIEXT
+#endif // TTG_HAVE_MPI
 
 
 #include <parsec.h>
@@ -79,8 +84,17 @@
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
 #include <parsec/remote_dep.h>
-/* TODO: once we use parsec master we need to switch this include */
+
+#ifdef PARSEC_HAVE_DEV_CUDA_SUPPORT
 #include <parsec/mca/device/cuda/device_cuda.h>
+#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
+#ifdef PARSEC_HAVE_DEV_HIP_SUPPORT
+#include <parsec/mca/device/hip/device_hip.h>
+#endif // PARSEC_HAVE_DEV_HIP_SUPPORT
+#ifdef PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT
+#include <parsec/mca/device/level_zero/device_level_zero.h>
+#endif //PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT
+
 #include <parsec/mca/device/device_gpu.h>
 #if defined(PARSEC_PROF_TRACE)
 #include <parsec/profiling.h>
@@ -100,10 +114,9 @@
 #include "ttg/parsec/thread_local.h"
 #include "ttg/parsec/ptr.h"
 #include "ttg/parsec/task.h"
-#ifdef TTG_HAVE_CUDART
-#include "ttg/device/cublas_helper.h"
-#endif  // TTG_HAVE_CUDART
 #include "ttg/parsec/parsec-ext.h"
+
+#include "ttg/device/device.h"
 
 #undef TTG_PARSEC_DEBUG_TRACK_DATA_COPIES
 
@@ -123,18 +136,22 @@ namespace ttg_parsec {
 
   struct msg_header_t {
     typedef enum fn_id : std::int8_t {
+      MSG_INVALID = -1,
       MSG_SET_ARG = 0,
       MSG_SET_ARGSTREAM_SIZE = 1,
       MSG_FINALIZE_ARGSTREAM_SIZE = 2,
       MSG_GET_FROM_PULL = 3 } fn_id_t;
-    uint32_t taskpool_id;
-    uint64_t op_id;
+    uint32_t taskpool_id = -1;
+    uint64_t op_id = -1;
     std::size_t key_offset = 0;
-    fn_id_t fn_id;
+    fn_id_t fn_id = MSG_INVALID;
     std::int8_t num_iovecs = 0;
-    int32_t param_id;
+    bool inline_data = false;
+    int32_t param_id = -1;
     int num_keys = 0;
-    int sender;
+    int sender = -1;
+
+    msg_header_t() = default;
 
     msg_header_t(fn_id_t fid, uint32_t tid, uint64_t oid, int32_t pid, int sender, int nk)
     : fn_id(fid)
@@ -149,6 +166,26 @@ namespace ttg_parsec {
   static void unregister_parsec_tags(void *_);
 
   namespace detail {
+
+    constexpr const int PARSEC_TTG_MAX_AM_SIZE = 1 * 1024*1024;
+
+    struct msg_t {
+      msg_header_t tt_id;
+      static constexpr std::size_t max_payload_size = PARSEC_TTG_MAX_AM_SIZE - sizeof(msg_header_t);
+      unsigned char bytes[max_payload_size];
+
+      msg_t() = default;
+      msg_t(uint64_t tt_id,
+            uint32_t taskpool_id,
+            msg_header_t::fn_id_t fn_id,
+            int32_t param_id,
+            int sender,
+            int num_keys = 1)
+      : tt_id(fn_id, taskpool_id, tt_id, param_id, sender, num_keys)
+      {}
+    };
+
+    inline std::size_t max_inline_size = msg_t::max_payload_size;
 
     static int static_unpack_msg(parsec_comm_engine_t *ce, uint64_t tag, void *data, long unsigned int size,
                                  int src_rank, void *obj) {
@@ -193,6 +230,8 @@ namespace ttg_parsec {
     ttg::Edge<> m_ctl_edge;
     bool _dag_profiling;
     bool _task_profiling;
+    std::array<bool, static_cast<std::size_t>(ttg::ExecutionSpace::Invalid)>
+               mpi_space_support = {true, false, false};
 
     int query_comm_size() {
       int comm_size;
@@ -208,7 +247,7 @@ namespace ttg_parsec {
 
     static void ttg_parsec_ce_up(parsec_comm_engine_t *comm_engine, void *user_data)
     {
-      parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, user_data, PARSEC_TTG_MAX_AM_SIZE);
+      parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, user_data, detail::PARSEC_TTG_MAX_AM_SIZE);
       parsec_ce.tag_register(WorldImpl::parsec_ttg_rma_tag(), &detail::get_remote_complete_cb, user_data, 128);
     }
 
@@ -225,7 +264,6 @@ namespace ttg_parsec {
     int parsec_ttg_profile_backend_allocate_datacopy, parsec_ttg_profile_backend_free_datacopy;
 #endif
 
-    static constexpr const int PARSEC_TTG_MAX_AM_SIZE = 4 * 1024;
     WorldImpl(int *argc, char **argv[], int ncores, parsec_context_t *c = nullptr)
         : WorldImplBase(query_comm_size(), query_comm_rank())
         , ctx(c)
@@ -239,6 +277,23 @@ namespace ttg_parsec {
     {
       ttg::detail::register_world(*this);
       if (own_ctx) ctx = parsec_init(ncores, argc, argv);
+
+      /* query MPI device support */
+      if (ttg::detail::force_device_comm()
+#if defined(MPIX_CUDA_AWARE_SUPPORT) && MPIX_CUDA_AWARE_SUPPORT
+          || MPIX_Query_cuda_support()
+#endif // MPIX_CUDA_AWARE_SUPPORT
+         ) {
+        mpi_space_support[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)] = true;
+      }
+
+      if (ttg::detail::force_device_comm()
+#if defined(MPIX_HIP_AWARE_SUPPORT) && MPIX_HIP_AWARE_SUPPORT
+          || MPIX_Query_hip_support()
+#endif // MPIX_HIP_AWARE_SUPPORT
+         ) {
+        mpi_space_support[static_cast<std::size_t>(ttg::ExecutionSpace::HIP)] = true;
+      }
 
 #if defined(PARSEC_PROF_TRACE)
       if(parsec_profile_enabled) {
@@ -259,7 +314,7 @@ namespace ttg_parsec {
 #endif
 
       if( NULL != parsec_ce.tag_register) {
-        parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, this, PARSEC_TTG_MAX_AM_SIZE);
+        parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, this, detail::PARSEC_TTG_MAX_AM_SIZE);
         parsec_ce.tag_register(WorldImpl::parsec_ttg_rma_tag(), &detail::get_remote_complete_cb, this, 128);
       }
 
@@ -437,6 +492,10 @@ namespace ttg_parsec {
     }
 
     virtual bool profiling() override { return _task_profiling; }
+
+    bool mpi_support(ttg::ExecutionSpace space) {
+      return mpi_space_support[static_cast<std::size_t>(space)];
+    }
 
     virtual void final_task() override {
 #ifdef TTG_USE_USER_TERMDET
@@ -679,7 +738,7 @@ namespace ttg_parsec {
 
     template<typename TT, std::size_t I>
     inline void transfer_ownership_impl(ttg_data_copy_t *copy, int device) {
-      if constexpr(!std::is_const_v<std::tuple_element_t<I, typename TT::input_args_type>>) {
+      if constexpr(!std::is_const_v<std::tuple_element_t<I, typename TT::input_values_tuple_type>>) {
         copy->transfer_ownership(PARSEC_FLOW_ACCESS_RW, device);
       }
     }
@@ -695,7 +754,7 @@ namespace ttg_parsec {
     inline parsec_hook_return_t hook(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
       parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
       if constexpr(std::tuple_size_v<typename TT::input_values_tuple_type> > 0) {
-        transfer_ownership<TT>(me, 0, std::index_sequence_for<typename TT::input_values_tuple_type>{});
+        transfer_ownership<TT>(me, 0, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
       }
       return me->template invoke_op<ttg::ExecutionSpace::Host>();
     }
@@ -706,7 +765,27 @@ namespace ttg_parsec {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_op<ttg::ExecutionSpace::CUDA>();
       } else {
-        assert(TT::derived_has_cuda_op());
+        throw std::runtime_error("PaRSEC CUDA hook invoked on a TT that does not support CUDA operations!");
+      }
+    }
+
+    template<typename TT>
+    inline parsec_hook_return_t hook_hip(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+      if constexpr(TT::derived_has_hip_op()) {
+        parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
+        return me->template invoke_op<ttg::ExecutionSpace::HIP>();
+      } else {
+        throw std::runtime_error("PaRSEC HIP hook invoked on a TT that does not support HIP operations!");
+      }
+    }
+
+    template<typename TT>
+    inline parsec_hook_return_t hook_level_zero(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+      if constexpr(TT::derived_has_level_zero_op()) {
+        parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
+        return me->template invoke_op<ttg::ExecutionSpace::L0>();
+      } else {
+        throw std::runtime_error("PaRSEC HIP hook invoked on a TT that does not support HIP operations!");
       }
     }
 
@@ -788,6 +867,7 @@ namespace ttg_parsec {
           parsec_task_t *next_task = copy->get_next_task();
           copy->set_next_task(nullptr);
           parsec_ttg_task_base_t *deferred_op = (parsec_ttg_task_base_t *)next_task;
+          copy->mark_mutable();
           deferred_op->release_task();
         } else if ((1 == copy->num_ref()) || (1 == copy->drop_ref())) {
           /* we are the last reference, delete the copy */
@@ -927,6 +1007,26 @@ namespace ttg_parsec {
     std::shared_ptr<ttg::base::WorldImplBase> world_sptr{static_cast<ttg::base::WorldImplBase *>(world_ptr)};
     ttg::World world{std::move(world_sptr)};
     ttg::detail::set_default_world(std::move(world));
+
+    // query the first device ID
+    detail::first_device_id = -1;
+    for (int i = 0; i < parsec_nb_devices; ++i) {
+      bool is_gpu = parsec_mca_device_is_gpu(i);
+      if (detail::first_device_id == -1 && is_gpu) {
+        detail::first_device_id = i;
+      } else if (detail::first_device_id > -1 && !is_gpu) {
+        throw std::runtime_error("PaRSEC: Found non-GPU device in GPU ID range!");
+      }
+    }
+
+    /* parse the maximum inline size */
+    const char* ttg_max_inline_cstr = std::getenv("TTG_MAX_INLINE");
+    if (nullptr != ttg_max_inline_cstr) {
+      std::size_t inline_size = std::atol(ttg_max_inline_cstr);
+      if (inline_size < detail::max_inline_size) {
+        detail::max_inline_size = inline_size;
+      }
+    }
   }
   inline void ttg_finalize() {
     // We need to notify the current taskpool of termination if we are in user termination detection mode
@@ -934,7 +1034,7 @@ namespace ttg_parsec {
     if(0 == ttg::default_execution_context().rank())
       ttg::default_execution_context().impl().final_task();
     ttg::detail::set_default_world(ttg::World{});  // reset the default world
-    detail::ptr::drop_all_ptr();
+    detail::ptr_impl::drop_all_ptr();
     ttg::detail::destroy_worlds<ttg_parsec::WorldImpl>();
     if (detail::initialized_mpi()) MPI_Finalize();
   }
@@ -1005,20 +1105,6 @@ namespace ttg_parsec {
       parsec_task_class_t self;
     };
 
-    struct msg_t {
-      msg_header_t tt_id;
-      unsigned char bytes[WorldImpl::PARSEC_TTG_MAX_AM_SIZE - sizeof(msg_header_t)];
-
-      msg_t() = default;
-      msg_t(uint64_t tt_id,
-            uint32_t taskpool_id,
-            msg_header_t::fn_id_t fn_id,
-            int32_t param_id,
-            int sender,
-            int num_keys = 1)
-      : tt_id(fn_id, taskpool_id, tt_id, param_id, sender, num_keys)
-      {}
-    };
   }  // namespace detail
 
   template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs>
@@ -1042,6 +1128,12 @@ namespace ttg_parsec {
     template <typename T>
     using have_cuda_op_non_type_t = decltype(T::have_cuda_op);
 
+    template <typename T>
+    using have_hip_op_non_type_t = decltype(T::have_hip_op);
+
+    template <typename T>
+    using have_level_zero_op_non_type_t = decltype(T::have_level_zero_op);
+
     bool alive = true;
 
     static constexpr int numinedges = std::tuple_size_v<input_tuple_type>;     // number of input edges
@@ -1057,6 +1149,29 @@ namespace ttg_parsec {
       } else {
         return false;
       }
+    }
+
+    /// @return true if derivedT::have_hip_op exists and is defined to true
+    static constexpr bool derived_has_hip_op() {
+      if constexpr (ttg::meta::is_detected_v<have_hip_op_non_type_t, derivedT>) {
+        return derivedT::have_hip_op;
+      } else {
+        return false;
+      }
+    }
+
+    /// @return true if derivedT::have_hip_op exists and is defined to true
+    static constexpr bool derived_has_level_zero_op() {
+      if constexpr (ttg::meta::is_detected_v<have_level_zero_op_non_type_t, derivedT>) {
+        return derivedT::have_level_zero_op;
+      } else {
+        return false;
+      }
+    }
+
+    /// @return true if the TT supports device execution
+    static constexpr bool derived_has_device_op() {
+      return (derived_has_cuda_op() || derived_has_hip_op() || derived_has_level_zero_op());
     }
 
     using ttT = TT;
@@ -1238,6 +1353,7 @@ namespace ttg_parsec {
               task->copies[IS]->get_ptr()))...};
     }
 
+#ifdef TTG_HAVE_DEVICE
     /**
      * Submit callback called by PaRSEC once all input transfers have completed.
      */
@@ -1248,7 +1364,7 @@ namespace ttg_parsec {
 
       task_t *task = (task_t*)gpu_task->ec;
       // get the device task from the coroutine handle
-      ttg::device_task dev_task = ttg::device_task_handle_type::from_address(task->suspended_task_address);
+      ttg::device::Task dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
 
       task->dev_ptr->stream = gpu_stream;
 
@@ -1258,30 +1374,52 @@ namespace ttg_parsec {
       auto dev_data = dev_task.promise();
 
       /* we should still be waiting for the transfer to complete */
-      assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_TRANSFER ||
-             dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL);
+      assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_TRANSFER ||
+             dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_KERNEL);
 
-#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
-      parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu_stream;
-      ttg::detail::cublas_set_kernel_stream(cuda_stream->cuda_stream);
-#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
+#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
+      {
+        parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu_stream;
+        int device = detail::parsec_device_to_ttg_device(gpu_device->super.device_index);
+        ttg::device::detail::set_current(device, cuda_stream->cuda_stream);
+      }
+#endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
+
+#if defined(PARSEC_HAVE_DEV_HIP_SUPPORT) && defined(TTG_HAVE_HIP)
+      {
+        parsec_hip_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)gpu_stream;
+        int device = detail::parsec_device_to_ttg_device(gpu_device->super.device_index);
+        ttg::device::detail::set_current(device, hip_stream->hip_stream);
+      }
+#endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
+
+#if defined(PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT) && defined(TTG_HAVE_LEVEL_ZERO)
+      {
+        parsec_level_zero_exec_stream_t *stream;
+        stream = (parsec_level_zero_exec_stream_t *)gpu_stream;
+        int device = detail::parsec_device_to_ttg_device(gpu_device->super.device_index);
+        ttg::device::detail::set_current(device, stream->swq->queue);
+      }
+#endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
 
       /* Here we call back into the coroutine again after the transfers have completed */
       static_op<Space>(&task->parsec_task);
+
+      ttg::device::detail::reset_current();
 
       /* we will come back into this function once the kernel and transfers are done */
       int rc = PARSEC_HOOK_RETURN_DONE;
       if (nullptr != task->suspended_task_address) {
         /* Get a new handle for the promise*/
-        dev_task = ttg::device_task_handle_type::from_address(task->suspended_task_address);
+        dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
         dev_data = dev_task.promise();
 
-        assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_KERNEL ||
-               dev_data.state() == ttg::TTG_DEVICE_CORO_SENDOUT     ||
-               dev_data.state() == ttg::TTG_DEVICE_CORO_COMPLETE);
+        assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_KERNEL ||
+               dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT     ||
+               dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_COMPLETE);
 
-        if (ttg::TTG_DEVICE_CORO_SENDOUT == dev_data.state() ||
-            ttg::TTG_DEVICE_CORO_COMPLETE == dev_data.state()) {
+        if (ttg::device::detail::TTG_DEVICE_CORO_SENDOUT == dev_data.state() ||
+            ttg::device::detail::TTG_DEVICE_CORO_COMPLETE == dev_data.state()) {
           /* the task started sending so we won't come back here */
           //std::cout << "device_static_submit task " << task << " complete" << std::endl;
         } else {
@@ -1295,8 +1433,8 @@ namespace ttg_parsec {
       return rc;
     }
 
-    static int
-    static_cuda_stage_in(parsec_gpu_task_t        *gtask,
+    static void
+    static_device_stage_in(parsec_gpu_task_t        *gtask,
                          uint32_t                  flow_mask,
                          parsec_gpu_exec_stream_t *gpu_stream) {
       /* register any memory that hasn't been registered yet */
@@ -1308,19 +1446,26 @@ namespace ttg_parsec {
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
             // register host memory for faster device access
             cudaError_t status;
-            status = cudaHostRegister(copy->device_private, gtask->flow_nb_elts[i], cudaHostRegisterPortable);
-            assert(cudaSuccess == status);
+            //status = cudaHostRegister(copy->device_private, gtask->flow_nb_elts[i], cudaHostRegisterPortable);
+            //assert(cudaSuccess == status);
 #endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
-            copy->flags |= TTG_PARSEC_DATA_FLAG_REGISTERED;
+            //copy->flags |= TTG_PARSEC_DATA_FLAG_REGISTERED;
           }
         }
       }
-      return parsec_default_cuda_stage_in(gtask, flow_mask, gpu_stream);
+    }
+
+    static int
+    static_device_stage_in_hook(parsec_gpu_task_t        *gtask,
+                                uint32_t                  flow_mask,
+                                parsec_gpu_exec_stream_t *gpu_stream) {
+      static_device_stage_in(gtask, flow_mask, gpu_stream);
+      return parsec_default_gpu_stage_in(gtask, flow_mask, gpu_stream);
     }
 
     template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t device_static_op(parsec_task_t* parsec_task) {
-      static_assert(derived_has_cuda_op());
+      static_assert(derived_has_device_op());
 
       int dev_index;
       double ratio = 1.0;
@@ -1337,7 +1482,7 @@ namespace ttg_parsec {
       PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_list_item_t);
       gpu_task->ec = parsec_task;
       gpu_task->task_type = 0; // user task
-      gpu_task->load = 1.0;    // TODO: can we do better?
+      gpu_task->load = 1;    // TODO: can we do better?
       gpu_task->last_data_check_epoch = -1; // used internally
       gpu_task->pushout = 0;
       gpu_task->submit = &TT::device_static_submit<Space>;
@@ -1350,47 +1495,94 @@ namespace ttg_parsec {
 
       /* when we come back here, the flows in gpu_task are set (see register_device_memory) */
 
+      if (nullptr == task->suspended_task_address) {
+        /* short-cut in case the task returned immediately */
+        return PARSEC_HOOK_RETURN_DONE;
+      }
+
       // get the device task from the coroutine handle
-      auto dev_task = ttg::device_task_handle_type::from_address(task->suspended_task_address);
+      auto dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
 
       // get the promise which contains the views
-      ttg::device_task_promise_type& dev_data = dev_task.promise();
+      ttg::device::detail::device_task_promise_type& dev_data = dev_task.promise();
 
       /* for now make sure we're waiting for transfers and the coro hasn't skipped this step */
-      assert(dev_data.state() == ttg::TTG_DEVICE_CORO_WAIT_TRANSFER);
+      assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_TRANSFER);
+
+      /* set up a temporary task-class to correctly specify the flows */
+      parsec_task_class_t tc = *task->parsec_task.task_class;
+
+      tc.name = task->parsec_task.task_class->name;
+      // input flows are set up during register_device_memory as part of the first invocation above
+      for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
+        tc.in[i]  = gpu_task->flow[i];
+        tc.out[i] = gpu_task->flow[i];
+      }
+      tc.nb_flows = MAX_PARAM_COUNT;
+
+      /* swap in the new task class */
+      const parsec_task_class_t* tmp = task->parsec_task.task_class;
+      *const_cast<parsec_task_class_t**>(&task->parsec_task.task_class) = &tc;
 
       /* TODO: is this the right place to set the mask? */
       task->parsec_task.chore_mask = PARSEC_DEV_ALL;
       /* get a device and come back if we need another one */
-      double task_load = 1.;
-      dev_index = parsec_get_best_device(parsec_task, task_load);
+      int64_t task_load = 1;
+      dev_index = parsec_get_best_device(parsec_task, &task_load);
+
+      /* swap back the original task class */
+      task->parsec_task.task_class = tmp;
+
+      gpu_task->load = task_load;
       assert(dev_index >= 0);
-      if (dev_index < 2) {
+      if (!parsec_mca_device_is_gpu(dev_index)) {
           return PARSEC_HOOK_RETURN_NEXT; /* Fall back */
       }
 
-      parsec_device_module_t *device = parsec_mca_device_get(dev_index);
+      parsec_device_gpu_module_t *device = (parsec_device_gpu_module_t*)parsec_mca_device_get(dev_index);
       assert(NULL != device);
-      switch(device->type) {
+
+      task->dev_ptr->device = device;
+
+      switch(device->super.type) {
 
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
         case PARSEC_DEV_CUDA:
           if constexpr (Space == ttg::ExecutionSpace::CUDA) {
             /* TODO: we need custom staging functions because PaRSEC looks at the
              *       task-class to determine the number of flows. */
-            gpu_task->stage_in  = static_cuda_stage_in;
-            gpu_task->stage_out = parsec_default_cuda_stage_out;
-            return parsec_cuda_kernel_scheduler(es, gpu_task, dev_index);
+            gpu_task->stage_in  = static_device_stage_in_hook;
+            gpu_task->stage_out = parsec_default_gpu_stage_out;
+            return parsec_device_kernel_scheduler(&device->super, es, gpu_task);
           }
           break;
 #endif
+#if defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
+        case PARSEC_DEV_HIP:
+          if constexpr (Space == ttg::ExecutionSpace::HIP) {
+            gpu_task->stage_in  = static_device_stage_in_hook;
+            gpu_task->stage_out = parsec_default_gpu_stage_out;
+            return parsec_device_kernel_scheduler(&device->super, es, gpu_task);
+          }
+          break;
+#endif // PARSEC_HAVE_DEV_HIP_SUPPORT
+#if defined(PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT)
+        case PARSEC_DEV_LEVEL_ZERO:
+          if constexpr (Space == ttg::ExecutionSpace::L0) {
+            gpu_task->stage_in  = static_device_stage_in_hook;
+            gpu_task->stage_out = parsec_default_gpu_stage_out;
+            return parsec_device_kernel_scheduler(&device->super, es, gpu_task);
+          }
+          break;
+#endif // PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT
         default:
           break;
       }
-      ttg::print_error(task->tt->get_name(), " : received mismatching device type ", device->type, " from PaRSEC");
+      ttg::print_error(task->tt->get_name(), " : received mismatching device type ", (int)device->super.type, " from PaRSEC");
       ttg::abort();
       return PARSEC_HOOK_RETURN_DONE; // will not be reacehed
     }
+#endif  // TTG_HAVE_DEVICE
 
     template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t static_op(parsec_task_t *parsec_task) {
@@ -1432,7 +1624,8 @@ namespace ttg_parsec {
         detail::parsec_ttg_caller = nullptr;
       }
       else {  // resume the suspended coroutine
-        auto coro = static_cast<ttg::device_task>(ttg::device_task_handle_type::from_address(suspended_task_address));
+#ifdef TTG_HAVE_DEVICE
+        ttg::device::Task coro = ttg::device::detail::device_task_handle_type::from_address(suspended_task_address);
         assert(detail::parsec_ttg_caller == nullptr);
         detail::parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
         // TODO: unify the outputs tls handling
@@ -1459,9 +1652,12 @@ namespace ttg_parsec {
         }
         task->suspended_task_address = suspended_task_address;
 #else
-#endif // 0
+#endif  // TTG_HAS_COROUTINE
         ttg::abort();  // should not happen
-#endif
+#endif  // 0
+#else  // TTG_HAVE_DEVICE
+ttg::abort();  // should not happen
+#endif  // TTG_HAVE_DEVICE
       }
       task->suspended_task_address = suspended_task_address;
 
@@ -1557,12 +1753,15 @@ namespace ttg_parsec {
       using rtask_t = detail::reducer_task_t;
       using value_t = std::tuple_element_t<i, actual_input_tuple_type>;
       constexpr const bool val_is_void = ttg::meta::is_void_v<value_t>;
+      constexpr const bool input_is_const = std::is_const_v<value_t>;
       rtask_t *rtask = (rtask_t*)parsec_task;
       task_t *parent_task = static_cast<task_t*>(rtask->parent_task);
       ttT *baseobj = parent_task->tt;
       derivedT *obj = static_cast<derivedT *>(baseobj);
 
       auto& reducer = std::get<i>(baseobj->input_reducers);
+
+      //std::cout << "static_reducer_op " << parent_task->key << std::endl;
 
       if (obj->tracing()) {
         if constexpr (!ttg::meta::is_void_v<keyT>)
@@ -1607,6 +1806,8 @@ namespace ttg_parsec {
             break;
           }
           source_copy = ((detail::ttg_data_copy_self_t *)(item))->self;
+          assert(target_copy->num_readers() == target_copy->mutable_tag);
+          assert(source_copy->num_readers() > 0);
           reducer(*reinterpret_cast<std::decay_t<value_t> *>(target_copy->get_ptr()),
                   *reinterpret_cast<std::decay_t<value_t> *>(source_copy->get_ptr()));
           detail::release_data_copy(source_copy);
@@ -1626,7 +1827,11 @@ namespace ttg_parsec {
       //          << " of " << parent_task->streams[i].goal << " complete " << complete
       //          << " c " << c << std::endl;
       if (complete && c == 0) {
-        /* task is still in the hash table, have release_task remove it */
+        if constexpr(input_is_const) {
+          /* make the consumer task a reader if its input is const */
+          target_copy->reset_readers();
+        }
+        /* task may not be runnable yet because other inputs are missing, have release_task decide */
         parent_task->remove_from_hash = true;
         parent_task->release_task(parent_task);
       }
@@ -1806,6 +2011,7 @@ namespace ttg_parsec {
         if constexpr (!ttg::meta::is_void_v<valueT>) {
           using decvalueT = std::decay_t<valueT>;
           int32_t num_iovecs = msg->tt_id.num_iovecs;
+          //bool inline_data = msg->inline_data;
           detail::ttg_data_copy_t *copy;
           if constexpr (ttg::has_split_metadata<decvalueT>::value) {
             ttg::SplitMetadataDescriptor<decvalueT> descr;
@@ -1820,6 +2026,30 @@ namespace ttg_parsec {
             copy = detail::create_new_datacopy(descr.create_from_metadata(metadata));
           } else if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
             copy = detail::create_new_datacopy(decvalueT{});
+#if 0
+            // TODO: first attempt at sending directly to the device
+            parsec_gpu_data_copy_t* gpu_elem;
+            gpu_elem = PARSEC_DATA_GET_COPY(master, gpu_device->super.device_index);
+            int i = detail::first_device_id;
+            int devid = detail::first_device_id;
+            while (i < parsec_nb_devices) {
+              if (nullptr == gpu_elem) {
+                gpu_elem = PARSEC_OBJ_NEW(parsec_data_copy_t);
+                gpu_elem->flags = PARSEC_DATA_FLAG_PARSEC_OWNED | PARSEC_DATA_FLAG_PARSEC_MANAGED;
+                gpu_elem->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
+                gpu_elem->version = 0;
+                gpu_elem->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
+              }
+              if (nullptr == gpu_elem->device_private) {
+                gpu_elem->device_private = zone_malloc(gpu_device->memory, gpu_task->flow_nb_elts[i]);
+                if (nullptr == gpu_elem->device_private) {
+                  devid++;
+                  continue;
+                }
+                break;
+              }
+            }
+#endif // 0
             /* unpack the object, potentially discovering iovecs */
             pos = unpack(*static_cast<decvalueT *>(copy->get_ptr()), msg->bytes, pos);
             //std::cout << "set_arg_from_msg iovec_begin num_iovecs " << num_iovecs << " distance " << std::distance(copy->iovec_begin(), copy->iovec_end()) << std::endl;
@@ -1835,26 +2065,37 @@ namespace ttg_parsec {
             int remote = msg->tt_id.sender;
             assert(remote < world.size());
 
-            /* nothing else to do if the object is empty */
-            /* extract the callback tag */
-            parsec_ce_tag_t cbtag;
-            std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
-            pos += sizeof(cbtag);
-
-            /* create the value from the metadata */
-            auto activation = new detail::rma_delayed_activate(
-                std::move(keylist), copy, num_iovecs, [this](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
-                  set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
-                  this->world.impl().decrement_inflight_msg();
-                });
             auto &val = *static_cast<decvalueT *>(copy->get_ptr());
 
-            using ActivationT = std::decay_t<decltype(*activation)>;
+            bool inline_data = msg->tt_id.inline_data;
 
             int nv = 0;
             /* start the RMA transfers */
             auto handle_iovecs_fn =
               [&](auto&& iovecs) {
+
+                if (inline_data) {
+                  /* unpack the data from the message */
+                  for (auto &&iov : iovecs) {
+                    ++nv;
+                    std::memcpy(iov.data, msg->bytes + pos, iov.num_bytes);
+                    pos += iov.num_bytes;
+                  }
+                } else {
+                  /* extract the callback tag */
+                  parsec_ce_tag_t cbtag;
+                  std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
+                  pos += sizeof(cbtag);
+
+                  /* create the value from the metadata */
+                  auto activation = new detail::rma_delayed_activate(
+                      std::move(keylist), copy, num_iovecs, [this](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
+                        set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
+                        this->world.impl().decrement_inflight_msg();
+                      });
+
+                  using ActivationT = std::decay_t<decltype(*activation)>;
+
                   for (auto &&iov : iovecs) {
                     ++nv;
                     parsec_ce_mem_reg_handle_t rreg;
@@ -1882,6 +2123,7 @@ namespace ttg_parsec {
                                   /*world.impl().parsec_ttg_rma_tag()*/
                                   cbtag, &fn_ptr, sizeof(std::intptr_t));
                   }
+                }
             };
             if constexpr (ttg::has_split_metadata<decvalueT>::value) {
               ttg::SplitMetadataDescriptor<decvalueT> descr;
@@ -1893,6 +2135,10 @@ namespace ttg_parsec {
 
             assert(num_iovecs == nv);
             assert(size == (key_end_pos + sizeof(msg_header_t)));
+
+            if (inline_data) {
+              set_arg_from_msg_keylist<i, decvalueT>(ttg::span<keyT>(&keylist[0], num_keys), copy);
+            }
           }
           // case 2 and 3
         } else if constexpr (!ttg::meta::is_void_v<keyT> && std::is_void_v<valueT>) {
@@ -2083,8 +2329,10 @@ namespace ttg_parsec {
       bool remove_from_hash = true;
       bool discover_task = true;
       bool get_pull_data = false;
+      bool has_lock = false;
       /* If we have only one input and no reducer on that input we can skip the hash table */
       if (numins > 1 || reducer) {
+        has_lock = true;
         parsec_hash_table_lock_bucket(&tasks_table, hk);
         if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
           task = create_new_task(key);
@@ -2105,6 +2353,7 @@ namespace ttg_parsec {
         /* if we have a reducer, we need to hold on to the lock for just a little longer */
         if (!reducer) {
           parsec_hash_table_unlock_bucket(&tasks_table, hk);
+          has_lock = false;
         }
       } else {
         task = create_new_task(key);
@@ -2120,7 +2369,7 @@ namespace ttg_parsec {
 
       if( world_impl.dag_profiling() ) {
 #if defined(PARSEC_PROF_GRAPHER)
-        if(NULL != detail::parsec_ttg_caller && !detail::parsec_ttg_caller->dummy()) {
+        if(NULL != detail::parsec_ttg_caller && !detail::parsec_ttg_caller->is_dummy()) {
           int orig_index = detail::find_index_of_copy_in_task(detail::parsec_ttg_caller, &value);
           char orig_str[32];
           char dest_str[32];
@@ -2141,15 +2390,18 @@ namespace ttg_parsec {
 
       auto get_copy_fn = [&](detail::parsec_ttg_task_base_t *task, auto&& value, bool is_const){
         detail::ttg_data_copy_t *copy = copy_in;
-        if (nullptr != detail::parsec_ttg_caller) {
+        if (nullptr == copy && nullptr != detail::parsec_ttg_caller) {
           copy = detail::find_copy_in_task(detail::parsec_ttg_caller, &value);
         }
         if (nullptr != copy) {
           /* retain the data copy */
-          copy = detail::register_data_copy<valueT>(copy, task, true);
+          copy = detail::register_data_copy<valueT>(copy, task, is_const);
         } else {
           /* create a new copy */
           copy = detail::create_new_datacopy(std::forward<Value>(value));
+          if (!is_const) {
+            copy->mark_mutable();
+          }
         }
         return copy;
       };
@@ -2158,6 +2410,7 @@ namespace ttg_parsec {
         auto submit_reducer_task = [&](auto *parent_task){
           /* check if we need to create a task */
           std::size_t c = parent_task->streams[i].reduce_count.fetch_add(1, std::memory_order_release);
+          //std::cout << "submit_reducer_task " << key << " c " << c << std::endl;
           if (0 == c) {
             /* we are responsible for creating the reduction task */
             detail::reducer_task_t *reduce_task;
@@ -2173,8 +2426,13 @@ namespace ttg_parsec {
             using decay_valueT = std::decay_t<valueT>;
 
             /* first input value, create a task and bind it to the copy */
+            //std::cout << "Creating new reducer task for " << key << std::endl;
             detail::reducer_task_t *reduce_task;
             reduce_task = create_new_reducer_task<i>(task, true);
+
+            /* protected by the bucket lock */
+            task->streams[i].size = 1;
+            task->streams[i].reduce_count.store(1, std::memory_order_relaxed);
 
             /* get the copy to use as input for this task */
             detail::ttg_data_copy_t *copy = get_copy_fn(reduce_task, std::forward<Value>(value), false);
@@ -2182,10 +2440,9 @@ namespace ttg_parsec {
             /* put the copy into the task */
             task->copies[i] = copy;
 
-            /* protected by the bucket lock */
-            task->streams[i].size = 1;
-            task->streams[i].reduce_count.store(1, std::memory_order_relaxed);
-
+            /* release the task if we're not deferred
+             * TODO: can we delay that until we get the second value?
+             */
             if (copy->get_next_task() != &reduce_task->parsec_task) {
               reduce_task->release_task(reduce_task);
             }
@@ -2216,7 +2473,9 @@ namespace ttg_parsec {
         //parsec_hash_table_unlock_bucket(&tasks_table, hk);
       } else {
         /* unlock the bucket, the lock is not needed anymore */
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        if (has_lock) {
+          parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        }
         /* whether the task needs to be deferred or not */
         if constexpr (!valueT_is_Void) {
           if (nullptr != task->copies[i]) {
@@ -2320,6 +2579,35 @@ namespace ttg_parsec {
       set_arg_impl<i>(key, ttg::Void{});
     }
 
+    template<typename Value, typename Key>
+    bool can_inline_data(Value* value_ptr, detail::ttg_data_copy_t *copy, const Key& key, std::size_t num_keys) {
+      using decvalueT = std::decay_t<Value>;
+      bool inline_data = false;
+      /* check whether to send data in inline */
+      std::size_t iov_size = 0;
+      std::size_t metadata_size = 0;
+      if constexpr (ttg::has_split_metadata<std::decay_t<Value>>::value) {
+        ttg::SplitMetadataDescriptor<decvalueT> descr;
+        auto iovs = descr.get_data(*const_cast<decvalueT *>(value_ptr));
+        iov_size = std::accumulate(iovs.begin(), iovs.end(), 0,
+                                    [](std::size_t s, auto& iov){ return s + iov.num_bytes; });
+        auto metadata = descr.get_metadata(*const_cast<decvalueT *>(value_ptr));
+        metadata_size = ttg::default_data_descriptor<decltype(metadata)>::payload_size(&metadata);
+      } else {
+        /* TODO: how can we query the iovecs of the buffers here without actually packing the data? */
+        metadata_size = ttg::default_data_descriptor<ttg::meta::remove_cvr_t<Value>>::payload_size(value_ptr);
+        iov_size = std::accumulate(copy->iovec_begin(), copy->iovec_end(), 0,
+                                    [](std::size_t s, auto& iov){ return s + iov.num_bytes; });
+      }
+      /* key is packed at the end */
+      std::size_t key_pack_size = ttg::default_data_descriptor<Key>::payload_size(&key);
+      std::size_t pack_size = key_pack_size + metadata_size + iov_size;
+      if (pack_size < detail::max_inline_size) {
+        inline_data = true;
+      }
+      return inline_data;
+    }
+
     // Used to set the i'th argument
     template <std::size_t i, typename Key, typename Value>
     void set_arg_impl(const Key &key, Value &&value, detail::ttg_data_copy_t *copy_in = nullptr) {
@@ -2374,46 +2662,58 @@ namespace ttg_parsec {
           }
         }
 
+        bool inline_data = can_inline_data(value_ptr, copy, key, 1);
+        msg->tt_id.inline_data = inline_data;
+
         auto handle_iovec_fn = [&](auto&& iovecs){
 
-          /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
-           * raw function pointer instead of a preregistered AM tag, so play that game.
-           * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
-          parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
-          std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
-          pos += sizeof(cbtag);
+          if (inline_data) {
+            /* inline data is packed right after the tt_id in the message */
+            for (auto &&iov : iovecs) {
+              std::memcpy(msg->bytes + pos, iov.data, iov.num_bytes);
+              pos += iov.num_bytes;
+            }
+          } else {
 
-          /**
-           * register the generic iovecs and pack the registration handles
-           * memory layout: [<lreg_size, lreg, release_cb_ptr>, ...]
-           */
-          for (auto &&iov : iovecs) {
-            copy = detail::register_data_copy<decvalueT>(copy, nullptr, true);
-            parsec_ce_mem_reg_handle_t lreg;
-            size_t lreg_size;
-            /* TODO: only register once when we can broadcast the data! */
-            parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
-                                   iov.num_bytes, &lreg, &lreg_size);
-            auto lreg_ptr = std::shared_ptr<void>{lreg, [](void *ptr) {
-                                                    parsec_ce_mem_reg_handle_t memreg = (parsec_ce_mem_reg_handle_t)ptr;
-                                                    parsec_ce.mem_unregister(&memreg);
-                                                  }};
-            int32_t lreg_size_i = lreg_size;
-            std::memcpy(msg->bytes + pos, &lreg_size_i, sizeof(lreg_size_i));
-            pos += sizeof(lreg_size_i);
-            std::memcpy(msg->bytes + pos, lreg, lreg_size);
-            pos += lreg_size;
-            //std::cout << "set_arg_impl lreg " << lreg << std::endl;
-            /* TODO: can we avoid the extra indirection of going through std::function? */
-            std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
-              /* shared_ptr of value and registration captured by value so resetting
-               * them here will eventually release the memory/registration */
-              detail::release_data_copy(copy);
-              lreg_ptr.reset();
-            });
-            std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
-            std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
-            pos += sizeof(fn_ptr);
+            /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
+            * raw function pointer instead of a preregistered AM tag, so play that game.
+            * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
+            parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
+            std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
+            pos += sizeof(cbtag);
+
+            /**
+             * register the generic iovecs and pack the registration handles
+             * memory layout: [<lreg_size, lreg, release_cb_ptr>, ...]
+             */
+            for (auto &&iov : iovecs) {
+              copy = detail::register_data_copy<decvalueT>(copy, nullptr, true);
+              parsec_ce_mem_reg_handle_t lreg;
+              size_t lreg_size;
+              /* TODO: only register once when we can broadcast the data! */
+              parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
+                                    iov.num_bytes, &lreg, &lreg_size);
+              auto lreg_ptr = std::shared_ptr<void>{lreg, [](void *ptr) {
+                                                      parsec_ce_mem_reg_handle_t memreg = (parsec_ce_mem_reg_handle_t)ptr;
+                                                      parsec_ce.mem_unregister(&memreg);
+                                                    }};
+              int32_t lreg_size_i = lreg_size;
+              std::memcpy(msg->bytes + pos, &lreg_size_i, sizeof(lreg_size_i));
+              pos += sizeof(lreg_size_i);
+              std::memcpy(msg->bytes + pos, lreg, lreg_size);
+              pos += lreg_size;
+              //std::cout << "set_arg_impl lreg " << lreg << std::endl;
+              /* TODO: can we avoid the extra indirection of going through std::function? */
+              std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
+                /* shared_ptr of value and registration captured by value so resetting
+                * them here will eventually release the memory/registration */
+                detail::release_data_copy(copy);
+                lreg_ptr.reset();
+              });
+              std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
+              std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
+              pos += sizeof(fn_ptr);
+            }
           }
         };
 
@@ -2462,7 +2762,7 @@ namespace ttg_parsec {
       }
 #endif
 #if defined(PARSEC_PROF_GRAPHER)
-      if(NULL != detail::parsec_ttg_caller && !detail::parsec_ttg_caller->dummy()) {
+      if(NULL != detail::parsec_ttg_caller && !detail::parsec_ttg_caller->is_dummy()) {
         int orig_index = detail::find_index_of_copy_in_task(detail::parsec_ttg_caller, value_ptr);
         char orig_str[32];
         char dest_str[32];
@@ -2517,6 +2817,7 @@ namespace ttg_parsec {
     broadcast_arg(const ttg::span<const Key> &keylist, const Value &value) {
       using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;
       auto world = ttg_default_execution_context();
+      auto np = world.size();
       int rank = world.rank();
       uint64_t pos = 0;
       bool have_remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
@@ -2530,7 +2831,10 @@ namespace ttg_parsec {
         std::sort(keylist_sorted.begin(), keylist_sorted.end(), [&](const Key &a, const Key &b) mutable {
           int rank_a = keymap(a);
           int rank_b = keymap(b);
-          return rank_a < rank_b;
+          // sort so that the keys for my rank are first, rank+1 next, ..., wrapping around to 0
+          int pos_a = (rank_a + np - rank) % np;
+          int pos_b = (rank_b + np - rank) % np;
+          return pos_a < pos_b;
         });
 
         /* Assuming there are no local keys, will be updated while iterating over the keys */
@@ -2543,56 +2847,71 @@ namespace ttg_parsec {
         copy = detail::find_copy_in_task(detail::parsec_ttg_caller, &value);
         assert(nullptr != copy);
 
-        std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs;
-        auto register_iovs_fn = [&memregs](auto&& iovs){
-          for (auto &&iov : iovs) {
-            parsec_ce_mem_reg_handle_t lreg;
-            size_t lreg_size;
-            parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
-                                  iov.num_bytes, &lreg, &lreg_size);
-            /* TODO: use a static function for deregistration here? */
-            memregs.push_back(std::make_pair(static_cast<int32_t>(lreg_size),
-                                            /* TODO: this assumes that parsec_ce_mem_reg_handle_t is void* */
-                                            std::shared_ptr<void>{lreg, [](void *ptr) {
-                                                                    parsec_ce_mem_reg_handle_t memreg =
-                                                                        (parsec_ce_mem_reg_handle_t)ptr;
-                                                                    //std::cout << "broadcast_arg memunreg lreg " << memreg << std::endl;
-                                                                    parsec_ce.mem_unregister(&memreg);
-                                                                  }}));
-            //std::cout << "broadcast_arg memreg lreg " << lreg << std::endl;
-          }
-        };
-
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
         std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
                                                              msg_header_t::MSG_SET_ARG, i, world_impl.rank());
 
+        /* check if we inline the data */
+        /* TODO: this assumes the worst case: that all keys are packed at once (i.e., go to the same remote). Can we do better?*/
+        bool inline_data = can_inline_data(&value, copy, keylist_sorted[0], keylist_sorted.size());
+        msg->tt_id.inline_data = inline_data;
+
+        std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs;
+        auto handle_iovs_fn = [&](auto&& iovs){
+
+          if (inline_data) {
+            /* inline data is packed right after the tt_id in the message */
+            for (auto &&iov : iovs) {
+              std::memcpy(msg->bytes + pos, iov.data, iov.num_bytes);
+              pos += iov.num_bytes;
+            }
+          } else {
+
+            /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
+              * raw function pointer instead of a preregistered AM tag, so play that game.
+              * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
+            parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
+            std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
+            pos += sizeof(cbtag);
+
+            for (auto &&iov : iovs) {
+              parsec_ce_mem_reg_handle_t lreg;
+              size_t lreg_size;
+              parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
+                                    iov.num_bytes, &lreg, &lreg_size);
+              /* TODO: use a static function for deregistration here? */
+              memregs.push_back(std::make_pair(static_cast<int32_t>(lreg_size),
+                                              /* TODO: this assumes that parsec_ce_mem_reg_handle_t is void* */
+                                              std::shared_ptr<void>{lreg, [](void *ptr) {
+                                                                      parsec_ce_mem_reg_handle_t memreg =
+                                                                          (parsec_ce_mem_reg_handle_t)ptr;
+                                                                      //std::cout << "broadcast_arg memunreg lreg " << memreg << std::endl;
+                                                                      parsec_ce.mem_unregister(&memreg);
+                                                                    }}));
+              //std::cout << "broadcast_arg memreg lreg " << lreg << std::endl;
+            }
+          }
+        };
+
         if constexpr (ttg::has_split_metadata<std::decay_t<Value>>::value) {
           ttg::SplitMetadataDescriptor<decvalueT> descr;
-          auto iovs = descr.get_data(*const_cast<decvalueT *>(&value));
-          num_iovs = std::distance(std::begin(iovs), std::end(iovs));
-          memregs.reserve(num_iovs);
-          register_iovs_fn(iovs);
           /* pack the metadata */
           auto metadata = descr.get_metadata(value);
           size_t metadata_size = sizeof(metadata);
           pos = pack(metadata, msg->bytes, pos);
+          auto iovs = descr.get_data(*const_cast<decvalueT *>(&value));
+          num_iovs = std::distance(std::begin(iovs), std::end(iovs));
+          memregs.reserve(num_iovs);
+          handle_iovs_fn(iovs);
           //std::cout << "broadcast_arg splitmd num_iovecs " << num_iovs << std::endl;
         } else if constexpr (!ttg::has_split_metadata<std::decay_t<Value>>::value) {
           /* serialize the object once */
           pos = pack(value, msg->bytes, pos, copy);
           num_iovs = std::distance(copy->iovec_begin(), copy->iovec_end());
-          register_iovs_fn(copy->iovec_span());
+          handle_iovs_fn(copy->iovec_span());
           copy->iovec_reset();
         }
-
-        /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
-          * raw function pointer instead of a preregistered AM tag, so play that game.
-          * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
-        parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
-        std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
-        pos += sizeof(cbtag);
 
         msg->tt_id.num_iovecs = num_iovs;
 
@@ -2618,28 +2937,30 @@ namespace ttg_parsec {
            * memory layout: [<lreg_size, lreg, lreg_fn>, ...]
            * NOTE: we need to pack these for every receiver to ensure correct ref-counting of the registration
            */
-          for (int idx = 0; idx < num_iovs; ++idx) {
-            // auto [lreg_size, lreg_ptr] = memregs[idx];
-            int32_t lreg_size;
-            std::shared_ptr<void> lreg_ptr;
-            std::tie(lreg_size, lreg_ptr) = memregs[idx];
-            std::memcpy(msg->bytes + pos, &lreg_size, sizeof(lreg_size));
-            pos += sizeof(lreg_size);
-            std::memcpy(msg->bytes + pos, lreg_ptr.get(), lreg_size);
-            pos += lreg_size;
-            //std::cout << "broadcast_arg lreg_ptr " << lreg_ptr.get() << std::endl;
-            /* mark another reader on the copy */
-            copy = detail::register_data_copy<valueT>(copy, nullptr, true);
-            /* create a function that will be invoked upon RMA completion at the target */
-            std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
-              /* shared_ptr of value and registration captured by value so resetting
-                * them here will eventually release the memory/registration */
-              detail::release_data_copy(copy);
-              lreg_ptr.reset();
-            });
-            std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
-            std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
-            pos += sizeof(fn_ptr);
+          if (!inline_data) {
+            for (int idx = 0; idx < num_iovs; ++idx) {
+              // auto [lreg_size, lreg_ptr] = memregs[idx];
+              int32_t lreg_size;
+              std::shared_ptr<void> lreg_ptr;
+              std::tie(lreg_size, lreg_ptr) = memregs[idx];
+              std::memcpy(msg->bytes + pos, &lreg_size, sizeof(lreg_size));
+              pos += sizeof(lreg_size);
+              std::memcpy(msg->bytes + pos, lreg_ptr.get(), lreg_size);
+              pos += lreg_size;
+              //std::cout << "broadcast_arg lreg_ptr " << lreg_ptr.get() << std::endl;
+              /* mark another reader on the copy */
+              copy = detail::register_data_copy<valueT>(copy, nullptr, true);
+              /* create a function that will be invoked upon RMA completion at the target */
+              std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
+                /* shared_ptr of value and registration captured by value so resetting
+                  * them here will eventually release the memory/registration */
+                detail::release_data_copy(copy);
+                lreg_ptr.reset();
+              });
+              std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
+              std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
+              pos += sizeof(fn_ptr);
+            }
           }
 
           /* mark the beginning of the keys */
@@ -3011,13 +3332,19 @@ namespace ttg_parsec {
       /* TODO: remove this once we support reductions on the GPU */
       auto &reducer = std::get<i>(input_reducers);
       if (reducer) {
-        /* non-gpu task, check if we need to push back to the host */
+        /* reductions are currently done only on the host so push out */
         copy_mark_pushout(copy);
         caller->data_flags |= detail::ttg_parsec_data_flags::MARKED_PUSHOUT;
         return;
       }
 
       if constexpr (value_is_const) {
+        if (caller->data_flags & detail::ttg_parsec_data_flags::IS_MODIFIED) {
+          /* The data has been modified previously. PaRSEC requires us to pushout
+           * data if we transition from a writer to one or more readers. */
+          need_pushout = true;
+        }
+
         /* check for multiple readers */
         if (caller->data_flags & detail::ttg_parsec_data_flags::SINGLE_READER) {
           caller->data_flags |= detail::ttg_parsec_data_flags::MULTIPLE_READER;
@@ -3042,17 +3369,28 @@ namespace ttg_parsec {
         }
       }
 
-      if constexpr (!derived_has_cuda_op()) {
+      if constexpr (!derived_has_device_op()) {
         need_pushout = true;
       }
 
-      /* check if there are non-local successors if it's a cuda task */
+      /* check if there are non-local successors if it's a device task */
       if (!need_pushout) {
-        need_pushout = remote_check();
+        bool device_supported = false;
+        if constexpr (derived_has_cuda_op()) {
+          device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::CUDA);
+        } else if constexpr (derived_has_hip_op()) {
+          device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::HIP);
+        } else if constexpr (derived_has_level_zero_op()) {
+          device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::L0);
+        }
+        /* if MPI supports the device we don't care whether we have remote peers
+         * because we can send from the device directly */
+        if (!device_supported) {
+          need_pushout = remote_check();
+        }
       }
 
       if (need_pushout) {
-        /* non-gpu task, check if we need to push back to the host */
         copy_mark_pushout(copy);
         caller->data_flags |= detail::ttg_parsec_data_flags::MARKED_PUSHOUT;
       }
@@ -3193,6 +3531,7 @@ namespace ttg_parsec {
       junk[0]++;
     }
 
+#if 0
     template <typename input_terminals_tupleT, std::size_t... IS, typename flowsT>
     void _initialize_flows(std::index_sequence<IS...>, flowsT &&flows) {
       int junk[] = {0,
@@ -3208,6 +3547,7 @@ namespace ttg_parsec {
       _initialize_flows<input_terminals_tupleT>(
           std::make_index_sequence<std::tuple_size<input_terminals_tupleT>::value>{}, flows);
     }
+#endif // 0
 
     void fence() override { ttg::default_execution_context().impl().fence(); }
 
@@ -3253,24 +3593,22 @@ namespace ttg_parsec {
         return reinterpret_cast<parsec_key_t>(key);
     }
 
-    static char *parsec_ttg_task_snprintf(char *buffer, size_t buffer_size, const parsec_task_t *t) {
+    static char *parsec_ttg_task_snprintf(char *buffer, size_t buffer_size, const parsec_task_t *parsec_task) {
       if(buffer_size == 0)
         return buffer;
 
       if constexpr (ttg::meta::is_void_v<keyT>) {
-        snprintf(buffer, buffer_size, "%s()[]<%d>", t->task_class->name, t->priority);
+        snprintf(buffer, buffer_size, "%s()[]<%d>", parsec_task->task_class->name, parsec_task->priority);
       }  else {
-        // we use the locals array as a scratchpad to store the hash of the key and its actual address
-        // locals[0] amd locals[1] hold the hash, while locals[2] and locals[3] hold the key pointer
-        keyT *key = *(keyT**)&(t->locals[2]);
+        const task_t *task = reinterpret_cast<const task_t*>(parsec_task);
         std::stringstream ss;
-        ss << *key;
+        ss << task->key;
 
         std::string keystr = ss.str();
         std::replace(keystr.begin(), keystr.end(), '(', ':');
         std::replace(keystr.begin(), keystr.end(), ')', ':');
 
-        snprintf(buffer, buffer_size, "%s(%s)[]<%d>", t->task_class->name, keystr.c_str(), t->priority);
+        snprintf(buffer, buffer_size, "%s(%s)[]<%d>", parsec_task->task_class->name, keystr.c_str(), parsec_task->priority);
       }
       return buffer;
     }
@@ -3278,25 +3616,36 @@ namespace ttg_parsec {
 #if defined(PARSEC_PROF_TRACE)
     static void *parsec_ttg_task_info(void *dst, const void *data, size_t size)
     {
-      const parsec_task_t *t = reinterpret_cast<const parsec_task_t *>(data);
+      const task_t *task = reinterpret_cast<const task_t *>(data);
 
       if constexpr (ttg::meta::is_void_v<keyT>) {
         snprintf(reinterpret_cast<char*>(dst), size, "()");
       } else {
-        // we use the locals array as a scratchpad to store the hash of the key and its actual address
-        // locals[0] amd locals[1] hold the hash, while locals[2] and locals[3] hold the key pointer
-        keyT *key = *(keyT**)&(t->locals[2]);
         std::stringstream ss;
-        ss << *key;
-
-        std::string keystr = ss.str();
-        snprintf(reinterpret_cast<char*>(dst), size, "%s", keystr.c_str());
+        ss << task->key;
+        snprintf(reinterpret_cast<char*>(dst), size, "%s", ss.str().c_str());
       }
       return dst;
     }
 #endif
 
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
+
+    template<std::size_t I>
+    inline static void increment_data_version_impl(task_t *task) {
+      if constexpr (!std::is_const_v<std::tuple_element_t<I, typename TT::input_values_tuple_type>>) {
+        if (task->copies[I] != nullptr){
+          task->copies[I]->inc_current_version();
+        }
+      }
+    }
+
+    template<std::size_t... Is>
+    inline static void increment_data_versions(task_t *task, std::index_sequence<Is...>) {
+      /* increment version of each mutable data */
+      int junk[] = {0, (increment_data_version_impl<Is>(task), 0)...};
+      junk[0]++;
+    }
 
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *parsec_task) {
 
@@ -3306,23 +3655,30 @@ namespace ttg_parsec {
 
       /* if we still have a coroutine handle we invoke it one more time to get the sends/broadcasts */
       if (task->suspended_task_address) {
+#ifdef TTG_HAVE_DEVICE
+        /* increment versions of all data we might have modified
+         * this must happen before we issue the sends */
+        //increment_data_versions(task, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
+
         // get the device task from the coroutine handle
-        auto dev_task = ttg::device_task_handle_type::from_address(task->suspended_task_address);
+        auto dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
 
         // get the promise which contains the views
         auto dev_data = dev_task.promise();
 
         /* for now make sure we're waiting for the kernel to complete and the coro hasn't skipped this step */
-        assert(dev_data.state() == ttg::TTG_DEVICE_CORO_SENDOUT);
+        assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT);
 
         /* execute the sends we stored */
-        if (dev_data.state() == ttg::TTG_DEVICE_CORO_SENDOUT) {
+        if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT) {
           /* set the current task, needed inside the sends */
           detail::parsec_ttg_caller = task;
           dev_data.do_sends();
           detail::parsec_ttg_caller = nullptr;
         }
-
+#else // TTG_HAVE_DEVICE
+        ttg::abort();  // should not happen
+#endif // TTG_HAVE_DEVICE
         /* the coroutine should have completed and we cannot access the promise anymore */
         task->suspended_task_address = nullptr;
       }
@@ -3409,11 +3765,24 @@ namespace ttg_parsec {
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CUDA;
         ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_cuda<TT>;
-#if 0
-        ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_CPU;
+        ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
-        ((__parsec_chore_t *)self.incarnations)[1].hook = &detail::hook<TT>;
-#endif // 0
+        ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
+      } else if (derived_has_hip_op()) {
+        self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
+        ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_HIP;
+        ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
+        ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_hip<TT>;
+
+        ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
+        ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
+        ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
+      } else if (derived_has_level_zero_op()) {
+        self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
+        ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_LEVEL_ZERO;
+        ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
+        ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_level_zero<TT>;
+
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
@@ -3510,18 +3879,6 @@ namespace ttg_parsec {
         self.name = nullptr;
       }
 
-      for (int i = 0; i < MAX_PARAM_COUNT; i++) {
-        parsec_flow_t *flow = (parsec_flow_t *)(self.in[i]);
-        free(flow->name);
-        delete flow;
-        *((parsec_flow_t **)&(self.in[i])) = nullptr;
-
-        flow = (parsec_flow_t *)(self.out[i]);
-        free(flow->name);
-        delete flow;
-        *((parsec_flow_t **)&(self.out[i])) = nullptr;
-      }
-
       for (std::size_t i = 0; i < numins; ++i) {
         if (inpute_reducers_taskclass[i] != nullptr) {
           std::free(inpute_reducers_taskclass[i]);
@@ -3541,6 +3898,10 @@ namespace ttg_parsec {
       }
     }
 
+    void print_incomplete_tasks() {
+      parsec_hash_table_for_all(&tasks_table, ht_iter_cb, this);
+    }
+
     virtual void release() override { do_release(); }
 
     void do_release() {
@@ -3549,20 +3910,22 @@ namespace ttg_parsec {
       }
       alive = false;
       /* print all outstanding tasks */
-      parsec_hash_table_for_all(&tasks_table, ht_iter_cb, this);
+      print_incomplete_tasks();
       parsec_hash_table_fini(&tasks_table);
       parsec_mempool_destruct(&mempools);
       // uintptr_t addr = (uintptr_t)self.incarnations;
       // free((void *)addr);
       free((__parsec_chore_t *)self.incarnations);
-      for (int i = 0; i < numflows; i++) {
+      for (int i = 0; i < MAX_PARAM_COUNT; i++) {
         if (NULL != self.in[i]) {
           free(self.in[i]->name);
           delete self.in[i];
+          self.in[i] = nullptr;
         }
         if (NULL != self.out[i]) {
           free(self.out[i]->name);
           delete self.out[i];
+          self.out[i] = nullptr;
         }
       }
       world.impl().deregister_op(this);
@@ -3742,7 +4105,7 @@ namespace ttg_parsec {
     template<typename Key, typename Arg, typename... Args, std::size_t I, std::size_t... Is>
     void invoke_arglist(std::index_sequence<I, Is...>, const Key& key, Arg&& arg, Args&&... args) {
       using arg_type = std::decay_t<Arg>;
-      if constexpr (ttg::detail::is_ptr_v<arg_type>) {
+      if constexpr (ttg::meta::is_ptr_v<arg_type>) {
         /* add a reference to the object */
         auto copy = ttg_parsec::detail::get_copy(arg);
         copy->add_ref();
@@ -3755,7 +4118,7 @@ namespace ttg_parsec {
           /* if the ptr was moved in we reset it */
           arg.reset();
         }
-      } else if constexpr (!ttg::detail::is_ptr_v<arg_type>) {
+      } else if constexpr (!ttg::meta::is_ptr_v<arg_type>) {
         set_arg<I>(key, std::forward<Arg>(arg));
       }
       if constexpr (sizeof...(Is) > 0) {
@@ -3930,12 +4293,14 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
       /* the value was potentially changed, so increment version */
       copy->inc_current_version();
     }
-    caller->data_flags = ttg_parsec::detail::ttg_parsec_data_flags::NONE;
+    /* We're coming from a writer so mark the data as modified.
+     * That way we can force a pushout in prepare_send if we move to read-only tasks (needed by PaRSEC). */
+    caller->data_flags = ttg_parsec::detail::ttg_parsec_data_flags::IS_MODIFIED;
     return *value_ptr;
   }
 
   template<typename Value>
-  inline std::add_lvalue_reference_t<Value> operator()(ttg::detail::persistent_value_ref<Value> vref) {
+  inline std::add_lvalue_reference_t<Value> operator()(ttg_parsec::detail::persistent_value_ref<Value> vref) {
     auto caller = ttg_parsec::detail::parsec_ttg_caller;
     if (nullptr == caller) {
       ttg::print("ERROR: ttg::send or ttg::broadcast called outside of a task!\n");

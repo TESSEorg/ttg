@@ -1,6 +1,7 @@
 #ifndef TTG_H_INCLUDED
 #define TTG_H_INCLUDED
 
+#include "ttg/config.h"
 #include "ttg/fwd.h"
 
 #include "ttg/runtimes.h"
@@ -30,7 +31,10 @@
 #include "ttg/ptr.h"
 #include "ttg/buffer.h"
 #include "ttg/devicescratch.h"
+#include "ttg/ttvalue.h"
 #include "ttg/devicescope.h"
+#include "ttg/device/device.h"
+#include "ttg/device/task.h"
 
 #if defined(TTG_USE_PARSEC)
 #include "ttg/parsec/ttg.h"

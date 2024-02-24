@@ -30,5 +30,16 @@ namespace ttg {
       return static_cast<int>(result);
     }
 
+    bool force_device_comm() {
+      bool result = false;
+      const char* ttg_force_device_comm_cstr = std::getenv("TTG_FORCE_DEVICE_COMM");
+      if (ttg_force_device_comm_cstr) {
+        const auto result_int = std::atoi(ttg_force_device_comm_cstr);
+        if (result_int) {
+          result = true;
+        }
+      }
+      return result;
+    }
   }  // namespace detail
 }  // namespace ttg

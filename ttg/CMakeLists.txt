@@ -60,15 +60,13 @@ set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/terminal.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/traverse.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/ttvalue.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/world.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/make_tt.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/make_device_tt.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/view.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/task.h
         ${CMAKE_CURRENT_BINARY_DIR}/ttg/config.h
     )
 set(ttg_device_headers
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/cublas_helper.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/device.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/task.h
     )
 set(ttg-headers
@@ -96,11 +94,17 @@ set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
         COMPILE_DEFINITIONS "TTG_GIT_REVISION=\"${TTG_GIT_REVISION}\";TTG_GIT_DESCRIPTION=\"${TTG_GIT_DESCRIPTION}\"")
 
 # optional dependencies
-if (TARGET Boost::boost)
-  list(APPEND ttg-deps Boost::boost)
-else () # if Boost::boost is missing must use bundled Boost.CallableTraits
-  list(APPEND ttg-defs "$<BUILD_INTERFACE:TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1>")
-  list(APPEND ttg-incs "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ttg/external>")
+if (TARGET Boost::headers)
+  if (TARGET Boost::callable_traits)  # using modularized Boost?
+      list(APPEND ttg-deps Boost::callable_traits)
+  else()
+      list(APPEND ttg-deps Boost::headers)
+  endif()
+else () # if Boost::headers is missing must use bundled Boost.CallableTraits
+  list(APPEND ttg-defs "TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1")
+  list(APPEND ttg-incs
+          "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ttg/external>"
+          "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/ttg/external>")
 endif ()
 if (TARGET TTG_Libunwind)
   list(APPEND ttg-deps TTG_Libunwind)
@@ -116,11 +120,16 @@ if (TARGET std::coroutine)
           )
 endif ()
 if (TTG_HAVE_CUDA)
-  list(APPEND ttg-sources
-          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/device/cublas_helper.cpp
-          )
-  list(APPEND ttg-deps CUDA::cudart CUDA::cublas)
-endif ()
+  list(APPEND ttg-deps CUDA::cudart)
+endif (TTG_HAVE_CUDA)
+
+if (TTG_HAVE_HIPBLAS)
+  list(APPEND ttg-deps hip::host)
+endif (TTG_HAVE_HIPBLAS)
+
+if (TTG_HAVE_LEVEL_ZERO)
+  list(APPEND ttg-deps level_zero::ze_loader)
+endif (TTG_HAVE_LEVEL_ZERO)
 
 set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers};${ttg_device_headers})
 if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
@@ -164,6 +173,11 @@ if (TARGET MADworld)
 endif(TARGET MADworld)
 if (TARGET Boost::serialization)
   list(APPEND ttg-serialization-deps Boost::serialization)
+  list(APPEND ttg-serialization-boost-deps Boost::serialization)
+  if (TARGET Boost::iostreams)  # using modularized Boost?
+      list(APPEND ttg-serialization-deps Boost::iostreams)
+      list(APPEND ttg-serialization-boost-deps Boost::iostreams)
+  endif()
   list(APPEND ttg-serialization-compile-definitions TTG_SERIALIZATION_SUPPORTS_BOOST=1)
 endif (TARGET Boost::serialization)
 if (TARGET cereal::cereal)
@@ -189,7 +203,7 @@ if (TARGET Boost::serialization)
   add_ttg_library(ttg-serialization-boost
           "${ttg-serialization-sources}"
           PUBLIC_HEADER "${ttg-serialization-headers}"
-          LINK_LIBRARIES "Boost::serialization"
+          LINK_LIBRARIES "${ttg-serialization-boost-deps}"
           COMPILE_DEFINITIONS "TTG_SERIALIZATION_SUPPORTS_BOOST=1")
 endif(TARGET Boost::serialization)
 # make cereal-only serialization target
@@ -206,9 +220,11 @@ endif(TARGET cereal::cereal)
 #########################
 if (TARGET MADworld)
   set(ttg-mad-headers
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/buffer.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/fwd.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/import.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/ttg.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/ttvalue.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/watch.h)
   # N.B. ttg-mad can use MADNESS serialization only
   add_ttg_library(ttg-mad "${ttg-mad-headers}" PUBLIC_HEADER "${ttg-mad-headers}" LINK_LIBRARIES "ttg;MADworld;ttg-serialization-madness" COMPILE_DEFINITIONS "WORLD_INSTANTIATE_STATIC_TEMPLATES=1")
@@ -220,6 +236,8 @@ endif(TARGET MADworld)
 if (TARGET PaRSEC::parsec)
   set(ttg-parsec-headers
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/buffer.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/device.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/devicefunc.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/devicescratch.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/fwd.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/import.h

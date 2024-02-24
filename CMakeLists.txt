@@ -32,6 +32,8 @@ project(ttg
 
 if (NOT DEFINED CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_STANDARD "20" CACHE STRING "The C++ standard")
+elseif (${CMAKE_CXX_STANDARD} LESS 20)
+    message(FATAL_ERROR "TTG requires C++ compiler with C++20, but CMAKE_CXX_STANDARD is set to ${CMAKE_CXX_STANDARD}; bump up CMAKE_CXX_STANDARD to 20 or above")
 endif()
 if (NOT CMAKE_CXX_EXTENSIONS)
   set(CMAKE_CXX_EXTENSIONS OFF CACHE BOOL "The C++ standard extensions allowed?")
@@ -52,10 +54,13 @@ set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
 ########################################
 option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" ON)
 option(TTG_ENABLE_CUDA "Whether to TTG will look for CUDA" OFF)
+option(TTG_ENABLE_HIP "Whether to TTG will look for HIP" OFF)
+option(TTG_ENABLE_LEVEL_ZERO "Whether to TTG will look for Intel oneAPI Level Zero" OFF)
 option(TTG_EXAMPLES "Whether to build examples" OFF)
+option(TTG_ENABLE_ASAN "Whether to enable address sanitizer" OFF)
 
 option(TTG_FETCH_BOOST "Whether to fetch+build Boost, if missing" OFF)
-option(TTG_IGNORE_BUNDLED_EXTERNALS "Whether to skip installation and use of bundled external depenedencies (Boost.CallableTraits)" OFF)
+option(TTG_IGNORE_BUNDLED_EXTERNALS "Whether to skip installation and use of bundled external dependencies (Boost.CallableTraits)" OFF)
 option(TTG_ENABLE_TRACE "Whether to enable ttg::trace() output" OFF)
 # See https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
 option (FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." TRUE)
@@ -67,6 +72,12 @@ if (FORCE_COLORED_OUTPUT)
     endif ()
 endif (FORCE_COLORED_OUTPUT)
 
+if (TTG_ENABLE_ASAN)
+    add_compile_options(-fsanitize=address)
+    add_link_options(-fsanitize=address)
+endif (TTG_ENABLE_ASAN)
+
+set(TTG_HIP_PLATFORM "__HIP_PLATFORM_AMD__" CACHE STRING "Which platform to use when compiling HIP-related code (default: __HIP_PLATFORM_AMD__)")
 ##########################
 #### prerequisites
 ##########################
@@ -82,7 +93,7 @@ endif (BUILD_TESTING)
 #### optional prerequisites
 ###########################
 # Boost
-include(FindOrFetchBoost)
+include("${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchBoost.cmake")
 # Cereal
 #include(FindOrFetchCereal)
 # C++ coroutines
@@ -104,7 +115,53 @@ if (TTG_ENABLE_CUDA)
   if (TARGET CUDA::cudart)
     set(TTG_HAVE_CUDART True CACHE BOOL "TTG supports execution on CUDA devices")
   endif()
+endif(TTG_ENABLE_CUDA)
+
+if (TTG_ENABLE_HIP)
+  # HIP LANGUAGE introduced in 3.21
+  cmake_minimum_required(VERSION 3.21)
+  include(CheckLanguage)
+  check_language(HIP)
+  if(CMAKE_HIP_COMPILER)
+    enable_language(HIP)
+  endif(CMAKE_HIP_COMPILER)
+  set(TTG_HAVE_HIP ${CMAKE_HIP_COMPILER} CACHE BOOL "True if TTG supports compiling .hip files")
+
+  find_package(hipblas)
+  if (TARGET roc::hipblas)
+    set(TTG_HAVE_HIPBLAS True CACHE BOOL "TTG detected support for hipBLAS")
+  endif()
+
+  find_package(hipsolver)
+  if (TARGET roc::hipsolver)
+    set(TTG_HAVE_HIPSOLVER True CACHE BOOL "TTG detected support for hipSolver")
+  endif()
+  add_compile_definitions(${TTG_HIP_PLATFORM})
+endif(TTG_ENABLE_HIP)
+
+if (TTG_ENABLE_LEVEL_ZERO)
+  find_package(level-zero)
+  set(TTG_HAVE_LEVEL_ZERO ${LEVEL_ZERO_FOUND} CACHE BOOL "True if TTG provide support for Intel Level Zero")
+  if(TTG_HAVE_LEVEL_ZERO)
+    include_directories("${LEVEL_ZERO_INCLUDE_DIR}/level_zero/")
+    find_package(DPCPP)
+    if(DPCPP_EXECUTABLE)
+      set(TTG_HAVE_DPCPP TRUE CACHE BOOL "True if TTG knows how to compile DPCPP code")
+      message(STATUS "Found Intel level-zero ${LEVEL_ZERO_VERSION} in -I${LEVEL_ZERO_INCLUDE_DIR} / -L${LEVEL_ZERO_LIBRARY_DIR}")
+      message(STATUS "Found dpcpp in ${DPCPP_EXECUTABLE}")
+
+      find_package(MKL)
+    else(DPCPP_EXECUTABLE)
+      set(TTG_HAVE_DPCPP FALSE CACHE BOOL "True if TTG knows how to compile DPCPP code")
+    endif(DPCPP_EXECUTABLE)
+  endif(TTG_HAVE_LEVEL_ZERO)
+endif(TTG_ENABLE_LEVEL_ZERO)
+
+set(_ttg_have_device FALSE)
+if (TTG_HAVE_CUDA OR TTG_HAVE_HIP OR TTG_HAVE_LEVEL_ZERO)
+    set(_ttg_have_device TRUE)
 endif()
+set(TTG_HAVE_DEVICE ${_ttg_have_device} CACHE BOOL "True if TTG has support for any device programming model")
 
 ##########################
 #### prerequisite runtimes
@@ -120,6 +177,20 @@ if (TARGET MADworld)
   message(STATUS "MADNESS_FOUND=1")
 endif(TARGET MADworld)
 
+####################################################
+#### Check for MPIX_Query_[cuda|rocm]_support
+#### Open MPI provides mpi-ext.h for such extensions
+#### so check for that first.
+####################################################
+find_package(MPI)
+set(TTG_HAVE_MPI MPI_FOUND)
+if (MPI_FOUND)
+  include(CheckIncludeFiles)
+  set(CMAKE_REQUIRED_INCLUDES ${MPI_C_INCLUDE_DIRS})
+  check_include_files("mpi-ext.h" TTG_HAVE_MPIEXT)
+else(MPI_FOUND)
+  set(TTG_HAVE_MPIEXT $<BOOL:false>)
+endif(MPI_FOUND)
 
 ##########################
 #### Examples

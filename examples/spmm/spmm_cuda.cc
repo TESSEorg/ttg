@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include <madness/world/world.h>
+
 #if __has_include(<btas/features.h>)
 #pragma message("C Preprocessor got here!")
 #include <btas/features.h>
@@ -17,8 +19,8 @@
 #include <btas/btas.h>
 #include <btas/optimize/contract.h>
 #include <btas/util/mohndle.h>
-#include <TiledArray/cuda/allocators.h>
-#include <ttg/device/cublas_helper.h>
+#include <TiledArray/device/allocators.h>
+#include "../devblas_helper.h"
 #include <madness/world/parsec.h>  // need to initialize MADNESS purely for the purposes of TA allocators
 #else
 #warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
@@ -35,6 +37,8 @@
 
 #include "ttg.h"
 
+#include "../devblas_helper.h"
+
 using namespace ttg;
 
 #include "ttg/util/future.h"
@@ -45,19 +49,24 @@ using namespace ttg;
 
 #include "ttg/serialization/std/pair.h"
 
+#if defined(TTG_HAVE_LEVEL_ZERO)
+#include <oneapi/mkl.hpp>
+#include <sys/time.h>
+#endif
+
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 
 template <typename _T, class _Range, class _Storage>
 struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
                     , public btas::Tensor<_T, _Range, _Storage> {
-  using tensor_type = btas::Tensor<_T, _Range, _Storage>;
-  using ttvalue_type = ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>;
-  ttg::buffer<_T> b; // does not own the host buffer
+  using tensor_type = typename btas::Tensor<_T, _Range, _Storage>;
+  using ttvalue_type = typename ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>;
+  ttg::Buffer<_T> b; // does not own the host buffer
 
-  using value_type = tensor_type::value_type;
-  using size_type = tensor_type::size_type;
-  using storage_type = tensor_type::storage_type;
-  using range_type = tensor_type::range_type;
+  using value_type = typename tensor_type::value_type;
+  using size_type = typename tensor_type::size_type;
+  using storage_type = typename tensor_type::storage_type;
+  using range_type = typename tensor_type::range_type;
 
 
    public:
@@ -184,7 +193,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     /* Grrrr, moving a Tensor does not guarantee to move the pointer */
     , b((this->size() == 0 ||
          this->data() == x.b.host_ptr()) ? std::move(x.b)
-                                         : ttg::buffer<_T>(this->size() ? this->data()
+                                         : ttg::Buffer<_T>(this->size() ? this->data()
                                                                         : nullptr,
                                                            this->size()))
     {
@@ -230,7 +239,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
       if (this->size() == 0 || this->data() == x.b.host_ptr()){
         b = std::move(x.b);
       } else  {
-        b = ttg::buffer<_T>(this->size() ? this->data() : nullptr, this->size());
+        b = ttg::Buffer<_T>(this->size() ? this->data() : nullptr, this->size());
       }
       //std::swap(x.b, b);
       //std::cout << "DeviceTensor move ctor" << std::endl;
@@ -244,10 +253,15 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
 
 };
 
-using blk_t = DeviceTensor<double, btas::DEFAULT::range,
-                           btas::mohndle<btas::varray<double, TiledArray::cuda_pinned_allocator<double>>,
+using scalar_t = double;
+#if defined(TTG_HAVE_CUDA) || defined(TTG_HAVE_HIPBLAS)
+using blk_t = DeviceTensor<scalar_t, btas::DEFAULT::range,
+                           btas::mohndle<btas::varray<scalar_t, TiledArray::device_pinned_allocator<scalar_t>>,
                                          btas::Handle::shared_ptr>>;
-
+#else
+using blk_t = DeviceTensor<scalar_t, btas::DEFAULT::range,
+                           btas::mohndle<btas::varray<scalar_t>, btas::Handle::shared_ptr>>;
+#endif
 
 
 //inline blk_t operator*(const blk_t &A, const blk_t &B) {
@@ -257,23 +271,78 @@ using blk_t = DeviceTensor<double, btas::DEFAULT::range,
 //}
 
 /* TODO: call CUDA gemm here */
-static void cuda_gemm(blk_t &C, const blk_t &A, const blk_t &B) {
-  double alpha = 1.0;
-  double beta  = 1.0;
+template <typename Blk>
+static void device_gemm(Blk &C, const Blk &A, const Blk &B) {
+  using blk_t = Blk;
+  using T = typename blk_t::value_type;
+  static_assert(std::is_same_v<T,double> || std::is_same_v<T,float>);
+  static const T alpha = 1.0;
+  static const T beta  = 1.0;
   // make sure all memory is on the device
   // TODO: A and B are read-only so the owner device will be 0. How to fix?
   //assert(A.b.get_current_device() != 0);
   //assert(B.b.get_current_device() != 0);
-  int device = C.b.get_current_device();
-  assert(device != 0);
-  cublasDgemm(ttg::detail::cublas_get_handle(),
-              CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1), &alpha,
-              A.b.device_ptr_on(device), A.extent(0),
-              B.b.device_ptr_on(device), B.extent(0), &beta,
-              C.b.current_device_ptr(), C.extent(0));
-}
+  auto device = ttg::device::current_device();
+  assert(device.is_device());
+#if defined(TTG_HAVE_CUDA)
+  if constexpr (std::is_same_v<T,double>) {
+      cublasDgemm(cublas_handle(), CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1),
+                  &alpha, A.b.current_device_ptr(), A.extent(0), B.b.current_device_ptr(), B.extent(0), &beta,
+                  C.b.current_device_ptr(), C.extent(0));
+  }
+  else if constexpr (std::is_same_v<T,float>) {
+      cublasSgemm(cublas_handle(), CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1),
+                  &alpha, A.b.current_device_ptr(), A.extent(0), B.b.current_device_ptr(), B.extent(0), &beta,
+                  C.b.current_device_ptr(), C.extent(0));
+  }
+#elif defined(TTG_HAVE_HIPBLAS)
+  if constexpr (std::is_same_v<T,double>) {
+    hipblasDgemm(hipblas_handle(),
+                 HIPBLAS_OP_N, HIPBLAS_OP_N,
+                 C.extent(0), C.extent(1), A.extent(1), &alpha,
+                 A.b.current_device_ptr(), A.extent(0),
+                 B.b.current_device_ptr(), B.extent(0), &beta,
+                 C.b.current_device_ptr(), C.extent(0));
+  } else if constexpr (std::is_same_v<T,float>) {
+    hipblasSgemm(hipblas_handle(),
+                 HIPBLAS_OP_N, HIPBLAS_OP_N,
+                 C.extent(0), C.extent(1), A.extent(1), &alpha,
+                 A.b.current_device_ptr(), A.extent(0),
+                 B.b.current_device_ptr(), B.extent(0), &beta,
+                 C.b.current_device_ptr(), C.extent(0));
+  }
+#elif defined(TTG_HAVE_LEVEL_ZERO)
 
-//using blk_t = btas::Tensor<double, btas::DEFAULT::range, btas::mohndle<btas::varray<double>, btas::Handle::shared_ptr>>;
+#if defined(DEBUG_SYNCHRONOUS)
+  try {
+#endif /* DEBUG_SYNCHRONOUS */
+    cl::sycl::event gemm_event;
+    gemm_event = oneapi::mkl::blas::gemm(ttg::device::current_stream(),
+         oneapi::mkl::transpose::N, oneapi::mkl::transpose::N,
+         C.extent(0), C.extent(1), A.extent(1),
+         alpha, A.b.current_device_ptr(), A.extent(0),
+                B.b.current_device_ptr(), B.extent(0),
+         beta,  C.b.current_device_ptr(), C.extent(0));
+#if defined(DEBUG_SYNCHRONOUS)
+    gemm_event.wait();
+  } catch (const oneapi::mkl::invalid_argument &e) {
+    std::cerr << "OneAPI MKL BLAS GEMM throws invalid argument exception" << std::endl;
+  } catch (const oneapi::mkl::unsupported_device &e) {
+    std::cerr << "OneAPI MKL BLAS GEMM throws unsuported device exception" << std::endl;
+  } catch (const oneapi::mkl::host_bad_alloc &e) {
+    std::cerr << "OneAPI MKL BLAS GEMM throws host bad allocation exception" << std::endl;
+  } catch (const oneapi::mkl::device_bad_alloc &e) {
+    std::cerr << "OneAPI MKL BLAS GEMM throws device bad allocation exception" << std::endl;
+  } catch (const oneapi::mkl::unimplemented &e) {
+    std::cerr << "OneAPI MKL BLAS GEMM throws unimplemented exception" << std::endl;
+  } catch (const std::exception& e) {
+    std::cerr << "OneAPI MKL BLAS GEMM throws unexpected exception" << std::endl;
+  } catch (...) {
+    std::cerr << "OneAPI MKL BLAS GEMM throws unexpected exception that is also badly formatted..." << std::endl;
+  }
+#endif /* DEBUG_SYNCHRONOUS */
+#endif
+}
 
 #if defined(TTG_USE_PARSEC)
 namespace ttg {
@@ -296,14 +365,15 @@ namespace ttg {
       return dim;
     }
     static auto get_data(blk_t &b) {
+      using T = typename blk_t::value_type;
       if (!b.empty())
-        return boost::container::small_vector<iovec, 1>(1, iovec{b.size() * sizeof(double), b.data()});
+        return boost::container::small_vector<iovec, 1>(1, iovec{b.size() * sizeof(T), b.data()});
       else
         return boost::container::small_vector<iovec, 1>{};
     }
     static auto create_from_metadata(const std::pair<int, int> &meta) {
-      if (meta != std::pair{0, 0})
-        return blk_t(btas::Range(std::get<0>(meta), std::get<1>(meta)), 0.0);
+      if (meta != std::pair{0, 0}) // N.B. allocate only, do not fill with zeroes
+        return blk_t(btas::Range(std::get<0>(meta), std::get<1>(meta)));
       else
         return blk_t{};
     }
@@ -352,10 +422,13 @@ namespace btas {
   btas::Tensor<T_, Range_, Store_> gemm(btas::Tensor<T_, Range_, Store_> &&C, const btas::Tensor<T_, Range_, Store_> &A,
                                         const btas::Tensor<T_, Range_, Store_> &B) {
     using array = btas::DEFAULT::index<int>;
-    if (C.empty()) {
-      C = btas::Tensor<T_, Range_, Store_>(btas::Range(A.range().extent(0), B.range().extent(1)), 0.0);
+    if (C.empty()) {  // first contribution to C = allocate it and gemm with beta=0
+      C = btas::Tensor<T_, Range_, Store_>(btas::Range(A.range().extent(0), B.range().extent(1)));
+      btas::contract_222(1.0, A, array{1, 2}, B, array{2, 3}, 0.0, C, array{1, 3}, false, false);
     }
-    btas::contract_222(1.0, A, array{1, 2}, B, array{2, 3}, 1.0, C, array{1, 3}, false, false);
+    else {   // subsequent contributions to C = gemm with beta=1
+      btas::contract_222(1.0, A, array{1, 2}, B, array{2, 3}, 1.0, C, array{1, 3}, false, false);
+    }
     return std::move(C);
   }
 }  // namespace btas
@@ -423,18 +496,22 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, ttg:
   using baseT = typename Write_SpMatrix::ttT;
 
   template <typename Keymap2>
-  Write_SpMatrix(SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &in, Keymap2 &&ij_keymap)
-      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, ij_keymap), matrix_(matrix) {}
+  Write_SpMatrix(SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &in, Keymap2 &&ij_keymap, bool write_back = false)
+      : baseT(edges(in), edges(), "write_spmatrix", {"Cij"}, {}, ij_keymap)
+      , matrix_(matrix)
+      , write_back(write_back)
+  { }
 
   void op(const Key<2> &key, typename baseT::input_refs_tuple_type &&elem, std::tuple<> &) {
-#if 0
-    std::lock_guard<std::mutex> lock(mtx_);
-    ttg::trace("rank =", default_execution_context().rank(),
-               "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.cc Write_SpMatrix wrote {",
-               key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
-               " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
-    values_.emplace_back(key[0], key[1], std::move(baseT::template get<0>(elem)));
-#endif // 0
+
+    if (write_back) {
+      std::lock_guard<std::mutex> lock(mtx_);
+      ttg::trace("rank =", default_execution_context().rank(),
+                 "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.cc Write_SpMatrix wrote {",
+                 key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
+                 " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
+      values_.emplace_back(key[0], key[1], std::move(baseT::template get<0>(elem)));
+    }
   }
 
   /// grab completion status as a future<void>
@@ -458,6 +535,7 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, ttg:
   SpMatrix<Blk> &matrix_;
   std::vector<SpMatrixTriplet<Blk>> values_;
   mutable std::shared_ptr<std::shared_future<void>> completion_status_;
+  bool write_back = false;
 };
 
 /// sparse mm via 2.5D SUMMA
@@ -687,7 +765,18 @@ class SpMM25D {
    public:
     using baseT = typename MultiplyAdd::ttT;
 
+#if defined(TTG_HAVE_CUDA)
     static constexpr bool have_cuda_op = true;
+#warning SPMM using CUDA implementation
+#elif defined(TTG_HAVE_HIPBLAS)
+    static constexpr bool have_hip_op  = true;
+#warning SPMM using HIP implementation
+#elif defined(TTG_HAVE_LEVEL_ZERO)
+    static constexpr bool have_level_zero_op = true;
+#warning SPMM using LEVEL_ZERO implementation
+#else
+#error No valid device implementation found!
+#endif
 
     MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
                 const std::vector<std::vector<long>> &a_rowidx_to_colidx,
@@ -726,7 +815,7 @@ class SpMM25D {
       }
     }
 
-    ttg::device_task op(const Key<3> &ijk, typename baseT::input_refs_tuple_type &&_ijk,
+    ttg::device::Task op(const Key<3> &ijk, typename baseT::input_refs_tuple_type &&_ijk,
             std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>> &result) {
       const auto i = ijk[0];
       const auto j = ijk[1];
@@ -744,10 +833,10 @@ class SpMM25D {
       }
 
       /* pull all buffers onto the device */
-      co_await ttg::to_device(A.b, B.b, C.b);
+      co_await ttg::device::select(A.b, B.b, C.b);
 
       /* everything is on the device, call the gemm */
-      cuda_gemm(C, A, B);
+      device_gemm(C, A, B);
 
       /* compute next k while the kernel is running */
       std::tie(next_k, have_next_k) = compute_next_k(i, j, k, p);
@@ -758,7 +847,7 @@ class SpMM25D {
                  (have_next_k ? std::to_string(next_k) : "does not exist"));
 
       /* wait for the kernel to complete */
-      co_await ttg::wait_kernel();
+      co_await ttg::device::wait();
 
 
       // compute the contrib, pass the running total to the next flow, if needed
@@ -1518,9 +1607,6 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   gettimeofday(&start, nullptr);
   // ready, go! need only 1 kick, so must be done by 1 thread only
   if (ttg::default_execution_context().rank() == 0) control.start(P, Q);
-  static volatile int debug_signal = 0;
-  std::cout << "Waiting on debug signal (int*)" << &debug_signal << std::endl;
-  //while (!debug_signal) {}
   fence();
   gettimeofday(&end, nullptr);
   timersub(&end, &start, &diff);
@@ -1607,6 +1693,11 @@ int main(int argc, char **argv) {
     btas::gemm(std::move(Ct), Bt, At);
   }
 #endif  // BTAS_IS_USABLE
+
+//  static volatile int debug_signal = 0;
+//  std::cout << "Waiting on debug signal (int*)" << &debug_signal << std::endl;
+//  while (!debug_signal) {}
+
 
   int cores = -1;
   std::string nbCoreStr(getCmdOption(argv, argv + argc, "-c"));
@@ -1764,13 +1855,13 @@ int main(int argc, char **argv) {
         std::string Mstr(getCmdOption(argv, argv + argc, "-M"));
         M = parseOption(Mstr, 1200);
         std::string Nstr(getCmdOption(argv, argv + argc, "-N"));
-        N = parseOption(Nstr, 1200);
+        N = parseOption(Nstr, M);
         std::string Kstr(getCmdOption(argv, argv + argc, "-K"));
-        K = parseOption(Kstr, 1200);
+        K = parseOption(Kstr, N);
         std::string minTsStr(getCmdOption(argv, argv + argc, "-t"));
-        minTs = parseOption(minTsStr, 32);
+        minTs = parseOption(minTsStr, 64);
         std::string maxTsStr(getCmdOption(argv, argv + argc, "-T"));
-        maxTs = parseOption(maxTsStr, 256);
+        maxTs = parseOption(maxTsStr, minTs);
         std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
         double avg = parseOption(avgStr, 0.3);
         timing = (check == 0);
@@ -1796,9 +1887,11 @@ int main(int argc, char **argv) {
         // Start up engine
         execute();
         for (int nrun = 0; nrun < nb_runs; nrun++) {
+          parsec_devices_release_memory();
           timed_measurement(A, B, ij_keymap, ijk_keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity,
                             a_rowidx_to_colidx, a_colidx_to_rowidx, b_rowidx_to_colidx, b_colidx_to_rowidx, mTiles,
                             nTiles, kTiles, M, N, K, minTs, maxTs, P, Q, R);
+          parsec_devices_reset_load(default_execution_context().impl().context());
         }
       } else {
         // flow graph needs to exist on every node
@@ -1809,7 +1902,7 @@ int main(int argc, char **argv) {
         Edge<Key<2>, blk_t> eA, eB, eC;
         Read_SpMatrix a("A", A, ctl, eA, ij_keymap);
         Read_SpMatrix b("B", B, ctl, eB, ij_keymap);
-        Write_SpMatrix<> c(C, eC, keymap_write);
+        Write_SpMatrix<> c(C, eC, keymap_write, true);
         auto &c_status = c.status();
         assert(!has_value(c_status));
         //  SpMM25D a_times_b(world, eA, eB, eC, A, B);

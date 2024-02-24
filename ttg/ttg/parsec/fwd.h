@@ -13,26 +13,6 @@ namespace ttg_parsec {
   template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs = ttg::typelist<>>
   class TT;
 
-  template<typename T>
-  struct ptr;
-
-  template<typename T>
-  struct buffer;
-  template<typename T>
-  struct devicescratch;
-
-  template<typename... Views>
-  inline bool register_device_memory(std::tuple<Views&...> &views);
-
-  template<typename... Buffer>
-  inline void mark_device_out(std::tuple<Buffer&...> &b);
-
-  template<typename... Buffer>
-  inline void post_device_out(std::tuple<Buffer&...> &b);
-
-  /* the query of the parsec backend only returns whether the data should be marked for pushout */
-  using query_result_type = bool;
-
   /// \internal the OG name
   template <typename keyT, typename output_terminalsT, typename derivedT, typename... input_valueTs>
   using Op [[deprecated("use TT instead")]] = TT<keyT, output_terminalsT, derivedT, ttg::typelist<input_valueTs...>>;
@@ -74,16 +54,38 @@ namespace ttg_parsec {
   template <typename T>
   static void ttg_broadcast(ttg::World world, T &data, int source_rank);
 
+  /* device definitions */
+  template<typename T, typename Allocator = std::allocator<T>>
+  struct Buffer;
+
+  template<typename T>
+  struct Ptr;
+
+  template<typename T>
+  struct devicescratch;
+
+  template<typename T>
+  struct TTValue;
+
+  template<typename T, typename... Args>
+  inline Ptr<T> make_ptr(Args&&... args);
+
+  template<typename T>
+  inline Ptr<std::decay_t<T>> get_ptr(T&& obj);
+
+  template<typename... Views>
+  inline bool register_device_memory(std::tuple<Views&...> &views);
+
+  template<typename... Buffer>
+  inline void post_device_out(std::tuple<Buffer&...> &b);
+
+  template<typename... Buffer>
+  inline void mark_device_out(std::tuple<Buffer&...> &b);
+
 #if 0
   template<typename... Args>
   inline std::pair<bool, std::tuple<ptr<std::decay_t<Args>>...>> get_ptr(Args&&... args);
 #endif
-  template<typename T>
-  inline ptr<std::decay_t<T>> get_ptr(T&& obj);
-
-  template<typename T, typename... Args>
-  inline ptr<T> make_ptr(Args&&... args);
-
 
 }  // namespace ttg_parsec
 

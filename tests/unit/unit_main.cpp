@@ -1,6 +1,6 @@
 #define CATCH_CONFIG_RUNNER
 
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 
 #include <clocale>
 #include <iostream>
@@ -30,7 +30,8 @@ int main(int argc, char** argv) {
   ttg::diagnose_off();  // turn off diagnostics
 
   const auto nranks = ttg::default_execution_context().size();
-  std::cout << "ready to run TTG unit tests with " << nranks << " rank" << (nranks > 1 ? "s" : "") << std::endl;
+  if (session.config().verbosity() != Catch::Verbosity::Quiet)
+    std::cout << "ready to run TTG unit tests with " << nranks << " rank" << (nranks > 1 ? "s" : "") << std::endl;
 
   ttg::execute();
 #endif

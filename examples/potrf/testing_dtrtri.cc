@@ -6,6 +6,7 @@
 #endif  // TTG_USE_PARSEC
 
 #include <ttg.h>
+#include <ttg/serialization/std/tuple.h>
 
 #include "plgsy.h"
 #include "pmw.h"
@@ -72,6 +73,9 @@ int main(int argc, char **argv)
     uplo = lapack::Uplo::Lower;
 
   ttg::initialize(argc, argv, nthreads);
+
+  /* set up TA to get the allocator */
+  allocator_init();
 
   auto world = ttg::default_execution_context();
 
@@ -227,6 +231,7 @@ int main(int argc, char **argv)
   world.dag_off();
   world.profile_off();
 
+  allocator_fini();
   ttg::finalize();
   return ret;
 }
@@ -308,7 +313,7 @@ int check_dtrtri( lapack::Diag diag, lapack::Uplo uplo, double *A, double *Ainv,
 
     std::cout << "============" << std::endl;
     std::cout << "Checking TRTRI " << std::endl;
-    std::cout <<  "-- ||A||_one = " << Anorm << " ||A^(-1)||_one = " << Ainvnorm << " ||I - A * A^(-1)||_one = " 
+    std::cout <<  "-- ||A||_one = " << Anorm << " ||A^(-1)||_one = " << Ainvnorm << " ||I - A * A^(-1)||_one = "
               << Rnorm << ", cond = " << Rcond << ", result = " << result << std::endl;
 
     if ( std::isinf(Ainvnorm) || std::isnan(result) || std::isinf(result) || (result > 10.0) ) {

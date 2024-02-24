@@ -14,6 +14,7 @@ namespace ttg_parsec {
       parsec_gpu_task_t* gpu_task = nullptr;
       parsec_flow_t* flows = nullptr;
       parsec_gpu_exec_stream_t* stream = nullptr;
+      parsec_device_gpu_module_t* device = nullptr;
     };
 
     template<bool SupportDevice>
@@ -33,7 +34,7 @@ namespace ttg_parsec {
       static constexpr bool support_device = false;
       static constexpr size_t num_flows = MAX_PARAM_COUNT;
       parsec_flow_t m_flows[num_flows];
-      device_ptr_t m_dev_ptr = {nullptr, &m_flows[0], nullptr}; // gpu_task will be allocated in each task
+      device_ptr_t m_dev_ptr = {nullptr, &m_flows[0], nullptr, nullptr}; // gpu_task will be allocated in each task
       device_ptr_t* dev_ptr() {
         return &m_dev_ptr;
       }
@@ -45,7 +46,8 @@ namespace ttg_parsec {
       MULTIPLE_READER   = 1 << 1,
       SINGLE_WRITER  = 1 << 2,
       MULTIPLE_WRITER   = 1 << 3,
-      MARKED_PUSHOUT = 1 << 4
+      IS_MODIFIED    = 1 << 4,
+      MARKED_PUSHOUT = 1 << 5
     };
 
     inline
@@ -118,9 +120,9 @@ namespace ttg_parsec {
        * need offsetof for the mempool and scheduling.
        */
       release_task_fn* release_task_cb = nullptr;
-      device_ptr_t* dev_ptr;
+      device_ptr_t* dev_ptr = nullptr;
       bool remove_from_hash = true;
-      bool is_dummy = false;
+      bool dummy = false;
       bool defer_writer = TTG_PARSEC_DEFER_WRITER; // whether to defer writer instead of creating a new copy
       ttg_parsec_data_flags data_flags; // HACKY: flags set by prepare_send and reset by the copy_handler
 
@@ -139,11 +141,10 @@ namespace ttg_parsec {
        */
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
-                             int data_count, ttg_data_copy_t **copies, device_ptr_t *dev_ptr,
+                             int data_count, ttg_data_copy_t **copies,
                              bool defer_writer = TTG_PARSEC_DEFER_WRITER)
           : data_count(data_count)
           , copies(copies)
-          , dev_ptr(dev_ptr)
           , defer_writer(defer_writer) {
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
@@ -153,13 +154,12 @@ namespace ttg_parsec {
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
                              parsec_taskpool_t *taskpool, int32_t priority,
-                             int data_count, ttg_data_copy_t **copies, device_ptr_t *dev_ptr,
+                             int data_count, ttg_data_copy_t **copies,
                              release_task_fn *release_fn,
                              bool defer_writer = TTG_PARSEC_DEFER_WRITER)
           : data_count(data_count)
           , copies(copies)
           , release_task_cb(release_fn)
-          , dev_ptr(dev_ptr)
           , defer_writer(defer_writer) {
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
@@ -171,8 +171,8 @@ namespace ttg_parsec {
       }
 
     public:
-      void set_dummy(bool d) { is_dummy = d; }
-      bool dummy() { return is_dummy; }
+      void set_dummy(bool d) { dummy = d; }
+      bool is_dummy() { return dummy; }
     };
 
     template <typename TT, bool KeyIsVoid = ttg::meta::is_void_v<typename TT::key_type>>
@@ -180,21 +180,21 @@ namespace ttg_parsec {
       using key_type = typename TT::key_type;
       static constexpr size_t num_streams = TT::numins;
       /* device tasks may have to store more copies than it's inputs as their sends are aggregated */
-      static constexpr size_t num_copies  = TT::derived_has_cuda_op() ? static_cast<size_t>(MAX_PARAM_COUNT)
+      static constexpr size_t num_copies  = TT::derived_has_device_op() ? static_cast<size_t>(MAX_PARAM_COUNT)
                                                                       : (num_streams+1);
-      TT* tt;
+      TT* tt = nullptr;
       key_type key;
       std::array<stream_info_t, num_streams> streams;
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
 #endif
+      device_state_t<TT::derived_has_device_op()> dev_state;
       ttg_data_copy_t *copies[num_copies] = { nullptr };  // the data copies tracked by this task
-      device_state_t<TT::derived_has_cuda_op()> dev_state;
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
-          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies, dev_state.dev_ptr()) {
+          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies) {
         tt_ht_item.key = pkey();
-
+        this->dev_ptr = this->dev_state.dev_ptr();
         // We store the hash of the key and the address where it can be found in locals considered as a scratchpad
         *(uintptr_t*)&(parsec_task.locals[0]) = 0; //there is no key
         *(uintptr_t*)&(parsec_task.locals[2]) = 0; //there is no key
@@ -204,10 +204,11 @@ namespace ttg_parsec {
                         parsec_task_class_t *task_class, parsec_taskpool_t *taskpool,
                         TT *tt_ptr, int32_t priority)
           : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
-                                   num_streams, copies, dev_state.dev_ptr(),
+                                   num_streams, copies,
                                    &release_task, tt_ptr->m_defer_writer)
           , tt(tt_ptr), key(key) {
         tt_ht_item.key = pkey();
+        this->dev_ptr = this->dev_state.dev_ptr();
 
         // We store the hash of the key and the address where it can be found in locals considered as a scratchpad
         uint64_t hv = ttg::hash<std::decay_t<decltype(key)>>{}(key);
@@ -238,28 +239,29 @@ namespace ttg_parsec {
     template <typename TT>
     struct parsec_ttg_task_t<TT, true> : public parsec_ttg_task_base_t {
       static constexpr size_t num_streams = TT::numins;
-      TT* tt;
+      TT* tt = nullptr;
       std::array<stream_info_t, num_streams> streams;
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
 #endif
+      device_state_t<TT::derived_has_device_op()> dev_state;
       ttg_data_copy_t *copies[num_streams+1] = { nullptr };  // the data copies tracked by this task
                                                              // +1 for the copy needed during send/bcast
-      device_state_t<TT::derived_has_cuda_op()> dev_state;
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
-          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies, dev_state.dev_ptr()) {
+          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies) {
         tt_ht_item.key = pkey();
+        this->dev_ptr = this->dev_state.dev_ptr();
       }
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
                         parsec_taskpool_t *taskpool, TT *tt_ptr, int32_t priority)
           : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
-                                   num_streams, copies, dev_state.dev_ptr(),
+                                   num_streams, copies,
                                    &release_task, tt_ptr->m_defer_writer)
           , tt(tt_ptr) {
         tt_ht_item.key = pkey();
-
+        this->dev_ptr = this->dev_state.dev_ptr();
         init_stream_info(tt, streams);
       }
 
@@ -297,12 +299,17 @@ namespace ttg_parsec {
                      parsec_task_class_t *task_class, parsec_taskpool_t *taskpool,
                      int32_t priority, bool is_first)
       : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
-                               0, nullptr, nullptr,
+                               0, nullptr,
                                &release_task,
                                true /* deferred until other readers have completed */)
       , parent_task(task)
       , is_first(is_first)
-      { }
+      {
+        /* store the first 4 integers from the parent task (needed for profiling) */
+        for (int i = 0; i < 4; ++i) {
+          parsec_task.locals[i] = task->parsec_task.locals[i];
+        }
+      }
 
       static void release_task(parsec_ttg_task_base_t* task_base) {
         /* reducer tasks have one mutable input so the task can be submitted on the first release */

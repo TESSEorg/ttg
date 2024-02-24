@@ -463,7 +463,7 @@ namespace freestanding::symmetric::bc_v {
 
 #include "ttg/serialization/data_descriptor.h"
 
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 
 static_assert(ttg::detail::is_madness_buffer_serializable_v<int>);
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<int>);
