@@ -32,6 +32,8 @@ project(ttg
 
 if (NOT DEFINED CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_STANDARD "20" CACHE STRING "The C++ standard")
+elseif (${CMAKE_CXX_STANDARD} LESS 20)
+    message(FATAL_ERROR "TTG requires C++ compiler with C++20, but CMAKE_CXX_STANDARD is set to ${CMAKE_CXX_STANDARD}; bump up CMAKE_CXX_STANDARD to 20 or above")
 endif()
 if (NOT CMAKE_CXX_EXTENSIONS)
   set(CMAKE_CXX_EXTENSIONS OFF CACHE BOOL "The C++ standard extensions allowed?")
@@ -53,7 +55,7 @@ set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
 option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" ON)
 option(TTG_ENABLE_CUDA "Whether to TTG will look for CUDA" OFF)
 option(TTG_ENABLE_HIP "Whether to TTG will look for HIP" OFF)
-option(TTG_ENABLE_LEVEL_ZERO "Whether to TTG will look for LEVEL_ZERO" OFF)
+option(TTG_ENABLE_LEVEL_ZERO "Whether to TTG will look for Intel oneAPI Level Zero" OFF)
 option(TTG_EXAMPLES "Whether to build examples" OFF)
 option(TTG_ENABLE_ASAN "Whether to enable address sanitizer" OFF)
 
@@ -116,6 +118,8 @@ if (TTG_ENABLE_CUDA)
 endif(TTG_ENABLE_CUDA)
 
 if (TTG_ENABLE_HIP)
+  # HIP LANGUAGE introduced in 3.21
+  cmake_minimum_required(VERSION 3.21)
   include(CheckLanguage)
   check_language(HIP)
   if(CMAKE_HIP_COMPILER)
