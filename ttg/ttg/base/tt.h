@@ -228,6 +228,9 @@ namespace ttg {
     /// Returns this thread's pointer to the vector of output terminals
     static const std::vector<TerminalBase *> *get_outputs_tls_ptr() { return outputs_tls_ptr_accessor(); }
 
+    /// @return World in which this lives
+    virtual ttg::World get_world() const = 0;
+
     /// Returns a pointer to the i'th input terminal
     ttg::TerminalBase *in(size_t i) {
       if (i >= inputs.size()) throw name + ":TTBase: you are requesting an input terminal that does not exist";
