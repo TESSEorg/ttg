@@ -1274,13 +1274,12 @@ namespace ttg_parsec {
     ttg::World get_world() const override final { return world; }
 
    private:
-    /// dispatches a call to derivedT::op if Space == Host, otherwise to derivedT::op_cuda if Space == CUDA
+    /// dispatches a call to derivedT::op
     /// @return void if called a synchronous function, or ttg::coroutine_handle<> if called a coroutine (if non-null,
     ///    points to the suspended coroutine)
     template <ttg::ExecutionSpace Space, typename... Args>
     auto op(Args &&...args) {
       derivedT *derived = static_cast<derivedT *>(this);
-      // TODO: do we still distinguish op and op_cuda? How do we handle support for multiple devices?
       //if constexpr (Space == ttg::ExecutionSpace::Host) {
         using return_type = decltype(derived->op(std::forward<Args>(args)...));
         if constexpr (std::is_same_v<return_type,void>) {
@@ -1290,21 +1289,6 @@ namespace ttg_parsec {
         else {
           return derived->op(std::forward<Args>(args)...);
         }
-#if 0
-      }
-      else if constexpr (Space == ttg::ExecutionSpace::CUDA) {
-        using return_type = decltype(derived->op_cuda(std::forward<Args>(args)...));
-        if constexpr (std::is_same_v<return_type,void>) {
-          derived->op_cuda(std::forward<Args>(args)...);
-          return;
-        }
-        else {
-          return derived->op_cuda(std::forward<Args>(args)...);
-        }
-      }
-      else
-        ttg::abort();
-#endif // 0
     }
 
     template <std::size_t i, typename terminalT, typename Key>
