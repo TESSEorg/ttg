@@ -9,14 +9,16 @@ set(ut_src
 		streams.cc
     )
 set(ut_libs Catch2::Catch2)
-#if (TARGET std::coroutine)
-    #list(APPEND ut_src fibonacci-coro.cc)
-    list(APPEND ut_src device_coro.cc)
-    if (TTG_HAVE_CUDA)
-        list(APPEND ut_src cuda_kernel.cu)
-    endif(TTG_HAVE_CUDA)
-    list(APPEND ut_libs std::coroutine)
-#endif()
+
+# coroutine tests
+# we definitely have TARGET std::coroutine
+list(APPEND ut_src fibonacci-coro.cc)
+list(APPEND ut_src device_coro.cc)
+if (TTG_HAVE_CUDA)
+    list(APPEND ut_src cuda_kernel.cu)
+endif(TTG_HAVE_CUDA)
+list(APPEND ut_libs std::coroutine)
+
 add_ttg_executable(core-unittests-ttg "${ut_src}" LINK_LIBRARIES "${ut_libs}" COMPILE_DEFINITIONS "CATCH_CONFIG_NO_POSIX_SIGNALS=1" )
 
 # serialization test: probes serialization via all supported serialization methods (MADNESS, Boost::serialization, cereal) that are available

@@ -5,8 +5,6 @@
 #include "ttg/serialization/std/pair.h"
 #include "ttg/util/hash/std/pair.h"
 
-#include "ttg/util/coroutine.h"
-
 constexpr int64_t N = 1000;
 
 TEST_CASE("Fibonacci-coroutines", "[fib][core]") {

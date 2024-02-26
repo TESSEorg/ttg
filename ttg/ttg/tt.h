@@ -1,17 +1,18 @@
 #ifndef TTG_TT_H
 #define TTG_TT_H
 
-#include <memory>
-#include <vector>
-
 #include "ttg/fwd.h"
 
 #include "ttg/base/tt.h"
 #include "ttg/edge.h"
 
 #ifdef TTG_HAS_COROUTINE
-#include "ttg/util/coroutine.h"
+#include "ttg/coroutine.h"
 #endif
+
+#include <cassert>
+#include <memory>
+#include <vector>
 
 namespace ttg {
 
@@ -176,19 +177,29 @@ namespace ttg {
 
 #ifndef TTG_PROCESS_TT_OP_RETURN
 #ifdef TTG_HAS_COROUTINE
-#define TTG_PROCESS_TT_OP_RETURN(result, invoke)       \
-  {                                                    \
-    using return_type = decltype(invoke);              \
-    if constexpr (std::is_same_v<return_type, void>) { \
-      invoke;                                          \
-    } else {                                           \
-      auto coro_return = invoke;                       \
-      result = coro_return.address();                  \
-    }                                                  \
+#define TTG_PROCESS_TT_OP_RETURN(result, id, invoke)                                                           \
+  {                                                                                                            \
+    using return_type = decltype(invoke);                                                                      \
+    if constexpr (std::is_same_v<return_type, void>) {                                                         \
+      invoke;                                                                                                  \
+      id = ttg::TaskCoroutineID::Invalid;                                                                      \
+    } else {                                                                                                   \
+      auto coro_return = invoke;                                                                               \
+      if constexpr (std::is_same_v<decltype(coro_return), ttg::coroutine_handle<ttg::resumable_task_state>>)   \
+        id = ttg::TaskCoroutineID::ResumableTask;                                                              \
+      else if constexpr (std::is_same_v<decltype(coro_return),                                                 \
+                                        ttg::coroutine_handle<ttg::device::detail::device_task_promise_type>>) \
+        id = ttg::TaskCoroutineID::DeviceTask;                                                                 \
+      else                                                                                                     \
+        std::abort();                                                                                          \
+      result = coro_return.address();                                                                          \
+    }                                                                                                          \
   }
 #else
 #define TTG_PROCESS_TT_OP_RETURN(result, invoke) invoke
 #endif
+#else
+#error "TTG_PROCESS_TT_OP_RETURN already defined in ttg/tt.h, check your header guards"
 #endif  // !defined(TTG_PROCESS_TT_OP_RETURN)
 
 #endif  // TTG_TT_H

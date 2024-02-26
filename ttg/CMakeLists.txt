@@ -116,7 +116,7 @@ if (TARGET std::coroutine)
   list(APPEND ttg-deps std::coroutine)
   list(APPEND ttg-defs "TTG_HAS_COROUTINE=1")
   list(APPEND ttg-util-headers
-          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/coroutine.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/coroutine.h
           )
 endif ()
 if (TTG_HAVE_CUDA)

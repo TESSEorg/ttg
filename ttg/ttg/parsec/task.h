@@ -187,6 +187,7 @@ namespace ttg_parsec {
       std::array<stream_info_t, num_streams> streams;
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
+      ttg::TaskCoroutineID coroutine_id = ttg::TaskCoroutineID::Invalid;
 #endif
       device_state_t<TT::derived_has_device_op()> dev_state;
       ttg_data_copy_t *copies[num_copies] = { nullptr };  // the data copies tracked by this task
@@ -243,6 +244,7 @@ namespace ttg_parsec {
       std::array<stream_info_t, num_streams> streams;
 #ifdef TTG_HAS_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
+      ttg::TaskCoroutineID coroutine_id = ttg::TaskCoroutineID::Invalid;
 #endif
       device_state_t<TT::derived_has_device_op()> dev_state;
       ttg_data_copy_t *copies[num_streams+1] = { nullptr };  // the data copies tracked by this task

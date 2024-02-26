@@ -1610,38 +1610,46 @@ namespace ttg_parsec {
 
         if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
           auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(task->key, std::move(input), obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(task->key, std::move(input), obj->output_terminals));
         } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(task->key, obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(task->key, obj->output_terminals));
         } else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
           auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(std::move(input), obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(std::move(input), obj->output_terminals));
         } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(obj->output_terminals));
         } else {
           ttg::abort();
         }
         detail::parsec_ttg_caller = nullptr;
       }
       else {  // resume the suspended coroutine
+
+        assert(task->coroutine_id != ttg::TaskCoroutineID::Invalid);
+
+#ifdef TTG_HAS_COROUTINE
 #ifdef TTG_HAVE_DEVICE
-        ttg::device::Task coro = ttg::device::detail::device_task_handle_type::from_address(suspended_task_address);
-        assert(detail::parsec_ttg_caller == nullptr);
-        detail::parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
-        // TODO: unify the outputs tls handling
+        if (task->coroutine_id == ttg::TaskCoroutineID::DeviceTask) {
+          ttg::device::Task coro = ttg::device::detail::device_task_handle_type::from_address(suspended_task_address);
+          assert(detail::parsec_ttg_caller == nullptr);
+          detail::parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
+          // TODO: unify the outputs tls handling
+          auto old_output_tls_ptr = task->tt->outputs_tls_ptr_accessor();
+          task->tt->set_outputs_tls_ptr();
+          coro.resume();
+          if (coro.completed()) {
+            coro.destroy();
+            suspended_task_address = nullptr;
+          }
+          task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
+          detail::parsec_ttg_caller = nullptr;
+        } else
+#endif  // TTG_HAVE_DEVICE
+      if (task->coroutine_id == ttg::TaskCoroutineID::ResumableTask) {
+        auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address));
+        assert(ret.ready());
         auto old_output_tls_ptr = task->tt->outputs_tls_ptr_accessor();
         task->tt->set_outputs_tls_ptr();
-        coro.resume();
-        if (coro.completed()) {
-          coro.destroy();
-          suspended_task_address = nullptr;
-        }
-        task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
-        detail::parsec_ttg_caller = nullptr;
-#if 0
-#ifdef TTG_HAS_COROUTINE
-        auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<>::from_address(suspended_task_address));
-        assert(ret.ready());
         ret.resume();
         if (ret.completed()) {
           ret.destroy();
@@ -1649,15 +1657,23 @@ namespace ttg_parsec {
         }
         else { // not yet completed
           // leave suspended_task_address as is
+
+          // right now can events are not properly implemented, we are only testing the workflow with dummy events
+          // so mark the events finished manually, parsec will rerun this task again and it should complete the second time
+          auto events = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address)).events();
+          for (auto &event_ptr : events) {
+            event_ptr->finish();
+          }
+          assert(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address).promise().ready());
         }
-        task->suspended_task_address = suspended_task_address;
-#else
-#endif  // TTG_HAS_COROUTINE
-        ttg::abort();  // should not happen
-#endif  // 0
-#else  // TTG_HAVE_DEVICE
+        task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
+        detail::parsec_ttg_caller = nullptr;
+      }
+      else
+        ttg::abort();  // unrecognized task id
+#else // TTG_HAS_COROUTINE
 ttg::abort();  // should not happen
-#endif  // TTG_HAVE_DEVICE
+#endif  // TTG_HAS_COROUTINE
       }
       task->suspended_task_address = suspended_task_address;
 
@@ -1672,30 +1688,7 @@ ttg::abort();  // should not happen
         }
       }
 
-// XXX the below code is not needed, should be removed once the fib test has been changed
-#if 0
-#ifdef TTG_HAS_COROUTINE
-      if (suspended_task_address) {
-        // right now can events are not properly implemented, we are only testing the workflow with dummy events
-        // so mark the events finished manually, parsec will rerun this task again and it should complete the second time
-        auto events = static_cast<ttg::resumable_task>(ttg::coroutine_handle<>::from_address(suspended_task_address)).events();
-        for (auto &event_ptr : events) {
-          event_ptr->finish();
-        }
-        assert(ttg::coroutine_handle<>::from_address(suspended_task_address).promise().ready());
-
-        // TODO: shove {ptr to parsec_task, ptr to this function} to the list of tasks suspended by this thread (hence stored in TLS)
-        // thread will loop over its list (after running every task? periodically? need a dedicated queue of ready tasks?)
-        // and resume the suspended tasks whose events are ready (N.B. ptr to parsec_task is enough to get the list of pending events)
-        // event clearance will in device case handled by host callbacks run by the dedicated device runtime thread
-
-        // TODO PARSEC_HOOK_RETURN_AGAIN -> PARSEC_HOOK_RETURN_ASYNC when event tracking and task resumption (by this thread) is ready
-        return PARSEC_HOOK_RETURN_AGAIN;
-      }
-      else
-#endif  // TTG_HAS_COROUTINE
-#endif // 0
-        return PARSEC_HOOK_RETURN_DONE;
+      return PARSEC_HOOK_RETURN_DONE;
     }
 
     template <ttg::ExecutionSpace Space>
@@ -1714,9 +1707,9 @@ ttg::abort();  // should not happen
         assert(detail::parsec_ttg_caller == NULL);
         detail::parsec_ttg_caller = task;
         if constexpr (!ttg::meta::is_void_v<keyT>) {
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(task->key, obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(task->key, obj->output_terminals));
         } else if constexpr (ttg::meta::is_void_v<keyT>) {
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, baseobj->template op<Space>(obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(obj->output_terminals));
         } else  // unreachable
           ttg:: abort();
         detail::parsec_ttg_caller = NULL;
@@ -3655,29 +3648,30 @@ ttg::abort();  // should not happen
 
       /* if we still have a coroutine handle we invoke it one more time to get the sends/broadcasts */
       if (task->suspended_task_address) {
+        assert(task->coroutine_id != ttg::TaskCoroutineID::Invalid);
 #ifdef TTG_HAVE_DEVICE
-        /* increment versions of all data we might have modified
-         * this must happen before we issue the sends */
-        //increment_data_versions(task, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
+        if (task->coroutine_id == ttg::TaskCoroutineID::DeviceTask) {
+          /* increment versions of all data we might have modified
+           * this must happen before we issue the sends */
+          //increment_data_versions(task, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
 
-        // get the device task from the coroutine handle
-        auto dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
+          // get the device task from the coroutine handle
+          auto dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
 
-        // get the promise which contains the views
-        auto dev_data = dev_task.promise();
+          // get the promise which contains the views
+          auto dev_data = dev_task.promise();
 
-        /* for now make sure we're waiting for the kernel to complete and the coro hasn't skipped this step */
-        assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT);
+          /* for now make sure we're waiting for the kernel to complete and the coro hasn't skipped this step */
+          assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT);
 
-        /* execute the sends we stored */
-        if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT) {
-          /* set the current task, needed inside the sends */
-          detail::parsec_ttg_caller = task;
-          dev_data.do_sends();
-          detail::parsec_ttg_caller = nullptr;
+          /* execute the sends we stored */
+          if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT) {
+            /* set the current task, needed inside the sends */
+            detail::parsec_ttg_caller = task;
+            dev_data.do_sends();
+            detail::parsec_ttg_caller = nullptr;
+          }
         }
-#else // TTG_HAVE_DEVICE
-        ttg::abort();  // should not happen
 #endif // TTG_HAVE_DEVICE
         /* the coroutine should have completed and we cannot access the promise anymore */
         task->suspended_task_address = nullptr;

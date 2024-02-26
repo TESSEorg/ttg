@@ -40,7 +40,7 @@
 #include "ttg/parsec/ttg.h"
 #elif defined(TTG_USE_MADNESS)
 #include "ttg/madness/ttg.h"
-#endif  // TTG_USE_PARSEC|MADNESS
+#endif  // TTG_USE_{PARSEC|MADNESS}
 
 // these headers use the default backend
 #include "ttg/run.h"

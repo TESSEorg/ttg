@@ -2,8 +2,8 @@
 // Created by Eduard Valeyev on 10/31/22.
 //
 
-#ifndef TTG_UTIL_COROUTINE_H
-#define TTG_UTIL_COROUTINE_H
+#ifndef TTG_COROUTINE_H
+#define TTG_COROUTINE_H
 
 #include "ttg/config.h"
 #include TTG_CXX_COROUTINE_HEADER
@@ -205,6 +205,26 @@ namespace ttg {
 
   /// @}
 
+  /////////////////////////////////////////////////////////////////////////////
+  // describe all types of coroutine tasks known to TTG
+  /////////////////////////////////////////////////////////////////////////////
+
+  // fwd declare all coro promise types that have not been declared yet
+  namespace device::detail {
+    struct device_task_promise_type;
+  }  // namespace device::detail
+
+  /// describes all types of coroutine tasks known to TTG
+  /// @internal only exists to simplify metaprogramming in the backend code
+  enum class TaskCoroutineID {
+    /// not a coroutine, i.e. a standard task function, -> void
+    Invalid,
+    /// -> ttg::resumable_task
+    ResumableTask,
+    /// -> ttg::device::Task
+    DeviceTask
+  };
+
 }  // namespace ttg
 
-#endif  // TTG_UTIL_COROUTINE_H
+#endif  // TTG_COROUTINE_H

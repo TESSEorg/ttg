@@ -12,11 +12,11 @@
 namespace ttg::device {
 
   namespace detail {
-    template<typename... Ts>
+    template <typename... Ts>
     struct to_device_t {
       std::tuple<std::add_lvalue_reference_t<Ts>...> ties;
     };
-  } // namespace detail
+  }  // namespace detail
 
   /**
    * Select a device to execute on based on the provided buffer and scratchspace objects.
@@ -25,9 +25,9 @@ namespace ttg::device {
    * \sa ttg::device::current_stream are available) and the buffers are available on the
    * selected device.
    */
-  template<typename... Args>
+  template <typename... Args>
   [[nodiscard]]
-  inline auto select(Args&&... args) {
+  inline auto select(Args &&...args) {
     return detail::to_device_t<std::remove_reference_t<Args>...>{std::tie(std::forward<Args>(args)...)};
   }
 
@@ -42,17 +42,16 @@ namespace ttg::device {
       TTG_DEVICE_CORO_COMPLETE
     };
 
-
-    template<typename... Ts>
+    template <typename... Ts>
     struct wait_kernel_t {
-      std::tuple<Ts&...> ties;
+      std::tuple<Ts &...> ties;
 
       /* always suspend */
       constexpr bool await_ready() const noexcept { return false; }
 
       /* always suspend */
       template <typename Promise>
-      constexpr void await_suspend( ttg::coroutine_handle<Promise> ) const noexcept {}
+      constexpr void await_suspend(ttg::coroutine_handle<Promise>) const noexcept {}
 
       void await_resume() noexcept {
         if constexpr (sizeof...(Ts) > 0) {
@@ -61,19 +60,20 @@ namespace ttg::device {
         }
       }
     };
-  } // namespace detail
+  }  // namespace detail
 
   /**
    * Wait for previously submitted kernels to complete and provided
    * ttg::Buffer and ttg::devicescratch to be transferred back to host.
    * Must only be called after awaiting \sa ttg::device::select has resumed.
    */
-  template<typename... Buffers>
+  template <typename... Buffers>
   [[nodiscard]]
-  inline auto wait(Buffers&&... args) {
-    static_assert(((ttg::meta::is_buffer_v<std::decay_t<Buffers>>
-                    ||ttg::meta::is_devicescratch_v<std::decay_t<Buffers>>)&&...),
-                  "Only ttg::Buffer and ttg::devicescratch can be waited on!");
+  inline auto wait(Buffers &&...args) {
+    static_assert(
+        ((ttg::meta::is_buffer_v<std::decay_t<Buffers>> || ttg::meta::is_devicescratch_v<std::decay_t<Buffers>>) &&
+         ...),
+        "Only ttg::Buffer and ttg::devicescratch can be waited on!");
     return detail::wait_kernel_t<std::remove_reference_t<Buffers>...>{std::tie(std::forward<Buffers>(args)...)};
   }
 
@@ -102,12 +102,10 @@ namespace ttg::device {
 
       send_coro_state(base_type base) : base_type(std::move(base)) {}
 
-      base_type& handle() { return *this; }
+      base_type &handle() { return *this; }
 
       /// @return true if ready to resume
-      inline bool ready() {
-        return true;
-      }
+      inline bool ready() { return true; }
 
       /// @return true if task completed and can be destroyed
       inline bool completed();
@@ -115,96 +113,86 @@ namespace ttg::device {
 
     /// the promise type for the send coroutine
     struct send_coro_promise_type {
-
       /* do not suspend the coroutine on first invocation, we want to run
       * the coroutine immediately and suspend only once.
-      */
-      ttg::suspend_never initial_suspend() {
-        return {};
-      }
+       */
+      ttg::suspend_never initial_suspend() { return {}; }
 
       /* we don't suspend the coroutine at the end.
       * it can be destroyed once the send/broadcast is done
-      */
-      ttg::suspend_never final_suspend() noexcept {
-        return {};
-      }
+       */
+      ttg::suspend_never final_suspend() noexcept { return {}; }
 
       send_coro_state get_return_object() { return send_coro_state{send_coro_handle_type::from_promise(*this)}; }
 
       /* the send coros only have an empty co_await */
-      ttg::suspend_always await_transform(ttg::Void) {
-        return {};
-      }
+      ttg::suspend_always await_transform(ttg::Void) { return {}; }
 
       void unhandled_exception() {
         std::cerr << "Send coroutine caught an unhandled exception!" << std::endl;
-        throw; // fwd
+        throw;  // fwd
       }
 
       void return_void() {}
-
     };
 
-    template<typename Key, typename Value, ttg::Runtime Runtime = ttg::ttg_runtime>
-    inline send_coro_state send_coro(const Key& key, Value&& value, ttg::Out<Key, std::decay_t<Value>> &t,
-                                     ttg::detail::value_copy_handler<Runtime>& ch) {
-      ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
+    template <typename Key, typename Value, ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline send_coro_state send_coro(const Key &key, Value &&value, ttg::Out<Key, std::decay_t<Value>> &t,
+                                     ttg::detail::value_copy_handler<Runtime> &ch) {
+      ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch);  // destroyed at the end of the coro
       Key k = key;
       t.prepare_send(k, std::forward<Value>(value));
-      co_await ttg::Void{}; // we'll come back once the task is done
+      co_await ttg::Void{};  // we'll come back once the task is done
       t.send(k, std::forward<Value>(value));
     };
 
-    template<typename Value, ttg::Runtime Runtime = ttg::ttg_runtime>
-    inline send_coro_state sendv_coro(Value&& value, ttg::Out<void, std::decay_t<Value>> &t,
-                                      ttg::detail::value_copy_handler<Runtime>& ch) {
-      ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
+    template <typename Value, ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline send_coro_state sendv_coro(Value &&value, ttg::Out<void, std::decay_t<Value>> &t,
+                                      ttg::detail::value_copy_handler<Runtime> &ch) {
+      ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch);  // destroyed at the end of the coro
       t.prepare_send(std::forward<Value>(value));
-      co_await ttg::Void{}; // we'll come back once the task is done
+      co_await ttg::Void{};  // we'll come back once the task is done
       t.sendv(std::forward<Value>(value));
     };
 
-    template<typename Key, ttg::Runtime Runtime = ttg::ttg_runtime>
-    inline send_coro_state sendk_coro(const Key& key, ttg::Out<Key, void> &t) {
+    template <typename Key, ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline send_coro_state sendk_coro(const Key &key, ttg::Out<Key, void> &t) {
       // no need to prepare the send but we have to suspend once
       Key k = key;
-      co_await ttg::Void{}; // we'll come back once the task is done
+      co_await ttg::Void{};  // we'll come back once the task is done
       t.sendk(k);
     };
 
-    template<ttg::Runtime Runtime = ttg::ttg_runtime>
+    template <ttg::Runtime Runtime = ttg::ttg_runtime>
     inline send_coro_state send_coro(ttg::Out<void, void> &t) {
       // no need to prepare the send but we have to suspend once
-      co_await ttg::Void{}; // we'll come back once the task is done
+      co_await ttg::Void{};  // we'll come back once the task is done
       t.send();
     };
 
     struct send_t {
       send_coro_state coro;
     };
-  } // namespace detail
+  }  // namespace detail
 
   template <size_t i, typename keyT, typename valueT, typename... out_keysT, typename... out_valuesT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
-  inline detail::send_t send(const keyT &key, valueT &&value,
-                                      std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+  inline detail::send_t send(const keyT &key, valueT &&value, std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
     ttg::detail::value_copy_handler<Runtime> copy_handler;
-    return detail::send_t{detail::send_coro(key, copy_handler(std::forward<valueT>(value)), std::get<i>(t), copy_handler)};
+    return detail::send_t{
+        detail::send_coro(key, copy_handler(std::forward<valueT>(value)), std::get<i>(t), copy_handler)};
   }
 
   template <size_t i, typename valueT, typename... out_keysT, typename... out_valuesT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
-  inline detail::send_t sendv(
-      valueT &&value, std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+  inline detail::send_t sendv(valueT &&value, std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
     ttg::detail::value_copy_handler<Runtime> copy_handler;
     return detail::send_t{detail::sendv_coro(copy_handler(std::forward<valueT>(value)), std::get<i>(t), copy_handler)};
   }
 
   template <size_t i, typename Key, typename... out_keysT, typename... out_valuesT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
-  inline detail::send_t sendk(
-      const Key& key, std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+  inline detail::send_t sendk(const Key &key, std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
     return detail::send_t{detail::sendk_coro(key, std::get<i>(t))};
   }
 
@@ -419,7 +407,7 @@ namespace ttg::device {
 
   /// A device::Task is a coroutine (a callable that can be suspended and resumed).
 
-  /// \note Since task execution in TTG is not preempable, tasks should not block.
+  /// Since task execution in TTG is not preempable, tasks should not block.
   /// The purpose of suspending a task is to yield control back to the runtime until some events occur;
   /// in the meantime its executor (e.g., a user-space thread) can perform other work.
   /// Once the task function reaches a point where further progress is pending completion of one or more asynchronous
