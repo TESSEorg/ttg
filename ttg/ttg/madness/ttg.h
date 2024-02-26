@@ -359,7 +359,7 @@ namespace ttg_madness {
             ttg::abort();
         } else {  // resume suspended coroutine
 #ifdef TTG_HAS_COROUTINE
-          auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<>::from_address(suspended_task_address));
+          auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address));
           assert(ret.ready());
           ret.resume();
           if (ret.completed()) {
@@ -388,14 +388,14 @@ namespace ttg_madness {
           // so mark the events finished manually, parsec will rerun this task again and it should complete the second
           // time
           auto events =
-              static_cast<ttg::resumable_task>(ttg::coroutine_handle<>::from_address(suspended_task_address)).events();
+              static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address)).events();
           for (auto &event_ptr : events) {
             event_ptr->finish();
           }
-          assert(ttg::coroutine_handle<>::from_address(suspended_task_address).promise().ready());
+          assert(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address).promise().ready());
 
           // resume the coroutine
-          auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<>::from_address(suspended_task_address));
+          auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address));
           assert(ret.ready());
           ret.resume();
           if (ret.completed()) {

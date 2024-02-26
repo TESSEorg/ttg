@@ -1723,7 +1723,7 @@ ttg::abort();  // should not happen
       }
       else {
 #ifdef TTG_HAS_COROUTINE
-        auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<>::from_address(suspended_task_address));
+        auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address));
         assert(ret.ready());
         ret.resume();
         if (ret.completed()) {

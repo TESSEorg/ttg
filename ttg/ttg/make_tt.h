@@ -151,7 +151,7 @@ class CallableWrapTTArgs
   using op_return_type =
 #ifdef TTG_HAS_COROUTINE
       std::conditional_t<std::is_same_v<returnT, ttg::resumable_task>,
-                         ttg::coroutine_handle<>,
+                         ttg::coroutine_handle<ttg::resumable_task_state>,
 #ifdef TTG_HAVE_DEVICE
                          std::conditional_t<std::is_same_v<returnT, ttg::device::Task>,
                                             ttg::device::Task::base_type,
@@ -178,7 +178,7 @@ protected:
     if constexpr (!std::is_void_v<returnT>) {  // protect from compiling for void returnT
 #ifdef TTG_HAS_COROUTINE
       if constexpr (std::is_same_v<returnT, ttg::resumable_task>) {
-        ttg::coroutine_handle<> coro_handle;
+        ttg::coroutine_handle<ttg::resumable_task_state> coro_handle;
         // if task completed destroy it
         if (ret.completed()) {
           ret.destroy();

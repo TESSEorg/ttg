@@ -13,16 +13,29 @@
 
 namespace ttg {
 
-  struct resumable_task_state;
+  // import std coroutine API into ttg namespace
 
-  // import coroutine_handle, with default promise redefined to resumable_task_state
-  template <typename Promise = resumable_task_state>
+  using suspend_always = TTG_CXX_COROUTINE_NAMESPACE::suspend_always;
+  using suspend_never = TTG_CXX_COROUTINE_NAMESPACE::suspend_never;
+  template <typename Promise>
   using coroutine_handle = TTG_CXX_COROUTINE_NAMESPACE::coroutine_handle<Promise>;
+
+  /// @defgroup resumable_task resumable_task coroutine
+
+  /// resumable_task is the original prototype TTG coroutine that awaits on generic events.
+  /// There is no proper support for it by TTG runtimes, but it can be useful for understanding how
+  /// coroutines work with TTG and potentially in the future as a model for universal resumable tasks
+
+  /// @{
+
+  // fwd-declares
+
+  struct resumable_task_state;
 
   template <std::size_t N>
   struct resumable_task_events;
 
-  /// represents a one-time event
+  /// represents a generic one-time event
   struct event {
     void finish() { finished_ = true; }
 
@@ -34,15 +47,15 @@ namespace ttg {
   };
 
   /// task that can be resumed after some events occur
-  struct resumable_task : public ttg::coroutine_handle<> {
-    using base_type = ttg::coroutine_handle<>;
+  struct resumable_task : public ttg::coroutine_handle<resumable_task_state> {
+    using base_type = ttg::coroutine_handle<resumable_task_state>;
 
-    /// these are members mandated by the promise_type concept
-    ///@{
+    /// @name members mandated by the promise_type concept
+    /// @{
 
     using promise_type = struct resumable_task_state;
 
-    ///@}
+    /// @}
 
     resumable_task(base_type base) : base_type(std::move(base)) {}
 
@@ -69,28 +82,28 @@ namespace ttg {
     resumable_task_state& operator=(resumable_task_state&&) = delete;
 
     constexpr static inline std::size_t MaxNumEvents = 20;
-    using handle_type = coroutine_handle<>;
+    using handle_type = coroutine_handle<resumable_task_state>;
 
-    /// these are members mandated by the promise_type concept
-    ///@{
+    /// @name members mandated by the promise_type concept
+    /// @{
 
     resumable_task get_return_object() { return resumable_task{handle_type::from_promise(*this)}; }
 
     /// @note start task eagerly
-    TTG_CXX_COROUTINE_NAMESPACE::suspend_never initial_suspend() noexcept { return {}; }
+    suspend_never initial_suspend() noexcept { return {}; }
 
     /// @note suspend task before destroying it so the runtime can know that the task is completed
-    TTG_CXX_COROUTINE_NAMESPACE::suspend_always final_suspend() noexcept {
+    suspend_always final_suspend() noexcept {
       completed_ = true;
       return {};
     }
     void return_void() {}
     void unhandled_exception() {}
 
-    ///@}
+    /// @}
 
-    /// these are optional members of the promise_type concept
-    ///@{
+    /// @name optional members of the promise_type concept
+    /// @{
 
     // these can be used to use optional storage provided by the runtime (e.g. part of the runtime's task data struct)
     // N.B. the existing buffer must be passed to operator new via TLS
@@ -105,7 +118,7 @@ namespace ttg {
     //      ::operator delete(ptr, size);
     //    }
 
-    ///@}
+    /// @}
 
     /// @return true if ready to resume
     constexpr bool ready() const {
@@ -160,12 +173,12 @@ namespace ttg {
     template <typename... Events>
     constexpr resumable_task_events(Events&&... events) : events_{(&events)...} {}
 
-    /// these are members mandated by the Awaiter concept
-    ///@{
+    /// @name members mandated by the Awaiter concept
+    /// @{
 
     constexpr bool await_ready() const { return await_ready(std::make_index_sequence<N>{}); }
 
-    void await_suspend(coroutine_handle<> pending_task) {
+    void await_suspend(coroutine_handle<resumable_task_state> pending_task) {
       pending_task_ = pending_task;
       pending_task_.promise().set_events(events_);
     }
@@ -177,11 +190,11 @@ namespace ttg {
       }
     }
 
-    ///@}
+    /// @}
 
    private:
     std::array<event*, N> events_;
-    coroutine_handle<> pending_task_;
+    coroutine_handle<resumable_task_state> pending_task_;
   };  // resumable_task_events
 
   // deduce the number of events properly
@@ -189,6 +202,9 @@ namespace ttg {
   resumable_task_events(Events&&...) -> resumable_task_events<sizeof...(Events)>;
 
   static_assert(resumable_task_events<0>{}.await_ready() == true);
+
+  /// @}
+
 }  // namespace ttg
 
 #endif  // TTG_UTIL_COROUTINE_H
