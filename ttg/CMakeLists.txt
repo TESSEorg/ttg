@@ -153,7 +153,6 @@ set(ttg-serialization-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/traits.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/boost.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/boost/archive.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/cereal.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/backends/madness.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/allocator.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/serialization/std/array.h
@@ -180,10 +179,6 @@ if (TARGET Boost::serialization)
   endif()
   list(APPEND ttg-serialization-compile-definitions TTG_SERIALIZATION_SUPPORTS_BOOST=1)
 endif (TARGET Boost::serialization)
-if (TARGET cereal::cereal)
-  list(APPEND ttg-serialization-deps cereal::cereal)
-  list(APPEND ttg-serialization-compile-definitions TTG_SERIALIZATION_SUPPORTS_CEREAL=1)
-endif (TARGET cereal::cereal)
 
 add_ttg_library(ttg-serialization
                 "${ttg-serialization-sources}"
@@ -206,14 +201,6 @@ if (TARGET Boost::serialization)
           LINK_LIBRARIES "${ttg-serialization-boost-deps}"
           COMPILE_DEFINITIONS "TTG_SERIALIZATION_SUPPORTS_BOOST=1")
 endif(TARGET Boost::serialization)
-# make cereal-only serialization target
-if (TARGET cereal::cereal)
-  add_ttg_library(ttg-serialization-cereal
-          "${ttg-serialization-sources}"
-          PUBLIC_HEADER "${ttg-serialization-headers}"
-          LINK_LIBRARIES "cereal::cereal"
-          COMPILE_DEFINITIONS "TTG_SERIALIZATION_SUPPORTS_CEREAL=1")
-endif(TARGET cereal::cereal)
 
 #########################
 ####### MADNESS-specific

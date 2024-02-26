@@ -42,24 +42,14 @@ class POD {
 static_assert(std::is_trivially_copyable_v<POD>);
 static_assert(ttg::detail::is_memcpyable_v<POD>);
 
-#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
-// WTF?! std::array of non-Serializable is Serializable
-static_assert(!cereal::traits::is_input_serializable<POD, cereal::BinaryInputArchive>::value);
-static_assert(!cereal::traits::is_output_serializable<POD, cereal::BinaryOutputArchive>::value);
-static_assert(!cereal::traits::is_input_serializable<std::array<POD, 3>, cereal::BinaryInputArchive>::value);
-static_assert(!cereal::traits::is_output_serializable<std::array<POD, 3>, cereal::BinaryOutputArchive>::value);
-#endif  // TTG_SERIALIZATION_SUPPORTS_CEREAL
-
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<POD>);
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
 static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_oarchive, POD>);
 static_assert(ttg::detail::has_freestanding_boost_serialize_with_version_v<POD, boost::archive::binary_oarchive>);
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<POD>);
-static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<POD>);
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<std::array<POD, 3>>);
 static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<std::array<POD, 3>>);
-static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<std::array<POD, 3>>);
 
 std::ostream& operator<<(std::ostream& s, const POD& f) {
   s << "POD(" << f.get() << ")";
@@ -161,7 +151,7 @@ namespace intrusive::symmetric::bc_v {
 
     int get() const { return value; }
 
-    // boost uses `unsigned int` for version, cereal uses `std::uint32_t`
+    // boost uses `unsigned int` for version
     template <typename Archive>
     void serialize(Archive& ar, const unsigned int version) {
       ar& value;
@@ -180,9 +170,6 @@ namespace intrusive_private::symmetric::bc_v {
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
     friend class boost::serialization::access;
 #endif
-#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
-    friend class cereal::access;  // befriend the cereal version of access
-#endif
 
     template <typename Archive>
     void serialize(Archive& ar, const unsigned int version) {
@@ -200,72 +187,6 @@ namespace intrusive_private::symmetric::bc_v {
   };
   static_assert(!std::is_trivially_copyable_v<NonPOD>);
 }  // namespace intrusive_private::symmetric::bc_v
-
-#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
-namespace intrusive::symmetric::c {
-
-  class NonPOD {
-    int value;
-
-   public:
-    NonPOD() = default;
-    NonPOD(int value) : value(value) {}
-    NonPOD(const NonPOD& other) : value(other.value) {}
-
-    int get() const { return value; }
-
-    // versioned
-    template <class Archive>
-    std::enable_if_t<std::is_base_of_v<cereal::detail::InputArchiveBase, Archive> ||
-                     std::is_base_of_v<cereal::detail::OutputArchiveBase, Archive>>
-    serialize(Archive& ar) {
-      ar(value);
-    }
-  };
-  static_assert(!std::is_trivially_copyable_v<NonPOD>);
-
-  static_assert(ttg::detail::is_cereal_buffer_serializable_v<NonPOD>);
-  static_assert(!ttg::detail::is_boost_buffer_serializable_v<NonPOD>);
-  static_assert(!ttg::detail::is_madness_buffer_serializable_v<NonPOD>);
-  static_assert(ttg::detail::is_cereal_user_buffer_serializable_v<NonPOD>);
-  static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<NonPOD>);
-  static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<NonPOD>);
-
-}  // namespace intrusive::symmetric::c
-
-namespace intrusive::symmetric::c_v {
-
-  class NonPOD {
-    int value;
-
-   public:
-    NonPOD() = default;
-    NonPOD(int value) : value(value) {}
-    NonPOD(const NonPOD& other) : value(other.value) {}
-
-    int get() const { return value; }
-
-    // versioned
-    template <class Archive>
-    std::enable_if_t<std::is_base_of_v<cereal::detail::InputArchiveBase, Archive> ||
-                     std::is_base_of_v<cereal::detail::OutputArchiveBase, Archive>>
-    serialize(Archive& ar, std::uint32_t const version) {
-      ar(value);
-    }
-  };
-  static_assert(!std::is_trivially_copyable_v<NonPOD>);
-
-  static_assert(ttg::detail::is_cereal_buffer_serializable_v<NonPOD>);
-  static_assert(!ttg::detail::is_boost_serializable_v<boost::archive::binary_iarchive, NonPOD>);
-  static_assert(!ttg::detail::is_boost_buffer_serializable_v<NonPOD>);
-  static_assert(!ttg::detail::is_madness_buffer_serializable_v<NonPOD>);
-  static_assert(ttg::detail::is_cereal_user_buffer_serializable_v<NonPOD>);
-  static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<NonPOD>);
-  static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<NonPOD>);
-
-}  // namespace intrusive::symmetric::c_v
-
-#endif  // TTG_SERIALIZATION_SUPPORTS_CEREAL
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
 
@@ -372,10 +293,6 @@ static_assert(std::is_same_v<typex<boost::archive::binary_oarchive, intrusive::a
 
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
-#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
-CEREAL_CLASS_VERSION(intrusive::symmetric::c_v::NonPOD, 17);
-#endif
-
 namespace nonintrusive::symmetric::m {
 
   class NonPOD {
@@ -468,17 +385,14 @@ namespace freestanding::symmetric::bc_v {
 static_assert(ttg::detail::is_madness_buffer_serializable_v<int>);
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<int>);
 static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<int>);
-static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<int>);
 static_assert(!ttg::detail::is_user_buffer_serializable_v<int>);
 static_assert(ttg::detail::is_madness_buffer_serializable_v<const int>);
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<const int>);
 static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<const int>);
-static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<const int>);
 static_assert(!ttg::detail::is_user_buffer_serializable_v<const int>);
 static_assert(ttg::detail::is_madness_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_madness_user_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_boost_user_buffer_serializable_v<int[4]>);
-static_assert(!ttg::detail::is_cereal_user_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_user_buffer_serializable_v<int[4]>);
 static_assert(!ttg::detail::is_user_buffer_serializable_v<std::array<int, 4>>);
 
@@ -819,20 +733,6 @@ TEST_CASE("Boost Serialization", "[serialization]") {
 }
 #endif  // TTG_SERIALIZATION_SUPPORTS_BOOST
 
-#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
-TEST_CASE("Cereal Serialization", "[serialization]") {
-  auto test = [](const auto& t) {
-    using T = std::remove_reference_t<decltype(t)>;
-    CHECK(ttg::detail::is_cereal_serializable_v<cereal::BinaryOutputArchive, T>);
-    using Tnc = std::remove_const_t<T>;
-    CHECK(ttg::detail::is_cereal_serializable_v<cereal::BinaryInputArchive, Tnc>);
-  };
-
-  test(intrusive::symmetric::bc_v::NonPOD{17});
-  test(freestanding::symmetric::bc_v::NonPOD{18});
-}
-#endif  // TTG_SERIALIZATION_SUPPORTS_CEREAL
-
 #if defined(TTG_SERIALIZATION_SUPPORTS_MADNESS) && defined(TTG_SERIALIZATION_SUPPORTS_BOOST)
 TEST_CASE("TTG Serialization", "[serialization]") {
   // Test code written as if calling from C
@@ -887,10 +787,6 @@ TEST_CASE("TTG Serialization", "[serialization]") {
   test_struct(intrusive::asymmetric::b::NonPOD{21});       // Boost
   test_struct(intrusive::symmetric::bc_v::NonPOD{20});     // Boost
   test_struct(freestanding::symmetric::bc_v::NonPOD{21});  // Boost
-#endif
-#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
-  test_struct(intrusive::symmetric::c::NonPOD{22});    // Cereal
-  test_struct(intrusive::symmetric::c_v::NonPOD{23});  // Cereal
 #endif
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST

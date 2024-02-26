@@ -350,27 +350,6 @@ public:
   }
 #endif // TTG_SERIALIZATION_SUPPORTS_BOOST
 
-#ifdef TTG_SERIALIZATION_SUPPORTS_CEREAL
-  template <class Archive>
-  std::enable_if_t<std::is_base_of_v<cereal::detail::InputArchiveBase, Archive> ||
-                    std::is_base_of_v<cereal::detail::OutputArchiveBase, Archive>>
-  serialize(Archive& ar) {
-    if constexpr (ttg::detail::is_output_archive_v<Archive>)
-      std::size_t s = size();
-      assert(m_ttg_copy != nullptr); // only tracked objects allowed
-      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), current_device_ptr()});
-      ar(s);
-    else {
-      std::size_t s;
-      ar(s);
-      reset(s);
-      assert(m_ttg_copy != nullptr); // only tracked objects allowed
-      m_ttg_copy->iovec_add(ttg::iovec{s*sizeof(T), current_device_ptr()});
-    }
-    ar(value);
-  }
-#endif // TTG_SERIALIZATION_SUPPORTS_CEREAL
-
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
   template <typename Archive>
   std::enable_if_t<std::is_base_of_v<madness::archive::BufferInputArchive, Archive> ||

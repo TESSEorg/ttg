@@ -273,25 +273,6 @@ public:
   }
 #endif // TTG_SERIALIZATION_SUPPORTS_BOOST
 
-#if defined(TTG_SERIALIZATION_SUPPORTS_CEREAL) && 0
-  template <class Archive>
-  std::enable_if_t<std::is_base_of_v<cereal::detail::InputArchiveBase, Archive> ||
-                    std::is_base_of_v<cereal::detail::OutputArchiveBase, Archive>>
-  serialize(Archive& ar) {
-    if constexpr (ttg::detail::is_output_archive_v<Archive>)
-      std::size_t s = size();
-      ar(s);
-      /* TODO: how to serialize the array? */
-    else {
-      std::size_t s;
-      ar(s);
-      reset(s);
-      /* TODO: how to deserialize the array? */
-    }
-    ar(value);
-  }
-#endif // TTG_SERIALIZATION_SUPPORTS_CEREAL
-
 #if defined(TTG_SERIALIZATION_SUPPORTS_MADNESS)
   template <typename Archive>
   std::enable_if_t<std::is_base_of_v<madness::archive::BufferInputArchive, Archive> ||
