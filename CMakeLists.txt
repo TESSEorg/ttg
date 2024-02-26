@@ -94,8 +94,6 @@ endif (BUILD_TESTING)
 ###########################
 # Boost
 include("${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchBoost.cmake")
-# Cereal
-#include(FindOrFetchCereal)
 # C++ coroutines
 find_package(CXXStdCoroutine MODULE REQUIRED COMPONENTS Final Experimental)
 

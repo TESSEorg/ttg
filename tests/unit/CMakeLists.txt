@@ -21,7 +21,7 @@ list(APPEND ut_libs std::coroutine)
 
 add_ttg_executable(core-unittests-ttg "${ut_src}" LINK_LIBRARIES "${ut_libs}" COMPILE_DEFINITIONS "CATCH_CONFIG_NO_POSIX_SIGNALS=1" )
 
-# serialization test: probes serialization via all supported serialization methods (MADNESS, Boost::serialization, cereal) that are available
+# serialization test: probes serialization via all supported serialization methods (MADNESS, Boost::serialization) that are available
 add_ttg_executable(serialization serialization.cc unit_main.cpp
                    LINK_LIBRARIES Catch2::Catch2 ttg-serialization  $<TARGET_NAME_IF_EXISTS:BTAS::BTAS>
                    COMPILE_DEFINITIONS $<$<TARGET_EXISTS:BTAS::BTAS>:TTG_HAS_BTAS=1>)
