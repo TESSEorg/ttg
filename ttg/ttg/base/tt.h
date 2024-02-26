@@ -264,7 +264,6 @@ namespace ttg {
     virtual void release() {}
 
     /// Marks this executable
-    /// @return nothing
     virtual void make_executable() = 0;
 
     /// Queries if this ready to execute

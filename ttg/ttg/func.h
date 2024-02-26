@@ -98,11 +98,14 @@ namespace ttg {
   inline void connect(ttg::TerminalBase *out, ttg::TerminalBase *in) { out->connect(in); }
 
   /// \brief Connect producer output terminal outindex to consumer input terminal inindex (via unique or otherwise
-  /// wrapped pointers to TTs) \tparam outindex The index of the output terminal on the producer. \tparam inindex  The
-  /// index of the input terminal on the consumer. \param p The producer TT \param c The consumer TT
+  /// wrapped pointers to TTs)
+  /// \tparam outindex The index of the output terminal on the producer.
+  /// \tparam inindex  The index of the input terminal on the consumer.
+  /// \param p The producer TT
+  /// \param c The consumer TT
   template <std::size_t outindex, std::size_t inindex, typename producer_tt_ptr, typename successor_tt_ptr>
-  inline void connect(producer_tt_ptr &p, successor_tt_ptr &s) {
-    connect(p->template out<outindex>(), s->template in<inindex>());
+  inline void connect(producer_tt_ptr &p, successor_tt_ptr &c) {
+    connect(p->template out<outindex>(), c->template in<inindex>());
   }
 
   /// \brief Connect producer output terminal outindex to consumer input terminal inindex (via bare pointers to TTs)
@@ -111,13 +114,13 @@ namespace ttg {
   /// \param p The producer TT
   /// \param c The consumer TT
   template <std::size_t outindex, std::size_t inindex, typename producer_tt_ptr, typename successor_tt_ptr>
-  inline void connect(producer_tt_ptr *p, successor_tt_ptr *s) {
-    connect(p->template out<outindex>(), s->template in<inindex>());
+  inline void connect(producer_tt_ptr *p, successor_tt_ptr *c) {
+    connect(p->template out<outindex>(), c->template in<inindex>());
   }
 
   /// \brief Connect producer output terminal outindex to consumer input terminal inindex (via TTBase pointers)
-  /// \tparam outindex The index of the output terminal on the producer.
-  /// \tparam inindex  The index of the input terminal on the consumer.
+  /// \param outindex The index of the output terminal on the producer.
+  /// \param inindex  The index of the input terminal on the consumer.
   /// \param producer The producer TT
   /// \param consumer The consumer TT
   inline void connect(size_t outindex, size_t inindex, TTBase *producer, TTBase *consumer) {
@@ -149,7 +152,7 @@ namespace ttg {
   /// \brief Sends a task id and a value to the given output terminal
   /// \param[in] key: the id of the task(s) receiving the value
   /// \param[in] value: the value to send to the receiving task(s)
-  /// \param[in] out: the output terminal
+  /// \param[in] t: the output terminal
   // clang-format on
   template <typename keyT, typename valueT, typename output_terminalT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline void send(const keyT &key, valueT &&value, ttg::Out<keyT, valueT> &t) {
@@ -160,7 +163,7 @@ namespace ttg {
   // clang-format off
   /// \brief Sends a task id (without an accompanying value) to the given output terminal
   /// \param[in] key: the id of the task(s) receiving the value
-  /// \param[in] out: the output terminal
+  /// \param[in] t: the output terminal
   // clang-format on
   template <typename keyT>
   inline void sendk(const keyT &key, ttg::Out<keyT, void> &t) {
@@ -170,7 +173,7 @@ namespace ttg {
   // clang-format off
   /// \brief Sends a value (without an accompanying task id) to the given output terminal
   /// \param[in] value: the value to send to the receiving task(s)
-  /// \param[in] out: the output terminal
+  /// \param[in] t: the output terminal
   // clang-format on
   template <typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline void sendv(valueT &&value, ttg::Out<void, valueT> &t) {
@@ -180,7 +183,7 @@ namespace ttg {
 
   // clang-format off
   /// \brief Sends a control message (message without an accompanying task id or a value) to the given output terminal
-  /// \param[in] out: the output terminal
+  /// \param[in] t: the output terminal
   // clang-format on
   inline void send(ttg::Out<void, void> &t) { t.send(); }
 
@@ -189,7 +192,7 @@ namespace ttg {
   /// \tparam <i> Identifies which output terminal in \p t to select for sending
   /// \param[in] key: the id of the task(s) receiving the value
   /// \param[in] value: the value to send to the receiving task(s)
-  /// \param[in] out: a tuple of output terminals (typically, this is the output terminal of the template task where this is invoked)
+  /// \param[in] t: a tuple of output terminals (typically, this is the output terminal of the template task where this is invoked)
   // clang-format on
   template <size_t i, typename keyT, typename valueT, typename... out_keysT, typename... out_valuesT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
@@ -230,7 +233,7 @@ namespace ttg {
   /// \brief Sends a task id (without an accompanying value) to the template tasks attached to the output terminal selected in the explicitly given terminal tuple \p t
   /// \tparam <i> Identifies which output terminal in \p t to select for sending
   /// \param[in] key: the id of the task(s) receiving the value
-  /// \param[in] out: a tuple of output terminals (typically, this is the output terminal of the template task where this is invoked)
+  /// \param[in] t: a tuple of output terminals (typically, this is the output terminal of the template task where this is invoked)
   // clang-format on
   template <size_t i, typename keyT, typename... out_keysT, typename... out_valuesT>
   inline std::enable_if_t<!meta::is_void_v<keyT>, void> sendk(const keyT &key,
@@ -264,7 +267,7 @@ namespace ttg {
   /// \brief Sends a value (without an accompanying task id) to the template tasks attached to the output terminal selected in the explicitly given terminal tuple \p t
   /// \tparam <i> Identifies which output terminal in \p t to select for sending
   /// \param[in] value: the value to send to the receiving task(s)
-  /// \param[in] out: a tuple of output terminals (typically, this is the output terminal of the template task where this is invoked)
+  /// \param[in] t: a tuple of output terminals (typically, this is the output terminal of the template task where this is invoked)
   // clang-format on
   template <size_t i, typename valueT, typename... out_keysT, typename... out_valuesT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
@@ -276,7 +279,7 @@ namespace ttg {
 
   // clang-format off
   /// \brief Sends a value (without an accompanying task id) to the template tasks attached to the output terminal of this template task
-  /// \param[in] i Identifies which output terminal of this template task to select for sending
+  /// \param[in] <i> Identifies which output terminal of this template task to select for sending
   /// \param[in] value: the value to send to the receiving task(s)
   // clang-format on
   template <typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
@@ -300,7 +303,7 @@ namespace ttg {
   // clang-format off
   /// \brief Sends a control message (message without an accompanying task id or a value) to the template tasks attached to the output terminal selected in the explicitly given terminal tuple \p t
   /// \tparam <i> Identifies which output terminal in \p t to select for sending
-  /// \param[in] out: a tuple of output terminals (typically, this is the output terminal of the template task where this is invoked)
+  /// \param[in] t: a tuple of output terminals (typically, this is the output terminal of the template task where this is invoked)
   // clang-format on
   template <size_t i, typename... out_keysT, typename... out_valuesT>
   inline void send(std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {

@@ -188,6 +188,7 @@ namespace ttg {
     ///     will continue adding data onto this terminal
     /// \param[in] setsize_callback: if the terminal is a reduce terminal, announces how many items will be set
     ///     unto this terminal for reduction
+    /// \param[in] prepare_send_callback: for resumable/device tasks this is called before actual send
     void set_callback(const send_callback_type &send_callback, const move_callback_type &move_callback,
                       const broadcast_callback_type &bcast_callback = broadcast_callback_type{},
                       const setsize_callback_type &setsize_callback = setsize_callback_type{},

@@ -286,12 +286,11 @@ namespace ttg {
 
     static std::shared_ptr<Debugger> default_debugger_;
 
-    /** prints out a backtrace
+    /** prints out a backtrace to `std::cout`
      *
      * @param prefix this string will be prepended at the beginning of each line
      * of Backtrace
      * @param reason optional string specifying the reason for traceback
-     * @return backtrace
      */
     static void __traceback(const std::string &prefix, const char *reason = nullptr);
 

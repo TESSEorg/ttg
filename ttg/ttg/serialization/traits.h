@@ -23,7 +23,7 @@ namespace ttg::detail {
 
   /// helps to detect that `T` has a member serialization method that
   /// accepts single argument of type `Archive`
-  /// @note use in combination with `ttg::meta`::is_detected_v
+  /// @note use in combination with ttg::meta::is_detected_v
   template <typename T, typename Archive>
   using has_member_serialize_t = decltype(std::declval<T&>().serialize(std::declval<Archive&>()));
 
