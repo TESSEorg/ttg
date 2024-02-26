@@ -859,6 +859,7 @@ namespace ttg_parsec {
       /* if there was only one reader (the current task) or
        * a mutable copy and a successor, we release the copy */
       if (1 == readers || copy->is_mutable()) {
+        std::atomic_thread_fence(std::memory_order_acquire);
         if (nullptr != copy->get_next_task()) {
           /* Release the deferred task.
            * The copy was mutable and will be mutated by the released task,
@@ -943,9 +944,10 @@ namespace ttg_parsec {
            * no other readers, mark copy as mutable and defer the release
            * of the task
            */
-          copy_in->mark_mutable();
           assert(nullptr == copy_in->get_next_task());
           copy_in->set_next_task(&task->parsec_task);
+          std::atomic_thread_fence(std::memory_order_release);
+          copy_in->mark_mutable();
         } else {
           if (task->defer_writer && nullptr == copy_in->get_next_task()) {
             /* we're the first writer and want to wait for all readers to complete */
@@ -2386,7 +2388,7 @@ ttg::abort();  // should not happen
       if (reducer && 1 != task->streams[i].goal) {  // is this a streaming input? reduce the received value
         auto submit_reducer_task = [&](auto *parent_task){
           /* check if we need to create a task */
-          std::size_t c = parent_task->streams[i].reduce_count.fetch_add(1, std::memory_order_release);
+          std::size_t c = parent_task->streams[i].reduce_count.fetch_add(1, std::memory_order_acquire);
           //std::cout << "submit_reducer_task " << key << " c " << c << std::endl;
           if (0 == c) {
             /* we are responsible for creating the reduction task */
