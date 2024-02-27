@@ -292,11 +292,16 @@ class SpMM25D {
       , parallel_bcasts_(parallel_bcasts) {
     Edge<Key<2>, void> a_ctl, b_ctl;
     Edge<Key<2>, int> a_rowctl, b_colctl; // TODO: can we have multiple control inputs per TT?
+    auto constraint = ttg::make_shared_constraint<ttg::SequencedKeysConstraint<Key<2>>>();
     bcast_a_ = std::make_unique<BcastA>(a, a_ctl, a_rowctl, local_a_ijk_, a_rows_of_col_, a_cols_of_row_, b_cols_of_row_,
                                         ij_keymap_, ijk_keymap_, parallel_bcasts_);
+    // add constraint with external mapper: key[1] represents `k`
+    bcast_a_->add_constraint(constraint, [](const Key<2>& key){ return key[1]; });
     local_bcast_a_ = std::make_unique<LocalBcastA>(local_a_ijk_, a_ijk_, b_cols_of_row_, ijk_keymap_);
     bcast_b_ = std::make_unique<BcastB>(b, b_ctl, b_colctl, local_b_ijk_, a_rows_of_col_, b_cols_of_row_, b_rows_of_col_,
                                         ij_keymap_, ijk_keymap_, parallel_bcasts_);
+    // add constraint with external mapper: key[0] represents `k`
+    bcast_b_->add_constraint(constraint, [](const Key<2>& key){ return key[0]; });
     local_bcast_b_ = std::make_unique<LocalBcastB>(local_b_ijk_, b_ijk_, a_rows_of_col_, ijk_keymap_);
     multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c_ij_p_, a_cols_of_row_,
                                                  b_rows_of_col_, mTiles, nTiles, ijk_keymap_);

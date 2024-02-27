@@ -912,6 +912,21 @@ namespace ttg {
       template <typename Key, typename Value>
       using prepare_send_callback_t = typename prepare_send_callback<Key, Value>::type;
 
+      template<typename Key, typename Enabler = void>
+      struct constraint_callback;
+
+      template<typename Key>
+      struct constraint_callback<Key, std::enable_if_t<!is_void_v<Key>>> {
+        using type = std::function<bool(const Key&)>;
+      };
+
+      template<typename Key>
+      struct constraint_callback<Key, std::enable_if_t<is_void_v<Key>>> {
+        using type = std::function<bool()>;
+      };
+
+      template<typename Key>
+      using constraint_callback_t = typename constraint_callback<Key>::type;
 
     }  // namespace detail
 

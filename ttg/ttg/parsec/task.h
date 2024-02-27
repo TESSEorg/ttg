@@ -92,6 +92,7 @@ namespace ttg_parsec {
       int32_t data_count = 0;      //< number of data elements in the copies array
       ttg_data_copy_t **copies;    //< pointer to the fixed copies array of the derived task
       parsec_hash_table_item_t tt_ht_item = {};
+      std::atomic<uint32_t> constraint_blocks;
 
       struct stream_info_t {
         std::size_t goal;
@@ -141,6 +142,19 @@ namespace ttg_parsec {
     //public:
       void release_task() {
         release_task_cb(this);
+      }
+
+      /* add a constraint to the task
+       * returns true if this is the first constraint */
+      bool add_constraint() {
+        return (0 == constraint_blocks.fetch_add(1, std::memory_order_relaxed));
+      }
+
+      /* remove a constraint from the task
+       * returns true if this is the last constraint */
+      bool release_constaint() {
+        /* return true if this was the last constraint*/
+        return 1 == constraint_blocks.fetch_sub(1, std::memory_order_relaxed);
       }
 
      protected:

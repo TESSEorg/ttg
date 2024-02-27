@@ -22,6 +22,7 @@
 #include "ttg/base/keymap.h"
 #include "ttg/base/tt.h"
 #include "ttg/base/world.h"
+#include "ttg/constraint.h"
 #include "ttg/edge.h"
 #include "ttg/execution.h"
 #include "ttg/func.h"
@@ -1150,6 +1151,7 @@ namespace ttg_parsec {
      protected:
       //  static std::map<int, ParsecBaseTT*> function_id_to_instance;
       parsec_hash_table_t tasks_table;
+      parsec_hash_table_t task_constraint_table;
       parsec_task_class_t self;
     };
 
@@ -1318,6 +1320,9 @@ namespace ttg_parsec {
     int num_pullins = 0;
 
     bool m_defer_writer = TTG_PARSEC_DEFER_WRITER;
+
+    std::vector<ttg::meta::detail::constraint_callback_t<keyT>> constraints_check;
+    std::vector<ttg::meta::detail::constraint_callback_t<keyT>> constraints_complete;
 
    public:
     ttg::World get_world() const override final { return world; }
@@ -2570,6 +2575,73 @@ namespace ttg_parsec {
       }
     }
 
+    bool check_constraints(task_t *task) {
+      bool release = true;
+      for (auto& c : constraints_check) {
+        bool constrained = false;
+        if constexpr (ttg::meta::is_void_v<keyT>) {
+          constrained = !c();
+        } else {
+          constrained = !c(task->key);
+        }
+        if (constrained) {
+          if (task->add_constraint()) {
+            if constexpr (!ttg::meta::is_void_v<keyT>) {
+            }
+            parsec_hash_table_insert(&task_constraint_table, &task->tt_ht_item);
+          }
+          release = false;
+        }
+      }
+      return release;
+    }
+
+    template<typename Key = keyT>
+    std::enable_if_t<ttg::meta::is_void_v<Key>, void> release_constraint(const std::span<Key>& keys) {
+      task_t *task;
+      parsec_key_t hk = 0;
+      parsec_hash_table_lock_bucket(&task_constraint_table, hk);
+      task = (task_t *)parsec_hash_table_nolock_find(&task_constraint_table, hk);
+      if (task->release_constaint()) {
+        parsec_hash_table_nolock_remove(&task_constraint_table, hk);
+        auto &world_impl = world.impl();
+        parsec_execution_stream_t *es = world_impl.execution_stream();
+        parsec_task_t *vp_task_rings[1] = { &task->parsec_task };
+        __parsec_schedule_vp(es, vp_task_rings, 0);
+      }
+      parsec_hash_table_unlock_bucket(&task_constraint_table, hk);
+    }
+
+    template<typename Key = keyT>
+    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> release_constraint(const std::span<Key>& keys) {
+      parsec_task_t *task_ring = nullptr;
+      for (auto& key : keys) {
+        task_t *task;
+        auto hk = reinterpret_cast<parsec_key_t>(&key);
+        parsec_hash_table_lock_bucket(&task_constraint_table, hk);
+        task = (task_t *)parsec_hash_table_nolock_find(&task_constraint_table, hk);
+        assert(task != nullptr);
+        if (task->release_constaint()) {
+          parsec_hash_table_nolock_remove(&task_constraint_table, hk);
+          if (task_ring == nullptr) {
+            /* the first task is set directly */
+            task_ring = &task->parsec_task;
+          } else {
+            /* push into the ring */
+            parsec_list_item_ring_push_sorted(&task_ring->super, &task->parsec_task.super,
+                                              offsetof(parsec_task_t, priority));
+          }
+        }
+        parsec_hash_table_unlock_bucket(&task_constraint_table, hk);
+      }
+      if (nullptr != task_ring) {
+        auto &world_impl = world.impl();
+        parsec_execution_stream_t *es = world_impl.execution_stream();
+        parsec_task_t *vp_task_rings[1] = { task_ring };
+        __parsec_schedule_vp(es, vp_task_rings, 0);
+      }
+    }
+
     void release_task(task_t *task,
                       parsec_task_t **task_ring = nullptr) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
@@ -2599,16 +2671,19 @@ namespace ttg_parsec {
           }
         }
         if (task->remove_from_hash) parsec_hash_table_remove(&tasks_table, hk);
-        if (nullptr == task_ring) {
-          parsec_task_t *vp_task_rings[1] = { &task->parsec_task };
-          __parsec_schedule_vp(es, vp_task_rings, 0);
-        } else if (*task_ring == nullptr) {
-          /* the first task is set directly */
-          *task_ring = &task->parsec_task;
-        } else {
-          /* push into the ring */
-          parsec_list_item_ring_push_sorted(&(*task_ring)->super, &task->parsec_task.super,
-                                            offsetof(parsec_task_t, priority));
+
+        if (check_constraints(task)) {
+          if (nullptr == task_ring) {
+            parsec_task_t *vp_task_rings[1] = { &task->parsec_task };
+            __parsec_schedule_vp(es, vp_task_rings, 0);
+          } else if (*task_ring == nullptr) {
+            /* the first task is set directly */
+            *task_ring = &task->parsec_task;
+          } else {
+            /* push into the ring */
+            parsec_list_item_ring_push_sorted(&(*task_ring)->super, &task->parsec_task.super,
+                                              offsetof(parsec_task_t, priority));
+          }
         }
       } else if constexpr (!ttg::meta::is_void_v<keyT>) {
         if ((baseobj->num_pullins + count == numins) && baseobj->is_lazy_pull()) {
@@ -3772,6 +3847,14 @@ namespace ttg_parsec {
         detail::release_data_copy(copy);
         task->copies[i] = nullptr;
       }
+
+      for (auto& c : task->tt->constraints_complete) {
+        if constexpr(std::is_void_v<keyT>) {
+          c();
+        } else {
+          c(task->key);
+        }
+      }
       return PARSEC_HOOK_RETURN_DONE;
     }
 
@@ -3925,6 +4008,9 @@ namespace ttg_parsec {
                                offsetof(parsec_task_t, mempool_owner), nbthreads);
 
       parsec_hash_table_init(&tasks_table, offsetof(detail::parsec_ttg_task_base_t, tt_ht_item), 8, tasks_hash_fcts,
+                             NULL);
+
+      parsec_hash_table_init(&task_constraint_table, offsetof(detail::parsec_ttg_task_base_t, tt_ht_item), 8, tasks_hash_fcts,
                              NULL);
     }
 
@@ -4294,6 +4380,39 @@ namespace ttg_parsec {
     /// device map accessor
     /// @return the device map
     auto get_devicemap() { return devicemap; }
+
+    /// add a constraint
+    /// the constraint must provide a valid override of `check_key(key)`
+    template<typename Constraint>
+    void add_constraint(std::shared_ptr<Constraint> c) {
+      c->add_listener(&release_constraint, this);
+      if constexpr(ttg::meta::is_void_v<keyT>) {
+        c->add_listener([this](){ this->release_constraint(); }, this);
+        constraints_check.push_back([c, this](){ return c->check(this); });
+        constraints_complete.push_back([c, this](const keyT& key){ c->complete(this); return true; });
+      } else {
+        c->add_listener([this](const std::span<keyT>& keys){ this->release_constraint(keys); }, this);
+        constraints_check.push_back([c, this](const keyT& key){ return c->check(key, this); });
+        constraints_complete.push_back([c, this](const keyT& key){ c->complete(key, this); return true; });
+      }
+    }
+
+    /// add a constraint
+    /// the constraint must provide a valid override of `check_key(key, map(key))`
+    /// ths overload can be used to provide different key mapping functions for each TT
+    template<typename Constraint, typename Mapper>
+    void add_constraint(std::shared_ptr<Constraint> c, Mapper&& map) {
+      static_assert(std::is_same_v<typename Constraint::key_type, keyT>);
+      if constexpr(ttg::meta::is_void_v<keyT>) {
+        c->add_listener([this](){ this->release_constraint(); }, this);
+        constraints_check.push_back([map, c, this](){ return c->check(map(), this); });
+        constraints_complete.push_back([map, c, this](){ c->complete(map(), this); return true; });
+      } else {
+        c->add_listener([this](const std::span<keyT>& keys){ this->release_constraint(keys); }, this);
+        constraints_check.push_back([map, c, this](const keyT& key){ return c->check(key, map(key), this); });
+        constraints_complete.push_back([map, c, this](const keyT& key){ c->complete(key, map(key), this); return true; });
+      }
+    }
 
     // Register the static_op function to associate it to instance_id
     void register_static_op_function(void) {
