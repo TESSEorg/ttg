@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 
 #include "ttg.h"
 
@@ -146,7 +146,7 @@ namespace tt_i_iv {
 
   template <typename K, typename D1, typename D2>
   void func0(K &key, D1 &datum1, D2 &&datum2) {
-    abort();
+    ttg::abort();
   }
 }  // namespace tt_i_iv
 
@@ -298,6 +298,9 @@ TEST_CASE("TemplateTask", "[core]") {
         // OK: all of {auto&&, auto&, const auto&} bind to const T&
         static_assert(std::is_invocable<decltype(func0), int, const float &, const float &, const float &,
                                         const float &, std::tuple<> &>::value);
+        static_assert(std::is_same_v<std::invoke_result_t<decltype(func0), int, const float &, const float &,
+                                                          const float &, const float &, std::tuple<> &>,
+                                     void>);
         // OK: ditto
         static_assert(std::is_void_v<decltype(tt_i_iv::func0(std::declval<const int &>(), std::declval<const float &>(),
                                                              std::declval<const float &>()))>);
@@ -323,14 +326,15 @@ TEST_CASE("TemplateTask", "[core]") {
                                ttg::typelist<ttg::typelist<int>, ttg::typelist<float &&, const float &>,
                                              ttg::typelist<float &&>, ttg::typelist<float &&, const float &>,
                                              ttg::typelist<float &&, const float &>, ttg::typelist<std::tuple<> &>>{})),
-                           ttg::typelist<>>);
+                           ttg::typelist<ttg::typelist<>, ttg::typelist<>>>);
         static_assert(
             std::is_same_v<
                 decltype(compute_arg_binding_types(
                     func0, ttg::typelist<ttg::typelist<int>, ttg::typelist<float &&, const float &>,
                                          ttg::typelist<float &&, const float &>, ttg::typelist<float &&, const float &>,
                                          ttg::typelist<float &&, const float &>, ttg::typelist<std::tuple<> &>>{})),
-                ttg::typelist<int, float &&, const float &, float &&, float &&, std::tuple<> &>>);
+                ttg::typelist<ttg::typelist<void>,
+                              ttg::typelist<int, float &&, const float &, float &&, float &&, std::tuple<> &>>>);
         // voids are skipped
         static_assert(
             std::is_same_v<
@@ -339,7 +343,8 @@ TEST_CASE("TemplateTask", "[core]") {
                                          ttg::typelist<float &&, const float &>, ttg::typelist<float &&, const float &>,
                                          ttg::typelist<float &&, const float &>, ttg::typelist<float &&, const float &>,
                                          ttg::typelist<void, std::tuple<> &>, ttg::typelist<void>>{})),
-                ttg::typelist<int, void, float &&, const float &, float &&, float &&, std::tuple<> &, void>>);
+                ttg::typelist<ttg::typelist<void>, ttg::typelist<int, void, float &&, const float &, float &&, float &&,
+                                                                 std::tuple<> &, void>>>);
 
         // test introspection of generic arguments by the runtime (i.e. contents of TT::input_args_type) and
         // the deduced types inside the function body
@@ -425,10 +430,10 @@ TEST_CASE("TemplateTask", "[core]") {
     static_assert(ttg::meta::is_generic_callable_v<decltype(g)>);
     auto [f_is_generic, f_args_t_v] = ttg::meta::callable_args<decltype(f)>;
     CHECK(!f_is_generic);
-    static_assert(std::is_same_v<decltype(f_args_t_v), ttg::typelist<int &>>);
+    static_assert(std::is_same_v<decltype(f_args_t_v), std::pair<ttg::typelist<void>, ttg::typelist<int &>>>);
     auto [g_is_generic, g_args_t_v] = ttg::meta::callable_args<decltype(g)>;
     CHECK(g_is_generic);
-    static_assert(std::is_same_v<decltype(g_args_t_v), ttg::typelist<>>);
+    static_assert(std::is_same_v<decltype(g_args_t_v), std::pair<ttg::typelist<>, ttg::typelist<>>>);
 
     {
       static_assert(!ttg::meta::is_generic_callable_v<decltype(&args_pmf::X::f)>);

@@ -144,11 +144,11 @@ namespace ttg {
     virtual ~TTBase() = default;
 
     /// Use this to create a task that takes no data "manually"
-    /// @warning calls std::abort() if the derived class TT did not override this;
+    /// @warning calls ttg::abort() if the derived class TT did not override this;
     ///          only makes sense to override this if the derived TT uses void for key or data
     virtual void invoke() {
       std::cerr << "TTBase::invoke() invoked on a TT that did not override it" << std::endl;
-      abort();
+      ttg::abort();
     }
 
     /// Sets trace for all operations to value and returns previous setting.
@@ -264,7 +264,6 @@ namespace ttg {
     virtual void release() {}
 
     /// Marks this executable
-    /// @return nothing
     virtual void make_executable() = 0;
 
     /// Queries if this ready to execute

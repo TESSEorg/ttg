@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 
 #include "ttg.h"
 
@@ -49,8 +49,9 @@ TEST_CASE("Fibonacci", "[fib][core]") {
               const auto F_n_plus_2 = F_n_plus_1 + F_n;
               ttg::sendv<1>(F_n_plus_1, outs);
               ttg::send<0>(F_n_plus_2, F_n_plus_1, outs);
-            } else
+            } else {
               ttg::finalize<1>(outs);
+            }
           },
           ttg::edges(F2F), ttg::edges(F2F, F2P));
       auto print_op = ttg::make_tt(

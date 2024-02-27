@@ -13,6 +13,8 @@
 #include <madness/world/type_traits.h>
 #endif
 
+#include "ttg/serialization/traits.h"
+
 namespace ttg::detail {
 
   /*----- if_madness_{input,output,}_archive_v -----*/

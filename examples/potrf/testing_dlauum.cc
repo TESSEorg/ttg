@@ -6,6 +6,7 @@
 #endif  // TTG_USE_PARSEC
 
 #include <ttg.h>
+#include <ttg/serialization/std/tuple.h>
 
 #include "lauum.h"
 #include "plgsy.h"
@@ -56,6 +57,9 @@ int main(int argc, char **argv)
   bool defer_cow_hint = !cmdOptionExists(argv+1, argv+argc, "-w");
 
   ttg::initialize(argc, argv, nthreads);
+
+  /* set up TA to get the allocator */
+  allocator_init();
 
   auto world = ttg::default_execution_context();
 
@@ -139,6 +143,39 @@ int main(int argc, char **argv)
   world.dag_off();
   world.profile_off();
 
+  allocator_fini();
   ttg::finalize();
   return ret;
+}
+
+static void
+dplasma_dprint_tile( int m, int n,
+                     const parsec_tiled_matrix_t* descA,
+                     const double *M )
+{
+    int tempmm = ( m == descA->mt-1 ) ? descA->m - m*descA->mb : descA->mb;
+    int tempnn = ( n == descA->nt-1 ) ? descA->n - n*descA->nb : descA->nb;
+    int ldam = BLKLDD( descA, m );
+
+    int ii, jj;
+
+    fflush(stdout);
+    for(ii=0; ii<tempmm; ii++) {
+        if ( ii == 0 )
+            fprintf(stdout, "(%2d, %2d) :", m, n);
+        else
+            fprintf(stdout, "          ");
+        for(jj=0; jj<tempnn; jj++) {
+#if defined(PRECISION_z) || defined(PRECISION_c)
+            fprintf(stdout, " (% e, % e)",
+                    creal( M[jj*ldam + ii] ),
+                    cimag( M[jj*ldam + ii] ));
+#else
+            fprintf(stdout, " % e", M[jj*ldam + ii]);
+#endif
+        }
+        fprintf(stdout, "\n");
+    }
+    fflush(stdout);
+    usleep(1000);
 }

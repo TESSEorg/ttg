@@ -23,7 +23,7 @@ namespace ttg::detail {
 
   /// helps to detect that `T` has a member serialization method that
   /// accepts single argument of type `Archive`
-  /// @note use in combination with `ttg::meta`::is_detected_v
+  /// @note use in combination with ttg::meta::is_detected_v
   template <typename T, typename Archive>
   using has_member_serialize_t = decltype(std::declval<T&>().serialize(std::declval<Archive&>()));
 
@@ -179,11 +179,32 @@ namespace ttg::detail {
   //  is_boost_user_buffer_serializable_v<T>>> : std::true_type {};
   template <typename T>
   struct is_user_buffer_serializable<
-      T, std::enable_if_t<is_madness_user_buffer_serializable_v<T> || is_boost_user_buffer_serializable_v<T> ||
-                          is_cereal_user_buffer_serializable_v<T>>> : std::true_type {};
+      T, std::enable_if_t<is_madness_user_buffer_serializable_v<T> || is_boost_user_buffer_serializable_v<T>>> : std::true_type {};
 
   template <typename T>
   inline constexpr bool is_user_buffer_serializable_v = is_user_buffer_serializable<T>::value;
+
+  /// \brief can be used to override the default value of is_memcpyable<T>::value
+
+  /// std::is_trivially_copyable_v<T> is sufficient to guarantee that T std::memcpy is safe to use on object of type T
+  /// however, sometimes is_trivially_copyable_v<T> reports false for objects that can be copied with memcpy ,
+  /// e.g., std::pair<int, int> (see https://danlark.org/2020/04/13/why-is-stdpair-broken/).
+  /// In this case specialize this trait
+  template <typename T>
+  inline constexpr bool is_memcpyable_override_v = std::is_trivially_copyable_v<T>;
+
+  // std::pair of trivially-copyable types is trivially copyable
+  template <typename T1, typename T2>
+  inline constexpr bool is_memcpyable_override_v<std::pair<T1,T2>> = std::is_trivially_copyable_v<T1> && std::is_trivially_copyable_v<T2>;
+
+  /// \brief reports whether objects of type T are safe to std::memcpy
+
+  /// True if either std::is_trivially_copyable_v<T> or is_memcpyable_override_v<T> are true
+  template <typename T>
+  struct is_memcpyable : std::bool_constant<std::is_trivially_copyable_v<T> || is_memcpyable_override_v<T>> {};
+
+  template <typename T>
+  inline constexpr bool is_memcpyable_v = is_memcpyable<T>::value;
 
 }  // namespace ttg::detail
 

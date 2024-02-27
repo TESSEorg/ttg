@@ -28,6 +28,7 @@
 #include "bug.h"
 
 #include <unistd.h>
+#include <cfenv>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -45,6 +46,103 @@
 
 using namespace std;
 using namespace ttg;
+
+namespace ttg {
+  void initialize_fpe() {
+#if defined(__APPLE__) && defined(__MACH__)
+
+    // Public domain polyfill for feenableexcept on OS X
+    // http://www-personal.umich.edu/~williams/archive/computation/fe-handling-example.c
+
+#ifndef HAVE_FEENABLEEXCEPT
+    auto feenableexcept = [](int excepts) -> int {
+      static fenv_t fenv;
+      const auto new_excepts = excepts & FE_ALL_EXCEPT;
+
+      if (fegetenv(&fenv)) {
+        return -1;
+      }
+#if defined(__x86_64__)
+      // previous masks
+      const unsigned int old_excepts = fenv.__control & FE_ALL_EXCEPT;
+
+      // unmask
+      fenv.__control &= ~new_excepts;
+      fenv.__mxcsr &= ~(new_excepts << 7);
+#elif defined(__arm64__)
+      if (new_excepts & FE_INVALID) fenv.__fpcr |= __fpcr_trap_invalid;
+      if (new_excepts & FE_DIVBYZERO) fenv.__fpcr |= __fpcr_trap_divbyzero;
+      if (new_excepts & FE_OVERFLOW) fenv.__fpcr |= __fpcr_trap_overflow;
+      if (new_excepts & FE_UNDERFLOW) fenv.__fpcr |= __fpcr_trap_underflow;
+      if (new_excepts & FE_INEXACT) fenv.__fpcr |= __fpcr_trap_inexact;
+#else
+#error "MacOS on unknown architecture"
+#endif
+      return fesetenv(&fenv);
+    };
+#define HAVE_FEENABLEEXCEPT 1
+#endif  // not defined HAVE_FEENABLEEXCEPT
+
+#ifndef HAVE_FEDISABLEEXCEPT
+    auto fedisableexcept = [](int excepts) -> int {
+      static fenv_t fenv;
+      const auto new_excepts = excepts & FE_ALL_EXCEPT;
+      // all previous masks
+
+      if (fegetenv(&fenv)) {
+        return -1;
+      }
+#if defined(__x86_64__)
+      const unsigned int old_excepts = fenv.__control & FE_ALL_EXCEPT;
+
+      // mask
+      fenv.__control |= new_excepts;
+      fenv.__mxcsr |= new_excepts << 7;
+#elif defined(__arm64__)
+      if (new_excepts & FE_INVALID) fenv.__fpcr &= ~__fpcr_trap_invalid;
+      if (new_excepts & FE_DIVBYZERO) fenv.__fpcr &= ~__fpcr_trap_divbyzero;
+      if (new_excepts & FE_OVERFLOW) fenv.__fpcr &= ~__fpcr_trap_overflow;
+      if (new_excepts & FE_UNDERFLOW) fenv.__fpcr &= ~__fpcr_trap_underflow;
+      if (new_excepts & FE_INEXACT) fenv.__fpcr &= ~__fpcr_trap_inexact;
+#else
+#error "MacOS on unknown architecture"
+#endif
+
+      return fesetenv(&fenv);
+    };
+
+#define HAVE_FEDISABLEEXCEPT 1
+#endif  // not defined HAVE_FEDISABLEEXCEPT
+#endif  // mac
+
+#ifdef HAVE_FEENABLEEXCEPT
+    // this uses a glibc extension to trap on individual exceptions
+    int enable_excepts = 0;
+#ifdef FE_DIVBYZERO
+    enable_excepts |= FE_DIVBYZERO;
+#endif
+#ifdef FE_INVALID
+    enable_excepts |= FE_INVALID;
+#endif
+#ifdef FE_OVERFLOW
+    enable_excepts |= FE_OVERFLOW;
+#endif
+    feenableexcept(enable_excepts);
+#endif
+
+#ifdef HAVE_FEDISABLEEXCEPT
+    // this uses a glibc extension to not trap on individual exceptions
+    int disable_excepts = 0;
+#ifdef FE_UNDERFLOW
+    disable_excepts |= FE_UNDERFLOW;
+#endif
+#ifdef FE_INEXACT
+    disable_excepts |= FE_INEXACT;
+#endif
+    fedisableexcept(disable_excepts);
+#endif
+  }
+}
 
 //////////////////////////////////////////////////////////////////////
 // static variables

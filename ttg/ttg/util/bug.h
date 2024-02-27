@@ -251,6 +251,15 @@ namespace ttg {
 
   }  // namespace detail
 
+  /// @brief Initializes the floating point exceptions.
+  ///
+  /// Enables (if available) FE_DIVBYZERO, FE_INVALID, and FE_OVERFLOW;
+  /// FE_UNDERFLOW and FE_INEXACT are disabled (if available).
+  /// @warning This should be called from the main thread *before* any threads
+  /// have been created (i.e. before madness::initialize()),
+  ///          so that all threads inherit the same floating point environment.
+  void initialize_fpe();
+
   /**
    * The Debugger class describes what should be done when a catastrophic
    * error causes unexpected program termination.  It can try things such as
@@ -277,12 +286,11 @@ namespace ttg {
 
     static std::shared_ptr<Debugger> default_debugger_;
 
-    /** prints out a backtrace
+    /** prints out a backtrace to `std::cout`
      *
      * @param prefix this string will be prepended at the beginning of each line
      * of Backtrace
      * @param reason optional string specifying the reason for traceback
-     * @return backtrace
      */
     static void __traceback(const std::string &prefix, const char *reason = nullptr);
 

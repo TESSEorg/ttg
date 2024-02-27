@@ -1,4 +1,5 @@
 #include <ttg.h>
+#include <ttg/serialization/std/tuple.h>
 
 #include "plgsy.h"
 #include "pmw.h"
@@ -35,6 +36,7 @@ int main(int argc, char **argv)
   const char* prof_filename = nullptr;
   char *opt = nullptr;
   int ret = EXIT_SUCCESS;
+  int niter = 3;
 
   if( (opt = getCmdOption(argv+1, argv+argc, "-N")) != nullptr ) {
     N = M = atoi(opt);
@@ -52,10 +54,18 @@ int main(int argc, char **argv)
     prof_filename = opt;
   }
 
+  if( (opt = getCmdOption(argv+1, argv+argc, "-n")) != nullptr) {
+    niter = atoi(opt);
+  }
+
   bool check = !cmdOptionExists(argv+1, argv+argc, "-x");
   bool cow_hint = !cmdOptionExists(argv+1, argv+argc, "-w");
 
-  ttg::initialize(argc, argv, nthreads);
+  // TODO: need to filter out our arguments to make parsec happy
+  ttg::initialize(1, argv, nthreads);
+
+  /* set up TA to get the allocator */
+  allocator_init();
 
   auto world = ttg::default_execution_context();
   if(nullptr != prof_filename) {
@@ -85,53 +95,64 @@ int main(int argc, char **argv)
   parsec_data_collection_set_key((parsec_data_collection_t*)&dcA, (char*)"Matrix A");
 
   if(!check) {
-    ttg::Edge<Key2, void> startup("startup");
-    ttg::Edge<Key2, MatrixTile<double>> topotrf("To POTRF");
-    ttg::Edge<Key2, MatrixTile<double>> result("To result");
+    for (int i = 0; i < niter; ++i) {
+      parsec_devices_release_memory();
+      ttg::Edge<Key2, void> startup("startup");
+      ttg::Edge<Key2, MatrixTile<double>> topotrf("To POTRF");
+      ttg::Edge<Key2, MatrixTile<double>> result("To result");
 
-    //Matrix<double>* A = new Matrix<double>(n_rows, n_cols, NB, NB);
-    MatrixT<double> A{&dcA};
-    /* TODO: initialize the matrix */
-    /* This works only with the parsec backend! */
-    int random_seed = 3872;
+      //Matrix<double>* A = new Matrix<double>(n_rows, n_cols, NB, NB);
+      MatrixT<double> A{&dcA};
+      /* TODO: initialize the matrix */
+      /* This works only with the parsec backend! */
+      int random_seed = 3872;
 
-    auto init_tt =  ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, void>>& out) {
-      for(int i = 0; i < A.rows(); i++) {
-        for(int j = 0; j <= i && j < A.cols(); j++) {
-          if(A.is_local(i, j)) {
-            if(ttg::tracing()) ttg::print("init(", Key2{i, j}, ")");
-            ttg::sendk<0>(Key2{i, j}, out);
+      auto init_tt =  ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, void>>& out) {
+        for(int i = 0; i < A.rows(); i++) {
+          for(int j = 0; j <= i && j < A.cols(); j++) {
+            if(A.is_local(i, j)) {
+              if(ttg::tracing()) ttg::print("init(", Key2{i, j}, ")");
+              ttg::sendk<0>(Key2{i, j}, out);
+            }
           }
         }
+      }, ttg::edges(), ttg::edges(startup), "Startup Trigger", {}, {"startup"});
+      init_tt->set_keymap([&]() {return world.rank();});
+
+      auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, topotrf, cow_hint);
+      auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, result, cow_hint);
+      auto result_ttg = make_result_ttg(A, result, cow_hint);
+
+      auto connected = make_graph_executable(init_tt.get());
+      assert(connected);
+      TTGUNUSED(connected);
+      std::cout << "Graph is connected: " << connected << std::endl;
+
+      if (world.rank() == 0) {
+        std::cout << "==== begin dot ====\n";
+        std::cout << ttg::Dot()(init_tt.get()) << std::endl;
+        std::cout << "==== end dot ====\n";
+        beg = std::chrono::high_resolution_clock::now();
       }
-    }, ttg::edges(), ttg::edges(startup), "Startup Trigger", {}, {"startup"});
-    init_tt->set_keymap([&]() {return world.rank();});
 
-    auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, topotrf, cow_hint);
-    auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, result, cow_hint);
-    auto result_ttg = make_result_ttg(A, result, cow_hint);
+      if (world.rank() == 0) {
+        beg = std::chrono::high_resolution_clock::now();
+      }
 
-    auto connected = make_graph_executable(init_tt.get());
-    assert(connected);
-    TTGUNUSED(connected);
-    std::cout << "Graph is connected: " << connected << std::endl;
+      init_tt->invoke();
+      ttg::execute(world);
+      ttg::fence(world);
 
-    if (world.rank() == 0) {
-      std::cout << "==== begin dot ====\n";
-      std::cout << ttg::Dot()(init_tt.get()) << std::endl;
-      std::cout << "==== end dot ====\n";
-      beg = std::chrono::high_resolution_clock::now();
-    }
-    init_tt->invoke();
-
-    ttg::execute(world);
-    ttg::fence(world);
-    if (world.rank() == 0) {
-      end = std::chrono::high_resolution_clock::now();
-      auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
-      end = std::chrono::high_resolution_clock::now();
-      std::cout << "TTG Execution Time (milliseconds) : "
-                << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+      if (world.rank() == 0) {
+        end = std::chrono::high_resolution_clock::now();
+        auto elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
+        end = std::chrono::high_resolution_clock::now();
+        std::cout << "TTG Execution Time (milliseconds) : "
+                  << elapsed / 1E3 << " : Flops " << (potrf::FLOPS_DPOTRF(N)) << " " << (potrf::FLOPS_DPOTRF(N)/1e9)/(elapsed/1e6) << " GF/s" << std::endl;
+      }
+#if defined(TTG_PARSEC_IMPORTED)
+      parsec_devices_reset_load(ttg::default_execution_context().impl().context());
+#endif // TTG_PARSEC_IMPORTED
     }
 
     world.dag_off();
@@ -206,8 +227,41 @@ int main(int argc, char **argv)
 
   world.profile_off();
 
+  allocator_fini();
   ttg::finalize();
   return ret;
+}
+
+static void
+dplasma_dprint_tile( int m, int n,
+                     const parsec_tiled_matrix_t* descA,
+                     const double *M )
+{
+    int tempmm = ( m == descA->mt-1 ) ? descA->m - m*descA->mb : descA->mb;
+    int tempnn = ( n == descA->nt-1 ) ? descA->n - n*descA->nb : descA->nb;
+    int ldam = BLKLDD( descA, m );
+
+    int ii, jj;
+
+    fflush(stdout);
+    for(ii=0; ii<tempmm; ii++) {
+        if ( ii == 0 )
+            fprintf(stdout, "(%2d, %2d) :", m, n);
+        else
+            fprintf(stdout, "          ");
+        for(jj=0; jj<tempnn; jj++) {
+#if defined(PRECISION_z) || defined(PRECISION_c)
+            fprintf(stdout, " (% e, % e)",
+                    creal( M[jj*ldam + ii] ),
+                    cimag( M[jj*ldam + ii] ));
+#else
+            fprintf(stdout, " % e", M[jj*ldam + ii]);
+#endif
+        }
+        fprintf(stdout, "\n");
+    }
+    fflush(stdout);
+    usleep(1000);
 }
 
 int check_dpotrf( double *A, double *A0, int N )

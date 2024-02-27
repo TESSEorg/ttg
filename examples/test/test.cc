@@ -22,7 +22,9 @@ class A : public TT<keyT, std::tuple<Out<void, int>, Out<keyT, int>>, A, ttg::ty
     const std::string &name)
       : baseT(inedges, outedges, name, {"inputA"}, {"resultA", "iterateA"}) {}
 
+#if defined(TTG_HAVE_CUDA)
   static constexpr const bool have_cuda_op = true;
+#endif // TTG_HAVE_CUDA
 
   void op(const keyT &key, const baseT::input_refs_tuple_type &t, baseT::output_terminals_type &out) {
     // int& value = baseT::get<0>(t);  // !! ERROR, trying to get int& from const int

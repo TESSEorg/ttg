@@ -13,10 +13,11 @@ if (NOT TARGET PaRSEC::parsec)
   set(CMAKE_SYSTEM_PROCESSOR ${CMAKE_HOST_SYSTEM_PROCESSOR})
   set(PARSEC_WITH_DEVEL_HEADERS ON CACHE BOOL "Install PaRSEC headers")
   set(BUILD_TOOLS ON CACHE BOOL "Do not build PaRSEC tools")
+  set(PARSEC_GPU_WITH_CUDA ${TTG_ENABLE_CUDA} CACHE BOOL "Enable CUDA support in PaRSEC runtime?")
 
   FetchContent_Declare(
           PARSEC
-          GIT_REPOSITORY      https://github.com/ICLDisco/parsec.git
+          GIT_REPOSITORY      https://github.com/devreal/parsec-1.git
           GIT_TAG             ${TTG_TRACKED_PARSEC_TAG}
   )
   FetchContent_MakeAvailable(PARSEC)

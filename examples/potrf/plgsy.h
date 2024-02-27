@@ -13,7 +13,8 @@ auto make_plgsy(MatrixT<T>& A, unsigned long bump, unsigned long random_seed, tt
     if(ttg::tracing()) ttg::print("PLGSY( ", key, ") on rank ", A.rank_of(key[0], key[1]));
     assert(A.is_local(I, J));
 
-    T *a = A(I, J).data();
+    auto tile = A(I, J);
+    T *a = tile.data();
     int tempmm, tempnn, ldam;
 
     tempmm = (I==A.rows()-1) ? A.rows_in_matrix()-I*A.rows_in_tile() : A.rows_in_tile();
@@ -22,8 +23,11 @@ auto make_plgsy(MatrixT<T>& A, unsigned long bump, unsigned long random_seed, tt
 
     CORE_plgsy((double)bump, tempmm, tempnn, a, ldam,
                A.rows_in_matrix(), I*A.rows_in_tile(), J*A.cols_in_tile(), random_seed);
+#ifdef DEBUG_TILES_VALUES
+    tile.set_norm(blas::nrm2(tile.size(), a, 1));
+#endif // DEBUG_TILES_VALUES
 
-    ttg::send<0>(key, std::move(A(I, J)), out);
+    ttg::send<0>(key, std::move(tile), out);
   };
 
   return ttg::make_tt(f, ttg::edges(input), ttg::edges(output), "PLGSY", {"startup"}, {"output"});

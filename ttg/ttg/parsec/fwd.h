@@ -28,6 +28,7 @@ namespace ttg_parsec {
 
   inline void ttg_finalize();
 
+  [[noreturn]]
   static inline void ttg_abort();
 
   inline ttg::World ttg_default_execution_context();
@@ -52,6 +53,39 @@ namespace ttg_parsec {
   /// @tparam T a serializable type
   template <typename T>
   static void ttg_broadcast(ttg::World world, T &data, int source_rank);
+
+  /* device definitions */
+  template<typename T, typename Allocator = std::allocator<T>>
+  struct Buffer;
+
+  template<typename T>
+  struct Ptr;
+
+  template<typename T>
+  struct devicescratch;
+
+  template<typename T>
+  struct TTValue;
+
+  template<typename T, typename... Args>
+  inline Ptr<T> make_ptr(Args&&... args);
+
+  template<typename T>
+  inline Ptr<std::decay_t<T>> get_ptr(T&& obj);
+
+  template<typename... Views>
+  inline bool register_device_memory(std::tuple<Views&...> &views);
+
+  template<typename... Buffer>
+  inline void post_device_out(std::tuple<Buffer&...> &b);
+
+  template<typename... Buffer>
+  inline void mark_device_out(std::tuple<Buffer&...> &b);
+
+#if 0
+  template<typename... Args>
+  inline std::pair<bool, std::tuple<ptr<std::decay_t<Args>>...>> get_ptr(Args&&... args);
+#endif
 
 }  // namespace ttg_parsec
 

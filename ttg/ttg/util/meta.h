@@ -6,6 +6,9 @@
 
 #include "ttg/util/span.h"
 #include "ttg/util/typelist.h"
+#include "ttg/buffer.h"
+#include "ttg/ptr.h"
+#include "ttg/devicescratch.h"
 
 namespace ttg {
 
@@ -290,6 +293,53 @@ namespace ttg {
     template <typename... Ts>
     constexpr bool is_any_nonconst_lvalue_reference_v<std::tuple<Ts...>> = is_any_nonconst_lvalue_reference_v<Ts...>;
 
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // device type traits
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    template<typename T>
+    struct is_ptr : std::false_type
+    { };
+
+    template<typename T>
+    struct is_ptr<ttg::Ptr<T>> : std::true_type
+    { };
+
+    template<typename T>
+    constexpr bool is_ptr_v = is_ptr<T>::value;
+
+    template<typename T>
+    struct is_buffer : std::false_type
+    { };
+
+    template<typename T, typename A>
+    struct is_buffer<ttg::Buffer<T, A>> : std::true_type
+    { };
+
+    template<typename T, typename A>
+    struct is_buffer<const ttg::Buffer<T, A>> : std::true_type
+    { };
+
+    template<typename T>
+    constexpr bool is_buffer_v = is_buffer<T>::value;
+
+    template<typename T>
+    struct is_devicescratch : std::false_type
+    { };
+
+    template<typename T>
+    struct is_devicescratch<ttg::devicescratch<T>> : std::true_type
+    { };
+
+    template<typename T>
+    struct is_devicescratch<const ttg::devicescratch<T>> : std::true_type
+    { };
+
+    template<typename T>
+    constexpr bool is_devicescratch_v = is_devicescratch<T>::value;
+
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // typelist metafunctions
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -549,6 +599,15 @@ namespace ttg {
     template <typename T>
     constexpr bool is_tuple_v = is_tuple<T>::value;
 
+    template <typename>
+    struct is_span : std::false_type {};
+
+    template <typename T, std::size_t S>
+    struct is_span<ttg::span<T, S>> : std::true_type {};
+
+    template <typename T>
+    constexpr bool is_span_v = is_span<T>::value;
+
     template <template <class> class Pred, typename TupleT, std::size_t I, std::size_t... Is>
     struct predicate_index_seq_helper;
 
@@ -752,6 +811,8 @@ namespace ttg {
       template <typename Key, typename Value>
       using broadcast_callback_t = typename broadcast_callback<Key, Value>::type;
 
+
+
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       // setsize_callback_t<key> = std::function<void(const keyT &, std::size_t)> protected against void key
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -827,6 +888,31 @@ namespace ttg {
       template <typename... valueTs>
       using input_reducers_t = typename input_reducers<valueTs...>::type;
 
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // prepare_send_callback_t<Key, Value> = std::function<int(const ttg::span<Key> &, const Value &)> protected against void key
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      template <typename Key, typename Value, typename Enabler = void>
+      struct prepare_send_callback;
+      template <typename Key, typename Value>
+      struct prepare_send_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
+        using type = std::function<void(const ttg::span<const Key> &, const Value &)>;
+      };
+      template <typename Key, typename Value>
+      struct prepare_send_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
+        using type = std::function<void(const ttg::span<const Key> &)>;
+      };
+      template <typename Key, typename Value>
+      struct prepare_send_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
+        using type = std::function<void(const Value &)>;
+      };
+      template <typename Key, typename Value>
+      struct prepare_send_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
+        using type = std::function<void()>;
+      };
+      template <typename Key, typename Value>
+      using prepare_send_callback_t = typename prepare_send_callback<Key, Value>::type;
+
+
     }  // namespace detail
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -856,6 +942,16 @@ namespace ttg {
     template <typename ReturnType, typename Callable, typename... Args>
     constexpr bool is_invocable_typelist_r_v<ReturnType, Callable, ttg::typelist<Args...>> =
         std::is_invocable_r_v<ReturnType, Callable, Args...>;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // detects the return result of a Callable when invoked with the arguments given as a typelist
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <typename Callable, typename Typelist>
+    struct invoke_result_typelist {};
+    template <typename Callable, typename... Args>
+    struct invoke_result_typelist<Callable, ttg::typelist<Args...>> : std::invoke_result<Callable, Args...> {};
+    template <class F, class... ArgTypes>
+    using invoke_result_typelist_t = typename invoke_result_typelist<F, ArgTypes...>::type;
 
   }  // namespace meta
 }  // namespace ttg

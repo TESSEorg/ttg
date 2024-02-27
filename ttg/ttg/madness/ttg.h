@@ -23,6 +23,9 @@
 #include "ttg/util/meta/callable.h"
 #include "ttg/util/void.h"
 #include "ttg/world.h"
+#ifdef TTG_HAS_COROUTINE
+#include "ttg/coroutine.h"
+#endif
 
 #include <array>
 #include <cassert>
@@ -132,7 +135,10 @@ namespace ttg_madness {
     ::madness::finalize();
   }
   inline ttg::World ttg_default_execution_context() { return ttg::get_default_world(); }
-  inline void ttg_abort() { MPI_Abort(ttg_default_execution_context().impl().impl().mpi.Get_mpi_comm(), 1); }
+  inline void ttg_abort() {
+    MPI_Abort(ttg_default_execution_context().impl().impl().mpi.Get_mpi_comm(), 1);
+    assert(0); // make sure we abort
+  }
   inline void ttg_execute(ttg::World world) {
     // World executes tasks eagerly
   }
@@ -207,6 +213,26 @@ namespace ttg_madness {
    public:
     ttg::World get_world() const override final { return world; }
 
+    /// @return true if derivedT::have_cuda_op exists and is defined to true
+    static constexpr bool derived_has_cuda_op() {
+      return false;
+    }
+
+    /// @return true if derivedT::have_hip_op exists and is defined to true
+    static constexpr bool derived_has_hip_op() {
+      return false;
+    }
+
+    /// @return true if derivedT::have_hip_op exists and is defined to true
+    static constexpr bool derived_has_level_zero_op() {
+      return false;
+    }
+
+    /// @return true if the TT supports device execution
+    static constexpr bool derived_has_device_op() {
+      return false;
+    }
+
    protected:
     using worldobjT = ::madness::WorldObject<ttT>;
 
@@ -276,6 +302,10 @@ namespace ttg_madness {
       derivedT *derived;                            // Pointer to derived class instance
       bool pull_terminals_invoked = false;
       std::conditional_t<ttg::meta::is_void_v<keyT>, ttg::Void, keyT> key;  // Task key
+#ifdef TTG_HAS_COROUTINE
+      void *suspended_task_address = nullptr;  // if not null the function is suspended
+      ttg::TaskCoroutineID coroutine_id = ttg::TaskCoroutineID::Invalid;
+#endif
 
       /// makes a tuple of references out of tuple of
       template <typename Tuple, std::size_t... Is>
@@ -300,28 +330,88 @@ namespace ttg_madness {
       }
 
       virtual void run(::madness::World &world) override {
-        // ttg::print("starting task");
-
         using ttg::hash;
         ttT::threaddata.key_hash = hash<decltype(key)>{}(key);
         ttT::threaddata.call_depth++;
 
-        if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-          derived->op(key, this->make_input_refs(),
-                      derived->output_terminals);  // !!! NOTE converting input values to refs
-        } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-          derived->op(key, derived->output_terminals);
-        } else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-          derived->op(this->make_input_refs(),
-                      derived->output_terminals);  // !!! NOTE converting input values to refs
-        } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-          derived->op(derived->output_terminals);
-        } else
-          abort();
+        void *suspended_task_address =
+#ifdef TTG_HAS_COROUTINE
+            this->suspended_task_address;  // non-null = need to resume the task
+#else
+            nullptr;
+#endif
+        if (suspended_task_address == nullptr) {  // task is a coroutine that has not started or an ordinary function
+          // ttg::print("starting task");
+          if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+            TTG_PROCESS_TT_OP_RETURN(
+                suspended_task_address,
+                coroutine_id,
+                derived->op(key, this->make_input_refs(),
+                            derived->output_terminals));  // !!! NOTE converting input values to refs
+          } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+            TTG_PROCESS_TT_OP_RETURN(suspended_task_address, coroutine_id, derived->op(key, derived->output_terminals));
+          } else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+            TTG_PROCESS_TT_OP_RETURN(
+                suspended_task_address,
+                coroutine_id,
+                derived->op(this->make_input_refs(),
+                            derived->output_terminals));  // !!! NOTE converting input values to refs
+          } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
+            TTG_PROCESS_TT_OP_RETURN(suspended_task_address, coroutine_id, derived->op(derived->output_terminals));
+          } else  // unreachable
+            ttg::abort();
+        } else {  // resume suspended coroutine
+#ifdef TTG_HAS_COROUTINE
+          auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address));
+          assert(ret.ready());
+          ret.resume();
+          if (ret.completed()) {
+            ret.destroy();
+            suspended_task_address = nullptr;
+          } else {  // not yet completed
+            // leave suspended_task_address as is
+          }
+          this->suspended_task_address = suspended_task_address;
+#else
+          ttg::abort();  // should not happen
+#endif
+        }
 
         ttT::threaddata.call_depth--;
 
-        // ttg::print("finishing task",ttT::threaddata.call_depth);
+        // if (suspended_task_address == nullptr) {
+        //   ttg::print("finishing task",ttT::threaddata.call_depth);
+        // }
+
+#ifdef TTG_HAS_COROUTINE
+        if (suspended_task_address) {
+          // TODO implement handling of suspended coroutines properly
+
+          // only resumable_task is recognized at the moment
+          assert(coroutine_id == ttg::TaskCoroutineID::ResumableTask);
+
+          // right now can events are not properly implemented, we are only testing the workflow with dummy events
+          // so mark the events finished manually
+          // proper thing to do is to process event queue and resubmit this task again
+          auto events =
+              static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address)).events();
+          for (auto &event_ptr : events) {
+            event_ptr->finish();
+          }
+          assert(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address).promise().ready());
+
+          // resume the coroutine
+          auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address));
+          assert(ret.ready());
+          ret.resume();
+          if (ret.completed()) {
+            ret.destroy();
+            suspended_task_address = nullptr;
+          } else {  // not yet completed
+            ttg::abort();
+          }
+        }
+#endif  // TTG_HAS_COROUTINE
       }
 
       virtual ~TTArgs() {}  // Will be deleted via TaskInterface*
@@ -567,7 +657,7 @@ namespace ttg_madness {
             } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
               static_cast<derivedT *>(this)->op(output_terminals);  // Runs immediately
             } else
-              abort();
+              ttg::abort();
             ttT::threaddata.call_depth--;
 
           } else {
@@ -947,7 +1037,7 @@ namespace ttg_madness {
         auto finalize_callback = [this]() { finalize_argstream<i>(); };
         input.set_callback(send_callback, send_callback, {}, setsize_callback, finalize_callback);
       } else
-        abort();
+        ttg::abort();
     }
 
     template <std::size_t... IS>
@@ -1073,14 +1163,14 @@ namespace ttg_madness {
           for (std::size_t i = 0; i < numins; i++) std::cerr << (item.second->nargs[i] == 0 ? "T" : "F") << " ";
           std::cerr << ")" << std::endl;
         }
-        abort();
+        ttg::abort();
       }
     }
 
     /// define the reducer function to be called when additional inputs are
     /// received on a streaming terminal
     ///   @tparam <i> the index of the input terminal that is used as a streaming terminal
-    ///   @param[in] reducer: a function of prototype (input_type<i> &a, const input_type<i> &b)
+    ///   @param[in] reducer: a function of prototype `void(input_type<i> &a, const input_type<i> &b)`
     ///                       that function should aggregate b into a
     template <std::size_t i, typename Reducer>
     void set_input_reducer(Reducer &&reducer) {
@@ -1091,7 +1181,7 @@ namespace ttg_madness {
     /// define the reducer function to be called when additional inputs are
     /// received on a streaming terminal
     ///   @tparam <i> the index of the input terminal that is used as a streaming terminal
-    ///   @param[in] reducer: a function of prototype (input_type<i> &a, const input_type<i> &b)
+    ///   @param[in] reducer: a function of prototype `void(input_type<i> &a, const input_type<i> &b)`
     ///                       that function should aggregate b into a
     ///   @param[in] size: the default number of inputs that are received in this streaming terminal,
     ///                    for each task
@@ -1231,5 +1321,7 @@ namespace ttg_madness {
 }  // namespace ttg_madness
 
 #include "ttg/madness/watch.h"
+#include "ttg/madness/buffer.h"
+#include "ttg/madness/ttvalue.h"
 
 #endif  // MADNESS_TTG_H_INCLUDED
