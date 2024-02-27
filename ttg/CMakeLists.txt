@@ -45,6 +45,7 @@ configure_file(
 set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/broadcast.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/buffer.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/constraint.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/devicescope.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/devicescratch.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/edge.h
