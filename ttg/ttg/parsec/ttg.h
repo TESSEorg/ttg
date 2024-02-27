@@ -858,7 +858,7 @@ namespace ttg_parsec {
       }
       /* if there was only one reader (the current task) or
        * a mutable copy and a successor, we release the copy */
-      if (1 == readers || copy->is_mutable()) {
+      if (1 == readers || readers == copy->mutable_tag) {
         std::atomic_thread_fence(std::memory_order_acquire);
         if (nullptr != copy->get_next_task()) {
           /* Release the deferred task.
