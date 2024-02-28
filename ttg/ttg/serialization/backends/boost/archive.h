@@ -219,6 +219,9 @@ namespace ttg::detail {
   using boost_buffer_oarchive =
       boost_optimized_oarchive<boost::iostreams::stream<boost::iostreams::basic_array_sink<char>>>;
 
+  /// an archive that constructs serialized representation of an object in a memory buffer, in an optimized manner
+  using boost_byte_oarchive = boost_optimized_oarchive<byte_ostreambuf>;
+
   /// constructs a boost_buffer_oarchive object
 
   /// @param[in] buf pointer to a memory buffer to which serialized representation will be written
@@ -316,6 +319,9 @@ namespace ttg::detail {
   using boost_buffer_iarchive =
       boost_optimized_iarchive<boost::iostreams::stream<boost::iostreams::basic_array_source<char>>>;
 
+  /// the deserializer for boost_byte_oarchive
+  using boost_byte_iarchive = boost_optimized_iarchive<byte_istreambuf>;
+
   /// constructs a boost_buffer_iarchive object
 
   /// @param[in] buf pointer to a memory buffer from which serialized representation will be read
@@ -359,6 +365,10 @@ BOOST_SERIALIZATION_REGISTER_ARCHIVE(ttg::detail::boost_iovec_iarchive);
 BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE(ttg::detail::boost_iovec_iarchive);
 BOOST_SERIALIZATION_REGISTER_ARCHIVE(ttg::detail::boost_buffer_iarchive);
 BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE(ttg::detail::boost_buffer_iarchive);
+BOOST_SERIALIZATION_REGISTER_ARCHIVE(ttg::detail::boost_byte_oarchive);
+BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE(ttg::detail::boost_byte_oarchive);
+BOOST_SERIALIZATION_REGISTER_ARCHIVE(ttg::detail::boost_byte_iarchive);
+BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE(ttg::detail::boost_byte_iarchive);
 
 #undef BOOST_SERIALIZATION_USE_ARRAY_OPTIMIZATION_FOR_THIS_AND_BASE
 
