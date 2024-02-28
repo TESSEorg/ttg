@@ -230,8 +230,7 @@ namespace ttg::detail {
   /// @return a boost_buffer_oarchive object referring to @p buf
   inline auto make_boost_buffer_oarchive(void* const buf, std::size_t size, std::size_t buf_offset = 0) {
     assert(buf_offset <= size);
-    using arrsink_t = boost::iostreams::basic_array_sink<char>;
-    return boost_buffer_oarchive(arrsink_t(static_cast<char*>(buf) + buf_offset, size - buf_offset));
+    return ttg::detail::boost_byte_oarchive(ttg::detail::byte_ostreambuf(static_cast<char*>(buf) + buf_offset, size - buf_offset));
   }
 
   /// constructs a boost_buffer_oarchive object
