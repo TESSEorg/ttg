@@ -74,7 +74,19 @@ namespace ttg::detail {
 
   /// optimized data-only serializer
 
-  /// skips metadata (class version, etc.)
+  /// skips metadata (class version, etc.) by providing optimized save_override function that will be called by
+  /// `boost::archive::binary_oarchive_impl::save_override`
+  ///
+  /// \internal Using `boost::archive::binary_oarchive_impl` provides stock implementation for this custom archive. Unfortunately
+  /// `boost::archive::binary_oarchive_impl` uses the streambuf object via its std::streambuf base which means that
+  /// calls to `xsputn` are not inlined. To work around this problem, this class replaces several functions in
+  /// `boost::archive::binary_oarchive_impl` that were provided by `boost::archive::basic_binary_oprimitive`
+  /// such as `save`, `save_array` and `save_binary`; the latter calls the streambuf's sputn directly,
+  /// not via std::streambuf::sputn . To make sure these "replacements" are called this class must be used directly
+  /// rather than cast to `boost::archive::binary_oarchive_impl`, as an argument to
+  /// `oarchive_save_override_optimized_dispatch`
+  /// if \p StreamOrStreambuf is a streambuf (i.e. derived from std::streambuf).
+  ///
   template <typename StreamOrStreambuf>
   class boost_optimized_oarchive
       : private StreamOrStreambuf,
@@ -84,6 +96,8 @@ namespace ttg::detail {
     using pbase_type = StreamOrStreambuf;
     using base_type = boost::archive::binary_oarchive_impl<boost_optimized_oarchive<StreamOrStreambuf>,
                                                            std::ostream::char_type, std::ostream::traits_type>;
+    // if pbase_type is derived from std::streambuf can use this information to avoid virtual function calls and inline
+    static constexpr bool pbase_derived_from_stdstreambuf = std::is_base_of_v<std::streambuf, pbase_type>;
 
    private:
     friend class boost::archive::save_access;
@@ -108,9 +122,12 @@ namespace ttg::detail {
         : pbase_type(std::forward<Arg>(arg))
         , base_type(this->pbase(), boost::archive::no_header | boost::archive::no_codecvt){};
 
+    /// these provide optimized implementation that's called by base_type::save_override
+    /// @{
+
     template <class T>
     void save_override(const T& t) {
-      oarchive_save_override_optimized_dispatch(this->base(), t);
+        oarchive_save_override_optimized_dispatch(*this, t);
     }
 
     void save_override(const boost::archive::class_id_optional_type& /* t */) {}
@@ -121,11 +138,53 @@ namespace ttg::detail {
     void save_override(const boost::archive::class_id_type& t) {}
     void save_override(const boost::archive::class_id_reference_type& t) {}
 
+    /// @}
+
     void save_object(const void* x, const boost::archive::detail::basic_oserializer& bos) { abort(); }
 
+    /// override default implementations in base_type provided by basic_binary_oprimitive<Archive>
+    /// @{
+
+    // default saving of primitives.
+    template<class T>
+    void save(const T & t)
+    {
+      save_binary(& t, sizeof(T));
+    }
+
+    // trap usage of invalid uninitialized boolean which would
+    // otherwise crash on load.
+    void save(const bool t){
+      BOOST_ASSERT(0 == static_cast<int>(t) || 1 == static_cast<int>(t));
+      save_binary(& t, sizeof(t));
+    }
+
    public:
-    BOOST_ARCHIVE_DECL
-    void save_binary(const void* address, std::size_t count);
+
+    // the optimized save_array dispatches to save_binary
+    template <class ValueType>
+    void save_array(boost::serialization::array_wrapper<ValueType> const& a, unsigned int)
+    {
+      save_binary(a.address(),a.count()*sizeof(ValueType));
+    }
+
+    void save_binary(const void *address, std::size_t count) {
+      if constexpr (pbase_derived_from_stdstreambuf) {  // if we were given a streambuf use it directly ...
+        using Elem = std::ostream::char_type;
+        count = (count + sizeof(Elem) - 1) / sizeof(Elem);
+        std::streamsize scount = static_cast<StreamOrStreambuf&>(this->pbase())
+                                     .sputn(static_cast<const Elem*>(address), static_cast<std::streamsize>(count));
+        if (count != static_cast<std::size_t>(scount))
+          boost::serialization::throw_exception(
+              boost::archive::archive_exception(boost::archive::archive_exception::output_stream_error));
+      }
+      else {  // ... else let boost::archive::basic_binary_oprimitive handle via std::stringbuf
+              // (and associated virtual function calls ... no inlining for you)
+        this->base().save_binary(address, count);
+      }
+    }
+
+    /// @}
 
     template <class T>
     auto& operator<<(const T& t) {
@@ -139,7 +198,14 @@ namespace ttg::detail {
       return *this << t;
     }
 
-    const auto& streambuf() const { return this->pbase(); }
+    const auto& streambuf() const {
+      if constexpr (pbase_derived_from_stdstreambuf) {
+        return static_cast<const StreamOrStreambuf&>(this->pbase());
+      }
+      else {
+        return this->pbase();
+      }
+    }
     const auto& stream() const { return this->pbase(); }
   };
 
