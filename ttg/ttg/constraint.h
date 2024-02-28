@@ -9,8 +9,6 @@
 
 namespace ttg {
 
-  // TODO: do we need a (virtual) base class?
-
   template<typename Key>
   struct ConstraintBase {
     using key_type = Key;
