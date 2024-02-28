@@ -72,9 +72,14 @@ namespace ttg::detail {
    public:
     using std::streambuf::streambuf;
 
-    byte_ostreambuf(char_type* buffer, std::streamsize buffer_size = std::numeric_limits<std::streamsize>::max()) : buffer_(buffer), cursor_(buffer_), buffer_size_(buffer_size) {}
+    inline byte_ostreambuf(char_type* buffer, std::streamsize buffer_size = std::numeric_limits<std::streamsize>::max()) : buffer_(buffer), cursor_(buffer_), buffer_size_(buffer_size) {}
 
-    std::streamsize xsputn(const char_type* s, std::streamsize n) override {
+    // hides basic_streambuf::sputn so can avoid the virtual function dispatch if the compiler is not aggressive enough
+    inline std::streamsize sputn(const char_type* s, std::streamsize n) noexcept {
+      return this->xsputn(s, n);
+    }
+
+    inline std::streamsize xsputn(const char_type* s, std::streamsize n) noexcept override {
       assert((cursor_ - buffer_) + n <= buffer_size_);
       std::memcpy(cursor_, s, n * sizeof(char_type));
       cursor_ += n;
@@ -92,9 +97,14 @@ namespace ttg::detail {
    public:
     using std::streambuf::streambuf;
 
-    byte_istreambuf(char_type* buffer, std::size_t buffer_size = std::numeric_limits<std::size_t>::max()) : buffer_(buffer), cursor_(buffer_), buffer_size_(buffer_size) {}
+    inline byte_istreambuf(char_type* buffer, std::size_t buffer_size = std::numeric_limits<std::size_t>::max()) : buffer_(buffer), cursor_(buffer_), buffer_size_(buffer_size) {}
 
-    std::streamsize xsgetn(char_type* s, std::streamsize max_n) override {
+    // hides basic_streambuf::sgetn so can avoid the virtual function dispatch if the compiler is not aggressive enough
+    inline std::streamsize sgetn(char_type* s, std::streamsize n) noexcept {
+      return this->xsgetn(s, n);
+    }
+
+    inline std::streamsize xsgetn(char_type* s, std::streamsize max_n) noexcept override {
       const auto n_to_read = std::min(buffer_size_ - (cursor_ - buffer_), max_n);
       std::memcpy(s, cursor_, n_to_read * sizeof(char_type));
       cursor_ += n_to_read;
