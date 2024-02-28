@@ -4256,7 +4256,7 @@ ttg::abort();  // should not happen
       priomap = std::forward<Priomap>(pm);
     }
 
-    /// add a constraint
+    /// add a shared constraint
     /// the constraint must provide a valid override of `check_key(key)`
     template<typename Constraint>
     void add_constraint(std::shared_ptr<Constraint> c) {
@@ -4273,6 +4273,14 @@ ttg::abort();  // should not happen
     }
 
     /// add a constraint
+    /// the constraint must provide a valid override of `check_key(key)`
+    template<typename Constraint>
+    void add_constraint(Constraint&& c) {
+      // need to make this a shared_ptr since it's shared between different callbacks
+      this->add_constraint(std::make_shared<Constraint>(std::forward<Constraint>(c)));
+    }
+
+    /// add a shared constraint
     /// the constraint must provide a valid override of `check_key(key, map(key))`
     /// ths overload can be used to provide different key mapping functions for each TT
     template<typename Constraint, typename Mapper>
@@ -4288,6 +4296,15 @@ ttg::abort();  // should not happen
         constraints_check.push_back([map, c, this](const keyT& key){ return c->check(key, map(key), this); });
         constraints_complete.push_back([map, c, this](const keyT& key){ c->complete(key, map(key), this); return true; });
       }
+    }
+
+    /// add a shared constraint
+    /// the constraint must provide a valid override of `check_key(key, map(key))`
+    /// ths overload can be used to provide different key mapping functions for each TT
+    template<typename Constraint, typename Mapper>
+    void add_constraint(Constraint c, Mapper&& map) {
+      // need to make this a shared_ptr since it's shared between different callbacks
+      this->add_constraint(std::make_shared<Constraint>(std::forward<Constraint>(c)), std::forward<Mapper>(map));
     }
 
 
