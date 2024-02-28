@@ -6,6 +6,7 @@
 #define TTG_SERIALIZATION_STREAM_H
 
 #include <streambuf>
+#include <cstring>
 
 namespace ttg::detail {
 
@@ -64,6 +65,46 @@ namespace ttg::detail {
    private:
     std::size_t current_item_ = 0;
     const std::vector<std::pair<const void*, std::size_t>>& iovec_;
+  };
+
+  /// streambuf that writes bytes to a buffer in memory
+  class byte_ostreambuf : public std::streambuf {
+   public:
+    using std::streambuf::streambuf;
+
+    byte_ostreambuf(char_type* buffer, std::streamsize buffer_size = std::numeric_limits<std::streamsize>::max()) : buffer_(buffer), cursor_(buffer_), buffer_size_(buffer_size) {}
+
+    std::streamsize xsputn(const char_type* s, std::streamsize n) override {
+      assert((cursor_ - buffer_) + n <= buffer_size_);
+      std::memcpy(cursor_, s, n * sizeof(char_type));
+      cursor_ += n;
+      return n;
+    }
+
+   private:
+    char_type* buffer_;
+    char_type* cursor_;  // current location in buffer_
+    std::streamsize buffer_size_;
+  };
+
+  /// streambuf that writes bytes to a buffer in memory
+  class byte_istreambuf : public std::streambuf {
+   public:
+    using std::streambuf::streambuf;
+
+    byte_istreambuf(char_type* buffer, std::size_t buffer_size = std::numeric_limits<std::size_t>::max()) : buffer_(buffer), cursor_(buffer_), buffer_size_(buffer_size) {}
+
+    std::streamsize xsgetn(char_type* s, std::streamsize max_n) override {
+      const auto n_to_read = std::min(buffer_size_ - (cursor_ - buffer_), max_n);
+      std::memcpy(s, cursor_, n_to_read * sizeof(char_type));
+      cursor_ += n_to_read;
+      return n_to_read;
+    }
+
+   private:
+    char_type* buffer_;
+    char_type* cursor_;  // current location in buffer_
+    std::streamsize buffer_size_;
   };
 
 }  // namespace ttg::detail
