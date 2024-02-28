@@ -2576,53 +2576,64 @@ namespace ttg_parsec {
     }
 
     bool check_constraints(task_t *task) {
-      bool release = true;
-      for (auto& c : constraints_check) {
-        bool constrained = false;
+      bool constrained = false;
+      if (constraints_check.size() > 0) {
         if constexpr (ttg::meta::is_void_v<keyT>) {
-          constrained = !c();
+          constrained = !constraints_check[0]();
         } else {
-          constrained = !c(task->key);
-        }
-        if (constrained) {
-          if (task->add_constraint()) {
-            if constexpr (!ttg::meta::is_void_v<keyT>) {
-            }
-            parsec_hash_table_insert(&task_constraint_table, &task->tt_ht_item);
-          }
-          release = false;
+          constrained = !constraints_check[0](task->key);
         }
       }
-      return release;
+      if (constrained) {
+        // store the task so we can later access it once it is released
+        parsec_hash_table_insert(&task_constraint_table, &task->tt_ht_item);
+      }
+      return !constrained;
     }
 
     template<typename Key = keyT>
-    std::enable_if_t<ttg::meta::is_void_v<Key>, void> release_constraint(const std::span<Key>& keys) {
-      task_t *task;
-      parsec_key_t hk = 0;
-      parsec_hash_table_lock_bucket(&task_constraint_table, hk);
-      task = (task_t *)parsec_hash_table_nolock_find(&task_constraint_table, hk);
-      if (task->release_constaint()) {
-        parsec_hash_table_nolock_remove(&task_constraint_table, hk);
+    std::enable_if_t<ttg::meta::is_void_v<Key>, void> release_constraint(std::size_t cid) {
+      // check the next constraint, if any
+      assert(cid < constraints_check.size());
+      bool release = true;
+      for (std::size_t i = cid+1; i < constraints_check.size(); i++) {
+        if (!constraints_check[i]()) {
+          release = false;
+          break;
+        }
+      }
+      if (release) {
+        // no constraint blocked us
+        task_t *task;
+        parsec_key_t hk = 0;
+        task = (task_t*)parsec_hash_table_remove(&task_constraint_table, hk);
+        assert(task != nullptr);
         auto &world_impl = world.impl();
         parsec_execution_stream_t *es = world_impl.execution_stream();
         parsec_task_t *vp_task_rings[1] = { &task->parsec_task };
         __parsec_schedule_vp(es, vp_task_rings, 0);
       }
-      parsec_hash_table_unlock_bucket(&task_constraint_table, hk);
     }
 
     template<typename Key = keyT>
-    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> release_constraint(const std::span<Key>& keys) {
+    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> release_constraint(std::size_t cid, const std::span<Key>& keys) {
+      assert(cid < constraints_check.size());
       parsec_task_t *task_ring = nullptr;
       for (auto& key : keys) {
         task_t *task;
-        auto hk = reinterpret_cast<parsec_key_t>(&key);
-        parsec_hash_table_lock_bucket(&task_constraint_table, hk);
-        task = (task_t *)parsec_hash_table_nolock_find(&task_constraint_table, hk);
-        assert(task != nullptr);
-        if (task->release_constaint()) {
-          parsec_hash_table_nolock_remove(&task_constraint_table, hk);
+        bool release = true;
+        for (std::size_t i = cid+1; i < constraints_check.size(); i++) {
+          if (!constraints_check[i](key)) {
+            release = false;
+            break;
+          }
+        }
+
+        if (release) {
+          // no constraint blocked this task, so go ahead and release
+          auto hk = reinterpret_cast<parsec_key_t>(&key);
+          task = (task_t*)parsec_hash_table_remove(&task_constraint_table, hk);
+          assert(task != nullptr);
           if (task_ring == nullptr) {
             /* the first task is set directly */
             task_ring = &task->parsec_task;
@@ -2632,7 +2643,6 @@ namespace ttg_parsec {
                                               offsetof(parsec_task_t, priority));
           }
         }
-        parsec_hash_table_unlock_bucket(&task_constraint_table, hk);
       }
       if (nullptr != task_ring) {
         auto &world_impl = world.impl();
@@ -4385,13 +4395,13 @@ namespace ttg_parsec {
     /// the constraint must provide a valid override of `check_key(key)`
     template<typename Constraint>
     void add_constraint(std::shared_ptr<Constraint> c) {
-      c->add_listener(&release_constraint, this);
+      std::size_t cid = constraints_check.size();
       if constexpr(ttg::meta::is_void_v<keyT>) {
-        c->add_listener([this](){ this->release_constraint(); }, this);
+        c->add_listener([this, cid](){ this->release_constraint(cid); }, this);
         constraints_check.push_back([c, this](){ return c->check(this); });
         constraints_complete.push_back([c, this](const keyT& key){ c->complete(this); return true; });
       } else {
-        c->add_listener([this](const std::span<keyT>& keys){ this->release_constraint(keys); }, this);
+        c->add_listener([this, cid](const std::span<keyT>& keys){ this->release_constraint(cid, keys); }, this);
         constraints_check.push_back([c, this](const keyT& key){ return c->check(key, this); });
         constraints_complete.push_back([c, this](const keyT& key){ c->complete(key, this); return true; });
       }
@@ -4403,12 +4413,13 @@ namespace ttg_parsec {
     template<typename Constraint, typename Mapper>
     void add_constraint(std::shared_ptr<Constraint> c, Mapper&& map) {
       static_assert(std::is_same_v<typename Constraint::key_type, keyT>);
+      std::size_t cid = constraints_check.size();
       if constexpr(ttg::meta::is_void_v<keyT>) {
-        c->add_listener([this](){ this->release_constraint(); }, this);
+        c->add_listener([this, cid](){ this->release_constraint(cid); }, this);
         constraints_check.push_back([map, c, this](){ return c->check(map(), this); });
         constraints_complete.push_back([map, c, this](){ c->complete(map(), this); return true; });
       } else {
-        c->add_listener([this](const std::span<keyT>& keys){ this->release_constraint(keys); }, this);
+        c->add_listener([this, cid](const std::span<keyT>& keys){ this->release_constraint(cid, keys); }, this);
         constraints_check.push_back([map, c, this](const keyT& key){ return c->check(key, map(key), this); });
         constraints_complete.push_back([map, c, this](const keyT& key){ c->complete(key, map(key), this); return true; });
       }
