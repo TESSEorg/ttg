@@ -174,9 +174,7 @@ namespace ttg::detail {
         count = (count + sizeof(Elem) - 1) / sizeof(Elem);
         std::streamsize scount = static_cast<StreamOrStreambuf&>(this->pbase())
                                      .sputn(static_cast<const Elem*>(address), static_cast<std::streamsize>(count));
-        if (count != static_cast<std::size_t>(scount))
-          boost::serialization::throw_exception(
-              boost::archive::archive_exception(boost::archive::archive_exception::output_stream_error));
+        assert(count == static_cast<std::size_t>(scount));
       }
       else {  // ... else let boost::archive::basic_binary_oprimitive handle via std::stringbuf
               // (and associated virtual function calls ... no inlining for you)
