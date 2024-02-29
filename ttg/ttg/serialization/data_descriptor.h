@@ -15,22 +15,41 @@
 
 #include "ttg/serialization/splitmd_data_descriptor.h"
 
-// This provides an efficent API for serializing/deserializing a data type.
-// An object of this type will need to be provided for each serializable type.
-// The default implementation, in serialization.h, works only for primitive/POD data types;
-// backend-specific implementations may be available in backend/serialization.h .
+/// This provides an efficient C API for serializing/deserializing a data type to a nonportable contiguous bytestring.
+/// An object of this type will need to be provided for each serializable type.
+/// The default implementation, in serialization.h, works only for primitive/POD data types;
+/// backend-specific implementations may be available in backend/serialization.h .
 extern "C" struct ttg_data_descriptor {
   const char *name;
+
+  /// @brief measures the size of the binary representation of @p object
+  /// @param[in] object pointer to the object to be serialized
+  /// @return the number of bytes needed for binary representation of @p object
   uint64_t (*payload_size)(const void *object);
-  uint64_t (*pack_payload)(const void *object, uint64_t chunk_size, uint64_t pos, void *buf);
-  void (*unpack_payload)(void *object, uint64_t chunk_size, uint64_t pos, const void *buf);
+
+  /// @brief serializes object to a buffer
+  /// @param[in] object pointer to the object to be serialized
+  /// @param[in] max_nbytes_to_write the maximum number of bytes to write
+  /// @param[in] offset the position in \p buf where the first byte of serialized data will be written
+  /// @param[in,out] buf the data buffer that will contain the serialized representation of the object
+  /// @return position in \p buf after the last byte written
+  uint64_t (*pack_payload)(const void *object, uint64_t max_nbytes_to_write, uint64_t offset, void *buf);
+
+  /// @brief deserializes object from a buffer
+  /// @param[in] object pointer to the object to be deserialized
+  /// @param[in] max_nbytes_to_read the maximum number of bytes to read
+  /// @param[in] offset the position in \p buf where the first byte of serialized data will be read
+  /// @param[in] buf the data buffer that contains the serialized representation of the object
+  /// @return position in \p buf after the last byte written
+  void (*unpack_payload)(void *object, uint64_t max_nbytes_to_read, uint64_t offset, const void *buf);
+
   void (*print)(const void *object);
 };
 
 namespace ttg {
 
-  /**
- *  \brief Provides (de)serialization of C++ data invocable from C primarily to interface with PaRSEC
+/**
+ *  \brief Provides (de)serialization of C++ data that can be invoked from C via ttg_data_descriptor
 
  * The default implementation is only provided for POD data types but is efficient in the sense that
  * it does enable zero-copy remote data transfers.   For other data types, optimized implementations
@@ -40,7 +59,7 @@ namespace ttg {
   template <typename T, typename Enabler = void>
   struct default_data_descriptor;
 
-  /// default_data_descriptor for trivially-copyable types
+  /// @brief default_data_descriptor for trivially-copyable types
   /// @tparam T a trivially-copyable type
   template <typename T>
   struct default_data_descriptor<
@@ -48,43 +67,46 @@ namespace ttg {
                           !ttg::has_split_metadata<T>::value>> {
     static constexpr const bool serialize_size_is_const = true;
 
+    /// @brief measures the size of the binary representation of @p object
     /// @param[in] object pointer to the object to be serialized
-    /// @return size of serialized @p object
+    /// @return the number of bytes needed for binary representation of @p object
     static uint64_t payload_size(const void *object) { return static_cast<uint64_t>(sizeof(T)); }
 
     /// @brief serializes object to a buffer
-
     /// @param[in] object pointer to the object to be serialized
-    /// @param[in] size the size of @p object in bytes
-    /// @param[in] begin location in @p buf where the first byte of serialized data will be written
-    /// @param[in,out] buf the data buffer that will contain serialized data
-    /// @return location in @p buf after the last byte written
-    static uint64_t pack_payload(const void *object, uint64_t size, uint64_t begin, void *buf) {
+    /// @param[in] max_nbytes_to_write the maximum number of bytes to write
+    /// @param[in] offset the position in \p buf where the first byte of serialized data will be written
+    /// @param[in,out] buf the data buffer that will contain the serialized representation of the object
+    /// @return position in \p buf after the last byte written
+    static uint64_t pack_payload(const void *object, uint64_t max_nbytes_to_write, uint64_t begin, void *buf) {
       unsigned char *char_buf = reinterpret_cast<unsigned char *>(buf);
-      std::memcpy(&char_buf[begin], object, size);
-      return begin + size;
+      assert(sizeof(T)<=max_nbytes_to_write);
+      std::memcpy(&char_buf[begin], object, sizeof(T));
+      return begin + sizeof(T);
     }
 
     /// @brief deserializes object from a buffer
-
-    /// @param[in,out] object pointer to the object to be deserialized
-    /// @param[in] size the size of @p object in bytes
-    /// @param[in] begin location in @p buf where the first byte of serialized data will be read
-    /// @param[in] buf the data buffer that contains serialized data
-    static void unpack_payload(void *object, uint64_t size, uint64_t begin, const void *buf) {
+    /// @param[in] object pointer to the object to be deserialized
+    /// @param[in] max_nbytes_to_read the maximum number of bytes to read
+    /// @param[in] offset the position in \p buf where the first byte of serialized data will be read
+    /// @param[in] buf the data buffer that contains the serialized representation of the object
+    /// @return position in \p buf after the last byte written
+    static void unpack_payload(void *object, uint64_t max_nbytes_to_read, uint64_t begin, const void *buf) {
       const unsigned char *char_buf = reinterpret_cast<const unsigned char *>(buf);
-      std::memcpy(object, &char_buf[begin], size);
+      assert(sizeof(T)<=max_nbytes_to_read);
+      std::memcpy(object, &char_buf[begin], sizeof(T));
     }
   };
 
-  /// default_data_descriptor for trivially-copyable types
-  /// @tparam T a trivially-copyable type
+  /// @brief default_data_descriptor for types that support 2-stage serialization (metadata first, then the rest) for implementing zero-copy transfers
+  /// @tparam T a type for which `ttg::has_split_metadata<T>::value` is true
   template <typename T>
   struct default_data_descriptor<T, std::enable_if_t<ttg::has_split_metadata<T>::value>> {
     static constexpr const bool serialize_size_is_const = false;
 
+    /// @brief measures the size of the binary representation of @p object
     /// @param[in] object pointer to the object to be serialized
-    /// @return size of serialized @p object
+    /// @return the number of bytes needed for binary representation of @p object
     static uint64_t payload_size(const void *object) {
       SplitMetadataDescriptor<T> smd;
       const T *t = reinterpret_cast<T *>(object);
@@ -98,39 +120,40 @@ namespace ttg {
     }
 
     /// @brief serializes object to a buffer
-
     /// @param[in] object pointer to the object to be serialized
-    /// @param[in] size the size of @p object in bytes
-    /// @param[in] begin location in @p buf where the first byte of serialized data will be written
-    /// @param[in,out] buf the data buffer that will contain serialized data
-    /// @return location in @p buf after the last byte written
-    static uint64_t pack_payload(const void *object, uint64_t size, uint64_t begin, void *buf) {
+    /// @param[in] max_nbytes_to_write the maximum number of bytes to write
+    /// @param[in] offset the position in \p buf where the first byte of serialized data will be written
+    /// @param[in,out] buf the data buffer that will contain the serialized representation of the object
+    /// @return position in \p buf after the last byte written
+    static uint64_t pack_payload(const void *object, uint64_t max_nbytes_to_write, uint64_t begin, void *buf) {
       SplitMetadataDescriptor<T> smd;
       const T *t = reinterpret_cast<T *>(object);
 
       unsigned char *char_buf = reinterpret_cast<unsigned char *>(buf);
       auto metadata = smd.get_metadata(t);
+      assert(sizeof(metadata) <= max_nbytes_to_write);
       std::memcpy(&char_buf[begin], metadata, sizeof(metadata));
       size_t pos = sizeof(metadata);
       for (auto &&iovec : smd.get_data(t)) {
         std::memcpy(&char_buf[begin + pos], iovec.data, iovec.num_bytes);
         pos += iovec.num_bytes;
-        assert(pos < size);
+        assert(pos <= max_nbytes_to_write);
       }
-      return begin + size;
+      return begin + pos;
     }
 
     /// @brief deserializes object from a buffer
-
-    /// @param[in,out] object pointer to the object to be deserialized
-    /// @param[in] size the size of @p object in bytes
-    /// @param[in] begin location in @p buf where the first byte of serialized data will be read
-    /// @param[in] buf the data buffer that contains serialized data
-    static void unpack_payload(void *object, uint64_t size, uint64_t begin, const void *buf) {
+    /// @param[in] object pointer to the object to be deserialized
+    /// @param[in] max_nbytes_to_read the maximum number of bytes to read
+    /// @param[in] offset the position in \p buf where the first byte of serialized data will be read
+    /// @param[in] buf the data buffer that contains the serialized representation of the object
+    /// @return position in \p buf after the last byte written
+    static void unpack_payload(void *object, uint64_t max_nbytes_to_read, uint64_t begin, const void *buf) {
       SplitMetadataDescriptor<T> smd;
       T *t = reinterpret_cast<T *>(object);
 
       using metadata_t = decltype(smd.get_metadata(t));
+      assert(sizeof(metadata_t) <= max_nbytes_to_read);
       const unsigned char *char_buf = reinterpret_cast<const unsigned char *>(buf);
       const metadata_t *metadata = reinterpret_cast<const metadata_t *>(char_buf + begin);
       T t_created = smd.create_from_metadata();
@@ -139,7 +162,7 @@ namespace ttg {
       for (auto &&iovec : smd.get_data(t)) {
         std::memcpy(iovec.data, &char_buf[begin + pos], iovec.num_bytes);
         pos += iovec.num_bytes;
-        assert(pos < size);
+        assert(pos <= max_nbytes_to_read);
       }
     }
   };
@@ -150,39 +173,45 @@ namespace ttg {
 
 namespace ttg {
 
-  /// The default implementation for non-POD data types that are not directly copyable
-  /// and support MADNESS serialization
+  /// @brief default_data_descriptor for non-POD data types that are not directly copyable or 2-stage serializable and support MADNESS serialization
   template <typename T>
   struct default_data_descriptor<
       T, std::enable_if_t<((!detail::is_memcpyable_v<T> && detail::is_madness_buffer_serializable_v<T>) ||
                            detail::is_madness_user_buffer_serializable_v<T>)&&!ttg::has_split_metadata<T>::value>> {
     static constexpr const bool serialize_size_is_const = false;
 
+    /// @brief measures the size of the binary representation of @p object
+    /// @param[in] object pointer to the object to be serialized
+    /// @return the number of bytes needed for binary representation of @p object
     static uint64_t payload_size(const void *object) {
       madness::archive::BufferOutputArchive ar;
-      ar &(*(T *)object);
+      ar & (*static_cast<std::add_pointer_t<std::add_const_t<T>>>(object));
       return static_cast<uint64_t>(ar.size());
     }
 
-    /// object --- obj to be serialized
-    /// chunk_size --- inputs max amount of data to output, and on output returns amount actually output
-    /// pos --- position in the input buffer to resume serialization
-    /// buf[pos] --- place for output
-    static uint64_t pack_payload(const void *object, uint64_t chunk_size, uint64_t pos, void *_buf) {
+    /// @brief serializes object to a buffer
+    /// @param[in] object pointer to the object to be serialized
+    /// @param[in] max_nbytes_to_write the maximum number of bytes to write
+    /// @param[in] offset the position in \p buf where the first byte of serialized data will be written
+    /// @param[in,out] buf the data buffer that will contain the serialized representation of the object
+    /// @return position in \p buf after the last byte written
+    static uint64_t pack_payload(const void *object, uint64_t max_nbytes_to_write, uint64_t pos, void *_buf) {
       unsigned char *buf = reinterpret_cast<unsigned char *>(_buf);
-      madness::archive::BufferOutputArchive ar(&buf[pos], chunk_size);
-      ar &(*(T *)object);
-      return pos + chunk_size;
+      madness::archive::BufferOutputArchive ar(&buf[pos], max_nbytes_to_write);
+      ar & (*static_cast<std::add_pointer_t<std::add_const_t<T>>>(object));
+      return pos + ar.size();
     }
 
-    /// object --- obj to be deserialized
-    /// chunk_size --- amount of data for input
-    /// pos --- position in the input buffer to resume deserialization
-    /// object -- pointer to the object to fill up
-    static void unpack_payload(void *object, uint64_t chunk_size, uint64_t pos, const void *_buf) {
+    /// @brief deserializes object from a buffer
+    /// @param[in] object pointer to the object to be deserialized
+    /// @param[in] max_nbytes_to_read the maximum number of bytes to read
+    /// @param[in] offset the position in \p buf where the first byte of serialized data will be read
+    /// @param[in] buf the data buffer that contains the serialized representation of the object
+    /// @return position in \p buf after the last byte written
+    static void unpack_payload(void *object, uint64_t max_nbytes_to_read, uint64_t pos, const void *_buf) {
       const unsigned char *buf = reinterpret_cast<const unsigned char *>(_buf);
-      madness::archive::BufferInputArchive ar(&buf[pos], chunk_size);
-      ar &(*(T *)object);
+      madness::archive::BufferInputArchive ar(&buf[pos], max_nbytes_to_read);
+      ar & (*static_cast<std::add_pointer_t<T>>(object));
     }
   };
 
@@ -196,8 +225,7 @@ namespace ttg {
 
 namespace ttg {
 
-  /// The default implementation for non-POD data types that are not directly copyable,
-  /// do not support MADNESS serialization, and support Boost serialization
+  /// @brief default_data_descriptor for non-POD data types that are not directly copyable, not 2-stage serializable, do not support MADNESS serialization, and support Boost serialization
   template <typename T>
   struct default_data_descriptor<
       T, std::enable_if_t<(!detail::is_memcpyable_v<T> && !detail::is_madness_buffer_serializable_v<T> &&
@@ -206,29 +234,38 @@ namespace ttg {
                            detail::is_boost_user_buffer_serializable_v<T>)>> {
     static constexpr const bool serialize_size_is_const = false;
 
+    /// @brief measures the size of the binary representation of @p object
+    /// @param[in] object pointer to the object to be serialized
+    /// @return the number of bytes needed for binary representation of @p object
     static uint64_t payload_size(const void *object) {
       ttg::detail::boost_counting_oarchive oa;
-      oa << (*(T *)object);
+      oa << (*static_cast<std::add_pointer_t<std::add_const_t<T>>>(object));
       return oa.streambuf().size();
     }
 
-    /// object --- obj to be serialized
-    /// chunk_size --- inputs max amount of data to output, and on output returns amount actually output
-    /// pos --- position in the input buffer to resume serialization
-    /// buf[pos] --- place for output
-    static uint64_t pack_payload(const void *object, uint64_t chunk_size, uint64_t pos, void *_buf) {
-      auto oa = ttg::detail::make_boost_buffer_oarchive(_buf, pos + chunk_size, pos);
-      oa << (*(T *)object);
-      return pos + chunk_size;
+    /// @brief serializes object to a buffer
+    /// @param[in] object pointer to the object to be serialized
+    /// @param[in] max_nbytes_to_write the maximum number of bytes to write
+    /// @param[in] offset the position in \p buf where the first byte of serialized data will be written
+    /// @param[in,out] buf the data buffer that will contain the serialized representation of the object
+    /// @return position in \p buf after the last byte written
+    static uint64_t pack_payload(const void *object, uint64_t max_nbytes_to_write, uint64_t pos, void *buf) {
+      auto oa = ttg::detail::make_boost_buffer_oarchive(buf, pos + max_nbytes_to_write, pos);
+      oa << (*static_cast<std::add_pointer_t<std::add_const_t<T>>>(object));
+      assert(oa.streambuf().size() <= max_nbytes_to_write);
+      return pos + oa.streambuf().size();
     }
 
-    /// object --- obj to be deserialized
-    /// chunk_size --- amount of data for input
-    /// pos --- position in the input buffer to resume deserialization
-    /// object -- pointer to the object to fill up
-    static void unpack_payload(void *object, uint64_t chunk_size, uint64_t pos, const void *_buf) {
-      auto ia = ttg::detail::make_boost_buffer_iarchive(_buf, pos + chunk_size, pos);
-      ia >> (*(T *)object);
+    /// @brief deserializes object from a buffer
+    /// @param[in] object pointer to the object to be deserialized
+    /// @param[in] max_nbytes_to_read the maximum number of bytes to read
+    /// @param[in] offset the position in \p buf where the first byte of serialized data will be read
+    /// @param[in] buf the data buffer that contains the serialized representation of the object
+    /// @return position in \p buf after the last byte written
+    static void unpack_payload(void *object, uint64_t max_nbytes_to_read, uint64_t pos, const void *buf) {
+      auto ia = ttg::detail::make_boost_buffer_iarchive(buf, pos + max_nbytes_to_read, pos);
+      ia >> (*static_cast<std::add_pointer_t<T>>(object));
+      assert(ia.streambuf().size() <= max_nbytes_to_read);
     }
   };
 
