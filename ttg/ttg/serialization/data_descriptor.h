@@ -40,8 +40,8 @@ extern "C" struct ttg_data_descriptor {
   /// @param[in] max_nbytes_to_read the maximum number of bytes to read
   /// @param[in] offset the position in \p buf where the first byte of serialized data will be read
   /// @param[in] buf the data buffer that contains the serialized representation of the object
-  /// @return position in \p buf after the last byte written
-  void (*unpack_payload)(void *object, uint64_t max_nbytes_to_read, uint64_t offset, const void *buf);
+  /// @return position in \p buf after the last byte read
+  uint64_t (*unpack_payload)(void *object, uint64_t max_nbytes_to_read, uint64_t offset, const void *buf);
 
   void (*print)(const void *object);
 };
@@ -90,11 +90,12 @@ namespace ttg {
     /// @param[in] max_nbytes_to_read the maximum number of bytes to read
     /// @param[in] offset the position in \p buf where the first byte of serialized data will be read
     /// @param[in] buf the data buffer that contains the serialized representation of the object
-    /// @return position in \p buf after the last byte written
-    static void unpack_payload(void *object, uint64_t max_nbytes_to_read, uint64_t begin, const void *buf) {
+    /// @return position in \p buf after the last byte read
+    static uint64_t unpack_payload(void *object, uint64_t max_nbytes_to_read, uint64_t begin, const void *buf) {
       const unsigned char *char_buf = reinterpret_cast<const unsigned char *>(buf);
       assert(sizeof(T)<=max_nbytes_to_read);
       std::memcpy(object, &char_buf[begin], sizeof(T));
+      return begin + sizeof(T);
     }
   };
 
@@ -147,8 +148,8 @@ namespace ttg {
     /// @param[in] max_nbytes_to_read the maximum number of bytes to read
     /// @param[in] offset the position in \p buf where the first byte of serialized data will be read
     /// @param[in] buf the data buffer that contains the serialized representation of the object
-    /// @return position in \p buf after the last byte written
-    static void unpack_payload(void *object, uint64_t max_nbytes_to_read, uint64_t begin, const void *buf) {
+    /// @return position in \p buf after the last byte read
+    static uint64_t unpack_payload(void *object, uint64_t max_nbytes_to_read, uint64_t begin, const void *buf) {
       SplitMetadataDescriptor<T> smd;
       T *t = reinterpret_cast<T *>(object);
 
@@ -164,6 +165,7 @@ namespace ttg {
         pos += iovec.num_bytes;
         assert(pos <= max_nbytes_to_read);
       }
+      return begin + pos;
     }
   };
 
@@ -207,11 +209,12 @@ namespace ttg {
     /// @param[in] max_nbytes_to_read the maximum number of bytes to read
     /// @param[in] offset the position in \p buf where the first byte of serialized data will be read
     /// @param[in] buf the data buffer that contains the serialized representation of the object
-    /// @return position in \p buf after the last byte written
-    static void unpack_payload(void *object, uint64_t max_nbytes_to_read, uint64_t pos, const void *_buf) {
+    /// @return position in \p buf after the last byte read
+    static uint64_t unpack_payload(void *object, uint64_t max_nbytes_to_read, uint64_t pos, const void *_buf) {
       const unsigned char *buf = reinterpret_cast<const unsigned char *>(_buf);
       madness::archive::BufferInputArchive ar(&buf[pos], max_nbytes_to_read);
       ar & (*static_cast<std::add_pointer_t<T>>(object));
+      return pos + (max_nbytes_to_read - ar.nbyte_avail());
     }
   };
 
@@ -261,11 +264,12 @@ namespace ttg {
     /// @param[in] max_nbytes_to_read the maximum number of bytes to read
     /// @param[in] offset the position in \p buf where the first byte of serialized data will be read
     /// @param[in] buf the data buffer that contains the serialized representation of the object
-    /// @return position in \p buf after the last byte written
-    static void unpack_payload(void *object, uint64_t max_nbytes_to_read, uint64_t pos, const void *buf) {
+    /// @return position in \p buf after the last byte read
+    static uint64_t unpack_payload(void *object, uint64_t max_nbytes_to_read, uint64_t pos, const void *buf) {
       auto ia = ttg::detail::make_boost_buffer_iarchive(buf, pos + max_nbytes_to_read, pos);
       ia >> (*static_cast<std::add_pointer_t<T>>(object));
       assert(ia.streambuf().size() <= max_nbytes_to_read);
+      return pos + ia.streambuf().size();
     }
   };
 

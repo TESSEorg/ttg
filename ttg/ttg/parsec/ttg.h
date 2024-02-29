@@ -1835,13 +1835,12 @@ ttg::abort();  // should not happen
       uint64_t payload_size;
       if constexpr (!ttg::default_data_descriptor<ttg::meta::remove_cvr_t<T>>::serialize_size_is_const) {
         const ttg_data_descriptor *dSiz = ttg::get_data_descriptor<uint64_t>();
-        dSiz->unpack_payload(&payload_size, sizeof(uint64_t), pos, _bytes);
-        pos += sizeof(uint64_t);
+        pos = dSiz->unpack_payload(&payload_size, sizeof(uint64_t), pos, _bytes);
       } else {
         payload_size = dObj->payload_size(&obj);
       }
-      dObj->unpack_payload(&obj, payload_size, pos, _bytes);
-      return pos + payload_size;
+      pos = dObj->unpack_payload(&obj, payload_size, pos, _bytes);
+      return pos;
     }
 
     template <typename T>
@@ -1855,11 +1854,10 @@ ttg::abort();  // should not happen
 
       if constexpr (!ttg::default_data_descriptor<ttg::meta::remove_cvr_t<T>>::serialize_size_is_const) {
         const ttg_data_descriptor *dSiz = ttg::get_data_descriptor<uint64_t>();
-        dSiz->pack_payload(&payload_size, sizeof(uint64_t), pos, bytes);
-        pos += sizeof(uint64_t);
+        pos = dSiz->pack_payload(&payload_size, sizeof(uint64_t), pos, bytes);
       }
-      dObj->pack_payload(&obj, payload_size, pos, bytes);
-      return pos + payload_size;
+      pos = dObj->pack_payload(&obj, payload_size, pos, bytes);
+      return pos;
     }
 
     static void static_set_arg(void *data, std::size_t size, ttg::TTBase *bop) {

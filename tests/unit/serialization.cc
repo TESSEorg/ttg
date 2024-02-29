@@ -504,7 +504,7 @@ TEST_CASE("MADNESS Serialization", "[serialization]") {
 
     T g_obj;
     void* g = (void*)&g_obj;
-    CHECK_NOTHROW(d->unpack_payload(g, obj_size, 0, buf.get()));
+    CHECK(d->unpack_payload(g, obj_size, 0, buf.get()) == pos);
   };
 
   test(99);
@@ -755,7 +755,7 @@ TEST_CASE("TTG Serialization", "[serialization]") {
 
     T g_obj;
     void* g = (void*)&g_obj;
-    CHECK_NOTHROW(d->unpack_payload(g, obj_size, 0, buf.get()));
+    CHECK(d->unpack_payload(g, obj_size, 0, buf.get()) == pos);
   };
 
   test(99);
