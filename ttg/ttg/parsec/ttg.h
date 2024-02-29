@@ -1831,32 +1831,30 @@ ttg::abort();  // should not happen
    protected:
     template <typename T>
     uint64_t unpack(T &obj, void *_bytes, uint64_t pos) {
-      const ttg_data_descriptor *dObj = ttg::get_data_descriptor<ttg::meta::remove_cvr_t<T>>();
+      using dd_t = ttg::default_data_descriptor<ttg::meta::remove_cvr_t<T>>;
       uint64_t payload_size;
-      if constexpr (!ttg::default_data_descriptor<ttg::meta::remove_cvr_t<T>>::serialize_size_is_const) {
-        const ttg_data_descriptor *dSiz = ttg::get_data_descriptor<uint64_t>();
-        pos = dSiz->unpack_payload(&payload_size, sizeof(uint64_t), pos, _bytes);
+      if constexpr (!dd_t::serialize_size_is_const) {
+        pos = ttg::default_data_descriptor<uint64_t>::unpack_payload(&payload_size, sizeof(uint64_t), pos, _bytes);
       } else {
-        payload_size = dObj->payload_size(&obj);
+        payload_size = dd_t::payload_size(&obj);
       }
-      pos = dObj->unpack_payload(&obj, payload_size, pos, _bytes);
+      pos = dd_t::unpack_payload(&obj, payload_size, pos, _bytes);
       return pos;
     }
 
     template <typename T>
     uint64_t pack(T &obj, void *bytes, uint64_t pos, detail::ttg_data_copy_t *copy = nullptr) {
-      const ttg_data_descriptor *dObj = ttg::get_data_descriptor<ttg::meta::remove_cvr_t<T>>();
-      uint64_t payload_size = dObj->payload_size(&obj);
+      using dd_t = ttg::default_data_descriptor<ttg::meta::remove_cvr_t<T>>;
+      uint64_t payload_size = dd_t::payload_size(&obj);
       if (copy) {
         /* reset any tracked data, we don't care about the packing from the payload size */
         copy->iovec_reset();
       }
 
-      if constexpr (!ttg::default_data_descriptor<ttg::meta::remove_cvr_t<T>>::serialize_size_is_const) {
-        const ttg_data_descriptor *dSiz = ttg::get_data_descriptor<uint64_t>();
-        pos = dSiz->pack_payload(&payload_size, sizeof(uint64_t), pos, bytes);
+      if constexpr (!dd_t::serialize_size_is_const) {
+        pos = ttg::default_data_descriptor<uint64_t>::pack_payload(&payload_size, sizeof(uint64_t), pos, bytes);
       }
-      pos = dObj->pack_payload(&obj, payload_size, pos, bytes);
+      pos = dd_t::pack_payload(&obj, payload_size, pos, bytes);
       return pos;
     }
 
