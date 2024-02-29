@@ -86,6 +86,11 @@ namespace ttg::detail {
       return n;
     }
 
+    /// number of characters written to the buffer
+    std::streamsize size() const noexcept {
+      return cursor_ - buffer_;
+    }
+
    private:
     char_type* buffer_;
     char_type* cursor_;  // current location in buffer_
@@ -109,6 +114,11 @@ namespace ttg::detail {
       std::memcpy(s, cursor_, n_to_read * sizeof(char_type));
       cursor_ += n_to_read;
       return n_to_read;
+    }
+
+    /// number of characters read from the buffer
+    std::streamsize size() const noexcept {
+      return cursor_ - buffer_;
     }
 
    private:
