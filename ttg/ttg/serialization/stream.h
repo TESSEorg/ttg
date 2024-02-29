@@ -97,7 +97,7 @@ namespace ttg::detail {
    public:
     using std::streambuf::streambuf;
 
-    byte_istreambuf(char_type* buffer, std::size_t buffer_size = std::numeric_limits<std::size_t>::max()) : buffer_(buffer), cursor_(buffer_), buffer_size_(buffer_size) {}
+    byte_istreambuf(const char_type* buffer, std::size_t buffer_size = std::numeric_limits<std::size_t>::max()) : buffer_(buffer), cursor_(buffer_), buffer_size_(buffer_size) {}
 
     // hides basic_streambuf::sgetn so can avoid the virtual function dispatch if the compiler is not aggressive enough
     std::streamsize sgetn(char_type* s, std::streamsize n) noexcept {
@@ -112,8 +112,8 @@ namespace ttg::detail {
     }
 
    private:
-    char_type* buffer_;
-    char_type* cursor_;  // current location in buffer_
+    const char_type* buffer_;
+    const char_type* cursor_;  // current location in buffer_
     std::streamsize buffer_size_;
   };
 
