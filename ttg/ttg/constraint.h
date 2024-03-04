@@ -63,7 +63,7 @@ namespace ttg {
 
   template<typename Key,
            typename Ordinal = std::size_t,
-           typename Compare = std::less<Ordinal>,
+           typename Compare = std::less_equal<Ordinal>,
            typename Mapper = ttg::Void>
   struct SequencedKeysConstraint : public ConstraintBase<Key> {
 
@@ -73,7 +73,7 @@ namespace ttg {
     using compare_t = Compare;
     using base_t = ConstraintBase<Key>;
 
-  private:
+  protected:
     struct sequence_elem_t {
       std::map<ttg::TTBase*, std::vector<key_type>> m_keys;
 
@@ -89,43 +89,22 @@ namespace ttg {
       }
     };
 
-    void release_next() {
-      if (m_stopped) {
-        // don't release tasks if we're stopped
-        return;
-      }
-      // trigger the next sequence
-      sequence_elem_t elem;
-      {
-        // extract the next sequence
-        auto g = this->lock_guard();
-        auto it = m_sequence.begin(); // sequence is ordered by ordinal
-        if (it == m_sequence.end()) {
-          return; // nothing to be done
-        }
-        m_current = it->first;
-        elem = std::move(it->second);
-        m_sequence.erase(it);
-      }
-
-      for (auto& seq : elem.m_keys) {
-        // account for the newly active keys
-        m_active.fetch_add(seq.second.size(), std::memory_order_relaxed);
-        this->notify_listener(std::span<key_type>(seq.second.data(), seq.second.size()), seq.first);
-      }
-    }
-
     bool check_key_impl(const key_type& key, Ordinal ord, ttg::TTBase *tt) {
       if (!m_stopped) {
         if (m_order(ord, m_current)) {
           // key should be executed
-          m_active.fetch_add(1, std::memory_order_relaxed);
+          if (m_auto_release) { // only needed for auto-release
+            m_active.fetch_add(1, std::memory_order_relaxed);
+          }
           // reset current to the lower ordinal
           m_current = ord;
           return true;
-        } else if (m_sequence.empty() && 0 == m_active.load(std::memory_order_relaxed)) {
+        } else if (m_sequence.empty() && m_auto_release && 0 == m_active.load(std::memory_order_relaxed)) {
           // there are no keys (active or blocked) so we execute to avoid a deadlock
           // we don't change the current ordinal because there may be lower ordinals coming in later
+          // NOTE: there is a race condition between the check here and the increment above.
+          //       This is mostly benign as it can lead to out-of-sequence released tasks.
+          //       Avoiding this race would incur significant overheads.
           m_active.fetch_add(1, std::memory_order_relaxed);
           return true;
         }
@@ -146,67 +125,99 @@ namespace ttg {
       return false;
     }
 
+
     void complete_key_impl() {
-      auto active = m_active.fetch_sub(1, std::memory_order_relaxed) - 1;
-      if (0 == active) {
-        release_next();
+      if (m_auto_release) {
+        auto active = m_active.fetch_sub(1, std::memory_order_relaxed) - 1;
+        if (0 == active) {
+          release_next();
+        }
       }
     }
 
+    // used in the auto case
+    void release_next() {
+      if (this->m_stopped) {
+        // don't release tasks if we're stopped
+        return;
+      }
+      // trigger the next sequence
+      sequence_elem_t elem;
+      {
+        // extract the next sequence
+        auto g = this->lock_guard();
+        auto it = this->m_sequence.begin(); // sequence is ordered by ordinal
+        if (it == this->m_sequence.end()) {
+          return; // nothing to be done
+        }
+        this->m_current = it->first;
+        elem = std::move(it->second);
+        this->m_sequence.erase(it);
+      }
+
+      for (auto& seq : elem.m_keys) {
+        // account for the newly active keys
+        this->m_active.fetch_add(seq.second.size(), std::memory_order_relaxed);
+        this->notify_listener(std::span<key_type>(seq.second.data(), seq.second.size()), seq.first);
+      }
+    }
+
+
+    // used in the non-auto case
+    void release_next(ordinal_type ord, bool force_check = false) {
+      if (this->m_stopped) {
+        // don't release tasks if we're stopped
+        return;
+      }
+      if (!force_check && m_order(ord, this->m_current)) {
+        return; // already at the provided ordinal, nothing to be done
+      }
+      // set current ordinal
+      this->m_current = ord;
+      // trigger the next sequence(s) (m_sequence is ordered by ordinal)
+      std::vector<sequence_elem_t> seqs;
+      {
+        auto g = this->lock_guard();
+        for (auto it = this->m_sequence.begin(); it != this->m_sequence.end(); it = this->m_sequence.begin()) {
+          if (!this->m_order(it->first, this->m_current)) break;
+          // extract the next sequence
+          this->m_current = it->first;
+          seqs.push_back(std::move(it->second));
+          this->m_sequence.erase(it);
+        }
+      }
+      for (auto& elem : seqs) {
+        for (auto& e : elem.m_keys) {
+          // account for the newly active keys
+          this->notify_listener(std::span<key_type>(e.second.data(), e.second.size()), e.first);
+        }
+      }
+    }
 
   public:
 
     /**
      * Used for external key mapper.
      */
-    SequencedKeysConstraint()
+    SequencedKeysConstraint(bool auto_release = false)
     : base_t()
+    , m_auto_release(auto_release)
     { }
 
     template<typename Mapper_, typename = std::enable_if_t<std::is_invocable_v<Mapper_, Key>, Mapper_>>
-    SequencedKeysConstraint(Mapper_&& map)
+    SequencedKeysConstraint(Mapper_&& map, bool auto_release)
     : base_t()
     , m_map(std::forward<Mapper_>(map))
+    , m_auto_release(auto_release)
     { }
 
-    SequencedKeysConstraint(SequencedKeysConstraint&& skc)
-    : base_t(std::move(skc))
-    , m_sequence(std::move(skc.m_sequence))
-    , m_active(skc.m_active.load(std::memory_order_relaxed))
-    , m_current(std::move(skc.m_current))
-    , m_map(std::move(skc.m_map))
-    , m_order(std::move(skc.m_order))
-    , m_stopped(skc.m_stopped)
-    { }
+    SequencedKeysConstraint(SequencedKeysConstraint&& skc) = default;
 
-    SequencedKeysConstraint(const SequencedKeysConstraint& skc)
-    : base_t(skc)
-    , m_sequence(skc.m_sequence)
-    , m_active(skc.m_active.load(std::memory_order_relaxed))
-    , m_current(skc.m_current)
-    , m_map(skc.m_map)
-    , m_order(skc.m_order)
-    , m_stopped(skc.m_stopped)
-    { }
+    SequencedKeysConstraint(const SequencedKeysConstraint& skc) = default;
 
-    SequencedKeysConstraint& operator=(SequencedKeysConstraint&& skc) {
-      base_t::operator=(std::move(skc));
-      m_sequence = std::move(skc.m_sequence);
-      m_active = skc.m_active.load(std::memory_order_relaxed);
-      m_current = std::move(skc.m_current);
-      m_map = std::move(skc.m_map);
-      m_order = std::move(skc.m_order);
-      m_stopped = skc.m_stopped;
-    }
-    SequencedKeysConstraint& operator=(const SequencedKeysConstraint& skc) {
-      base_t::operator=(skc);
-      m_sequence = skc.m_sequence;
-      m_active = skc.m_active.load(std::memory_order_relaxed);
-      m_current = skc.m_current;
-      m_map = skc.m_map;
-      m_order = skc.m_order;
-      m_stopped = skc.m_stopped;
-    }
+    SequencedKeysConstraint& operator=(SequencedKeysConstraint&& skc) = default;
+
+    SequencedKeysConstraint& operator=(const SequencedKeysConstraint& skc) = default;
 
     virtual ~SequencedKeysConstraint() = default;
 
@@ -217,49 +228,49 @@ namespace ttg {
     std::enable_if_t<!ttg::meta::is_void_v<Key_> && !ttg::meta::is_void_v<Mapper_>, bool>
     check(const key_type& key, ttg::TTBase *tt) {
       ordinal_type ord = m_map(key);
-      return check_key_impl(key, ord, tt);
+      return this->check_key_impl(key, ord, tt);
     }
 
     template<typename Key_ = key_type, typename Mapper_ = Mapper>
     std::enable_if_t<!ttg::meta::is_void_v<Key_> && ttg::meta::is_void_v<Mapper_>, bool>
     check(const key_type& key, Ordinal ord, ttg::TTBase *tt) {
-      return check_key_impl(key, ord, tt);
+      return this->check_key_impl(key, ord, tt);
     }
 
     template<typename Key_ = key_type, typename Mapper_ = Mapper>
     std::enable_if_t<ttg::meta::is_void_v<Key_> && !ttg::meta::is_void_v<Mapper_>, bool>
     check(ttg::TTBase *tt) {
-      return check_key_impl(ttg::Void{}, m_map(), tt);
+      return this->check_key_impl(ttg::Void{}, m_map(), tt);
     }
 
     template<typename Key_ = key_type, typename Mapper_ = Mapper>
     std::enable_if_t<ttg::meta::is_void_v<Key_> && ttg::meta::is_void_v<Mapper_>, bool>
     check(ordinal_type ord, ttg::TTBase *tt) {
-      return check_key_impl(ttg::Void{}, ord, tt);
+      return this->check_key_impl(ttg::Void{}, ord, tt);
     }
 
     template<typename Key_ = key_type, typename Mapper_ = Mapper>
     std::enable_if_t<!ttg::meta::is_void_v<Key_> && !ttg::meta::is_void_v<Mapper_>>
     complete(const key_type& key, ttg::TTBase *tt) {
-      complete_key_impl();
+      this->complete_key_impl();
     }
 
     template<typename Key_ = key_type, typename Mapper_ = Mapper>
     std::enable_if_t<!ttg::meta::is_void_v<Key_> && ttg::meta::is_void_v<Mapper_>>
     complete(const key_type& key, Ordinal ord, ttg::TTBase *tt) {
-      complete_key_impl();
+      this->complete_key_impl();
     }
 
     template<typename Key_ = key_type, typename Mapper_ = Mapper>
     std::enable_if_t<!ttg::meta::is_void_v<Key_> && ttg::meta::is_void_v<Mapper_>>
     complete(Ordinal ord, ttg::TTBase *tt) {
-      complete_key_impl();
+      this->complete_key_impl();
     }
 
     template<typename Key_ = key_type, typename Mapper_ = Mapper>
     std::enable_if_t<!ttg::meta::is_void_v<Key_> && !ttg::meta::is_void_v<Mapper_>>
     complete(ttg::TTBase *tt) {
-      complete_key_impl();
+      this->complete_key_impl();
     }
 
     /**
@@ -279,23 +290,41 @@ namespace ttg {
     void start() {
       if (m_stopped) {
         m_stopped = false;
-        release_next();
+        release_next(m_current, true); // force the check for a next release even if the current ordinal hasn't changed
       }
     }
 
+    /**
+     * Release tasks up to the ordinal. The provided ordinal is ignored if `auto_release` is enabled.
+     */
+    void release(ordinal_type ord = 0) {
+      if (m_auto_release) {
+        // last key for this ordinal, release the next
+        // the provided ordinal is ignored
+        release_next();
+      } else {
+        release_next(ord);
+      }
+    }
 
-  private:
+    bool is_auto() const {
+      return m_auto_release;
+    }
+
+
+  protected:
     std::map<ordinal_type, sequence_elem_t, compare_t> m_sequence;
-    std::atomic<std::size_t> m_active;
-    ordinal_type m_current;
+    ordinal_type m_current = std::numeric_limits<ordinal_type>::min();
     [[no_unique_address]]
     Mapper m_map;
     [[no_unique_address]]
     compare_t m_order;
+    std::atomic<std::size_t> m_active;
     bool m_stopped = false;
+    bool m_auto_release = false;
   };
 
-  // deduction guide: take type of first argument to Mapper as the key type
+  // deduction guides: take type of first argument to Mapper as the key type
   // TODO: can we use the TTG callable_args instead?
   template<typename Mapper, typename = std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>>>>
   SequencedKeysConstraint(Mapper&&)
@@ -314,10 +343,35 @@ namespace ttg {
   SequencedKeysConstraint(const SequencedKeysConstraint<Key, Ordinal, Compare, Mapper>&)
     -> SequencedKeysConstraint<Key, Ordinal, Compare, Mapper>;
 
+  /**
+   * Make a constraint that can be shared between multiple TT instances.
+   * Overload for incomplete templated constraint types.
+   *
+   * Example:
+   * // SequencedKeysConstraint is incomplete
+   * auto c = ttg::make_shared_constraint<SequencedKeysConstraint>([](Key& k){ return k[0]; });
+   * auto tt_a = ttg::make_tt<Key>(...);
+   * tt_a->add_constraint(c);
+   * auto tt_b = ttg::make_tt<Key>(...);
+   * tt_b->add_constraint(c);
+   *
+   * -> the constraint will handle keys from both tt_a and tt_b. Both TTs must have the same key type.
+   */
   template<template<typename...> typename Constraint, typename... Args>
   auto make_shared_constraint(Args&&... args) {
-    return std::make_shared<decltype(Constraint(std::forward<Args>(args)...))>(Constraint(std::forward<Args>(args)...));
+    return std::make_shared<decltype(Constraint(std::forward<Args>(args)...))>(std::forward<Args>(args)...);
   }
+
+  /**
+   * Make a constraint that can be shared between multiple TT instances.
+   * Overload for complete constraint types.
+   */
+  template<typename Constraint, typename... Args>
+  auto make_shared_constraint(Args&&... args) {
+    return std::make_shared<Constraint>(std::forward<Args>(args)...);
+  }
+
+
 
 } // namespace ttg
 
