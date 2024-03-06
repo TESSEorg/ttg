@@ -78,6 +78,10 @@ namespace ttg {
       std::map<ttg::TTBase*, std::vector<key_type>> m_keys;
 
       sequence_elem_t() = default;
+      sequence_elem_t(sequence_elem_t&&) = default;
+      sequence_elem_t(const sequence_elem_t&) = default;
+      sequence_elem_t& operator=(sequence_elem_t&&) = default;
+      sequence_elem_t& operator=(const sequence_elem_t&) = default;
 
       void add_key(const key_type& key, ttg::TTBase* tt) {
         auto it = m_keys.find(tt);
@@ -95,9 +99,9 @@ namespace ttg {
           // key should be executed
           if (m_auto_release) { // only needed for auto-release
             m_active.fetch_add(1, std::memory_order_relaxed);
+            // revert the current ordinal to the lower ordinal
+            m_current = ord;
           }
-          // reset current to the lower ordinal
-          m_current = ord;
           return true;
         } else if (m_sequence.empty() && m_auto_release && 0 == m_active.load(std::memory_order_relaxed)) {
           // there are no keys (active or blocked) so we execute to avoid a deadlock
@@ -172,18 +176,20 @@ namespace ttg {
       if (!force_check && m_order(ord, this->m_current)) {
         return; // already at the provided ordinal, nothing to be done
       }
-      // set current ordinal
-      this->m_current = ord;
       // trigger the next sequence(s) (m_sequence is ordered by ordinal)
       std::vector<sequence_elem_t> seqs;
       {
         auto g = this->lock_guard();
-        for (auto it = this->m_sequence.begin(); it != this->m_sequence.end(); it = this->m_sequence.begin()) {
-          if (!this->m_order(it->first, this->m_current)) break;
-          // extract the next sequence
-          this->m_current = it->first;
-          seqs.push_back(std::move(it->second));
-          this->m_sequence.erase(it);
+        // set current ordinal
+        this->m_current = ord;
+        {
+          for (auto it = this->m_sequence.begin(); it != this->m_sequence.end();) {
+            if (!this->m_order(it->first, this->m_current)) break;
+            // extract the next sequence
+            this->m_current = it->first;
+            seqs.push_back(std::move(it->second));
+            it = this->m_sequence.erase(it);
+          }
         }
       }
       for (auto& elem : seqs) {

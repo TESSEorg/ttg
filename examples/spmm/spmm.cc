@@ -304,7 +304,8 @@ class SpMM25D {
     bcast_b_->add_constraint(constraint, [](const Key<2>& key){ return key[0]; });
     local_bcast_b_ = std::make_unique<LocalBcastB>(local_b_ijk_, b_ijk_, a_rows_of_col_, ijk_keymap_);
     multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c_ij_p_, a_cols_of_row_,
-                                                 b_rows_of_col_, mTiles, nTiles, ijk_keymap_, constraint, k_cnt_);
+                                                 b_rows_of_col_, mTiles, nTiles, ijk_keymap_, constraint,
+                                                 k_cnt_, parallel_bcasts);
 
     reduce_c_ = std::make_unique<ReduceC>(c_ij_p_, c, ij_keymap_);
     reduce_c_->template set_input_reducer<0>(
@@ -545,13 +546,15 @@ class SpMM25D {
                 const std::vector<std::vector<long>> &b_rows_of_col, const std::vector<int> &mTiles,
                 const std::vector<int> &nTiles, const Keymap3 &ijk_keymap,
                 std::shared_ptr<ttg::SequencedKeysConstraint<Key<2>>> constraint,
-                std::vector<bool>& k_cnt)
+                std::vector<bool>& k_cnt,
+                std::size_t parallel_bcasts)
         : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM25D::MultiplyAdd", {"a_ijk", "b_ijk", "c_ijk"},
                 {"c_ij", "c_ijk"}, ijk_keymap)
         , a_cols_of_row_(a_cols_of_row)
         , b_rows_of_col_(b_rows_of_col)
         , k_cnt_(k_cnt)
-        , constraint(std::move(constraint)){
+        , constraint(std::move(constraint))
+        , parallel_bcasts_(parallel_bcasts) {
       this->set_priomap([=,this](const Key<3> &ijk) { return this->prio(ijk); });  // map a key to an integral priority value
 
       // for each {i,j} determine first k that contributes AND belongs to this node,
@@ -598,9 +601,10 @@ class SpMM25D {
       // release the constraint on the next round of broadcasts
       {
         std::size_t release_k = k;
+        std::size_t bcasts_ahead = parallel_bcasts_;
         while (release_k < k_cnt_.size()) {
           ++release_k;
-          if (k_cnt_[release_k])
+          if (k_cnt_[release_k] && --bcasts_ahead)
             break;
         }
         constraint->release(release_k);
@@ -627,6 +631,7 @@ class SpMM25D {
     const std::vector<std::vector<long>> &b_rows_of_col_;
     std::vector<bool>& k_cnt_;
     std::shared_ptr<ttg::SequencedKeysConstraint<Key<2>>> constraint;
+    std::size_t parallel_bcasts_;
 
     /* Compute the length of the remaining sequence on that tile */
     int32_t prio(const Key<3> &key) const {

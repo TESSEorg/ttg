@@ -2001,7 +2001,7 @@ namespace ttg_parsec {
       task_t *dummy;
       parsec_execution_stream_s *es = world.impl().execution_stream();
       parsec_thread_mempool_t *mempool = get_task_mempool();
-      dummy = new (parsec_thread_mempool_allocate(mempool)) task_t(mempool, &this->self);
+      dummy = new (parsec_thread_mempool_allocate(mempool)) task_t(mempool, &this->self, this);
       dummy->set_dummy(true);
       // TODO: do we need to copy static_stream_goal in dummy?
 
