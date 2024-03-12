@@ -289,6 +289,7 @@ class SpMM25D {
       , b_rows_of_col_(b_rows_of_col)
       , a_rows_of_col_(a_rows_of_col)
       , b_cols_of_row_(b_cols_of_row)
+      , k_cnt_(a_cols_of_row_.size()+1)
       , ij_keymap_(std::move(ij_keymap))
       , ijk_keymap_(std::move(ijk_keymap))
       , parallel_bcasts_(parallel_bcasts) {
@@ -323,7 +324,8 @@ class SpMM25D {
     std::vector<bool> c_ij_procmask(world.size(), false);
     std::vector<unsigned long> first_k_map(world.size(), std::numeric_limits<unsigned long>::max());
     std::size_t max_k = a_rows_of_col_.size();
-    k_cnt_.resize(max_k+1, false);
+    std::vector<std::size_t> k_cnt;
+    k_cnt.resize(a_cols_of_row_.size(), 0);
     for (auto i = 0ul; i != a_cols_of_row_.size(); ++i) {
       if (a_cols_of_row_[i].empty()) continue;
       for (auto j = 0ul; j != b_rows_of_col_.size(); ++j) {
@@ -333,12 +335,10 @@ class SpMM25D {
           decltype(i) k;
           bool have_k;
           std::tie(k, have_k) = multiplyadd_->compute_first_k(i, j);
-          if (have_k) {
-            k_cnt_[k] = true;
-          }
           while (have_k) {
             const auto pR = ijk_keymap_(Key<3>{i, j, k});
             assert(pR < c_ij_procmask.size());
+            k_cnt[k]++;
             c_ij_procmask[pR] = true;
             // find the first k that is needed from us by this rank
             first_k_map[pR] = std::min(first_k_map[pR], k);
@@ -353,16 +353,23 @@ class SpMM25D {
       }
     }
 
-    k_cnt_.push_back(true); // we always want to release the last k
-
-    // find the maximum k for which we need to release the broadcast constraint
-    unsigned long first_k = 0;
-    for (auto k : first_k_map) {
-      if (k != std::numeric_limits<unsigned long>::max()) {
-        first_k = std::max(first_k, k);
-      }
+    k_cnt.push_back(1); // we always want to release the last k
+    assert(k_cnt.size() == k_cnt_.size());
+    // copy into atomic counters
+    std::size_t i = 0;
+    for (auto c : k_cnt) {
+      assert(i < k_cnt_.size());
+      k_cnt_[i++].store(c, std::memory_order_relaxed);
     }
-    constraint->release(first_k);
+
+    // release the first bcast(s)
+    auto pbcasts = parallel_bcasts_;
+    auto release_k = k_cnt.begin();
+    while (pbcasts-- > 0 && (k_cnt.end() != release_k))
+    {
+      release_k = std::find_if(release_k, k_cnt.end(), [](std::size_t c){ return c > 0; });
+    }
+    constraint->release(*release_k);
 
     TTGUNUSED(bcast_a_);
     TTGUNUSED(bcast_b_);
@@ -546,7 +553,7 @@ class SpMM25D {
                 const std::vector<std::vector<long>> &b_rows_of_col, const std::vector<int> &mTiles,
                 const std::vector<int> &nTiles, const Keymap3 &ijk_keymap,
                 std::shared_ptr<ttg::SequencedKeysConstraint<Key<2>>> constraint,
-                std::vector<bool>& k_cnt,
+                std::vector<std::atomic<std::size_t>>& k_cnt,
                 std::size_t parallel_bcasts)
         : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM25D::MultiplyAdd", {"a_ijk", "b_ijk", "c_ijk"},
                 {"c_ij", "c_ijk"}, ijk_keymap)
@@ -602,12 +609,13 @@ class SpMM25D {
       {
         std::size_t release_k = k;
         std::size_t bcasts_ahead = parallel_bcasts_;
-        while (release_k < k_cnt_.size()) {
-          ++release_k;
-          if (k_cnt_[release_k] && --bcasts_ahead)
-            break;
+        assert(k_cnt_.size() > release_k);
+        if (0 == k_cnt_[release_k].fetch_sub(1, std::memory_order_relaxed)-1) {
+          // this was the last gemm in this k, find the one to release
+          while (++release_k < k_cnt_.size() && (0 == k_cnt_[release_k].load(std::memory_order_relaxed) || --bcasts_ahead > 0))
+          { }
+          constraint->release(release_k);
         }
-        constraint->release(release_k);
       }
 
       // compute the contrib, pass the running total to the next flow, if needed
@@ -629,7 +637,7 @@ class SpMM25D {
    private:
     const std::vector<std::vector<long>> &a_cols_of_row_;
     const std::vector<std::vector<long>> &b_rows_of_col_;
-    std::vector<bool>& k_cnt_;
+    std::vector<std::atomic<std::size_t>>& k_cnt_;
     std::shared_ptr<ttg::SequencedKeysConstraint<Key<2>>> constraint;
     std::size_t parallel_bcasts_;
 
@@ -777,7 +785,7 @@ class SpMM25D {
   std::unique_ptr<LocalBcastB> local_bcast_b_;
   std::unique_ptr<MultiplyAdd> multiplyadd_;
   std::unique_ptr<ReduceC> reduce_c_;
-  std::vector<bool> k_cnt_;
+  std::vector<std::atomic<std::size_t>> k_cnt_;
   Keymap2 ij_keymap_;
   Keymap3 ijk_keymap_;
   long parallel_bcasts_;
