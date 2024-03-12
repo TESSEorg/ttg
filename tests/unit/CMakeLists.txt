@@ -14,6 +14,7 @@ set(ut_libs Catch2::Catch2)
 # we definitely have TARGET std::coroutine
 list(APPEND ut_src fibonacci-coro.cc)
 list(APPEND ut_src device_coro.cc)
+list(APPEND ut_src constraints.cc)
 if (TTG_HAVE_CUDA)
     list(APPEND ut_src cuda_kernel.cu)
 endif(TTG_HAVE_CUDA)
