@@ -76,6 +76,14 @@ int main(int argc, char **argv)
   int P = std::sqrt(world.size());
   int Q = (world.size() + P - 1)/P;
 
+  if ( (opt = getCmdOption(argv+1, argv + argc, "-P")) != nullptr) {
+    P = atoi(opt);
+  }
+  if ( (opt = getCmdOption(argv+1, argv + argc, "-Q")) != nullptr) {
+    Q = atoi(opt);
+  }
+
+
   if(check && (P>1 || Q>1)) {
     std::cerr << "Check is disabled for distributed runs at this time" << std::endl;
     check = false;
@@ -83,7 +91,9 @@ int main(int argc, char **argv)
 
   static_assert(ttg::has_split_metadata<MatrixTile<double>>::value);
 
-  std::cout << "Creating 2D block cyclic matrix with NB " << NB << " N " << N << " M " << M << " P " << P << std::endl;
+  if (world.rank() == 0) {
+    std::cout << "Creating 2D block cyclic matrix with NB " << NB << " N " << N << " M " << M << " P " << P << " Q " << Q << std::endl;
+  }
 
   parsec_matrix_sym_block_cyclic_t dcA;
   parsec_matrix_sym_block_cyclic_init(&dcA, parsec_matrix_type_t::PARSEC_MATRIX_DOUBLE,
@@ -126,7 +136,6 @@ int main(int argc, char **argv)
       auto connected = make_graph_executable(init_tt.get());
       assert(connected);
       TTGUNUSED(connected);
-      std::cout << "Graph is connected: " << connected << std::endl;
 
       if (world.rank() == 0) {
         std::cout << "==== begin dot ====\n";
