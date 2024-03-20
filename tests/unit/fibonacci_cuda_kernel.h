@@ -1,4 +1,4 @@
 #include "ttg/config.h"
 #include <cinttypes>
 
-void calculate_fibonacci(int64_t* result, std::size_t n);
+void next_value(int64_t* fn_and_fnm1);
