@@ -20,7 +20,7 @@ if (TTG_HAVE_CUDA)
     list(APPEND ut_src
             fibonacci_device.cc
             fibonacci_cuda_kernel.h
-            fibonacci_cuda_kernel.cc
+            fibonacci_cuda_kernel.cu
     )
 endif(TTG_HAVE_CUDA)
 list(APPEND ut_libs std::coroutine)
