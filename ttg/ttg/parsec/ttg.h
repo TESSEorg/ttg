@@ -339,7 +339,7 @@ namespace ttg_parsec {
       for(int i = 0; i < (int)parsec_nb_devices; i++) {
           parsec_device_module_t *device = parsec_mca_device_get(i);
           if( NULL == device ) continue;
-          tpool->devices_index_mask |= (1 << device->device_index);
+          tpool->devices_index_mask |= (1 << i);
       }
 
 #ifdef TTG_USE_USER_TERMDET
