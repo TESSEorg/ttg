@@ -21,8 +21,8 @@
 #endif
 
 #include <sys/time.h>
-#include <boost/graph/rmat_graph_generator.hpp>
 #if !defined(BLOCK_SPARSE_GEMM)
+#include <boost/graph/rmat_graph_generator.hpp>
 #include <boost/graph/directed_graph.hpp>
 #include <boost/random/linear_congruential.hpp>
 #include <unsupported/Eigen/SparseExtra>
@@ -1104,6 +1104,7 @@ static void initSpMatrixMarket(const std::function<int(const Key<2> &)> &keymap,
   K = (int)A.cols();
 }
 
+#ifdef HAVE_BOOST_GRAPH
 static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const char *opt, SpMatrix<> &A, SpMatrix<> &B,
                        SpMatrix<> &C, int &M, int &N, int &K, unsigned long seed) {
   int E;
@@ -1160,6 +1161,7 @@ static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const c
     std::cout << "#R-MAT: " << E << " nonzero elements, density: " << (double)nnz / (double)N / (double)N << std::endl;
   }
 }
+#endif // HAVE_BOOST_GRAPH
 
 static void initSpHardCoded(const std::function<int(const Key<2> &)> &keymap, SpMatrix<> &A, SpMatrix<> &B,
                             SpMatrix<> &C, int &m, int &n, int &k) {
@@ -1802,10 +1804,12 @@ int main(int argc, char **argv) {
         char *filename = getCmdOption(argv, argv + argc, "-mm");
         tiling_type = filename;
         initSpMatrixMarket(ij_keymap, filename, A, B, C, M, N, K);
+#ifdef HAVE_BOOST_GRAPH
       } else if (cmdOptionExists(argv, argv + argc, "-rmat")) {
         char *opt = getCmdOption(argv, argv + argc, "-rmat");
         tiling_type = "RandomSparseMatrix";
         initSpRmat(ij_keymap, opt, A, B, C, M, N, K, seed);
+#endif // HAVE_BOOST_GRAPH
       } else {
         tiling_type = "HardCodedSparseMatrix";
         initSpHardCoded(ij_keymap, A, B, C, M, N, K);

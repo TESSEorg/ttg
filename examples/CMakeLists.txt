@@ -7,10 +7,12 @@ add_ttg_executable(t9-streaming t9/t9_streaming.cc)
 # sparse matmul need Eigen ... it's always provided by TA
 if (TARGET tiledarray)
     # MADworld used for MADNESS serialization
-    add_ttg_executable(spmm spmm/spmm.cc LINK_LIBRARIES TiledArray_Eigen)
+    add_ttg_executable(spmm spmm/spmm.cc LINK_LIBRARIES TiledArray_Eigen $<TARGET_NAME_IF_EXISTS:Boost::graph>
+                                         COMPILE_DEFINITIONS $<$<TARGET_EXISTS:Boost::graph>:HAVE_BOOST_GRAPH=1>)
     # block-sparse needs BTAS ... it's always provided by TA
     # since only need to use matrices, limit BTAS_TARGET_MAX_INDEX_RANK to 2
-    add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2)
+    add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS
+                                          COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2)
 
     add_ttg_executable(testing_dpotrf potrf/testing_dpotrf.cc LINK_LIBRARIES tiledarray lapackpp)
     add_ttg_executable(testing_dtrtri potrf/testing_dtrtri.cc LINK_LIBRARIES tiledarray lapackpp)
@@ -37,7 +39,7 @@ if (TARGET tiledarray)
       if (TARGET roc::hipsolver)
         add_ttg_executable(testing_dpotrf_hip potrf/testing_dpotrf.cc
                            LINK_LIBRARIES lapackpp tiledarray roc::hipblas roc::hipsolver
-                           COMPILE_DEFINITIONS TTG_ENABLE_HIP=1;DEBUG_TILES_VALUES=1
+                           COMPILE_DEFINITIONS TTG_ENABLE_HIP=1 #;DEBUG_TILES_VALUES=1
                            RUNTIMES "parsec")
       endif(TARGET roc::hipsolver)
     elseif (TARGET MKL::MKL_DPCPP)
