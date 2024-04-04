@@ -740,6 +740,7 @@ namespace ttg_parsec {
     inline void transfer_ownership_impl(ttg_data_copy_t *copy, int device) {
       if constexpr(!std::is_const_v<std::tuple_element_t<I, typename TT::input_values_tuple_type>>) {
         copy->transfer_ownership(PARSEC_FLOW_ACCESS_RW, device);
+        copy->inc_current_version();
       }
     }
 
@@ -4266,8 +4267,6 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
         /* this copy won't be modified anymore so mark it as read-only */
         copy->reset_readers();
       }
-      /* the value was potentially changed, so increment version */
-      copy->inc_current_version();
     }
     /* We're coming from a writer so mark the data as modified.
      * That way we can force a pushout in prepare_send if we move to read-only tasks (needed by PaRSEC). */
