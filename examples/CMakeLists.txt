@@ -22,7 +22,7 @@ if (TARGET tiledarray)
     if (TARGET CUDA::cublas)
       add_ttg_executable(bspmm-cuda spmm/spmm_cuda.cc
                          LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS CUDA::cublas
-                         COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
+                         COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2;TTG_ENABLE_CUDA=1
                          RUNTIMES "parsec")
 
       if (TARGET CUDA::cusolver)
@@ -34,7 +34,7 @@ if (TARGET tiledarray)
     elseif (TARGET roc::hipblas)
       add_ttg_executable(bspmm-hip spmm/spmm_cuda.cc
                           LINK_LIBRARIES tiledarray TiledArray_Eigen roc::hipblas
-                          COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
+                          COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2;TTG_ENABLE_HIP=1
                           RUNTIMES "parsec")
       if (TARGET roc::hipsolver)
         add_ttg_executable(testing_dpotrf_hip potrf/testing_dpotrf.cc
@@ -45,7 +45,7 @@ if (TARGET tiledarray)
     elseif (TARGET MKL::MKL_DPCPP)
       add_ttg_executable(bspmm-lz spmm/spmm_cuda.cc
                           LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS MKL::MKL_DPCPP level_zero::ze_loader m
-                          COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2
+                          COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2;TTG_ENABLE_LEVEL_ZERO=1
                           RUNTIMES "parsec")
     endif()
 

@@ -15,7 +15,7 @@
 #define ES ttg::ExecutionSpace::CUDA
 #define TASKRET -> ttg::device::Task
 #include <cusolverDn.h>
-#elif defined(TTG_HAVE_HIP)
+#elif defined(TTG_ENABLE_HIP)
 #define ES ttg::ExecutionSpace::HIP
 #define TASKRET -> ttg::device::Task
 #include <hipsolver/hipsolver.h>
@@ -35,13 +35,13 @@ namespace potrf {
 #if defined(ENABLE_DEVICE_KERNEL)
   static int device_potrf_workspace_size(MatrixTile<double> &A) {
     int Lwork;
-    #if defined(TTG_HAVE_CUDA)
+    #if defined(TTG_ENABLE_CUDA)
       cusolverDnDpotrf_bufferSize(cusolver_handle(),
                                   CUBLAS_FILL_MODE_LOWER, A.cols(),
                                   nullptr, A.lda(),
                                   &Lwork);
       return Lwork;
-    #elif defined(TTG_HAVE_HIPBLAS)
+    #elif defined(TTG_ENABLE_HIP)
       hipsolverDnDpotrf_bufferSize(hipsolver_handle(),
                                    HIPSOLVER_FILL_MODE_LOWER, A.cols(),
                                    nullptr, A.lda(),
@@ -55,7 +55,7 @@ namespace potrf {
   static void device_potrf(MatrixTile<double> &A, double *workspace, int Lwork, int *devInfo) {
     int device = ttg::device::current_device();
     assert(device >= 0);
-#if defined(TTG_HAVE_CUDA)
+#if defined(TTG_ENABLE_CUDA)
     //std::cout << "POTRF A " << A.buffer().device_ptr_on(device) << " device " << device << " cols " << A.cols() << " lda " << A.lda() << " Lwork " << Lwork << " WS " << workspace << " devInfo " << devInfo << std::endl;
     auto handle = cusolver_handle();
     //std::cout << "POTRF handle  " << handle << " device " << device << " stream " << ttg::device::current_stream() << std::endl;
@@ -64,7 +64,7 @@ namespace potrf {
                       A.buffer().current_device_ptr(), A.lda(),
                       workspace, Lwork,
                       devInfo);
-  #elif defined(TTG_HAVE_HIPBLAS)
+  #elif defined(TTG_ENABLE_HIP)
     hipsolverDpotrf(hipsolver_handle(),
                       HIPSOLVER_FILL_MODE_LOWER, A.cols(),
                       A.buffer().current_device_ptr(), A.lda(),
@@ -77,11 +77,11 @@ namespace potrf {
     auto size = A.size();
     auto buffer = A.buffer().current_device_ptr();
     //std::cout << "device_norm ptr " << buffer << " device " << ttg::device::current_device() << std::endl;
-#if defined(TTG_HAVE_CUDA)
+#if defined(TTG_ENABLE_CUDA)
     auto handle = cublas_handle();
     //double n = 1.0;
     cublasDnrm2(handle, size, buffer, 1, norm);
-  #elif defined(TTG_HAVE_HIPBLAS)
+  #elif defined(TTG_ENABLE_HIP)
     hipblasDnrm2(hipblas_handle(), size, buffer, 1, norm);
   #endif
   }
@@ -288,14 +288,14 @@ namespace potrf {
 
       //std::cout << "TRSM [" << K << ", " << M << "] on " << device << std::endl;
 
-#if defined(TTG_HAVE_CUDA)
+#if defined(TTG_ENABLE_CUDA)
       cublasDtrsm(cublas_handle(),
                   CUBLAS_SIDE_RIGHT, CUBLAS_FILL_MODE_LOWER,
                   CUBLAS_OP_T, CUBLAS_DIAG_NON_UNIT,
                   mb, nb, &alpha,
                   tile_kk.buffer().current_device_ptr(), tile_kk.lda(),
                   tile_mk.buffer().current_device_ptr(), tile_mk.lda());
-#elif defined(TTG_HAVE_HIPBLAS)
+#elif defined(TTG_ENABLE_HIP)
       hipblasDtrsm(hipblas_handle(),
                    HIPBLAS_SIDE_RIGHT, HIPBLAS_FILL_MODE_LOWER,
                    HIPBLAS_OP_T, HIPBLAS_DIAG_NON_UNIT,
@@ -418,14 +418,14 @@ namespace potrf {
 
       //std::cout << "SYRK [" << K << ", " << M << "] on " << device << std::endl;
 
-#if defined(TTG_HAVE_CUDA)
+#if defined(TTG_ENABLE_CUDA)
       cublasDsyrk(cublas_handle(),
                   CUBLAS_FILL_MODE_LOWER,
                   CUBLAS_OP_N,
                   mb, nb, &alpha,
                   tile_mk.buffer().current_device_ptr(), tile_mk.lda(), &beta,
                   tile_kk.buffer().current_device_ptr(), tile_kk.lda());
-#elif defined(TTG_HAVE_HIPBLAS)
+#elif defined(TTG_ENABLE_HIP)
       hipblasDsyrk(hipblas_handle(),
                    HIPBLAS_FILL_MODE_LOWER,
                    HIPBLAS_OP_N,
@@ -543,7 +543,7 @@ namespace potrf {
       double alpha = -1.0;
       double beta  =  1.0;
 
-#if defined(TTG_HAVE_CUDA)
+#if defined(TTG_ENABLE_CUDA)
       cublasDgemm(cublas_handle(),
                   CUBLAS_OP_N, CUBLAS_OP_T,
                   tile_mk.rows(), tile_nk.rows(),
@@ -551,7 +551,7 @@ namespace potrf {
                   tile_mk.buffer().current_device_ptr(), tile_mk.lda(),
                   tile_nk.buffer().current_device_ptr(), tile_nk.lda(), &beta,
                   tile_mn.buffer().current_device_ptr(), tile_mn.lda());
-#elif defined(TTG_HAVE_HIPBLAS)
+#elif defined(TTG_ENABLE_HIP)
       hipblasDgemm(hipblas_handle(),
                    HIPBLAS_OP_N, HIPBLAS_OP_T,
                    tile_mk.rows(), tile_nk.rows(),
