@@ -1454,7 +1454,6 @@ namespace ttg_parsec {
     static parsec_hook_return_t device_static_op(parsec_task_t* parsec_task) {
       static_assert(derived_has_device_op());
 
-      int dev_index;
       double ratio = 1.0;
 
       task_t *task = (task_t*)parsec_task;
@@ -1469,7 +1468,7 @@ namespace ttg_parsec {
       PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_list_item_t);
       gpu_task->ec = parsec_task;
       gpu_task->task_type = 0; // user task
-      gpu_task->load = 1;    // TODO: can we do better?
+      //gpu_task->load = 1;    // TODO: can we do better?
       gpu_task->last_data_check_epoch = -1; // used internally
       gpu_task->pushout = 0;
       gpu_task->submit = &TT::device_static_submit<Space>;
@@ -1513,20 +1512,11 @@ namespace ttg_parsec {
 
       /* TODO: is this the right place to set the mask? */
       task->parsec_task.chore_mask = PARSEC_DEV_ALL;
-      /* get a device and come back if we need another one */
-      int64_t task_load = 1;
-      dev_index = parsec_get_best_device(parsec_task, &task_load);
 
       /* swap back the original task class */
       task->parsec_task.task_class = tmp;
 
-      gpu_task->load = task_load;
-      assert(dev_index >= 0);
-      if (!parsec_mca_device_is_gpu(dev_index)) {
-          return PARSEC_HOOK_RETURN_NEXT; /* Fall back */
-      }
-
-      parsec_device_gpu_module_t *device = (parsec_device_gpu_module_t*)parsec_mca_device_get(dev_index);
+      parsec_device_gpu_module_t *device = (parsec_device_gpu_module_t*)task->parsec_task.selected_device;
       assert(NULL != device);
 
       task->dev_ptr->device = device;
@@ -3745,7 +3735,7 @@ ttg::abort();  // should not happen
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
-      } else if (derived_has_hip_op()) {
+      } else if constexpr (derived_has_hip_op()) {
         self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_HIP;
         ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
@@ -3754,7 +3744,8 @@ ttg::abort();  // should not happen
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
-      } else if (derived_has_level_zero_op()) {
+#if defined(PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT)
+      } else if constexpr (derived_has_level_zero_op()) {
         self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_LEVEL_ZERO;
         ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
@@ -3763,6 +3754,7 @@ ttg::abort();  // should not happen
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
+#endif // PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT
       } else {
         self.incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CPU;
