@@ -23,6 +23,7 @@ if (TTG_PARSEC_USE_BOOST_SERIALIZATION)
     list(APPEND optional_components
             serialization
             iostreams
+            graph
     )
 endif()
 
