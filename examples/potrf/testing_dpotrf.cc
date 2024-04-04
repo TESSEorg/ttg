@@ -65,7 +65,7 @@ int main(int argc, char **argv)
   ttg::initialize(1, argv, nthreads);
 
   /* set up TA to get the allocator */
-  allocator_init();
+  allocator_init(argc, argv);
 
   auto world = ttg::default_execution_context();
   if(nullptr != prof_filename) {

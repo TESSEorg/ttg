@@ -14,7 +14,7 @@
 #if defined(TILEDARRAY_HAS_DEVICE)
 #define ALLOCATOR TiledArray::device_pinned_allocator<T>
 
-inline void allocator_init() {
+inline void allocator_init(int argc, char **argv) {
   // initialize MADNESS so that TA allocators can be created
 #if defined(TTG_PARSEC_IMPORTED)
   madness::ParsecRuntime::initialize_with_existing_context(ttg::default_execution_context().impl().context());
@@ -28,7 +28,7 @@ inline void allocator_fini() {
 #else  // TILEDARRAY_HAS_DEVICE
 #define ALLOCATOR std::allocator<T>
 
-inline void allocator_init() { }
+inline void allocator_init(int argc, char **argv) { }
 
 inline void allocator_fini() { }
 
