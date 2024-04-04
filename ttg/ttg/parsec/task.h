@@ -150,6 +150,9 @@ namespace ttg_parsec {
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
         parsec_task.priority = 0;
+
+	// TODO: can we avoid this?
+	for (int i = 0; i < MAX_PARAM_COUNT; ++i) { this->parsec_task.data[i].data_in = nullptr; }
       }
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
@@ -168,6 +171,9 @@ namespace ttg_parsec {
         parsec_task.taskpool = taskpool;
         parsec_task.priority = priority;
         parsec_task.chore_mask = 1<<0;
+
+	// TODO: can we avoid this?
+	for (int i = 0; i < MAX_PARAM_COUNT; ++i) { this->parsec_task.data[i].data_in = nullptr; }
       }
 
     public:
