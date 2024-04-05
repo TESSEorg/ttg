@@ -147,13 +147,14 @@ namespace ttg_parsec {
           : data_count(data_count)
           , copies(copies)
           , defer_writer(defer_writer) {
+        PARSEC_OBJ_CONSTRUCT(&parsec_task, parsec_task_t);
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
         parsec_task.priority = 0;
 
-	// TODO: can we avoid this?
-	for (int i = 0; i < MAX_PARAM_COUNT; ++i) { this->parsec_task.data[i].data_in = nullptr; }
+        // TODO: can we avoid this?
+        for (int i = 0; i < MAX_PARAM_COUNT; ++i) { this->parsec_task.data[i].data_in = nullptr; }
       }
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
@@ -173,8 +174,8 @@ namespace ttg_parsec {
         parsec_task.priority = priority;
         parsec_task.chore_mask = 1<<0;
 
-	// TODO: can we avoid this?
-	for (int i = 0; i < MAX_PARAM_COUNT; ++i) { this->parsec_task.data[i].data_in = nullptr; }
+        // TODO: can we avoid this?
+        for (int i = 0; i < MAX_PARAM_COUNT; ++i) { this->parsec_task.data[i].data_in = nullptr; }
       }
 
     public:
