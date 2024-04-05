@@ -317,16 +317,11 @@ namespace ttg {
       }
     }
 
-    template <typename rangeT, typename Value>
+    template <typename Value>
     void prepare_send(Value &&value) {
       const Value &v = value;
       if (prepare_send_callback) {
-        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
           prepare_send_callback(v);
-        } else {
-          /* got something we cannot iterate over (single element?) so put one element in the span */
-          prepare_send_callback(v);
-        }
       }
     }
   };
@@ -579,7 +574,7 @@ namespace ttg {
       }
     }
 
-    template <typename rangeT, typename Key = keyT, typename Value = valueT>
+    template <typename Key = keyT, typename Value = valueT>
     std::enable_if_t<meta::is_none_void_v<Key> && !meta::is_void_v<valueT>, void>
     prepare_send(const Value &value) {
       for (auto &&successor : this->successors()) {
