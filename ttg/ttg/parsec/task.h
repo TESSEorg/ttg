@@ -15,6 +15,7 @@ namespace ttg_parsec {
       parsec_flow_t* flows = nullptr;
       parsec_gpu_exec_stream_t* stream = nullptr;
       parsec_device_gpu_module_t* device = nullptr;
+      parsec_task_class_t task_class; // copy of the taskclass
     };
 
     template<bool SupportDevice>
@@ -237,6 +238,15 @@ namespace ttg_parsec {
           return TT::template static_op<Space>(&this->parsec_task);
         } else {
           return TT::template device_static_op<Space>(&this->parsec_task);
+        }
+      }
+
+      template<ttg::ExecutionSpace Space>
+      parsec_hook_return_t invoke_evaluate() {
+        if constexpr (Space == ttg::ExecutionSpace::Host) {
+          return PARSEC_HOOK_RETURN_DONE;
+        } else {
+          return TT::template device_static_evaluate<Space>(&this->parsec_task);
         }
       }
 

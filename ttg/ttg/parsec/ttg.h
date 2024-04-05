@@ -766,7 +766,7 @@ namespace ttg_parsec {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_op<ttg::ExecutionSpace::CUDA>();
       } else {
-        throw std::runtime_error("PaRSEC CUDA hook invoked on a TT that does not support CUDA operations!");
+        return PARSEC_HOOK_RETURN_NEXT;
       }
     }
 
@@ -776,7 +776,7 @@ namespace ttg_parsec {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_op<ttg::ExecutionSpace::HIP>();
       } else {
-        throw std::runtime_error("PaRSEC HIP hook invoked on a TT that does not support HIP operations!");
+        return PARSEC_HOOK_RETURN_NEXT;
       }
     }
 
@@ -786,9 +786,41 @@ namespace ttg_parsec {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_op<ttg::ExecutionSpace::L0>();
       } else {
-        throw std::runtime_error("PaRSEC HIP hook invoked on a TT that does not support HIP operations!");
+        return PARSEC_HOOK_RETURN_NEXT;
       }
     }
+
+
+    template<typename TT>
+    inline parsec_hook_return_t evaluate_cuda(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+      if constexpr(TT::derived_has_cuda_op()) {
+        parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
+        return me->template invoke_evaluate<ttg::ExecutionSpace::CUDA>();
+      } else {
+        return PARSEC_HOOK_RETURN_NEXT;
+      }
+    }
+
+    template<typename TT>
+    inline parsec_hook_return_t evaluate_hip(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+      if constexpr(TT::derived_has_hip_op()) {
+        parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
+        return me->template invoke_evaluate<ttg::ExecutionSpace::HIP>();
+      } else {
+        return PARSEC_HOOK_RETURN_NEXT;
+      }
+    }
+
+    template<typename TT>
+    inline parsec_hook_return_t evaluate_level_zero(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+      if constexpr(TT::derived_has_level_zero_op()) {
+        parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
+        return me->template invoke_evaluate<ttg::ExecutionSpace::L0>();
+      } else {
+        return PARSEC_HOOK_RETURN_NEXT;
+      }
+    }
+
 
     template <typename KeyT, typename ActivationCallbackT>
     class rma_delayed_activate {
@@ -1451,35 +1483,69 @@ namespace ttg_parsec {
     }
 
     template <ttg::ExecutionSpace Space>
+    static parsec_hook_return_t device_static_evaluate(parsec_task_t* parsec_task) {
+
+      task_t *task = (task_t*)parsec_task;
+      if (task->dev_ptr->gpu_task == nullptr) {
+
+        //std::cout << "device_static_op: task " << parsec_task << std::endl;
+
+        /* set up a device task */
+        parsec_gpu_task_t *gpu_task;
+        /* PaRSEC wants to free the gpu_task, because F***K ownerships */
+        gpu_task = static_cast<parsec_gpu_task_t*>(std::calloc(1, sizeof(*gpu_task)));
+        PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_list_item_t);
+        gpu_task->ec = parsec_task;
+        gpu_task->task_type = 0; // user task
+        //gpu_task->load = 1;    // TODO: can we do better?
+        gpu_task->last_data_check_epoch = -1; // used internally
+        gpu_task->pushout = 0;
+        gpu_task->submit = &TT::device_static_submit<Space>;
+
+        /* set the gpu_task so it's available in register_device_memory */
+        task->dev_ptr->gpu_task = gpu_task;
+
+        /* TODO: is this the right place to set the mask? */
+        task->parsec_task.chore_mask = PARSEC_DEV_ALL;
+
+        /* copy over the task class, because that's what we need */
+        task->dev_ptr->task_class = *task->parsec_task.task_class;
+
+        // first invocation of the coroutine to get the coroutine handle
+        static_op<Space>(parsec_task);
+
+        /* when we come back here, the flows in gpu_task are set (see register_device_memory) */
+
+        parsec_task_class_t& tc = *task->dev_ptr->task_class;
+
+        // input flows are set up during register_device_memory as part of the first invocation above
+        for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
+          tc.in[i]  = gpu_task->flow[i];
+          tc.out[i] = gpu_task->flow[i];
+        }
+        tc.nb_flows = MAX_PARAM_COUNT;
+
+        /* set the new task class that contains the flows */
+        task->parsec_task.task_class = task->dev_ptr->task_class;
+
+        /* select this one */
+        return PARSEC_HOOK_RETURN_DONE;
+      }
+
+      std::cerr << "EVALUATE called on task with assigned GPU task!" << std::endl;
+
+      /* not sure if this might happen*/
+      return PARSEC_HOOK_RETURN_ERROR;
+
+    }
+
+    template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t device_static_op(parsec_task_t* parsec_task) {
       static_assert(derived_has_device_op());
 
-      double ratio = 1.0;
+      /* when we come in here we have a device assigned and are ready to go */
 
       task_t *task = (task_t*)parsec_task;
-      parsec_execution_stream_s *es = task->tt->world.impl().execution_stream();
-
-      //std::cout << "device_static_op: task " << parsec_task << std::endl;
-
-      /* set up a device task */
-      parsec_gpu_task_t *gpu_task;
-      /* PaRSEC wants to free the gpu_task, because F***K ownerships */
-      gpu_task = static_cast<parsec_gpu_task_t*>(std::calloc(1, sizeof(*gpu_task)));
-      PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_list_item_t);
-      gpu_task->ec = parsec_task;
-      gpu_task->task_type = 0; // user task
-      //gpu_task->load = 1;    // TODO: can we do better?
-      gpu_task->last_data_check_epoch = -1; // used internally
-      gpu_task->pushout = 0;
-      gpu_task->submit = &TT::device_static_submit<Space>;
-
-      /* set the gpu_task so it's available in register_device_memory */
-      task->dev_ptr->gpu_task = gpu_task;
-
-      // first invocation of the coroutine to get the coroutine handle
-      static_op<Space>(parsec_task);
-
-      /* when we come back here, the flows in gpu_task are set (see register_device_memory) */
 
       if (nullptr == task->suspended_task_address) {
         /* short-cut in case the task returned immediately */
@@ -1495,31 +1561,11 @@ namespace ttg_parsec {
       /* for now make sure we're waiting for transfers and the coro hasn't skipped this step */
       assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_TRANSFER);
 
-      /* set up a temporary task-class to correctly specify the flows */
-      parsec_task_class_t tc = *task->parsec_task.task_class;
-
-      tc.name = task->parsec_task.task_class->name;
-      // input flows are set up during register_device_memory as part of the first invocation above
-      for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
-        tc.in[i]  = gpu_task->flow[i];
-        tc.out[i] = gpu_task->flow[i];
-      }
-      tc.nb_flows = MAX_PARAM_COUNT;
-
-      /* swap in the new task class */
-      const parsec_task_class_t* tmp = task->parsec_task.task_class;
-      *const_cast<parsec_task_class_t**>(&task->parsec_task.task_class) = &tc;
-
-      /* TODO: is this the right place to set the mask? */
-      task->parsec_task.chore_mask = PARSEC_DEV_ALL;
-
-      /* swap back the original task class */
-      task->parsec_task.task_class = tmp;
-
       parsec_device_gpu_module_t *device = (parsec_device_gpu_module_t*)task->parsec_task.selected_device;
       assert(NULL != device);
 
       task->dev_ptr->device = device;
+      parsec_execution_stream_s *es = task->tt->world.impl().execution_stream();
 
       switch(device->super.type) {
 
@@ -3730,7 +3776,7 @@ ttg::abort();  // should not happen
       if constexpr (derived_has_cuda_op()) {
         self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CUDA;
-        ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
+        ((__parsec_chore_t *)self.incarnations)[0].evaluate = &detail::evaluate_cuda<TT>;
         ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_cuda<TT>;
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
@@ -3738,7 +3784,7 @@ ttg::abort();  // should not happen
       } else if constexpr (derived_has_hip_op()) {
         self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_HIP;
-        ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
+        ((__parsec_chore_t *)self.incarnations)[0].evaluate = &detail::evaluate_hip<TT>;
         ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_hip<TT>;
 
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
@@ -3748,7 +3794,7 @@ ttg::abort();  // should not happen
       } else if constexpr (derived_has_level_zero_op()) {
         self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_LEVEL_ZERO;
-        ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
+        ((__parsec_chore_t *)self.incarnations)[0].evaluate = &detail::evaluate_level_zero<TT>;
         ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_level_zero<TT>;
 
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
