@@ -304,7 +304,7 @@ namespace ttg {
 
     template <typename rangeT, typename Value>
     void prepare_send(const rangeT &keylist, Value &&value) {
-      const Value &v = value;
+      const std::remove_reference_t<Value> &v = value;
       if (prepare_send_callback) {
         if constexpr (ttg::meta::is_iterable_v<rangeT>) {
           prepare_send_callback(ttg::span<const keyT>(&(*std::begin(keylist)),
@@ -319,7 +319,7 @@ namespace ttg {
 
     template <typename Value>
     void prepare_send(Value &&value) {
-      const Value &v = value;
+      const std::remove_reference_t<Value> &v = value;
       if (prepare_send_callback) {
           prepare_send_callback(v);
       }
@@ -575,7 +575,7 @@ namespace ttg {
     }
 
     template <typename Key = keyT, typename Value = valueT>
-    std::enable_if_t<meta::is_none_void_v<Key> && !meta::is_void_v<valueT>, void>
+    std::enable_if_t<meta::is_void_v<Key> && !meta::is_void_v<valueT>, void>
     prepare_send(const Value &value) {
       for (auto &&successor : this->successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
