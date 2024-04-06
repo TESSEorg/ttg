@@ -792,7 +792,7 @@ namespace ttg_parsec {
 
 
     template<typename TT>
-    inline parsec_hook_return_t evaluate_cuda(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+    inline parsec_hook_return_t evaluate_cuda(const parsec_task_t *parsec_task) {
       if constexpr(TT::derived_has_cuda_op()) {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_evaluate<ttg::ExecutionSpace::CUDA>();
@@ -802,7 +802,7 @@ namespace ttg_parsec {
     }
 
     template<typename TT>
-    inline parsec_hook_return_t evaluate_hip(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+    inline parsec_hook_return_t evaluate_hip(const parsec_task_t *parsec_task) {
       if constexpr(TT::derived_has_hip_op()) {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_evaluate<ttg::ExecutionSpace::HIP>();
@@ -812,7 +812,7 @@ namespace ttg_parsec {
     }
 
     template<typename TT>
-    inline parsec_hook_return_t evaluate_level_zero(struct parsec_execution_stream_s *es, parsec_task_t *parsec_task) {
+    inline parsec_hook_return_t evaluate_level_zero(const parsec_task_t *parsec_task) {
       if constexpr(TT::derived_has_level_zero_op()) {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_evaluate<ttg::ExecutionSpace::L0>();
@@ -1516,7 +1516,7 @@ namespace ttg_parsec {
 
         /* when we come back here, the flows in gpu_task are set (see register_device_memory) */
 
-        parsec_task_class_t& tc = *task->dev_ptr->task_class;
+        parsec_task_class_t& tc = task->dev_ptr->task_class;
 
         // input flows are set up during register_device_memory as part of the first invocation above
         for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
@@ -1526,7 +1526,7 @@ namespace ttg_parsec {
         tc.nb_flows = MAX_PARAM_COUNT;
 
         /* set the new task class that contains the flows */
-        task->parsec_task.task_class = task->dev_ptr->task_class;
+        task->parsec_task.task_class = &task->dev_ptr->task_class;
 
         /* select this one */
         return PARSEC_HOOK_RETURN_DONE;
@@ -1565,6 +1565,7 @@ namespace ttg_parsec {
       assert(NULL != device);
 
       task->dev_ptr->device = device;
+      parsec_gpu_task_t *gpu_task = task->dev_ptr->gpu_task;
       parsec_execution_stream_s *es = task->tt->world.impl().execution_stream();
 
       switch(device->super.type) {
