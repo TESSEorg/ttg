@@ -13,10 +13,10 @@
 const int64_t F_n_max = 1000;
 /// N.B. contains values of F_n and F_{n-1}
 struct Fn : public ttg::TTValue<Fn> {
-  int64_t F[2] = {1, 0};  // F[0] = F_n, F[1] = F_{n-1}
+  std::unique_ptr<int64_t[]> F;  // F[0] = F_n, F[1] = F_{n-1}
   ttg::Buffer<int64_t> b;
 
-  Fn() : b(&F[0], 2) {}
+  Fn() : F(std::make_unique<int64_t[]>(2)), b(F.get(), 2) { F[0] = 1; F[1] = 0; }
 
   Fn(const Fn&) = delete;
   Fn(Fn&& other) = default;
@@ -57,7 +57,7 @@ auto make_ttg_fib_lt(const int64_t F_n_max = 1000) {
       },
       ttg::edges(f2f), ttg::edges(f2f, f2p), "fib");
   auto print = ttg::make_tt(
-      [=](Fn f_n) {
+      [=](Fn&& f_n) {
         std::cout << "The largest Fibonacci number smaller than " << F_n_max << " is " << f_n.F[1] << std::endl;
       },
       ttg::edges(f2p), ttg::edges(), "print");
