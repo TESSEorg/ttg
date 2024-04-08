@@ -16,12 +16,6 @@ list(APPEND ut_src fibonacci-coro.cc)
 list(APPEND ut_src device_coro.cc)
 if (TTG_HAVE_CUDA)
     list(APPEND ut_src cuda_kernel.cu)
-    # fibonacci device example
-    list(APPEND ut_src
-            fibonacci_device.cc
-            fibonacci_cuda_kernel.h
-            fibonacci_cuda_kernel.cu
-    )
 endif(TTG_HAVE_CUDA)
 list(APPEND ut_libs std::coroutine)
 
@@ -35,6 +29,14 @@ add_ttg_executable(serialization serialization.cc unit_main.cpp
 # Boost serialization test: checks low-level codegen
 add_ttg_executable(serialization_boost serialization_boost.cc
         LINK_LIBRARIES ttg-serialization-boost RUNTIMES "parsec")
+
+# Fib device test
+if (TTG_HAVE_CUDA)
+       add_ttg_executable(fibonacci_device fibonacci_device.cc
+            fibonacci_cuda_kernel.h
+            fibonacci_cuda_kernel.cu
+        LINK_LIBRARIES std::coroutine RUNTIMES "parsec")
+endif()
 
 # TODO: convert into unit test
 #if (TARGET MADworld)

@@ -32,12 +32,15 @@ struct Fn : public ttg::TTValue<Fn> {
     ttg::ttg_abort();
   }
 };
-extern ttg::Edge<int64_t, Fn> f2f;
-extern ttg::Edge<void, Fn> f2p;
-auto create_fib_task() {
-  return ttg::make_tt<ES>(
+
+auto make_ttg_fib_lt(const int64_t F_n_max = 1000) {
+  ttg::Edge<int64_t, Fn> f2f;
+  ttg::Edge<void, Fn> f2p;
+
+  auto fib = ttg::make_tt<ES>(
       [=](int64_t n, Fn&& f_n) -> ttg::device::Task {
         assert(n > 0);
+        ttg::trace("in fib: n=", n, " F_n=", f_n.F[0]);
 
         co_await ttg::device::select(f_n.b);
 
@@ -54,18 +57,28 @@ auto create_fib_task() {
       },
       ttg::edges(f2f), ttg::edges(f2f, f2p), "fib");
   auto print = ttg::make_tt(
-      [](Fn f_n) {
+      [=](Fn f_n) {
         std::cout << "The largest Fibonacci number smaller than " << F_n_max << " is " << f_n.F[1] << std::endl;
       },
       ttg::edges(f2p), ttg::edges(), "print");
+
+  auto ins = std::make_tuple(fib->template in<0>());
+  std::vector<std::unique_ptr<::ttg::TTBase>> ops;
+  ops.emplace_back(std::move(fib));
+  ops.emplace_back(std::move(print));
+  return make_ttg(std::move(ops), ins, std::make_tuple(), "Fib_n < N");
 }
 
 int main(int argc, char* argv[]) {
   ttg::initialize(argc, argv, -1);
-  auto fib = create_fib_task();
+  ttg::trace_on();
+  int64_t N = 1000;
+  if (argc > 1) N = std::atol(argv[1]);
+  auto fib = make_ttg_fib_lt(N);  // computes largest F_n < N
 
   ttg::make_graph_executable(fib.get());
-  if (ttg::default_execution_context().rank() == 0) fib->invoke(1, Fn{});
+  if (ttg::default_execution_context().rank() == 0)
+    fib->template in<0>()->send(1, Fn{});;
 
   ttg::execute(ttg::ttg_default_execution_context());
   ttg::fence(ttg::ttg_default_execution_context());
