@@ -225,6 +225,107 @@ separating the downward flow of control (task creation,
 <img src="https://render.githubusercontent.com/render/math?math=F_{n} \to F_{n-1},F_{n-2}">)
 from the upward flow of data (task evaluation,
 <img src="https://render.githubusercontent.com/render/math?math=F_{n-1},F_{n-2} \to F_{n}">).
+## Example : Computing the Largest Fibonacci Number Smaller Than a Given Threshold on the device(GPU)
+
+This example demonstrates how to efficiently compute the largest Fibonacci number smaller than a specified threshold, utilizing GPU acceleration. The Fibonacci sequence is defined by the recurrence relation F(N) = F(N-1) + F(N-2), with F(0) = 0, and F(1) = 1
+
+
+###  CUDA and GPU Acceleration
+In this example, CUDA is used to accelerate the computation of Fibonacci numbers by leveraging the parallel processing capabilities of GPUs. This is achieved through the use of a specific CUDA kernel defined in fibonacci_cuda_kernel.h whose cuda based implementation is described below, which contains the logic for computing the next Fibonacci number in the sequence.
+
+```cpp
+ #include "fibonacci_cuda_kernel.h"
+#ifdef TTG_HAVE_CUDA
+    __global__ void cu_next_value(int64_t* fn_and_fnm1) {
+      int64_t fnp1 = fn_and_fnm1[0] + fn_and_fnm1[1];
+      fn_and_fnm1[1] = fn_and_fnm1[0];
+      fn_and_fnm1[0] = fnp1;
+    }
+    void next_value(int64_t* fn_and_fnm1) {
+      cu_next_value<<<1, 1>>>(fn_and_fnm1);
+    }
+#endif // TTG_HAVE_CUDA
+```
+
+### Struct Fn and Serialization
+
+```cpp
+struct Fn : public ttg::TTValue<Fn> {
+  std::unique_ptr<int64_t[]> F;  // F[0] = F_n, F[1] = F_{n-1}
+  ttg::Buffer<int64_t> b;
+  Fn() : F(std::make_unique<int64_t[]>(2)), b(F.get(), 2) { F[0] = 1; F[1] = 0; }
+  Fn(const Fn&) = delete;
+  Fn(Fn&& other) = default;
+  Fn& operator=(const Fn& other) = delete;
+  Fn& operator=(Fn&& other) = default;
+  template <typename Archive>
+  void serialize(Archive& ar) {
+    ttg::ttg_abort();
+  }
+  template <typename Archive>
+  void serialize(Archive& ar, const unsigned int) {
+    ttg::ttg_abort();
+  }
+};
+```
+The Fn struct is integral to our TTG-powered, GPU-accelerated Fibonacci sequence computation, serving dual roles in task management and efficient GPU data handling. It inherits from ttg::TTValue<Fn> for seamless integration with TTG tasks and employs ttg::Buffer<int64_t> for optimal data transfer and access in GPU environments. With smart management of resources — from its constructor initializing Fibonacci number storage and preparing for GPU data transfers, to explicitly deleted copy operations ensuring unique resource ownership and default move semantics for task-based data flow — Fn is finely tuned for high-performance parallel computing. Its serialization methods, currently aborting operations, hint at future extensions for distributed or GPU-accelerated contexts, underscoring the struct's pivotal role in efficient, scalable Fibonacci calculations.
+
+### Task Graph Construction and Execution
+
+The task graph consists of two types of tasks: fib tasks that compute Fibonacci numbers and a print task that outputs the final result. Tasks are connected by edges, which represent the data flow between them. The task graph is explicitly constructed and made executable, then the computation is initiated by sending the first task into the graph.
+
+#### GPU Memory Management and Kernel Execution
+The Fn struct also contains a ttg::Buffer<int64_t> b, which is used for GPU memory management. This buffer manages the memory where the Fibonacci numbers are stored and provides mechanisms to transfer data between the host and the GPU. The next_value function is called to execute the CUDA kernel, which computes the next Fibonacci number and updates the values in the GPU memory. This operation is performed asynchronously, allowing the CPU to continue executing other tasks while the GPU is working
+
+```cpp
+auto make_ttg_fib_lt(const int64_t F_n_max = 1000) {
+  ttg::Edge<int64_t, Fn> f2f;
+  ttg::Edge<void, Fn> f2p;
+
+  auto fib = ttg::make_tt<ES>(
+      [=](int64_t n, Fn&& f_n) -> ttg::device::Task {
+        assert(n > 0);
+        ttg::trace("in fib: n=", n, " F_n=", f_n.F[0]);
+
+        co_await ttg::device::select(f_n.b);
+
+        next_value(f_n.b.current_device_ptr());
+
+        // wait for the task to complete and the values to be brought back to the host
+        co_await ttg::device::wait(f_n.b);
+
+        if (f_n.F[0] < F_n_max) {
+          co_await ttg::device::forward(ttg::device::send<0>(n + 1, std::move(f_n)));
+        } else {
+          co_await ttg::device::forward(ttg::device::sendv<1>(std::move(f_n)));
+        }
+      },
+      ttg::edges(f2f), ttg::edges(f2f, f2p), "fib");
+  auto print = ttg::make_tt(
+      [=](Fn&& f_n) {
+        std::cout << "The largest Fibonacci number smaller than " << F_n_max << " is " << f_n.F[1] << std::endl;
+      },
+      ttg::edges(f2p), ttg::edges(), "print");
+
+  auto ins = std::make_tuple(fib->template in<0>());
+  std::vector<std::unique_ptr<::ttg::TTBase>> ops;
+  ops.emplace_back(std::move(fib));
+  ops.emplace_back(std::move(print));
+  return make_ttg(std::move(ops), ins, std::make_tuple(), "Fib_n < N");
+}
+```
+#### Asynchronous Task Execution with Co-Routines
+In the make_ttg_fib_lt function, co-routines are used to await the completion of GPU tasks and the transfer of computed values back to the host. This approach enables efficient overlap of computation and communication, reducing the overall execution time.
+
+
+## Comparing _nth Fibonacci_ CPU vs GPU-version
+
+| Concept   | CPU version             | GPU version               |
+|--------------------------------------|--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Execution Environment | Utilizing the TTG library to manage task parallelism within a possibly distributed computing environment but without explicit hardware acceleration             |  It uses the TTG library in conjunction with CUDA to offload computationally intensive tasks to the GPU, thereby achieving significant performance gains through parallel execution|
+| Computational Model  | It relies on the CPU for all computations and data management            |  Computations are offloaded to the GPU, allowing for the parallel computation of Fibonacci numbers, which is particularly beneficial for large sequences due to the GPU's ability to handle many threads simultaneously  |
+| Data Management  | Manages data flow between tasks using TTG edges, with each task operating on standard CPU memory   |Incorporates complex data management strategies to handle memory transfers between host (CPU) and device (GPU) memory spaces |
+| Software Requirements and Portability  | Relies on the TTG library and a standard C++ compiler | Requires a CUDA-enabled environment and a compatible NVIDIA GPU, in addition to the TTG library  |
 
 ## Debugging TTG Programs
 
