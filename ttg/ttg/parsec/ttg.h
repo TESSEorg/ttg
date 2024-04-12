@@ -3417,7 +3417,6 @@ ttg::abort();  // should not happen
       auto remote_check = [&](){
           auto world = ttg_default_execution_context();
           int rank = world.rank();
-          uint64_t pos = 0;
           bool remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
                                                       [&](const Key &key) { return keymap(key) != rank; });
           return remote;
