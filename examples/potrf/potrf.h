@@ -674,7 +674,7 @@ namespace potrf {
     auto keymap1 = [&](const Key1& key) { return A.rank_of(key[0], key[0]); };
 
     auto keymap2a = [&](const Key2& key) { return A.rank_of(key[0], key[1]); };
-    auto keymap2b = [&](const Key2& key) { return A.rank_of(key[0], key[0]); };
+    auto keymap2b = [&](const Key2& key) { return A.rank_of(key[1], key[1]); };
 
     auto keymap3 = [&](const Key3& key) { return A.rank_of(key[0], key[1]); };
 
