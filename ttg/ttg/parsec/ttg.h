@@ -3390,11 +3390,11 @@ ttg::abort();  // should not happen
       if (!need_pushout) {
         bool device_supported = false;
         if constexpr (derived_has_cuda_op()) {
-          device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::CUDA);
+          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::CUDA);
         } else if constexpr (derived_has_hip_op()) {
-          device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::HIP);
+          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::HIP);
         } else if constexpr (derived_has_level_zero_op()) {
-          device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::L0);
+          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::L0);
         }
         /* if MPI supports the device we don't care whether we have remote peers
          * because we can send from the device directly */
