@@ -96,9 +96,9 @@ namespace ttg {
 
     ttg::World get_world() const override final { return tts[0]->get_world(); }
 
-    void fence() { tts[0]->fence(); }
+    void fence() override { tts[0]->fence(); }
 
-    void make_executable() {
+    void make_executable() override {
       for (auto &op : tts) op->make_executable();
     }
 
