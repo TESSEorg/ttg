@@ -58,15 +58,23 @@ namespace ttg_parsec {
     }
 
     inline
-    ttg_parsec_data_flags operator|=(ttg_parsec_data_flags lhs, ttg_parsec_data_flags rhs) {
+    ttg_parsec_data_flags operator|=(ttg_parsec_data_flags& lhs, ttg_parsec_data_flags rhs) {
         using flags_type = std::underlying_type<ttg_parsec_data_flags>::type;
-        return ttg_parsec_data_flags(static_cast<flags_type>(lhs) | static_cast<flags_type>(rhs));
+        lhs = ttg_parsec_data_flags(static_cast<flags_type>(lhs) | static_cast<flags_type>(rhs));
+        return lhs;
     }
 
     inline
     uint8_t operator&(ttg_parsec_data_flags lhs, ttg_parsec_data_flags rhs) {
         using flags_type = std::underlying_type<ttg_parsec_data_flags>::type;
         return static_cast<flags_type>(lhs) & static_cast<flags_type>(rhs);
+    }
+
+    inline
+    ttg_parsec_data_flags operator&=(ttg_parsec_data_flags& lhs, ttg_parsec_data_flags rhs) {
+        using flags_type = std::underlying_type<ttg_parsec_data_flags>::type;
+        lhs = ttg_parsec_data_flags(static_cast<flags_type>(lhs) & static_cast<flags_type>(rhs));
+        return lhs;
     }
 
     inline
