@@ -166,6 +166,7 @@ namespace ttg_parsec {
           , copies(copies)
           , release_task_cb(release_fn)
           , defer_writer(defer_writer) {
+        PARSEC_OBJ_CONSTRUCT(&parsec_task, parsec_task_t);
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
