@@ -1,28 +1,20 @@
 #include <ttg.h>
 #include "ttg/serialization.h"
 
-const int64_t F_n_max = 1000;
 /// N.B. contains values of F_n and F_{n-1}
-struct Fn : public ttg::TTValue<Fn> {
-  std::unique_ptr<int64_t[]> F;  // F[0] = F_n, F[1] = F_{n-1}
-
-  Fn() : F(std::make_unique<int64_t[]>(2)) { F[0] = 1; F[1] = 0; }
-
-  Fn(const Fn&) = delete;
-  Fn(Fn&& other) = default;
-  Fn& operator=(const Fn& other) = delete;
-  Fn& operator=(Fn&& other) = default;
-
+struct Fn {
+  int64_t F[2];  // F[0] = F_n, F[1] = F_{n-1}
+  Fn() { F[0] = 1; F[1] = 0; }
   template <typename Archive>
   void serialize(Archive& ar) {
-    ttg::ttg_abort();
+    ar & F;
   }
   template <typename Archive>
   void serialize(Archive& ar, const unsigned int) {
-    ttg::ttg_abort();
+    ar & F;
   }
 };
-auto make_ttg_fib_lt(const int64_t) {
+auto make_ttg_fib_lt(const int64_t F_n_max =1000) {
   ttg::Edge<int64_t, Fn> f2f;
   ttg::Edge<void, Fn> f2p;
 
@@ -32,9 +24,9 @@ auto make_ttg_fib_lt(const int64_t) {
         f_n.F[1] = f_n.F[0];
         f_n.F[0] = next_f_n;
         if (next_f_n < F_n_max) {
-          ttg::send<0>(n + 1, std::move(f_n));
+          ttg::send<0>(n + 1, f_n);
         } else {
-          ttg::send<1>(n, std::move(f_n));
+          ttg::send<1>(n, f_n);
         }
       },
       ttg::edges(f2f), ttg::edges(f2f, f2p), "fib");
@@ -51,10 +43,8 @@ auto make_ttg_fib_lt(const int64_t) {
   return make_ttg(std::move(ops), ins, std::make_tuple(), "Fib_n < N");
 }
 
-
 int main(int argc, char* argv[]) {
   ttg::initialize(argc, argv, -1);
-  ttg::trace_on();
   int64_t N = 1000;
   if (argc > 1) N = std::atol(argv[1]);
 
@@ -65,6 +55,7 @@ int main(int argc, char* argv[]) {
 
   ttg::execute();
   ttg::fence();
+
   ttg::finalize();
   return 0;
 }
