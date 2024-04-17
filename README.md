@@ -317,7 +317,74 @@ auto make_ttg_fib_lt(const int64_t F_n_max = 1000) {
 #### Asynchronous Task Execution with Co-Routines
 In the make_ttg_fib_lt function, co-routines are used to await the completion of GPU tasks and the transfer of computed values back to the host. This approach enables efficient overlap of computation and communication, reducing the overall execution time.
 
+## Example : Computing the Largest Fibonacci Number Smaller Than a Given Threshold on the CPU
+```cpp
+#include <ttg.h>
+#include "ttg/serialization.h"
 
+const int64_t F_n_max = 1000;
+/// N.B. contains values of F_n and F_{n-1}
+struct Fn : public ttg::TTValue<Fn> {
+  std::unique_ptr<int64_t[]> F;  // F[0] = F_n, F[1] = F_{n-1}
+  Fn() : F(std::make_unique<int64_t[]>(2)) { F[0] = 1; F[1] = 0; }
+  Fn(const Fn&) = delete;
+  Fn(Fn&& other) = default;
+  Fn& operator=(const Fn& other) = delete;
+  Fn& operator=(Fn&& other) = default;
+  template <typename Archive>
+  void serialize(Archive& ar) {
+    ttg::ttg_abort();
+  }
+  template <typename Archive>
+  void serialize(Archive& ar, const unsigned int) {
+    ttg::ttg_abort();
+  }
+};
+auto make_ttg_fib_lt(const int64_t) {
+  ttg::Edge<int64_t, Fn> f2f;
+  ttg::Edge<void, Fn> f2p;
+
+  auto fib = ttg::make_tt(
+      [=](int64_t n, Fn&& f_n) {
+        int64_t next_f_n = f_n.F[0] + f_n.F[1];
+        f_n.F[1] = f_n.F[0];
+        f_n.F[0] = next_f_n;
+        if (next_f_n < F_n_max) {
+          ttg::send<0>(n + 1, std::move(f_n));
+        } else {
+          ttg::send<1>(n, std::move(f_n));
+        }
+      },
+      ttg::edges(f2f), ttg::edges(f2f, f2p), "fib");
+
+  auto print = ttg::make_tt(
+      [=](Fn&& f_n) {
+        std::cout << "The largest Fibonacci number smaller than " << F_n_max << " is " << f_n.F[1] << std::endl;
+      },
+      ttg::edges(f2p), ttg::edges(), "print");
+  auto ins = std::make_tuple(fib->template in<0>());
+  std::vector<std::unique_ptr<ttg::TTBase>> ops;
+  ops.emplace_back(std::move(fib));
+  ops.emplace_back(std::move(print));
+  return make_ttg(std::move(ops), ins, std::make_tuple(), "Fib_n < N");
+}
+
+int main(int argc, char* argv[]) {
+  ttg::initialize(argc, argv, -1);
+  ttg::trace_on();
+  int64_t N = 1000;
+  if (argc > 1) N = std::atol(argv[1]);
+  auto fib = make_ttg_fib_lt(N);
+  ttg::make_graph_executable(fib.get());
+  if (ttg::default_execution_context().rank() == 0)
+    fib->template in<0>()->send(1, Fn{});;
+  ttg::execute();
+  ttg::fence();
+  ttg::finalize();
+  return 0;
+}
+
+```
 ## Comparing _nth Fibonacci_ CPU vs GPU-version
 
 | Concept   | CPU version             | GPU version               |
@@ -326,6 +393,8 @@ In the make_ttg_fib_lt function, co-routines are used to await the completion of
 | Computational Model  | It relies on the CPU for all computations and data management            |  Computations are offloaded to the GPU, allowing for the parallel computation of Fibonacci numbers, which is particularly beneficial for large sequences due to the GPU's ability to handle many threads simultaneously  |
 | Data Management  | Manages data flow between tasks using TTG edges, with each task operating on standard CPU memory   |Incorporates complex data management strategies to handle memory transfers between host (CPU) and device (GPU) memory spaces |
 | Software Requirements and Portability  | Relies on the TTG library and a standard C++ compiler | Requires a CUDA-enabled environment and a compatible NVIDIA GPU, in addition to the TTG library  |
+| Data Structures |  Utilizes a simple structure Fn containing a std::unique_ptr<int64_t[]> to store the Fibonacci sequence |Similar to the CPU version but includes a ttg::Buffer<int64_t> for GPU memory management |
+|Concurrency | There's no explicit synchronization or concurrency control needed beyond what's handled by the TTG framework |Uses co_await for synchronization, indicating more complex control flow to manage GPU operations efficiently |
 
 ## Debugging TTG Programs
 
