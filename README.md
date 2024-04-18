@@ -232,9 +232,8 @@ To illustrate the real power of TTG let's tweak the problem slightly: instead of
 
 To make things even more interesting, we will demonstrate how to implement such program both for execution on CPUs as well as on accelerators (GPUs).
 
-### CPU Version
+### Here's  CPU Version
 
-Here's 
 ```cpp
 #include <ttg.h>
 #include "ttg/serialization.h"
@@ -299,9 +298,30 @@ int main(int argc, char* argv[]) {
 }
 ```
 
-TODO: walk through the example, key things to emphasize:
-- `Fn` aggregates 2 pieces of data that were separate before in preparation for aggregating datums into single continguous chunks that can be allocated on GPU more efficiently
-- `make_ttg_fib_lt` creates a TTG composed of multiple TTs, whereas before we had disparate TTs connected to each other (i.e. there was no explicit graph object). This allows to support composition of multiple TTGs together, as described in Herault et al DOI 10.1109/PAW-ATM56565.2022.00008
+[//]: # (TODO: walk through the example, key things to emphasize:)
+
+[//]: # (- `Fn` aggregates 2 pieces of data that were separate before in preparation for aggregating datums into single continguous chunks that can be allocated on GPU more efficiently)
+
+[//]: # (- `make_ttg_fib_lt` creates a TTG composed of multiple TTs, whereas before we had disparate TTs connected to each other &#40;i.e. there was no explicit graph object&#41;. This allows to support composition of multiple TTGs together, as described in Herault et al DOI 10.1109/PAW-ATM56565.2022.00008)
+
+### Utility of Fn struct
+Fn aggregates 2 pieces of data that were separate before in preparation for aggregating datums into single continguous chunks that can be allocated on GPU more efficiently.This arrangement allows each task to access and modify both current and previous Fibonacci values without the need for separate data fields or additional communication overhead.
+
+- F[0] and F[1] store the current and previous Fibonacci numbers, respectively.
+- The default constructor initializes the sequence starting values, with F[0] as 1 (first Fibonacci number) and F[1] as 0 (base case).
+
+##### Serialization Functions in Fn
+Serialize functions are useful to communicate the struct among the tasks. TTG leverages these functions to serialize and deserialize the data as it is sent and received through the task graph.
+
+### Utility of make_ttg_fib_lt
+This function creates a TTG composed of multiple TTs, whereas before we had disparate TTs connected to each other (i.e. there was no explicit graph object). This allows to support composition of multiple TTGs together
+
+- The function make_ttg_fib_lt constructs the task graph that calculates Fibonacci numbers. It defines two template tasks (fib and print) and their connections via edges.
+- Task 1 - fib Task: Computes the next Fibonacci number and decides whether to continue the sequence or send the result to the print task.Receives an Fn object containing the current and previous Fibonacci numbers.Sends updated Fn objects either back to itself for the next computation or to the print task if the maximum is reached or exceeded.
+- Task2 - print Task: Outputs the largest Fibonacci number less than F_n_max.Receives an Fn object from the fib task. No output terminals, as its sole purpose is to display the result.Just uses std::out and prints the largest fibonacci until N.
+- The fib task sends either a new Fn object to itself for further computation or to the print task if the condition next_f_n < F_n_max is not met.The print task simply outputs the received Fibonacci number and completes the computation.
+
+![Fibonacci_TTG_example](doc/images/fibonacci_ttg.png)
 
 ###  CUDA Version
 
@@ -363,7 +383,22 @@ auto make_ttg_fib_lt(const int64_t F_n_max = 1000) {
 }
 ```
 
-Walk through the key differences ... potentially we could show both side by side ... not sure how to do that in Markdown though ...
+[//]: # (Walk through the key differences ... potentially we could show both side by side ... not sure how to do that in Markdown though ...)
+### Differences in the Code Implementation 
+| Aspect                             | CPU Implementation Code                         | GPU Implementation Code (CUDA)                                                                                                                                |
+|------------------------------------|-------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| C++ Features                       | Full use of C++20                               | Limited C++20 due to `__global__` and other CUDA specifics                                                                                                     |
+| Execution Space                    | CPU cores                                       | Defined by `#define ES ttg::ExecutionSpace::CUDA`                                                                                                              |
+| Data Transfer                      | Direct C++ object passing                       | Use of `ttg::Buffer` and CUDA memory operations                                                                                                                |
+| Task Creation                      | `auto fib = ttg::make_tt(...);`                 | `auto fib = ttg::make_tt<ES>(...);`                                                                                                                            |
+| Task Execution Synchronization    | Synchronous execution within TTG runtime        | Asynchronous execution using CUDA and coroutines: `co_await ttg::device::wait(f_n.b);`                                                                        |
+| Device-Specific Code               | Not applicable                                  | CUDA kernels: `__global__ void cu_next_value(int64_t* fn_and_fnm1);`                                                                                           |
+| Serialization                      | ` void serialize(Archive& ar) {ar & F;}`        | `void serialize(Archive& ar) { ttg::ttg_abort(); }`                                                                                                            |
+| Memory Management                  | Managed by C++ runtime and Managed by Fn struct                     | Managed by `Fn` struct with `ttg::Buffer`: `Fn() : F(std::make_unique<int64_t[]>(2)), b(F.get(), 2) {...}`                                                     |
+| Task Continuation and Data Locality| Managed implicitly by TTG                       | Managed explicitly: `co_await ttg::device::select(f_n.b); next_value(f_n.b.current_device_ptr()); co_await ttg::device::wait(f_n.b);`                         |
+| Memory Model                       | Implicit, managed by C++ runtime                | Explicit memory model involving CUDA memory management: `std::unique_ptr<int64_t[]> F; ttg::Buffer<int64_t> b;`                                                |
+| Task Flow and Control              | Implicit control flow based on TTG              | Explicit control flow using CUDA streams and coroutines: `if (f_n.F[0] < F_n_max) {...} else {...}`                                                             |
+| Task Invocation                    | Task invocation within TTG: `fib->invoke(...);` | Task invocation with host-device communication: `fib->template in<0>()->send(1, Fn{});`                                                                       |
 
 here's the CUDA code
 ```cpp
@@ -379,31 +414,21 @@ here's the CUDA code
     }
 #endif // TTG_HAVE_CUDA
 ```
+| CPU Implementation Feature          | GPU Implementation Feature (CUDA)                                                                                                                                                                                                                     |
+|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Standard C++20 features             | Limited C++20 features due to CUDA restrictions                                                                                                                                                                                                       |
+| Task execution on CPU               | Task execution split between CPU (host) and GPU (device)                                                                                                                                                                                              |
+| Direct data passing between tasks   | Use of `ttg::Buffer` for managing data transfer between host and device memory                                                                                                                                                                        |
+| Simple TT task creation             | `make_tt<ES>` specifies that the task is meant for execution on an Execution Space (`ES`), which can be CUDA                                                                                                                                          |
+| Synchronous task execution          | Asynchronous task execution with `co_await`, waiting for GPU computation to complete, and data to be brought back to the host                                                                                                                         |
+| No explicit device code             | Separate device code (`cuda_kernel code`) and host/device memory management; Device code uses CUDA kernels, e.g., `cu_next_value`, to compute the next Fibonacci number on the GPU                                                                    |
+| Standard C++ serialization          | Custom serialization that aborts execution; in GPU code, serialization is not needed as the data does not leave the device memory space until computation is complete                                                                                 |
+| TTG manages data locality           | Explicit data locality management due to device memory requirements; use of `ttg::device::select`, `ttg::device::wait`, and `ttg::device::forward` to handle data between host and device                                                             |
+| Classic CPU memory model            | Complex memory model involving host and device memory; `Fn` struct now includes `std::unique_ptr` and `ttg::Buffer` to accommodate CUDA memory management                                                                                             |
+| TTG-based computation flow          | Computation flow is managed partially by TTG on the host side and by CUDA on the device side; Task continuation and flow control is achieved through the use of CUDA co-routines. |
+| TTG task invocation                 | Task invocation involves sending data to the GPU and managing the lifecycle of the computation on the device; use of `ttg::device::send` and `ttg::device::sendv`                                                                                     |
 
 
-### Struct Fn and Serialization
-
-
-### Task Graph Construction and Execution
-
-The task graph consists of two types of tasks: fib tasks that compute Fibonacci numbers and a print task that outputs the final result. Tasks are connected by edges, which represent the data flow between them. The task graph is explicitly constructed and made executable, then the computation is initiated by sending the first task into the graph.
-
-#### GPU Memory Management and Kernel Execution
-The Fn struct also contains a ttg::Buffer<int64_t> b, which is used for GPU memory management. This buffer manages the memory where the Fibonacci numbers are stored and provides mechanisms to transfer data between the host and the GPU. The next_value function is called to execute the CUDA kernel, which computes the next Fibonacci number and updates the values in the GPU memory. This operation is performed asynchronously, allowing the CPU to continue executing other tasks while the GPU is working
-
-#### Asynchronous Task Execution with Co-Routines
-In the make_ttg_fib_lt function, co-routines are used to await the completion of GPU tasks and the transfer of computed values back to the host. This approach enables efficient overlap of computation and communication, reducing the overall execution time.
-
-## Comparing _nth Fibonacci_ CPU vs GPU-version
-
-| Concept   | CPU version             | GPU version               |
-|--------------------------------------|--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Execution Environment | Utilizing the TTG library to manage task parallelism within a possibly distributed computing environment but without explicit hardware acceleration             |  It uses the TTG library in conjunction with CUDA to offload computationally intensive tasks to the GPU, thereby achieving significant performance gains through parallel execution|
-| Computational Model  | It relies on the CPU for all computations and data management            |  Computations are offloaded to the GPU, allowing for the parallel computation of Fibonacci numbers, which is particularly beneficial for large sequences due to the GPU's ability to handle many threads simultaneously  |
-| Data Management  | Manages data flow between tasks using TTG edges, with each task operating on standard CPU memory   |Incorporates complex data management strategies to handle memory transfers between host (CPU) and device (GPU) memory spaces |
-| Software Requirements and Portability  | Relies on the TTG library and a standard C++ compiler | Requires a CUDA-enabled environment and a compatible NVIDIA GPU, in addition to the TTG library  |
-| Data Structures |  Utilizes a simple structure Fn containing a std::unique_ptr<int64_t[]> to store the Fibonacci sequence |Similar to the CPU version but includes a ttg::Buffer<int64_t> for GPU memory management |
-|Concurrency | There's no explicit synchronization or concurrency control needed beyond what's handled by the TTG framework |Uses co_await for synchronization, indicating more complex control flow to manage GPU operations efficiently |
 
 ## Debugging TTG Programs
 
