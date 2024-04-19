@@ -414,19 +414,6 @@ here's the CUDA code
     }
 #endif // TTG_HAVE_CUDA
 ```
-| CPU Implementation Feature          | GPU Implementation Feature (CUDA)                                                                                                                                                                                                                     |
-|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Standard C++20 features             | Limited C++20 features due to CUDA restrictions                                                                                                                                                                                                       |
-| Task execution on CPU               | Task execution split between CPU (host) and GPU (device)                                                                                                                                                                                              |
-| Direct data passing between tasks   | Use of `ttg::Buffer` for managing data transfer between host and device memory                                                                                                                                                                        |
-| Simple TT task creation             | `make_tt<ES>` specifies that the task is meant for execution on an Execution Space (`ES`), which can be CUDA                                                                                                                                          |
-| Synchronous task execution          | Asynchronous task execution with `co_await`, waiting for GPU computation to complete, and data to be brought back to the host                                                                                                                         |
-| No explicit device code             | Separate device code (`cuda_kernel code`) and host/device memory management; Device code uses CUDA kernels, e.g., `cu_next_value`, to compute the next Fibonacci number on the GPU                                                                    |
-| Standard C++ serialization          | Custom serialization that aborts execution; in GPU code, serialization is not needed as the data does not leave the device memory space until computation is complete                                                                                 |
-| TTG manages data locality           | Explicit data locality management due to device memory requirements; use of `ttg::device::select`, `ttg::device::wait`, and `ttg::device::forward` to handle data between host and device                                                             |
-| Classic CPU memory model            | Complex memory model involving host and device memory; `Fn` struct now includes `std::unique_ptr` and `ttg::Buffer` to accommodate CUDA memory management                                                                                             |
-| TTG-based computation flow          | Computation flow is managed partially by TTG on the host side and by CUDA on the device side; Task continuation and flow control is achieved through the use of CUDA co-routines. |
-| TTG task invocation                 | Task invocation involves sending data to the GPU and managing the lifecycle of the computation on the device; use of `ttg::device::send` and `ttg::device::sendv`                                                                                     |
 
 
 
