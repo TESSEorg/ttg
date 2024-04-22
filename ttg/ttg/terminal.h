@@ -204,6 +204,9 @@ namespace ttg {
     template <typename Key = keyT, typename Value = valueT>
     std::enable_if_t<meta::is_none_void_v<Key, Value>, void>
     send(const Key &key, Value &&value) {
+      static_assert(meta::is_none_void_v<keyT, valueT>, "ttg::send<>() sending to a terminal expecting void key and value; use ttg::send<>() instead");
+      static_assert(!meta::is_void_v<keyT>, "ttg::send<>(key,value) sending to a terminal expecting void key; use ttg::sendv(value) instead");
+      static_assert(!meta::is_void_v<valueT>, "ttg::send<>(key,value) sending to a terminal expecting void value; use ttg::sendk(key) instead");
       constexpr auto value_is_rvref = !std::is_reference_v<Value>;
       if constexpr (value_is_rvref) {
         if (!move_callback) throw std::runtime_error("move callback not initialized");
@@ -216,6 +219,9 @@ namespace ttg {
 
     template <typename Key = keyT>
     std::enable_if_t<!meta::is_void_v<Key>, void> sendk(const Key &key) {
+      static_assert(!meta::is_void_v<keyT> && meta::is_void_v<valueT>, "ttg::sendk<>(key) sending to a terminal expecting void key and nonvoid value; use ttg::sendv<>(value) instead");
+      static_assert(!meta::is_void_v<keyT>, "ttg::sendk<>(key) sending to a terminal expecting void key; use ttg::send() instead");
+      static_assert(meta::is_void_v<valueT>, "ttg::sendk<>(key) sending to a terminal expecting nonvoid value; use ttg::send(key,value) instead");
       if (!send_callback) throw std::runtime_error("send callback not initialized");
       send_callback(key);
     }
@@ -223,6 +229,9 @@ namespace ttg {
     template <typename Value = valueT>
     std::enable_if_t<!meta::is_void_v<Value>, void> sendv(
         Value &&value) {
+      static_assert(meta::is_void_v<keyT> && !meta::is_void_v<valueT>, "ttg::sendv<>(value) sending to a terminal expecting nonvoid key and void value; use ttg::sendk<>(key) instead");
+      static_assert(meta::is_void_v<keyT>, "ttg::sendv<>(value) sending to a terminal expecting nonvoid key; use ttg::send(key, value) instead");
+      static_assert(!meta::is_void_v<valueT>, "ttg::sendv<>(value) sending to a terminal expecting void value; use ttg::send() instead");
       constexpr auto value_is_rvref = !std::is_reference_v<Value>;
       if constexpr (value_is_rvref) {
         if (!move_callback) throw std::runtime_error("move callback not initialized");
@@ -235,6 +244,9 @@ namespace ttg {
     }
 
     void send() {
+      static_assert(!meta::is_none_void_v<keyT, valueT>, "ttg::send<>() sending to a terminal expecting nonvoid key and value; use ttg::send<>(key,value) instead");
+      static_assert(meta::is_void_v<keyT>, "ttg::send<>() sending to a terminal expecting nonvoid key; use ttg::sendk<>(key) instead");
+      static_assert(meta::is_void_v<valueT>, "ttg::send<>() sending to a terminal expecting nonvoid value; use ttg::sendv<>(value) instead");
       if (!send_callback) throw std::runtime_error("send callback not initialized");
       send_callback();
     }
