@@ -26,7 +26,7 @@ auto make_ttg_fib_lt(const int64_t F_n_max =1000) {
         if (next_f_n < F_n_max) {
           ttg::send<0>(n + 1, f_n);
         } else {
-          ttg::send<1>(n, f_n);
+          ttg::sendv<1>(f_n);
         }
       },
       ttg::edges(f2f), ttg::edges(f2f, f2p), "fib");
