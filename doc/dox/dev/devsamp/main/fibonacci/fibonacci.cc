@@ -14,7 +14,7 @@ struct Fn {
     ar & F;
   }
 };
-auto make_ttg_fib_lt(const int64_t F_n_max =1000) {
+auto make_ttg_fib_lt(const int64_t F_n_max = 1000) {
   ttg::Edge<int64_t, Fn> f2f;
   ttg::Edge<void, Fn> f2p;
 
@@ -45,8 +45,7 @@ auto make_ttg_fib_lt(const int64_t F_n_max =1000) {
 
 int main(int argc, char* argv[]) {
   ttg::initialize(argc, argv, -1);
-  int64_t N = 1000;
-  if (argc > 1) N = std::atol(argv[1]);
+  int64_t N = (argc > 1) ? std::atol(argv[1]) : 1000;
 
   auto fib = make_ttg_fib_lt(N);
   ttg::make_graph_executable(fib.get());
