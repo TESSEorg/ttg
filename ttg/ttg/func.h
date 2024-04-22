@@ -211,6 +211,8 @@ namespace ttg {
   template <typename keyT, typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline std::enable_if_t<meta::is_none_void_v<keyT, std::decay_t<valueT>>, void> send(size_t i, const keyT &key,
                                                                                        valueT &&value) {
+    // to avoid mixups due to value being a terminal tuple
+    static_assert(!meta::is_output_terminal_v<std::decay_t<valueT>> && !meta::is_output_terminal_tuple_v<std::decay_t<valueT>>, "ttg::send(i, key, x) - invalid invocation, x cannot be a terminal or a tuple of terminals; did you mean to call another version of send, e.g. sendk<i>(key, x)?");
     detail::value_copy_handler<Runtime> copy_handler;
     auto *terminal_ptr = detail::get_out_terminal<keyT, valueT>(i, "ttg::send(i, key, value)");
     terminal_ptr->send(key, copy_handler(std::forward<valueT>(value)));
@@ -226,6 +228,8 @@ namespace ttg {
   template <size_t i, typename keyT, typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline std::enable_if_t<meta::is_none_void_v<keyT, std::decay_t<valueT>>, void> send(const keyT &key,
                                                                                        valueT &&value) {
+    // to avoid mixups due to value being a terminal tuple
+    static_assert(!meta::is_output_terminal_v<std::decay_t<valueT>> && !meta::is_output_terminal_tuple_v<std::decay_t<valueT>>, "ttg::send<i>(key, x) - invalid invocation, x cannot be a terminal or a tuple of terminals; did you mean to call another version of send, e.g. sendk<i>(key, x)?");
     send(i, key, std::forward<valueT>(value));
   }
 
@@ -248,6 +252,8 @@ namespace ttg {
   // clang-format on
   template <typename keyT>
   inline std::enable_if_t<!meta::is_void_v<keyT>, void> sendk(std::size_t i, const keyT &key) {
+    // to avoid mixups due to key being a terminal tuple
+    static_assert(!meta::is_output_terminal_v<std::decay_t<keyT>> && !meta::is_output_terminal_tuple_v<std::decay_t<keyT>>, "ttg::sendk(i, x) - invalid invocation, x cannot be a terminal or a tuple of terminals; did you mean to call another version of send, e.g. send<i>(x)?");
     auto *terminal_ptr = detail::get_out_terminal<keyT, void>(i, "ttg::sendk(i, key)");
     terminal_ptr->sendk(key);
   }
@@ -260,6 +266,8 @@ namespace ttg {
   // clang-format on
   template <size_t i, typename keyT>
   inline std::enable_if_t<!meta::is_void_v<keyT>, void> sendk(const keyT &key) {
+    // to avoid mixups due to key being a terminal tuple
+    static_assert(!meta::is_output_terminal_v<std::decay_t<keyT>> && !meta::is_output_terminal_tuple_v<std::decay_t<keyT>>, "ttg::sendk<i>(x) - invalid invocation, x cannot be a terminal or a tuple of terminals; did you mean to call another version of send, e.g. send<i>(x)?");
     sendk(i, key);
   }
 
@@ -284,6 +292,8 @@ namespace ttg {
   // clang-format on
   template <typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline std::enable_if_t<!meta::is_void_v<std::decay_t<valueT>>, void> sendv(std::size_t i, valueT &&value) {
+    // to avoid mixups due to key being a terminal tuple
+    static_assert(!meta::is_output_terminal_v<std::decay_t<valueT>> && !meta::is_output_terminal_tuple_v<std::decay_t<valueT>>, "ttg::sendv(i, x) - invalid invocation, x cannot be a terminal or a tuple of terminals; did you mean to call another version of send, e.g. send<i>(x)?");
     detail::value_copy_handler<Runtime> copy_handler;
     auto *terminal_ptr = detail::get_out_terminal<void, valueT>(i, "ttg::sendv(i, value)");
     terminal_ptr->sendv(copy_handler(std::forward<valueT>(value)));
@@ -297,6 +307,8 @@ namespace ttg {
   // clang-format on
   template <size_t i, typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline std::enable_if_t<!meta::is_void_v<std::decay_t<valueT>>, void> sendv(valueT &&value) {
+    // to avoid mixups due to key being a terminal tuple
+    static_assert(!meta::is_output_terminal_v<std::decay_t<valueT>> && !meta::is_output_terminal_tuple_v<std::decay_t<valueT>>, "ttg::sendv<i>(x) - invalid invocation, x cannot be a terminal or a tuple of terminals; did you mean to call another version of send, e.g. send<i>(x)?");
     sendv(i, std::forward<valueT>(value));
   }
 
