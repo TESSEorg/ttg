@@ -851,11 +851,11 @@ namespace ttg {
       template <typename Key, typename Return, typename Enabler = void>
       struct keymap;
       template <typename Key, typename Return>
-      struct keymap<Key, std::enable_if_t<!is_void_v<Key>>> {
+      struct keymap<Key, Return, std::enable_if_t<!is_void_v<Key>>> {
         using type = std::function<Return(const Key &)>;
       };
       template <typename Key, typename Return>
-      struct keymap<Key, std::enable_if_t<is_void_v<Key>>> {
+      struct keymap<Key, Return, std::enable_if_t<is_void_v<Key>>> {
         using type = std::function<Return()>;
       };
       template <typename Key, typename Return = int>

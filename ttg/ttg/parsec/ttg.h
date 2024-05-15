@@ -1537,13 +1537,13 @@ namespace ttg_parsec {
         if (tt->devicemap) {
           int parsec_dev;
           if constexpr (std::is_void_v<keyT>) {
-            parsec_dev = ttg::device::ttg_device_to_parsec_device(tt->devicemap());
+            parsec_dev = detail::ttg_device_to_parsec_device(tt->devicemap());
           } else {
-            parsec_dev = ttg::device::ttg_device_to_parsec_device(tt->devicemap(tt->key));
+            parsec_dev = detail::ttg_device_to_parsec_device(tt->devicemap(task->key));
           }
           for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
             /* only set on mutable data since we have exclusive access */
-            if (tc.in[i].flow_flags & PARSEC_FLOW_ACCESS_WRITE) {
+            if (tc.in[i]->flow_flags & PARSEC_FLOW_ACCESS_WRITE) {
               parsec_data_t *data = parsec_task->data[i].data_in->original;
               /* only set the preferred device if the host has the latest copy
                * as otherwise we may end up with the wrong data if there is a newer
