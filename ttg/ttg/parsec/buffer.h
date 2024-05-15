@@ -329,6 +329,14 @@ public:
     //          << " parsec_data " << m_data.get() << std::endl;
   }
 
+  void prefer_device(ttg::device::Device dev) {
+    /* only set device if the host has the latest copy as otherwise we might end up with a stale copy */
+    if (dev.is_device() && this->parsec_data()->owner_device == 0) {
+      parsec_advise_data_on_device(this->parsec_data(), detail::ttg_device_to_parsec_device(dev),
+                                   PARSEC_DEV_DATA_ADVICE_PREFERRED_DEVICE);
+    }
+  }
+
   /* serialization support */
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_BOOST

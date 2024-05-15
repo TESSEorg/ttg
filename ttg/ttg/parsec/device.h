@@ -2,6 +2,7 @@
 #define TTG_PARSEC_DEVICE_H
 
 #include "ttg/device/device.h"
+#include <parsec/mca/device/device.h>
 
 namespace ttg_parsec {
 
@@ -34,6 +35,12 @@ namespace ttg_parsec {
                                 ttg::device::available_execution_space);
     }
   } // namespace detail
+
+
+  inline
+  int num_devices() {
+    return parsec_nb_devices - detail::first_device_id;
+  }
 
 } // namespace ttg_parsec
 

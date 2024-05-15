@@ -1296,6 +1296,7 @@ namespace ttg_parsec {
     ttg::World world;
     ttg::meta::detail::keymap_t<keyT> keymap;
     ttg::meta::detail::keymap_t<keyT> priomap;
+    ttg::meta::detail::keymap_t<keyT, ttg::device::Device> devicemap;
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<actual_input_tuple_type>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
@@ -1502,6 +1503,12 @@ namespace ttg_parsec {
         gpu_task->pushout = 0;
         gpu_task->submit = &TT::device_static_submit<Space>;
 
+        // one way to force the task device
+        // currently this will probably break all of PaRSEC if this hint
+        // does not match where the data is located, not really useful for us
+        // instead we set a hint on the data if there is no hint set yet
+        //parsec_task->selected_device = ...;
+
         /* set the gpu_task so it's available in register_device_memory */
         task->dev_ptr->gpu_task = gpu_task;
 
@@ -1524,6 +1531,29 @@ namespace ttg_parsec {
           tc.out[i] = gpu_task->flow[i];
         }
         tc.nb_flows = MAX_PARAM_COUNT;
+
+        /* set the device hint on the data */
+        TT *tt = task->tt;
+        if (tt->devicemap) {
+          int parsec_dev;
+          if constexpr (std::is_void_v<keyT>) {
+            parsec_dev = ttg::device::ttg_device_to_parsec_device(tt->devicemap());
+          } else {
+            parsec_dev = ttg::device::ttg_device_to_parsec_device(tt->devicemap(tt->key));
+          }
+          for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
+            /* only set on mutable data since we have exclusive access */
+            if (tc.in[i].flow_flags & PARSEC_FLOW_ACCESS_WRITE) {
+              parsec_data_t *data = parsec_task->data[i].data_in->original;
+              /* only set the preferred device if the host has the latest copy
+               * as otherwise we may end up with the wrong data if there is a newer
+               * version on a different device. Also, keep fingers crossed. */
+              if (data->owner_device == 0) {
+                parsec_advise_data_on_device(data, parsec_dev, PARSEC_DEV_DATA_ADVICE_PREFERRED_DEVICE);
+              }
+            }
+          }
+        }
 
         /* set the new task class that contains the flows */
         task->parsec_task.task_class = &task->dev_ptr->task_class;
@@ -4194,6 +4224,37 @@ ttg::abort();  // should not happen
     void set_priomap(Priomap &&pm) {
       priomap = std::forward<Priomap>(pm);
     }
+
+    /// device map setter
+    /// The device map provides a hint on which device a task should execute.
+    /// TTG may not be able to honor the request and the corresponding task
+    /// may execute on a different device.
+    /// @arg pm a function that provides a hint on which device the task should execute.
+    template<typename Devicemap>
+    void set_devicemap(Devicemap&& dm) {
+      static_assert(derived_has_device_op(), "Device map only allowed on device-enabled TT!");
+      if constexpr (std::is_same_v<ttg::device::Device, decltype(dm(std::declval<keyT>()))>) {
+        // dm returns a Device
+        devicemap = std::forward<Devicemap>(dm);
+      } else {
+        // convert dm return into a Device
+        devicemap = [=](const keyT& key) {
+          if constexpr (derived_has_cuda_op()) {
+            return ttg::device::Device(dm(key), ttg::ExecutionSpace::CUDA);
+          } else if constexpr (derived_has_hip_op()) {
+            return ttg::device::Device(dm(key), ttg::ExecutionSpace::HIP);
+          } else if constexpr (derived_has_level_zero_op()) {
+            return ttg::device::Device(dm(key), ttg::ExecutionSpace::L0);
+          } else {
+            throw std::runtime_error("Unknown device type!");
+          }
+        };
+      }
+    }
+
+    /// device map accessor
+    /// @return the device map
+    auto get_devicemap() { return devicemap; }
 
     // Register the static_op function to associate it to instance_id
     void register_static_op_function(void) {

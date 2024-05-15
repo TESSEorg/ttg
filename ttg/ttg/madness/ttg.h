@@ -13,6 +13,7 @@
 #include "ttg/base/keymap.h"
 #include "ttg/base/tt.h"
 #include "ttg/func.h"
+#include "ttg/madness/device.h"
 #include "ttg/runtimes.h"
 #include "ttg/tt.h"
 #include "ttg/util/bug.h"
