@@ -77,6 +77,8 @@ namespace ttg_madness {
   template<typename... Buffer>
   inline void mark_device_out(std::tuple<Buffer&...> &b);
 
+  inline int num_devices();
+
 }  // namespace ttg_madness
 
 #endif  // TTG_MADNESS_FWD_H
