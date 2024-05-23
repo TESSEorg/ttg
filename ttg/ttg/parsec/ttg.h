@@ -766,7 +766,8 @@ namespace ttg_parsec {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_op<ttg::ExecutionSpace::CUDA>();
       } else {
-        return PARSEC_HOOK_RETURN_NEXT;
+        std::cerr << "CUDA hook called without having a CUDA op!" << std::endl;
+        return PARSEC_HOOK_RETURN_ERROR;
       }
     }
 
@@ -776,7 +777,8 @@ namespace ttg_parsec {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_op<ttg::ExecutionSpace::HIP>();
       } else {
-        return PARSEC_HOOK_RETURN_NEXT;
+        std::cerr << "HIP hook called without having a HIP op!" << std::endl;
+        return PARSEC_HOOK_RETURN_ERROR;
       }
     }
 
@@ -786,7 +788,8 @@ namespace ttg_parsec {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_op<ttg::ExecutionSpace::L0>();
       } else {
-        return PARSEC_HOOK_RETURN_NEXT;
+        std::cerr << "L0 hook called without having a L0 op!" << std::endl;
+        return PARSEC_HOOK_RETURN_ERROR;
       }
     }
 
@@ -1489,8 +1492,6 @@ namespace ttg_parsec {
       task_t *task = (task_t*)parsec_task;
       if (task->dev_ptr->gpu_task == nullptr) {
 
-        //std::cout << "device_static_op: task " << parsec_task << std::endl;
-
         /* set up a device task */
         parsec_gpu_task_t *gpu_task;
         /* PaRSEC wants to free the gpu_task, because F***K ownerships */
@@ -1498,7 +1499,6 @@ namespace ttg_parsec {
         PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_list_item_t);
         gpu_task->ec = parsec_task;
         gpu_task->task_type = 0; // user task
-        //gpu_task->load = 1;    // TODO: can we do better?
         gpu_task->last_data_check_epoch = -1; // used internally
         gpu_task->pushout = 0;
         gpu_task->submit = &TT::device_static_submit<Space>;
