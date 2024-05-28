@@ -196,7 +196,7 @@ namespace ttg {
     }                                                                                                          \
   }
 #else
-#define TTG_PROCESS_TT_OP_RETURN(result, invoke) invoke
+#define TTG_PROCESS_TT_OP_RETURN(result, id, invoke) invoke
 #endif
 #else
 #error "TTG_PROCESS_TT_OP_RETURN already defined in ttg/tt.h, check your header guards"
