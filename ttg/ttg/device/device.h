@@ -3,6 +3,7 @@
 #include "ttg/config.h"
 #include "ttg/execution.h"
 #include "ttg/impl_selector.h"
+#include "ttg/fwd.h"
 
 
 
