@@ -94,8 +94,23 @@ endif (BUILD_TESTING)
 ###########################
 # Boost
 include("${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchBoost.cmake")
-# C++ coroutines
-find_package(CXXStdCoroutine MODULE REQUIRED COMPONENTS Final Experimental)
+
+# C++ coroutines, check for broken GCC releases and skip if one is found
+set(SKIP_COROUTINE_DETECTION FALSE)
+if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+    if (${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 11.4.0)
+        set(SKIP_COROUTINE_DETECTION TRUE)
+    elseif(${CMAKE_CXX_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.1.0 AND ${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 12.3.0)
+        set(SKIP_COROUTINE_DETECTION TRUE)
+    endif()
+    if (SKIP_COROUTINE_DETECTION)
+        message(WARNING "GCC with broken Coroutine support detected, disabling Coroutine support. At least GCC 11.4, 12.3, or 13.1 required.")
+    endif(SKIP_COROUTINE_DETECTION)
+endif(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+
+if (SKIP_COROUTINE_DETECTION)
+    find_package(CXXStdCoroutine MODULE REQUIRED COMPONENTS Final Experimental)
+endif(SKIP_COROUTINE_DETECTION)
 
 
 ##########################
