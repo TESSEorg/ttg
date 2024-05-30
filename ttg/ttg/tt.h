@@ -1,12 +1,13 @@
 #ifndef TTG_TT_H
 #define TTG_TT_H
 
+#include "ttg/config.h"
 #include "ttg/fwd.h"
 
 #include "ttg/base/tt.h"
 #include "ttg/edge.h"
 
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
 #include "ttg/coroutine.h"
 #endif
 
@@ -176,7 +177,7 @@ namespace ttg {
 }  // namespace ttg
 
 #ifndef TTG_PROCESS_TT_OP_RETURN
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
 #define TTG_PROCESS_TT_OP_RETURN(result, id, invoke)                                                           \
   {                                                                                                            \
     using return_type = decltype(invoke);                                                                      \

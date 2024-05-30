@@ -12,6 +12,8 @@
  * This may cause deadlocks, so use with caution. */
 #define TTG_PARSEC_DEFER_WRITER false
 
+#include "ttg/config.h"
+
 #include "ttg/impl_selector.h"
 
 /* include ttg header to make symbols available in case this header is included directly */
@@ -1643,11 +1645,11 @@ namespace ttg_parsec {
 
       task_t *task = (task_t*)parsec_task;
       void* suspended_task_address =
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
         task->suspended_task_address;  // non-null = need to resume the task
-#else
+#else  // TTG_HAVE_COROUTINE
         nullptr;
-#endif
+#endif // TTG_HAVE_COROUTINE
       //std::cout << "static_op: suspended_task_address " << suspended_task_address << std::endl;
       if (suspended_task_address == nullptr) {  // task is a coroutine that has not started or an ordinary function
 
@@ -1679,9 +1681,9 @@ namespace ttg_parsec {
       }
       else {  // resume the suspended coroutine
 
+#ifdef TTG_HAVE_COROUTINE
         assert(task->coroutine_id != ttg::TaskCoroutineID::Invalid);
 
-#ifdef TTG_HAS_COROUTINE
 #ifdef TTG_HAVE_DEVICE
         if (task->coroutine_id == ttg::TaskCoroutineID::DeviceTask) {
           ttg::device::Task coro = ttg::device::detail::device_task_handle_type::from_address(suspended_task_address);
@@ -1725,9 +1727,9 @@ namespace ttg_parsec {
       }
       else
         ttg::abort();  // unrecognized task id
-#else // TTG_HAS_COROUTINE
-ttg::abort();  // should not happen
-#endif  // TTG_HAS_COROUTINE
+#else // TTG_HAVE_COROUTINE
+      ttg::abort();  // should not happen
+#endif  // TTG_HAVE_COROUTINE
       }
       task->suspended_task_address = suspended_task_address;
 
@@ -1750,11 +1752,11 @@ ttg::abort();  // should not happen
       task_t *task = static_cast<task_t*>(parsec_task);
 
       void* suspended_task_address =
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
         task->suspended_task_address;  // non-null = need to resume the task
-#else
+#else // TTG_HAVE_COROUTINE
         nullptr;
-#endif
+#endif // TTG_HAVE_COROUTINE
       if (suspended_task_address == nullptr) {  // task is a coroutine that has not started or an ordinary function
         ttT *baseobj = (ttT *)task->object_ptr;
         derivedT *obj = (derivedT *)task->object_ptr;
@@ -1769,7 +1771,7 @@ ttg::abort();  // should not happen
         detail::parsec_ttg_caller = NULL;
       }
       else {
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
         auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address));
         assert(ret.ready());
         ret.resume();
@@ -1780,9 +1782,9 @@ ttg::abort();  // should not happen
         else { // not yet completed
           // leave suspended_task_address as is
         }
-#else
+#else  // TTG_HAVE_COROUTINE
         ttg::abort();  // should not happen
-#endif
+#endif // TTG_HAVE_COROUTINE
       }
       task->suspended_task_address = suspended_task_address;
 
@@ -3695,7 +3697,7 @@ ttg::abort();  // should not happen
 
       task_t *task = (task_t*)parsec_task;
 
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
       /* if we still have a coroutine handle we invoke it one more time to get the sends/broadcasts */
       if (task->suspended_task_address) {
         assert(task->coroutine_id != ttg::TaskCoroutineID::Invalid);
@@ -3726,7 +3728,7 @@ ttg::abort();  // should not happen
         /* the coroutine should have completed and we cannot access the promise anymore */
         task->suspended_task_address = nullptr;
       }
-#endif // TTG_HAS_COROUTINE
+#endif // TTG_HAVE_COROUTINE
 
       /* release our data copies */
       for (int i = 0; i < task->data_count; i++) {

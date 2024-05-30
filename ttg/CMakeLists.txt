@@ -114,7 +114,6 @@ if (TTG_ENABLE_TRACE)
 endif (TTG_ENABLE_TRACE)
 if (TARGET std::coroutine)
   list(APPEND ttg-deps std::coroutine)
-  list(APPEND ttg-defs "TTG_HAS_COROUTINE=1")
   list(APPEND ttg-util-headers
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/coroutine.h
           )

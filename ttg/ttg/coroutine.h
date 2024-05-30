@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <array>
 
+#ifdef TTG_HAVE_COROUTINE
+
 namespace ttg {
 
   // import std coroutine API into ttg namespace
@@ -226,5 +228,7 @@ namespace ttg {
   };
 
 }  // namespace ttg
+
+#endif // TTG_HAVE_COROUTINE
 
 #endif  // TTG_COROUTINE_H
