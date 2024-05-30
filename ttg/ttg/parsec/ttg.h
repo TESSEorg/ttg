@@ -1724,6 +1724,7 @@ namespace ttg_parsec {
         }
         task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
         detail::parsec_ttg_caller = nullptr;
+        task->suspended_task_address = suspended_task_address;
       }
       else
         ttg::abort();  // unrecognized task id
@@ -1731,7 +1732,6 @@ namespace ttg_parsec {
       ttg::abort();  // should not happen
 #endif  // TTG_HAVE_COROUTINE
       }
-      task->suspended_task_address = suspended_task_address;
 
       if (suspended_task_address == nullptr) {
         ttT *baseobj = task->tt;
