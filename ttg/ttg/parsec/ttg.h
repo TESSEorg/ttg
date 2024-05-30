@@ -3695,6 +3695,7 @@ ttg::abort();  // should not happen
 
       task_t *task = (task_t*)parsec_task;
 
+#ifdef TTG_HAS_COROUTINE
       /* if we still have a coroutine handle we invoke it one more time to get the sends/broadcasts */
       if (task->suspended_task_address) {
         assert(task->coroutine_id != ttg::TaskCoroutineID::Invalid);
@@ -3725,6 +3726,7 @@ ttg::abort();  // should not happen
         /* the coroutine should have completed and we cannot access the promise anymore */
         task->suspended_task_address = nullptr;
       }
+#endif // TTG_HAS_COROUTINE
 
       /* release our data copies */
       for (int i = 0; i < task->data_count; i++) {
