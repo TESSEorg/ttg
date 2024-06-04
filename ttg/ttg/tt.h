@@ -178,23 +178,28 @@ namespace ttg {
 
 #ifndef TTG_PROCESS_TT_OP_RETURN
 #ifdef TTG_HAVE_COROUTINE
-#define TTG_PROCESS_TT_OP_RETURN(result, id, invoke)                                                           \
-  {                                                                                                            \
-    using return_type = decltype(invoke);                                                                      \
-    if constexpr (std::is_same_v<return_type, void>) {                                                         \
-      invoke;                                                                                                  \
-      id = ttg::TaskCoroutineID::Invalid;                                                                      \
-    } else {                                                                                                   \
-      auto coro_return = invoke;                                                                               \
-      if constexpr (std::is_same_v<decltype(coro_return), ttg::coroutine_handle<ttg::resumable_task_state>>)   \
-        id = ttg::TaskCoroutineID::ResumableTask;                                                              \
-      else if constexpr (std::is_same_v<decltype(coro_return),                                                 \
-                                        ttg::coroutine_handle<ttg::device::detail::device_task_promise_type>>) \
-        id = ttg::TaskCoroutineID::DeviceTask;                                                                 \
-      else                                                                                                     \
-        std::abort();                                                                                          \
-      result = coro_return.address();                                                                          \
-    }                                                                                                          \
+#define TTG_PROCESS_TT_OP_RETURN(result, id, invoke)                                                              \
+  {                                                                                                               \
+    using return_type = decltype(invoke);                                                                         \
+    if constexpr (std::is_same_v<return_type, void>) {                                                            \
+      invoke;                                                                                                     \
+      id = ttg::TaskCoroutineID::Invalid;                                                                         \
+    } else {                                                                                                      \
+      auto coro_return = invoke;                                                                                  \
+      static_assert(std::is_same_v<return_type, void> ||                                                          \
+                    std::is_base_of_v<ttg::coroutine_handle<ttg::resumable_task_state>, decltype(coro_return)>||  \
+                    std::is_base_of_v<ttg::coroutine_handle<ttg::device::detail::device_task_promise_type>,       \
+                                      decltype(coro_return)>);                                                    \
+      if constexpr (std::is_base_of_v<ttg::coroutine_handle<ttg::resumable_task_state>, decltype(coro_return)>)   \
+        id = ttg::TaskCoroutineID::ResumableTask;                                                                 \
+      else if constexpr (std::is_base_of_v<                                                                       \
+                                        ttg::coroutine_handle<ttg::device::detail::device_task_promise_type>,     \
+                                        decltype(coro_return)>)                                                   \
+        id = ttg::TaskCoroutineID::DeviceTask;                                                                    \
+      else                                                                                                        \
+        std::abort();                                                                                             \
+      result = coro_return.address();                                                                             \
+    }                                                                                                             \
   }
 #else
 #define TTG_PROCESS_TT_OP_RETURN(result, id, invoke) invoke
