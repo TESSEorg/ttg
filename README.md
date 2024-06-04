@@ -322,7 +322,7 @@ This function creates a TTG composed of multiple TTs, whereas before we had disp
 - The fib task sends either a new Fn object to itself for further computation or to the print task if the condition next_f_n < F_n_max is not met.The print task simply outputs the received Fibonacci number and completes the computation.
 
 ![Fibonacci_TTG_example](doc/images/fibonacci_ttg.png)
-
+Image Source - https://lucid.app/lucidchart/a42b4027-156d-4cd0-8167-7d4acd205996/edit?viewport_loc=-1180%2C-522%2C2023%2C1165%2C0_0&invitationId=inv_bf9ace23-880a-4b36-a51c-d49c63913fad
 ###  CUDA Version
 
 First show complete example, split into host and device code (single source cannot work since CUDA does not support C++20 and probably cannot handle TTG hyper-C++ anyway).
