@@ -1,12 +1,13 @@
 #ifndef TTG_TT_H
 #define TTG_TT_H
 
+#include "ttg/config.h"
 #include "ttg/fwd.h"
 
 #include "ttg/base/tt.h"
 #include "ttg/edge.h"
 
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
 #include "ttg/coroutine.h"
 #endif
 
@@ -96,9 +97,9 @@ namespace ttg {
 
     ttg::World get_world() const override final { return tts[0]->get_world(); }
 
-    void fence() { tts[0]->fence(); }
+    void fence() override { tts[0]->fence(); }
 
-    void make_executable() {
+    void make_executable() override {
       for (auto &op : tts) op->make_executable();
     }
 
@@ -176,27 +177,32 @@ namespace ttg {
 }  // namespace ttg
 
 #ifndef TTG_PROCESS_TT_OP_RETURN
-#ifdef TTG_HAS_COROUTINE
-#define TTG_PROCESS_TT_OP_RETURN(result, id, invoke)                                                           \
-  {                                                                                                            \
-    using return_type = decltype(invoke);                                                                      \
-    if constexpr (std::is_same_v<return_type, void>) {                                                         \
-      invoke;                                                                                                  \
-      id = ttg::TaskCoroutineID::Invalid;                                                                      \
-    } else {                                                                                                   \
-      auto coro_return = invoke;                                                                               \
-      if constexpr (std::is_same_v<decltype(coro_return), ttg::coroutine_handle<ttg::resumable_task_state>>)   \
-        id = ttg::TaskCoroutineID::ResumableTask;                                                              \
-      else if constexpr (std::is_same_v<decltype(coro_return),                                                 \
-                                        ttg::coroutine_handle<ttg::device::detail::device_task_promise_type>>) \
-        id = ttg::TaskCoroutineID::DeviceTask;                                                                 \
-      else                                                                                                     \
-        std::abort();                                                                                          \
-      result = coro_return.address();                                                                          \
-    }                                                                                                          \
+#ifdef TTG_HAVE_COROUTINE
+#define TTG_PROCESS_TT_OP_RETURN(result, id, invoke)                                                              \
+  {                                                                                                               \
+    using return_type = decltype(invoke);                                                                         \
+    if constexpr (std::is_same_v<return_type, void>) {                                                            \
+      invoke;                                                                                                     \
+      id = ttg::TaskCoroutineID::Invalid;                                                                         \
+    } else {                                                                                                      \
+      auto coro_return = invoke;                                                                                  \
+      static_assert(std::is_same_v<return_type, void> ||                                                          \
+                    std::is_base_of_v<ttg::coroutine_handle<ttg::resumable_task_state>, decltype(coro_return)>||  \
+                    std::is_base_of_v<ttg::coroutine_handle<ttg::device::detail::device_task_promise_type>,       \
+                                      decltype(coro_return)>);                                                    \
+      if constexpr (std::is_base_of_v<ttg::coroutine_handle<ttg::resumable_task_state>, decltype(coro_return)>)   \
+        id = ttg::TaskCoroutineID::ResumableTask;                                                                 \
+      else if constexpr (std::is_base_of_v<                                                                       \
+                                        ttg::coroutine_handle<ttg::device::detail::device_task_promise_type>,     \
+                                        decltype(coro_return)>)                                                   \
+        id = ttg::TaskCoroutineID::DeviceTask;                                                                    \
+      else                                                                                                        \
+        std::abort();                                                                                             \
+      result = coro_return.address();                                                                             \
+    }                                                                                                             \
   }
 #else
-#define TTG_PROCESS_TT_OP_RETURN(result, invoke) invoke
+#define TTG_PROCESS_TT_OP_RETURN(result, id, invoke) invoke
 #endif
 #else
 #error "TTG_PROCESS_TT_OP_RETURN already defined in ttg/tt.h, check your header guards"

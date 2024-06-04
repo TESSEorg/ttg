@@ -12,12 +12,14 @@ set(ut_libs Catch2::Catch2)
 
 # coroutine tests
 # we definitely have TARGET std::coroutine
-list(APPEND ut_src fibonacci-coro.cc)
-list(APPEND ut_src device_coro.cc)
-if (TTG_HAVE_CUDA)
-    list(APPEND ut_src cuda_kernel.cu)
-endif(TTG_HAVE_CUDA)
-list(APPEND ut_libs std::coroutine)
+if (CXXStdCoroutine_FOUND)
+    list(APPEND ut_src fibonacci-coro.cc)
+    list(APPEND ut_src device_coro.cc)
+    if (TTG_HAVE_CUDA)
+        list(APPEND ut_src cuda_kernel.cu)
+    endif(TTG_HAVE_CUDA)
+    list(APPEND ut_libs std::coroutine)
+endif(CXXStdCoroutine_FOUND)
 
 add_ttg_executable(core-unittests-ttg "${ut_src}" LINK_LIBRARIES "${ut_libs}" COMPILE_DEFINITIONS "CATCH_CONFIG_NO_POSIX_SIGNALS=1" )
 

@@ -95,7 +95,7 @@ int main(int argc, char **argv)
   delete[] ttg_argv;
 
   /* set up TA to get the allocator */
-  allocator_init();
+  allocator_init(argc, argv);
 
   ttg::trace_on();
 

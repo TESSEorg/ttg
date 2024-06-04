@@ -15,6 +15,7 @@ namespace ttg_parsec {
       parsec_flow_t* flows = nullptr;
       parsec_gpu_exec_stream_t* stream = nullptr;
       parsec_device_gpu_module_t* device = nullptr;
+      parsec_task_class_t task_class; // copy of the taskclass
     };
 
     template<bool SupportDevice>
@@ -57,15 +58,23 @@ namespace ttg_parsec {
     }
 
     inline
-    ttg_parsec_data_flags operator|=(ttg_parsec_data_flags lhs, ttg_parsec_data_flags rhs) {
+    ttg_parsec_data_flags operator|=(ttg_parsec_data_flags& lhs, ttg_parsec_data_flags rhs) {
         using flags_type = std::underlying_type<ttg_parsec_data_flags>::type;
-        return ttg_parsec_data_flags(static_cast<flags_type>(lhs) | static_cast<flags_type>(rhs));
+        lhs = ttg_parsec_data_flags(static_cast<flags_type>(lhs) | static_cast<flags_type>(rhs));
+        return lhs;
     }
 
     inline
     uint8_t operator&(ttg_parsec_data_flags lhs, ttg_parsec_data_flags rhs) {
         using flags_type = std::underlying_type<ttg_parsec_data_flags>::type;
         return static_cast<flags_type>(lhs) & static_cast<flags_type>(rhs);
+    }
+
+    inline
+    ttg_parsec_data_flags operator&=(ttg_parsec_data_flags& lhs, ttg_parsec_data_flags rhs) {
+        using flags_type = std::underlying_type<ttg_parsec_data_flags>::type;
+        lhs = ttg_parsec_data_flags(static_cast<flags_type>(lhs) & static_cast<flags_type>(rhs));
+        return lhs;
     }
 
     inline
@@ -146,10 +155,14 @@ namespace ttg_parsec {
           : data_count(data_count)
           , copies(copies)
           , defer_writer(defer_writer) {
+        PARSEC_OBJ_CONSTRUCT(&parsec_task, parsec_task_t);
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
         parsec_task.priority = 0;
+
+        // TODO: can we avoid this?
+        for (int i = 0; i < MAX_PARAM_COUNT; ++i) { this->parsec_task.data[i].data_in = nullptr; }
       }
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
@@ -161,6 +174,7 @@ namespace ttg_parsec {
           , copies(copies)
           , release_task_cb(release_fn)
           , defer_writer(defer_writer) {
+        PARSEC_OBJ_CONSTRUCT(&parsec_task, parsec_task_t);
         PARSEC_LIST_ITEM_SINGLETON(&parsec_task.super);
         parsec_task.mempool_owner = mempool;
         parsec_task.task_class = task_class;
@@ -168,6 +182,9 @@ namespace ttg_parsec {
         parsec_task.taskpool = taskpool;
         parsec_task.priority = priority;
         parsec_task.chore_mask = 1<<0;
+
+        // TODO: can we avoid this?
+        for (int i = 0; i < MAX_PARAM_COUNT; ++i) { this->parsec_task.data[i].data_in = nullptr; }
       }
 
     public:
@@ -185,7 +202,7 @@ namespace ttg_parsec {
       TT* tt = nullptr;
       key_type key;
       std::array<stream_info_t, num_streams> streams;
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
       ttg::TaskCoroutineID coroutine_id = ttg::TaskCoroutineID::Invalid;
 #endif
@@ -234,6 +251,15 @@ namespace ttg_parsec {
         }
       }
 
+      template<ttg::ExecutionSpace Space>
+      parsec_hook_return_t invoke_evaluate() {
+        if constexpr (Space == ttg::ExecutionSpace::Host) {
+          return PARSEC_HOOK_RETURN_DONE;
+        } else {
+          return TT::template device_static_evaluate<Space>(&this->parsec_task);
+        }
+      }
+
       parsec_key_t pkey() { return reinterpret_cast<parsec_key_t>(&key); }
     };
 
@@ -242,7 +268,7 @@ namespace ttg_parsec {
       static constexpr size_t num_streams = TT::numins;
       TT* tt = nullptr;
       std::array<stream_info_t, num_streams> streams;
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
       ttg::TaskCoroutineID coroutine_id = ttg::TaskCoroutineID::Invalid;
 #endif

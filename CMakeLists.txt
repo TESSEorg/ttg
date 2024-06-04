@@ -59,6 +59,7 @@ option(TTG_ENABLE_LEVEL_ZERO "Whether to TTG will look for Intel oneAPI Level Ze
 option(TTG_EXAMPLES "Whether to build examples" OFF)
 option(TTG_ENABLE_ASAN "Whether to enable address sanitizer" OFF)
 
+option(TTG_ENABLE_COROUTINES "Whether to enable C++ coroutines, needed for accelerator device support" ON)
 option(TTG_FETCH_BOOST "Whether to fetch+build Boost, if missing" OFF)
 option(TTG_IGNORE_BUNDLED_EXTERNALS "Whether to skip installation and use of bundled external dependencies (Boost.CallableTraits)" OFF)
 option(TTG_ENABLE_TRACE "Whether to enable ttg::trace() output" OFF)
@@ -94,8 +95,26 @@ endif (BUILD_TESTING)
 ###########################
 # Boost
 include("${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchBoost.cmake")
-# C++ coroutines
-find_package(CXXStdCoroutine MODULE REQUIRED COMPONENTS Final Experimental)
+
+if (TTG_ENABLE_COROUTINES)
+    set(SKIP_COROUTINE_DETECTION FALSE)
+    # C++ coroutines, check for broken GCC releases and skip if one is found
+    if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+        if (${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 11.4.0)
+            set(SKIP_COROUTINE_DETECTION TRUE)
+        elseif(${CMAKE_CXX_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.1.0 AND ${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 12.3.0)
+            set(SKIP_COROUTINE_DETECTION TRUE)
+        endif()
+        if (SKIP_COROUTINE_DETECTION)
+            message(WARNING "GCC with broken Coroutine support detected, disabling Coroutine support. At least GCC 11.4, 12.3, or 13.1 required.")
+        endif(SKIP_COROUTINE_DETECTION)
+    endif(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+
+    if (NOT SKIP_COROUTINE_DETECTION)
+        find_package(CXXStdCoroutine MODULE REQUIRED COMPONENTS Final Experimental)
+        set(TTG_HAVE_COROUTINE CXXStdCoroutine_FOUND CACHE BOOL "True if the compiler has coroutine support")
+    endif(NOT SKIP_COROUTINE_DETECTION)
+endif(TTG_ENABLE_COROUTINES)
 
 
 ##########################

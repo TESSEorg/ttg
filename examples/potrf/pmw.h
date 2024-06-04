@@ -102,6 +102,14 @@ public:
            (pm->uplo == PARSEC_MATRIX_UPPER && col >= row);
   }
 
+  int P() const {
+    return pm->grid.rows;
+  }
+
+  int Q() const {
+    return pm->grid.cols;
+  }
+
   PaRSECMatrixT* parsec() {
     return pm;
   }
@@ -132,7 +140,7 @@ public:
 };
 
 template<typename ValueT>
-using MatrixT = PaRSECMatrixWrapper<sym_two_dim_block_cyclic_t, ValueT>;
+using MatrixT = PaRSECMatrixWrapper<parsec_matrix_sym_block_cyclic_t, ValueT>;
 
 static auto make_load_tt(MatrixT<double> &A, ttg::Edge<Key2, MatrixTile<double>> &toop, bool defer_write)
 {

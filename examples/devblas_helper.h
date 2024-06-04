@@ -10,7 +10,7 @@
 #include <map>
 #include <mutex>
 
-#ifdef TTG_HAVE_CUDART
+#ifdef TTG_ENABLE_CUDA
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -87,9 +87,9 @@ inline const cusolverDnHandle_t& cusolver_handle(T _ = 0) {
 
   return it->second;
 }
-#endif // TTG_HAVE_CUDART
+#endif // TTG_ENABLE_CUDA
 
-#ifdef TTG_HAVE_HIPBLAS
+#ifdef TTG_ENABLE_HIP
 
 #include <hip/hip_runtime.h>
 #include <hipblas/hipblas.h>
@@ -162,4 +162,4 @@ inline const hipsolverDnHandle_t& hipsolver_handle(T _ = 0) {
   }
   return it->second;
 }
-#endif // TTG_HAVE_HIPBLAS
+#endif // TTG_ENABLE_HIP

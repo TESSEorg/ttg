@@ -49,7 +49,7 @@ using namespace ttg;
 
 #include "ttg/serialization/std/pair.h"
 
-#if defined(TTG_HAVE_LEVEL_ZERO)
+#if defined(TTG_ENABLE_LEVEL_ZERO)
 #include <oneapi/mkl.hpp>
 #include <sys/time.h>
 #endif
@@ -254,7 +254,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
 };
 
 using scalar_t = double;
-#if defined(TTG_HAVE_CUDA) || defined(TTG_HAVE_HIPBLAS)
+#if defined(TTG_ENABLE_CUDA) || defined(TTG_ENABLE_HIP)
 using blk_t = DeviceTensor<scalar_t, btas::DEFAULT::range,
                            btas::mohndle<btas::varray<scalar_t, TiledArray::device_pinned_allocator<scalar_t>>,
                                          btas::Handle::shared_ptr>>;
@@ -284,7 +284,7 @@ static void device_gemm(Blk &C, const Blk &A, const Blk &B) {
   //assert(B.b.get_current_device() != 0);
   auto device = ttg::device::current_device();
   assert(device.is_device());
-#if defined(TTG_HAVE_CUDA)
+#if defined(TTG_ENABLE_CUDA)
   if constexpr (std::is_same_v<T,double>) {
       cublasDgemm(cublas_handle(), CUBLAS_OP_N, CUBLAS_OP_N, C.extent(0), C.extent(1), A.extent(1),
                   &alpha, A.b.current_device_ptr(), A.extent(0), B.b.current_device_ptr(), B.extent(0), &beta,
@@ -295,7 +295,7 @@ static void device_gemm(Blk &C, const Blk &A, const Blk &B) {
                   &alpha, A.b.current_device_ptr(), A.extent(0), B.b.current_device_ptr(), B.extent(0), &beta,
                   C.b.current_device_ptr(), C.extent(0));
   }
-#elif defined(TTG_HAVE_HIPBLAS)
+#elif defined(TTG_ENABLE_HIP)
   if constexpr (std::is_same_v<T,double>) {
     hipblasDgemm(hipblas_handle(),
                  HIPBLAS_OP_N, HIPBLAS_OP_N,
@@ -311,7 +311,7 @@ static void device_gemm(Blk &C, const Blk &A, const Blk &B) {
                  B.b.current_device_ptr(), B.extent(0), &beta,
                  C.b.current_device_ptr(), C.extent(0));
   }
-#elif defined(TTG_HAVE_LEVEL_ZERO)
+#elif defined(TTG_ENABLE_LEVEL_ZERO)
 
 #if defined(DEBUG_SYNCHRONOUS)
   try {
@@ -765,13 +765,13 @@ class SpMM25D {
    public:
     using baseT = typename MultiplyAdd::ttT;
 
-#if defined(TTG_HAVE_CUDA)
+#if defined(TTG_ENABLE_CUDA)
     static constexpr bool have_cuda_op = true;
 #warning SPMM using CUDA implementation
-#elif defined(TTG_HAVE_HIPBLAS)
+#elif defined(TTG_ENABLE_HIP)
     static constexpr bool have_hip_op  = true;
 #warning SPMM using HIP implementation
-#elif defined(TTG_HAVE_LEVEL_ZERO)
+#elif defined(TTG_ENABLE_LEVEL_ZERO)
     static constexpr bool have_level_zero_op = true;
 #warning SPMM using LEVEL_ZERO implementation
 #else
