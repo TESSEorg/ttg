@@ -7,6 +7,8 @@
 #include <mutex>
 #include <map>
 
+#include "ttg/util/span.h"
+
 #ifdef TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS
 #include <ttg/external/boost/callable_traits.hpp>
 #else
@@ -18,7 +20,7 @@ namespace ttg {
   template<typename Key>
   struct ConstraintBase {
     using key_type = Key;
-    using listener_t = std::function<void(const std::span<key_type>&)>;
+    using listener_t = std::function<void(const ttg::span<key_type>&)>;
 
     ConstraintBase()
     { }
@@ -45,7 +47,7 @@ namespace ttg {
       m_listeners.insert_or_assign(tt, std::move(l));
     }
 
-    void notify_listener(const std::span<key_type>& keys, ttg::TTBase* tt) {
+    void notify_listener(const ttg::span<key_type>& keys, ttg::TTBase* tt) {
       auto& release = m_listeners[tt];
       release(keys);
     }
@@ -162,7 +164,7 @@ namespace ttg {
       for (auto& seq : elem.m_keys) {
         // account for the newly active keys
         this->m_active.fetch_add(seq.second.size(), std::memory_order_relaxed);
-        this->notify_listener(std::span<key_type>(seq.second.data(), seq.second.size()), seq.first);
+        this->notify_listener(ttg::span<key_type>(seq.second.data(), seq.second.size()), seq.first);
       }
     }
 
@@ -195,7 +197,7 @@ namespace ttg {
       for (auto& elem : seqs) {
         for (auto& e : elem.m_keys) {
           // account for the newly active keys
-          this->notify_listener(std::span<key_type>(e.second.data(), e.second.size()), e.first);
+          this->notify_listener(ttg::span<key_type>(e.second.data(), e.second.size()), e.first);
         }
       }
     }
