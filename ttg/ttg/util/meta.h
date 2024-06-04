@@ -848,18 +848,18 @@ namespace ttg {
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       // keymap_t<key,value> = std::function<int(const key&>, protected against void key
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-      template <typename Key, typename Enabler = void>
+      template <typename Key, typename Return, typename Enabler = void>
       struct keymap;
-      template <typename Key>
-      struct keymap<Key, std::enable_if_t<!is_void_v<Key>>> {
-        using type = std::function<int(const Key &)>;
+      template <typename Key, typename Return>
+      struct keymap<Key, Return, std::enable_if_t<!is_void_v<Key>>> {
+        using type = std::function<Return(const Key &)>;
       };
-      template <typename Key>
-      struct keymap<Key, std::enable_if_t<is_void_v<Key>>> {
-        using type = std::function<int()>;
+      template <typename Key, typename Return>
+      struct keymap<Key, Return, std::enable_if_t<is_void_v<Key>>> {
+        using type = std::function<Return()>;
       };
-      template <typename Key>
-      using keymap_t = typename keymap<Key>::type;
+      template <typename Key, typename Return = int>
+      using keymap_t = typename keymap<Key, Return>::type;
 
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       // input_reducers_t<valueTs...> = std::tuple<

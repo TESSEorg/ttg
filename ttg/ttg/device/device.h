@@ -2,6 +2,8 @@
 
 #include "ttg/config.h"
 #include "ttg/execution.h"
+#include "ttg/impl_selector.h"
+#include "ttg/fwd.h"
 
 
 
@@ -180,3 +182,9 @@ namespace ttg::device {
   }
 } // namespace ttg
 #endif // defined(TTG_HAVE_HIP)
+
+namespace ttg::device {
+  inline int num_devices() {
+    return TTG_IMPL_NS::num_devices();
+  }
+}

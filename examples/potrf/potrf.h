@@ -674,9 +674,21 @@ namespace potrf {
     auto keymap1 = [&](const Key1& key) { return A.rank_of(key[0], key[0]); };
 
     auto keymap2a = [&](const Key2& key) { return A.rank_of(key[0], key[1]); };
-    auto keymap2b = [&](const Key2& key) { return A.rank_of(key[0], key[0]); };
+    auto keymap2b = [&](const Key2& key) { return A.rank_of(key[1], key[1]); };
 
     auto keymap3 = [&](const Key3& key) { return A.rank_of(key[0], key[1]); };
+
+    /**
+     * Device map hints: we try to keep tiles on one row on the same device to minimize
+     * data movement between devices. This provides hints for load-balancing up front
+     * and avoids movement of the TRSM result to GEMM tasks.
+     */
+    auto devmap1 = [&](const Key1& key) { return (key[0] / A.P()) % ttg::device::num_devices(); };
+
+    auto devmap2a = [&](const Key2& key) { return (key[0] / A.P()) % ttg::device::num_devices(); };
+    auto devmap2b = [&](const Key2& key) { return (key[1] / A.P()) % ttg::device::num_devices(); };
+
+    auto devmap3 = [&](const Key3& key) { return (key[0] / A.P()) % ttg::device::num_devices(); };
 
     ttg::Edge<Key1, MatrixTile<T>> syrk_potrf("syrk_potrf"), disp_potrf("disp_potrf");
 
@@ -692,18 +704,30 @@ namespace potrf {
     auto tt_potrf = make_potrf(A, disp_potrf, syrk_potrf, potrf_trsm, output);
     tt_potrf->set_keymap(keymap1);
     tt_potrf->set_defer_writer(defer_write);
+#ifdef ENABLE_DEVICE_KERNEL
+    tt_potrf->set_devicemap(devmap1);
+#endif // 0
 
     auto tt_trsm = make_trsm(A, disp_trsm, potrf_trsm, gemm_trsm, trsm_syrk, trsm_gemm_row, trsm_gemm_col, output);
     tt_trsm->set_keymap(keymap2a);
     tt_trsm->set_defer_writer(defer_write);
+#ifdef ENABLE_DEVICE_KERNEL
+    tt_trsm->set_devicemap(devmap2a);
+#endif // 0
 
     auto tt_syrk = make_syrk(A, disp_syrk, trsm_syrk, syrk_syrk, syrk_potrf, syrk_syrk);
     tt_syrk->set_keymap(keymap2b);
     tt_syrk->set_defer_writer(defer_write);
+#ifdef ENABLE_DEVICE_KERNEL
+    tt_syrk->set_devicemap(devmap2b);
+#endif // 0
 
     auto tt_gemm = make_gemm(A, disp_gemm, trsm_gemm_row, trsm_gemm_col, gemm_gemm, gemm_trsm, gemm_gemm);
     tt_gemm->set_keymap(keymap3);
     tt_gemm->set_defer_writer(defer_write);
+#ifdef ENABLE_DEVICE_KERNEL
+    tt_gemm->set_devicemap(devmap3);
+#endif // 0
 
     /* Priorities taken from DPLASMA */
     auto nt = A.cols();

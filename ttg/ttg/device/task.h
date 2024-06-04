@@ -9,6 +9,8 @@
 #include "ttg/impl_selector.h"
 #include "ttg/ptr.h"
 
+#ifdef TTG_HAVE_COROUTINE
+
 namespace ttg::device {
 
   namespace detail {
@@ -632,6 +634,8 @@ namespace ttg::device {
   bool device_reducer::completed() { return base_type::promise().state() == ttg::device::detail::TTG_DEVICE_CORO_COMPLETE; }
 #endif // 0
 
-}  // namespace ttg::devie
+}  // namespace ttg::device
+
+#endif // TTG_HAVE_COROUTINE
 
 #endif // TTG_DEVICE_TASK_H

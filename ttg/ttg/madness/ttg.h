@@ -13,6 +13,7 @@
 #include "ttg/base/keymap.h"
 #include "ttg/base/tt.h"
 #include "ttg/func.h"
+#include "ttg/madness/device.h"
 #include "ttg/runtimes.h"
 #include "ttg/tt.h"
 #include "ttg/util/bug.h"
@@ -23,9 +24,7 @@
 #include "ttg/util/meta/callable.h"
 #include "ttg/util/void.h"
 #include "ttg/world.h"
-#ifdef TTG_HAS_COROUTINE
 #include "ttg/coroutine.h"
-#endif
 
 #include <array>
 #include <cassert>
@@ -302,10 +301,10 @@ namespace ttg_madness {
       derivedT *derived;                            // Pointer to derived class instance
       bool pull_terminals_invoked = false;
       std::conditional_t<ttg::meta::is_void_v<keyT>, ttg::Void, keyT> key;  // Task key
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
       void *suspended_task_address = nullptr;  // if not null the function is suspended
       ttg::TaskCoroutineID coroutine_id = ttg::TaskCoroutineID::Invalid;
-#endif
+#endif // TTG_HAVE_COROUTINE
 
       /// makes a tuple of references out of tuple of
       template <typename Tuple, std::size_t... Is>
@@ -335,11 +334,11 @@ namespace ttg_madness {
         ttT::threaddata.call_depth++;
 
         void *suspended_task_address =
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
             this->suspended_task_address;  // non-null = need to resume the task
-#else
+#else  // TTG_HAVE_COROUTINE
             nullptr;
-#endif
+#endif // TTG_HAVE_COROUTINE
         if (suspended_task_address == nullptr) {  // task is a coroutine that has not started or an ordinary function
           // ttg::print("starting task");
           if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
@@ -361,7 +360,7 @@ namespace ttg_madness {
           } else  // unreachable
             ttg::abort();
         } else {  // resume suspended coroutine
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
           auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address));
           assert(ret.ready());
           ret.resume();
@@ -372,9 +371,9 @@ namespace ttg_madness {
             // leave suspended_task_address as is
           }
           this->suspended_task_address = suspended_task_address;
-#else
+#else  // TTG_HAVE_COROUTINE
           ttg::abort();  // should not happen
-#endif
+#endif // TTG_HAVE_COROUTINE
         }
 
         ttT::threaddata.call_depth--;
@@ -383,7 +382,7 @@ namespace ttg_madness {
         //   ttg::print("finishing task",ttT::threaddata.call_depth);
         // }
 
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
         if (suspended_task_address) {
           // TODO implement handling of suspended coroutines properly
 
@@ -411,7 +410,7 @@ namespace ttg_madness {
             ttg::abort();
           }
         }
-#endif  // TTG_HAS_COROUTINE
+#endif  // TTG_HAVE_COROUTINE
       }
 
       virtual ~TTArgs() {}  // Will be deleted via TaskInterface*

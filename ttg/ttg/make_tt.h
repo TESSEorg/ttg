@@ -149,7 +149,7 @@ class CallableWrapTTArgs
   std::conditional_t<std::is_function_v<noref_funcT>, std::add_pointer_t<noref_funcT>, noref_funcT> func;
 
   using op_return_type =
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
       std::conditional_t<std::is_same_v<returnT, ttg::resumable_task>,
                          ttg::coroutine_handle<ttg::resumable_task_state>,
 #ifdef TTG_HAVE_DEVICE
@@ -160,9 +160,9 @@ class CallableWrapTTArgs
                            void
 #endif  // TTG_HAVE_DEVICE
                          >;
-#else   // TTG_HAS_COROUTINE
+#else   // TTG_HAVE_COROUTINE
       void;
-#endif  // TTG_HAS_COROUTINE
+#endif  // TTG_HAVE_COROUTINE
 
 public:
   static constexpr bool have_cuda_op = (space == ttg::ExecutionSpace::CUDA);
@@ -176,7 +176,7 @@ protected:
     static_assert(std::is_same_v<std::remove_reference_t<decltype(ret)>, returnT>,
                   "CallableWrapTTArgs<funcT,returnT,...>: returnT does not match the actual return type of funcT");
     if constexpr (!std::is_void_v<returnT>) {  // protect from compiling for void returnT
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
       if constexpr (std::is_same_v<returnT, ttg::resumable_task>) {
         ttg::coroutine_handle<ttg::resumable_task_state> coro_handle;
         // if task completed destroy it

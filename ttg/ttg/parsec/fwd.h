@@ -82,6 +82,8 @@ namespace ttg_parsec {
   template<typename... Buffer>
   inline void mark_device_out(std::tuple<Buffer&...> &b);
 
+  inline int num_devices();
+
 #if 0
   template<typename... Args>
   inline std::pair<bool, std::tuple<ptr<std::decay_t<Args>>...>> get_ptr(Args&&... args);

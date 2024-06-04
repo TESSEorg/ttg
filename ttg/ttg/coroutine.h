@@ -6,10 +6,13 @@
 #define TTG_COROUTINE_H
 
 #include "ttg/config.h"
+
+#ifdef TTG_HAVE_COROUTINE
 #include TTG_CXX_COROUTINE_HEADER
 
 #include <algorithm>
 #include <array>
+
 
 namespace ttg {
 
@@ -226,5 +229,7 @@ namespace ttg {
   };
 
 }  // namespace ttg
+
+#endif // TTG_HAVE_COROUTINE
 
 #endif  // TTG_COROUTINE_H

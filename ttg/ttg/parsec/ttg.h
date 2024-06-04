@@ -12,6 +12,8 @@
  * This may cause deadlocks, so use with caution. */
 #define TTG_PARSEC_DEFER_WRITER false
 
+#include "ttg/config.h"
+
 #include "ttg/impl_selector.h"
 
 /* include ttg header to make symbols available in case this header is included directly */
@@ -740,6 +742,7 @@ namespace ttg_parsec {
     inline void transfer_ownership_impl(ttg_data_copy_t *copy, int device) {
       if constexpr(!std::is_const_v<std::tuple_element_t<I, typename TT::input_values_tuple_type>>) {
         copy->transfer_ownership(PARSEC_FLOW_ACCESS_RW, device);
+        copy->inc_current_version();
       }
     }
 
@@ -765,7 +768,8 @@ namespace ttg_parsec {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_op<ttg::ExecutionSpace::CUDA>();
       } else {
-        throw std::runtime_error("PaRSEC CUDA hook invoked on a TT that does not support CUDA operations!");
+        std::cerr << "CUDA hook called without having a CUDA op!" << std::endl;
+        return PARSEC_HOOK_RETURN_ERROR;
       }
     }
 
@@ -775,7 +779,8 @@ namespace ttg_parsec {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_op<ttg::ExecutionSpace::HIP>();
       } else {
-        throw std::runtime_error("PaRSEC HIP hook invoked on a TT that does not support HIP operations!");
+        std::cerr << "HIP hook called without having a HIP op!" << std::endl;
+        return PARSEC_HOOK_RETURN_ERROR;
       }
     }
 
@@ -785,9 +790,42 @@ namespace ttg_parsec {
         parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
         return me->template invoke_op<ttg::ExecutionSpace::L0>();
       } else {
-        throw std::runtime_error("PaRSEC HIP hook invoked on a TT that does not support HIP operations!");
+        std::cerr << "L0 hook called without having a L0 op!" << std::endl;
+        return PARSEC_HOOK_RETURN_ERROR;
       }
     }
+
+
+    template<typename TT>
+    inline parsec_hook_return_t evaluate_cuda(const parsec_task_t *parsec_task) {
+      if constexpr(TT::derived_has_cuda_op()) {
+        parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
+        return me->template invoke_evaluate<ttg::ExecutionSpace::CUDA>();
+      } else {
+        return PARSEC_HOOK_RETURN_NEXT;
+      }
+    }
+
+    template<typename TT>
+    inline parsec_hook_return_t evaluate_hip(const parsec_task_t *parsec_task) {
+      if constexpr(TT::derived_has_hip_op()) {
+        parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
+        return me->template invoke_evaluate<ttg::ExecutionSpace::HIP>();
+      } else {
+        return PARSEC_HOOK_RETURN_NEXT;
+      }
+    }
+
+    template<typename TT>
+    inline parsec_hook_return_t evaluate_level_zero(const parsec_task_t *parsec_task) {
+      if constexpr(TT::derived_has_level_zero_op()) {
+        parsec_ttg_task_t<TT> *me = (parsec_ttg_task_t<TT> *)parsec_task;
+        return me->template invoke_evaluate<ttg::ExecutionSpace::L0>();
+      } else {
+        return PARSEC_HOOK_RETURN_NEXT;
+      }
+    }
+
 
     template <typename KeyT, typename ActivationCallbackT>
     class rma_delayed_activate {
@@ -1263,6 +1301,7 @@ namespace ttg_parsec {
     ttg::World world;
     ttg::meta::detail::keymap_t<keyT> keymap;
     ttg::meta::detail::keymap_t<keyT> priomap;
+    ttg::meta::detail::keymap_t<keyT, ttg::device::Device> devicemap;
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<actual_input_tuple_type>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
@@ -1450,36 +1489,95 @@ namespace ttg_parsec {
     }
 
     template <ttg::ExecutionSpace Space>
+    static parsec_hook_return_t device_static_evaluate(parsec_task_t* parsec_task) {
+
+      task_t *task = (task_t*)parsec_task;
+      if (task->dev_ptr->gpu_task == nullptr) {
+
+        /* set up a device task */
+        parsec_gpu_task_t *gpu_task;
+        /* PaRSEC wants to free the gpu_task, because F***K ownerships */
+        gpu_task = static_cast<parsec_gpu_task_t*>(std::calloc(1, sizeof(*gpu_task)));
+        PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_list_item_t);
+        gpu_task->ec = parsec_task;
+        gpu_task->task_type = 0; // user task
+        gpu_task->last_data_check_epoch = -1; // used internally
+        gpu_task->pushout = 0;
+        gpu_task->submit = &TT::device_static_submit<Space>;
+
+        // one way to force the task device
+        // currently this will probably break all of PaRSEC if this hint
+        // does not match where the data is located, not really useful for us
+        // instead we set a hint on the data if there is no hint set yet
+        //parsec_task->selected_device = ...;
+
+        /* set the gpu_task so it's available in register_device_memory */
+        task->dev_ptr->gpu_task = gpu_task;
+
+        /* TODO: is this the right place to set the mask? */
+        task->parsec_task.chore_mask = PARSEC_DEV_ALL;
+
+        /* copy over the task class, because that's what we need */
+        task->dev_ptr->task_class = *task->parsec_task.task_class;
+
+        // first invocation of the coroutine to get the coroutine handle
+        static_op<Space>(parsec_task);
+
+        /* when we come back here, the flows in gpu_task are set (see register_device_memory) */
+
+        parsec_task_class_t& tc = task->dev_ptr->task_class;
+
+        // input flows are set up during register_device_memory as part of the first invocation above
+        for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
+          tc.in[i]  = gpu_task->flow[i];
+          tc.out[i] = gpu_task->flow[i];
+        }
+        tc.nb_flows = MAX_PARAM_COUNT;
+
+        /* set the device hint on the data */
+        TT *tt = task->tt;
+        if (tt->devicemap) {
+          int parsec_dev;
+          if constexpr (std::is_void_v<keyT>) {
+            parsec_dev = detail::ttg_device_to_parsec_device(tt->devicemap());
+          } else {
+            parsec_dev = detail::ttg_device_to_parsec_device(tt->devicemap(task->key));
+          }
+          for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
+            /* only set on mutable data since we have exclusive access */
+            if (tc.in[i]->flow_flags & PARSEC_FLOW_ACCESS_WRITE) {
+              parsec_data_t *data = parsec_task->data[i].data_in->original;
+              /* only set the preferred device if the host has the latest copy
+               * as otherwise we may end up with the wrong data if there is a newer
+               * version on a different device. Also, keep fingers crossed. */
+              if (data->owner_device == 0) {
+                parsec_advise_data_on_device(data, parsec_dev, PARSEC_DEV_DATA_ADVICE_PREFERRED_DEVICE);
+              }
+            }
+          }
+        }
+
+        /* set the new task class that contains the flows */
+        task->parsec_task.task_class = &task->dev_ptr->task_class;
+
+        /* select this one */
+        return PARSEC_HOOK_RETURN_DONE;
+      }
+
+      std::cerr << "EVALUATE called on task with assigned GPU task!" << std::endl;
+
+      /* not sure if this might happen*/
+      return PARSEC_HOOK_RETURN_ERROR;
+
+    }
+
+    template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t device_static_op(parsec_task_t* parsec_task) {
       static_assert(derived_has_device_op());
 
-      int dev_index;
-      double ratio = 1.0;
+      /* when we come in here we have a device assigned and are ready to go */
 
       task_t *task = (task_t*)parsec_task;
-      parsec_execution_stream_s *es = task->tt->world.impl().execution_stream();
-
-      //std::cout << "device_static_op: task " << parsec_task << std::endl;
-
-      /* set up a device task */
-      parsec_gpu_task_t *gpu_task;
-      /* PaRSEC wants to free the gpu_task, because F***K ownerships */
-      gpu_task = static_cast<parsec_gpu_task_t*>(std::calloc(1, sizeof(*gpu_task)));
-      PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_list_item_t);
-      gpu_task->ec = parsec_task;
-      gpu_task->task_type = 0; // user task
-      gpu_task->load = 1;    // TODO: can we do better?
-      gpu_task->last_data_check_epoch = -1; // used internally
-      gpu_task->pushout = 0;
-      gpu_task->submit = &TT::device_static_submit<Space>;
-
-      /* set the gpu_task so it's available in register_device_memory */
-      task->dev_ptr->gpu_task = gpu_task;
-
-      // first invocation of the coroutine to get the coroutine handle
-      static_op<Space>(parsec_task);
-
-      /* when we come back here, the flows in gpu_task are set (see register_device_memory) */
 
       if (nullptr == task->suspended_task_address) {
         /* short-cut in case the task returned immediately */
@@ -1495,40 +1593,12 @@ namespace ttg_parsec {
       /* for now make sure we're waiting for transfers and the coro hasn't skipped this step */
       assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_TRANSFER);
 
-      /* set up a temporary task-class to correctly specify the flows */
-      parsec_task_class_t tc = *task->parsec_task.task_class;
-
-      tc.name = task->parsec_task.task_class->name;
-      // input flows are set up during register_device_memory as part of the first invocation above
-      for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
-        tc.in[i]  = gpu_task->flow[i];
-        tc.out[i] = gpu_task->flow[i];
-      }
-      tc.nb_flows = MAX_PARAM_COUNT;
-
-      /* swap in the new task class */
-      const parsec_task_class_t* tmp = task->parsec_task.task_class;
-      *const_cast<parsec_task_class_t**>(&task->parsec_task.task_class) = &tc;
-
-      /* TODO: is this the right place to set the mask? */
-      task->parsec_task.chore_mask = PARSEC_DEV_ALL;
-      /* get a device and come back if we need another one */
-      int64_t task_load = 1;
-      dev_index = parsec_get_best_device(parsec_task, &task_load);
-
-      /* swap back the original task class */
-      task->parsec_task.task_class = tmp;
-
-      gpu_task->load = task_load;
-      assert(dev_index >= 0);
-      if (!parsec_mca_device_is_gpu(dev_index)) {
-          return PARSEC_HOOK_RETURN_NEXT; /* Fall back */
-      }
-
-      parsec_device_gpu_module_t *device = (parsec_device_gpu_module_t*)parsec_mca_device_get(dev_index);
+      parsec_device_gpu_module_t *device = (parsec_device_gpu_module_t*)task->parsec_task.selected_device;
       assert(NULL != device);
 
       task->dev_ptr->device = device;
+      parsec_gpu_task_t *gpu_task = task->dev_ptr->gpu_task;
+      parsec_execution_stream_s *es = task->tt->world.impl().execution_stream();
 
       switch(device->super.type) {
 
@@ -1575,11 +1645,11 @@ namespace ttg_parsec {
 
       task_t *task = (task_t*)parsec_task;
       void* suspended_task_address =
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
         task->suspended_task_address;  // non-null = need to resume the task
-#else
+#else  // TTG_HAVE_COROUTINE
         nullptr;
-#endif
+#endif // TTG_HAVE_COROUTINE
       //std::cout << "static_op: suspended_task_address " << suspended_task_address << std::endl;
       if (suspended_task_address == nullptr) {  // task is a coroutine that has not started or an ordinary function
 
@@ -1611,9 +1681,9 @@ namespace ttg_parsec {
       }
       else {  // resume the suspended coroutine
 
+#ifdef TTG_HAVE_COROUTINE
         assert(task->coroutine_id != ttg::TaskCoroutineID::Invalid);
 
-#ifdef TTG_HAS_COROUTINE
 #ifdef TTG_HAVE_DEVICE
         if (task->coroutine_id == ttg::TaskCoroutineID::DeviceTask) {
           ttg::device::Task coro = ttg::device::detail::device_task_handle_type::from_address(suspended_task_address);
@@ -1654,14 +1724,14 @@ namespace ttg_parsec {
         }
         task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
         detail::parsec_ttg_caller = nullptr;
+        task->suspended_task_address = suspended_task_address;
       }
       else
         ttg::abort();  // unrecognized task id
-#else // TTG_HAS_COROUTINE
-ttg::abort();  // should not happen
-#endif  // TTG_HAS_COROUTINE
+#else // TTG_HAVE_COROUTINE
+      ttg::abort();  // should not happen
+#endif  // TTG_HAVE_COROUTINE
       }
-      task->suspended_task_address = suspended_task_address;
 
       if (suspended_task_address == nullptr) {
         ttT *baseobj = task->tt;
@@ -1682,11 +1752,11 @@ ttg::abort();  // should not happen
       task_t *task = static_cast<task_t*>(parsec_task);
 
       void* suspended_task_address =
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
         task->suspended_task_address;  // non-null = need to resume the task
-#else
+#else // TTG_HAVE_COROUTINE
         nullptr;
-#endif
+#endif // TTG_HAVE_COROUTINE
       if (suspended_task_address == nullptr) {  // task is a coroutine that has not started or an ordinary function
         ttT *baseobj = (ttT *)task->object_ptr;
         derivedT *obj = (derivedT *)task->object_ptr;
@@ -1701,7 +1771,7 @@ ttg::abort();  // should not happen
         detail::parsec_ttg_caller = NULL;
       }
       else {
-#ifdef TTG_HAS_COROUTINE
+#ifdef TTG_HAVE_COROUTINE
         auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address));
         assert(ret.ready());
         ret.resume();
@@ -1712,9 +1782,9 @@ ttg::abort();  // should not happen
         else { // not yet completed
           // leave suspended_task_address as is
         }
-#else
+#else  // TTG_HAVE_COROUTINE
         ttg::abort();  // should not happen
-#endif
+#endif // TTG_HAVE_COROUTINE
       }
       task->suspended_task_address = suspended_task_address;
 
@@ -3352,11 +3422,11 @@ ttg::abort();  // should not happen
       if (!need_pushout) {
         bool device_supported = false;
         if constexpr (derived_has_cuda_op()) {
-          device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::CUDA);
+          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::CUDA);
         } else if constexpr (derived_has_hip_op()) {
-          device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::HIP);
+          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::HIP);
         } else if constexpr (derived_has_level_zero_op()) {
-          device_supported = !world.impl().mpi_support(ttg::ExecutionSpace::L0);
+          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::L0);
         }
         /* if MPI supports the device we don't care whether we have remote peers
          * because we can send from the device directly */
@@ -3379,7 +3449,6 @@ ttg::abort();  // should not happen
       auto remote_check = [&](){
           auto world = ttg_default_execution_context();
           int rank = world.rank();
-          uint64_t pos = 0;
           bool remote = keylist.end() != std::find_if(keylist.begin(), keylist.end(),
                                                       [&](const Key &key) { return keymap(key) != rank; });
           return remote;
@@ -3628,6 +3697,7 @@ ttg::abort();  // should not happen
 
       task_t *task = (task_t*)parsec_task;
 
+#ifdef TTG_HAVE_COROUTINE
       /* if we still have a coroutine handle we invoke it one more time to get the sends/broadcasts */
       if (task->suspended_task_address) {
         assert(task->coroutine_id != ttg::TaskCoroutineID::Invalid);
@@ -3658,6 +3728,7 @@ ttg::abort();  // should not happen
         /* the coroutine should have completed and we cannot access the promise anymore */
         task->suspended_task_address = nullptr;
       }
+#endif // TTG_HAVE_COROUTINE
 
       /* release our data copies */
       for (int i = 0; i < task->data_count; i++) {
@@ -3739,29 +3810,31 @@ ttg::abort();  // should not happen
       if constexpr (derived_has_cuda_op()) {
         self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CUDA;
-        ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
+        ((__parsec_chore_t *)self.incarnations)[0].evaluate = &detail::evaluate_cuda<TT>;
         ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_cuda<TT>;
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
-      } else if (derived_has_hip_op()) {
+      } else if constexpr (derived_has_hip_op()) {
         self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_HIP;
-        ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
+        ((__parsec_chore_t *)self.incarnations)[0].evaluate = &detail::evaluate_hip<TT>;
         ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_hip<TT>;
 
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
-      } else if (derived_has_level_zero_op()) {
+#if defined(PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT)
+      } else if constexpr (derived_has_level_zero_op()) {
         self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_LEVEL_ZERO;
-        ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
+        ((__parsec_chore_t *)self.incarnations)[0].evaluate = &detail::evaluate_level_zero<TT>;
         ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_level_zero<TT>;
 
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
+#endif // PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT
       } else {
         self.incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CPU;
@@ -4156,6 +4229,37 @@ ttg::abort();  // should not happen
       priomap = std::forward<Priomap>(pm);
     }
 
+    /// device map setter
+    /// The device map provides a hint on which device a task should execute.
+    /// TTG may not be able to honor the request and the corresponding task
+    /// may execute on a different device.
+    /// @arg pm a function that provides a hint on which device the task should execute.
+    template<typename Devicemap>
+    void set_devicemap(Devicemap&& dm) {
+      static_assert(derived_has_device_op(), "Device map only allowed on device-enabled TT!");
+      if constexpr (std::is_same_v<ttg::device::Device, decltype(dm(std::declval<keyT>()))>) {
+        // dm returns a Device
+        devicemap = std::forward<Devicemap>(dm);
+      } else {
+        // convert dm return into a Device
+        devicemap = [=](const keyT& key) {
+          if constexpr (derived_has_cuda_op()) {
+            return ttg::device::Device(dm(key), ttg::ExecutionSpace::CUDA);
+          } else if constexpr (derived_has_hip_op()) {
+            return ttg::device::Device(dm(key), ttg::ExecutionSpace::HIP);
+          } else if constexpr (derived_has_level_zero_op()) {
+            return ttg::device::Device(dm(key), ttg::ExecutionSpace::L0);
+          } else {
+            throw std::runtime_error("Unknown device type!");
+          }
+        };
+      }
+    }
+
+    /// device map accessor
+    /// @return the device map
+    auto get_devicemap() { return devicemap; }
+
     // Register the static_op function to associate it to instance_id
     void register_static_op_function(void) {
       int rank;
@@ -4266,8 +4370,6 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
         /* this copy won't be modified anymore so mark it as read-only */
         copy->reset_readers();
       }
-      /* the value was potentially changed, so increment version */
-      copy->inc_current_version();
     }
     /* We're coming from a writer so mark the data as modified.
      * That way we can force a pushout in prepare_send if we move to read-only tasks (needed by PaRSEC). */
