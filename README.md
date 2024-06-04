@@ -328,7 +328,7 @@ Because `Fn` is now a user-defined type, for TTG to be able to copy/move it betw
 
 Until now we have constructed individual TTs and linked them together; i.e.,  TTGs until now was implicit. Function `make_ttg_fib_lt` instead explicitly creates a graph of TTs (a TTG). This seemingly small step will greatly improve composability by allowing to use entire TTGs as a component of other graphs by stitching it with TTs or TTGs together.
 
-[//]: ![Fibonacci_TTG_example](doc/images/fibonacci_ttg.png)
+[//]: ![Fibonacci_TTG_example](doc/images/fibonacci_ttg.png) Image Source - https://lucid.app/lucidchart/a42b4027-156d-4cd0-8167-7d4acd205996/edit?viewport_loc=-1180%2C-522%2C2023%2C1165%2C0_0&invitationId=inv_bf9ace23-880a-4b36-a51c-d49c63913fad
 
 ###  CUDA Version
 
