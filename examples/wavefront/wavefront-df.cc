@@ -249,7 +249,7 @@ template <typename T>
 auto make_result(Matrix<T>* r, const Edge<Key, BlockMatrix<T>>& result) {
   auto f = [r](const Key& key, const BlockMatrix<T>& bm, std::tuple<>& out) {
     auto [i, j] = key;
-    if (bm(i, j) != (*r)(i, j)) {
+    if (bm != (*r)(i, j)) {
       std::cout << "ERROR in block (" << i << "," << j << ")\n";
     }
   };

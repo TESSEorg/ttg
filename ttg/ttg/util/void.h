@@ -11,7 +11,7 @@ namespace ttg {
   class Void {
   public:
     Void() = default;
-    template <typename T> Void(T&&) {}
+    template <typename T> explicit Void(T&&) {}
   };
 
   inline bool operator==(const Void&, const Void&) { return true; }
