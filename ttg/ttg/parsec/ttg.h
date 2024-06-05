@@ -1732,7 +1732,9 @@ namespace ttg_parsec {
       ttg::abort();  // should not happen
 #endif  // TTG_HAVE_COROUTINE
       }
-
+#ifdef TTG_HAVE_COROUTINE
+      task->suspended_task_address = suspended_task_address;
+#endif // TTG_HAVE_COROUTINE
       if (suspended_task_address == nullptr) {
         ttT *baseobj = task->tt;
         derivedT *obj = static_cast<derivedT *>(baseobj);
@@ -2354,12 +2356,8 @@ namespace ttg_parsec {
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<Key>;
 
-      if constexpr (!valueT_is_Void) {
-        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i,
-                   " : value = ", value);
-      } else {
-        ttg::trace(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
-      }
+
+      ttg::trace(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
 
       parsec_key_t hk = 0;
       if constexpr (!keyT_is_Void) {
