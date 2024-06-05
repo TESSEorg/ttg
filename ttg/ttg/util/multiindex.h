@@ -70,6 +70,13 @@ namespace ttg {
     }
 
     std::array<Int, Rank> data_;
+
+    friend bool operator==(const MultiIndex<Rank> &lhs, const MultiIndex<Rank> &rhs) {
+      return lhs.data_ == rhs.data_;
+    }
+    friend bool operator!=(const MultiIndex<Rank> &lhs, const MultiIndex<Rank> &rhs) {
+      return !(lhs == rhs);
+    }
   };
 
   template <std::size_t Rank>
