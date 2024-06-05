@@ -23,7 +23,15 @@ if (TTG_PARSEC_USE_BOOST_SERIALIZATION)
     list(APPEND optional_components
             serialization
             iostreams
-            graph
+    )
+endif()
+if (BUILD_EXAMPLES)
+    list(APPEND optional_components
+            bimap   # dependency of graph
+            foreach # dependency of graph
+            graph   # used for generation of inputs for spmm
+            property_map # dependency of graph
+            xpressive # dependency of graph
     )
 endif()
 
