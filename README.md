@@ -9,7 +9,7 @@ TTG might be for you if you want fine-grained parallel execution of complex (esp
 
   - programming models that target fine-grained parallelism, like native language tools (threads, async) and programming models/libraries (OpenMP, TaskFlow, Cilk, etc.) deal only with control flow, and thus are poorly suited for dealing with data-dependent execution
   - such models do not deal with distributed memory anyway
-  - and specialized runtimes like HPC, UPC++, StarPU, MADNESS, PaRSEC, etc., are still relatively low-level abstractions for expressing complex data-dependent task flows across modern distributed heterogeneous machines.
+  - and specialized runtimes like StarPU, PaRSEC, MADNESS, HPX, UPC++, etc., are still relatively low-level abstractions for expressing complex data-dependent task flows across modern distributed heterogeneous machines.
 
 The development of TTG was motivated by _irregular_ scientific applications like adaptive multiresolution numerical calculus and data-sparse tensor algebra which have lacked tools to keep up with the evolution of HPC platforms, especially toward heterogeneity. But TTG is far more widely applicable than that; it is a general-purpose programming model.
 
@@ -77,6 +77,7 @@ The basic model of computation is built around a Template Task Graph (TTG). A TT
 Thus, task creation is a byproduct of messages traveling through one or more TTGs. What makes the model powerful is the ability to encode large DAGs of tasks compactly.
 
 Before proceeding further, let's refine the few concepts used to define the programming model above:
+
 - `TaskId` (aka `Key`): A unique identifier for each task. It must be _perfectly_ hashable.
 - `Terminal`: A port for receiving (input)  and sending (output) messages. Each message consists of a (potentially void) `TaskId` and an (optional) datum. Terminals are strongly-typed. An {in,out}put terminal can be connected to one or more {out,in}put terminal (as long as the `TaskId` and datum types match). Input terminals are programmable (e.g., incoming messages can be optionally reduced).
 - `TemplateTask` (aka `TT`): This is a _template_ for creating tasks. Task template creates a task associated with a given `TaskId` when every input terminal received messages for the given `TaskId`.
@@ -87,6 +88,7 @@ Due to its simplicity only template tasks appear in the "Hello, World!" program.
 ## Structure of a Minimal TTG Program
 
 Every TTG program must:
+
 - select the TTG backend,
 - initialize the TTG runtime,
 - construct a TTG by declaring its constituent nodes,
@@ -326,13 +328,17 @@ Because `Fn` is now a user-defined type, for TTG to be able to copy/move it betw
 
 #### Why `make_ttg_fib_lt`?
 
-Until now we have constructed individual TTs and linked them together; i.e.,  TTGs until now was implicit. Function `make_ttg_fib_lt` instead explicitly creates a graph of TTs (a TTG). This seemingly small step will greatly improve composability by allowing to use entire TTGs as a component of other graphs by stitching it with TTs or TTGs together.
+Until now we have constructed individual TTs and linked them together; i.e.,  TTGs until now was implicit. Function `make_ttg_fib_lt` instead explicitly creates a graph of TTs (a TTG). This seemingly small step helps improve composability by allowing to use entire TTGs as a component of other graphs by stitching it with TTs or TTGs together.
 
-[//]: ![Fibonacci_TTG_example](doc/images/fibonacci_ttg.png) Image Source - https://lucid.app/lucidchart/a42b4027-156d-4cd0-8167-7d4acd205996/edit?viewport_loc=-1180%2C-522%2C2023%2C1165%2C0_0&invitationId=inv_bf9ace23-880a-4b36-a51c-d49c63913fad
+[//]: ![Fibonacci_TTG_example](doc/images/fibonacci_ttg.png)
 
-###  CUDA Version
+###  Device Version
 
-First show complete example, split into host and device code (single source cannot work since CUDA does not support C++20 and probably cannot handle TTG hyper-C++ anyway).
+It is currently not possible to have a general-purpose task runtime execute purely on device, hence TTG and the underlying runtimes execute tasks on the host (CPU), and these tasks launch device _kernels_. For technical reasons it is necessary to split the code into the host-only part, which looks remarkably like the CPU-only version above, and the device-specific part that implements the core part of the computation on the device. In the future it _may_ become possible to have single-source programs that contain both host and device parts contain in the same source file.
+
+####  Host-side Code
+
+The host-only part is completely independent of the type of the device programming model.
 
 ```cpp
 struct Fn : public ttg::TTValue<Fn> {
@@ -390,27 +396,43 @@ auto make_ttg_fib_lt(const int64_t F_n_max = 1000) {
 }
 ```
 
-`Fn` 
+Although the structure of the device-capable program is nearly identical to the CPU version, there are important differences:
+
+  - `Fn`'s data must exist on the host side (where the task is executed). To automate moving of the data between host and device memories `Fn` is implemented with the help of helper classes `TTValue` and `Buffer`.
+  - task functions become _coroutines_ (as indicated by their return type `device::Task`) to deal with the asynchrony of the host-device interactions (kernel launch, memory allocation and transfers)
+  - the target execution space is specified as a template argument of type `ExecutionSpace` to `make_tt`
+
+##### `TTValue`
+
+For optimal performance low-level runtime that manages the data motion across the memory hierarchy (host-to-host (i.e., between MPI ranks), host-to-device, and device-to-device) must be able to _track_ each datum as it orchestrates the computation. For example, when a TTG task `send`'s a datum to an output terminal connected to multiple consumers the runtime may avoid unnecessary copies, e.g. by recognizing that all consumers will only need read-only access to the data, hence reference to the same datum can be passed to all consumers. This requires being able to map pointer to a C++ object to the control block that describes that object to the runtime. Deriving C++ type `T` from `TTValue<T>` makes it possible to track objects `T` by embedding the control block into each object. This is particularly important for the data that has to travel to the device.
+
+##### `Buffer`
+`Buffer<T>` is a view of a contiguous sequence of objects of type `T` in the host memory that can be automatically moved by the runtime to/from the device memory. Here `Fn::b` is a view of the 2-element sequence pointed to by `Fn::F`; once it's constructed the content of `Fn::F` will be moved to/from the device by the runtime. The subsequent actions of `Fn::b` cause the automatic transfers of data to (`device::select(f_n.b)`) and from (`ttg::device::wait(f_n.b)`) the device.
+
+##### `device::Task`
+
+The key challenge of device programming models is that they are fundamentally _asynchronous_ to hide the large latency of interacting with the device. Kernel launches, unlike function calls on CPU, take 1000s of CPU cycles to occur, and the asynchrony helps amortize these costs by overlapping kernels launch and execution. Task programming models are a seemingly good match for device programming, but the key challenge is how to make device-capable task code look most like standard host-only task code. TTG ability to use _C++ coroutines_ as task bodies allows it to deal with asynchronous calls inside the tasks (the use of coroutines is the primary reason why TTG requires C++20 support by the C++ compiler). Roughly speaking, coroutines are resumable functions; they can return to the caller via a `co_await` statement and resumed at that point once some condition (typically, completion of submitted actions) has been satisdied. Device tasks `co_await` at every point where further progress requires completion of preceding device tasks:
+
+  - First `co_await` ensures that contents of `f_n.F[]` are available on the device. During the first invocation the data resides on the host, hence this allocates memory on the device and transfers the contents of `f_n.F[]` from host to device. During subsequent invocations the contents of `f_n.F[]` are likely already available on the device (unless the runtime decides to compute $F_{n+1}$ on a different device than $F_n$), thus this `co_await` may become a no-op.
+  - Second `co_await` ensures that the kernel launched by `next_value` has completed and the contents of `f_n.F[]` changed by that kernel are available on the host. This always causes device-to-host transfer.
+  - Third set of `co_await`'s ensures that the corresponding `device::send`, which sends the data located in the device memory, has completed. Since `device::send` within a task will typically return a local variable exit from coroutine would destroy such variables prematurely, hence instead of a `co_return` the coroutine concludes by waiting for the `device::send` to complete before exiting.
+
+##### `ExecutionSpace`
+
+TTG and its underlying runtime needs to be told in which _execution space_ the task code will operate. The current choices are denoted by the `ExecutionSpace` enumeration:
+
+- `ExecutionSpace::Host`: host processor (default)
+- `ExecutionSpace::CUDA`: an NVIDIA CUDA device
+- `ExecutionSpace::HIP`: an AMD HIP device
+- `ExecutionSpace::L0`: an Intel L0 device
+
+
 
 [//]: # (Walk through the key differences ... potentially we could show both side by side ... not sure how to do that in Markdown though ...)
 
-### Differences in the Code Implementation 
-| Aspect                             | CPU Implementation Code                         | GPU Implementation Code (CUDA)                                                                                                                                |
-|------------------------------------|-------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| C++ Features                       | Full use of C++20                               | Limited C++20 due to `__global__` and other CUDA specifics                                                                                                     |
-| Execution Space                    | CPU cores                                       | Defined by `#define ES ttg::ExecutionSpace::CUDA`                                                                                                              |
-| Data Transfer                      | Direct C++ object passing                       | Use of `ttg::Buffer` and CUDA memory operations                                                                                                                |
-| Task Creation                      | `auto fib = ttg::make_tt(...);`                 | `auto fib = ttg::make_tt<ES>(...);`                                                                                                                            |
-| Task Execution Synchronization    | Synchronous execution within TTG runtime        | Asynchronous execution using CUDA and coroutines: `co_await ttg::device::wait(f_n.b);`                                                                        |
-| Device-Specific Code               | Not applicable                                  | CUDA kernels: `__global__ void cu_next_value(int64_t* fn_and_fnm1);`                                                                                           |
-| Serialization                      | ` void serialize(Archive& ar) {ar & F;}`        | `void serialize(Archive& ar) { ttg::ttg_abort(); }`                                                                                                            |
-| Memory Management                  | Managed by C++ runtime and Managed by Fn struct                     | Managed by `Fn` struct with `ttg::Buffer`: `Fn() : F(std::make_unique<int64_t[]>(2)), b(F.get(), 2) {...}`                                                     |
-| Task Continuation and Data Locality| Managed implicitly by TTG                       | Managed explicitly: `co_await ttg::device::select(f_n.b); next_value(f_n.b.current_device_ptr()); co_await ttg::device::wait(f_n.b);`                         |
-| Memory Model                       | Implicit, managed by C++ runtime                | Explicit memory model involving CUDA memory management: `std::unique_ptr<int64_t[]> F; ttg::Buffer<int64_t> b;`                                                |
-| Task Flow and Control              | Implicit control flow based on TTG              | Explicit control flow using CUDA streams and coroutines: `if (f_n.F[0] < F_n_max) {...} else {...}`                                                             |
-| Task Invocation                    | Task invocation within TTG: `fib->invoke(...);` | Task invocation with host-device communication: `fib->template in<0>()->send(1, Fn{});`                                                                       |
+####  Device Kernel
 
-here's the CUDA code
+Here's the CUDA version of the device kernel and its host-side wrapper; ROCm and SYCL/Level0 variants will be very similar to the CUDA version:
 
 ```cpp
 #include "fibonacci_cuda_kernel.h"
@@ -426,7 +448,9 @@ here's the CUDA code
 #endif // TTG_HAVE_CUDA
 ```
 
+`cu_next_value` is the device kernel that evaluates $F_{n+1}$ from $F_{n}$ and $F_{n-1}$. `next_value` is a host function that launches `cu_next_value`; this is the function called in the `fib` task.
 
+The complete example, including the CMake build harness, can be found in [dox examples](https://github.com/TESSEorg/ttg/tree/master/doc/dox/dev/devsamp/fibonacci).
 
 ## Debugging TTG Programs
 
