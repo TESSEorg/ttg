@@ -110,10 +110,13 @@ jobs:
       working-directory: ${{github.workspace}}/build
       shell: bash
       run: |
-        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/main -B test_install_devsamp_main -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat test_install_devsamp_main/CMakeFiles/CMakeOutput.log && cat test_install_devsamp_main/CMakeFiles/CMakeError.log)
-        cmake --build test_install_devsamp_main
+        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/helloworld -B test_install_devsamp_helloworld -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat test_install_devsamp_helloworld/CMakeFiles/CMakeOutput.log && cat test_install_devsamp_helloworld/CMakeFiles/CMakeError.log)
+        cmake --build test_install_devsamp_helloworld
+        test_install_devsamp_helloworld/helloworld-parsec
+        test_install_devsamp_helloworld/helloworld-mad
         cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/fibonacci -B test_install_devsamp_fibonacci -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat test_install_devsamp_fibonacci/CMakeFiles/CMakeOutput.log && cat test_install_devsamp_fibonacci/CMakeFiles/CMakeError.log)
         cmake --build test_install_devsamp_fibonacci
+        test_install_devsamp_fibonacci/fibonacci-parsec
         cmake -E make_directory test_install_userexamples
         cat > test_install_userexamples/CMakeLists.txt <<EOF
         cmake_minimum_required(VERSION 3.14)
