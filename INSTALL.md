@@ -1,6 +1,6 @@
 # synopsis
 
-```.sh
+```sh
 $ git clone https://github.com/TESSEorg/ttg.git
 $ cmake -S ttg -B ttg/build -DCMAKE_INSTALL_PREFIX=/path/to/ttg/install [optional cmake args]
 $ cmake --build ttg/build

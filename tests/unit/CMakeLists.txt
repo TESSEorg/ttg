@@ -27,11 +27,18 @@ add_ttg_executable(core-unittests-ttg "${ut_src}" LINK_LIBRARIES "${ut_libs}" CO
 add_ttg_executable(serialization serialization.cc unit_main.cpp
                    LINK_LIBRARIES Catch2::Catch2 ttg-serialization  $<TARGET_NAME_IF_EXISTS:BTAS::BTAS>
                    COMPILE_DEFINITIONS $<$<TARGET_EXISTS:BTAS::BTAS>:TTG_HAS_BTAS=1>)
-#target_link_libraries(serialization "Catch2::Catch2;ttg-serialization")
-#if (TARGET BTAS::BTAS)
-#    target_link_libraries(serialization BTAS::BTAS)
-#    target_compile_definitions(serialization PRIVATE TTG_HAS_BTAS=1)
-#endif (TARGET BTAS::BTAS)
+
+# Boost serialization test: checks low-level codegen
+add_ttg_executable(serialization_boost serialization_boost.cc
+        LINK_LIBRARIES ttg-serialization-boost RUNTIMES "parsec")
+
+# Fib device test
+if (TTG_HAVE_CUDA)
+       add_ttg_executable(fibonacci_device fibonacci_device.cc
+            fibonacci_cuda_kernel.h
+            fibonacci_cuda_kernel.cu
+        LINK_LIBRARIES std::coroutine RUNTIMES "parsec")
+endif()
 
 # TODO: convert into unit test
 #if (TARGET MADworld)

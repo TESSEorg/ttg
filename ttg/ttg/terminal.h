@@ -202,38 +202,51 @@ namespace ttg {
     }
 
     template <typename Key = keyT, typename Value = valueT>
-    std::enable_if_t<meta::is_none_void_v<Key, Value>, void> send(const Key &key, const Value &value) {
-      if (!send_callback) throw std::runtime_error("send callback not initialized");
-      send_callback(key, value);
-    }
-
-    template <typename Key = keyT, typename Value = valueT>
-    std::enable_if_t<meta::is_none_void_v<Key, Value> && std::is_same_v<Value, std::remove_reference_t<Value>>, void>
+    std::enable_if_t<meta::is_none_void_v<Key, Value>, void>
     send(const Key &key, Value &&value) {
-      if (!move_callback) throw std::runtime_error("move callback not initialized");
-      move_callback(key, std::forward<valueT>(value));
+      static_assert(meta::is_none_void_v<keyT, valueT>, "ttg::send<>() sending to a terminal expecting void key and value; use ttg::send<>() instead");
+      static_assert(!meta::is_void_v<keyT>, "ttg::send<>(key,value) sending to a terminal expecting void key; use ttg::sendv(value) instead");
+      static_assert(!meta::is_void_v<valueT>, "ttg::send<>(key,value) sending to a terminal expecting void value; use ttg::sendk(key) instead");
+      constexpr auto value_is_rvref = !std::is_reference_v<Value>;
+      if constexpr (value_is_rvref) {
+        if (!move_callback) throw std::runtime_error("move callback not initialized");
+        move_callback(key, std::move(value));
+      } else {
+        if (!send_callback) throw std::runtime_error("send callback not initialized");
+        send_callback(key, value);
+      }
     }
 
     template <typename Key = keyT>
     std::enable_if_t<!meta::is_void_v<Key>, void> sendk(const Key &key) {
+      static_assert(!meta::is_void_v<keyT> && meta::is_void_v<valueT>, "ttg::sendk<>(key) sending to a terminal expecting void key and nonvoid value; use ttg::sendv<>(value) instead");
+      static_assert(!meta::is_void_v<keyT>, "ttg::sendk<>(key) sending to a terminal expecting void key; use ttg::send() instead");
+      static_assert(meta::is_void_v<valueT>, "ttg::sendk<>(key) sending to a terminal expecting nonvoid value; use ttg::send(key,value) instead");
       if (!send_callback) throw std::runtime_error("send callback not initialized");
       send_callback(key);
     }
 
     template <typename Value = valueT>
-    std::enable_if_t<!meta::is_void_v<Value>, void> sendv(const Value &value) {
-      if (!send_callback) throw std::runtime_error("send callback not initialized");
-      send_callback(value);
-    }
-
-    template <typename Value = valueT>
-    std::enable_if_t<!meta::is_void_v<Value> && std::is_same_v<Value, std::remove_reference_t<Value>>, void> sendv(
+    std::enable_if_t<!meta::is_void_v<Value>, void> sendv(
         Value &&value) {
-      if (!move_callback) throw std::runtime_error("move callback not initialized");
-      move_callback(std::forward<valueT>(value));
+      static_assert(meta::is_void_v<keyT> && !meta::is_void_v<valueT>, "ttg::sendv<>(value) sending to a terminal expecting nonvoid key and void value; use ttg::sendk<>(key) instead");
+      static_assert(meta::is_void_v<keyT>, "ttg::sendv<>(value) sending to a terminal expecting nonvoid key; use ttg::send(key, value) instead");
+      static_assert(!meta::is_void_v<valueT>, "ttg::sendv<>(value) sending to a terminal expecting void value; use ttg::send() instead");
+      constexpr auto value_is_rvref = !std::is_reference_v<Value>;
+      if constexpr (value_is_rvref) {
+        if (!move_callback) throw std::runtime_error("move callback not initialized");
+        move_callback(std::move(value));
+      }
+      else {
+        if (!send_callback) throw std::runtime_error("send callback not initialized");
+        send_callback(value);
+      }
     }
 
     void send() {
+      static_assert(!meta::is_none_void_v<keyT, valueT>, "ttg::send<>() sending to a terminal expecting nonvoid key and value; use ttg::send<>(key,value) instead");
+      static_assert(meta::is_void_v<keyT>, "ttg::send<>() sending to a terminal expecting nonvoid key; use ttg::sendk<>(key) instead");
+      static_assert(meta::is_void_v<valueT>, "ttg::send<>() sending to a terminal expecting nonvoid value; use ttg::sendv<>(value) instead");
       if (!send_callback) throw std::runtime_error("send callback not initialized");
       send_callback();
     }
@@ -304,7 +317,7 @@ namespace ttg {
 
     template <typename rangeT, typename Value>
     void prepare_send(const rangeT &keylist, Value &&value) {
-      const Value &v = value;
+      const std::remove_reference_t<Value> &v = value;
       if (prepare_send_callback) {
         if constexpr (ttg::meta::is_iterable_v<rangeT>) {
           prepare_send_callback(ttg::span<const keyT>(&(*std::begin(keylist)),
@@ -317,16 +330,11 @@ namespace ttg {
       }
     }
 
-    template <typename rangeT, typename Value>
+    template <typename Value>
     void prepare_send(Value &&value) {
-      const Value &v = value;
+      const std::remove_reference_t<Value> &v = value;
       if (prepare_send_callback) {
-        if constexpr (ttg::meta::is_iterable_v<rangeT>) {
           prepare_send_callback(v);
-        } else {
-          /* got something we cannot iterate over (single element?) so put one element in the span */
-          prepare_send_callback(v);
-        }
       }
     }
   };
@@ -463,18 +471,6 @@ namespace ttg {
         in->connect_pull(this);
     }
 
-    template<typename Key = keyT, typename Value = valueT>
-    std::enable_if_t<meta::is_none_void_v<Key,Value>,void> send(const Key &key, const Value &value) {
-      for (auto && successor : this->successors()) {
-        assert(successor->get_type() != TerminalBase::Type::Write);
-        if (successor->get_type() == TerminalBase::Type::Read) {
-          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
-        } else if (successor->get_type() == TerminalBase::Type::Consume) {
-          static_cast<In<keyT, valueT> *>(successor)->send(key, value);
-        }
-      }
-    }
-
     template <typename Key = keyT, typename Value = valueT>
     std::enable_if_t<!meta::is_void_v<Key> && meta::is_void_v<Value>, void> sendk(const Key &key) {
       for (auto &&successor : this->successors()) {
@@ -488,14 +484,29 @@ namespace ttg {
     }
 
     template <typename Key = keyT, typename Value = valueT>
-    std::enable_if_t<meta::is_void_v<Key> && !meta::is_void_v<Value>, void> sendv(const Value &value) {
-      for (auto &&successor : this->successors()) {
-        assert(successor->get_type() != TerminalBase::Type::Write);
+    std::enable_if_t<meta::is_void_v<Key> && !meta::is_void_v<Value>, void> sendv(Value&& value) {
+      const std::size_t N = this->nsuccessors();
+      TerminalBase *move_successor = nullptr;
+      // send copies to every terminal except the one we will move the results to
+      for (std::size_t i = 0; i != N; ++i) {
+        TerminalBase *successor = this->successors().at(i);
         if (successor->get_type() == TerminalBase::Type::Read) {
-          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->sendv(value);
+          // if only have 1 successor forward value even if successor is read-only, so we can deal with move-only types
+          auto* read_successor = static_cast<In<keyT, std::add_const_t<valueT>> *>(successor);
+          if (N != 1)
+            read_successor->sendv(value);
+          else
+            read_successor->sendv(std::forward<Value>(value));
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
-          static_cast<In<keyT, valueT> *>(successor)->sendv(value);
+          if (nullptr == move_successor) {
+            move_successor = successor;
+          } else {
+            static_cast<In<keyT, valueT> *>(successor)->sendv(value);
+          }
         }
+      }
+      if (nullptr != move_successor) {
+        static_cast<In<keyT, valueT> *>(move_successor)->sendv(std::forward<Value>(value));
       }
     }
 
@@ -517,7 +528,7 @@ namespace ttg {
     }
 
     template <typename Key = keyT, typename Value = valueT>
-    std::enable_if_t<meta::is_none_void_v<Key, Value> && std::is_same_v<Value, std::remove_reference_t<Value>>, void>
+    std::enable_if_t<meta::is_none_void_v<Key, Value>, void>
     send(const Key &key, Value &&value) {
       const std::size_t N = this->nsuccessors();
       TerminalBase *move_successor = nullptr;
@@ -525,7 +536,12 @@ namespace ttg {
       for (std::size_t i = 0; i != N; ++i) {
         TerminalBase *successor = this->successors().at(i);
         if (successor->get_type() == TerminalBase::Type::Read) {
-          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->send(key, value);
+          // if only have 1 successor forward value even if successor is read-only, so we can deal with move-only types
+          auto* read_successor = static_cast<In<keyT, std::add_const_t<valueT>> *>(successor);
+          if (N != 1)
+            read_successor->send(key, value);
+          else
+            read_successor->send(key, std::forward<Value>(value));
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
           if (nullptr == move_successor) {
             move_successor = successor;
@@ -579,8 +595,8 @@ namespace ttg {
       }
     }
 
-    template <typename rangeT, typename Key = keyT, typename Value = valueT>
-    std::enable_if_t<meta::is_none_void_v<Key> && !meta::is_void_v<valueT>, void>
+    template <typename Key = keyT, typename Value = valueT>
+    std::enable_if_t<meta::is_void_v<Key> && !meta::is_void_v<valueT>, void>
     prepare_send(const Value &value) {
       for (auto &&successor : this->successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
