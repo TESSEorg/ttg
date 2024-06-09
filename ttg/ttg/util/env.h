@@ -21,7 +21,7 @@ namespace ttg {
     /// using the unofficial extension MPIX_Query_cuda_support). However, since not all MPI implementations
     /// support this extension, users can force the use of device buffers in communication by setting
     /// `TTG_FORCE_DEVICE_COMM` to a non-negative number.
-    /// @return true if the user wants to force the use of device-side buffers in communicaton.
+    /// @return true if the user wants to force the use of device-side buffers in communication.
     bool force_device_comm();
 
   }  // namespace detail
