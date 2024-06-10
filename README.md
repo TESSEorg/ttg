@@ -111,20 +111,20 @@ While it is possible to use specific TTG backend explicitly, by using the approp
       Following the definition of this macro it is safe to include the top-level TTG header file:
 
       ```cpp
-#include <ttg.h>
+      #include <ttg.h>
       ```
 
   2. By including the corresponding backend-specific header directly:
     - to use PaRSEC backend only, add:
 
       ```cpp
-#include <ttg/parsec/ttg.h>
+      #include <ttg/parsec/ttg.h>
       ```
 
     - to use the MADNESS backend only, add:
 
       ```cpp
-#include <ttg/madness/ttg.h>
+      #include <ttg/madness/ttg.h>
       ```
 
    This approach does not require inclusion of the top-level TTG header or definition of a backend selection macro.
