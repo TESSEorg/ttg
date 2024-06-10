@@ -145,7 +145,7 @@ The "Hello, World!" example contains a single TT that executes a single task (he
 
 ## Execute TTG
 
-To execute a TTG we must make it executable (this will declare the TTG complete). To execute the TTG its root TT must receive at least one message; since in this case the task does not receive either task ID or data the message is empty (i.e., void):
+To execute a TTG we must make it executable (this will declare the TTG  program complete so no additional changes to the flowgraph are possible). To execute the TTG its root TT must receive at least one message; since in this case the task does not receive either task ID or data the message is empty (i.e., void):
 
 ```cpp
   ttg::make_graph_executable(tt);
@@ -154,7 +154,7 @@ To execute a TTG we must make it executable (this will declare the TTG complete)
       tt->invoke();
 ```
 
-Note that we must ensure that only one such message must be generated. Since TTG execution uses the Single Program Multiple Data (SPMD) model,
+`ttg::execute()` must occur before, not after, sending any messages. Note also that we must ensure that only one such message must be generated. Since TTG execution uses the Single Program Multiple Data (SPMD) model,
 when launching the TTG program as multiple processes only the first process (rank) gets to send the message.
 
 ## Finalize TTG
@@ -303,12 +303,11 @@ int main(int argc, char* argv[]) {
 
   auto fib = make_ttg_fib_lt(N);
   ttg::make_graph_executable(fib.get());
+  ttg::execute();
   if (ttg::default_execution_context().rank() == 0)
     fib->template in<0>()->send(1, Fn{});;
 
-  ttg::execute();
   ttg::fence();
-
   ttg::finalize();
   return 0;
 }
@@ -396,6 +395,22 @@ auto make_ttg_fib_lt(const int64_t F_n_max = 1000) {
   ops.emplace_back(std::move(fib));
   ops.emplace_back(std::move(print));
   return make_ttg(std::move(ops), ins, std::make_tuple(), "Fib_n < N");
+}
+
+int main(int argc, char* argv[]) {
+  ttg::initialize(argc, argv, -1);
+  int64_t N = 1000;
+  if (argc > 1) N = std::atol(argv[1]);
+
+  auto fib = make_ttg_fib_lt(N);
+  ttg::make_graph_executable(fib.get());
+  ttg::execute();
+  if (ttg::default_execution_context().rank() == 0)
+    fib->template in<0>()->send(1, Fn{});;
+
+  ttg::fence();
+  ttg::finalize();
+  return 0;
 }
 ```
 
