@@ -1,4 +1,4 @@
-![Build Status](https://github.com/TESSEorg/ttg/workflows/CMake/badge.svg)
+![Build Status](https://github.com/TESSEorg/ttg/actions/workflows/cmake.yml/badge.svg)
 
 # TTG
 This is the C++ API for the Template Task Graph (TTG) programming model for flowgraph-based composition of high-performance algorithms executable on distributed heterogeneous computer platforms. The TTG API abstracts out the details of the underlying task and data flow runtime; the current realization is implemented using [MADNESS](https://github.com/m-a-d-n-e-s-s/madness) and [PaRSEC](https://bitbucket.org/icldistcomp/parsec.git) runtimes as backends.
@@ -30,7 +30,7 @@ The development of TTG was motivated by _irregular_ scientific applications like
 int main(int argc, char *argv[]) {
   ttg::initialize(argc, argv);
 
-  auto tt = ttg::make_tt([]() { std::cout << "Hello, World!"; });
+  auto tt = ttg::make_tt([]() { std::cout << "Hello, World!\n"; });
 
   ttg::make_graph_executable(tt);
   ttg::execute();
@@ -55,7 +55,7 @@ if (NOT TARGET ttg-parsec) # else build from source
   FetchContent_MakeAvailable( ttg )
 endif()
 
-add_executable(hw-parsec helloworld.cpp)
+add_executable(helloworld-parsec helloworld.cpp)
 target_link_libraries(hw-parsec PRIVATE ttg-parsec)
 target_compile_definitions(hw-parsec PRIVATE TTG_USE_PARSEC=1)
 ```
@@ -63,8 +63,10 @@ target_compile_definitions(hw-parsec PRIVATE TTG_USE_PARSEC=1)
 Configure + build:
 
 ```sh
-> cmake -S . -B build && cmake --build build --target hw-parsec
+> cmake -S . -B build && cmake --build build --target helloworld-parsec
 ```
+
+The complete example, including the CMake build harness using a slightly easier way to build the executable (using `add_ttg_executable` CMake macro), can be found in [dox examples](https://github.com/TESSEorg/ttg/tree/master/doc/dox/dev/devsamp/helloworld).
 
 ## "Hello, World!" Walkthrough
 
@@ -95,7 +97,7 @@ Every TTG program must:
 - make TTG executable and kickstart the execution by sending a control or data message to the TTG,
 - shut down the runtime
 
-Let's go over each of these steps using the "Hello, World!" example.
+Let's go over each of these steps using the "Hello, World!" example. The complete example, including the CMake build harness, can be found in [dox examples](https://github.com/TESSEorg/ttg/tree/master/doc/dox/dev/devsamp/fibonacci).
 
 ### Select the TTG Backend
 
@@ -138,12 +140,12 @@ To make a TTG create and connect one or more TTs. The simplest TTG consists of a
 The "Hello, World!" example contains a single TT that executes a single task (hence, task ID can be omitted, i.e., void) that does not take and produce any data. The easiest way to make such a TT  is by wrapping a callable (e.g., a lambda) with `ttg::make_tt`:
 
 ```cpp
-  auto tt = ttg::make_tt([]() { std::cout << "Hello, World!"; });
+  auto tt = ttg::make_tt([]() { std::cout << "Hello, World!\n"; });
 ```
 
 ## Execute TTG
 
-To execute a TTG we must make it executable (this will declare the TTG complete). To execute the TTG its root TT must receive at least one message; since in this case the task does not receive either task ID or data the message is empty (i.e., void):
+To execute a TTG we must make it executable (this will declare the TTG  program complete so no additional changes to the flowgraph are possible). To execute the TTG its root TT must receive at least one message; since in this case the task does not receive either task ID or data the message is empty (i.e., void):
 
 ```cpp
   ttg::make_graph_executable(tt);
@@ -152,7 +154,7 @@ To execute a TTG we must make it executable (this will declare the TTG complete)
       tt->invoke();
 ```
 
-Note that we must ensure that only one such message must be generated. Since TTG execution uses the Single Program Multiple Data (SPMD) model,
+`ttg::execute()` must occur before, not after, sending any messages. Note also that we must ensure that only one such message must be generated. Since TTG execution uses the Single Program Multiple Data (SPMD) model,
 when launching the TTG program as multiple processes only the first process (rank) gets to send the message.
 
 ## Finalize TTG
@@ -243,6 +245,7 @@ $F_{n-1},F_{n-2} \to F_{n}$).
 To illustrate the real power of TTG let's tweak the problem slightly: instead of computing first $N$ Fibonacci numbers let's find the largest Fibonacci number smaller than some $N$. The key difference in the latter case is that, unlike the former, the number of tasks is NOT known a priori; furthermore, to make a decision whether we need to compute next Fibonacci number we must examine the value returned by the previous task. This is an example of data-dependent tasking, where the decision which (if any) task to execute next depends on the values produced by previous tasks. The ability to compose regular as well as data-dependent task graphs is a distinguishing strength of TTG.
 
 To make things even more interesting, we will demonstrate how to implement such program both for execution on CPUs as well as on accelerators (GPUs).
+The complete examples, including the CMake build harness, can be found in [dox examples](https://github.com/TESSEorg/ttg/tree/master/doc/dox/dev/devsamp/fibonacci).
 
 ### The CPU Version
 
@@ -300,12 +303,11 @@ int main(int argc, char* argv[]) {
 
   auto fib = make_ttg_fib_lt(N);
   ttg::make_graph_executable(fib.get());
+  ttg::execute();
   if (ttg::default_execution_context().rank() == 0)
     fib->template in<0>()->send(1, Fn{});;
 
-  ttg::execute();
   ttg::fence();
-
   ttg::finalize();
   return 0;
 }
@@ -394,6 +396,22 @@ auto make_ttg_fib_lt(const int64_t F_n_max = 1000) {
   ops.emplace_back(std::move(print));
   return make_ttg(std::move(ops), ins, std::make_tuple(), "Fib_n < N");
 }
+
+int main(int argc, char* argv[]) {
+  ttg::initialize(argc, argv, -1);
+  int64_t N = 1000;
+  if (argc > 1) N = std::atol(argv[1]);
+
+  auto fib = make_ttg_fib_lt(N);
+  ttg::make_graph_executable(fib.get());
+  ttg::execute();
+  if (ttg::default_execution_context().rank() == 0)
+    fib->template in<0>()->send(1, Fn{});;
+
+  ttg::fence();
+  ttg::finalize();
+  return 0;
+}
 ```
 
 Although the structure of the device-capable program is nearly identical to the CPU version, there are important differences:
@@ -449,8 +467,6 @@ Here's the CUDA version of the device kernel and its host-side wrapper; ROCm and
 ```
 
 `cu_next_value` is the device kernel that evaluates $F_{n+1}$ from $F_{n}$ and $F_{n-1}$. `next_value` is a host function that launches `cu_next_value`; this is the function called in the `fib` task.
-
-The complete example, including the CMake build harness, can be found in [dox examples](https://github.com/TESSEorg/ttg/tree/master/doc/dox/dev/devsamp/fibonacci).
 
 ## Debugging TTG Programs
 

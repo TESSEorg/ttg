@@ -47,12 +47,16 @@ int main(int argc, char* argv[]) {
   ttg::initialize(argc, argv, -1);
   int64_t N = (argc > 1) ? std::atol(argv[1]) : 1000;
 
+  // make TTG
   auto fib = make_ttg_fib_lt(N);
+  // program complete, declare it executable
   ttg::make_graph_executable(fib.get());
+  // start execution
+  ttg::execute();
+  // start the computation by sending the first message
   if (ttg::default_execution_context().rank() == 0)
     fib->template in<0>()->send(1, Fn{});;
-
-  ttg::execute();
+  // wait for the computation to finish
   ttg::fence();
 
   ttg::finalize();
