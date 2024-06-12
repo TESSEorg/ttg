@@ -78,7 +78,7 @@ using ctlOut = ttg::Out<Key<NDIM>, void>;
 std::mutex printer_guard;
 template <typename keyT, typename valueT>
 auto make_printer(const ttg::Edge<keyT, valueT>& in, const char* str = "", const bool doprint = true) {
-  auto func = [str, doprint](const keyT& key, const valueT& value, std::tuple<>& out) {
+  auto func = [str, doprint](const keyT& key, const valueT& value) {
     if (doprint) {
       std::lock_guard<std::mutex> obolus(printer_guard);
       std::cout << str << " (" << key << "," << value << ")" << std::endl;
@@ -89,36 +89,37 @@ auto make_printer(const ttg::Edge<keyT, valueT>& in, const char* str = "", const
 
 template <Dimension NDIM>
 auto make_start(const ctlEdge<NDIM>& ctl) {
-  auto func = [](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>>& out) { ttg::sendk<0>(key, out); };
+  auto func = [](const Key<NDIM>& key) { ttg::sendk<0>(key); };
   return ttg::make_tt<Key<NDIM>>(func, ttg::edges(), edges(ctl), "start", {}, {"control"});
 }
 
 /// Constructs an operator that adaptively projects the provided function into the basis
 
 /// Returns an std::unique_ptr to the object
-template <typename functorT, typename T, size_t K, Dimension NDIM>
+template <typename functorT, typename T, std::size_t K, Dimension NDIM>
 auto make_project(functorT& f,
                   const T thresh,  /// should be scalar value not complex
-                  ctlEdge<NDIM>& ctl, rnodeEdge<T, K, NDIM>& result, const std::string& name = "project") {
-  auto F = [f, thresh](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>, rnodeOut<T, K, NDIM>>& out) {
+                  ctlEdge<NDIM>& ctl, rnodeEdge<T, K, NDIM>& result,
+                  const std::string& name = "project") {
+  auto F = [f, thresh](const Key<NDIM>& key) {
     FunctionReconstructedNode<T, K, NDIM> node(key);  // Our eventual result
-    auto& coeffs = node.coeffs;                       // Need to clean up OO design
+    FixedTensor<T,K,NDIM>& coeffs = node.coeffs;                       // Need to clean up OO design
 
     if (key.level() < initial_level(f)) {
-      for (auto child : children(key)) ttg::sendk<0>(child, out);
+      for (auto child : children(key)) ttg::sendk<0>(child);
       coeffs = T(1e7);  // set to obviously bad value to detect incorrect use
       node.is_leaf = false;
-    } else if (is_negligible<functorT, T, NDIM>(f, Domain<NDIM>::template bounding_box<T>(key),
-                                                truncate_tol(key, thresh))) {
+    } else if (is_negligible(f, Domain<NDIM>::template bounding_box<T>(key),
+                             truncate_tol(key, thresh))) {
       coeffs = T(0.0);
       node.is_leaf = true;
     } else {
-      node.is_leaf = fcoeffs<functorT, T, K>(f, key, thresh, coeffs);  // cannot deduce K
+      node.is_leaf = fcoeffs<functorT, T, K, NDIM>(f, key, thresh, coeffs);  // cannot deduce K
       if (!node.is_leaf) {
-        for (auto child : children(key)) ttg::sendk<0>(child, out);  // should be broadcast ?
+        for (auto child : children(key)) ttg::sendk<0>(child);  // should be broadcast ?
       }
     }
-    ttg::send<1>(key, node, out);  // always produce a result
+    ttg::send<1>(key, std::move(node));  // always produce a result
   };
   ctlEdge<NDIM> refine("refine");
   return ttg::make_tt(F, edges(fuse(refine, ctl)), edges(refine, result), name, {"control"}, {"refine", "result"});
@@ -274,8 +275,7 @@ auto make_compress(rnodeEdge<T, K, NDIM>& in, cnodeEdge<T, K, NDIM>& out, const 
 
 template <typename T, size_t K, Dimension NDIM>
 void do_reconstruct(const Key<NDIM>& key,
-                    const std::tuple<FunctionCompressedNode<T, K, NDIM>&, FixedTensor<T, K, NDIM>&>& t,
-                    std::tuple<ttg::Out<Key<NDIM>, FixedTensor<T, K, NDIM>>, rnodeOut<T, K, NDIM>>& out) {
+                    const std::tuple<FunctionCompressedNode<T, K, NDIM>&, FixedTensor<T, K, NDIM>&>& t) {
   const auto& child_slices = FunctionData<T, K, NDIM>::get_child_slices();
   auto& node = std::get<0>(t);
   const auto& from_parent = std::get<1>(t);
@@ -287,7 +287,7 @@ void do_reconstruct(const Key<NDIM>& key,
   FunctionReconstructedNode<T, K, NDIM> r(key);
   r.coeffs = T(0.0);
   r.is_leaf = false;
-  ttg::send<1>(key, r, out);  // Send empty interior node to result tree
+  ttg::send<1>(key, r);  // Send empty interior node to result tree
 
   KeyChildren<NDIM> children(key);
   for (auto it = children.begin(); it != children.end(); ++it) {
@@ -296,9 +296,9 @@ void do_reconstruct(const Key<NDIM>& key,
     r.coeffs = s(child_slices[it.index()]);
     r.is_leaf = node.is_leaf[it.index()];
     if (r.is_leaf) {
-      ttg::send<1>(child, r, out);
+      ttg::send<1>(child, r);
     } else {
-      ttg::send<0>(child, r.coeffs, out);
+      ttg::send<0>(child, r.coeffs);
     }
   }
 }
