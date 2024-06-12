@@ -30,7 +30,7 @@ namespace mra {
         void apply_dim(long dim) {
             if (start == END) {start = dim-1;}
             else if (start < 0) {start += dim;}
-            
+
             if (finish == END && step > 0) {finish = dim;}
             else if (finish == END && step < 0) {finish = -1;}
             else if (finish < 0) {finish += dim;}
@@ -81,7 +81,7 @@ namespace mra {
 
     namespace detail {
         // If using c++-17 can use fold expression instead of some of these
-        
+
         // Compute the product of the template parameters
         template <size_t v0, size_t ... Values> struct Product {static const size_t value = v0*Product<Values...>::value;};
         template <size_t v0> struct Product<v0> {static constexpr size_t value = v0;};
@@ -93,7 +93,7 @@ namespace mra {
         // Compute the maximum value of the template parameters
         template <size_t v0, size_t ... Values> struct Max {static const size_t value = std::max(v0,Product<Values...>::value);};
         template <size_t v0> struct Max<v0> {static constexpr size_t value = v0;};
-        
+
         // Access size of d'th dimension
         template <size_t d, size_t v0, size_t ... Values> struct GetDim {static constexpr size_t value = (d==0) ? v0 :  GetDim<d-1, Values...>::value;};
         template <size_t d, size_t v0> struct GetDim<d,v0> {static constexpr size_t value = v0;};
@@ -103,7 +103,7 @@ namespace mra {
             static constexpr size_t value = ((d>=D) ? 1 : v0) * GetStride<d,D+1,Values...>::value;
         };
         template <size_t d, size_t D, size_t v0> struct GetStride<d,D,v0> {static constexpr size_t value = (d>=D) ? 1 : v0;};
-        
+
         // Check that all types are integral (>=1)
         template <typename T0, typename ... Ts> struct IsIntegral {static constexpr bool value = std::is_integral<T0>::value && IsIntegral<Ts...>::value;};
         template <typename T> struct IsIntegral<T> {static constexpr bool value = std::is_integral<T>::value;};
@@ -111,18 +111,18 @@ namespace mra {
         // Check that all types are slices or convertible to slices (>=1)
         template <typename T0, typename ... Ts> struct IsSlice {static constexpr bool value = std::is_convertible<T0,Slice>::value && IsSlice<Ts...>::value;};
         template <typename T> struct IsSlice<T> {static constexpr bool value = std::is_convertible<T,Slice>::value;};
-        
+
         template <typename tensorT, size_t num_dimensions>
         struct base_tensor_iterator {
             size_t count;
             const tensorT* t;
             std::array<size_t,std::max(size_t(1),num_dimensions)> indx = {};
-            
+
             base_tensor_iterator (size_t count, const tensorT* t)
                 : count(count)
                 , t(t)
             {}
-            
+
             void inc() {
                 assert(count < t->size());
                 count++;
@@ -149,7 +149,7 @@ namespace mra {
             if constexpr (t.ndim() == 1) {
                 const size_t n = t.dim(t.ndim()-1);
                 auto p = t.ptr();
-                for (size_t i=0; i<n; ++i) op(p[i]);                
+                for (size_t i=0; i<n; ++i) op(p[i]);
             }
             else if constexpr (t.ndim() >= 2) {
                 const size_t dimi = t.dim(t.ndim()-1);
@@ -182,10 +182,10 @@ namespace mra {
         else { // general but slowest iteration
             std::cout << "in slow apply_unaryop ... what are you doing?\n";
             std::for_each(t.begin(), t.end(), op);
-        }        
+        }
     }
 
-    
+
     template <typename tensorA, typename tensorB, typename opT>
     void apply_binaryop(tensorA& a, tensorB& b, const opT& op) {
         assert(a.conforms(b));
@@ -201,7 +201,7 @@ namespace mra {
                 const size_t n = a.dim(a.ndim()-1);
                 auto pa = a.ptr();
                 auto pb = b.ptr();
-                for (size_t i=0; i<n; ++i) op(pa[i],pb[i]);                
+                for (size_t i=0; i<n; ++i) op(pa[i],pb[i]);
             }
             else if (a.ndim() >= 2) {
                 const size_t dimi = a.dim(a.ndim()-1);
@@ -261,7 +261,7 @@ namespace mra {
             }
             assert(itb == endb); // should be true if they really do conform
             TTGUNUSED(endb);
-        }        
+        }
     }
 
     template <typename tensorT>
@@ -277,12 +277,12 @@ namespace mra {
         std::array<Slice,num_dimensions> slices;
         std::array<size_t,num_dimensions> dimensions; // dimensions of the sliced tensor
         size_t num_elements; // number of elements in the sliced tensor
-        
+
         SliceTensor() = delete; // no default constuctor
 
         // Computes index in dimension d for underlying tensor using slice info
         inline size_t index(size_t d, size_t i) const {return slices[d].start+i*slices[d].step;}
-        
+
         // Given indices in slice as arguments looks up element in underlying tensor
         template <typename returnT, size_t...D, typename...Args>
         returnT
@@ -292,7 +292,7 @@ namespace mra {
         template <typename returnT, size_t...D>
         returnT
         access(std::index_sequence<D...>, const std::array<size_t,num_dimensions>& indices) const {return t(index(D,indices[D])...);}
-        
+
         using ST = SliceTensor<tensorT>;
         template<size_t ndimactive>
         struct iterator : public detail::base_tensor_iterator<ST,ndimactive> {
@@ -302,7 +302,7 @@ namespace mra {
             bool operator!=(const iterator& other) {return this->count != other.count;}
             bool operator==(const iterator& other) {return this->count == other.count;}
         };
-        
+
         template<size_t ndimactive>
         struct const_iterator : public detail::base_tensor_iterator<ST,ndimactive> {
             const_iterator (size_t count, const ST* t) : detail::base_tensor_iterator<ST,ndimactive>(count, t) {}
@@ -311,7 +311,7 @@ namespace mra {
             bool operator!=(const const_iterator& other) {return this->count != other.count;}
             bool operator==(const const_iterator& other) {return this->count == other.count;}
         };
-        
+
         iterator<num_dimensions> finish{0,0};
         const_iterator<num_dimensions> cfinish{0,0};
 
@@ -329,7 +329,7 @@ namespace mra {
             finish = iterator<num_dimensions>{num_elements,0};
             cfinish = const_iterator<num_dimensions>{num_elements,0};
         }
-        
+
         /// Returns number of dimensions at compile time
         static constexpr size_t ndim() {return num_dimensions;}
 
@@ -337,7 +337,7 @@ namespace mra {
         size_t size() const {return num_elements;}
 
         /// Returns size of dimension d at runtime
-        size_t dim(size_t d) const {return slices[d].count;}        
+        size_t dim(size_t d) const {return slices[d].count;}
 
         /// Returns array containing size of each dimension at runtime
         const std::array<size_t, num_dimensions>& dims() const {return dimensions;}
@@ -387,7 +387,7 @@ namespace mra {
             // assert(lit==this->end() && rit==other.end());
             apply_binaryop(*this,other,[](data_type& a, const typename SliceTensor<otherT>::data_type& b) {a=b;});
             return *this;
-        }        
+        }
 
         /// Start for forward iteration through elements in row-major order --- this is convenient but not efficient
         iterator<num_dimensions> begin() {return iterator<num_dimensions>(0,this);}
@@ -471,7 +471,7 @@ namespace mra {
         static constexpr size_t num_elements = detail::Product<Dims...>::value; //< Number of elements in the tensor
         static constexpr bool is_tensor = true;
         static constexpr bool is_simple_tensor = true;
-        
+
     private:
         template <size_t d> struct Dim {static constexpr size_t value = detail::GetDim<d,Dims...>::value;};
         template <size_t d> struct Stride {static constexpr size_t value = detail::GetStride<d,0,Dims...>::value;};
@@ -481,11 +481,11 @@ namespace mra {
         static constexpr bool bounds_check = true; //< If true bounds are checked on access
         inline static constexpr std::array<size_t, num_dimensions> dimensions = {Dims...}; //< Array containing size of each dimension
         inline static constexpr std::array<size_t, num_dimensions> stride_array = make_strides(std::make_index_sequence<num_dimensions>{});
-        
+
         std::array<T, num_elements> a; //< Holds the data
 
         template <size_t D> static size_t offset(size_t i) {if (bounds_check) {check<D>(i);} return i*Stride<D>::value;}
-        
+
         template <size_t...D,typename...Args> static size_t sum_offset(std::index_sequence<D...>, Args...args) {return (offset<D>(args)+...);}
 
         template <size_t ndimactive>
@@ -505,7 +505,7 @@ namespace mra {
             bool operator!=(const const_iterator& other) {return this->count != other.count;}
             bool operator==(const const_iterator& other) {return this->count == other.count;}
         };
-        
+
         inline static iterator<num_dimensions> finish = {num_elements,0};
         inline static const_iterator<num_dimensions> cfinish = {num_elements,0};
 
@@ -524,16 +524,16 @@ namespace mra {
         SimpleTensor(const SimpleTensor<R,Dims...>& other) {
             for (size_t i=0; i<num_elements; ++i) a[i] = T(other.a[i]);
         }
-        
+
         /// Returns number of elements in the tensor
         static constexpr size_t size() {return num_elements;}
-        
+
         /// Returns number of dimensions in the tensor
         static constexpr size_t ndim() {return num_dimensions;}
 
         /// Returns true if data is contiguous (presently always true)
         static constexpr bool is_contiguous() {return true;}
-        
+
         /// Returns array with size of each dimension
         static constexpr const std::array<size_t, num_dimensions>& dims() {return dimensions;}
 
@@ -545,7 +545,7 @@ namespace mra {
             static_assert(d < num_dimensions);
             return Dim<d>::value;
         }
-        
+
         /// Returns stride of dimension d at compile time
         template <size_t d> static constexpr size_t stride() {
             static_assert(d < num_dimensions);
@@ -563,7 +563,7 @@ namespace mra {
             if (bounds_check) assert(d>=0 && d<num_dimensions);
             return stride_array[d];
         }
-        
+
         /// Returns value of element (const element access)
         template <typename...Args, typename X=T>
         typename std::enable_if<detail::IsIntegral<Args...>::value,X>::type
@@ -573,7 +573,7 @@ namespace mra {
             if (bounds_check) assert(offset>=0 && offset<num_elements);
             return a[offset];
         }
-        
+
         /// Returns reference to value of element (non-const element access)
         template <typename...Args,typename X=T>
         typename std::enable_if<detail::IsIntegral<Args...>::value, X&>::type
@@ -629,7 +629,7 @@ namespace mra {
             for (size_t i=0; i<num_elements; i++) sum += a[i]*a[i];
             return sum;
         }
-        
+
         /// Compute Frobenius norm ... still needs specializing for complex
         template <typename accumulatorT = T>
         T normf() const {
@@ -637,7 +637,7 @@ namespace mra {
         }
 
         /// Fill with value
-        SimpleTensor<T,Dims...>& operator=(T value) {a.fill(value); return *this;} //for (size_t i=0; i<num_elements; ++i) a[i] = value; 
+        SimpleTensor<T,Dims...>& operator=(T value) {a.fill(value); return *this;} //for (size_t i=0; i<num_elements; ++i) a[i] = value;
 
         /// Deep copy (with possible type conversion) from identically shaped SimpleTensor
         template <typename R>
@@ -723,7 +723,7 @@ namespace mra {
             for (auto d : range(num_dimensions-2)) p += indx[d] * stride(d);
             return p;
         }
-        
+
     };
 
     namespace detail {
@@ -736,7 +736,7 @@ namespace mra {
     /// FixedTensor is a SimpleTensor that has the same fixed size for each dimension
 
     /// Cannot specialize type aliases so instead use one level of redirection
-    template <typename T, size_t K, Dimension NDIM>
+    template <typename T, std::size_t K, Dimension NDIM>
     using FixedTensor = typename detail::FixedTensor<T,K,NDIM>::type;
 
     /// Transform all dimensions of the tensor t by the matrix c
@@ -770,7 +770,7 @@ namespace mra {
             s << "[empty tensor]\n";
             return s;
         }
-        
+
         const Dimension ndim = t.ndim();
         size_t maxdim = 0;
         for (auto d : range(ndim)) maxdim = std::max(maxdim,t.dim(d));
@@ -785,11 +785,11 @@ namespace mra {
             index_width = 4;
         else
             index_width = 6;
-        
+
         std::ios::fmtflags oldflags = s.setf(std::ios::scientific);
         long oldprec = s.precision();
         long oldwidth = s.width();
-        
+
         const Dimension lastdim = ndim-1;
         const size_t lastdimsize = t.dim(lastdim);
 
@@ -817,13 +817,13 @@ namespace mra {
             s.unsetf(std::ios::scientific);
             if (it != t.end()) s << std::endl;
         }
-        
+
         s.setf(oldflags,std::ios::floatfield);
         s.precision(oldprec);
         s.width(oldwidth);
-        
+
         return s;
     }
 }
-                         
+
 #endif

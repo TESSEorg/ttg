@@ -294,7 +294,7 @@ template <Dimension NDIM> using ctlOut = ttg::Out<Key<NDIM>, void>;
 std::mutex printer_guard;
 template <typename keyT, typename valueT>
 auto make_printer(const ttg::Edge<keyT, valueT>& in, const char* str = "", const bool doprint=true) {
-    auto func = [str,doprint](const keyT& key, auto& value, auto& out) {
+    auto func = [str,doprint](const keyT& key, auto& value) {
         if (doprint) {
             std::lock_guard<std::mutex> obolus(printer_guard);
             std::cout << str << " (" << key << "," << value << ")" << std::endl;
@@ -305,7 +305,7 @@ auto make_printer(const ttg::Edge<keyT, valueT>& in, const char* str = "", const
 
 template <Dimension NDIM>
 auto make_start(const ctlEdge<NDIM>& ctl) {
-    auto func = [](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>>& out) { ttg::sendk<0>(key, out); };
+    auto func = [](const Key<NDIM>& key) { ttg::sendk<0>(key); };
     return ttg::make_tt<Key<NDIM>>(func, ttg::edges(), edges(ctl), "start", {}, {"control"});
 }
 
@@ -320,7 +320,7 @@ auto make_project(functorT& f,
                   rnodeEdge<T,K,NDIM>& result,
                   const std::string& name = "project") {
 
-    auto F = [f, thresh](const Key<NDIM>& key, std::tuple<ctlOut<NDIM>, rnodeOut<T,K,NDIM>>& out) {
+    auto F = [f, thresh](const Key<NDIM>& key) {
         FunctionReconstructedNodeWrap<T,K,NDIM> node(key); // Our eventual result
         auto& coeffs = node.get().coeffs; // Need to clean up OO design
 
@@ -329,7 +329,7 @@ auto make_project(functorT& f,
             /* TODO: children() returns an iteratable object but broadcast() expects a contiguous memory range.
                      We need to fix broadcast to support any ranges */
             for (auto child : children(key)) bcast_keys.push_back(child);
-            ttg::broadcastk<0>(bcast_keys, out);
+            ttg::broadcastk<0>(bcast_keys);
             coeffs = T(1e7); // set to obviously bad value to detect incorrect use
             node.get().is_leaf = false;
         }
@@ -342,10 +342,10 @@ auto make_project(functorT& f,
             if (!node.get().is_leaf) {
                 std::vector<Key<NDIM>> bcast_keys;
                 for (auto child : children(key)) bcast_keys.push_back(child);
-                ttg::broadcastk<0>(bcast_keys, out);
+                ttg::broadcastk<0>(bcast_keys);
             }
         }
-        ttg::send<1>(key, std::move(node), out); // always produce a result
+        ttg::send<1>(key, std::move(node)); // always produce a result
     };
     ctlEdge<NDIM> refine("refine");
     return ttg::make_tt(F, edges(fuse(refine, ctl)), ttg::edges(refine, result), name, {"control"}, {"refine", "result"});
@@ -386,8 +386,7 @@ namespace detail {
 // Stream leaf nodes up the tree as a prelude to compressing
 template <typename T, size_t K, Dimension NDIM>
 void send_leaves_up(const Key<NDIM>& key,
-                    const FunctionReconstructedNodeWrap<T,K,NDIM>& node,
-                    std::tuple<rnodeOut<T,K,NDIM>, cnodeOut<T,K,NDIM>>& out) {
+                    const FunctionReconstructedNodeWrap<T,K,NDIM>& node) {
   //typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
   //Removed const from here!!
     node.get().sum = 0.0;   //
@@ -403,22 +402,21 @@ void send_leaves_up(const Key<NDIM>& key,
         } else {
           //auto outs = ::mra::subtuple_to_array_of_ptrs<0,Key<NDIM>::num_children>(out);
           //outs[key.childindex()]->send(key.parent(),node);
-          ttg::send<0>(key.parent(), node, out);
+          ttg::send<0>(key.parent(), node);
         }
     }
 }
 
 template <typename T, size_t K, Dimension NDIM>
-void reduce_leaves(const Key<NDIM>& key, const FunctionReconstructedNodeWrap<T,K,NDIM>& node, std::tuple<rnodeOut<T,K,NDIM>>& out) {
+void reduce_leaves(const Key<NDIM>& key, const FunctionReconstructedNodeWrap<T,K,NDIM>& node) {
   //std::cout << "Reduce_leaves " << node.key.childindex() << " " << node.neighbor_sum[node.key.childindex()] << std::endl;
-  std::get<0>(out).send(key, node);
+  ttg::send<0>(key, node);
 }
 
 // With data streaming up the tree run compression
 template <typename T, size_t K, Dimension NDIM>
 void do_compress(const Key<NDIM>& key,
-                 const FunctionReconstructedNodeWrap<T,K,NDIM> &in,
-                 std::tuple<rnodeOut<T,K,NDIM>, cnodeOut<T,K,NDIM>> &out) {
+                 const FunctionReconstructedNodeWrap<T,K,NDIM> &in) {
   //const typename ::detail::tree_types<T,K,NDIM>::compress_in_type& in,
   //typename ::detail::tree_types<T,K,NDIM>::compress_out_type& out) {
     auto& child_slices = FunctionData<T,K,NDIM>::get_child_slices();
@@ -448,7 +446,7 @@ void do_compress(const Key<NDIM>& key,
         p.get().sum = d.sumabssq() + sumsq; // Accumulate sumsq of difference coeffs from this node and children
         //auto outs = ::mra::subtuple_to_array_of_ptrs<0,Key<NDIM>::num_children>(out);
         //outs[key.childindex()]->send(key.parent(), p);
-        ttg::send<0>(key.parent(), std::move(p), out);
+        ttg::send<0>(key.parent(), std::move(p));
     }
     else {
         std::cout << "At root of compressed tree: total normsq is " << sumsq + d.sumabssq() << std::endl;
@@ -456,7 +454,7 @@ void do_compress(const Key<NDIM>& key,
 
     // Send result to output tree
     //send<Key<NDIM>::num_children>(key,result,out);
-    ttg::send<1>(key, std::move(result), out);
+    ttg::send<1>(key, std::move(result));
 }
 
 
@@ -482,8 +480,7 @@ auto make_compress(rnodeEdge<T,K,NDIM>& in, cnodeEdge<T,K,NDIM>& out, const std:
 
 template <typename T, size_t K, Dimension NDIM>
 void do_reconstruct(const Key<NDIM>& key,
-                    const std::tuple<FunctionCompressedNodeWrap<T,K,NDIM>&,FixedTensor<T,K,NDIM>&>& t,
-                    std::tuple<ttg::Out<Key<NDIM>,FixedTensor<T,K,NDIM>>,rnodeOut<T,K,NDIM>>& out) {
+                    const std::tuple<FunctionCompressedNodeWrap<T,K,NDIM>&,FixedTensor<T,K,NDIM>&>& t) {
   const auto& child_slices = FunctionData<T,K,NDIM>::get_child_slices();
     auto& node = std::get<0>(t);
     const auto& from_parent = std::get<1>(t);
@@ -515,8 +512,8 @@ void do_reconstruct(const Key<NDIM>& key,
             bcast_keys[0].push_back(child);
         }
     }
-    ttg::broadcast<0>(bcast_keys[0], r.get().coeffs, out);
-    ttg::broadcast<1>(bcast_keys[1], std::move(r), out);
+    ttg::broadcast<0>(bcast_keys[0], r.get().coeffs);
+    ttg::broadcast<1>(bcast_keys[1], std::move(r));
 }
 
 template <typename T, size_t K, Dimension NDIM>

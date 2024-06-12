@@ -21,7 +21,7 @@ namespace mra {
         transform<T,T,T,2*K,NDIM>(in,hgT,out);
 
     }
-    
+
     /// Applies inverse of two-scale filter (sum+difference coeffs of parent to sum coeffs of children)
     template <typename T, size_t K, Dimension NDIM>
     void unfilter(const FixedTensor<T,2*K,NDIM>& in, FixedTensor<T,2*K,NDIM>& out) {
@@ -29,13 +29,13 @@ namespace mra {
         transform<T,T,T,2*K,NDIM>(in,hg,out);
 
     }
-    
+
     /// In given box return the truncation tolerance for given threshold
     template <typename T, Dimension NDIM>
     T truncate_tol(const Key<NDIM>& key, const T thresh) {
         return thresh; // nothing clever for now
     }
-    
+
     /// Computes square of distance between two coordinates
     template <typename T>
     T distancesq(const Coordinate<T,1>& p, const Coordinate<T,1>& q) {
@@ -63,7 +63,7 @@ namespace mra {
             rsq[i] = xx*xx;
         }
     }
-    
+
     template <typename T, size_t N>
     void distancesq(const Coordinate<T,3>& p, const SimpleTensor<T,2,N>& q, std::array<T,N>& rsq) {
         const T x = p(0);
@@ -74,7 +74,7 @@ namespace mra {
             rsq[i] = xx*xx + yy*yy;
         }
     }
-    
+
     template <typename T, size_t N>
     void distancesq(const Coordinate<T,3>& p, const SimpleTensor<T,3,N>& q, std::array<T,N>& rsq) {
         const T x = p(0);
@@ -104,15 +104,15 @@ namespace mra {
             constexpr bool call_2d = (NDIM==2) && std::is_invocable_r<T, decltype(f), T, T>(); // f(x,y)
             constexpr bool call_3d = (NDIM==3) && std::is_invocable_r<T, decltype(f), T, T, T>(); // f(x,y,z)
             constexpr bool call_vec = std::is_invocable_r<void, decltype(f), SimpleTensor<T,NDIM,K2NDIM>, std::array<T,K2NDIM>&>(); // vector API
-            
+
             static_assert(call_coord || call_1d || call_2d || call_3d || call_vec, "no working call");
 
             if constexpr (call_1d || call_2d || call_3d || call_vec) {
-                SimpleTensor<T,NDIM,K2NDIM> xvec; 
+                SimpleTensor<T,NDIM,K2NDIM> xvec;
                 make_xvec(x,xvec);
                 if constexpr (call_vec) {
                     f(xvec,values.data());
-                }                
+                }
                 else if constexpr (call_1d || call_2d || call_3d) {
                     eval_cube_vec(f, xvec, values);
                 }
@@ -125,12 +125,12 @@ namespace mra {
             }
         }
     }
-    
+
     /// Project the scaling coefficients using screening and test norm of difference coeffs.  Return true if difference coeffs negligible.
     template <typename functorT, typename T, size_t K, Dimension NDIM>
     bool fcoeffs(const functorT& f, const Key<NDIM>& key, const T thresh, FixedTensor<T,K,NDIM>& s) {
         bool status;
-        
+
         if (is_negligible(f,Domain<NDIM>:: template bounding_box<T>(key),truncate_tol(key,thresh))) {
             s = 0.0;
             status = true;
@@ -138,7 +138,7 @@ namespace mra {
         else {
             auto& child_slices = FunctionData<T,K,NDIM>::get_child_slices();
             auto& phibar = FunctionData<T,K,NDIM>::get_phibar();
-            
+
             FixedTensor<T,2*K,NDIM> values;
             {
                 FixedTensor<T,K,NDIM> child_values;
@@ -179,7 +179,7 @@ namespace mra {
         std::array<bool, 1 << NDIM> is_neighbor_leaf;
         std::array<T, 1 << NDIM> neighbor_sum;
     };
-    
+
     template <typename T, size_t K, Dimension NDIM>
     class FunctionCompressedNode {
     public: // temporarily make everything public while we figure out what we are doing
@@ -192,7 +192,7 @@ namespace mra {
         T normf() const {return coeffs.normf();}
         bool has_children(size_t childindex) const {assert(childindex<Key<NDIM>::num_children); return !is_leaf[childindex];}
     };
-    
+
     template <typename T, size_t K, Dimension NDIM, typename ostream>
     ostream& operator<<(ostream& s, const FunctionReconstructedNode<T,K,NDIM>& node) {
         s << "FunctionReconstructedNode(" << node.key << "," << node.is_leaf << "," << node.normf() << ")";
@@ -206,5 +206,5 @@ namespace mra {
     }
 
 }
-    
+
 #endif
