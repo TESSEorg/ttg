@@ -1,7 +1,9 @@
 #include <iostream>
-#include <cuda/std/atomic>
 #include <cuda_runtime.h>
 
+// Note: To be added to TTG
+#define N 2048
+#define THREADS_PER_BLOCK 512
 
 template <typename T>
 void random_ints(T *arr, int size) {
@@ -24,14 +26,12 @@ class functor {
 };
 
 template <typename T, class F>
-__global__ void kernel(const F &f, T *x, T *y, int N){
-    for (int i = 0; i < N; ++i) {
-        y[i] = f(x[i]);
-    }
+__global__ void kernel(const F &f, T *x, T *y, int n){
+    int index = threadIdx.x + blockIdx.x * blockDim.x;
+    if (index < n) y[index] = f(x[index]);
 }
 
 int main(){
-    int N = 10;
     float *a, *c, *da, *dc;
     functor f, *d_f;
 
@@ -45,7 +45,7 @@ int main(){
     cudaMemcpy(da, a, sizeof(float)*N, cudaMemcpyHostToDevice);
     cudaMemcpy(dc, c, sizeof(float)*N, cudaMemcpyHostToDevice);
 
-    kernel<<<1,1>>>(*d_f, da, dc, N);
+    kernel<<<N/THREADS_PER_BLOCK, THREADS_PER_BLOCK>>>(*d_f, da, dc, N);
 
     cudaMemcpy(c, dc, sizeof(float)*N, cudaMemcpyDeviceToHost);
 
