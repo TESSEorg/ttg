@@ -18,15 +18,15 @@ __device__ float cexp(T a) {
 class functor {
     public:
         template <typename T>
-        __device__ T operator()(T x) {
+        __device__ T operator()(T x) const{
             return cexp(x);
         }
 };
 
-__global__ void kernel(functor *f, float *x, float *y, int N){
+template <typename T, class F>
+__global__ void kernel(const F &f, T *x, T *y, int N){
     for (int i = 0; i < N; ++i) {
-        y[i] = f->operator()(x[i]);
-        printf("exp(%f) = %f\n", x[i], f->operator()(x[i]));
+        y[i] = f(x[i]);
     }
 }
 
@@ -45,7 +45,7 @@ int main(){
     cudaMemcpy(da, a, sizeof(float)*N, cudaMemcpyHostToDevice);
     cudaMemcpy(dc, c, sizeof(float)*N, cudaMemcpyHostToDevice);
 
-    kernel<<<1,1>>>(d_f, da, dc, N);
+    kernel<<<1,1>>>(*d_f, da, dc, N);
 
     cudaMemcpy(c, dc, sizeof(float)*N, cudaMemcpyDeviceToHost);
 
