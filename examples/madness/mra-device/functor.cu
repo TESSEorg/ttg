@@ -1,0 +1,68 @@
+#include <iostream>
+#include <cuda/std/atomic>
+#include <cuda_runtime.h>
+
+
+template <typename T>
+void random_ints(T *arr, int size) {
+    for (int i = 0; i < size; ++i) {
+        arr[i] = rand() % 100; // Generate random int between 0 and 99
+    }
+}
+
+template <typename T>
+__device__ float cexp(T a) {
+    return std::exp(a);
+}
+
+class functor {
+    public:
+        template <typename T>
+        __device__ T operator()(T x) {
+            return cexp(x);
+        }
+};
+
+__global__ void kernel(functor *f, float *x, float *y, int N){
+    for (int i = 0; i < N; ++i) {
+        // printf("exp(%f) = %f\n", x[i], f->operator()(i));
+        y[i] = f->operator()(x[i]);
+        printf("exp(%f) = %f\n", x[i], f->operator()(x[i]));
+        // x[i] = f(x);
+    }
+}
+
+int main(){
+    int N = 10;
+    float *a, *c, *da, *dc;
+    functor f, *d_f;
+
+    a = (float*)malloc(sizeof(float)*N); random_ints(a, N);
+    c = (float*)malloc(sizeof(float)*N);
+
+    for (int i = 0; i < N; i++) {
+        std::cout << a[i] << std::endl;
+    }
+
+    std::cout << "-----------------" << std::endl;
+
+    cudaMalloc(&d_f, sizeof(functor));
+    cudaMalloc(&da, sizeof(float)*N);
+    cudaMalloc(&dc, sizeof(float)*N);
+    cudaMemcpy(d_f, &f, sizeof(functor), cudaMemcpyHostToDevice);
+    cudaMemcpy(da, a, sizeof(float)*N, cudaMemcpyHostToDevice);
+    cudaMemcpy(dc, c, sizeof(float)*N, cudaMemcpyHostToDevice);
+
+    kernel<<<1,1>>>(d_f, da, dc, N);
+
+    cudaMemcpy(c, dc, sizeof(float)*N, cudaMemcpyDeviceToHost);
+
+    for (int i = 0; i < N; ++i) {
+        std::cout << c[i] << std::endl;
+    }
+
+    free(a);
+
+    return 0;
+
+}
