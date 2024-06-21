@@ -209,8 +209,9 @@ namespace ttg_parsec {
       device_state_t<TT::derived_has_device_op()> dev_state;
       ttg_data_copy_t *copies[num_copies] = { nullptr };  // the data copies tracked by this task
 
-      parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
-          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies) {
+      parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class, TT *tt_ptr)
+          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies)
+          , tt(tt_ptr) {
         tt_ht_item.key = pkey();
         this->dev_ptr = this->dev_state.dev_ptr();
         // We store the hash of the key and the address where it can be found in locals considered as a scratchpad
@@ -276,8 +277,9 @@ namespace ttg_parsec {
       ttg_data_copy_t *copies[num_streams+1] = { nullptr };  // the data copies tracked by this task
                                                              // +1 for the copy needed during send/bcast
 
-      parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class)
-          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies) {
+      parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class, TT *tt_ptr)
+          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies)
+          , tt(tt_ptr) {
         tt_ht_item.key = pkey();
         this->dev_ptr = this->dev_state.dev_ptr();
       }

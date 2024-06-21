@@ -21,6 +21,8 @@ if (CXXStdCoroutine_FOUND)
     list(APPEND ut_libs std::coroutine)
 endif(CXXStdCoroutine_FOUND)
 
+list(APPEND ut_src constraints.cc)
+
 add_ttg_executable(core-unittests-ttg "${ut_src}" LINK_LIBRARIES "${ut_libs}" COMPILE_DEFINITIONS "CATCH_CONFIG_NO_POSIX_SIGNALS=1" )
 
 # serialization test: probes serialization via all supported serialization methods (MADNESS, Boost::serialization) that are available
