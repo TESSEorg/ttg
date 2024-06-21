@@ -25,10 +25,8 @@ class functor {
 
 __global__ void kernel(functor *f, float *x, float *y, int N){
     for (int i = 0; i < N; ++i) {
-        // printf("exp(%f) = %f\n", x[i], f->operator()(i));
         y[i] = f->operator()(x[i]);
         printf("exp(%f) = %f\n", x[i], f->operator()(x[i]));
-        // x[i] = f(x);
     }
 }
 
@@ -39,12 +37,6 @@ int main(){
 
     a = (float*)malloc(sizeof(float)*N); random_ints(a, N);
     c = (float*)malloc(sizeof(float)*N);
-
-    for (int i = 0; i < N; i++) {
-        std::cout << a[i] << std::endl;
-    }
-
-    std::cout << "-----------------" << std::endl;
 
     cudaMalloc(&d_f, sizeof(functor));
     cudaMalloc(&da, sizeof(float)*N);
@@ -61,7 +53,8 @@ int main(){
         std::cout << c[i] << std::endl;
     }
 
-    free(a);
+    free(a); free(c);
+    cudaFree(da); cudaFree(dc); cudaFree(d_f);
 
     return 0;
 
