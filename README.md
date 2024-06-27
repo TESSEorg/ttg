@@ -28,7 +28,6 @@ The development of TTG was motivated by _irregular_ scientific applications like
 #include <ttg.h>
 
 int main(int argc, char *argv[]) {
-  // initialization
   ttg::initialize(argc, argv);
   // a simple template task
   auto tt = ttg::make_tt([]() { std::cout << "Hello, World!\n"; });
@@ -37,12 +36,11 @@ int main(int argc, char *argv[]) {
   ttg::make_graph_executable(tt);
   // start executing any available tasks
   ttg::execute();
-  // add a single task into the taskpool
+  // create task to kickstart computation
   if (ttg::get_default_world().rank() == 0) tt->invoke();
   // wait for completion
   ttg::fence();
 
-  // finalization
   ttg::finalize();
   return 0;
 }
@@ -160,7 +158,7 @@ To execute a TTG we must make it executable (this will declare the TTG  program 
       tt->invoke();
 ```
 
-`ttg::execute()` must occur before, not after, sending any messages. Note also that we must ensure that only one such message is generated. Since TTG execution uses the Single Program Multiple Data (SPMD) model, when launching the TTG program as multiple processes only the first process (rank) gets to send the message. Otherwise, 
+`ttg::execute()` must occur before, not after, sending any messages. Note also that we must ensure that only one such message is generated. Since TTG execution uses the Single Program Multiple Data (SPMD) model, when launching the TTG program as multiple processes only the first process (rank) gets to send the message.
 
 ## Finalize TTG
 Since TTG program is executed asynchronously, we must ensure that all tasks are finished:
@@ -200,7 +198,7 @@ $F_N = F_{N-1} + F_{N-2}, F_0=0, F_1=1$.
 int main(int argc, char *argv[]) {
   ttg::initialize(argc, argv);
 
-  const int64_t N = 20; // want to compute Fib(20)
+  const int64_t N = 20; // want to compute fib(20)
   // edges used for recursion
   ttg::Edge<int64_t, int64_t> f2f_nm1, f2f_nm2;
   // edge to the task printing the output
@@ -286,8 +284,8 @@ struct Fn {
 };
 
 auto make_ttg_fib_lt(const int64_t F_n_max) {
-  ttg::Edge<int64_t, Fn> f2f; // Fib to Fib
-  ttg::Edge<void, Fn> f2p;    // Fib to print
+  ttg::Edge<int64_t, Fn> f2f; // fib to fib
+  ttg::Edge<void, Fn> f2p;    // fib to print
 
   auto fib = ttg::make_tt(
       [=](int64_t n, Fn&& f_n) {
@@ -447,12 +445,13 @@ Although the structure of the device-capable program is nearly identical to the 
 
 ##### `TTValue`
 
-For optimal performance, the low-level runtime that manages the data motion across the memory hierarchy (host-to-host (i.e., between MPI ranks), host-to-device, and device-to-device) and so it must be able to _track_ each datum as it orchestrates the computation. For example, when a TTG task `send`'s a datum to an output terminal connected to multiple consumers the runtime may avoid unnecessary copies, e.g., by recognizing that all consumers will only need read-only access to the data, hence reference to the same datum can be passed to all consumers. This requires the mapping of a pointer to a C++ object to the control block that describes that object to the runtime. Deriving C++ type `T` from `TTValue<T>` includes the control block in `T` and avoids creating a separate control block. This is particularly important for the data that has to travel to the device.
+For optimal performance, the low-level runtime that manages the data motion across the memory hierarchy (host-to-host (i.e., between MPI ranks), host-to-device, and device-to-device) and so it must be able to _track_ each datum as it orchestrates the computation. For example, when a TTG task sends a datum to an output terminal connected to multiple consumers the runtime may avoid unnecessary copies, e.g., by recognizing that all consumers will only need read-only access to the data, hence reference to the same datum can be passed to all consumers. This requires the mapping of a pointer to a C++ object to the control block that describes that object to the runtime. Deriving C++ type `T` from `TTValue<T>` includes the control block in `T` and avoids creating a separate control block. This is particularly important for the data that has to travel to the device.
 
 ##### `Buffer`
 `Buffer<T>` is a view of a contiguous sequence of objects of type `T` in the host memory that can be automatically moved by the runtime to/from the device memory. Here `Fn::b` is a view of the 2-element sequence pointed to by `Fn::F`; once it's constructed the content of `Fn::F` will be moved to/from the device by the runtime. The subsequent use of `Fn::b` cause the automatic transfers of data to (`device::select(f_n.b)`) and from (`ttg::device::wait(f_n.b)`) the device.
 A `Buffer<T>` can be either owning or non-owning. In the example above, the memory is owned by the `unique_ptr`.
-If no pointer is passed to the constructor of `Buffer<T>` the buffer becomes owning, i.e., it allocates the necessary host-side memory.
+If no pointer is passed to the constructor of `Buffer<T>` the buffer allocates the necessary host-side memory.
+In order to guarantee relocatability of buffers, the data managed by a buffer should be located on the heap, i.e., dynamically allocated.
 
 ##### `device::Task`
 
@@ -518,7 +517,7 @@ To simplify debugging of multirank TTG programs it is possible to automate the p
 # TTG Performance
 
 Competitive performance of TTG for several paradigmatic scientific applications on shared- and distributed-memory machines (CPU only)
-will be discussed in [manuscript ``Generalized Flow-Graph Programming Using Template Task-Graphs: Initial Implementation and Assessment''](https://www.ipdps.org/ipdps2022/2022-accepted-papers.html) and has been presented at [IPDPS'22](https://www.ipdps.org/ipdps2022/).
+is discussed in [manuscript ``Generalized Flow-Graph Programming Using Template Task-Graphs: Initial Implementation and Assessment''](https://www.ipdps.org/ipdps2022/2022-accepted-papers.html) and has been presented at [IPDPS'22](https://www.ipdps.org/ipdps2022/).
 
 # TTG Performance Tracing
 
