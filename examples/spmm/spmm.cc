@@ -1690,6 +1690,9 @@ int main(int argc, char **argv) {
         minTs = parseOption(minTsStr, 32);
         std::string maxTsStr(getCmdOption(argv, argv + argc, "-T"));
         maxTs = parseOption(maxTsStr, 256);
+        if (minTs >= maxTs) {
+          maxTs = minTs;
+        }
         std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
         double avg = parseOption(avgStr, 0.3);
         timing = (check == 0);
