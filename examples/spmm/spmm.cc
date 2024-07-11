@@ -365,12 +365,15 @@ class SpMM25D {
     // release the first bcast(s)
     auto pbcasts = parallel_bcasts_;
     auto release_k = k_cnt.begin();
-    release_k_ = release_k; // this will be released
-    while (pbcasts-- > 0 && (k_cnt.end() != release_k))
-    {
+    auto release_k_ = release_k; // this will be released
+    do {
+      release_k = std::find_if(release_k, k_cnt.end(), [](std::size_t c){ return c > 0; });
+      if (k_cnt.end() == release_k) {
+        break;
+      }
       release_k_ = release_k;
-      release_k = std::find_if(release_k++, k_cnt.end(), [](std::size_t c){ return c > 0; });
-    }
+      ++release_k;
+    } while (--pbcasts > 0);
     constraint->release(*release_k_);
 
     TTGUNUSED(bcast_a_);
