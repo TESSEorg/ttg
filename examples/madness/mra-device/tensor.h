@@ -5,6 +5,8 @@
 #include <numeric>
 #include <array>
 
+#include <ttg.h>
+
 #include <TiledArray/device/allocators.h>
 #if defined(TILEDARRAY_HAS_DEVICE)
 #define ALLOCATOR TiledArray::device_pinned_allocator<T>
@@ -36,10 +38,11 @@ namespace mra {
   public:
     using value_type = T;
     static const constexpr std::size_t ndims = NDIM;
+    using dims_array_t = std::array<std::size_t, ndims>;
 
   private:
     using ttvalue_type = ttg::TTValue<MatrixTile<T, Allocator>>;
-    std::array<std::size_t, ndims> m_dims;
+    dims_array_t m_dims;
     ttg::buffer<T, Allocator> m_buffer;
 
     template<std::size_t I, typename... Dims>
