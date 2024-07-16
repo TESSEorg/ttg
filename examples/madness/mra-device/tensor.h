@@ -7,52 +7,25 @@
 
 #include <ttg.h>
 
-#include <TiledArray/device/allocators.h>
-#if defined(TILEDARRAY_HAS_DEVICE)
-#define ALLOCATOR TiledArray::device_pinned_allocator<T>
+#include "tensorview.h"
 
 namespace mra {
 
-  inline void allocator_init(int argc, char **argv) {
-    // initialize MADNESS so that TA allocators can be created
-  #if defined(TTG_PARSEC_IMPORTED)
-    madness::ParsecRuntime::initialize_with_existing_context(ttg::default_execution_context().impl().context());
-  #endif // TTG_PARSEC_IMPORTED
-    madness::initialize(argc, argv, /* nthread = */ 1, /* quiet = */ true);
-  }
-
-  inline void allocator_fini() {
-    madness::finalize();
-  }
-  #else  // TILEDARRAY_HAS_DEVICE
-  #define ALLOCATOR std::allocator<T>
-
-  inline void allocator_init(int argc, char **argv) { }
-
-  inline void allocator_fini() { }
-
-  #endif // TILEDARRAY_HAS_DEVICE
-
-  template<typename T, std::size_t NDIM, class Allocator = ALLOCATOR>
+  template<typename T, int NDIM, class Allocator = std::allocator<T>>
   class Tensor : public ttg::TTValue<Tensor<T, NDIM, Allocator>> {
   public:
-    using value_type = T;
-    static const constexpr std::size_t ndims = NDIM;
-    using dims_array_t = std::array<std::size_t, ndims>;
+    using value_type = std::decay_t<T>;
+    using size_type = std::size_t;
+    using allocator_type = Allocator;
+    static const constexpr int ndims = NDIM;
+    using view_type = TensorView<T, NDIM>;
+    using buffer_type = ttg::Buffer<value_type, allocator_type>;
+    using dims_array_t = std::array<size_type, ndims>;
 
   private:
-    using ttvalue_type = ttg::TTValue<MatrixTile<T, Allocator>>;
+    using ttvalue_type = ttg::TTValue<Tensor<T, NDIM, Allocator>>;
     dims_array_t m_dims;
-    ttg::buffer<T, Allocator> m_buffer;
-
-    template<std::size_t I, typename... Dims>
-    std::size_t offset_impl(std::size_t idx, Dims... idxs) const {
-      if constexpr (sizeof...(idxs) == 0) {
-        return m_dims[I]*idx;
-      } else {
-        return m_dims[I]*idx + offset<I+1>(std::forward<Dims...>(idxs...));
-      }
-    }
+    buffer_type m_buffer;
 
     // (Re)allocate the tensor memory
     void realloc() {
@@ -63,7 +36,7 @@ namespace mra {
     template<typename... Dims>
     Tensor(Dims... dims)
     : ttvalue_type()
-    , m_dims({dims...})
+    , m_dims({static_cast<size_type>(dims)...})
     , m_buffer(size())
     {
       static_assert(sizeof...(Dims) == NDIM,
@@ -81,7 +54,6 @@ namespace mra {
     * can handle data sharing without excessive copying */
     Tensor(const Tensor<T, NDIM, Allocator>& other)
     : ttvalue_type()
-    , ndims(other.ndims)
     , m_dims(other.m_dims)
     , m_buffer(other.size())
     {
@@ -95,36 +67,21 @@ namespace mra {
       return *this;
     }
 
-    std::size_t size() const {
-      return std::reduce(&m_dims[0], &m_dims[ndims-1]);
-    }
-
-    /* return the offset for the provided indexes */
-    template<typename... Dims>
-    std::size_t offset(Dims... idxs) const {
-      static_assert(sizeof...(Dims) == NDIM,
-                    "Number of arguments does not match number of Dimensions.");
-      return offset_impl<0>(std::forward<Dims...>(idxs...));
-    }
-
-    /* access host-side elements */
-    template<typename... Dims>
-    value_type& operator()(Dims... idxs) {
-      static_assert(sizeof...(Dims) == NDIM,
-                    "Number of arguments does not match number of Dimensions.");
-      return m_buffer.get_host_ptr()[offset(std::forward<Dims...>(idxs...))];
+    size_type size() const {
+      return std::reduce(&m_dims[0], &m_dims[ndims-1], 1, std::multiplies<size_type>{});
     }
 
     auto get_buffer() {
       return m_buffer;
     }
 
-    value_type* data() {
-      return m_buffer.get_host_ptr();
+    const auto get_buffer() const {
+      return m_buffer;
     }
 
-    const value_type* data() const {
-      return m_buffer.get_host_ptr();
+    /* returns a view for the current memory space */
+    view_type current_view() {
+      return view_type(m_buffer.current_device_ptr(), m_dims);
     }
   };
 
