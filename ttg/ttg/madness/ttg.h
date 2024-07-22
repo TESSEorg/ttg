@@ -1205,6 +1205,23 @@ namespace ttg_madness {
       priomap = std::forward<Priomap>(pm);
     }
 
+    /// add a constraint
+    /// the constraint must provide a valid override of `check_key(key)`
+    template<typename Constraint>
+    void add_constraint(Constraint&& c) {
+      /* currently a noop */
+    }
+
+    template<typename Constraint, typename Mapper>
+    void add_constraint(std::shared_ptr<Constraint> c, Mapper&& map) {
+      /* currently a noop */
+    }
+
+    template<typename Constraint, typename Mapper>
+    void add_constraint(Constraint c, Mapper&& map) {
+      /* currently a noop */
+    }
+
     /// implementation of TTBase::make_executable()
     void make_executable() override {
       TTBase::make_executable();
