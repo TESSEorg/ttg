@@ -17,10 +17,12 @@ namespace mra {
     using value_type = std::decay_t<T>;
     using size_type = std::size_t;
     using allocator_type = Allocator;
-    static const constexpr int ndims = NDIM;
     using view_type = TensorView<T, NDIM>;
     using buffer_type = ttg::Buffer<value_type, allocator_type>;
-    using dims_array_t = std::array<size_type, ndims>;
+
+    static constexpr int ndim() { return NDIM; }
+
+    using dims_array_t = std::array<size_type, ndim()>;
 
   private:
     using ttvalue_type = ttg::TTValue<Tensor<T, NDIM, Allocator>>;
@@ -68,7 +70,7 @@ namespace mra {
     }
 
     size_type size() const {
-      return std::reduce(&m_dims[0], &m_dims[ndims-1], 1, std::multiplies<size_type>{});
+      return std::reduce(&m_dims[0], &m_dims[ndim()], 1, std::multiplies<size_type>{});
     }
 
     auto get_buffer() {

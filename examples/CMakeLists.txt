@@ -65,6 +65,8 @@ if (TARGET MADworld)
 
     add_ttg_executable(mrattg-streaming madness/mrattg_streaming.cc mragl.cc mratwoscale.cc mradomain.h mrafunctiondata.h mrafunctionfunctor.h mrafunctionnode.h mragl.h mrahash.h mrakey.h mramisc.h mramxm.h mrarange.h mrasimpletensor.h mratwoscale.h mratypes.h LINK_LIBRARIES blaspp MADworld)
   endif ()
+
+  add_ttg_executable(mradevice madness/mra-device/tests/tensor_test.cc)
 endif (TARGET MADworld)
 
 add_ttg_executable(wavefront-wf wavefront/wavefront-wf.cc SINGLERANKONLY)
