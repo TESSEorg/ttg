@@ -196,7 +196,7 @@ namespace ttg_parsec {
     struct parsec_ttg_task_t : public parsec_ttg_task_base_t {
       using key_type = typename TT::key_type;
       static constexpr size_t num_streams = TT::numins;
-      /* device tasks may have to store more copies than it's inputs as their sends are aggregated */
+      /* device tasks may have to store more copies than # of its inputs as their sends are aggregated */
       static constexpr size_t num_copies  = TT::derived_has_device_op() ? static_cast<size_t>(MAX_PARAM_COUNT)
                                                                       : (num_streams+1);
       TT* tt = nullptr;
