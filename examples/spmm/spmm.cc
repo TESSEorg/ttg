@@ -29,6 +29,7 @@
 #endif
 
 #include "ttg.h"
+#include "../ttg_matrix.h"
 
 using namespace ttg;
 
@@ -103,7 +104,7 @@ using blk_t = double;
 template <typename T = blk_t>
 using SpMatrix = Eigen::SparseMatrix<T>;
 template <typename T = blk_t>
-using SpMatrixTriplet = Eigen::Triplet<T>;  // {row,col,value}
+using SpMatrixTriplet = ttg::matrix::Triplet<T>;  // {row,col,value}
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 
@@ -990,7 +991,7 @@ static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const c
   boost::minstd_rand gen(seed);
   boost::rmat_iterator<boost::minstd_rand, boost::directed_graph<>> rmat_it(gen, N, E, a, b, c, d);
 
-  using triplet_t = Eigen::Triplet<blk_t>;
+  using triplet_t = ttg::matrix::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
   for (int i = 0; i < N; i++) {
     nnz++;
@@ -1026,7 +1027,7 @@ static void initSpHardCoded(const std::function<int(const Key<2> &)> &keymap, Sp
   C.resize(m, n);
   // We initialize the same matrices on all the ranks, but we will use only the local part
   // following the keymap
-  using triplet_t = Eigen::Triplet<blk_t>;
+  using triplet_t = ttg::matrix::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
   A_elements.emplace_back(0, 1, 12.3);
   A_elements.emplace_back(0, 2, 10.7);
@@ -1073,7 +1074,7 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
 
   int rank = ttg::default_execution_context().rank();
 
-  using triplet_t = Eigen::Triplet<blk_t>;
+  using triplet_t = ttg::matrix::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
   std::vector<triplet_t> Aref_elements;
 #if defined(BTAS_IS_USABLE)
@@ -1239,7 +1240,7 @@ static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, siz
   std::mt19937 genv(seed + 1);
 
   std::uniform_int_distribution<> dist(minTs, maxTs);  // randomly pick any value in the range minTs, maxTs
-  using triplet_t = Eigen::Triplet<blk_t>;
+  using triplet_t = ttg::matrix::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
   std::vector<triplet_t> B_elements;
   std::vector<triplet_t> Aref_elements;
