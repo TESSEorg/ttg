@@ -1346,7 +1346,6 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
   a_colidx_to_rowidx[3].emplace_back(0);  // A[0][3]
 
   A.setFromTriplets(A_elements.begin(), A_elements.end());
-  std::cout << "A_elements.begin()" << A_elements.begin() << "A_elements.end()" << A_elements.end() << "\n";
 
   if (buildRefs && 0 == rank) {
     Aref.setFromTriplets(Aref_elements.begin(), Aref_elements.end());
