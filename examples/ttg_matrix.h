@@ -16,10 +16,12 @@ namespace ttg {
 
   namespace matrix {
 
+    enum class ReadOnceTriplet { yes, no };
+
     /// element of a sparse matrix = {row index, col index, value}
 
-    /// movable replacement for Eigen::Triplet
-    template<typename Value, typename StorageIndex=typename Eigen::SparseMatrix<Value>::StorageIndex >
+    /// move-capable replacement for Eigen::Triplet
+    template<typename Value, ReadOnceTriplet ReadOnce = ReadOnceTriplet::yes, typename StorageIndex=typename Eigen::SparseMatrix<Value>::StorageIndex >
     class Triplet {
      public:
       Triplet() = default;
@@ -42,10 +44,15 @@ namespace ttg {
       const StorageIndex& col() const { return m_col; }
 
       /** \returns the value of the element */
-      const Value& value() const { return m_value; }
+      std::conditional_t<ReadOnce == ReadOnceTriplet::yes, Value&&, const Value&> value() const {
+        if constexpr (ReadOnce == ReadOnceTriplet::yes)
+          return std::move(m_value);
+        else
+          return m_value;
+      }
      protected:
       StorageIndex m_row = -1, m_col = -1;
-      Value m_value;
+      mutable Value m_value;
     };
 
     // matrix shape = maps {column,row} index to {row,column} indices
