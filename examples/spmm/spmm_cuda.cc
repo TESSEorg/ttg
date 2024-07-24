@@ -192,12 +192,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     DeviceTensor(DeviceTensor&& x) noexcept
     : ttvalue_type(std::move(x))
     , tensor_type(static_cast<tensor_type&&>(x))
-    /* Grrrr, moving a Tensor does not guarantee to move the pointer */
-    , b((this->size() == 0 ||
-         this->data() == x.b.host_ptr()) ? std::move(x.b)
-                                         : ttg::Buffer<_T>(this->size() ? this->data()
-                                                                        : nullptr,
-                                                           this->size()))
+    , b(std::move(x.b))
     {
       assert(this->data() == b.host_ptr());
       //std::cout << "DeviceTensor move ctor" << std::endl;
@@ -238,12 +233,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     DeviceTensor& operator=(DeviceTensor&& x) noexcept {
       ttvalue_type::operator=(std::move(x));
       tensor_type::operator=(static_cast<tensor_type&&>(x));
-      if (this->size() == 0 || this->data() == x.b.host_ptr()){
-        b = std::move(x.b);
-      } else  {
-        b = ttg::Buffer<_T>(this->size() ? this->data() : nullptr, this->size());
-      }
-      //std::swap(x.b, b);
+      b = std::move(x.b);
       //std::cout << "DeviceTensor move ctor" << std::endl;
       return *this;
     }
