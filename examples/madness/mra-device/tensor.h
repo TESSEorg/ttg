@@ -11,7 +11,7 @@
 
 namespace mra {
 
-  template<typename T, int NDIM, class Allocator = std::allocator<T>>
+  template<typename T, Dimension NDIM, class Allocator = std::allocator<T>>
   class Tensor : public ttg::TTValue<Tensor<T, NDIM, Allocator>> {
   public:
     using value_type = std::decay_t<T>;
@@ -20,7 +20,7 @@ namespace mra {
     using view_type = TensorView<T, NDIM>;
     using buffer_type = ttg::Buffer<value_type, allocator_type>;
 
-    static constexpr int ndim() { return NDIM; }
+    static constexpr Dimension ndim() { return NDIM; }
 
     using dims_array_t = std::array<size_type, ndim()>;
 
@@ -35,6 +35,8 @@ namespace mra {
     }
 
   public:
+    Tensor() = default;
+
     template<typename... Dims>
     Tensor(Dims... dims)
     : ttvalue_type()
@@ -79,6 +81,14 @@ namespace mra {
 
     const auto get_buffer() const {
       return m_buffer;
+    }
+
+    value_type* data() {
+      return m_buffer.host_ptr();
+    }
+
+    const value_type* data() const {
+      return m_buffer.host_ptr();
     }
 
     /* returns a view for the current memory space */

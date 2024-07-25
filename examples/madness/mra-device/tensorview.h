@@ -7,6 +7,8 @@
 
 #include <ttg.h>
 
+#include "../../mratypes.h"
+
 namespace mra {
 
   class Slice {
@@ -60,7 +62,7 @@ namespace mra {
   }; // Slice
 
 
-  template<typename T, int NDIM>
+  template<typename T, Dimension NDIM>
   class TensorView {
   public:
     using value_type = std::decay_t<T>;
@@ -77,10 +79,12 @@ namespace mra {
         return idx;
       } else {
         return idx*std::reduce(&m_dims[I+1], &m_dims[ndim()], 1, std::multiplies<size_type>{})
-              + offset_impl<I+1>(std::forward<Dims...>(idxs...));
+              + offset_impl<I+1>(std::forward<Dims>(idxs)...);
       }
     }
 
+    /* TODO: unused right now, should be used to condense N dimensions down to 3 for devices */
+#if 0
     template<typename Fn, typename... Args, std::size_t I, std::size_t... Is>
     void last_level_op_helper(Fn&& fn, std::index_sequence<I, Is...>, Args... args) {
       if constexpr (sizeof...(Is) == 0) {
@@ -91,6 +95,58 @@ namespace mra {
           last_level_op_helper(std::forward<Fn>(fn), std::index_sequence<Is...>{}, args..., i);
         }
       }
+    }
+#endif // 0
+
+    template<typename Fn>
+    void foreach_idx(Fn&& fn) {
+      static_assert(ndim() <= 3, "Missing implementation of operator= for NDIM>3");
+#ifdef __CUDA_ARCH__
+      /* let's start simple: iterate sequentially over all but the fastest dimension and use threads in the last
+       *                     dimension to do the assignment in parallel. This should be revisited later.*/
+      static_assert(ndim() <= 3, "Missing implementation of operator= for NDIM>3");
+      if constexpr(ndim() == 3) {
+        for (std::size_t i = threadIdx.z; i < dims(0); i += blockDim.z) {
+          for (std::size_t j = threadIdx.y; j < dims(1); j += blockDim.y) {
+            for (std::size_t k = threadIdx.x; k < dims(2); k += blockDim.x) {
+              fn(i, j, k);
+            }
+          }
+        }
+      } else if constexpr (ndim() == 2) {
+        for (std::size_t i = threadIdx.z*blockDim.y + threadIdx.y; i < dims(0); i += blockDim.z*blockDim.y) {
+          for (std::size_t j = threadIdx.x; j < dims(1); j += blockDim.x) {
+            fn(i, j);
+          }
+        }
+      } else if constexpr(ndim() == 1) {
+        int tid = threadDim.x * ((threadDim.y*threadIdx.z) + threadIdx.y) + threadIdx.x;
+        for (size_t i = tid; i < dim(0); i += blockDim.x*blockDim.y*blockDim.z) {
+            fn(i);
+        }
+      }
+      __syncthreads();
+#else  // __CUDA_ARCH__
+      if constexpr(ndim() ==3) {
+        for (int i = 0; i < dim(0); ++i) {
+          for (int j = 0; j < dim(1); ++j) {
+            for (int k = 0; k < dim(2); ++k) {
+              fn(i, j, k);
+            }
+          }
+        }
+      } else if constexpr (ndim() ==2) {
+        for (int i = 0; i < dim(0); ++i) {
+          for (int j = 0; j < dim(1); ++j) {
+            fn(i, j);
+          }
+        }
+      } else if constexpr (ndim() ==1) {
+        for (int i = 0; i < dim(0); ++i) {
+          fn(i);
+        }
+      }
+#endif // __CUDA_ARCH__
     }
 
 
@@ -105,8 +161,12 @@ namespace mra {
     : m_dims({dims...})
     , m_ptr(ptr)
     {
-      static_assert(sizeof...(Dims) == NDIM,
-                    "Number of arguments does not match number of Dimensions.");
+      static_assert(sizeof...(Dims) == NDIM || sizeof...(Dims) == 1,
+                    "Number of arguments does not match number of Dimensions. "
+                    "A single argument for all dimensions may be provided.");
+      if constexpr (sizeof...(Dims) != m_dims.size()) {
+        std::fill(m_dims.begin(), m_dims.end(), dims...);
+      }
     }
 
     TensorView(value_type *ptr, const dims_array_t& dims)
@@ -186,80 +246,28 @@ namespace mra {
     }
 
     /// Fill with scalar
-    /// Device: assumes this operation is called by all threads in a block
+    /// Device: assumes this operation is called by all threads in a block, synchronizes
     /// Host: assumes this operation is called by a single CPU thread
     TensorView& operator=(const value_type& value) {
-#ifdef __CUDA_ARCH__
-      /* let's start simple: iterate sequentially over all but the fastest dimension and use threads in the last
-       *                     dimension to do the assignment in parallel. This should be revisited later.*/
-      auto assign = [&](auto... args){
-        /* last dimension, do assignment */
-        int tid = threadIdx.x + blockDim.x * threadIdx.y;
-        for (int i = tid; i < m_dims[ndim()-1]; i += blockDim.x*blockDim.y) {
-          this->operator()(args..., i) = value;
-        }
-      };
-#else  // __CUDA_ARCH__
-      auto assign = [&](auto... args){
-        /* last dimension, do assignment */
-        for (int i = 0; i < m_dims[ndim()-1]; ++i) {
-          this->operator()(args..., i) = value;
-        }
-      };
-#endif // __CUDA_ARCH__
-      last_level_op_helper(assign, std::make_index_sequence<ndim()>{});
+      foreach_idx([&](auto... args){ this->operator()(args...) = value; });
       return *this;
     }
 
     /// Scale by scalar
-    /// Device: assumes this operation is called by all threads in a block
+    /// Device: assumes this operation is called by all threads in a block, synchronizes
     /// Host: assumes this operation is called by a single CPU thread
     TensorView& operator*=(const value_type& value) {
-#ifdef __CUDA_ARCH__
-      /* let's start simple: iterate sequentially over all but the fastest dimension and use threads in the last
-       *                     dimension to do the assignment in parallel. This should be revisited later.*/
-      auto assign = [&](auto... args){
-        /* last dimension, do assignment */
-        int tid = threadIdx.x + blockDim.x * threadIdx.y;
-        for (int i = tid; i < m_dims[ndim()-1]; i += blockDim.x*blockDim.y) {
-          this->operator()(args..., i) *= value;
-        }
-      };
-#else  // __CUDA_ARCH__
-      auto assign = [&](auto... args){
-        /* last dimension, do assignment */
-        for (int i = 0; i < m_dims[ndim()-1]; ++i) {
-          this->operator()(args..., i) *= value;
-        }
-      };
-#endif // __CUDA_ARCH__
-      last_level_op_helper(assign, std::make_index_sequence<ndim()>{});
+      foreach_idx([&](auto... args){ this->operator()(args...) *= value; });
       return *this;
     }
 
     /// Copy into patch
-    /// Device: assumes this operation is called by all threads in a block
+    /// Device: assumes this operation is called by all threads in a block, synchronizes
     /// Host: assumes this operation is called by a single CPU thread
     template <typename otherT>
     typename std::enable_if<otherT::is_tensor,TensorView&>::type
     operator=(const otherT& other) {
-#ifdef __CUDA_ARCH__
-      auto assign = [&](auto... args){
-        /* last dimension, do assignment */
-        int tid = threadIdx.x + blockDim.x * threadIdx.y;
-        for (int i = tid; i < m_dims[ndim()-1]; i += blockDim.x*blockDim.y) {
-          this->operator()(args..., i) = other(args..., i);
-        }
-      };
-#else  // __CUDA_ARCH__
-      auto assign = [&](auto... args){
-        /* last dimension, do assignment */
-        for (int i = 0; i < m_dims[ndim()-1]; ++i) {
-          this->operator()(args..., i) = other(args..., i);
-        }
-      };
-#endif // __CUDA_ARCH__
-      last_level_op_helper(assign, std::make_index_sequence<ndim()>{});
+      foreach_idx([&](auto... args){ this->operator()(args...) = other(args...); });
       return *this;
     }
 
@@ -277,7 +285,7 @@ namespace mra {
     using view_type = TensorViewT;
     using value_type = typename view_type::value_type;
 
-    static constexpr int ndim() { return TensorViewT::ndim(); }
+    static constexpr Dimension ndim() { return TensorViewT::ndim(); }
 
     static constexpr bool is_tensor() { return true; }
 
@@ -306,6 +314,59 @@ namespace mra {
           last_level_op_helper(std::forward<Fn>(fn), std::index_sequence<Is...>{}, args..., i);
         }
       }
+    }
+
+    /* Same as for TensorView but on different counts.
+     * TODO: Can we merge them? */
+    template<typename Fn>
+    void foreach_idx(Fn&& fn) {
+      static_assert(ndim() <= 3, "Missing implementation of operator= for NDIM>3");
+#ifdef __CUDA_ARCH__
+      /* let's start simple: iterate sequentially over all but the fastest dimension and use threads in the last
+       *                     dimension to do the assignment in parallel. This should be revisited later.*/
+      static_assert(ndim() <= 3, "Missing implementation of operator= for NDIM>3");
+      if constexpr(ndim() == 3) {
+        for (std::size_t i = threadIdx.z; i < m_slices[0].count; i += blockDim.z) {
+          for (std::size_t j = threadIdx.y; j < m_slices[1].count; j += blockDim.y) {
+            for (std::size_t k = threadIdx.x; k < m_slices[2].count; k += blockDim.x) {
+              fn(i, j, k);
+            }
+          }
+        }
+      } else if constexpr (ndim() == 2) {
+        for (std::size_t i = threadIdx.z*blockDim.y + threadIdx.y; i < m_slices[0].count; i += blockDim.z*blockDim.y) {
+          for (std::size_t j = threadIdx.x; j < m_slices[1].count; j += blockDim.x) {
+            fn(i, j);
+          }
+        }
+      } else if constexpr(ndim() == 1) {
+        int tid = threadDim.x * ((threadDim.y*threadIdx.z) + threadIdx.y) + threadIdx.x;
+        for (size_t i = tid; i < m_slices[0].count; i += blockDim.x*blockDim.y*blockDim.z) {
+            fn(i);
+        }
+      }
+      __syncthreads();
+#else  // __CUDA_ARCH__
+      if constexpr(ndim() ==3) {
+        for (int i = 0; i < m_slices[0].count; ++i) {
+          for (int j = 0; j < m_slices[1].count; ++j) {
+            for (int k = 0; k < m_slices[2].count; ++k) {
+              fn(i, j, k);
+            }
+          }
+        }
+      } else if constexpr (ndim() ==2) {
+        for (int i = 0; i < m_slices[0].count; ++i) {
+          for (int j = 0; j < m_slices[1].count; ++j) {
+            fn(i, j);
+          }
+        }
+      } else if constexpr (ndim() ==1) {
+        for (int i = 0; i < m_slices[1].count; ++i) {
+          fn(i);
+        }
+      }
+#endif // __CUDA_ARCH__
     }
 
 
@@ -387,25 +448,7 @@ namespace mra {
     template <typename X=TensorSlice<TensorViewT>>
     typename std::enable_if<!std::is_const_v<TensorSlice>,X&>::type
     operator=(const value_type& value) {
-#ifdef __CUDA_ARCH__
-      /* let's start simple: iterate sequentially over all but the fastest dimension and use threads in the last
-       *                     dimension to do the assignment in parallel. This should be revisited later.*/
-      auto assign = [&](auto... args){
-        /* last dimension, do assignment */
-        int tid = threadIdx.x + blockDim.x * threadIdx.y;
-        for (int i = tid; i < m_slices[ndim()-1].count; i += blockDim.x*blockDim.y) {
-          this->operator()(args..., i) = value;
-        }
-      };
-#else  // __CUDA_ARCH__
-      auto assign = [&](auto... args){
-        /* last dimension, do assignment */
-        for (int i = 0; i < m_slices[ndim()-1].count; ++i) {
-          this->operator()(args..., i) = value;
-        }
-      };
-#endif // __CUDA_ARCH__
-      last_level_op_helper(assign, std::make_index_sequence<ndim()>{});
+      foreach_idx([&](auto... args){ this->operator()(args...) = value; });
       return *this;
     }
 
@@ -415,25 +458,7 @@ namespace mra {
     template <typename X=TensorSlice<TensorViewT>>
     typename std::enable_if<!std::is_const_v<TensorSlice>,X&>::type
     operator*=(const value_type& value) {
-#ifdef __CUDA_ARCH__
-      /* let's start simple: iterate sequentially over all but the fastest dimension and use threads in the last
-       *                     dimension to do the assignment in parallel. This should be revisited later.*/
-      auto assign = [&](auto... args){
-        /* last dimension, do assignment */
-        int tid = threadIdx.x + blockDim.x * threadIdx.y;
-        for (int i = tid; i < m_slices[ndim()-1].count; i += blockDim.x*blockDim.y) {
-          this->operator()(args..., i) *= value;
-        }
-      };
-#else  // __CUDA_ARCH__
-      auto assign = [&](auto... args){
-        /* last dimension, do assignment */
-        for (int i = 0; i < m_slices[ndim()-1].count; ++i) {
-          this->operator()(args..., i) *= value;
-        }
-      };
-#endif // __CUDA_ARCH__
-      last_level_op_helper(assign, std::make_index_sequence<ndim()>{});
+      foreach_idx([&](auto... args){ this->operator()(args...) *= value; });
       return *this;
     }
 
@@ -442,23 +467,7 @@ namespace mra {
     /// Host: assumes this operation is called by a single CPU thread
     typename std::enable_if<!std::is_const_v<TensorViewT>,TensorSlice&>::type
     operator=(const TensorSlice& other) {
-#ifdef __CUDA_ARCH__
-      auto assign = [&](auto... args){
-        /* last dimension, do assignment */
-        int tid = threadIdx.x + blockDim.x * threadIdx.y;
-        for (int i = tid; i < m_slices[ndim()-1].count; i += blockDim.x*blockDim.y) {
-          this->operator()(args..., i) = other(args..., i);
-        }
-      };
-#else  // __CUDA_ARCH__
-      auto assign = [&](auto... args){
-        /* last dimension, do assignment */
-        for (int i = 0; i < m_slices[ndim()-1].count; ++i) {
-          this->operator()(args..., i) = other(args..., i);
-        }
-      };
-#endif // __CUDA_ARCH__
-      last_level_op_helper(assign, std::make_index_sequence<ndim()>{});
+      foreach_idx([&](auto... args){ this->operator()(args...) = other(args...); });
       return *this;
     }
   };
