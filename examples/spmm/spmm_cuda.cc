@@ -787,7 +787,11 @@ class SpMM25D {
         , a_rowidx_to_colidx_(a_rowidx_to_colidx)
         , b_colidx_to_rowidx_(b_colidx_to_rowidx) {
       this->set_priomap([this](const Key<3> &ijk) { return this->prio(ijk); });  // map a key to an integral priority value
-
+      auto num_devices = ttg::device::num_devices();
+      this->set_devicemap(
+        [num_devices](const Key<3> &ijk){
+          return ((((uint64_t)ijk[0]) << 32) + ijk[1]) % num_devices;
+        });
       // for each {i,j} determine first k that contributes AND belongs to this node,
       // initialize input {i,j,first_k} flow to 0
       for (auto i = 0ul; i != a_rowidx_to_colidx_.size(); ++i) {
@@ -1344,7 +1348,6 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
   a_colidx_to_rowidx[3].emplace_back(0);  // A[0][3]
 
   A.setFromTriplets(A_elements.begin(), A_elements.end());
-  std::cout << "A_elements.begin()" << A_elements.begin() << "A_elements.end()" << A_elements.end() << "\n";
 
   if (buildRefs && 0 == rank) {
     Aref.setFromTriplets(Aref_elements.begin(), Aref_elements.end());
