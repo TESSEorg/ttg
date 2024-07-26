@@ -1586,6 +1586,12 @@ int main(int argc, char **argv) {
     initialize(1, argv, cores);
   }
 
+#ifdef BTAS_IS_USABLE
+  // initialize MADNESS so that TA allocators can be created
+  madness::ParsecRuntime::initialize_with_existing_context(ttg::default_execution_context().impl().context());
+  madness::initialize(argc, argv, /* nthread = */ 1, /* quiet = */ true);
+#endif  // BTAS_IS_USABLE
+
   std::string debugStr(getCmdOption(argv, argv + argc, "-d"));
   auto debug = (unsigned int)parseOption(debugStr, 0);
 
@@ -1877,6 +1883,10 @@ int main(int argc, char **argv) {
         //      }
       }
     }
+
+#ifdef BTAS_IS_USABLE
+    madness::finalize();
+#endif  // BTAS_IS_USABLE
 
     ttg_finalize();
 
