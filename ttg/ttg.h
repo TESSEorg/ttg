@@ -26,6 +26,7 @@
 #include "ttg/util/print.h"
 #include "ttg/world.h"
 
+#include "ttg/constraint.h"
 #include "ttg/edge.h"
 
 #include "ttg/ptr.h"
