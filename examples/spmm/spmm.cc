@@ -40,12 +40,34 @@ using namespace ttg;
 
 #include "ttg/util/bug.h"
 
+#if defined(TTG_ENABLE_CUDA)
+#define HAVE_SPMM_DEVICE 1
+static constexpr ttg::ExecutionSpace space = ttg::ExecutionSpace::CUDA;
+#elif defined(TTG_ENABLE_HIP)
+#define HAVE_SPMM_DEVICE 1
+static constexpr ttg::ExecutionSpace space = ttg::ExecutionSpace::HIP;
+#elif defined(TTG_ENABLE_LEVEL_ZERO)
+#define HAVE_SPMM_DEVICE 1
+static constexpr ttg::ExecutionSpace space = ttg::ExecutionSpace::L0;
+#else
+static constexpr ttg::ExecutionSpace space = ttg::ExecutionSpace::Host;
+#endif
+
+/* set to true to automatically release constraints
+ * this removes the ability to control the window
+ * size and is equal to a window size of 1 */
 #define USE_AUTO_CONSTRAINT false
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 using scalar_t = double;
-using blk_t = btas::Tensor<scalar_t, btas::DEFAULT::range, btas::mohndle<btas::varray<scalar_t>, btas::Handle::shared_ptr>>;
 
+#if HAVE_SPMM_DEVICE
+using blk_t = DeviceTensor<scalar_t, btas::DEFAULT::range,
+                           btas::mohndle<btas::varray<scalar_t, TiledArray::device_pinned_allocator<scalar_t>>,
+                                         btas::Handle::shared_ptr>>;
+#else  // HAVE_SPMM_DEVICE
+using blk_t = btas::Tensor<scalar_t, btas::DEFAULT::range, btas::mohndle<btas::varray<scalar_t>, btas::Handle::shared_ptr>>;
+#endif // HAVE_SPMM_DEVICE
 //#include <atomic>
 //static std::atomic<uint64_t> reduce_count = 0;
 
@@ -272,7 +294,9 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, ttg:
 
 /// @tparam KeyMap2 maps {i,j} to processor
 /// @tparam KeyMap3 maps {i,j,k} to processor
-template <typename Keymap2 = std::function<int(const Key<2> &)>, typename Keymap3 = std::function<int(const Key<3> &)>,
+template <ttg::ExecutionSpace Space = space,
+          typename Keymap2 = std::function<int(const Key<2> &)>,
+          typename Keymap3 = std::function<int(const Key<3> &)>,
           typename Blk = blk_t>
 class SpMM25D {
  public:
@@ -305,9 +329,9 @@ class SpMM25D {
     // add constraint with external mapper: key[0] represents `k`
     bcast_b_->add_constraint(constraint, [](const Key<2>& key){ return key[0]; });
     local_bcast_b_ = std::make_unique<LocalBcastB>(local_b_ijk_, b_ijk_, a_rows_of_col_, ijk_keymap_);
-    multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c_ij_p_, a_cols_of_row_,
-                                                 b_rows_of_col_, mTiles, nTiles, ijk_keymap_, constraint,
-                                                 k_cnt_, parallel_bcasts_);
+    multiplyadd_ = std::make_unique<MultiplyAdd<Space>>(a_ijk_, b_ijk_, c_ijk_, c_ij_p_, a_cols_of_row_,
+                                                        b_rows_of_col_, mTiles, nTiles, ijk_keymap_, constraint,
+                                                        k_cnt_, parallel_bcasts_);
 
     reduce_c_ = std::make_unique<ReduceC>(c_ij_p_, c, ij_keymap_);
     reduce_c_->template set_input_reducer<0>(
@@ -543,8 +567,33 @@ class SpMM25D {
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total for this layer of the
   /// 3-D process grid only
-  class MultiplyAdd : public TT<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd,
+  template<ttg::ExecutionSpace Space_>
+  class MultiplyAdd : public TT<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd<Space_>,
                                 ttg::typelist<const Blk, const Blk, Blk>> {
+    static constexpr const bool is_device_space = (Space_ != ttg::ExecutionSpace::Host);
+    using task_return_type = std::conditional_t<is_device_space, ttg::device::Task, void>;
+    /* communicate to the runtime which device we support (if any) */
+    static constexpr bool have_cuda_op = (Space_ == ttg::ExecutionSpace::CUDA);
+    static constexpr bool have_hip_op  = (Space_ == ttg::ExecutionSpace::HIP);
+    static constexpr bool have_level_zero_op = (Space_ == ttg::ExecutionSpace::L0);
+
+    void release_next_k(long k) {
+      assert(k_cnt_.size() > k);
+      long cnt = k_cnt_[k].fetch_sub(1, std::memory_order_relaxed)-1;
+      assert(cnt >= 0);
+      if (0 == cnt) {
+        auto release_k = k;
+        auto bcasts_ahead = parallel_bcasts_;
+        // this was the last gemm in this k, find the next one to release
+        while (++release_k < k_cnt_.size() &&
+                (0 == k_cnt_[release_k].load(std::memory_order_relaxed)
+                || --bcasts_ahead > 0))
+        { }
+        constraint->release(release_k);
+      }
+    }
+
+
    public:
     using baseT = typename MultiplyAdd::ttT;
 
@@ -563,7 +612,13 @@ class SpMM25D {
         , constraint(std::move(constraint))
         , parallel_bcasts_(parallel_bcasts) {
       this->set_priomap([=,this](const Key<3> &ijk) { return this->prio(ijk); });  // map a key to an integral priority value
-
+      if constexpr (is_device_space) {
+        auto num_devices = ttg::device::num_devices();
+        this->set_devicemap(
+          [num_devices](const Key<3> &ijk){
+            return ((((uint64_t)ijk[0]) << 32) + ijk[1]) % num_devices;
+          });
+      }
       // for each {i,j} determine first k that contributes AND belongs to this node,
       // initialize input {i,j,first_k} flow to 0
       for (auto i = 0ul; i != a_cols_of_row_.size(); ++i) {
@@ -591,8 +646,8 @@ class SpMM25D {
       }
     }
 
-    void op(const Key<3> &ijk, typename baseT::input_refs_tuple_type &&_ijk,
-            std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>> &result) {
+    task_return_type op(const Key<3> &ijk, typename baseT::input_refs_tuple_type &&_ijk,
+                        std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>> &result) {
       const auto i = ijk[0];
       const auto j = ijk[1];
       const auto k = ijk[2];  // k==l same because 000 will always be on layer 0, 001 will be accessed on layer 1
@@ -606,36 +661,52 @@ class SpMM25D {
                  i, "][", j, "]  += A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
                  (have_next_k ? std::to_string(next_k) : "does not exist"));
       // release the constraint on the next round of broadcasts
-      {
-        assert(k_cnt_.size() > k);
-        long cnt = k_cnt_[k].fetch_sub(1, std::memory_order_relaxed)-1;
-        assert(cnt >= 0);
-        if (0 == cnt) {
-          auto release_k = k;
-          auto bcasts_ahead = parallel_bcasts_;
-          // this was the last gemm in this k, find the next one to release
-          while (++release_k < k_cnt_.size() &&
-                 (0 == k_cnt_[release_k].load(std::memory_order_relaxed)
-                  || --bcasts_ahead > 0))
-          { }
-          constraint->release(release_k);
-        }
+      release_next_k(k);
+      const blk_t& A = baseT::template get<0>(_ijk);
+      const blk_t& B = baseT::template get<1>(_ijk);
+      blk_t& C = baseT::template get<2>(_ijk);
+
+      if (C.empty()) {
+        C = blk_t(btas::Range(A.range().extent(0), B.range().extent(1)), 0.0);
       }
 
+#ifdef HAVE_SPMM_DEVICE
+      /* pull all buffers onto the device */
+      co_await ttg::device::select(A.b, B.b, C.b);
+
+      /* everything is on the device, call the gemm */
+      device_gemm(C, A, B);
+
+      // pass the running total to the next flow, if needed
+      // otherwise write to the result flow
+      if (have_next_k) {
+        co_await ttg::device::forward(ttg::device::send<1>(
+                                                Key<3>({i, j, next_k}),
+                                                std::move(C),
+                                                result));
+      } else {  // done with all local contributions to C[i][j], reduce with others on the process to which C[i][j]
+                // belongs
+        co_await ttg::device::forward(ttg::device::send<0>(
+                                                Key<2>({i, j}),
+                                                std::move(C),
+                                                result));
+      }
+#else  // HAVE_SPMM_DEVICE
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow
       if (have_next_k) {
         ::send<1>(
             Key<3>({i, j, next_k}),
-            gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
+            gemm(std::move(C), A, B),
             result);
       } else {  // done with all local contributions to C[i][j], reduce with others on the process to which C[i][j]
                 // belongs
         ::send<0>(
             Key<2>({i, j}),
-            gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
+            gemm(std::move(C), A, B),
             result);
       }
+#endif // HAVE_SPMM_DEVICE
     }
 
    private:
@@ -787,7 +858,7 @@ class SpMM25D {
   std::unique_ptr<LocalBcastA> local_bcast_a_;
   std::unique_ptr<BcastB> bcast_b_;
   std::unique_ptr<LocalBcastB> local_bcast_b_;
-  std::unique_ptr<MultiplyAdd> multiplyadd_;
+  std::unique_ptr<MultiplyAdd<Space>> multiplyadd_;
   std::unique_ptr<ReduceC> reduce_c_;
   std::vector<std::atomic<std::size_t>> k_cnt_;
   Keymap2 ij_keymap_;
@@ -1418,12 +1489,12 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   std::string rt("Unkown???");
 #endif
   if (ttg::default_execution_context().rank() == 0) {
-    std::cout << "TTG-" << rt << " PxQxR=   " << P << " " << Q << " " << R << " 1 average_NB= " << avg_nb << " M= " << M
+    std::cout << "TTG-" << rt << " PxQxR=   " << P << " " << Q << " " << R << " " << ttg::device::num_devices()
+              << " average_NB= " << avg_nb << " M= " << M
               << " N= " << N << " K= " << K << " t= " << minTs << " T=" << maxTs << " Tiling= " << tiling_type
               << " A_density= " << Adensity << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
               << " gflops/s= " << gflops / tc << std::endl;
   }
-  //std::cout << "num reductions " << reduce_count.load() << " tiles " << MT*KT << std::endl;
 }
 
 #if !defined(BLOCK_SPARSE_GEMM)
@@ -1722,9 +1793,17 @@ int main(int argc, char **argv) {
         // Start up engine
         execute();
         for (int nrun = 0; nrun < nb_runs; nrun++) {
+#if TTG_USE_PARSEC
+          /* flush all PaRSEC memory */
+          parsec_devices_release_memory();
+#endif // TTG_USE_PARSEC
           timed_measurement(A, B, ij_keymap, ijk_keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity,
                             a_cols_of_row, a_rows_of_col, b_cols_of_row, b_rows_of_col, mTiles,
                             nTiles, kTiles, M, N, K, minTs, maxTs, P, Q, R, parallel_bcasts);
+#if TTG_USE_PARSEC
+          /* reset PaRSEC's load tracking */
+          parsec_devices_reset_load(default_execution_context().impl().context());
+#endif // TTG_USE_PARSEC
         }
       } else {
         // flow graph needs to exist on every node
