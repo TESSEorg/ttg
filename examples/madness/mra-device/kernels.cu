@@ -8,7 +8,7 @@
 
 /// Make outer product of quadrature points for vectorized algorithms
 template<typename T>
-__device__ void make_xvec(const TensorView<T,2>& x, TensorView<T,2>& xvec, std::integral_constant<1>) {
+__device__ void make_xvec(const mra::TensorView<T,2>& x, mra::TensorView<T,2>& xvec, std::integral_constant<1>) {
   /* uses threads in 3 dimensions */
   xvec = x;
   /* TensorView assignment synchronizes */
@@ -16,7 +16,7 @@ __device__ void make_xvec(const TensorView<T,2>& x, TensorView<T,2>& xvec, std::
 
 /// Make outer product of quadrature points for vectorized algorithms
 template<typename T>
-__device__ void make_xvec(const TensorView<T,2>& x, TensorView<T,2>& xvec, std::integral_constant<2>) {
+__device__ void make_xvec(const mra::TensorView<T,2>& x, mra::TensorView<T,2>& xvec, std::integral_constant<2>) {
   const std::size_t K = x.dim(1);
   if (threadId.z == 0) {
     for (size_t i=blockIdx.y; i<K; i += blockDim.y) {
@@ -32,7 +32,7 @@ __device__ void make_xvec(const TensorView<T,2>& x, TensorView<T,2>& xvec, std::
 
 /// Make outer product of quadrature points for vectorized algorithms
 template<typename T>
-__device__ void make_xvec(const TensorView<T,2>& x, TensorView<T,2>& xvec, std::integral_constant<3>) {
+__device__ void make_xvec(const mra::TensorView<T,2>& x, mra::TensorView<T,2>& xvec, std::integral_constant<3>) {
   const std::size_t K = x.dim(1);
   for (size_t i=threadIdx.z; i<K; i += blockDim.z) {
     for (size_t j=blockIdx.y; j<K; j += blockDim.y) {
@@ -48,17 +48,17 @@ __device__ void make_xvec(const TensorView<T,2>& x, TensorView<T,2>& xvec, std::
 }
 
 
-template <typename functorT, typename T, Dimension NDIM>
+template <typename functorT, typename T, mra::Dimension NDIM>
 __device__
 void fcube(const functorT& f,
-           const Key<NDIM>& key,
+           const mra::Key<NDIM>& key,
            const T thresh,
            // output
-           TensorView<T,2>& values,
+           mra::TensorView<T,2>& values,
            std::size_t K,
            // temporaries
-           TensorView<T, NDIM> x,
-           TensorView<T, 2> xvec) {
+           mra::TensorView<T, NDIM> x,
+           mra::TensorView<T, 2> xvec) {
   if (is_negligible(f,Domain<NDIM>:: template bounding_box<T>(key),truncate_tol(key,thresh))) {
       values = 0.0;
       /* TensorView assigment synchronizes */
@@ -149,7 +149,7 @@ std::array<mra::Slice, NDIM> get_child_slice(mra::Key<NDIM> key, std::size_t K, 
   return slices;
 }
 
-template<typename Fn, typename T, std::size_t NDIM>
+template<typename Fn, typename T, mra::Dimension NDIM>
 __global__ fcoeffs_kernel1(
   const Fn f,
   mra::Key<NDIM> key,
@@ -180,7 +180,7 @@ __global__ fcoeffs_kernel1(
   }
 }
 
-template<typename T, std::size_t NDIM>
+template<typename T, mra::Dimension NDIM>
 __global__ fcoeffs_kernel2(
   mra::Key<NDIM> key,
   T* coeffs_ptr,
@@ -217,7 +217,7 @@ __global__ fcoeffs_kernel2(
   }
 }
 
-template<typename Fn, typename T, std::size_t NDIM>
+template<typename Fn, typename T, mra::Dimension NDIM>
 void submit_fcoeffs_kernel(
   const Fn* fn,
   const mra::Key<NDIM>& key,

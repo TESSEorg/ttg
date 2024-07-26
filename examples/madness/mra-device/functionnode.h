@@ -52,11 +52,11 @@ namespace mra {
     }
 
     template <typename T>
-    void distancesq(const Coordinate<T,3>& p, const TensorView<T,2>& q, T* rsq, std::size_t N) {
+    void distancesq(const Coordinate<T,3>& p, const TensorView<T,1>& q, T* rsq, std::size_t N) {
         const T x = p(0);
 #ifdef __CUDA_ARCH__
-        int tid = threadIdx.x*blockDim.x + threadIdx.y;
-        for (size_t i = tid; i < N; i += blockDim.x*blockDim.y) {
+        int tid = threadDim.x * ((threadDim.y*threadIdx.z) + threadIdx.y) + threadIdx.x;
+        for (size_t i = tid; i < N; i += blockDim.x*blockDim.y*blockDim.z) {
             T xx = q(0,i) - x;
             rsq[i] = xx*xx;
         }
@@ -73,8 +73,8 @@ namespace mra {
         const T x = p(0);
         const T y = p(1);
 #ifdef __CUDA_ARCH__
-        int tid = threadIdx.x*blockDim.x + threadIdx.y;
-        for (size_t i = tid; i < N; i += blockDim.x*blockDim.y) {
+        int tid = threadDim.x * ((threadDim.y*threadIdx.z) + threadIdx.y) + threadIdx.x;
+        for (size_t i = tid; i < N; i += blockDim.x*blockDim.y*blockDim.z) {
             T xx = q(0,i) - x;
             T yy = q(1,i) - y;
             rsq[i] = xx*xx + yy*yy;
@@ -89,13 +89,13 @@ namespace mra {
     }
 
     template <typename T>
-    void distancesq(const Coordinate<T,3>& p, const TensorView<T,2>& q, T* rsq, std::size_t N) {
+    void distancesq(const Coordinate<T,3>& p, const TensorView<T,3>& q, T* rsq, std::size_t N) {
         const T x = p(0);
         const T y = p(1);
         const T z = p(2);
 #ifdef __CUDA_ARCH__
-        int tid = threadIdx.x*blockDim.x + threadIdx.y;
-        for (size_t i = tid; i < N; i += blockDim.x*blockDim.y) {
+        int tid = threadDim.x * ((threadDim.y*threadIdx.z) + threadIdx.y) + threadIdx.x;
+        for (size_t i = tid; i < N; i += blockDim.x*blockDim.y*blockDim.z) {
             T xx = q(0,i) - x;
             T yy = q(1,i) - y;
             T zz = q(2,i) - z;

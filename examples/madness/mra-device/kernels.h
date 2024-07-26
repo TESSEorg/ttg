@@ -12,7 +12,7 @@ typedef int cudaStream;
 
 /* Returns the total size of temporary memory needed for
  * the project() kernel. */
-template<std::size_t NDIM>
+template<mra::Dimension NDIM>
 std::size_t project_tmp_size(std::size_t K) {
   const size_t K2NDIM = std::pow(K,NDIM);
   return (NDIM*K2NDIM) // xvec in fcube
@@ -20,7 +20,7 @@ std::size_t project_tmp_size(std::size_t K) {
 }
 
 /* Explicitly instantiated for 1, 2, 3 dimensional Gaussians */
-template<typename Fn, typename T, std::size_t NDIM>
+template<typename Fn, typename T, mra::Dimension NDIM>
 void submit_fcoeffs_kernel(
   const Fn* fn,
   const mra::Key<NDIM>& key,

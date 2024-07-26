@@ -8,6 +8,7 @@
 #include "functionfunctor.h"
 #include "../../mrakey.h"
 
+#if 0
 /// Project the scaling coefficients using screening and test norm of difference coeffs.  Return true if difference coeffs negligible.
 template <typename FnT, typename T, mra::Dimension NDIM>
 static bool fcoeffs(
@@ -60,6 +61,7 @@ static bool fcoeffs(
   }
   co_return status;
 }
+#endif // 0
 
 template<typename FnT, typename T, mra::Dimension NDIM>
 auto make_project(
@@ -93,7 +95,49 @@ auto make_project(
     }
     else {
       /* here we actually compute: first select a device */
-      result.is_leaf = fcoeffs(f, functiondata, key, thresh, coeffs);
+      //result.is_leaf = fcoeffs(f, functiondata, key, thresh, coeffs);
+      /**
+       * BEGIN FCOEFFS HERE
+       * TODO: figure out a way to outline this into a function or coroutine
+       */
+
+      /* global function data */
+      // TODO: need to make our own FunctionData with dynamic K
+      const auto& phibar = functiondata.get_phibar();
+      const auto& hgT = functiondata.get_hgT();
+
+      const std::size_t K = coeffs.dim(0);
+
+      /* temporaries */
+      bool is_leaf;
+      auto is_leaf_scratch = ttg::make_scratch(&is_leaf, ttg::scope::Allocate);
+      const std::size_t tmp_size = project_tmp_size<NDIM>(K);
+      T* tmp = new T[tmp_size]; // TODO: move this into make_scratch()
+      auto tmp_scratch = ttg::make_scratch(tmp, ttg::scope::Allocate, tmp_size);
+
+      /* TODO: cannot do this from a function, need to move it into the main task */
+      co_await ttg::device::select(f, coeffs.buffer(), phibar.buffer(),
+                                   hgT.buffer(), tmp_scratch, is_leaf_scratch);
+      auto coeffs_view = coeffs.current_view();
+      auto phibar_view = phibar.current_view();
+      auto hgT_view    = hgT.current_view();
+      T* tmp_device = tmp_scratch.device_ptr();
+      bool *is_leaf_device = is_leaf_scratch.device_ptr();
+      FnT* f_ptr = f.current_device_ptr();
+
+      /* submit the kernel */
+      submit_fcoeffs_kernel(f_ptr, key, coeffs_view, phibar_view, hgT_view, tmp_device,
+                            is_leaf_device, ttg::device::current_stream());
+
+      /* wait and get is_leaf back */
+      co_await ttg::device::wait(is_leaf_scratch);
+      result.is_leaf = is_leaf;
+      /* todo: is this safe? */
+      delete[] tmp;
+      /**
+       * END FCOEFFS HERE
+       */
+
       if (!result.is_leaf) {
         std::vector<mra::Key<NDIM>> bcast_keys;
         for (auto child : children(key)) bcast_keys.push_back(child);

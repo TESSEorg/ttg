@@ -66,8 +66,9 @@ namespace mra {
   class TensorView {
   public:
     using value_type = std::decay_t<T>;
+    using const_value_type = std::add_const_t<value_type>;
     using size_type = std::size_t;
-    static constexpr int ndim() { return NDIM; }
+    static constexpr Dimension ndim() { return NDIM; }
     using dims_array_t = std::array<size_type, ndim()>;
     static constexpr bool is_tensor() { return true; }
 
@@ -157,7 +158,7 @@ namespace mra {
 
   public:
     template<typename... Dims>
-    TensorView(value_type *ptr, Dims... dims)
+    TensorView(T *ptr, Dims... dims)
     : m_dims({dims...})
     , m_ptr(ptr)
     {
@@ -169,7 +170,7 @@ namespace mra {
       }
     }
 
-    TensorView(value_type *ptr, const dims_array_t& dims)
+    TensorView(T *ptr, const dims_array_t& dims)
     : m_dims(dims)
     , m_ptr(ptr)
     { }
@@ -197,7 +198,7 @@ namespace mra {
       return std::reduce(&m_dims[0], &m_dims[ndim()-1], 1, std::multiplies<size_type>{});
     }
 
-    size_type dim(size_type d) const {
+    size_type dim(Dimension d) const {
       return m_dims[d];
     }
 
@@ -273,7 +274,7 @@ namespace mra {
 
   private:
     dims_array_t m_dims;
-    value_type *m_ptr;
+    T *m_ptr; // may be const or non-const
   };
 
 
