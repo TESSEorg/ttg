@@ -19,12 +19,12 @@ namespace mra {
     private:
         Level n;  // = 0; cannot default initialize if want to be POD
         std::array<Translation,NDIM> l; // = {}; ditto
-        HashValue hashvalue; // = 0; ditto
-        
+
         /// Refreshes the hash value.  Note that the default std::hash does not mix enough
-        void rehash() {
-            hashvalue = n;
+        HashValue rehash() const {
+            HashValue hashvalue = n;
             for (Dimension d=0; d<NDIM; d++) mulhash(hashvalue,l[d]);
+            return hashvalue;
         }
         
     public:
@@ -40,8 +40,9 @@ namespace mra {
         Key(Key<NDIM>&& key) = default;
         
         /// Construct from level and translation
-        Key(Level n, const std::array<Translation,NDIM>& l) : n(n), l(l) {rehash();}
-        
+        Key(Level n, const std::array<Translation,NDIM>& l) : n(n), l(l)
+        { }
+
         /// Assignment default is OK
         Key& operator=(const Key<NDIM>& other) = default;
         
@@ -50,7 +51,7 @@ namespace mra {
         
         /// Equality
         bool operator==(const Key<NDIM>& other) const {
-            if (hashvalue != other.hashvalue) {
+            if (rehash() != other.rehash()) {
                 return false;
             }
             else {
@@ -64,8 +65,8 @@ namespace mra {
         bool operator!=(const Key<NDIM>& other) const {return !(*this == other);}
         
         /// Hash to unsigned value
-        HashValue hash() const {return hashvalue;}
-        
+        HashValue hash() const {return rehash();}
+
         /// Level (n = 0, 1, 2, ...)
         Level level() const {return n;}
         
@@ -119,22 +120,16 @@ namespace mra {
             for (Dimension d=NDIM-1; d>0; d--) b = (b<<1) | low_bit(l[d-1]);
             return b;
         }
+
+        /// Return the Key of the child at position idx \in [0, 1<<NDIM)
+        Key<NDIM> child_at(size_t& idx) {
+            assert(n<MAX_LEVEL);
+            assert(idx<NDIM);
+            std::array<Translation,NDIM> l = this->l;
+            for (auto d : range(NDIM)) l[d] = 2*l[d] + (idx & (1<<d)) ? 1 : 0;
+            return Key<NDIM>(2*n, l);
+        }
     };
-    
-    // Specializations for dubuoius efficiency gains except perhaps for NDIM=1
-    
-    template <> inline void Key<1>::rehash() {
-        hashvalue = mulhash(HashValue(n),l[0]);
-    }
-    
-    template <> inline void Key<2>::rehash() {
-        hashvalue = mulhash(mulhash(HashValue(n),l[0]),l[1]);
-    }
-    
-    template <> inline void Key<3>::rehash() {
-        hashvalue = mulhash(mulhash(mulhash(HashValue(n),l[0]),l[1]),l[2]);
-    }
-    
     template <> inline Key<1> Key<1>::parent(Level generation) const {
         generation = std::min(generation,n);
         return Key<1>(n-generation,{l[0]>>generation});

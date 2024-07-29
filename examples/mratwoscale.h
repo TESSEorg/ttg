@@ -1,8 +1,6 @@
 #ifndef MAD_TWOSCALE_H_INCL
 #define MAD_TWOSCALE_H_INCL
 
-#include "mrasimpletensor.h"
-
 namespace mra {
 
     namespace detail {
@@ -16,9 +14,9 @@ namespace mra {
     }
         
     /// Get the multiwavelet twoscale coefficients of order K (1<=K<=60) and either double or float
-    template <typename T, size_t K>
-    void twoscale_get(FixedTensor<T,2*K,2>& H) {
-        detail::twoscale_get(K, H.ptr());
+    template <typename T>
+    void twoscale_get(size_t k, T* p) {
+        detail::twoscale_get(k, p);
     }
 }
 

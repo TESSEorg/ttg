@@ -58,6 +58,11 @@ if (TARGET tiledarray)
     endif(TTG_HAVE_HIP)
 endif()
 
+add_ttg_executable(tensortest madness/mra-device/tests/tensor_test.cc)
+#if (TTG_HAVE_CUDA)
+  add_ttg_executable(mradevice-cuda madness/mra-device/mrattg-device.cc madness/mra-device/gl.cc RUNTIMES "parsec")
+ #endif (TTG_HAVE_CUDA)
+
 if (TARGET MADworld)
   add_ttg_executable(madness-1d madness/madness-1d/madness-1d.cc RUNTIMES "mad")
   if (TARGET blaspp) #(CBLAS_FOUND AND MKL_FOUND)
@@ -65,6 +70,7 @@ if (TARGET MADworld)
 
     add_ttg_executable(mrattg-streaming madness/mrattg_streaming.cc mragl.cc mratwoscale.cc mradomain.h mrafunctiondata.h mrafunctionfunctor.h mrafunctionnode.h mragl.h mrahash.h mrakey.h mramisc.h mramxm.h mrarange.h mrasimpletensor.h mratwoscale.h mratypes.h LINK_LIBRARIES blaspp MADworld)
   endif ()
+
 endif (TARGET MADworld)
 
 add_ttg_executable(wavefront-wf wavefront/wavefront-wf.cc SINGLERANKONLY)

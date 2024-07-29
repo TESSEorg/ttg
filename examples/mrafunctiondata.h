@@ -86,7 +86,7 @@ namespace mra {
         static void initialize() {
             make_phi(phi);
             make_phibar(phibar);
-            twoscale_get<T,K>(HG);
+            twoscale_get(K, HG.ptr());
             for (size_t i : range(2*K)) {
                 for (size_t j : range(2*K)) {
                     HGT(j,i) = HG(i,j);
