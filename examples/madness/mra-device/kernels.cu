@@ -161,17 +161,18 @@ __global__ fcoeffs_kernel1(
   int tid = threadIdx.x;
   int blockid = blockIdx.x;
   const std::size_t K2NDIM = std::pow(K, NDIM);
+  const std::size_t TWOK2NDIM = std::pow(2*K, NDIM);
   /* reconstruct tensor views from pointers
    * make sure we have the values at the same offset (0) as in kernel 1 */
-  auto values       = mra::TensorView<T, NDIM>(&tmp[0*K2NDIM], K);
-  auto r            = mra::TensorView<T, NDIM>(&tmp[1*K2NDIM], K);
-  auto child_values = mra::TensorView<T, NDIM>(&tmp[2*K2NDIM], K);
-  auto workspace    = mra::TensorView<T, NDIM>(&tmp[3*K2NDIM], K);
-  auto x            = mra::TensorView<T, NDIM>(&tmp[4*K2NDIM], K);
-  auto x_vec        = mra::TensorView<T, 2   >(&tmp[5*K2NDIM], NDIM, K2NDIM);
+  auto values       = mra::TensorView<T, NDIM>(&tmp[0       ], 2*K);
+  auto r            = mra::TensorView<T, NDIM>(&tmp[TWOK2NDIM+1*K2NDIM], K);
+  auto child_values = mra::TensorView<T, NDIM>(&tmp[TWOK2NDIM+2*K2NDIM], K);
+  auto workspace    = mra::TensorView<T, NDIM>(&tmp[TWOK2NDIM+3*K2NDIM], K);
+  auto x            = mra::TensorView<T, NDIM>(&tmp[TWOK2NDIM+4*K2NDIM], K);
+  auto x_vec        = mra::TensorView<T, 2   >(&tmp[TWOK2NDIM+5*K2NDIM], NDIM, K2NDIM);
   auto phibar       = mra::TensorView<T, 2   >(phibar_ptr, K, K);
   /* compute one child per block */
-  if (blockid < (1<<NDIM)) {
+  if (blockid < key.num_children) {
     mra::Key<NDIM> child = key.child_at(blockid);
     fcube(f, child, thresh, child_values, K, x, xvec);
     transform(child_values,phibar,r, K, workspace);
@@ -192,12 +193,12 @@ __global__ fcoeffs_kernel2(
 {
   const int tid = threadDim.x * ((threadDim.y*threadIdx.z) + threadIdx.y) + threadIdx.x;
   const std::size_t K2NDIM = std::pow(K, NDIM);
-  const std::size_t 2K2NDIM = std::pow(2*K, NDIM);
+  const std::size_t TWOK2NDIM = std::pow(2*K, NDIM);
   /* reconstruct tensor views from pointers
    * make sure we have the values at the same offset (0) as in kernel 1 */
-  auto values = mra::TensorView<T, NDIM>(&tmp[0], K);
-  auto r = mra::TensorView<T, NDIM>(&tmp[K2NDIM], 2*K);
-  auto workspace = mra::TensorView<T, NDIM>(&tmp[K2NDIM+2K2NDIM], K);
+  auto values = mra::TensorView<T, NDIM>(&tmp[0], 2*K);
+  auto r = mra::TensorView<T, NDIM>(&tmp[TWOK2NDIM], 2*K);
+  auto workspace = mra::TensorView<T, NDIM>(&tmp[2*TWOK2NDIM], K);
   auto hgT = mra::TensorView<T, 2>(hgT_ptr, 2*K, 2*K);
   auto coeffs = mra::TensorView<T, NDIM>(coeffs_ptr, K);
 
