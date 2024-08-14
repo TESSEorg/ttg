@@ -4579,6 +4579,11 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
       copy_to_remove = copy; // we want to remove the copy from the task once done sending
       do_release = true; // we don't release the copy since we didn't allocate it
       copy->add_ref(); // add a reference so that TTG does not attempt to delete this object
+      copy->add_ref(); // add another reference so that TTG never attempts to free this copy
+      if (copy->num_readers() == 0) {
+        /* add at least one reader (the current task) */
+        copy->increment_readers<false>();
+      }
     }
     return vref.value_ref;
   }
