@@ -4577,7 +4577,7 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
       bool inserted = ttg_parsec::detail::add_copy_to_task(copy, caller);
       assert(inserted);
       copy_to_remove = copy; // we want to remove the copy from the task once done sending
-      do_release = false; // we don't release the copy since we didn't allocate it
+      do_release = true; // we don't release the copy since we didn't allocate it
       copy->add_ref(); // add a reference so that TTG does not attempt to delete this object
     }
     return vref.value_ref;
