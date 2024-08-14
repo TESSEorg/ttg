@@ -409,7 +409,7 @@ class SpMM25D {
 
   /// Locally broadcast `A[i][k]` assigned to this processor `p` to matmul tasks `{i,j,k}` for all `j` such that
   /// `B[k][j]` exists AND `k` contribution to `C[i][j]` is assigned to this processor
-  class LocalBcastA : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastA, ttg::typelist<Blk>> {
+  class LocalBcastA : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastA, ttg::typelist<const Blk>> {
    public:
     using baseT = typename LocalBcastA::ttT;
 
@@ -446,7 +446,7 @@ class SpMM25D {
   };  // class LocalBcastA
 
   /// broadcast `A[i][k]` to all processors which will contain at least one `C[i][j]` such that `B[k][j]` exists
-  class BcastA : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, ttg::typelist<Blk>> {
+  class BcastA : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, ttg::typelist<const Blk>> {
    public:
     using baseT = typename BcastA::ttT;
 
@@ -462,7 +462,7 @@ class SpMM25D {
       });
     }
 
-    void op(const Key<2> &ik, typename baseT::input_values_tuple_type &&a_ik,
+    void op(const Key<2> &ik, typename baseT::input_refs_tuple_type &&a_ik,
             std::tuple<Out<Key<3>, Blk>> &outs) {
       const auto i = ik[0]; // row
       const auto k = ik[1]; // col
@@ -492,7 +492,7 @@ class SpMM25D {
 
   /// Locally broadcast `B[k][j]` assigned to this processor `p` to matmul tasks `{i,j,k}` for all `k` such that
   /// `A[i][k]` exists AND `k` contribution to `C[i][j]` is assigned to this processor
-  class LocalBcastB : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastB, ttg::typelist<Blk>> {
+  class LocalBcastB : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastB, ttg::typelist<const Blk>> {
    public:
     using baseT = typename LocalBcastB::ttT;
 
@@ -528,7 +528,7 @@ class SpMM25D {
   };  // class LocalBcastB
 
   /// broadcast `B[k][j]` to all processors which will contain at least one `C[i][j]` such that `A[i][k]` exists
-  class BcastB : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, ttg::typelist<Blk>> {
+  class BcastB : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, ttg::typelist<const Blk>> {
    public:
     using baseT = typename BcastB::ttT;
 
@@ -544,7 +544,7 @@ class SpMM25D {
       });
     }
 
-    void op(const Key<2> &kj, typename baseT::input_values_tuple_type &&b_kj,
+    void op(const Key<2> &kj, typename baseT::input_refs_tuple_type &&b_kj,
             std::tuple<Out<Key<3>, Blk>> &outs) {
       const auto k = kj[0]; // row
       const auto j = kj[1]; // col
