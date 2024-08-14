@@ -68,9 +68,8 @@ using blk_t = DeviceTensor<scalar_t, btas::DEFAULT::range,
                            btas::mohndle<btas::varray<scalar_t
 #if HAVE_SPMM_DEVICE
                                                       , TiledArray::device_pinned_allocator<scalar_t>
-#else  // HAVE_SPMM_DEVICE
-                                                      >,
 #endif  // HAVE_SPMM_DEVICE
+                                                      >,
                                          btas::Handle::shared_ptr>>;
 //#include <atomic>
 //static std::atomic<uint64_t> reduce_count = 0;
