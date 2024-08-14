@@ -150,7 +150,7 @@ namespace btas {
   }
 
   template <typename T_, class Range_, class Store_>
-  btas::Tensor<T_, Range_, Store_> gemm(btas::Tensor<T_, Range_, Store_> &&C, const btas::Tensor<T_, Range_, Store_> &A,
+  void gemm(btas::Tensor<T_, Range_, Store_> &C, const btas::Tensor<T_, Range_, Store_> &A,
                                         const btas::Tensor<T_, Range_, Store_> &B) {
     using array = btas::DEFAULT::index<int>;
     if (C.empty()) {  // first contribution to C = allocate it and gemm with beta=0
@@ -160,7 +160,7 @@ namespace btas {
     else {   // subsequent contributions to C = gemm with beta=1
       btas::contract_222(1.0, A, array{1, 2}, B, array{2, 3}, 1.0, C, array{1, 3}, false, false);
     }
-    return std::move(C);
+    //return std::move(C);
   }
 }  // namespace btas
 #endif  // BTAS_IS_USABLE
@@ -699,18 +699,19 @@ class SpMM25D {
                                                 result));
       }
 #else  // HAVE_SPMM_DEVICE
+      gemm(C, A, B);
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow
       if (have_next_k) {
         ::send<1>(
             Key<3>({i, j, next_k}),
-            gemm(std::move(C), A, B),
+            std::move(C),
             result);
       } else {  // done with all local contributions to C[i][j], reduce with others on the process to which C[i][j]
                 // belongs
         ::send<0>(
             Key<2>({i, j}),
-            gemm(std::move(C), A, B),
+            std::move(C),
             result);
       }
 #endif // HAVE_SPMM_DEVICE
@@ -1575,7 +1576,7 @@ int main(int argc, char **argv) {
     At.fill(1.0);
     Bt.fill(2.0);
     Ct.fill(3.0);
-    btas::gemm(std::move(Ct), Bt, At);
+    btas::gemm(Ct, Bt, At);
   }
 #endif  // BTAS_IS_USABLE
 
