@@ -669,7 +669,8 @@ namespace potrf {
 
   template <typename MatrixT>
   auto make_potrf_ttg(MatrixT& A, ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& input,
-                      ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output, bool defer_write) {
+                      ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output, bool defer_write,
+                      bool enable_device_map = true) {
     using T = typename MatrixT::element_type;
     auto keymap1 = [&](const Key1& key) { return A.rank_of(key[0], key[0]); };
 
@@ -705,28 +706,36 @@ namespace potrf {
     tt_potrf->set_keymap(keymap1);
     tt_potrf->set_defer_writer(defer_write);
 #ifdef ENABLE_DEVICE_KERNEL
-    tt_potrf->set_devicemap(devmap1);
+    if (enable_device_map) {
+      tt_potrf->set_devicemap(devmap1);
+    }
 #endif // 0
 
     auto tt_trsm = make_trsm(A, disp_trsm, potrf_trsm, gemm_trsm, trsm_syrk, trsm_gemm_row, trsm_gemm_col, output);
     tt_trsm->set_keymap(keymap2a);
     tt_trsm->set_defer_writer(defer_write);
 #ifdef ENABLE_DEVICE_KERNEL
-    tt_trsm->set_devicemap(devmap2a);
+    if (enable_device_map) {
+      tt_trsm->set_devicemap(devmap2a);
+    }
 #endif // 0
 
     auto tt_syrk = make_syrk(A, disp_syrk, trsm_syrk, syrk_syrk, syrk_potrf, syrk_syrk);
     tt_syrk->set_keymap(keymap2b);
     tt_syrk->set_defer_writer(defer_write);
 #ifdef ENABLE_DEVICE_KERNEL
-    tt_syrk->set_devicemap(devmap2b);
+    if (enable_device_map) {
+      tt_syrk->set_devicemap(devmap2b);
+    }
 #endif // 0
 
     auto tt_gemm = make_gemm(A, disp_gemm, trsm_gemm_row, trsm_gemm_col, gemm_gemm, gemm_trsm, gemm_gemm);
     tt_gemm->set_keymap(keymap3);
     tt_gemm->set_defer_writer(defer_write);
 #ifdef ENABLE_DEVICE_KERNEL
-    tt_gemm->set_devicemap(devmap3);
+    if (enable_device_map) {
+      tt_gemm->set_devicemap(devmap3);
+    }
 #endif // 0
 
     /* Priorities taken from DPLASMA */
