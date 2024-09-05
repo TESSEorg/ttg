@@ -15,6 +15,9 @@ if (TARGET tiledarray)
                                           COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2)
 
     add_ttg_executable(testing_dpotrf potrf/testing_dpotrf.cc LINK_LIBRARIES tiledarray lapackpp)
+    add_ttg_executable(testing_dpotrf_host potrf/testing_dpotrf.cc
+                       LINK_LIBRARIES tiledarray lapackpp
+                       COMPILE_DEFINITIONS TTG_ENABLE_DEV_HOST=1)
     add_ttg_executable(testing_dtrtri potrf/testing_dtrtri.cc LINK_LIBRARIES tiledarray lapackpp)
     add_ttg_executable(testing_dlauum potrf/testing_dlauum.cc LINK_LIBRARIES tiledarray lapackpp)
     add_ttg_executable(testing_dpoinv potrf/testing_dpoinv.cc LINK_LIBRARIES tiledarray lapackpp)
@@ -50,14 +53,27 @@ if (TARGET tiledarray)
     endif()
 
     if (TTG_HAVE_CUDA)
-      add_ttg_executable(chain-ttg-cuda task-benchmarks/chain-ttg-dev.cc LINK_LIBRARIES tiledarray RUNTIMES "parsec")
+      add_ttg_executable(chain-ttg-dev-cuda task-benchmarks/chain-ttg-dev.cc
+                         COMPILE_DEFINITIONS CHAIN_CUDA=1
+                         LINK_LIBRARIES tiledarray
+                         RUNTIMES "parsec")
     endif(TTG_HAVE_CUDA)
 
     if (TTG_HAVE_HIP)
-      add_ttg_executable(chain-ttg-hip task-benchmarks/chain-ttg-dev.cc LINK_LIBRARIES tiledarray RUNTIMES "parsec")
+      add_ttg_executable(chain-ttg-dev-hip task-benchmarks/chain-ttg-dev.cc
+                         COMPILE_DEFINITIONS CHAIN_HIP=1
+                         LINK_LIBRARIES tiledarray
+                         RUNTIMES "parsec")
     endif(TTG_HAVE_HIP)
 endif()
 
+add_ttg_executable(chain-ttg-host task-benchmarks/chain-ttg.cc)
+
+add_ttg_executable(chain-ttg-dev-host task-benchmarks/chain-ttg-dev.cc
+                   COMPILE_DEFINITIONS CHAIN_HOST=1
+                   LINK_LIBRARIES tiledarray
+                   RUNTIMES "parsec")
+                    
 if (TARGET MADworld)
   add_ttg_executable(madness-1d madness/madness-1d/madness-1d.cc RUNTIMES "mad")
   if (TARGET blaspp) #(CBLAS_FOUND AND MKL_FOUND)

@@ -3,13 +3,19 @@
 
 #include "chrono.h"
 
-#if defined(TTG_HAVE_CUDA)
+#if defined(CHAIN_CUDA)
+#ifndef TTG_HAVE_CUDA
+#error Cannot build CUDA chain benchmark against TTG that does not support CUDA!
+#endif
 #define ES ttg::ExecutionSpace::CUDA
-#elif defined(TTG_HAVE_HIP)
+#elif defined(CHAIN_HIP)
 #define ES ttg::ExecutionSpace::HIP
+#ifndef TTG_HAVE_HIP
+#error Cannot build HIP chain benchmark against TTG that does not support HIP!
+#endif
 #else
-#error "Either CUDA OR HIP is required to build this test!"
-#endif // 0
+#define ES ttg::ExecutionSpace::Host
+#endif
 
 #define NUM_TASKS 100000
 
@@ -53,7 +59,7 @@ auto make_ttg<1>(bool do_move) {
       send<0>(0, A{});
     }, edges(), edges(I2N));
 
-  auto next = make_tt<ES, int>([=](const int &key, auto&& value) -> ttg::device::Task {
+  auto next = make_tt<int>([=](const int &key, auto&& value) -> ttg::device::Task<ES> {
     //++task_counter;
     co_await ttg::device::select(value.b);
     if (key < NUM_TASKS) {
@@ -62,7 +68,6 @@ auto make_ttg<1>(bool do_move) {
       } else {
         co_await ttg::device::forward(ttg::device::send<0>(key+1, value));
       }
-    } else {
     }
   } , edges(fuse(I2N, N2N)), edges(N2N));
 
@@ -80,7 +85,7 @@ auto make_ttg<2>(bool do_move) {
     send<1>(0, A{});
   }, edges(), edges(I2N1, I2N2));
 
-  auto next = make_tt<ES, int>([=](const int &key, A&& v1, A&& v2) -> ttg::device::Task {
+  auto next = make_tt<int>([=](const int &key, A&& v1, A&& v2) -> ttg::device::Task<ES> {
     co_await ttg::device::select(v1.b, v2.b);
     if (key < NUM_TASKS) {
       if (do_move) {
@@ -110,7 +115,7 @@ auto make_ttg<4>(bool do_move) {
       send<3>(0, A{});
     }, edges(), edges(I2N1, I2N2, I2N3, I2N4));
 
-  auto next = make_tt<ES, int>([=](const int &key, A&& v1, A&& v2, A&& v3, A&& v4) -> ttg::device::Task {
+  auto next = make_tt<int>([=](const int &key, A&& v1, A&& v2, A&& v3, A&& v4) -> ttg::device::Task<ES> {
     co_await ttg::device::select(v1.b, v2.b, v3.b, v4.b);
     if (key < NUM_TASKS) {
       if (do_move) {
@@ -150,7 +155,7 @@ auto make_ttg<8>(bool do_move) {
       send<7>(0, A{});
     }, edges(), edges(I2N1, I2N2, I2N3, I2N4, I2N5, I2N6, I2N7, I2N8));
 
-  auto next = make_tt<ES, int>([=](const int &key, auto&& v1, auto&& v2, auto&& v3, auto&& v4, auto&& v5, auto&& v6, auto&& v7, auto&& v8) -> ttg::device::Task {
+  auto next = make_tt<int>([=](const int &key, auto&& v1, auto&& v2, auto&& v3, auto&& v4, auto&& v5, auto&& v6, auto&& v7, auto&& v8) -> ttg::device::Task<ES> {
     co_await ttg::device::select(v1.b, v2.b, v3.b, v4.b, v5.b, v6.b, v7.b, v8.b);
     if (key < NUM_TASKS) {
       if (do_move) {
@@ -187,7 +192,7 @@ auto make_ttg<0>(bool do_move) {
 
   auto init = make_tt<void>([](std::tuple<Out<int, void>> &outs) { sendk<0>(0, outs); }, edges(), edges(I2N));
 
-  auto next = make_tt<ES>([](const int& key) -> ttg::device::Task {
+  auto next = make_tt([](const int& key) -> ttg::device::Task<ES> {
     co_await ttg::device::select();
     if (key < NUM_TASKS) {
       co_await ttg::device::forward(ttg::device::sendk<0>(key+1));
