@@ -3,6 +3,39 @@
 #ifndef TTG_MAKE_TT_H
 #define TTG_MAKE_TT_H
 
+namespace detail {
+  template<typename T>
+  struct op_return_type {
+    using type = void;
+  };
+
+#ifdef TTG_HAVE_COROUTINE
+  template<>
+  struct op_return_type<ttg::resumable_task> {
+    using type = ttg::coroutine_handle<ttg::resumable_task_state>;
+  };
+
+  template<ttg::ExecutionSpace ES>
+  struct op_return_type<ttg::device::Task<ES>> {
+    using type = typename ttg::device::Task<ES>::base_type;
+  };
+#endif // TTG_HAVE_COROUTINE
+
+  template<typename T>
+  using op_return_type_t = typename op_return_type<T>::type;
+
+  template<typename T>
+  struct op_execution_space : std::integral_constant<ttg::ExecutionSpace, ttg::ExecutionSpace::Host>
+  { };
+
+  template<ttg::ExecutionSpace ES>
+  struct op_execution_space<ttg::device::Task<ES>> : std::integral_constant<ttg::ExecutionSpace, ES>
+  { };
+
+  template<typename T>
+  constexpr const ttg::ExecutionSpace op_execution_space_v = op_execution_space<T>::value;
+
+} // namespace detail
 
 // Class to wrap a callable with signature
 //
@@ -11,12 +44,12 @@
 //
 // returnT is void for funcT = synchronous (ordinary) function and the appropriate return type for funcT=coroutine
 template <typename funcT, typename returnT, bool funcT_receives_input_tuple,
-          bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
+          bool funcT_receives_outterm_tuple, ttg::ExecutionSpace Space,
           typename keyT, typename output_terminalsT, typename... input_valuesT>
 class CallableWrapTT
     : public TT<
           keyT, output_terminalsT,
-          CallableWrapTT<funcT, returnT, funcT_receives_input_tuple, funcT_receives_outterm_tuple, space, keyT, output_terminalsT, input_valuesT...>,
+          CallableWrapTT<funcT, returnT, funcT_receives_input_tuple, funcT_receives_outterm_tuple, Space, keyT, output_terminalsT, input_valuesT...>,
           ttg::typelist<input_valuesT...>> {
   using baseT = typename CallableWrapTT::ttT;
 
@@ -27,27 +60,13 @@ class CallableWrapTT
 
   using noref_funcT = std::remove_reference_t<funcT>;
   std::conditional_t<std::is_function_v<noref_funcT>, std::add_pointer_t<noref_funcT>, noref_funcT> func;
-
-  using op_return_type =
-#ifdef TTG_HAVE_COROUTINE
-      std::conditional_t<std::is_same_v<returnT, ttg::resumable_task>,
-                         ttg::coroutine_handle<ttg::resumable_task_state>,
-#ifdef TTG_HAVE_DEVICE
-                         std::conditional_t<std::is_same_v<returnT, ttg::device::Task>,
-                                            ttg::device::Task::base_type,
-                                            void>
-#else  // TTG_HAVE_DEVICE
-                           void
-#endif  // TTG_HAVE_DEVICE
-                         >;
-#else   // TTG_HAVE_COROUTINE
-      void;
-#endif  // TTG_HAVE_COROUTINE
+  static_assert(!ttg::device::detail::is_device_task_v<void>);
+  using op_return_type = detail::op_return_type_t<returnT>;
 
 public:
-  static constexpr bool have_cuda_op = (space == ttg::ExecutionSpace::CUDA);
-  static constexpr bool have_hip_op  = (space == ttg::ExecutionSpace::HIP);
-  static constexpr bool have_level_zero_op = (space == ttg::ExecutionSpace::L0);
+  static constexpr bool have_cuda_op = (Space == ttg::ExecutionSpace::CUDA);
+  static constexpr bool have_hip_op  = (Space == ttg::ExecutionSpace::HIP);
+  static constexpr bool have_level_zero_op = (Space == ttg::ExecutionSpace::L0);
 
 protected:
 
@@ -66,20 +85,12 @@ protected:
           coro_handle = ret;
         }
         return coro_handle;
-      } else
-#ifdef TTG_HAVE_DEVICE
-          if constexpr (std::is_same_v<returnT, ttg::device::Task>) {
-        ttg::device::Task::base_type coro_handle = ret;
+      } else if constexpr (ttg::device::detail::is_device_task_v<returnT>) {
+        typename returnT::base_type coro_handle = ret;
         return coro_handle;
       }
-#else  // TTG_HAVE_DEVICE
-        ttg::abort();  // should not happen
-#endif  // TTG_HAVE_DEVICE
       if constexpr (!(std::is_same_v<returnT, ttg::resumable_task>
-#ifdef TTG_HAVE_DEVICE
-          || std::is_same_v<returnT, ttg::device::Task>
-#endif  // TTG_HAVE_DEVICE
-              ))
+                   || ttg::device::detail::is_device_task_v<returnT>))
 #endif
       {
         static_assert(std::tuple_size_v<std::remove_reference_t<decltype(out)>> == 1,
@@ -490,8 +501,7 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
 /// @warning Although generic arguments annotated by `const auto&` are also permitted, their use is discouraged to avoid confusion;
 ///          namely, `const auto&` denotes a _consumable_ argument, NOT read-only, despite the `const`.
 // clang-format on
-template <ttg::ExecutionSpace space,
-          typename keyT = void, typename funcT,
+template <typename keyT = void, typename funcT,
           typename... input_edge_valuesT, typename... output_edgesT>
 auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges = std::tuple<>{},
              const std::tuple<output_edgesT...> &outedges = std::tuple<>{}, const std::string &name = "wrapper",
@@ -528,6 +538,8 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
                 "ttd::make_tt(func, inedges, ...): could not detect how to invoke generic callable func, either the "
                 "signature of func "
                 "is faulty, or inedges does match the expected list of types, or both");
+
+  constexpr const ttg::ExecutionSpace space = detail::op_execution_space_v<func_return_t>;
 
   // net argument typelist
   using func_args_t = ttg::meta::drop_void_t<gross_func_args_t>;
@@ -571,15 +583,6 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
                                                       output_terminals_type, full_input_args_t>::type;
 
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
-}
-
-template <typename keyT = void, typename funcT,
-          typename... input_edge_valuesT, typename... output_edgesT>
-auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges = std::tuple<>{},
-             const std::tuple<output_edgesT...> &outedges = std::tuple<>{}, const std::string &name = "wrapper",
-             const std::vector<std::string> &innames = std::vector<std::string>(sizeof...(input_edge_valuesT), "input"),
-             const std::vector<std::string> &outnames = std::vector<std::string>(sizeof...(output_edgesT), "output")) {
-  return make_tt<ttg::ExecutionSpace::Host, keyT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
 template <typename keyT, typename funcT, typename... input_valuesT, typename... output_edgesT>

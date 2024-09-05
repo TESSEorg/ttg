@@ -344,20 +344,26 @@ namespace ttg_madness {
           // ttg::print("starting task");
           if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
             TTG_PROCESS_TT_OP_RETURN(
+                ttg::ExecutionSpace::Host,
                 suspended_task_address,
                 coroutine_id,
                 derived->op(key, this->make_input_refs(),
                             derived->output_terminals));  // !!! NOTE converting input values to refs
           } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-            TTG_PROCESS_TT_OP_RETURN(suspended_task_address, coroutine_id, derived->op(key, derived->output_terminals));
+            TTG_PROCESS_TT_OP_RETURN(
+                ttg::ExecutionSpace::Host, suspended_task_address,
+                coroutine_id, derived->op(key, derived->output_terminals));
           } else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
             TTG_PROCESS_TT_OP_RETURN(
+                ttg::ExecutionSpace::Host,
                 suspended_task_address,
                 coroutine_id,
                 derived->op(this->make_input_refs(),
                             derived->output_terminals));  // !!! NOTE converting input values to refs
           } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-            TTG_PROCESS_TT_OP_RETURN(suspended_task_address, coroutine_id, derived->op(derived->output_terminals));
+            TTG_PROCESS_TT_OP_RETURN(
+                ttg::ExecutionSpace::Host, suspended_task_address,
+                coroutine_id, derived->op(derived->output_terminals));
           } else  // unreachable
             ttg::abort();
         } else {  // resume suspended coroutine
