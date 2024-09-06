@@ -9,4 +9,9 @@ set(TTG_TRACKED_BTAS_TAG 4e8f5233aa7881dccdfcc37ce07128833926d3c2)
 set(TTG_TRACKED_TILEDARRAY_TAG 8af44bdff51697de114219fea88db28ca10666e9)
 
 # need Boost.CallableTraits (header only, part of Boost 1.66 released in Dec 2017) for wrap.h to work
-set(TTG_OLDEST_BOOST_VERSION 1.66)
+# BUT if will be building examples, inherit the oldest version from the pickiest Boost consumer (TA and/or BSPMM)
+if (TTG_EXAMPLES)
+  set(TTG_OLDEST_BOOST_VERSION 1.81)
+else()
+  set(TTG_OLDEST_BOOST_VERSION 1.66)
+endif()
