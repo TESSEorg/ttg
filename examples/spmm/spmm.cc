@@ -314,7 +314,7 @@ class SpMM25D {
           const std::vector<std::vector<long>> &b_cols_of_row,
           const std::vector<std::vector<long>> &b_rows_of_col, const std::vector<int> &mTiles,
           const std::vector<int> &nTiles, const std::vector<int> &kTiles, Keymap2 ij_keymap, Keymap3 ijk_keymap,
-          long R, long parallel_bcasts = 1, bool enable_device_map = true)
+          long P, long Q, long R, long parallel_bcasts = 1, bool enable_device_map = true)
       : a_cols_of_row_(a_cols_of_row)
       , b_rows_of_col_(b_rows_of_col)
       , a_rows_of_col_(a_rows_of_col)
@@ -337,7 +337,7 @@ class SpMM25D {
     local_bcast_b_ = std::make_unique<LocalBcastB>(local_b_ijk_, b_ijk_, a_rows_of_col_, ijk_keymap_);
     multiplyadd_ = std::make_unique<MultiplyAdd<Space>>(a_ijk_, b_ijk_, c_ijk_, c_ij_p_, a_cols_of_row_,
                                                         b_rows_of_col_, mTiles, nTiles, ijk_keymap_, constraint,
-                                                        k_cnt_, parallel_bcasts_, enable_device_map_);
+                                                        k_cnt_, P, Q, parallel_bcasts_, enable_device_map_);
 
     reduce_c_ = std::make_unique<ReduceC>(c_ij_p_, c, ij_keymap_);
     reduce_c_->template set_input_reducer<0>(
@@ -610,6 +610,7 @@ class SpMM25D {
                 const std::vector<int> &nTiles, const Keymap3 &ijk_keymap,
                 std::shared_ptr<ttg::SequencedKeysConstraint<Key<2>>> constraint,
                 std::vector<std::atomic<std::size_t>>& k_cnt,
+                long P, long Q,
                 std::size_t parallel_bcasts, bool enable_device_map)
         : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM25D::MultiplyAdd", {"a_ijk", "b_ijk", "c_ijk"},
                 {"c_ij", "c_ijk"}, ijk_keymap)
@@ -621,10 +622,14 @@ class SpMM25D {
       this->set_priomap([=,this](const Key<3> &ijk) { return this->prio(ijk); });  // map a key to an integral priority value
       if constexpr (is_device_space) {
         if (enable_device_map) {
-          auto num_devices = ttg::device::num_devices();
+          int num_devices = ttg::device::num_devices();
+          int gp = std::sqrt(num_devices);
+          int gq = num_devices / gp;
           this->set_devicemap(
-            [num_devices](const Key<3> &ijk){
-              return ((((uint64_t)ijk[0]) << 32) + ijk[1]) % num_devices;
+            [P,Q,gp,gq,num_devices](const Key<3> &ijk){
+              // TODO: include the number of rows/columns in this formula
+              auto device = (((ijk[0]/P)%gp)*gq) + (ijk[1]/Q)%gq;
+              return device;
             });
         }
       }
@@ -1473,7 +1478,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   assert(!has_value(c_status));
   //  SpMM25D a_times_b(world, eA, eB, eC, A, B);
   SpMM25D<> a_times_b(eA, eB, eC, A, B, a_cols_of_row, a_rows_of_col, b_cols_of_row, b_rows_of_col,
-                      mTiles, nTiles, kTiles, ij_keymap, ijk_keymap, R, parallel_bcasts, enable_device_map);
+                      mTiles, nTiles, kTiles, ij_keymap, ijk_keymap, P, Q, R, parallel_bcasts, enable_device_map);
   TTGUNUSED(a);
   TTGUNUSED(b);
   TTGUNUSED(a_times_b);
@@ -1844,7 +1849,7 @@ int main(int argc, char **argv) {
         assert(!has_value(c_status));
         //  SpMM25D a_times_b(world, eA, eB, eC, A, B);
         SpMM25D<> a_times_b(eA, eB, eC, A, B, a_cols_of_row, a_rows_of_col, b_cols_of_row,
-                            b_rows_of_col, mTiles, nTiles, kTiles, ij_keymap, ijk_keymap, R);
+                            b_rows_of_col, mTiles, nTiles, kTiles, ij_keymap, ijk_keymap, P, Q, R);
         TTGUNUSED(a_times_b);
         // calling the Dot constructor with 'true' argument disables the type
         if (default_execution_context().rank() == 0) std::cout << Dot{/*disable_type=*/true}(&control) << std::endl;
