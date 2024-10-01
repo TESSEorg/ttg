@@ -10,7 +10,7 @@
 #include <btas/btas.h>
 #include <btas/optimize/contract.h>
 #include <btas/util/mohndle.h>
-#include <TiledArray/device/allocators.h>
+#include <TiledArray/external/device.h>
 #include "../devblas_helper.h"
 #include <madness/world/parsec.h>  // need to initialize MADNESS purely for the purposes of TA allocators
 #else
