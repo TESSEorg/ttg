@@ -65,14 +65,11 @@ namespace ttg_parsec {
           data->device_copies[0]->flags ^= TTG_PARSEC_DATA_FLAG_REGISTERED;
         }
 #endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
-        //std::fprintf(stderr, "parsec_data_destroy %p device_copy[0] %p\n", data, data->device_copies[0]);
-        //parsec_data_destroy(data);
         assert(data->device_copies[0] != nullptr);
         auto copy = data->device_copies[0];
         parsec_data_copy_detach(data, data->device_copies[0], 0);
         PARSEC_OBJ_RELEASE(copy);
         PARSEC_OBJ_RELEASE(data);
-
       }
 
       static void delete_null_parsec_data(parsec_data_t *) {
@@ -81,7 +78,7 @@ namespace ttg_parsec {
 
     protected:
 
-      /* remove the the data from the owning data copy */
+      /* remove the data from the owning data copy */
       void remove_from_owner();
 
       /* add the data to the owning data copy */
@@ -461,6 +458,7 @@ namespace ttg_parsec {
       value_type m_value;
 
       template<typename T>
+      requires(std::constructible_from<ValueT, T>)
       ttg_data_value_copy_t(T&& value)
       : ttg_data_copy_container_setter(this)
       , ttg_data_copy_t()
@@ -562,18 +560,13 @@ namespace ttg_parsec {
     : m_data(std::move(other.m_data))
     , m_ttg_copy(detail::ttg_data_copy_container())
     {
-      /* the ttg_data_copy may have moved us already */
-      //if (other.m_ttg_copy != m_ttg_copy) {
-        // try to remove the old buffer from the *old* ttg_copy
-        other.remove_from_owner();
+      // try to remove the old buffer from the *old* ttg_copy
+      other.remove_from_owner();
 
-        // register with the new ttg_copy
-        if (nullptr != m_ttg_copy) {
-          m_ttg_copy->add_device_data(this);
-        }
-      //} else {
-      //  other.m_ttg_copy = nullptr;
-      //}
+      // register with the new ttg_copy
+      if (nullptr != m_ttg_copy) {
+        m_ttg_copy->add_device_data(this);
+      }
     }
 
     inline

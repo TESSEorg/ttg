@@ -702,12 +702,13 @@ namespace ttg_parsec {
     inline ttg_data_copy_t *create_new_datacopy(Value &&value) {
       using value_type = std::decay_t<Value>;
       ttg_data_copy_t *copy;
-      if constexpr (std::is_base_of_v<ttg::TTValue<value_type>, value_type>) {
+      if constexpr (std::is_base_of_v<ttg::TTValue<value_type>, value_type> &&
+                    std::is_constructible_v<value_type, decltype(value)>) {
         copy = new value_type(std::forward<Value>(value));
-      } else if constexpr (std::is_rvalue_reference_v<decltype(value)> ||
-                           std::is_copy_constructible_v<std::decay_t<Value>>) {
+      } else if constexpr (std::is_constructible_v<ttg_data_value_copy_t<value_type>, decltype(value)>) {
         copy = new ttg_data_value_copy_t<value_type>(std::forward<Value>(value));
       } else {
+        /* we have no way to create a new copy from this value */
         throw std::logic_error("Trying to copy-construct data that is not copy-constructible!");
       }
 #if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
@@ -939,8 +940,11 @@ namespace ttg_parsec {
       ttg_data_copy_t *copy_res = copy_in;
       bool replace = false;
       int32_t readers = copy_in->num_readers();
-
       assert(readers != 0);
+
+      /* try hard to defer writers if we cannot make copies
+       * if deferral fails we have to bail out */
+      bool defer_writer = (!std::is_copy_constructible_v<std::decay_t<Value>>) || task->defer_writer;
 
       if (readonly && !copy_in->is_mutable()) {
         /* simply increment the number of readers */
@@ -980,7 +984,7 @@ namespace ttg_parsec {
          *       (current task) or there are others, in which we case won't
          *       touch it.
          */
-        if (1 == copy_in->num_readers() && !task->defer_writer) {
+        if (1 == copy_in->num_readers() && !defer_writer) {
           /**
            * no other readers, mark copy as mutable and defer the release
            * of the task
@@ -990,9 +994,10 @@ namespace ttg_parsec {
           std::atomic_thread_fence(std::memory_order_release);
           copy_in->mark_mutable();
         } else {
-          if (task->defer_writer && nullptr == copy_in->get_next_task()) {
+          if (defer_writer && nullptr == copy_in->get_next_task()) {
             /* we're the first writer and want to wait for all readers to complete */
             copy_res->set_next_task(&task->parsec_task);
+            task->defer_writer = true;
           } else {
             /* there are writers and/or waiting already of this copy already, make a copy that we can mutate */
             copy_res = NULL;
@@ -3505,7 +3510,7 @@ namespace ttg_parsec {
     // Registers the callback for the i'th input terminal
     template <typename terminalT, std::size_t i>
     void register_input_callback(terminalT &input) {
-      using valueT = typename terminalT::value_type;
+      using valueT = std::decay_t<typename terminalT::value_type>;
       if (input.is_pull_terminal) {
         num_pullins++;
       }
@@ -3517,20 +3522,10 @@ namespace ttg_parsec {
           set_arg<i, keyT, valueT>(key, std::forward<valueT>(value));
         };
         auto send_callback = [this](const keyT &key, const valueT &value) {
-          if constexpr (std::is_copy_constructible_v<valueT>) {
-            set_arg<i, keyT, const valueT &>(key, value);
-          }
-          else {
-            throw std::logic_error(std::string("TTG::PaRSEC: send_callback is invoked on datum of type ") + boost::typeindex::type_id<valueT>().pretty_name() + " which is not copy constructible, std::move datum into send statement");
-          }
+          set_arg<i, keyT, const valueT &>(key, value);
         };
         auto broadcast_callback = [this](const ttg::span<const keyT> &keylist, const valueT &value) {
-          if constexpr (std::is_copy_constructible_v<valueT>) {
-            broadcast_arg<i, keyT, valueT>(keylist, value);
-          }
-          else {
-            throw std::logic_error(std::string("TTG::PaRSEC: broadcast_callback is invoked on datum of type ") + boost::typeindex::type_id<valueT>().pretty_name() + " which is not copy constructible, broadcast is not possible with move-only type");
-          }
+          broadcast_arg<i, keyT, valueT>(keylist, value);
         };
         auto prepare_send_callback = [this](const ttg::span<const keyT> &keylist, const valueT &value) {
             prepare_send<i, keyT, valueT>(keylist, value);
@@ -4380,15 +4375,16 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
   template <typename Value>
   inline std::conditional_t<std::is_reference_v<Value>,Value,Value&&> operator()(Value &&value) {
     constexpr auto value_is_rvref = std::is_rvalue_reference_v<decltype(value)>;
+    using value_type = std::remove_reference_t<Value>;
     static_assert(value_is_rvref ||
                   std::is_copy_constructible_v<std::decay_t<Value>>,
                   "Data sent without being moved must be copy-constructible!");
 
     auto caller = ttg_parsec::detail::parsec_ttg_caller;
     if (nullptr == caller) {
-      ttg::print("ERROR: ttg::send or ttg::broadcast called outside of a task!\n");
+      throw std::runtime_error("ERROR: ttg::send or ttg::broadcast called outside of a task!");
     }
-    using value_type = std::remove_reference_t<Value>;
+
     ttg_parsec::detail::ttg_data_copy_t *copy;
     copy = ttg_parsec::detail::find_copy_in_task(caller, &value);
     value_type *value_ptr = &value;
@@ -4421,7 +4417,7 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
   inline std::add_lvalue_reference_t<Value> operator()(ttg_parsec::detail::persistent_value_ref<Value> vref) {
     auto caller = ttg_parsec::detail::parsec_ttg_caller;
     if (nullptr == caller) {
-      ttg::print("ERROR: ttg::send or ttg::broadcast called outside of a task!\n");
+      throw std::runtime_error("ERROR: ttg::send or ttg::broadcast called outside of a task!");
     }
     ttg_parsec::detail::ttg_data_copy_t *copy;
     copy = ttg_parsec::detail::find_copy_in_task(caller, &vref.value_ref);
@@ -4439,11 +4435,9 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
 
   template <typename Value>
   inline const Value &operator()(const Value &value) {
-    static_assert(std::is_copy_constructible_v<std::decay_t<Value>>,
-                  "Data sent without being moved must be copy-constructible!");
     auto caller = ttg_parsec::detail::parsec_ttg_caller;
     if (nullptr == caller) {
-      ttg::print("ERROR: ttg::send or ttg::broadcast called outside of a task!\n");
+      throw std::runtime_error("ERROR: ttg::send or ttg::broadcast called outside of a task!");
     }
     ttg_parsec::detail::ttg_data_copy_t *copy;
     copy = ttg_parsec::detail::find_copy_in_task(caller, &value);
