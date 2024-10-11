@@ -318,7 +318,7 @@ protected:
         func();
         this->set_outputs_tls_ptr(old_output_tls_ptr);
       } else {
-        auto ret = func(out);
+        auto ret = func();
         this->set_outputs_tls_ptr(old_output_tls_ptr);
         return process_return(std::move(ret), out);
       }
