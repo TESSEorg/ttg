@@ -162,7 +162,10 @@ namespace ttg_parsec {
         parsec_task.priority = 0;
 
         // TODO: can we avoid this?
-        for (int i = 0; i < MAX_PARAM_COUNT; ++i) { this->parsec_task.data[i].data_in = nullptr; }
+        for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
+          this->parsec_task.data[i].data_in  = nullptr;
+          this->parsec_task.data[i].data_out = nullptr;
+        }
       }
 
       parsec_ttg_task_base_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class,
@@ -184,7 +187,10 @@ namespace ttg_parsec {
         parsec_task.chore_mask = 1<<0;
 
         // TODO: can we avoid this?
-        for (int i = 0; i < MAX_PARAM_COUNT; ++i) { this->parsec_task.data[i].data_in = nullptr; }
+        for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
+          this->parsec_task.data[i].data_in  = nullptr;
+          this->parsec_task.data[i].data_out = nullptr;
+        }
       }
 
     public:
@@ -305,6 +311,15 @@ namespace ttg_parsec {
           return TT::template static_op<Space>(&this->parsec_task);
         } else {
           return TT::template device_static_op<Space>(&this->parsec_task);
+        }
+      }
+
+      template<ttg::ExecutionSpace Space>
+      parsec_hook_return_t invoke_evaluate() {
+        if constexpr (Space == ttg::ExecutionSpace::Host) {
+          return PARSEC_HOOK_RETURN_DONE;
+        } else {
+          return TT::template device_static_evaluate<Space>(&this->parsec_task);
         }
       }
 
