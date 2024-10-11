@@ -37,12 +37,13 @@ namespace ttg_parsec {
 
       friend ttg_data_copy_t;
 
-      static parsec_data_t* create_parsec_data(void *ptr, size_t size) {
+      static parsec_data_t* create_parsec_data(void *ptr, size_t size, bool sync_to_device) {
         parsec_data_t *data = parsec_data_create_with_type(nullptr, 0, ptr, size,
                                                           parsec_datatype_int8_t);
         data->device_copies[0]->flags |= PARSEC_DATA_FLAG_PARSEC_MANAGED;
         data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-        data->device_copies[0]->version = 1;
+        // if we don't want to synchronize data to the device we set the version to 0
+        data->device_copies[0]->version = (sync_to_device) ? 1 : 0;
         return data;
       }
 
@@ -84,7 +85,7 @@ namespace ttg_parsec {
       void remove_from_owner();
 
       /* add the data to the owning data copy */
-      void reset_parsec_data(void *ptr, size_t size);
+      void reset_parsec_data(void *ptr, size_t size, bool sync_to_device);
 
       ttg_parsec_data_wrapper_t();
 
@@ -101,6 +102,14 @@ namespace ttg_parsec {
       /* set a new owning data copy object */
       void set_owner(ttg_data_copy_t& new_copy) {
         m_ttg_copy = &new_copy;
+      }
+
+      /* add a new copy to the data on the give device backed by ptr */
+      void add_copy(int parsec_dev, void *ptr) {
+        parsec_data_copy_t* copy = parsec_data_copy_new(m_data.get(), parsec_dev,
+                                                        parsec_datatype_int8_t,
+                                                        PARSEC_DATA_FLAG_PARSEC_MANAGED);
+        copy->device_private = ptr;
       }
     };
 
@@ -528,13 +537,13 @@ namespace ttg_parsec {
     }
 
     inline
-    void ttg_parsec_data_wrapper_t::reset_parsec_data(void *ptr, size_t size) {
+    void ttg_parsec_data_wrapper_t::reset_parsec_data(void *ptr, size_t size, bool sync_to_device) {
       if (ptr == m_data.get()) return;
 
       if (nullptr == ptr) {
         m_data = parsec_data_ptr(nullptr, &delete_null_parsec_data);
       } else {
-        m_data = parsec_data_ptr(create_parsec_data(ptr, size), &delete_parsec_data);
+        m_data = parsec_data_ptr(create_parsec_data(ptr, size, sync_to_device), &delete_parsec_data);
       }
     }
 
