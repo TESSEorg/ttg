@@ -51,8 +51,6 @@ struct Buffer : public detail::ttg_parsec_data_wrapper_t
 
   static_assert(std::is_trivially_copyable_v<element_type>,
                 "Only trivially copyable types are supported for devices.");
-  static_assert(std::is_default_constructible_v<element_type>,
-                "Only default constructible types are supported for devices.");
 
 private:
   using delete_fn_t = std::function<void(element_type*)>;
