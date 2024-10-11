@@ -79,7 +79,15 @@ public:
   Buffer() : Buffer(nullptr, 0)
   { }
 
-  Buffer(std::size_t n)
+  /**
+   * Allocates n elements, unitialized
+   * By default, data is synchronized to the device, allowing codes
+   * to fill the buffer before making it available on the device.
+   * Passing ttg::scope::Allocate will prevent the initial synchronization.
+   * Subsequent data transfers behave as expected (i.e., data is transferred
+   * to the host and other devices as needed).
+   */
+  Buffer(std::size_t n, ttg::scope scope = ttg::scope::SyncIn)
   : ttg_parsec_data_wrapper_t()
   , allocator_type()
   , m_host_data(allocate(n))
@@ -90,13 +98,19 @@ public:
     //          << m_count << "(" << m_host_data << ") ttg_copy "
     //          << m_ttg_copy
     //          << " parsec_data " << m_data.get() << std::endl;
-    this->reset_parsec_data(m_host_data, n*sizeof(element_type));
+    this->reset_parsec_data(m_host_data, n*sizeof(element_type), (scope == ttg::scope::SyncIn));
   }
 
-  /* Constructing a buffer using application-managed memory.
+  /**
+   * Constructing a buffer using application-managed memory.
    * The memory pointed to by ptr must be accessible during
-   * the life-time of the buffer. */
-  Buffer(element_type* ptr, std::size_t n = 1)
+   * the life-time of the buffer.
+   *
+   * Passing ttg::scope::Allocate will prevent the initial synchronization.
+   * Subsequent data transfers behave as expected (i.e., data is transferred
+   * to the host and other devices as needed).
+   */
+  Buffer(element_type* ptr, std::size_t n = 1, ttg::scope scope = ttg::scope::SyncIn)
   : ttg_parsec_data_wrapper_t()
   , allocator_type()
   , m_host_data(ptr)
@@ -107,7 +121,7 @@ public:
     //          << m_count << "(" << m_host_data << ") ttg_copy "
     //          << m_ttg_copy
     //          << " parsec_data " << m_data.get() << std::endl;
-    this->reset_parsec_data(m_host_data, n*sizeof(element_type));
+    this->reset_parsec_data(m_host_data, n*sizeof(element_type), (scope == ttg::scope::SyncIn));
   }
 
   virtual ~Buffer() {
@@ -281,7 +295,7 @@ public:
   }
 
   /* Reallocate the buffer with count elements */
-  void reset(std::size_t n) {
+  void reset(std::size_t n, ttg::scope scope = ttg::scope::SyncIn) {
     /* TODO: can we resize if count is smaller than m_count? */
 
     if (m_owned) {
@@ -296,7 +310,7 @@ public:
       m_host_data = allocate(n);
       m_owned = true;
     }
-    reset_parsec_data(m_host_data, n*sizeof(element_type));
+    reset_parsec_data(m_host_data, n*sizeof(element_type), (scope == ttg::scope::SyncIn));
     //std::cout << "buffer::reset(" << count << ") ptr " << m_host_data.get()
     //          << " ttg_copy " << m_ttg_copy
     //          << " parsec_data " << m_data.get() << std::endl;
@@ -304,7 +318,7 @@ public:
   }
 
   /* Reset the buffer to use the ptr to count elements */
-  void reset(T* ptr, std::size_t n = 1) {
+  void reset(T* ptr, std::size_t n = 1, ttg::scope scope = ttg::scope::SyncIn) {
     /* TODO: can we resize if count is smaller than m_count? */
     if (n == m_count) {
       return;
@@ -323,10 +337,32 @@ public:
       m_count = n;
       m_owned = false;
     }
-    reset_parsec_data(m_host_data, n*sizeof(element_type));
+    reset_parsec_data(m_host_data, n*sizeof(element_type), (scope == ttg::scope::SyncIn));
     //std::cout << "buffer::reset(" << ptr << ", " << count << ") ptr " << m_host_data.get()
     //          << " ttg_copy " << m_ttg_copy
     //          << " parsec_data " << m_data.get() << std::endl;
+  }
+
+  /**
+   * Resets the scope of the buffer.
+   * If scope is SyncIn then the next time
+   * the buffer is made available on a device the host
+   * data will be copied from the host.
+   * If scope is Allocate then no data will be moved.
+   */
+  void reset_scope(ttg::scope scope) {
+    if (scope == ttg::scope::Allocate) {
+      m_data->device_copies[0]->version = 0;
+    } else {
+      m_data->device_copies[0]->version = 1;
+      /* reset all other copies to force a sync-in */
+      for (int i = 0; i < parsec_nb_devices; ++i) {
+        if (m_data->device_copies[i] != nullptr) {
+          m_data->device_copies[i]->version = 0;
+        }
+      }
+      m_data->owner_device = 0;
+    }
   }
 
   void prefer_device(ttg::device::Device dev) {
@@ -334,6 +370,17 @@ public:
     if (dev.is_device() && this->parsec_data()->owner_device == 0) {
       parsec_advise_data_on_device(this->parsec_data(), detail::ttg_device_to_parsec_device(dev),
                                    PARSEC_DEV_DATA_ADVICE_PREFERRED_DEVICE);
+    }
+  }
+
+  void add_device(ttg::device::Device dev, T* ptr, bool is_current = false) {
+    if (is_valid_on(dev)) {
+      throw std::runtime_error("Unable to add device that has already a buffer set!");
+    }
+    add_copy(detail::ttg_device_to_parsec_device(dev), ptr);
+    if (is_current) {
+      // mark the data as being current on the new device
+      parsec_data()->owner_device = detail::ttg_device_to_parsec_device(dev);
     }
   }
 
