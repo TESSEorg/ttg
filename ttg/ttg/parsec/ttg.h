@@ -1604,8 +1604,11 @@ namespace ttg_parsec {
       // get the promise which contains the views
       ttg::device::detail::device_task_promise_type& dev_data = dev_task.promise();
 
-      /* for now make sure we're waiting for transfers and the coro hasn't skipped this step */
-      assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_TRANSFER);
+      if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT ||
+          dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_COMPLETE) {
+        /* the task jumped directly to send or returned so we're done */
+        return PARSEC_HOOK_RETURN_DONE;
+      }
 
       parsec_device_gpu_module_t *device = (parsec_device_gpu_module_t*)task->parsec_task.selected_device;
       assert(NULL != device);
@@ -3744,14 +3747,17 @@ namespace ttg_parsec {
           // get the promise which contains the views
           auto dev_data = dev_task.promise();
 
-          /* for now make sure we're waiting for the kernel to complete and the coro hasn't skipped this step */
-          assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT);
+          assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT ||
+                 dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_COMPLETE);
 
           /* execute the sends we stored */
           if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT) {
             /* set the current task, needed inside the sends */
             detail::parsec_ttg_caller = task;
-            dev_data.do_sends();
+            auto old_output_tls_ptr = task->tt->outputs_tls_ptr_accessor();
+            task->tt->set_outputs_tls_ptr();
+            dev_data.do_sends(); // all sends happen here
+            task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
             detail::parsec_ttg_caller = nullptr;
           }
         }
