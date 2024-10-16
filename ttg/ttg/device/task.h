@@ -22,6 +22,7 @@ namespace ttg::device {
       impl_data_t impl_data;
       ttg::scope scope;
       bool is_const;
+      bool is_scratch;
     };
 
     template <typename... Ts>
@@ -31,10 +32,11 @@ namespace ttg::device {
 
     /* extract buffer information from to_device_t */
     template<typename... Ts, std::size_t... Is>
-    auto extract_buffer_data(detail::to_device_t<Ts...>& a) {
-      return std::array<device_input_data_t, sizeof...(Is)>{
+    auto extract_buffer_data(detail::to_device_t<Ts...>& a, std::index_sequence<Is...>) {
+      return std::array{
                 {TTG_IMPL_NS::buffer_data(std::get<Is>(a.ties)),
-                 std::get<Is>(a.ties).scope(), std::get<Is>(a.ties)}...};
+                 std::get<Is>(a.ties).scope(), std::is_const_v<std::tuple_element<Is, decltype(a.ties)>>,
+                 ttg::meta::is_devicescratch_v<std::tuple_element<Is, decltype(a.ties)>>}...};
     }
   }  // namespace detail
 
@@ -46,12 +48,16 @@ namespace ttg::device {
     Input() { }
     template<typename... Args>
     Input(Args&&... args)
-    : m_data{{TTG_IMPL_NS::buffer_data(args), args.scope(), std::is_const_v<Args>}...}
+    : m_data{{TTG_IMPL_NS::buffer_data(args), args.scope(),
+              std::is_const_v<std::decay_t<Args>>,
+              ttg::meta::is_devicescratch_v<Args>}...}
     { }
 
     template<typename T>
     void add(T&& v) {
-      m_data.emplace_back(TTG_IMPL_NS::buffer_data(v), v.scope(), std::is_const_v<T>);
+      using type = std::decay_t<T>;
+      m_data.emplace_back(TTG_IMPL_NS::buffer_data(v), v.scope(), std::is_const_v<type>,
+                          ttg::meta::is_devicescratch_v<type>);
     }
 
     ttg::span<detail::device_input_data_t> span() {
@@ -608,7 +614,7 @@ namespace ttg::device {
 
       template<typename... Ts>
       ttg::suspend_always await_transform(detail::to_device_t<Ts...>&& a) {
-        auto arr = detail::extract_buffer_data(a);
+        auto arr = detail::extract_buffer_data(a, std::make_index_sequence<sizeof...(Ts)>{});
         bool need_transfer = !(TTG_IMPL_NS::register_device_memory(ttg::span(arr)));
         /* TODO: are we allowed to not suspend here and launch the kernel directly? */
         m_state = ttg::device::detail::TTG_DEVICE_CORO_WAIT_TRANSFER;

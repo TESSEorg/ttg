@@ -1442,29 +1442,34 @@ namespace ttg_parsec {
         int device = detail::parsec_device_to_ttg_device(gpu_device->super.device_index);
         ttg::device::detail::set_current(device, cuda_stream->cuda_stream);
       }
-#endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
-
-#if defined(PARSEC_HAVE_DEV_HIP_SUPPORT) && defined(TTG_HAVE_HIP)
+#elif defined(PARSEC_HAVE_DEV_HIP_SUPPORT) && defined(TTG_HAVE_HIP)
       {
         parsec_hip_exec_stream_t *hip_stream = (parsec_hip_exec_stream_t *)gpu_stream;
         int device = detail::parsec_device_to_ttg_device(gpu_device->super.device_index);
         ttg::device::detail::set_current(device, hip_stream->hip_stream);
       }
-#endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
-
-#if defined(PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT) && defined(TTG_HAVE_LEVEL_ZERO)
+#elif defined(PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT) && defined(TTG_HAVE_LEVEL_ZERO)
       {
         parsec_level_zero_exec_stream_t *stream;
         stream = (parsec_level_zero_exec_stream_t *)gpu_stream;
         int device = detail::parsec_device_to_ttg_device(gpu_device->super.device_index);
         ttg::device::detail::set_current(device, stream->swq->queue);
       }
-#endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
+#endif // defined(PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT) && defined(TTG_HAVE_LEVEL_ZERO)
 
       /* Here we call back into the coroutine again after the transfers have completed */
       static_op<Space>(&task->parsec_task);
 
       ttg::device::detail::reset_current();
+
+      auto discard_tmp_flows = [&](){
+        for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
+          if (gpu_task->flow[i]->flow_flags & TTG_PARSEC_FLOW_ACCESS_TMP) {
+            /* temporary flow, discard by setting it to read-only to avoid evictions */
+            const_cast<parsec_flow_t*>(gpu_task->flow[i])->flow_flags = PARSEC_FLOW_ACCESS_READ;
+          }
+        }
+      };
 
       /* we will come back into this function once the kernel and transfers are done */
       int rc = PARSEC_HOOK_RETURN_DONE;
@@ -1481,6 +1486,7 @@ namespace ttg_parsec {
             ttg::device::detail::TTG_DEVICE_CORO_COMPLETE == dev_data.state()) {
           /* the task started sending so we won't come back here */
           //std::cout << "device_static_submit task " << task << " complete" << std::endl;
+          discard_tmp_flows();
         } else {
           //std::cout << "device_static_submit task " << task << " return-again" << std::endl;
           rc = PARSEC_HOOK_RETURN_AGAIN;
@@ -1488,6 +1494,7 @@ namespace ttg_parsec {
       } else {
         /* the task is done so we won't come back here */
         //std::cout << "device_static_submit task " << task << " complete" << std::endl;
+        discard_tmp_flows();
       }
       return rc;
     }

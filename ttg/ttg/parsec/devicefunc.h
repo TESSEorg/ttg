@@ -127,9 +127,9 @@ namespace ttg_parsec {
     for (i = 0; i < span.size(); ++i) {
       /* get_parsec_data is overloaded for buffer and devicescratch */
       parsec_data_t* data = span[i].impl_data;
-      /* TODO: check whether the device is current */
-      bool is_const = span[i].is_const;
       ttg::scope scope = span[i].scope;
+      bool is_const = span[i].is_const;
+      bool is_scratch = span[i].is_scratch;
 
       if (nullptr != data) {
         auto access = PARSEC_FLOW_ACCESS_RW;
@@ -137,6 +137,11 @@ namespace ttg_parsec {
           access = PARSEC_FLOW_ACCESS_WRITE;
         } else if (is_const) {
           access = PARSEC_FLOW_ACCESS_READ;
+        }
+
+        if (is_scratch) {
+          /* mark the flow as temporary so we can discard it easily */
+          access |= TTG_PARSEC_FLOW_ACCESS_TMP;
         }
 
         /* build the flow */
