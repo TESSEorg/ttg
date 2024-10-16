@@ -46,7 +46,7 @@ namespace ttg::device {
 
     template <typename... Ts>
     struct wait_kernel_t {
-      std::tuple<Ts &...> ties;
+      std::tuple<std::add_lvalue_reference_t<Ts>...> ties;
 
       /* always suspend */
       constexpr bool await_ready() const noexcept { return false; }
@@ -270,7 +270,7 @@ namespace ttg::device {
     /* overload for iterable types that extracts the type of the first element */
     template<typename T>
     struct broadcast_keylist_trait<T, std::enable_if_t<ttg::meta::is_iterable_v<T>>> {
-      using key_type = decltype(*std::begin(std::get<0>(std::declval<T>())));
+      using key_type = decltype(*std::begin(std::declval<T>()));
     };
 
     template <size_t KeyId, size_t I, size_t... Is, typename... RangesT, typename valueT,
@@ -364,6 +364,71 @@ namespace ttg::device {
         ttg::device::detail::broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value));
       }
     }
+
+    /**
+     * broadcastk
+     */
+
+    template <size_t KeyId, size_t I, size_t... Is, typename... RangesT,
+              typename... out_keysT, typename... out_valuesT>
+    inline void broadcastk(const std::tuple<RangesT...> &keylists,
+                           std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+      std::get<I>(t).broadcast(std::get<KeyId>(keylists));
+      if constexpr (sizeof...(Is) > 0) {
+        detail::broadcastk<KeyId+1, Is...>(keylists, t);
+      }
+    }
+
+    template <size_t KeyId, size_t I, size_t... Is, typename... RangesT,
+              typename... out_keysT, typename... out_valuesT>
+    inline void broadcastk(const std::tuple<RangesT...> &keylists) {
+      using key_t = typename broadcast_keylist_trait<
+                      std::tuple_element_t<KeyId, std::tuple<std::remove_reference_t<RangesT>...>>
+                    >::key_type;
+      auto *terminal_ptr = ttg::detail::get_out_terminal<key_t, void>(I, "ttg::device::broadcastk(keylists)");
+      terminal_ptr->broadcast(std::get<KeyId>(keylists));
+      if constexpr (sizeof...(Is) > 0) {
+        ttg::device::detail::broadcastk<KeyId+1, Is...>(keylists);
+      }
+    }
+
+    /* overload with explicit terminals */
+    template <size_t I, size_t... Is, typename RangesT,
+              typename... out_keysT, typename... out_valuesT,
+              ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline send_coro_state
+    broadcastk_coro(RangesT &&keylists,
+                    std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+      RangesT kl = std::forward<RangesT>(keylists); // capture the keylist(s)
+      if constexpr (ttg::meta::is_tuple_v<RangesT>) {
+        // treat as tuple
+        co_await ttg::Void{}; // we'll come back once the task is done
+        ttg::device::detail::broadcastk<0, I, Is...>(kl, t);
+      } else if constexpr (!ttg::meta::is_tuple_v<RangesT>) {
+        // create a tie to the captured keylist
+        co_await ttg::Void{}; // we'll come back once the task is done
+        ttg::device::detail::broadcastk<0, I, Is...>(std::tie(kl), t);
+      }
+    }
+
+    /* overload with implicit terminals */
+    template <size_t I, size_t... Is, typename RangesT,
+              ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline send_coro_state
+    broadcastk_coro(RangesT &&keylists) {
+      RangesT kl = std::forward<RangesT>(keylists); // capture the keylist(s)
+      if constexpr (ttg::meta::is_tuple_v<RangesT>) {
+        // treat as tuple
+        static_assert(sizeof...(Is)+1 == std::tuple_size_v<RangesT>,
+                      "Size of keylist tuple must match the number of output terminals");
+        co_await ttg::Void{}; // we'll come back once the task is done
+        ttg::device::detail::broadcastk<0, I, Is...>(kl);
+      } else if constexpr (!ttg::meta::is_tuple_v<RangesT>) {
+        // create a tie to the captured keylist
+        co_await ttg::Void{}; // we'll come back once the task is done
+        ttg::device::detail::broadcastk<0, I, Is...>(std::tie(kl));
+      }
+    }
   }  // namespace detail
 
   /* overload with explicit terminals and keylist passed by const reference */
@@ -389,11 +454,33 @@ namespace ttg::device {
                                             std::move(copy_handler))};
   }
 
+  /* overload with explicit terminals and keylist passed by const reference */
+  template <size_t I, size_t... Is, typename rangeT, typename... out_keysT, typename... out_valuesT,
+            ttg::Runtime Runtime = ttg::ttg_runtime>
+  [[nodiscard]]
+  inline detail::send_t broadcastk(rangeT &&keylist,
+                                   std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+    ttg::detail::value_copy_handler<Runtime> copy_handler;
+    return detail::send_t{
+            detail::broadcastk_coro<I, Is...>(std::forward<rangeT>(keylist), t)};
+  }
+
+  /* overload with implicit terminals and keylist passed by const reference */
+  template <size_t i, typename rangeT,
+            ttg::Runtime Runtime = ttg::ttg_runtime>
+  inline detail::send_t broadcastk(rangeT &&keylist) {
+    if constexpr (std::is_rvalue_reference_v<decltype(keylist)>) {
+      return detail::send_t{detail::broadcastk_coro<i>(std::forward<rangeT>(keylist))};
+    } else {
+      return detail::send_t{detail::broadcastk_coro<i>(std::tie(keylist))};
+    }
+  }
+
   template<typename... Args, ttg::Runtime Runtime = ttg::ttg_runtime>
   [[nodiscard]]
   std::vector<device::detail::send_t> forward(Args&&... args) {
     // TODO: check the cost of this!
-    return std::vector{std::forward<Args>(args)...};
+    return std::vector<device::detail::send_t>{std::forward<Args>(args)...};
   }
 
   /*******************************************
