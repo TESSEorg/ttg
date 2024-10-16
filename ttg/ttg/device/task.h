@@ -5,6 +5,7 @@
 #include <type_traits>
 #include <span>
 
+
 #include "ttg/fwd.h"
 #include "ttg/impl_selector.h"
 #include "ttg/ptr.h"
@@ -14,11 +15,57 @@
 namespace ttg::device {
 
   namespace detail {
+
+    struct device_input_data_t {
+      using impl_data_t = decltype(TTG_IMPL_NS::buffer_data(std::declval<ttg::Buffer<int>>()));
+
+      impl_data_t impl_data;
+      ttg::scope scope;
+      bool is_const;
+    };
+
     template <typename... Ts>
     struct to_device_t {
       std::tuple<std::add_lvalue_reference_t<Ts>...> ties;
     };
+
+    /* extract buffer information from to_device_t */
+    template<typename... Ts, std::size_t... Is>
+    auto extract_buffer_data(detail::to_device_t<Ts...>& a) {
+      return std::array<device_input_data_t, sizeof...(Is)>{
+                {TTG_IMPL_NS::buffer_data(std::get<Is>(a.ties)),
+                 std::get<Is>(a.ties).scope(), std::get<Is>(a.ties)}...};
+    }
   }  // namespace detail
+
+  struct Input {
+  private:
+    std::vector<detail::device_input_data_t> m_data;
+
+  public:
+    Input() { }
+    template<typename... Args>
+    Input(Args&&... args)
+    : m_data{{TTG_IMPL_NS::buffer_data(args), args.scope(), std::is_const_v<Args>}...}
+    { }
+
+    template<typename T>
+    void add(T&& v) {
+      m_data.emplace_back(TTG_IMPL_NS::buffer_data(v), v.scope(), std::is_const_v<T>);
+    }
+
+    ttg::span<detail::device_input_data_t> span() {
+      return ttg::span(m_data);
+    }
+  };
+
+  namespace detail {
+    // overload for Input
+    template <>
+    struct to_device_t<Input> {
+      Input& input;
+    };
+  } // namespace detail
 
   /**
    * Select a device to execute on based on the provided buffer and scratchspace objects.
@@ -31,6 +78,11 @@ namespace ttg::device {
   [[nodiscard]]
   inline auto select(Args &&...args) {
     return detail::to_device_t<std::remove_reference_t<Args>...>{std::tie(std::forward<Args>(args)...)};
+  }
+
+  [[nodiscard]]
+  inline auto select(Input& input) {
+    return detail::to_device_t<Input>{input};
   }
 
   namespace detail {
@@ -556,7 +608,15 @@ namespace ttg::device {
 
       template<typename... Ts>
       ttg::suspend_always await_transform(detail::to_device_t<Ts...>&& a) {
-        bool need_transfer = !(TTG_IMPL_NS::register_device_memory(a.ties));
+        auto arr = detail::extract_buffer_data(a);
+        bool need_transfer = !(TTG_IMPL_NS::register_device_memory(ttg::span(arr)));
+        /* TODO: are we allowed to not suspend here and launch the kernel directly? */
+        m_state = ttg::device::detail::TTG_DEVICE_CORO_WAIT_TRANSFER;
+        return {};
+      }
+
+      ttg::suspend_always await_transform(detail::to_device_t<Input>&& a) {
+        bool need_transfer = !(TTG_IMPL_NS::register_device_memory(a.input.span()));
         /* TODO: are we allowed to not suspend here and launch the kernel directly? */
         m_state = ttg::device::detail::TTG_DEVICE_CORO_WAIT_TRANSFER;
         return {};

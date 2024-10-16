@@ -363,8 +363,14 @@ public:
           m_data->device_copies[i]->version = 0;
         }
       }
-      m_data->owner_device = 0;
     }
+    m_data->owner_device = 0;
+  }
+
+  ttg::scope scope() const {
+    /* if the host owns the data and has a version of zero we only have to allocate data */
+    return (m_data->device_copies[0]->version == 0 && m_data->owner_device == 0)
+            ? ttg::scope::Allocate : ttg::scope::SyncIn;
   }
 
   void prefer_device(ttg::device::Device dev) {

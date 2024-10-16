@@ -3,6 +3,8 @@
 
 #include "ttg/serialization/traits.h"
 
+#include "ttg/device/device.h"
+
 namespace ttg_madness {
 
 /// A runtime-managed buffer mirrored between host and device memory
