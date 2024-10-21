@@ -201,10 +201,11 @@ namespace ttg_parsec {
       /* enqueue the transfer into the compute stream to come back once the compute and transfer are complete */
       if (data->owner_device != 0) {
         parsec_device_gpu_module_t *device_module = detail::parsec_ttg_caller->dev_ptr->device;
-        device_module->memcpy_async(device_module, stream,
-                                    data->device_copies[0]->device_private,
-                                    data->device_copies[data->owner_device]->device_private,
-                                    data->nb_elts, parsec_device_gpu_transfer_direction_d2h);
+        int ret = device_module->memcpy_async(device_module, stream,
+                                              data->device_copies[0]->device_private,
+                                              data->device_copies[data->owner_device]->device_private,
+                                              data->nb_elts, parsec_device_gpu_transfer_direction_d2h);
+        assert(ret == PARSEC_SUCCESS);
       }
       if constexpr (sizeof...(Is) > 0) {
         // recursion

@@ -34,9 +34,10 @@ namespace ttg::device {
     template<typename... Ts, std::size_t... Is>
     auto extract_buffer_data(detail::to_device_t<Ts...>& a, std::index_sequence<Is...>) {
       return std::array{
-                {TTG_IMPL_NS::buffer_data(std::get<Is>(a.ties)),
-                 std::get<Is>(a.ties).scope(), std::is_const_v<std::tuple_element<Is, decltype(a.ties)>>,
-                 ttg::meta::is_devicescratch_v<std::tuple_element<Is, decltype(a.ties)>>}...};
+                device_input_data_t{TTG_IMPL_NS::buffer_data(std::get<Is>(a.ties)),
+                                    std::get<Is>(a.ties).scope(),
+                                    std::is_const_v<std::tuple_element<Is, decltype(a.ties)>>,
+                                    ttg::meta::is_devicescratch_v<std::tuple_element<Is, decltype(a.ties)>>}...};
     }
   }  // namespace detail
 
@@ -49,13 +50,13 @@ namespace ttg::device {
     template<typename... Args>
     Input(Args&&... args)
     : m_data{{TTG_IMPL_NS::buffer_data(args), args.scope(),
-              std::is_const_v<std::decay_t<Args>>,
-              ttg::meta::is_devicescratch_v<Args>}...}
+              std::is_const_v<std::remove_reference_t<Args>>,
+              ttg::meta::is_devicescratch_v<std::remove_reference_t<Args>>}...}
     { }
 
     template<typename T>
     void add(T&& v) {
-      using type = std::decay_t<T>;
+      using type = std::remove_reference_t<T>;
       m_data.emplace_back(TTG_IMPL_NS::buffer_data(v), v.scope(), std::is_const_v<type>,
                           ttg::meta::is_devicescratch_v<type>);
     }
