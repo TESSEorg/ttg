@@ -3445,8 +3445,8 @@ namespace ttg_parsec {
             detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in = data->device_copies[0];
             gpu_task->flow_nb_elts[flowidx] = data->nb_elts;
           }
-          /* need to mark the flow RW to make PaRSEC happy */
-          ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_RW;
+          /* need to mark the flow WRITE to convince PaRSEC that the data changed */
+          ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_WRITE;
           gpu_task->pushout |= 1<<flowidx;
         }
       };
