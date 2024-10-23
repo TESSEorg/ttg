@@ -51,7 +51,7 @@ namespace ttg::device {
     Input(Args&&... args)
     : m_data{{TTG_IMPL_NS::buffer_data(args), args.scope(),
               std::is_const_v<std::remove_reference_t<Args>>,
-              ttg::meta::is_devicescratch_v<std::remove_reference_t<Args>>}...}
+              ttg::meta::is_devicescratch_v<std::decay_t<Args>>}...}
     { }
 
     template<typename T>
