@@ -1467,6 +1467,7 @@ namespace ttg_parsec {
           if (gpu_task->flow[i]->flow_flags & TTG_PARSEC_FLOW_ACCESS_TMP) {
             /* temporary flow, discard by setting it to read-only to avoid evictions */
             const_cast<parsec_flow_t*>(gpu_task->flow[i])->flow_flags = PARSEC_FLOW_ACCESS_READ;
+            task->parsec_task.data.data_out[i]->readers = 1;
           }
         }
       };
