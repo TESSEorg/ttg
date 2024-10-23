@@ -78,7 +78,12 @@ private:
 
 public:
 
-  Buffer() : Buffer(nullptr, 0)
+  Buffer()
+  : ttg_parsec_data_wrapper_t()
+  , allocator_type()
+  , m_host_data(nullptr)
+  , m_count(0)
+  , m_owned(false)
   { }
 
   /**
@@ -189,6 +194,7 @@ public:
    * device buffer. */
   ttg::device::Device get_owner_device() const {
     assert(is_valid());
+    if (empty()) return ttg::device::current_device(); // empty is always valid
     return detail::parsec_device_to_ttg_device(m_data->owner_device);
   }
 
@@ -248,6 +254,7 @@ public:
   }
 
   const_pointer_type host_ptr() const {
+    if (empty()) return nullptr;
     return static_cast<const_pointer_type>(parsec_data_get_ptr(m_data.get(), 0));
   }
 
@@ -292,11 +299,11 @@ public:
   }
 
   bool is_valid() const {
-    return !!m_data;
+    return (m_count == 0 || m_data);
   }
 
   operator bool() const {
-    return is_valid();
+    return !empty();
   }
 
   std::size_t size() const {
