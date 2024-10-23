@@ -3458,8 +3458,7 @@ namespace ttg_parsec {
     std::enable_if_t<!std::is_void_v<std::decay_t<Value>>,
                      void>
     do_prepare_send(const Value &value, RemoteCheckFn&& remote_check) {
-      using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;
-      static constexpr const bool value_is_const = std::is_const_v<valueT>;
+      constexpr const bool value_is_const = std::is_const_v<std::tuple_element_t<i, input_args_type>>;
 
       /* get the copy */
       detail::ttg_data_copy_t *copy;
