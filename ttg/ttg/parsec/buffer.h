@@ -195,6 +195,7 @@ public:
   /* Get the pointer on the currently active device. */
   pointer_type current_device_ptr() {
     assert(is_valid());
+    if (empty()) return nullptr;
     int device_id = detail::ttg_device_to_parsec_device(ttg::device::current_device());
     return static_cast<pointer_type>(m_data->device_copies[device_id]->device_private);
   }
@@ -202,6 +203,7 @@ public:
   /* Get the pointer on the currently active device. */
   const_pointer_type current_device_ptr() const {
     assert(is_valid());
+    if (empty()) return nullptr;
     int device_id = detail::ttg_device_to_parsec_device(ttg::device::current_device());
     return static_cast<const_pointer_type>(m_data->device_copies[device_id]->device_private);
   }
@@ -211,12 +213,14 @@ public:
    *        See \ref ttg::device::current_device for that. */
   pointer_type owner_device_ptr() {
     assert(is_valid());
+    if (empty()) return nullptr;
     return static_cast<pointer_type>(m_data->device_copies[m_data->owner_device]->device_private);
   }
 
   /* get the current device pointer */
   const_pointer_type owner_device_ptr() const {
     assert(is_valid());
+    if (empty()) return nullptr;
     return static_cast<const_pointer_type>(m_data->device_copies[m_data->owner_device]->device_private);
   }
 
@@ -224,6 +228,7 @@ public:
    */
   pointer_type device_ptr_on(const ttg::device::Device& device) {
     assert(is_valid());
+    if (empty()) return nullptr;
     int device_id = detail::ttg_device_to_parsec_device(device);
     return static_cast<pointer_type>(parsec_data_get_ptr(m_data.get(), device_id));
   }
@@ -232,11 +237,13 @@ public:
    */
   const_pointer_type device_ptr_on(const ttg::device::Device& device) const {
     assert(is_valid());
+    if (empty()) return nullptr;
     int device_id = detail::ttg_device_to_parsec_device(device);
     return static_cast<const_pointer_type>(parsec_data_get_ptr(m_data.get(), device_id));
   }
 
   pointer_type host_ptr() {
+    if (empty()) return nullptr;
     return static_cast<pointer_type>(parsec_data_get_ptr(m_data.get(), 0));
   }
 
@@ -294,6 +301,10 @@ public:
 
   std::size_t size() const {
     return m_count;
+  }
+
+  bool empty() const {
+    return m_count == 0;
   }
 
   /* Reallocate the buffer with count elements */
