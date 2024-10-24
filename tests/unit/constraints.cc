@@ -41,11 +41,18 @@ TEST_CASE("constraints", "") {
     }, ttg::edges(), ttg::edges(e));
     bcast->set_keymap([&](){ return world.rank(); });
 
+    /**
+     * Constraints are currently only implemented in the PaRSEC backend.
+     * Codes using constraints will still compile but they will not
+     * affect the execution order in other backends.
+     */
+#ifdef TTG_USE_PARSEC
     make_graph_executable(bcast);
     ttg::execute(ttg::default_execution_context());
     bcast->invoke();
 
     ttg::ttg_fence(ttg::default_execution_context());
+#endif // TTG_USE_PARSEC
 
   }
 }  // TEST_CASE("streams")
