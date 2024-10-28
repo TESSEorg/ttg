@@ -680,9 +680,11 @@ class SpMM25D {
       const blk_t& B = baseT::template get<1>(_ijk);
       blk_t& C = baseT::template get<2>(_ijk);
 
+#if defined(BLOCK_SPARSE_GEMM)
       if (C.empty()) {
         C = blk_t(btas::Range(A.range().extent(0), B.range().extent(1)), 0.0);
       }
+#endif // BLOCK_SPARSE_GEMM
 
 #ifdef HAVE_SPMM_DEVICE
       /* pull all buffers onto the device */
