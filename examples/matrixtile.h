@@ -12,7 +12,8 @@
 
 #include <TiledArray/external/device.h>
 #if defined(TILEDARRAY_HAS_DEVICE)
-#define ALLOCATOR TiledArray::device_pinned_allocator<T>
+template<typename T>
+using Allocator = TiledArray::device_pinned_allocator<T>;
 
 inline void allocator_init(int argc, char **argv) {
   // initialize MADNESS so that TA allocators can be created
@@ -26,7 +27,8 @@ inline void allocator_fini() {
   madness::finalize();
 }
 #else  // TILEDARRAY_HAS_DEVICE
-#define ALLOCATOR std::allocator<T>
+template<typename T>
+using Allocator = std::allocator<T>;
 
 inline void allocator_init(int argc, char **argv) { }
 
@@ -34,7 +36,7 @@ inline void allocator_fini() { }
 
 #endif // TILEDARRAY_HAS_DEVICE
 
-template <typename T, class Allocator = ALLOCATOR>
+template <typename T, class Allocator = Allocator<T>>
 class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
  public:
   using metadata_t = typename std::tuple<std::size_t, std::size_t, std::size_t>;
