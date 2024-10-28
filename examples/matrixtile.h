@@ -10,7 +10,7 @@
 #include <ttg/serialization/splitmd_data_descriptor.h>
 
 
-#include <TiledArray/device/allocators.h>
+#include <TiledArray/external/device.h>
 #if defined(TILEDARRAY_HAS_DEVICE)
 #define ALLOCATOR TiledArray::device_pinned_allocator<T>
 
