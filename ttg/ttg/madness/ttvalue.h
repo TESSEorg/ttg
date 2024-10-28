@@ -9,6 +9,11 @@ namespace ttg_madness {
     /* empty */
   };
 
+  template<typename ValueT>
+  inline auto persistent(ValueT&& value) {
+    return std::forward<ValueT>(value);
+  }
+
 } // namespace ttg_madness
 
   #endif // TTG_MADNESS_TTVALUE_H
