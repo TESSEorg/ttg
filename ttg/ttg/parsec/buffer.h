@@ -11,6 +11,7 @@
 #include "ttg/util/iovec.h"
 #include "ttg/device/device.h"
 #include "ttg/parsec/device.h"
+#include "ttg/devicescope.h"
 
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
 #include <cuda_runtime.h>
@@ -457,8 +458,6 @@ public:
     }
   }
 #endif // TTG_SERIALIZATION_SUPPORTS_MADNESS
-
-
 };
 
 namespace detail {
