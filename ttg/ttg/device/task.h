@@ -18,7 +18,9 @@ namespace ttg::device {
 
     struct device_input_data_t {
       using impl_data_t = decltype(TTG_IMPL_NS::buffer_data(std::declval<ttg::Buffer<int>>()));
-      : impl_data(data), scope(scope), is_const(is_const), is_scratch(is_scratch)
+
+      device_input_data_t(impl_data_t data, ttg::scope scope, bool isconst, bool isscratch)
+      : impl_data(data), scope(scope), is_const(isconst), is_scratch(isscratch)
       { }
       impl_data_t impl_data;
       ttg::scope scope;
@@ -38,8 +40,8 @@ namespace ttg::device {
       return std::array{
                 device_input_data_t{TTG_IMPL_NS::buffer_data(std::get<Is>(a.ties)),
                                     std::get<Is>(a.ties).scope(),
-                                    ttg::meta::is_const_v<std::tuple_element<Is, arg_types>>,
-                                    ttg::meta::is_devicescratch_v<std::tuple_element<Is, arg_types>>}...};
+                                    ttg::meta::is_const_v<std::tuple_element_t<Is, arg_types>>,
+                                    ttg::meta::is_devicescratch_v<std::tuple_element_t<Is, arg_types>>}...};
     }
   }  // namespace detail
 
