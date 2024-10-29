@@ -509,8 +509,9 @@ namespace ttg::device {
             ttg::Runtime Runtime = ttg::ttg_runtime>
   inline detail::send_t broadcast(rangeT &&keylist, valueT &&value) {
     ttg::detail::value_copy_handler<Runtime> copy_handler;
-    return detail::send_t{broadcast_coro<i>(std::tie(keylist), copy_handler(std::forward<valueT>(value)),
-                                            std::move(copy_handler))};
+    return detail::send_t{detail::broadcast_coro<i>(std::tie(keylist),
+                                                    copy_handler(std::forward<valueT>(value)),
+                                                    std::move(copy_handler))};
   }
 
   /* overload with explicit terminals and keylist passed by const reference */
