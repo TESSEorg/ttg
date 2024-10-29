@@ -36,13 +36,13 @@ inline void allocator_fini() { }
 
 #endif // TILEDARRAY_HAS_DEVICE
 
-template <typename T, class Allocator = Allocator<T>>
-class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
+template <typename T, class AllocatorT = Allocator<T>>
+class MatrixTile : public ttg::TTValue<MatrixTile<T, AllocatorT>> {
  public:
   using metadata_t = typename std::tuple<std::size_t, std::size_t, std::size_t>;
 
-  using buffer_t  = typename ttg::Buffer<T, Allocator>;
-  using ttvalue_type = ttg::TTValue<MatrixTile<T, Allocator>>;
+  using buffer_t  = typename ttg::Buffer<T, AllocatorT>;
+  using ttvalue_type = ttg::TTValue<MatrixTile<T, AllocatorT>>;
 
  private:
   buffer_t _buffer;
@@ -89,15 +89,15 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
   , _lda(lda)
   { }
 
-  MatrixTile(MatrixTile<T, Allocator>&& other) = default;
+  MatrixTile(MatrixTile<T, AllocatorT>&& other) = default;
 
-  MatrixTile& operator=(MatrixTile<T, Allocator>&& other) = default;
+  MatrixTile& operator=(MatrixTile<T, AllocatorT>&& other) = default;
 
   /* Deep copy ctor und op are not needed for PO since tiles will never be read
    * and written concurrently. Hence shallow copies are enough, will all
    * receiving tasks sharing tile data. Re-enable this once the PaRSEC backend
    * can handle data sharing without excessive copying */
-  MatrixTile(const MatrixTile<T, Allocator>& other)
+  MatrixTile(const MatrixTile<T, AllocatorT>& other)
   : ttvalue_type()
   , _buffer(other._lda*other._cols)
   , _rows(other._rows)
@@ -110,7 +110,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
     std::copy_n(other.data(), _lda * _cols, this->data());
   }
 
-  MatrixTile& operator=(const MatrixTile<T, Allocator>& other) {
+  MatrixTile& operator=(const MatrixTile<T, AllocatorT>& other) {
     this->_rows = other._rows;
     this->_cols = other._cols;
     this->_lda = other._lda;
@@ -168,7 +168,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, Allocator>> {
   }
 #endif // DEBUG_TILES_VALUES
 
-  friend std::ostream& operator<<(std::ostream& o, MatrixTile<T> const& tt) {
+  friend std::ostream& operator<<(std::ostream& o, MatrixTile<T, AllocatorT> const& tt) {
     auto ptr = tt.data();
     o << std::endl << " ";
     o << "MatrixTile<" << typeid(T).name() << ">{ rows=" << tt.rows() << " cols=" << tt.cols() << " ld=" << tt.lda();
