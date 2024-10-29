@@ -112,6 +112,12 @@ public:
     /* no-op */
   }
 
+
+  bool is_current_on(ttg::device::Device dev) const {
+    assert(is_valid());
+    return true;
+  }
+
   /* Get the owner device ID, i.e., the last updated
    * device buffer. */
   ttg::device::Device get_owner_device() const {

@@ -191,8 +191,23 @@ public:
     m_data->owner_device = parsec_id;
   }
 
+  bool is_current_on(ttg::device::Device dev) const {
+    if (empty()) return true; // empty is current everywhere
+    int parsec_id = detail::ttg_device_to_parsec_device(dev);
+    uint32_t max_version = 0;
+    for (int i = 0; i < parsec_nb_devices; ++i) {
+      if (nullptr == m_data->device_copies[i]) continue;
+      max_version = std::max(max_version, m_data->device_copies[i]->version);
+    }
+    return (m_data->device_copies[parsec_id] &&
+            m_data->device_copies[parsec_id]->version == max_version);
+  }
+
   /* Get the owner device ID, i.e., the last updated
-   * device buffer. */
+   * device buffer.
+   * NOTE: there may be more than one device with the current
+   *       data so the result may not always be what is expected.
+   *       Use is_current_on() to check for a specific device. */
   ttg::device::Device get_owner_device() const {
     assert(is_valid());
     if (empty()) return ttg::device::current_device(); // empty is always valid
