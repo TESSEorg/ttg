@@ -228,6 +228,8 @@ namespace ttg_parsec {
       return im;
     }
 
+    inline bool all_devices_peer_access;
+
   }  // namespace detail
 
   class WorldImpl : public ttg::base::WorldImplBase {
@@ -1075,6 +1077,21 @@ namespace ttg_parsec {
         detail::max_inline_size = inline_size;
       }
     }
+
+    bool all_peer_access = true;
+    /* check whether all GPUs can access all peer GPUs */
+    for (int i = 0; (i < parsec_nb_devices) && all_peer_access; ++i) {
+      parsec_device_module_t *device = parsec_mca_device_get(i);
+      if (PARSEC_DEV_IS_GPU(device->type)) {
+        parsec_device_gpu_module_t *gpu_device = (parsec_device_gpu_module_t*)device;
+        for (int j = 0; (j < parsec_nb_devices) && all_peer_access; ++j) {
+          if (PARSEC_DEV_IS_GPU(device->type)) {
+            all_peer_access &= (gpu_device->peer_access_mask & j);
+          }
+        }
+      }
+    }
+    detail::all_devices_peer_access = all_peer_access;
   }
   inline void ttg_finalize() {
     // We need to notify the current taskpool of termination if we are in user termination detection mode
@@ -3403,9 +3420,14 @@ namespace ttg_parsec {
 
       if constexpr (value_is_const) {
         if (caller->data_flags & detail::ttg_parsec_data_flags::IS_MODIFIED) {
-          /* The data has been modified previously. PaRSEC requires us to pushout
-           * data if we transition from a writer to one or more readers. */
-          need_pushout = true;
+          /* The data has been modified previously. If not all devices can access
+           * their peers then we need to push out to the host so that all devices
+           * have the data available for reading.
+           * NOTE: we currently don't allow users to force the next writer to be
+           *       on a different device. In that case PaRSEC would take the host-side
+           *       copy. If we change our restriction we need to revisit this.
+           *       Ideally, PaRSEC would take the device copy if the owner moves... */
+          need_pushout = !detail::all_devices_peer_access;
         }
 
         /* check for multiple readers */
