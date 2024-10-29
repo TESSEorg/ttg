@@ -1887,7 +1887,7 @@ int main(int argc, char **argv) {
       }
     }
 
-#ifdef BTAS_IS_USABLE
+#if defined(BTAS_IS_USABLE) && defined(TTG_PARSEC_IMPORTED)
     madness::finalize();
 #endif  // BTAS_IS_USABLE
 

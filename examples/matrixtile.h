@@ -19,12 +19,14 @@ inline void allocator_init(int argc, char **argv) {
   // initialize MADNESS so that TA allocators can be created
 #if defined(TTG_PARSEC_IMPORTED)
   madness::ParsecRuntime::initialize_with_existing_context(ttg::default_execution_context().impl().context());
-#endif // TTG_PARSEC_IMPORTED
   madness::initialize(argc, argv, /* nthread = */ 1, /* quiet = */ true);
+#endif // TTG_PARSEC_IMPORTED
 }
 
 inline void allocator_fini() {
+#if defined(TTG_PARSEC_IMPORTED)
   madness::finalize();
+#endif // TTG_PARSEC_IMPORTED
 }
 #else  // TILEDARRAY_HAS_DEVICE
 template<typename T>
