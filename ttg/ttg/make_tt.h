@@ -150,7 +150,7 @@ protected:
       if constexpr (funcT_receives_input_tuple) {
         return fn(std::forward<Tuple>(args_tuple), std::forward<decltype(args)>(args)...);
       } else {
-        return fn(baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))...,
+        return fn(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))...,
                   std::forward<decltype(args)>(args)...);
       }
     };
