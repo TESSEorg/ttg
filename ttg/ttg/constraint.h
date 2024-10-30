@@ -172,7 +172,8 @@ namespace ttg {
     // used in the non-auto case
     void release_next(ordinal_type ord, bool force_check = false) {
       if (this->m_stopped) {
-        // don't release tasks if we're stopped
+        // don't release tasks if we're stopped but remember that this was released
+        this->m_current = ord;
         return;
       }
       if (!force_check && m_order(ord, this->m_current)) {
@@ -212,8 +213,9 @@ namespace ttg {
     , m_auto_release(auto_release)
     { }
 
-    template<typename Mapper_, typename = std::enable_if_t<std::is_invocable_v<Mapper_, Key>, Mapper_>>
-    SequencedKeysConstraint(Mapper_&& map, bool auto_release)
+    template<typename Mapper_>
+    requires(std::is_invocable_v<Mapper_, Key>)
+    SequencedKeysConstraint(Mapper_&& map, bool auto_release = false)
     : base_t()
     , m_map(std::forward<Mapper_>(map))
     , m_auto_release(auto_release)
@@ -298,7 +300,17 @@ namespace ttg {
     void start() {
       if (m_stopped) {
         m_stopped = false;
-        release_next(m_current, true); // force the check for a next release even if the current ordinal hasn't changed
+        if (m_auto_release) {
+          release_next();
+        } else {
+          auto ord = m_current;
+          // release the first set of available keys if none were set explicitly
+          if (ord == std::numeric_limits<ordinal_type>::min() &&
+              this->m_sequence.begin() != this->m_sequence.end()) {
+            ord = this->m_sequence.begin()->first;
+          }
+          release_next(ord, true); // force the check for a next release even if the current ordinal hasn't changed
+        }
       }
     }
 
@@ -339,7 +351,16 @@ namespace ttg {
     -> SequencedKeysConstraint<
           std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>,
           std::decay_t<boost::callable_traits::return_type_t<Mapper>>,
-          std::less<std::decay_t<boost::callable_traits::return_type_t<Mapper>>>,
+          std::less_equal<std::decay_t<boost::callable_traits::return_type_t<Mapper>>>,
+          std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>>, Mapper>
+          >;
+
+  template<typename Mapper, typename = std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>>>>
+  SequencedKeysConstraint(Mapper&&, bool)
+    -> SequencedKeysConstraint<
+          std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>,
+          std::decay_t<boost::callable_traits::return_type_t<Mapper>>,
+          std::less_equal<std::decay_t<boost::callable_traits::return_type_t<Mapper>>>,
           std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>>, Mapper>
           >;
 
