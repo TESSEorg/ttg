@@ -127,7 +127,10 @@ protected:
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
       // make sure the output tls is reset
-      auto _ = ttg::detail::finally([this, old_output_tls_ptr](){ this->set_outputs_tls_ptr(old_output_tls_ptr); });
+      auto _ = ttg::detail::scope_exit(
+        [this, old_output_tls_ptr](){
+          this->set_outputs_tls_ptr(old_output_tls_ptr);
+        });
       return unpack_input_tuple_if_needed();
     }
   }
@@ -158,7 +161,10 @@ protected:
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
       // make sure the output tls is reset
-      auto _ = ttg::detail::finally([this, old_output_tls_ptr](){ this->set_outputs_tls_ptr(old_output_tls_ptr); });
+      auto _ = ttg::detail::scope_exit(
+        [this, old_output_tls_ptr](){
+          this->set_outputs_tls_ptr(old_output_tls_ptr);
+        });
       return unpack_input_tuple_if_needed(invoke_func_handle_ret);
     }
   }
@@ -179,7 +185,10 @@ protected:
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
       // make sure the output tls is reset
-      auto _ = ttg::detail::finally([this, old_output_tls_ptr](){ this->set_outputs_tls_ptr(old_output_tls_ptr); });
+      auto _ = ttg::detail::scope_exit(
+        [this, old_output_tls_ptr](){
+          this->set_outputs_tls_ptr(old_output_tls_ptr);
+        });
       return invoke_func_handle_ret();
     }
   }
@@ -201,7 +210,10 @@ protected:
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
       // make sure the output tls is reset
-      auto _ = ttg::detail::finally([this, old_output_tls_ptr](){ this->set_outputs_tls_ptr(old_output_tls_ptr); });
+      auto _ = ttg::detail::scope_exit(
+        [this, old_output_tls_ptr](){
+          this->set_outputs_tls_ptr(old_output_tls_ptr);
+        });
       return invoke_func_handle_ret();
     }
   }

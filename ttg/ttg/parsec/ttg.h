@@ -33,6 +33,7 @@
 #include "ttg/util/meta.h"
 #include "ttg/util/meta/callable.h"
 #include "ttg/util/print.h"
+#include "ttg/util/scope_exit.h"
 #include "ttg/util/trace.h"
 #include "ttg/util/typelist.h"
 #ifdef TTG_HAVE_DEVICE
