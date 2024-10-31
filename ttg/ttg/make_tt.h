@@ -13,12 +13,12 @@
 template <typename funcT, typename returnT, bool funcT_receives_input_tuple,
           bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
           typename keyT, typename output_terminalsT, typename... input_valuesT>
-class CallableWrapTTArgs
+class CallableWrapTT
     : public TT<
           keyT, output_terminalsT,
-          CallableWrapTTArgs<funcT, returnT, funcT_receives_input_tuple, funcT_receives_outterm_tuple, space, keyT, output_terminalsT, input_valuesT...>,
+          CallableWrapTT<funcT, returnT, funcT_receives_input_tuple, funcT_receives_outterm_tuple, space, keyT, output_terminalsT, input_valuesT...>,
           ttg::typelist<input_valuesT...>> {
-  using baseT = typename CallableWrapTTArgs::ttT;
+  using baseT = typename CallableWrapTT::ttT;
 
   using input_values_tuple_type = typename baseT::input_values_tuple_type;
   using input_refs_tuple_type = typename baseT::input_refs_tuple_type;
@@ -54,7 +54,7 @@ protected:
   template<typename ReturnT>
   auto process_return(ReturnT&& ret, output_terminalsT &out) {
     static_assert(std::is_same_v<std::remove_reference_t<decltype(ret)>, returnT>,
-                  "CallableWrapTTArgs<funcT,returnT,...>: returnT does not match the actual return type of funcT");
+                  "CallableWrapTT<funcT,returnT,...>: returnT does not match the actual return type of funcT");
     if constexpr (!std::is_void_v<returnT>) {  // protect from compiling for void returnT
 #ifdef TTG_HAVE_COROUTINE
       if constexpr (std::is_same_v<returnT, ttg::resumable_task>) {
@@ -83,10 +83,10 @@ protected:
 #endif
       {
         static_assert(std::tuple_size_v<std::remove_reference_t<decltype(out)>> == 1,
-                      "CallableWrapTTArgs<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
+                      "CallableWrapTT<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
                       "value only if there is only 1 out terminal");
         static_assert(std::tuple_size_v<returnT> <= 2,
-                      "CallableWrapTTArgs<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
+                      "CallableWrapTT<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
                       "value only if it is a plain value (then sent with null key), a tuple-like containing a single "
                       "key (hence value is void), or a tuple-like containing a key and a value");
         if constexpr (std::tuple_size_v<returnT> == 0)
@@ -241,13 +241,13 @@ protected:
 
  public:
   template <typename funcT_>
-  CallableWrapTTArgs(funcT_ &&f, const input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
+  CallableWrapTT(funcT_ &&f, const input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
                      const std::string &name, const std::vector<std::string> &innames,
                      const std::vector<std::string> &outnames)
       : baseT(inedges, outedges, name, innames, outnames), func(std::forward<funcT_>(f)) {}
 
   template <typename funcT_>
-  CallableWrapTTArgs(funcT_ &&f, const std::string &name, const std::vector<std::string> &innames,
+  CallableWrapTT(funcT_ &&f, const std::string &name, const std::vector<std::string> &innames,
                      const std::vector<std::string> &outnames)
       : baseT(name, innames, outnames), func(std::forward<funcT_>(f)) {}
 
@@ -289,15 +289,15 @@ protected:
 template <typename funcT, typename returnT, bool funcT_receives_input_tuple,
           bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
           typename keyT, typename output_terminalsT, typename input_values_typelistT>
-struct CallableWrapTTArgsAsTypelist;
+struct CallableWrapTTAsTypelist;
 
 template <typename funcT, typename returnT, bool funcT_receives_input_tuple,
           bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
           typename keyT, typename output_terminalsT, typename... input_valuesT>
-struct CallableWrapTTArgsAsTypelist<funcT, returnT, funcT_receives_input_tuple,
+struct CallableWrapTTAsTypelist<funcT, returnT, funcT_receives_input_tuple,
                                     funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
                                     std::tuple<input_valuesT...>> {
-  using type = CallableWrapTTArgs<funcT, returnT, funcT_receives_input_tuple,
+  using type = CallableWrapTT<funcT, returnT, funcT_receives_input_tuple,
                                   funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
                                   std::remove_reference_t<input_valuesT>...>;
 };
@@ -305,10 +305,10 @@ struct CallableWrapTTArgsAsTypelist<funcT, returnT, funcT_receives_input_tuple,
 template <typename funcT, typename returnT, bool funcT_receives_input_tuple,
           bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
           typename keyT, typename output_terminalsT, typename... input_valuesT>
-struct CallableWrapTTArgsAsTypelist<funcT, returnT, funcT_receives_input_tuple,
+struct CallableWrapTTAsTypelist<funcT, returnT, funcT_receives_input_tuple,
                                     funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
                                     ttg::meta::typelist<input_valuesT...>> {
-  using type = CallableWrapTTArgs<funcT, returnT, funcT_receives_input_tuple,
+  using type = CallableWrapTT<funcT, returnT, funcT_receives_input_tuple,
                                   funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
                                   std::remove_reference_t<input_valuesT>...>;
 };
@@ -421,7 +421,7 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
       "ref; this is illegal, should only pass arguments as const lvalue ref or (nonconst) rvalue ref");
   using input_args_t = std::decay_t<nondecayed_input_args_t>;
   using decayed_input_args_t = ttg::meta::decayed_typelist_t<input_args_t>;
-  using wrapT = typename CallableWrapTTArgsAsTypelist<funcT, func_return_t, true, have_outterm_tuple, space, keyT,
+  using wrapT = typename CallableWrapTTAsTypelist<funcT, func_return_t, true, have_outterm_tuple, space, keyT,
                                                       output_terminals_type, input_args_t>::type;
   static_assert(std::is_same_v<decayed_input_args_t, std::tuple<input_edge_valuesT...>>,
                 "ttg::make_tt_tpl(func, inedges, outedges): inedges value types do not match argument types of func");
@@ -552,7 +552,7 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
       OUTTERM_TUPLE_PASSED_AS_NONCONST_LVALUE_REF,
       "ttg::make_tt(func, ...): if given to func, the output terminal tuple must be passed by nonconst lvalue ref");
 
-  // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
+  // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTT
   using input_edge_value_types = ttg::meta::typelist<std::decay_t<input_edge_valuesT>...>;
   // input_args_t = {input_valuesT&&...}
   using input_args_t = typename ttg::meta::take_first_n<
@@ -567,7 +567,7 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   using decayed_input_args_t = ttg::meta::decayed_typelist_t<input_args_t>;
   // 3. full_input_args_t = edge-types with non-void types replaced by input_args_t
   using full_input_args_t = ttg::meta::replace_nonvoid_t<input_edge_value_types, input_args_t>;
-  using wrapT = typename CallableWrapTTArgsAsTypelist<funcT, func_return_t, false, have_outterm_tuple, space, keyT,
+  using wrapT = typename CallableWrapTTAsTypelist<funcT, func_return_t, false, have_outterm_tuple, space, keyT,
                                                       output_terminals_type, full_input_args_t>::type;
 
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
