@@ -22,6 +22,7 @@
 #include "ttg/util/macro.h"
 #include "ttg/util/meta.h"
 #include "ttg/util/meta/callable.h"
+#include "ttg/util/scope_exit.h"
 #include "ttg/util/void.h"
 #include "ttg/world.h"
 #include "ttg/coroutine.h"

@@ -177,7 +177,8 @@ namespace detail {
     using compress_out_type = std::tuple<Rout, Rout, cnodeOut<T, K, 1>>;
     using compress_in_type = std::tuple<Rin, Rin>;
     template <typename compfuncT>
-    using compwrap_type = ttg::CallableWrapTT<compfuncT, true, Key<1>, compress_out_type, Rin, Rin>;
+    using compwrap_type = ttg::CallableWrapTT<compfuncT, void, true, true, ttg::ExecutionSpace::Host,
+                                              Key<1>, compress_out_type, Rin, Rin>;
   };
 
   template <typename T, size_t K>
@@ -187,7 +188,8 @@ namespace detail {
     using compress_out_type = std::tuple<Rout, Rout, Rout, Rout, cnodeOut<T, K, 2>>;
     using compress_in_type = std::tuple<Rin, Rin, Rin, Rin>;
     template <typename compfuncT>
-    using compwrap_type = ttg::CallableWrapTT<compfuncT, true, Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
+    using compwrap_type = ttg::CallableWrapTT<compfuncT, void, true, true, ttg::ExecutionSpace::Host,
+                                              Key<2>, compress_out_type, Rin, Rin, Rin, Rin>;
   };
 
   template <typename T, size_t K>
@@ -198,7 +200,8 @@ namespace detail {
     using compress_in_type = std::tuple<Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
     template <typename compfuncT>
     using compwrap_type =
-        ttg::CallableWrapTT<compfuncT, true, Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
+        ttg::CallableWrapTT<compfuncT, void, true, true, ttg::ExecutionSpace::Host,
+                            Key<3>, compress_out_type, Rin, Rin, Rin, Rin, Rin, Rin, Rin, Rin>;
   };
 };  // namespace detail
 
@@ -277,7 +280,8 @@ auto make_compress(rnodeEdge<T, K, NDIM>& in, cnodeEdge<T, K, NDIM>& out, const 
 
   using sendfuncT = decltype(&send_leaves_up<T, K, NDIM>);
   using sendwrapT =
-      ttg::CallableWrapTT<sendfuncT, true, Key<NDIM>, typename ::detail::tree_types<T, K, NDIM>::compress_out_type,
+      ttg::CallableWrapTT<sendfuncT, void, true, true, ttg::ExecutionSpace::Host,
+                          Key<NDIM>, typename ::detail::tree_types<T, K, NDIM>::compress_out_type,
                           FunctionReconstructedNode<T, K, NDIM>>;
   using compfuncT = decltype(&do_compress<T, K, NDIM>);
   using compwrapT = typename ::detail::tree_types<T, K, NDIM>::template compwrap_type<compfuncT>;

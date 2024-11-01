@@ -3,127 +3,6 @@
 #ifndef TTG_MAKE_TT_H
 #define TTG_MAKE_TT_H
 
-// Class to wrap a callable with signature
-//
-// case 1 (keyT != void): void op(auto&& key, std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&)
-// case 2 (keyT == void): void op(std::tuple<input_valuesT...>&&, std::tuple<output_terminalsT...>&)
-//
-template <typename funcT, bool funcT_receives_outterm_tuple,
-          typename keyT, typename output_terminalsT,
-          typename... input_valuesT>
-class CallableWrapTT
-    : public TT<keyT, output_terminalsT,
-                CallableWrapTT<funcT, funcT_receives_outterm_tuple, keyT, output_terminalsT, input_valuesT...>,
-                ttg::typelist<input_valuesT...>> {
-  using baseT = typename CallableWrapTT::ttT;
-
-  using input_values_tuple_type = typename baseT::input_values_tuple_type;
-  using input_refs_tuple_type = typename baseT::input_refs_tuple_type;
-  using input_edges_type = typename baseT::input_edges_type;
-  using output_edges_type = typename baseT::output_edges_type;
-
-  using noref_funcT = std::remove_reference_t<funcT>;
-  std::conditional_t<std::is_function_v<noref_funcT>, std::add_pointer_t<noref_funcT>, noref_funcT> func;
-
-  template <typename Key, typename Tuple>
-  void call_func(Key &&key, Tuple &&args, output_terminalsT &out) {
-    if constexpr (funcT_receives_outterm_tuple)
-      func(std::forward<Key>(key), std::forward<Tuple>(args), out);
-    else {
-      auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
-      this->set_outputs_tls_ptr();
-      func(std::forward<Key>(key), std::forward<Tuple>(args));
-      this->set_outputs_tls_ptr(old_output_tls_ptr);
-    }
-  }
-
-  template <typename TupleOrKey>
-  void call_func(TupleOrKey &&args, output_terminalsT &out) {
-    if constexpr (funcT_receives_outterm_tuple)
-      func(std::forward<TupleOrKey>(args), out);
-    else {
-      auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
-      this->set_outputs_tls_ptr();
-      func(std::forward<TupleOrKey>(args));
-      this->set_outputs_tls_ptr(old_output_tls_ptr);
-    }
-  }
-
-  void call_func(output_terminalsT &out) {
-    if constexpr (funcT_receives_outterm_tuple)
-      func(std::tuple<>(), out);
-    else {
-      auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
-      this->set_outputs_tls_ptr();
-      func(std::tuple<>());
-      this->set_outputs_tls_ptr(old_output_tls_ptr);
-    }
-  }
-
- public:
-  template <typename funcT_>
-  CallableWrapTT(funcT_ &&f, const input_edges_type &inedges, const output_edges_type &outedges,
-                 const std::string &name, const std::vector<std::string> &innames,
-                 const std::vector<std::string> &outnames)
-      : baseT(inedges, outedges, name, innames, outnames), func(std::forward<funcT_>(f)) {}
-
-  template <typename funcT_>
-  CallableWrapTT(funcT_ &&f, const std::string &name, const std::vector<std::string> &innames,
-                 const std::vector<std::string> &outnames)
-      : baseT(name, innames, outnames), func(std::forward<funcT_>(f)) {}
-
-  template <typename Key, typename ArgsTuple>
-  std::enable_if_t<std::is_same_v<ArgsTuple, input_refs_tuple_type> && !ttg::meta::is_empty_tuple_v<ArgsTuple> &&
-                       !ttg::meta::is_void_v<Key>,
-                   void>
-  op(Key &&key, ArgsTuple &&args_tuple, output_terminalsT &out) {
-    call_func(std::forward<Key>(key), std::forward<ArgsTuple>(args_tuple), out);
-  }
-
-  template <typename ArgsTuple, typename Key = keyT>
-  std::enable_if_t<std::is_same_v<ArgsTuple, input_refs_tuple_type> && !ttg::meta::is_empty_tuple_v<ArgsTuple> &&
-                       ttg::meta::is_void_v<Key>,
-                   void>
-  op(ArgsTuple &&args_tuple, output_terminalsT &out) {
-    call_func(std::forward<ArgsTuple>(args_tuple), out);
-  }
-
-  template <typename Key, typename ArgsTuple = input_values_tuple_type>
-  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && !ttg::meta::is_void_v<Key>, void> op(
-      Key &&key, output_terminalsT &out) {
-    call_func(std::forward<Key>(key), out);
-  }
-
-  template <typename Key = keyT, typename ArgsTuple = input_values_tuple_type>
-  std::enable_if_t<ttg::meta::is_empty_tuple_v<ArgsTuple> && ttg::meta::is_void_v<Key>, void> op(
-      output_terminalsT &out) {
-    call_func(out);
-  }
-};
-
-template <typename funcT, bool funcT_receives_outterm_tuple,
-          typename keyT, typename output_terminalsT,
-          typename input_values_tupleT>
-struct CallableWrapTTUnwrapTypelist;
-
-template <typename funcT, bool funcT_receives_outterm_tuple,
-          typename keyT, typename output_terminalsT,
-          typename... input_valuesT>
-struct CallableWrapTTUnwrapTypelist<funcT, funcT_receives_outterm_tuple,
-                                    keyT, output_terminalsT,
-                                    std::tuple<input_valuesT...>> {
-  using type = CallableWrapTT<funcT, funcT_receives_outterm_tuple,
-                              keyT, output_terminalsT,
-                              std::remove_reference_t<input_valuesT>...>;
-};
-
-template <typename funcT, bool funcT_receives_outterm_tuple, typename keyT, typename output_terminalsT,
-          typename... input_valuesT>
-struct CallableWrapTTUnwrapTypelist<funcT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
-                                    ttg::meta::typelist<input_valuesT...>> {
-  using type = CallableWrapTT<funcT, funcT_receives_outterm_tuple, keyT, output_terminalsT,
-                              std::remove_reference_t<input_valuesT>...>;
-};
 
 // Class to wrap a callable with signature
 //
@@ -131,14 +10,15 @@ struct CallableWrapTTUnwrapTypelist<funcT, funcT_receives_outterm_tuple, keyT, o
 // case 2 (keyT == void): returnT op(input_valuesT&&..., std::tuple<output_terminalsT...>&)
 //
 // returnT is void for funcT = synchronous (ordinary) function and the appropriate return type for funcT=coroutine
-template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
+template <typename funcT, typename returnT, bool funcT_receives_input_tuple,
+          bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
           typename keyT, typename output_terminalsT, typename... input_valuesT>
-class CallableWrapTTArgs
+class CallableWrapTT
     : public TT<
           keyT, output_terminalsT,
-          CallableWrapTTArgs<funcT, returnT, funcT_receives_outterm_tuple, space, keyT, output_terminalsT, input_valuesT...>,
+          CallableWrapTT<funcT, returnT, funcT_receives_input_tuple, funcT_receives_outterm_tuple, space, keyT, output_terminalsT, input_valuesT...>,
           ttg::typelist<input_valuesT...>> {
-  using baseT = typename CallableWrapTTArgs::ttT;
+  using baseT = typename CallableWrapTT::ttT;
 
   using input_values_tuple_type = typename baseT::input_values_tuple_type;
   using input_refs_tuple_type = typename baseT::input_refs_tuple_type;
@@ -174,7 +54,7 @@ protected:
   template<typename ReturnT>
   auto process_return(ReturnT&& ret, output_terminalsT &out) {
     static_assert(std::is_same_v<std::remove_reference_t<decltype(ret)>, returnT>,
-                  "CallableWrapTTArgs<funcT,returnT,...>: returnT does not match the actual return type of funcT");
+                  "CallableWrapTT<funcT,returnT,...>: returnT does not match the actual return type of funcT");
     if constexpr (!std::is_void_v<returnT>) {  // protect from compiling for void returnT
 #ifdef TTG_HAVE_COROUTINE
       if constexpr (std::is_same_v<returnT, ttg::resumable_task>) {
@@ -203,10 +83,10 @@ protected:
 #endif
       {
         static_assert(std::tuple_size_v<std::remove_reference_t<decltype(out)>> == 1,
-                      "CallableWrapTTArgs<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
+                      "CallableWrapTT<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
                       "value only if there is only 1 out terminal");
         static_assert(std::tuple_size_v<returnT> <= 2,
-                      "CallableWrapTTArgs<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
+                      "CallableWrapTT<funcT,returnT,funcT_receives_outterm_tuple=true,...): funcT can return a "
                       "value only if it is a plain value (then sent with null key), a tuple-like containing a single "
                       "key (hence value is void), or a tuple-like containing a key and a value");
         if constexpr (std::tuple_size_v<returnT> == 0)
@@ -224,104 +104,132 @@ protected:
   template <typename Key, typename Tuple, std::size_t... S>
   auto call_func(Key &&key, Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
     using func_args_t = ttg::meta::tuple_concat_t<std::tuple<const Key &>, input_refs_tuple_type, output_edges_type>;
+    auto invoke_func_handle_ret = [&](auto&&... args){
+      if constexpr (std::is_void_v<returnT>) {
+        func(std::forward<Key>(key), std::forward<decltype(args)>(args)...);
+      } else {
+        return process_return(func(std::forward<Key>(key), std::forward<decltype(args)>(args)...), out);
+      }
+    };
+    auto unpack_input_tuple_if_needed = [&](auto&&... args){
+      if constexpr (funcT_receives_input_tuple) {
+        return invoke_func_handle_ret(std::forward<Tuple>(args_tuple), std::forward<decltype(args)>(args)...);
+      } else {
+        return invoke_func_handle_ret(baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))...,
+                  std::forward<decltype(args)>(args)...);
+      }
+    };
 
     if constexpr (funcT_receives_outterm_tuple) {
-      if constexpr (std::is_void_v<returnT>) {
-        func(std::forward<Key>(key),
-             baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
-        return;
-      } else {
-        auto ret = func(
-            std::forward<Key>(key),
-            baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
-
-        return process_return(std::move(ret), out);
-      }
+      return unpack_input_tuple_if_needed(out);
     } else {
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
-      if constexpr (std::is_void_v<returnT>) {
-        func(std::forward<Key>(key),
-             baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))...);
-        this->set_outputs_tls_ptr(old_output_tls_ptr);
-        return;
-      } else {
-        auto ret =
-            func(std::forward<Key>(key),
-                 baseT::template get<S, std::tuple_element_t<S + 1, func_args_t>>(std::forward<Tuple>(args_tuple))...);
-        this->set_outputs_tls_ptr(old_output_tls_ptr);
-        return process_return(std::move(ret), out);
-      }
+      // make sure the output tls is reset
+      auto _ = ttg::detail::scope_exit(
+        [this, old_output_tls_ptr](){
+          this->set_outputs_tls_ptr(old_output_tls_ptr);
+        });
+      return unpack_input_tuple_if_needed();
     }
   }
 
   template <typename Tuple, std::size_t... S>
   auto call_func(Tuple &&args_tuple, output_terminalsT &out, std::index_sequence<S...>) {
     using func_args_t = ttg::meta::tuple_concat_t<input_refs_tuple_type, output_edges_type>;
-    if constexpr (funcT_receives_outterm_tuple) {
+
+    auto invoke_func_handle_ret = [&](auto&&... args){
       if constexpr (std::is_void_v<returnT>) {
-        func(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
+        func(std::forward<decltype(args)>(args)...);
       } else {
-        auto ret = func(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))..., out);
-        return process_return(std::move(ret), out);
+        return process_return(func(std::forward<decltype(args)>(args)...), out);
       }
+    };
+    auto unpack_input_tuple_if_needed = [&](auto&& fn, auto&&... args){
+      if constexpr (funcT_receives_input_tuple) {
+        return fn(std::forward<Tuple>(args_tuple), std::forward<decltype(args)>(args)...);
+      } else {
+        return fn(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))...,
+                  std::forward<decltype(args)>(args)...);
+      }
+    };
+
+    if constexpr (funcT_receives_outterm_tuple) {
+      return unpack_input_tuple_if_needed(invoke_func_handle_ret, out);
     } else {
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
-      if constexpr (std::is_void_v<returnT>) {
-        func(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))...);
-        this->set_outputs_tls_ptr(old_output_tls_ptr);
-      } else {
-        auto ret = func(baseT::template get<S, std::tuple_element_t<S, func_args_t>>(std::forward<Tuple>(args_tuple))...);
-        this->set_outputs_tls_ptr(old_output_tls_ptr);
-        return process_return(std::move(ret), out);
-      }
+      // make sure the output tls is reset
+      auto _ = ttg::detail::scope_exit(
+        [this, old_output_tls_ptr](){
+          this->set_outputs_tls_ptr(old_output_tls_ptr);
+        });
+      return unpack_input_tuple_if_needed(invoke_func_handle_ret);
     }
   }
 
   template <typename Key>
   auto call_func(Key &&key, output_terminalsT &out) {
-    if constexpr (funcT_receives_outterm_tuple) {
+    auto invoke_func_handle_ret = [&](auto&&... args){
       if constexpr (std::is_void_v<returnT>) {
-        func(std::forward<Key>(key), out);
+        func(std::forward<Key>(key), std::forward<decltype(args)>(args)...);
       } else {
-        auto ret = func(std::forward<Key>(key), out);
-        return process_return(std::move(ret), out);
+        return process_return(func(std::forward<Key>(key), std::forward<decltype(args)>(args)...), out);
       }
+    };
+
+    auto invoke_func_empty_tuple = [&](auto&&... args){
+      if constexpr(funcT_receives_input_tuple) {
+        invoke_func_handle_ret(std::tuple<>{}, std::forward<decltype(args)>(args)...);
+      } else {
+        invoke_func_handle_ret(std::forward<decltype(args)>(args)...);
+      }
+    };
+
+    if constexpr (funcT_receives_outterm_tuple) {
+      invoke_func_handle_ret(out);
     } else {
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
-      if constexpr (std::is_void_v<returnT>) {
-        func(std::forward<Key>(key));
-        this->set_outputs_tls_ptr(old_output_tls_ptr);
-      } else {
-        auto ret = func(std::forward<Key>(key));
-        this->set_outputs_tls_ptr(old_output_tls_ptr);
-        return process_return(std::move(ret), out);
-      }
+      // make sure the output tls is reset
+      auto _ = ttg::detail::scope_exit(
+        [this, old_output_tls_ptr](){
+          this->set_outputs_tls_ptr(old_output_tls_ptr);
+        });
+      return invoke_func_handle_ret();
     }
   }
 
   template <typename OutputTerminals>
   auto call_func(OutputTerminals &out) {
-    if constexpr (funcT_receives_outterm_tuple) {
+
+    auto invoke_func_handle_ret = [&](auto&&... args){
       if constexpr (std::is_void_v<returnT>) {
-        func(out);
+        func(std::forward<decltype(args)>(args)...);
       } else {
-        auto ret = func(out);
-        return process_return(std::move(ret), out);
+        return process_return(func(std::forward<decltype(args)>(args)...), out);
       }
+    };
+
+    auto invoke_func_empty_tuple = [&](auto&&... args){
+      if constexpr(funcT_receives_input_tuple) {
+        invoke_func_handle_ret(std::tuple<>{}, std::forward<decltype(args)>(args)...);
+      } else {
+        invoke_func_handle_ret(std::forward<decltype(args)>(args)...);
+      }
+    };
+
+    if constexpr (funcT_receives_outterm_tuple) {
+      return invoke_func_empty_tuple(out);
     } else {
       auto old_output_tls_ptr = this->outputs_tls_ptr_accessor();
       this->set_outputs_tls_ptr();
-      if constexpr (std::is_void_v<returnT>) {
-        func();
-        this->set_outputs_tls_ptr(old_output_tls_ptr);
-      } else {
-        auto ret = func(out);
-        this->set_outputs_tls_ptr(old_output_tls_ptr);
-        return process_return(std::move(ret), out);
-      }
+      // make sure the output tls is reset
+      auto _ = ttg::detail::scope_exit(
+        [this, old_output_tls_ptr](){
+          this->set_outputs_tls_ptr(old_output_tls_ptr);
+        });
+      return invoke_func_empty_tuple();
     }
   }
 
@@ -333,13 +241,13 @@ protected:
 
  public:
   template <typename funcT_>
-  CallableWrapTTArgs(funcT_ &&f, const input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
+  CallableWrapTT(funcT_ &&f, const input_edges_type &inedges, const typename baseT::output_edges_type &outedges,
                      const std::string &name, const std::vector<std::string> &innames,
                      const std::vector<std::string> &outnames)
       : baseT(inedges, outedges, name, innames, outnames), func(std::forward<funcT_>(f)) {}
 
   template <typename funcT_>
-  CallableWrapTTArgs(funcT_ &&f, const std::string &name, const std::vector<std::string> &innames,
+  CallableWrapTT(funcT_ &&f, const std::string &name, const std::vector<std::string> &innames,
                      const std::vector<std::string> &outnames)
       : baseT(name, innames, outnames), func(std::forward<funcT_>(f)) {}
 
@@ -378,23 +286,30 @@ protected:
   };
 };
 
-template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
+template <typename funcT, typename returnT, bool funcT_receives_input_tuple,
+          bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
           typename keyT, typename output_terminalsT, typename input_values_typelistT>
-struct CallableWrapTTArgsAsTypelist;
+struct CallableWrapTTAsTypelist;
 
-template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
+template <typename funcT, typename returnT, bool funcT_receives_input_tuple,
+          bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
           typename keyT, typename output_terminalsT, typename... input_valuesT>
-struct CallableWrapTTArgsAsTypelist<funcT, returnT, funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
+struct CallableWrapTTAsTypelist<funcT, returnT, funcT_receives_input_tuple,
+                                    funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
                                     std::tuple<input_valuesT...>> {
-  using type = CallableWrapTTArgs<funcT, returnT, funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
+  using type = CallableWrapTT<funcT, returnT, funcT_receives_input_tuple,
+                                  funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
                                   std::remove_reference_t<input_valuesT>...>;
 };
 
-template <typename funcT, typename returnT, bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
+template <typename funcT, typename returnT, bool funcT_receives_input_tuple,
+          bool funcT_receives_outterm_tuple, ttg::ExecutionSpace space,
           typename keyT, typename output_terminalsT, typename... input_valuesT>
-struct CallableWrapTTArgsAsTypelist<funcT, returnT, funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
+struct CallableWrapTTAsTypelist<funcT, returnT, funcT_receives_input_tuple,
+                                    funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
                                     ttg::meta::typelist<input_valuesT...>> {
-  using type = CallableWrapTTArgs<funcT, returnT, funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
+  using type = CallableWrapTT<funcT, returnT, funcT_receives_input_tuple,
+                                  funcT_receives_outterm_tuple, space, keyT, output_terminalsT,
                                   std::remove_reference_t<input_valuesT>...>;
 };
 
@@ -425,7 +340,11 @@ struct CallableWrapTTArgsAsTypelist<funcT, returnT, funcT_receives_outterm_tuple
 ///
 /// @note Handling of generic @p func is described in the documentation of make_tt()
 // clang-format on
-template <typename keyT = void, typename funcT, typename... input_edge_valuesT, typename... output_edgesT>
+template <ttg::ExecutionSpace space,
+          typename keyT = void,
+          typename funcT,
+          typename... input_edge_valuesT,
+          typename... output_edgesT>
 auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges = std::tuple<>{},
                  const std::tuple<output_edgesT...> &outedges = std::tuple<>{}, const std::string &name = "wrapper",
                  const std::vector<std::string> &innames = std::vector<std::string>(sizeof...(input_edge_valuesT),
@@ -446,14 +365,17 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
       ttg::meta::candidate_argument_bindings_t<std::add_const_t<keyT>>,
       ttg::meta::candidate_argument_bindings_t<
           std::tuple<std::add_lvalue_reference_t<typename ttg::Edge<keyT, input_edge_valuesT>::value_type>...>>,
-      ttg::meta::typelist<output_terminals_type &, void>>;
+      ttg::meta::typelist<output_terminals_type &>>;
 
   // net list of candidate argument types excludes the empty typelists for void arguments
   using candidate_func_args_t = ttg::meta::filter_t<gross_candidate_func_args_t, ttg::meta::typelist_is_not_empty>;
 
   // compute list of argument types with which func can be invoked
   constexpr static auto func_is_generic = ttg::meta::is_generic_callable_v<funcT>;
-  using gross_func_args_t = decltype(ttg::meta::compute_arg_binding_types_r<void>(func, candidate_func_args_t{}));
+  using return_type_typelist_and_gross_func_args_t =
+      decltype(ttg::meta::compute_arg_binding_types(func, candidate_func_args_t{}));
+  using func_return_t = std::tuple_element_t<0, std::tuple_element_t<0, return_type_typelist_and_gross_func_args_t>>;
+  using gross_func_args_t = std::tuple_element_t<1, return_type_typelist_and_gross_func_args_t>;
   constexpr auto DETECTED_HOW_TO_INVOKE_GENERIC_FUNC =
       func_is_generic ? !std::is_same_v<gross_func_args_t, ttg::typelist<>> : true;
   static_assert(DETECTED_HOW_TO_INVOKE_GENERIC_FUNC,
@@ -499,14 +421,28 @@ auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_value
       "ref; this is illegal, should only pass arguments as const lvalue ref or (nonconst) rvalue ref");
   using input_args_t = std::decay_t<nondecayed_input_args_t>;
   using decayed_input_args_t = ttg::meta::decayed_typelist_t<input_args_t>;
-  using wrapT =
-      typename CallableWrapTTUnwrapTypelist<funcT, have_outterm_tuple, keyT, output_terminals_type, input_args_t>::type;
+  using wrapT = typename CallableWrapTTAsTypelist<funcT, func_return_t, true, have_outterm_tuple, space, keyT,
+                                                      output_terminals_type, input_args_t>::type;
   static_assert(std::is_same_v<decayed_input_args_t, std::tuple<input_edge_valuesT...>>,
                 "ttg::make_tt_tpl(func, inedges, outedges): inedges value types do not match argument types of func");
 
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
 }
 
+template <typename keyT = void,
+          typename funcT,
+          typename... input_edge_valuesT,
+          typename... output_edgesT>
+auto make_tt_tpl(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>...> &inedges = std::tuple<>{},
+                 const std::tuple<output_edgesT...> &outedges = std::tuple<>{}, const std::string &name = "wrapper",
+                 const std::vector<std::string> &innames = std::vector<std::string>(sizeof...(input_edge_valuesT),
+                                                                                    "input"),
+                 const std::vector<std::string> &outnames = std::vector<std::string>(sizeof...(output_edgesT),
+                                                                                     "output"))
+{
+  return make_tt_tpl<ttg::ExecutionSpace::Host, keyT>(
+      std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
+}
 // clang-format off
 /// @brief Factory function to assist in wrapping a callable with signature
 ///
@@ -616,7 +552,7 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
       OUTTERM_TUPLE_PASSED_AS_NONCONST_LVALUE_REF,
       "ttg::make_tt(func, ...): if given to func, the output terminal tuple must be passed by nonconst lvalue ref");
 
-  // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTTArgs
+  // TT needs actual types of arguments to func ... extract them and pass to CallableWrapTT
   using input_edge_value_types = ttg::meta::typelist<std::decay_t<input_edge_valuesT>...>;
   // input_args_t = {input_valuesT&&...}
   using input_args_t = typename ttg::meta::take_first_n<
@@ -631,7 +567,7 @@ auto make_tt(funcT &&func, const std::tuple<ttg::Edge<keyT, input_edge_valuesT>.
   using decayed_input_args_t = ttg::meta::decayed_typelist_t<input_args_t>;
   // 3. full_input_args_t = edge-types with non-void types replaced by input_args_t
   using full_input_args_t = ttg::meta::replace_nonvoid_t<input_edge_value_types, input_args_t>;
-  using wrapT = typename CallableWrapTTArgsAsTypelist<funcT, func_return_t, have_outterm_tuple, space, keyT,
+  using wrapT = typename CallableWrapTTAsTypelist<funcT, func_return_t, false, have_outterm_tuple, space, keyT,
                                                       output_terminals_type, full_input_args_t>::type;
 
   return std::make_unique<wrapT>(std::forward<funcT>(func), inedges, outedges, name, innames, outnames);
