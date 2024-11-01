@@ -61,6 +61,9 @@ int main(int argc, char **argv)
   bool check = !cmdOptionExists(argv+1, argv+argc, "-x");
   bool cow_hint = !cmdOptionExists(argv+1, argv+argc, "-w");
 
+  /* whether we set a device mapping */
+  bool enable_device_map = !cmdOptionExists(argv, argv+argc, "--default-device-map");
+
   // TODO: need to filter out our arguments to make parsec happy
   ttg::initialize(1, argv, nthreads);
 
@@ -130,7 +133,7 @@ int main(int argc, char **argv)
       init_tt->set_keymap([&]() {return world.rank();});
 
       auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, topotrf, cow_hint);
-      auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, result, cow_hint);
+      auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, result, cow_hint, enable_device_map);
       auto result_ttg = make_result_ttg(A, result, cow_hint);
 
       auto connected = make_graph_executable(init_tt.get());

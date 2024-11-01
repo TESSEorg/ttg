@@ -91,9 +91,11 @@ namespace ttg_parsec {
 
   template<typename ValueT>
   inline auto persistent(ValueT&& value) {
-    static_assert(std::is_base_of_v<TTValue<std::decay_t<ValueT>>, std::decay_t<ValueT>>,
-                  "ttg::persistent can only be used on types derived from ttg::TTValue");
-    return detail::persistent_value_ref<ValueT>{value};
+    if constexpr (std::is_base_of_v<TTValue<std::decay_t<ValueT>>, std::decay_t<ValueT>>) {
+      return detail::persistent_value_ref<ValueT>{value};
+    } else {
+      return std::forward<ValueT>(value);
+    }
   }
 
 } // namespace ttg_parsec
