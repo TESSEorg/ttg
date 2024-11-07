@@ -1086,7 +1086,7 @@ namespace ttg_parsec {
         parsec_device_gpu_module_t *gpu_device = (parsec_device_gpu_module_t*)device;
         for (int j = 0; (j < parsec_nb_devices) && all_peer_access; ++j) {
           if (PARSEC_DEV_IS_GPU(device->type)) {
-            all_peer_access &= (gpu_device->peer_access_mask & j);
+            all_peer_access = all_peer_access && (gpu_device->peer_access_mask & (1<<j));
           }
         }
       }
