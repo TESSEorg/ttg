@@ -62,6 +62,10 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, AllocatorT>> {
 #endif // DEBUG_TILES_VALUES
   }
 
+  struct non_owning_deleter {
+    void operator()(T* ptr) { }
+  };
+
  public:
   MatrixTile() {}
 
@@ -85,7 +89,7 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, AllocatorT>> {
    */
   MatrixTile(std::size_t rows, std::size_t cols, T* data, std::size_t lda)
   : ttvalue_type()
-  , _buffer(data, lda*cols)
+  , _buffer(std::unique_ptr<T[], non_owning_deleter>(data, non_owning_deleter{}), lda*cols)
   , _rows(rows)
   , _cols(cols)
   , _lda(lda)
@@ -187,6 +191,17 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, AllocatorT>> {
     o << " } ";
     return o;
   }
+
+  template<typename Archive>
+  void serialize(Archive& ar, const unsigned int version) {
+    serialize(ar);
+  }
+
+  template<typename Archive>
+  void serialize(Archive& ar) {
+    ar & rows() & cols() & lda();
+    ar & buffer();
+  }
 };
 
 namespace ttg {
@@ -203,30 +218,7 @@ namespace ttg {
 }  // namespace ttg
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
-namespace madness {
-  namespace archive {
-    template <class Archive, typename T>
-    struct ArchiveStoreImpl<Archive, MatrixTile<T>> {
-      static inline void store(const Archive& ar, const MatrixTile<T>& tile) {
-        ar << tile.rows() << tile.cols() << tile.lda();
-        ar << wrap(tile.data(), tile.rows() * tile.cols());
-      }
-    };
-
-    template <class Archive, typename T>
-    struct ArchiveLoadImpl<Archive, MatrixTile<T>> {
-      static inline void load(const Archive& ar, MatrixTile<T>& tile) {
-        std::size_t rows, cols, lda;
-        ar >> rows >> cols >> lda;
-        tile = MatrixTile<T>(rows, cols, lda);
-        ar >> wrap(tile.data(), tile.rows() * tile.cols());  // MatrixTile<T>(bm.rows(), bm.cols());
-      }
-    };
-  }  // namespace archive
-}  // namespace madness
-
 static_assert(madness::is_serializable_v<madness::archive::BufferOutputArchive, MatrixTile<float>>);
-
 #endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
 
 #endif  // TTG_EXAMPLES_MATRIX_TILE_H

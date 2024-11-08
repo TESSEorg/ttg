@@ -12,21 +12,44 @@ struct value_t {
 
   template<typename Archive>
   void serialize(Archive& ar, const unsigned int version) {
+    serialize(ar);
+  }
+
+  template<typename Archive>
+  void serialize(Archive& ar) {
     ar& quark;
-    ar& db; // input:
+    ar& db;
   }
 };
 
-#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
-/* devicebuf is non-POD so provide serialization
- * information for members not a devicebuf */
-namespace madness::archive {
-  template <class Archive>
-  struct ArchiveSerializeImpl<Archive, value_t> {
-    static inline void serialize(const Archive& ar, value_t& obj) { ar& obj.quark & obj.db; };
-  };
-}  // namespace madness::archive
-#endif  // TTG_SERIALIZATION_SUPPORTS_MADNESS
+struct nested_value_t {
+  value_t v;
+  ttg::Buffer<int> db;
+
+  template<typename Archive>
+  void serialize(Archive& ar, const unsigned int version) {
+    serialize(ar);
+  }
+
+  template<typename Archive>
+  void serialize(Archive& ar) {
+    ar& v;
+    ar& db;
+  }
+};
+
+TEST_CASE("Device", "coro") {
+  SECTION("buffer-inspection") {
+    value_t v1;
+    std::size_t i = 0;
+    ttg::detail::buffer_apply(v1, [&](const ttg::Buffer<double>& b){ i++; });
+    CHECK(i == 1);
+
+    nested_value_t v2;
+    i = 0;
+    ttg::detail::buffer_apply(v2, [&]<typename T>(const ttg::Buffer<T>& b){ i++; });
+  }
+}
 
 #if defined(TTG_HAVE_DEVICE) && defined(TTG_IMPL_DEVICE_SUPPORT)
 
