@@ -11,7 +11,7 @@
 #define ENABLE_DEVICE_KERNEL 1
 #endif
 
-#if defined(TTG_HAVE_CUDART)
+#if defined(TTG_ENABLE_CUDA)
 #define ES ttg::ExecutionSpace::CUDA
 #include <cusolverDn.h>
 #elif defined(TTG_ENABLE_HIP)
@@ -97,7 +97,7 @@ namespace potrf {
                   ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_result) {
     using T = typename MatrixT::element_type;
 #if defined(ENABLE_DEVICE_KERNEL)
-    auto iallocator = std::make_shared<TiledArray::device_pinned_allocator<int>>();
+    auto iallocator = std::make_shared<default_allocator_t<int>>();
     //std::cout << "Creating CUDA POTRF task " << std::endl;
     auto f_dev = [=, iallocator = std::move(iallocator)]
                     (const Key1& key, MatrixTile<T>&& tile_kk,
