@@ -32,9 +32,6 @@ namespace ttg::device {
     { }
 
     int id() const {
-      if (is_host()) {
-        throw std::runtime_error("No valid ID for Host execution space!");
-      }
       if (is_invalid()) {
         throw std::runtime_error("Invalid execution space!");
       }
