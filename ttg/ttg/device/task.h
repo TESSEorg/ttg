@@ -52,8 +52,14 @@ namespace ttg::device {
       constexpr bool await_ready() const noexcept { return false; }
 
       /* always suspend */
-      template <typename Promise>
-      constexpr void await_suspend(ttg::coroutine_handle<Promise>) const noexcept {}
+      template <ttg::ExecutionSpace ES>
+      constexpr void await_suspend(ttg::coroutine_handle<device_task_promise_type<ES>> handle) const noexcept {
+        if constexpr (ES == ttg::ExecutionSpace::Host) {
+          /* Destroy the coroutine handle. This allows the backends that are not coroutine-aware
+           * to execute co-routine tasks on the host. */
+          handle.destroy();
+        }
+      }
 
       void await_resume() noexcept {
         if constexpr (sizeof...(Ts) > 0) {

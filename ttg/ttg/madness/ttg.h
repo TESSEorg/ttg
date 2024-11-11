@@ -392,7 +392,7 @@ namespace ttg_madness {
         // }
 
 #ifdef TTG_HAVE_COROUTINE
-        if (suspended_task_address) {
+        if (suspended_task_address && coroutine_id != ttg::TaskCoroutineID::DeviceTask) {
           // TODO implement handling of suspended coroutines properly
 
           // only resumable_task is recognized at the moment
