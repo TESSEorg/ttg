@@ -1256,6 +1256,10 @@ namespace ttg_parsec {
       return (derived_has_cuda_op() || derived_has_hip_op() || derived_has_level_zero_op());
     }
 
+    static_assert(!derived_has_device_op() || ttg::meta::probe_all_v<ttg::detail::has_buffer_apply,
+                                                                     ttg::edges_to_output_value_types<output_terminalsT>>,
+                  "Data sent from a device-capable template task must be serializable.");
+
     using ttT = TT;
     using key_type = keyT;
     using input_terminals_type = ttg::detail::input_terminals_tuple_t<keyT, input_tuple_type>;

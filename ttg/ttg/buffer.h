@@ -34,12 +34,16 @@ namespace meta {
 
 namespace detail {
   /**
-   * Type trait to check whether we can use serialization
+   * Type traits to check whether we can use serialization
    * to inspect the buffers owned by an object passing
    * through a task graph.
    */
   template<typename T, typename Enabler = void>
-  struct has_buffer_apply : std::false_type
+  struct has_buffer_apply_helper : std::false_type
+  { };
+
+  template<typename T>
+  struct has_buffer_apply : has_buffer_apply_helper<T>
   { };
 
   template<typename T>
@@ -133,7 +137,7 @@ namespace ttg::detail {
 
   using buffer_apply_dummy_fn = decltype([]<typename T, typename A>(const ttg::Buffer<T, A>&){});
   template<typename T>
-  struct has_buffer_apply<T, std::enable_if_t<madness::is_serializable_v<madness::archive::BufferInspectorArchive<buffer_apply_dummy_fn>, std::decay_t<T>>>>
+  struct has_buffer_apply_helper<T, std::enable_if_t<madness::is_serializable_v<madness::archive::BufferInspectorArchive<buffer_apply_dummy_fn>, std::decay_t<T>>>>
   : std::true_type
   { };
 
