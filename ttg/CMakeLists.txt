@@ -209,6 +209,7 @@ if (TARGET MADworld)
   set(ttg-mad-headers
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/buffer.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/device.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/devicescratch.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/fwd.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/import.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/ttg.h
