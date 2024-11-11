@@ -250,21 +250,9 @@ private:
 
   void release_data() {
     if (nullptr == m_data) return;
-
-    /* first: drop our reference to the parsec_data_t */
-    PARSEC_OBJ_RELEASE(m_data);
-    /**
-     * second: drop a second reference to the parsec_data_t, for the host-side data_t.
-     *
-     * There are two cases:
-     * 1) There was only a host data. By dropping this reference
-     *    the data_t is destroyed, destroying the host-side data copy as well.
-     * 2) There was a device-side data copy with a reference to the data_t.
-     *    This reference will be released once the device-side data copy is released,
-     *    which will finally destroy the host-side data-copy.
-     */
-    PARSEC_OBJ_RELEASE(m_data);
-
+    /* discard the parsec data so it can be collected by the runtime
+     * and the buffer be free'd in the parsec_data_copy_t destructor */
+    parsec_data_discard(m_data);
     /* set data to null so we don't repeat the above */
     m_data = nullptr;
   }
