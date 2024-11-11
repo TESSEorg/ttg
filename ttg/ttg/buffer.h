@@ -32,7 +32,23 @@ namespace meta {
 
 } // namespace meta
 
+namespace detail {
+  /**
+   * Type trait to check whether we can use serialization
+   * to inspect the buffers owned by an object passing
+   * through a task graph.
+   */
+  template<typename T, typename Enabler = void>
+  struct has_buffer_apply : std::false_type
+  { };
+
+  template<typename T>
+  constexpr const bool has_buffer_apply_v = has_buffer_apply<T>::value;
+} // namespace detail
+
 } // namespace ttg
+
+
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
 #include <madness/world/buffer_archive.h>
@@ -109,11 +125,18 @@ namespace madness {
 
 namespace ttg::detail {
   template<typename T, typename Fn>
-  requires(madness::is_serializable_v<madness::archive::BufferInspectorArchive<Fn>, T>)
+  requires(madness::is_serializable_v<madness::archive::BufferInspectorArchive<Fn>, std::decay<T>>)
   void buffer_apply(T&& t, Fn&& fn) {
     madness::archive::BufferInspectorArchive ar(std::forward<Fn>(fn));
     ar & t;
   }
+
+  using buffer_apply_dummy_fn = decltype([]<typename T, typename A>(const ttg::Buffer<T, A>&){});
+  template<typename T>
+  struct has_buffer_apply<T, std::enable_if_t<madness::is_serializable_v<madness::archive::BufferInspectorArchive<buffer_apply_dummy_fn>, std::decay_t<T>>>>
+  : std::true_type
+  { };
+
 } // namespace ttg::detail
 
 #endif // TTG_SERIALIZATION_SUPPORTS_MADNESS

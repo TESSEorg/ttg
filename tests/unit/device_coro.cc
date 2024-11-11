@@ -38,6 +38,34 @@ struct nested_value_t {
   }
 };
 
+struct derived_value_t {
+  nested_value_t v;
+};
+
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+namespace madness {
+  namespace archive {
+
+    template <class Archive>
+    struct ArchiveLoadImpl<Archive, derived_value_t> {
+      static inline void load(const Archive& ar, derived_value_t& v) {
+        ar& v.v;
+      }
+    };
+
+    template <class Archive>
+    struct ArchiveStoreImpl<Archive, derived_value_t> {
+      static inline void store(const Archive& ar, const derived_value_t& v) {
+        ar& v.v;
+      }
+    };
+  }  // namespace archive
+}  // namespace madness
+#endif // TTG_SERIALIZATION_SUPPORTS_MADNESS
+
+static_assert(madness::is_serializable_v<madness::archive::BufferInspectorArchive<ttg::detail::buffer_apply_dummy_fn>, derived_value_t>);
+static_assert(ttg::detail::has_buffer_apply_v<derived_value_t>);
+
 TEST_CASE("Device", "coro") {
   SECTION("buffer-inspection") {
     value_t v1;
