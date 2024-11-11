@@ -50,12 +50,8 @@ namespace potrf {
   }
 
   static void device_potrf(MatrixTile<double> &A, double *workspace, int Lwork, int *devInfo) {
-    int device = ttg::device::current_device();
-    assert(device >= 0);
 #if defined(TTG_ENABLE_CUDA)
-    //std::cout << "POTRF A " << A.buffer().device_ptr_on(device) << " device " << device << " cols " << A.cols() << " lda " << A.lda() << " Lwork " << Lwork << " WS " << workspace << " devInfo " << devInfo << std::endl;
     auto handle = cusolver_handle();
-    //std::cout << "POTRF handle  " << handle << " device " << device << " stream " << ttg::device::current_stream() << std::endl;
     cusolverDnDpotrf(handle,
                       CUBLAS_FILL_MODE_LOWER, A.cols(),
                       A.buffer().current_device_ptr(), A.lda(),
@@ -68,8 +64,7 @@ namespace potrf {
                       workspace, Lwork,
                       devInfo);
 #else
-    auto info = lapack::potrf(lapack::Uplo::Lower, A.rows(), A.buffer().current_device_ptr(), A.lda());
-    assert(info == 0);
+    *devInfo = lapack::potrf(lapack::Uplo::Lower, A.rows(), A.buffer().current_device_ptr(), A.lda());
 #endif
   }
 
@@ -149,13 +144,6 @@ namespace potrf {
       /* the workspace and the devInfo must be device-level pointers */
       co_await ttg::device::select(tile_kk.buffer(), devWS, devInfo);
 #endif // DEBUG_TILES_VALUES
-
-      int device = ttg::device::current_device();
-      //std::cout << "POTRF [" << K << "] on " << device << std::endl;
-
-
-      //std::cout << "devWS host ptr " << hostWS << " device ptr " << devWS.device_ptr() << " size " <<  devWS.size()
-      //          << " devInfo host ptr " << hostInfo << " device ptr " << devInfo.device_ptr() << "size "  << devInfo.size() << std::endl;
 
       /* everything is on the device, call the POTRF */
       device_potrf(tile_kk, devWS.device_ptr(), Lwork, devInfo.device_ptr());
@@ -279,7 +267,6 @@ namespace potrf {
       co_await ttg::device::select(tile_kk.buffer(), tile_mk.buffer());
 #endif // DEBUG_TILES_VALUES
 
-      int device = ttg::device::current_device();
       double alpha = 1.0;
 
 #ifdef DEBUG_TILES_VALUES
@@ -287,9 +274,6 @@ namespace potrf {
       device_norm(tile_kk, &norms[0]);
       device_norm(tile_mk, &norms[1]);
 #endif // DEBUG_TILES_VALUES
-
-
-      //std::cout << "TRSM [" << K << ", " << M << "] on " << device << std::endl;
 
 #if defined(TTG_ENABLE_CUDA)
       cublasDtrsm(cublas_handle(),
@@ -416,8 +400,6 @@ namespace potrf {
 #else
       co_await ttg::device::select(tile_kk.buffer(), tile_mk.buffer());
 #endif // DEBUG_TILES_VALUES
-
-      int device = ttg::device::current_device();
 
       double alpha = -1.0;
       double beta  =  1.0;
@@ -547,7 +529,6 @@ namespace potrf {
       co_await ttg::device::select(tile_mk.buffer(), tile_nk.buffer(), tile_mn.buffer());
 #endif // DEBUG_TILES_VALUES
 
-      int device = ttg::device::current_device();
       double alpha = -1.0;
       double beta  =  1.0;
 
