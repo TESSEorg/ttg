@@ -4,6 +4,7 @@
 #include "ttg/serialization/traits.h"
 
 #include "ttg/device/device.h"
+#include <memory>
 
 namespace ttg_madness {
 
@@ -23,8 +24,8 @@ struct Buffer : private Allocator {
 
 private:
   using delete_fn_t = std::function<void(element_type*)>;
-
   using host_data_ptr   = std::add_pointer_t<element_type>;
+  std::shared_ptr<element_type[]> m_sptr; // to capture smart pointers
   host_data_ptr m_host_data = nullptr;
   std::size_t m_count = 0;
   bool m_owned= false;
@@ -58,9 +59,22 @@ public:
   /* Constructing a buffer using application-managed memory.
    * The memory pointed to by ptr must be accessible during
    * the life-time of the buffer. */
-  Buffer(element_type* ptr, std::size_t n = 1)
+  template<typename Deleter>
+  Buffer(std::unique_ptr<element_type[], Deleter> ptr, std::size_t n)
   : allocator_type()
-  , m_host_data(ptr)
+  , m_sptr(std::move(ptr))
+  , m_host_data(m_sptr.get())
+  , m_count(n)
+  , m_owned(false)
+  { }
+
+  /* Constructing a buffer using application-managed memory.
+   * The memory pointed to by ptr must be accessible during
+   * the life-time of the buffer. */
+  Buffer(std::shared_ptr<element_type[]> ptr, std::size_t n)
+  : allocator_type()
+  , m_sptr(std::move(ptr))
+  , m_host_data(m_sptr.get())
   , m_count(n)
   , m_owned(false)
   { }
@@ -293,12 +307,12 @@ public:
     if constexpr (ttg::detail::is_output_archive_v<Archive>) {
       std::size_t s = size();
       ar& s;
-      ar << wrap(host_ptr(), s);
+      ar << madness::archive::wrap(host_ptr(), s);
     } else {
       std::size_t s;
       ar & s;
       reset(s);
-      ar >> wrap(host_ptr(), s);  // MatrixTile<T>(bm.rows(), bm.cols());
+      ar >> madness::archive::wrap(host_ptr(), s);  // MatrixTile<T>(bm.rows(), bm.cols());
     }
   }
 #endif // TTG_SERIALIZATION_SUPPORTS_MADNESS

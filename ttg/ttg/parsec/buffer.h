@@ -40,6 +40,17 @@ namespace detail {
     }
   };
 
+  /* overloads for pointers and smart pointers */
+  template<typename T>
+  inline T* to_address(T* ptr) {
+    return ptr;
+  }
+
+  template<typename T>
+  inline auto to_address(T&& ptr) {
+    return ptr.get(); // smart pointer
+  }
+
   /**
    * Wrapper type to carry the Allocator into types that are using
    * the PaRSEC object system.
@@ -65,7 +76,7 @@ namespace detail {
         if constexpr (std::is_pointer_v<PtrT>) {
           m_ptr = allocator_traits::allocate(m_allocator, size);
         }
-        this->device_private = &(*m_ptr);
+        this->device_private = m_ptr;
         m_size = size;
       }
 
@@ -84,7 +95,7 @@ namespace detail {
         constexpr const bool is_empty_allocator = std::is_same_v<Allocator, empty_allocator<value_type>>;
         assert(is_empty_allocator);
         m_ptr = std::move(ptr);
-        this->device_private = &(*m_ptr);
+        this->device_private = to_address(m_ptr);
       }
 
       void construct(std::size_t size, const allocator_type& alloc = allocator_type()) {
@@ -92,7 +103,7 @@ namespace detail {
         assert(!is_empty_allocator);
         m_allocator = alloc;
         allocate(size);
-        this->device_private = &(*m_ptr);
+        this->device_private = m_ptr;
       }
 
       ~data_copy_type() {
@@ -202,7 +213,7 @@ namespace detail {
 
       /* create the host copy and allocate host memory */
       data_copy_type *copy = PARSEC_OBJ_NEW(data_copy_type);
-      copy->construct(ptr, size);
+      copy->construct(std::move(ptr), size);
       parsec_data_copy_attach(data, copy, 0);
 
       /* adjust data flags */
@@ -279,25 +290,12 @@ public:
   , m_count(n)
   { }
 
-  Buffer(std::shared_ptr<element_type> ptr)
-  : m_data(detail::ttg_parsec_data_types<std::shared_ptr<element_type>,
-                                         detail::empty_allocator<element_type>>
-                                        ::create_data(ptr, sizeof(element_type)))
-  , m_count(1)
-  { }
-
-  Buffer(std::unique_ptr<element_type[]> ptr, std::size_t n)
-  : m_data(detail::ttg_parsec_data_types<std::unique_ptr<element_type[]>,
+  template<typename Deleter>
+  Buffer(std::unique_ptr<element_type[], Deleter> ptr, std::size_t n)
+  : m_data(detail::ttg_parsec_data_types<std::unique_ptr<element_type[], Deleter>,
                                          detail::empty_allocator<element_type>>
                                         ::create_data(ptr, n*sizeof(element_type)))
   , m_count(n)
-  { }
-
-  Buffer(std::unique_ptr<element_type> ptr)
-  : m_data(detail::ttg_parsec_data_types<std::unique_ptr<element_type>,
-                                         detail::empty_allocator<element_type>>
-                                        ::create_data(ptr, sizeof(element_type)))
-  , m_count(1)
   { }
 
   virtual ~Buffer() {
