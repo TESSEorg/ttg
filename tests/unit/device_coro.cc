@@ -61,10 +61,10 @@ namespace madness {
     };
   }  // namespace archive
 }  // namespace madness
-#endif // TTG_SERIALIZATION_SUPPORTS_MADNESS
 
 static_assert(madness::is_serializable_v<madness::archive::BufferInspectorArchive<ttg::detail::buffer_apply_dummy_fn>, derived_value_t>);
-static_assert(ttg::detail::has_buffer_apply_v<derived_value_t>);
+static_assert(ttg::detail::has_buffer_apply_v<nested_value_t>);
+
 
 TEST_CASE("Device", "coro") {
   SECTION("buffer-inspection") {
@@ -500,3 +500,5 @@ TEST_CASE("Device", "coro") {
 }
 
 #endif // TTG_IMPL_DEVICE_SUPPORT
+
+#endif // TTG_SERIALIZATION_SUPPORTS_MADNESS
