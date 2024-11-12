@@ -581,9 +581,6 @@ public:
 #endif // TTG_SERIALIZATION_SUPPORTS_MADNESS
 };
 
-
-static_assert(madness::is_serializable_v<madness::archive::BufferInspectorArchive<ttg::detail::buffer_apply_dummy_fn>, const Buffer<double, std::allocator<double>>&>);
-
 namespace detail {
   template<typename T, typename A>
   parsec_data_t* get_parsec_data(const ttg_parsec::Buffer<T, A>& db) {
