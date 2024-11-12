@@ -35,38 +35,47 @@ namespace ttg_parsec {
       parsec_data_t* data = detail::get_parsec_data(view);
       /* TODO: check whether the device is current */
 
-      auto access = PARSEC_FLOW_ACCESS_RW;
-      if constexpr (std::is_const_v<view_type>) {
-        // keep the flow at RW if it was RW to make sure we pull the data back out eventually
-        //if (flows[I].flow_flags != PARSEC_FLOW_ACCESS_RW) {
+
+      if (nullptr != data) {
+        auto access = PARSEC_FLOW_ACCESS_RW;
+        if constexpr (std::is_const_v<view_type>) {
+          // keep the flow at RW if it was RW to make sure we pull the data back out eventually
           access = PARSEC_FLOW_ACCESS_READ;
-        //}
-      } else if constexpr (ttg::meta::is_devicescratch_v<view_type>) {
-        if (view.scope() == ttg::scope::Allocate) {
-          access = PARSEC_FLOW_ACCESS_WRITE;
+        } else if constexpr (ttg::meta::is_devicescratch_v<view_type>) {
+          if (view.scope() == ttg::scope::Allocate) {
+            access = PARSEC_FLOW_ACCESS_WRITE;
+          }
         }
+
+        /* build the flow */
+        /* TODO: reuse the flows of the task class? How can we control the sync direction then? */
+        flows[I] = parsec_flow_t{.name = nullptr,
+                                .sym_type = PARSEC_SYM_INOUT,
+                                .flow_flags = static_cast<uint8_t>(access),
+                                .flow_index = I,
+                                .flow_datatype_mask = ~0 };
+
+        gpu_task->flow_nb_elts[I] = data->nb_elts; // size in bytes
+        gpu_task->flow[I] = &flows[I];
+
+        /* set the input data copy, parsec will take care of the transfer
+        * and the buffer will look at the parsec_data_t for the current pointer */
+        //detail::parsec_ttg_caller->parsec_task.data[I].data_in = data->device_copies[data->owner_device];
+        assert(nullptr != data->device_copies[0]->original);
+        caller->parsec_task.data[I].data_in = data->device_copies[0];
+        caller->parsec_task.data[I].source_repo_entry = NULL;
+
+      } else {
+        /* ignore the flow */
+        flows[I] = parsec_flow_t{.name = nullptr,
+                                 .sym_type = PARSEC_FLOW_ACCESS_NONE,
+                                 .flow_flags = 0,
+                                 .flow_index = I,
+                                 .flow_datatype_mask = ~0 };
+        gpu_task->flow[I] = &flows[I];
+        gpu_task->flow_nb_elts[I] = 0; // size in bytes
+        caller->parsec_task.data[I].data_in = nullptr;
       }
-
-      //std::cout << "register_device_memory task " << detail::parsec_ttg_caller << " data " << I << " "
-      //          << data << " size " << data->nb_elts << std::endl;
-
-      /* build the flow */
-      /* TODO: reuse the flows of the task class? How can we control the sync direction then? */
-      flows[I] = parsec_flow_t{.name = nullptr,
-                               .sym_type = PARSEC_SYM_INOUT,
-                               .flow_flags = static_cast<uint8_t>(access),
-                               .flow_index = I,
-                               .flow_datatype_mask = ~0 };
-
-      gpu_task->flow_nb_elts[I] = data->nb_elts; // size in bytes
-      gpu_task->flow[I] = &flows[I];
-
-      /* set the input data copy, parsec will take care of the transfer
-       * and the buffer will look at the parsec_data_t for the current pointer */
-      //detail::parsec_ttg_caller->parsec_task.data[I].data_in = data->device_copies[data->owner_device];
-      assert(nullptr != data->device_copies[0]->original);
-      caller->parsec_task.data[I].data_in = data->device_copies[0];
-      caller->parsec_task.data[I].source_repo_entry = NULL;
 
       if constexpr (sizeof...(Is) > 0) {
         is_current |= register_device_memory(views, std::index_sequence<Is...>{});
@@ -118,12 +127,13 @@ namespace ttg_parsec {
       parsec_gpu_exec_stream_t *stream = detail::parsec_ttg_caller->dev_ptr->stream;
 
       /* enqueue the transfer into the compute stream to come back once the compute and transfer are complete */
-      parsec_device_gpu_module_t *device_module = detail::parsec_ttg_caller->dev_ptr->device;
-      device_module->memcpy_async(device_module, stream,
-                                  data->device_copies[0]->device_private,
-                                  data->device_copies[data->owner_device]->device_private,
-                                  data->nb_elts, parsec_device_gpu_transfer_direction_d2h);
-
+      if (data->owner_device != 0) {
+        parsec_device_gpu_module_t *device_module = detail::parsec_ttg_caller->dev_ptr->device;
+        device_module->memcpy_async(device_module, stream,
+                                    data->device_copies[0]->device_private,
+                                    data->device_copies[data->owner_device]->device_private,
+                                    data->nb_elts, parsec_device_gpu_transfer_direction_d2h);
+      }
       if constexpr (sizeof...(Is) > 0) {
         // recursion
         mark_device_out(views, std::index_sequence<Is...>{});

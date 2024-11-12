@@ -55,7 +55,7 @@ namespace ttg_parsec {
   static void ttg_broadcast(ttg::World world, T &data, int source_rank);
 
   /* device definitions */
-  template<typename T, typename Allocator = std::allocator<T>>
+  template<typename T, typename Allocator = std::allocator<std::decay_t<T>>>
   struct Buffer;
 
   template<typename T>
