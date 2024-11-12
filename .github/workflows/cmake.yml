@@ -41,7 +41,7 @@ jobs:
         -DCMAKE_CXX_STANDARD=20
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: Install prerequisite MacOS packages
       if: ${{ matrix.os == 'macos-latest' }}
