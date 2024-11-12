@@ -186,6 +186,10 @@ public:
     throw std::runtime_error("not implemented yet");
   }
 
+  bool empty() const {
+    return (m_host_data == nullptr);
+  }
+
   /* TODO: can we do this automatically?
    * Pin the memory on all devices we currently track.
    * Pinned memory won't be released by PaRSEC and can be used

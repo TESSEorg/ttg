@@ -14,6 +14,7 @@
 #include "ttg/base/tt.h"
 #include "ttg/func.h"
 #include "ttg/madness/device.h"
+#include "ttg/madness/devicefunc.h"
 #include "ttg/runtimes.h"
 #include "ttg/tt.h"
 #include "ttg/util/bug.h"
