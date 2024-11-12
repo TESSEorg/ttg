@@ -5,7 +5,7 @@
 
 #include "ttg/fwd.h"
 #include "ttg/util/meta.h"
-
+#include "ttg/serialization.h"
 #include <memory>
 
 namespace ttg {
@@ -48,6 +48,9 @@ namespace detail {
 
   template<typename T>
   constexpr const bool has_buffer_apply_v = has_buffer_apply<T>::value;
+
+  /* dummy function type used to check whether buffer_apply is available */
+  using buffer_apply_dummy_fn = decltype([]<typename T, typename A>(const ttg::Buffer<T, A>&){});
 } // namespace detail
 
 } // namespace ttg
@@ -135,9 +138,70 @@ namespace ttg::detail {
     ar & t;
   }
 
-  using buffer_apply_dummy_fn = decltype([]<typename T, typename A>(const ttg::Buffer<T, A>&){});
   template<typename T>
   struct has_buffer_apply_helper<T, std::enable_if_t<madness::is_serializable_v<madness::archive::BufferInspectorArchive<buffer_apply_dummy_fn>, std::decay_t<T>>>>
+  : std::true_type
+  { };
+
+} // namespace ttg::detail
+
+#elif defined(TTG_SERIALZIATION_SUPPORTS_BOOST)
+
+#include <boost/archive/detail/common_oarchive.hpp>
+namespace ttg::detail {
+
+  template<typename Fn>
+  struct BufferInspectorArchive
+  : public boost::archive::detail::common_oarchive<BufferInspectorArchive<Fn>> {
+  private:
+    Fn m_fn;
+
+    friend class boost::archive::save_access;
+
+    /// Stores (counts) data into the memory buffer.
+
+    /// The function only appears (due to \c enable_if) if \c T is
+    /// serializable.
+    /// \tparam T Type of the data to be stored (counted).
+    /// \param[in] t Pointer to the data to be stored (counted).
+    /// \param[in] n Size of data to be stored (counted).
+    template <typename T, typename Allocator>
+    void save(const ttg::Buffer<T, Allocator>* t) const {
+      /* invoke the function on buffer */
+      m_fn(t[i]);
+    }
+
+    template <typename T>
+    void save(const T& t) const {
+      /* nothing to be done for other types */
+    }
+
+  public:
+    template<typename _Fn>
+    BufferInspectorArchive(_Fn&& fn)
+    : m_fn(fn)
+    { }
+
+    // archives are expected to support this function
+    void save_binary(void *address, std::size_t count)
+    {
+      /* nothing to do */
+    }
+  };
+
+  /* deduction guide */
+  template<typename Fn>
+  BufferInspectorArchive(Fn&&) -> BufferInspectorArchive<Fn>;
+
+  template<typename T, typename Fn>
+  requires(is_boost_serializable_v<madness::archive::BufferInspectorArchive<Fn>, std::decay<T>>)
+  void buffer_apply(T&& t, Fn&& fn) {
+    BufferInspectorArchive ar(std::forward<Fn>(fn));
+    ar & t;
+  }
+
+  template<typename T>
+  struct has_buffer_apply_helper<T, std::enable_if_t<is_boost_serializable_v<BufferInspectorArchive<buffer_apply_dummy_fn>, std::decay_t<T>>>>
   : std::true_type
   { };
 
