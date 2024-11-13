@@ -487,12 +487,7 @@ public:
   /* Reallocate the buffer with count elements */
   void reset(std::size_t n, ttg::scope scope = ttg::scope::SyncIn) {
     release_data();
-
-    if (n > 0) {
-      m_data = detail::ttg_parsec_data_types<element_type*, Allocator>
-                                            ::create_data(n*sizeof(element_type));
-    }
-
+    m_data = detail::ttg_parsec_data_types<T*, Allocator>::create_data(n*sizeof(element_type), scope);
     m_count = n;
   }
 
@@ -526,8 +521,8 @@ public:
 
   void prefer_device(ttg::device::Device dev) {
     /* only set device if the host has the latest copy as otherwise we might end up with a stale copy */
-    if (dev.is_device() && this->parsec_data()->owner_device == 0) {
-      parsec_advise_data_on_device(this->parsec_data(), detail::ttg_device_to_parsec_device(dev),
+    if (dev.is_device() && m_data->owner_device == 0) {
+      parsec_advise_data_on_device(m_data, detail::ttg_device_to_parsec_device(dev),
                                    PARSEC_DEV_DATA_ADVICE_PREFERRED_DEVICE);
     }
   }
@@ -539,7 +534,7 @@ public:
     add_copy(detail::ttg_device_to_parsec_device(dev), ptr);
     if (is_current) {
       // mark the data as being current on the new device
-      parsec_data()->owner_device = detail::ttg_device_to_parsec_device(dev);
+      m_data->owner_device = detail::ttg_device_to_parsec_device(dev);
     }
   }
 
