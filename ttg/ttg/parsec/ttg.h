@@ -701,7 +701,7 @@ namespace ttg_parsec {
     template <typename Value>
     inline ttg_data_copy_t *create_new_datacopy(Value &&value) {
       using value_type = std::decay_t<Value>;
-      ttg_data_copy_t *copy;
+      ttg_data_copy_t *copy = nullptr;
       if constexpr (std::is_base_of_v<ttg::TTValue<value_type>, value_type> &&
                     std::is_constructible_v<value_type, decltype(value)>) {
         copy = new value_type(std::forward<Value>(value));
@@ -1472,36 +1472,6 @@ namespace ttg_parsec {
       return rc;
     }
 
-    static void
-    static_device_stage_in(parsec_gpu_task_t        *gtask,
-                         uint32_t                  flow_mask,
-                         parsec_gpu_exec_stream_t *gpu_stream) {
-      /* register any memory that hasn't been registered yet */
-      for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
-        if (flow_mask & (1<<i)) {
-          task_t *task = (task_t*)gtask->ec;
-          parsec_data_copy_t *copy = task->parsec_task.data[i].data_in;
-          if (0 == (copy->flags & TTG_PARSEC_DATA_FLAG_REGISTERED)) {
-#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
-            // register host memory for faster device access
-            cudaError_t status;
-            //status = cudaHostRegister(copy->device_private, gtask->flow_nb_elts[i], cudaHostRegisterPortable);
-            //assert(cudaSuccess == status);
-#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
-            //copy->flags |= TTG_PARSEC_DATA_FLAG_REGISTERED;
-          }
-        }
-      }
-    }
-
-    static int
-    static_device_stage_in_hook(parsec_gpu_task_t        *gtask,
-                                uint32_t                  flow_mask,
-                                parsec_gpu_exec_stream_t *gpu_stream) {
-      static_device_stage_in(gtask, flow_mask, gpu_stream);
-      return parsec_default_gpu_stage_in(gtask, flow_mask, gpu_stream);
-    }
-
     template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t device_static_evaluate(parsec_task_t* parsec_task) {
 
@@ -1515,7 +1485,7 @@ namespace ttg_parsec {
         PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_list_item_t);
         gpu_task->ec = parsec_task;
         gpu_task->task_type = 0; // user task
-        gpu_task->last_data_check_epoch = -1; // used internally
+        gpu_task->last_data_check_epoch = 0; // used internally
         gpu_task->pushout = 0;
         gpu_task->submit = &TT::device_static_submit<Space>;
 
@@ -1624,7 +1594,7 @@ namespace ttg_parsec {
           if constexpr (Space == ttg::ExecutionSpace::CUDA) {
             /* TODO: we need custom staging functions because PaRSEC looks at the
              *       task-class to determine the number of flows. */
-            gpu_task->stage_in  = static_device_stage_in_hook;
+            gpu_task->stage_in  = parsec_default_gpu_stage_in;
             gpu_task->stage_out = parsec_default_gpu_stage_out;
             return parsec_device_kernel_scheduler(&device->super, es, gpu_task);
           }
@@ -1633,7 +1603,7 @@ namespace ttg_parsec {
 #if defined(PARSEC_HAVE_DEV_HIP_SUPPORT)
         case PARSEC_DEV_HIP:
           if constexpr (Space == ttg::ExecutionSpace::HIP) {
-            gpu_task->stage_in  = static_device_stage_in_hook;
+            gpu_task->stage_in  = parsec_default_gpu_stage_in;
             gpu_task->stage_out = parsec_default_gpu_stage_out;
             return parsec_device_kernel_scheduler(&device->super, es, gpu_task);
           }
@@ -1642,7 +1612,7 @@ namespace ttg_parsec {
 #if defined(PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT)
         case PARSEC_DEV_LEVEL_ZERO:
           if constexpr (Space == ttg::ExecutionSpace::L0) {
-            gpu_task->stage_in  = static_device_stage_in_hook;
+            gpu_task->stage_in  = parsec_default_gpu_stage_in;
             gpu_task->stage_out = parsec_default_gpu_stage_out;
             return parsec_device_kernel_scheduler(&device->super, es, gpu_task);
           }
@@ -2399,7 +2369,9 @@ namespace ttg_parsec {
       auto &reducer = std::get<i>(input_reducers);
       bool release = false;
       bool remove_from_hash = true;
+#if defined(PARSEC_PROF_GRAPHER)
       bool discover_task = true;
+#endif
       bool get_pull_data = false;
       bool has_lock = false;
       /* If we have only one input and no reducer on that input we can skip the hash table */
@@ -2795,7 +2767,6 @@ namespace ttg_parsec {
           num_iovecs = std::distance(std::begin(iovs), std::end(iovs));
           /* pack the metadata */
           auto metadata = descr.get_metadata(*const_cast<decvalueT *>(value_ptr));
-          size_t metadata_size = sizeof(metadata);
           pos = pack(metadata, msg->bytes, pos);
           //std::cout << "set_arg_impl splitmd num_iovecs " << num_iovecs << std::endl;
           handle_iovec_fn(iovs);
@@ -2970,7 +2941,6 @@ namespace ttg_parsec {
           ttg::SplitMetadataDescriptor<decvalueT> descr;
           /* pack the metadata */
           auto metadata = descr.get_metadata(value);
-          size_t metadata_size = sizeof(metadata);
           pos = pack(metadata, msg->bytes, pos);
           auto iovs = descr.get_data(*const_cast<decvalueT *>(&value));
           num_iovs = std::distance(std::begin(iovs), std::end(iovs));
