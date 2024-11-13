@@ -146,8 +146,8 @@ namespace ttg_parsec {
       MSG_SET_ARGSTREAM_SIZE = 1,
       MSG_FINALIZE_ARGSTREAM_SIZE = 2,
       MSG_GET_FROM_PULL = 3 } fn_id_t;
-    uint32_t taskpool_id = -1;
-    uint64_t op_id = -1;
+    uint32_t taskpool_id = std::numeric_limits<uint32_t>::max();
+    uint64_t op_id = std::numeric_limits<uint64_t>::max();
     std::size_t key_offset = 0;
     fn_id_t fn_id = MSG_INVALID;
     std::int8_t num_iovecs = 0;
@@ -334,7 +334,7 @@ namespace ttg_parsec {
     void create_tpool() {
       assert(nullptr == tpool);
       tpool = PARSEC_OBJ_NEW(parsec_taskpool_t);
-      tpool->taskpool_id = -1;
+      tpool->taskpool_id = std::numeric_limits<uint32_t>::max();
       tpool->update_nb_runtime_task = parsec_add_fetch_runtime_task;
       tpool->taskpool_type = PARSEC_TASKPOOL_TYPE_TTG;
       tpool->taskpool_name = strdup("TTG Taskpool");
