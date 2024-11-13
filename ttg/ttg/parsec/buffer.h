@@ -36,7 +36,7 @@ namespace detail {
     }
 
     void deallocate(value_type* ptr, std::size_t size) {
-      throw std::runtime_error("Deallocate on empty allocator!");
+      /* nothing to be done; will be called from ~data_copy_type() */
     }
   };
 
