@@ -1403,7 +1403,7 @@ namespace ttg_parsec {
 
       task_t *task = (task_t*)gpu_task->ec;
       // get the device task from the coroutine handle
-      ttg::device::Task dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
+      auto dev_task = ttg::device::detail::device_task_handle_type<Space>::from_address(task->suspended_task_address);
 
       task->dev_ptr->stream = gpu_stream;
 
@@ -1450,7 +1450,7 @@ namespace ttg_parsec {
       int rc = PARSEC_HOOK_RETURN_DONE;
       if (nullptr != task->suspended_task_address) {
         /* Get a new handle for the promise*/
-        dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
+        dev_task = ttg::device::detail::device_task_handle_type<Space>::from_address(task->suspended_task_address);
         dev_data = dev_task.promise();
 
         assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_KERNEL ||
@@ -1569,10 +1569,10 @@ namespace ttg_parsec {
       }
 
       // get the device task from the coroutine handle
-      auto dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
+      auto dev_task = ttg::device::detail::device_task_handle_type<Space>::from_address(task->suspended_task_address);
 
       // get the promise which contains the views
-      ttg::device::detail::device_task_promise_type& dev_data = dev_task.promise();
+      ttg::device::detail::device_task_promise_type<Space>& dev_data = dev_task.promise();
 
       if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT ||
           dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_COMPLETE) {
@@ -1653,14 +1653,14 @@ namespace ttg_parsec {
 
         if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
           auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(task->key, std::move(input), obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(Space, suspended_task_address, task->coroutine_id, baseobj->template op<Space>(task->key, std::move(input), obj->output_terminals));
         } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(task->key, obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(Space, suspended_task_address, task->coroutine_id, baseobj->template op<Space>(task->key, obj->output_terminals));
         } else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
           auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(std::move(input), obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(Space, suspended_task_address, task->coroutine_id, baseobj->template op<Space>(std::move(input), obj->output_terminals));
         } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(Space, suspended_task_address, task->coroutine_id, baseobj->template op<Space>(obj->output_terminals));
         } else {
           ttg::abort();
         }
@@ -1671,50 +1671,47 @@ namespace ttg_parsec {
 #ifdef TTG_HAVE_COROUTINE
         assert(task->coroutine_id != ttg::TaskCoroutineID::Invalid);
 
-#ifdef TTG_HAVE_DEVICE
         if (task->coroutine_id == ttg::TaskCoroutineID::DeviceTask) {
-          ttg::device::Task coro = ttg::device::detail::device_task_handle_type::from_address(suspended_task_address);
+          auto coro = ttg::device::detail::device_task_handle_type<Space>::from_address(suspended_task_address);
           assert(detail::parsec_ttg_caller == nullptr);
           detail::parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
           // TODO: unify the outputs tls handling
           auto old_output_tls_ptr = task->tt->outputs_tls_ptr_accessor();
           task->tt->set_outputs_tls_ptr();
           coro.resume();
-          if (coro.completed()) {
+          if (coro.done()) {
             coro.destroy();
             suspended_task_address = nullptr;
           }
           task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
           detail::parsec_ttg_caller = nullptr;
-        } else
-#endif  // TTG_HAVE_DEVICE
-      if (task->coroutine_id == ttg::TaskCoroutineID::ResumableTask) {
-        auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address));
-        assert(ret.ready());
-        auto old_output_tls_ptr = task->tt->outputs_tls_ptr_accessor();
-        task->tt->set_outputs_tls_ptr();
-        ret.resume();
-        if (ret.completed()) {
-          ret.destroy();
-          suspended_task_address = nullptr;
-        }
-        else { // not yet completed
-          // leave suspended_task_address as is
-
-          // right now can events are not properly implemented, we are only testing the workflow with dummy events
-          // so mark the events finished manually, parsec will rerun this task again and it should complete the second time
-          auto events = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address)).events();
-          for (auto &event_ptr : events) {
-            event_ptr->finish();
+        } else if (task->coroutine_id == ttg::TaskCoroutineID::ResumableTask) {
+          auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address));
+          assert(ret.ready());
+          auto old_output_tls_ptr = task->tt->outputs_tls_ptr_accessor();
+          task->tt->set_outputs_tls_ptr();
+          ret.resume();
+          if (ret.done()) {
+            ret.destroy();
+            suspended_task_address = nullptr;
           }
-          assert(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address).promise().ready());
+          else { // not yet completed
+            // leave suspended_task_address as is
+
+            // right now can events are not properly implemented, we are only testing the workflow with dummy events
+            // so mark the events finished manually, parsec will rerun this task again and it should complete the second time
+            auto events = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address)).events();
+            for (auto &event_ptr : events) {
+              event_ptr->finish();
+            }
+            assert(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address).promise().ready());
+          }
+          task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
+          detail::parsec_ttg_caller = nullptr;
+          task->suspended_task_address = suspended_task_address;
         }
-        task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
-        detail::parsec_ttg_caller = nullptr;
-        task->suspended_task_address = suspended_task_address;
-      }
-      else
-        ttg::abort();  // unrecognized task id
+        else
+          ttg::abort();  // unrecognized task id
 #else // TTG_HAVE_COROUTINE
       ttg::abort();  // should not happen
 #endif  // TTG_HAVE_COROUTINE
@@ -1752,9 +1749,9 @@ namespace ttg_parsec {
         assert(detail::parsec_ttg_caller == NULL);
         detail::parsec_ttg_caller = task;
         if constexpr (!ttg::meta::is_void_v<keyT>) {
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(task->key, obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(Space, suspended_task_address, task->coroutine_id, baseobj->template op<Space>(task->key, obj->output_terminals));
         } else if constexpr (ttg::meta::is_void_v<keyT>) {
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(Space, suspended_task_address, task->coroutine_id, baseobj->template op<Space>(obj->output_terminals));
         } else  // unreachable
           ttg:: abort();
         detail::parsec_ttg_caller = NULL;
@@ -2017,7 +2014,7 @@ namespace ttg_parsec {
       detail::parsec_ttg_caller = parsec_ttg_caller_save;
 
       /* release the dummy task */
-      complete_task_and_release(es, &dummy->parsec_task);
+      complete_task_and_release<ttg::ExecutionSpace::Host>(es, &dummy->parsec_task);
       parsec_thread_mempool_free(mempool, &dummy->parsec_task);
     }
 
@@ -3313,16 +3310,19 @@ namespace ttg_parsec {
       }
     }
 
-    void copy_mark_pushout(detail::ttg_data_copy_t *copy) {
+    void copy_mark_pushout(detail::parsec_ttg_task_base_t *caller, detail::ttg_data_copy_t *copy) {
 
-      assert(detail::parsec_ttg_caller->dev_ptr && detail::parsec_ttg_caller->dev_ptr->gpu_task);
-      parsec_gpu_task_t *gpu_task = detail::parsec_ttg_caller->dev_ptr->gpu_task;
+      assert(caller->dev_ptr && caller->dev_ptr->gpu_task);
+      parsec_gpu_task_t *gpu_task = caller->dev_ptr->gpu_task;
+      if (nullptr == gpu_task->flow[0]) {
+        return; // this task has no flows because we skipped flow creation for host tasks
+      }
       auto check_parsec_data = [&](parsec_data_t* data) {
         if (data->owner_device != 0) {
           /* find the flow */
           int flowidx = 0;
           while (flowidx < MAX_PARAM_COUNT &&
-                gpu_task->flow[flowidx]->flow_flags != PARSEC_FLOW_ACCESS_NONE) {
+                 gpu_task->flow[flowidx]->flow_flags != PARSEC_FLOW_ACCESS_NONE) {
             if (detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in->original == data) {
               /* found the right data, set the corresponding flow as pushout */
               break;
@@ -3348,22 +3348,25 @@ namespace ttg_parsec {
 
     /* check whether a data needs to be pushed out */
     template <std::size_t i, typename Value, typename RemoteCheckFn>
-    std::enable_if_t<!std::is_void_v<std::decay_t<Value>>,
-                     void>
+    std::enable_if_t<!std::is_void_v<std::decay_t<Value>>, void>
     do_prepare_send(const Value &value, RemoteCheckFn&& remote_check) {
       using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;
       static constexpr const bool value_is_const = std::is_const_v<valueT>;
 
+      detail::parsec_ttg_task_base_t *caller = detail::parsec_ttg_caller;
+
+      // host tasks have no dev_ptr
+      if (nullptr == caller->dev_ptr) return;
+
       /* get the copy */
       detail::ttg_data_copy_t *copy;
-      copy = detail::find_copy_in_task(detail::parsec_ttg_caller, &value);
+      copy = detail::find_copy_in_task(caller, &value);
 
       /* if there is no copy we don't need to prepare anything */
       if (nullptr == copy) {
         return;
       }
 
-      detail::parsec_ttg_task_base_t *caller = detail::parsec_ttg_caller;
       bool need_pushout = false;
 
       if (caller->data_flags & detail::ttg_parsec_data_flags::MARKED_PUSHOUT) {
@@ -3375,7 +3378,7 @@ namespace ttg_parsec {
       auto &reducer = std::get<i>(input_reducers);
       if (reducer) {
         /* reductions are currently done only on the host so push out */
-        copy_mark_pushout(copy);
+        copy_mark_pushout(caller, copy);
         caller->data_flags |= detail::ttg_parsec_data_flags::MARKED_PUSHOUT;
         return;
       }
@@ -3384,6 +3387,9 @@ namespace ttg_parsec {
         if (caller->data_flags & detail::ttg_parsec_data_flags::IS_MODIFIED) {
           /* The data has been modified previously. PaRSEC requires us to pushout
            * data if we transition from a writer to one or more readers. */
+          /**
+           * TODO: check if there is only one device and avoid the pushout!
+           */
           need_pushout = true;
         }
 
@@ -3433,7 +3439,7 @@ namespace ttg_parsec {
       }
 
       if (need_pushout) {
-        copy_mark_pushout(copy);
+        copy_mark_pushout(caller, copy);
         caller->data_flags |= detail::ttg_parsec_data_flags::MARKED_PUSHOUT;
       }
     }
@@ -3695,6 +3701,7 @@ namespace ttg_parsec {
       junk[0]++;
     }
 
+    template<ttg::ExecutionSpace Space>
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *parsec_task) {
 
       //std::cout << "complete_task_and_release: task " << parsec_task << std::endl;
@@ -3712,7 +3719,7 @@ namespace ttg_parsec {
           //increment_data_versions(task, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
 
           // get the device task from the coroutine handle
-          auto dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
+          auto dev_task = ttg::device::detail::device_task_handle_type<Space>::from_address(task->suspended_task_address);
 
           // get the promise which contains the views
           auto dev_data = dev_task.promise();
@@ -3813,7 +3820,6 @@ namespace ttg_parsec {
       world_impl.taskpool()->nb_task_classes = std::max(world_impl.taskpool()->nb_task_classes, static_cast<decltype(world_impl.taskpool()->nb_task_classes)>(self.task_class_id+1));
       //    function_id_to_instance[self.task_class_id] = this;
       //self.incarnations = incarnations_array.data();
-//#if 0
       if constexpr (derived_has_cuda_op()) {
         self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CUDA;
@@ -3822,6 +3828,7 @@ namespace ttg_parsec {
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
+        self.complete_execution = complete_task_and_release<ttg::ExecutionSpace::CUDA>;
       } else if constexpr (derived_has_hip_op()) {
         self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
         ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_HIP;
@@ -3831,6 +3838,7 @@ namespace ttg_parsec {
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
+        self.complete_execution = complete_task_and_release<ttg::ExecutionSpace::HIP>;
 #if defined(PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT)
       } else if constexpr (derived_has_level_zero_op()) {
         self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
@@ -3841,6 +3849,7 @@ namespace ttg_parsec {
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
+        self.complete_execution = complete_task_and_release<ttg::ExecutionSpace::L0>;
 #endif // PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT
       } else {
         self.incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
@@ -3850,11 +3859,10 @@ namespace ttg_parsec {
         ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
         ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
         ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
+        self.complete_execution = complete_task_and_release<ttg::ExecutionSpace::Host>;
       }
-//#endif // 0
 
       self.release_task = &parsec_release_task_to_mempool_update_nbtasks;
-      self.complete_execution = complete_task_and_release;
 
       for (i = 0; i < MAX_PARAM_COUNT; i++) {
         parsec_flow_t *flow = new parsec_flow_t;

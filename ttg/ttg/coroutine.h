@@ -214,6 +214,7 @@ namespace ttg {
 
   // fwd declare all coro promise types that have not been declared yet
   namespace device::detail {
+    template<ttg::ExecutionSpace Space>
     struct device_task_promise_type;
   }  // namespace device::detail
 

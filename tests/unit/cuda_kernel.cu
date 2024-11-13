@@ -13,7 +13,10 @@ static __global__ void cu_increment_buffer(double* buffer, double* scratch) {
   }
 }
 
-void increment_buffer(double* buffer, std::size_t buffer_size, double* scratch, std::size_t scratch_size) {
+void increment_buffer_cuda(
+  double* buffer, std::size_t buffer_size,
+  double* scratch, std::size_t scratch_size)
+{
 
   cu_increment_buffer<<<1, buffer_size>>>(buffer, scratch);
 
