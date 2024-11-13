@@ -416,8 +416,7 @@ namespace ttg {
     std::get<i>(t).broadcast(keylist, copy_handler(std::forward<valueT>(value)));
   }
 
-  template <typename rangeT, typename valueT, typename... out_keysT, typename... out_valuesT,
-            ttg::Runtime Runtime = ttg::ttg_runtime>
+  template <typename rangeT, typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline void broadcast(std::size_t i, const rangeT &keylist, valueT &&value) {
     detail::value_copy_handler<Runtime> copy_handler;
     using key_t = decltype(*std::begin(keylist));
@@ -425,8 +424,7 @@ namespace ttg {
     terminal_ptr->broadcast(keylist, copy_handler(std::forward<valueT>(value)));
   }
 
-  template <size_t i, typename rangeT, typename valueT, typename... out_keysT, typename... out_valuesT,
-            ttg::Runtime Runtime = ttg::ttg_runtime>
+  template <size_t i, typename rangeT, typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline void broadcast(const rangeT &keylist, valueT &&value) {
     broadcast(i, keylist, std::forward<valueT>(value));
   }
@@ -505,7 +503,7 @@ namespace ttg {
     terminal_ptr->set_size(size);
   }
 
-  template <size_t i, typename keyT, typename... out_keysT, typename... out_valuesT>
+  template <size_t i, typename keyT>
   inline std::enable_if_t<!meta::is_void_v<keyT>, void> set_size(const keyT &key, const std::size_t size) {
     set_size(i, key, size);
   }

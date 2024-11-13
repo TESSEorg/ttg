@@ -306,8 +306,7 @@ namespace ttg::device {
       }
     }
 
-    template <size_t KeyId, size_t I, size_t... Is, typename... RangesT, typename valueT,
-              typename... out_keysT, typename... out_valuesT>
+    template <size_t KeyId, size_t I, size_t... Is, typename... RangesT, typename valueT>
     inline void broadcast(const std::tuple<RangesT...> &keylists, valueT &&value) {
       using key_t = typename broadcast_keylist_trait<
                       std::tuple_element_t<KeyId, std::tuple<std::remove_reference_t<RangesT>...>>
@@ -379,8 +378,7 @@ namespace ttg::device {
       }
     }
 
-    template <size_t KeyId, size_t I, size_t... Is, typename... RangesT,
-              typename... out_keysT, typename... out_valuesT>
+    template <size_t KeyId, size_t I, size_t... Is, typename... RangesT>
     inline void broadcastk(const std::tuple<RangesT...> &keylists) {
       using key_t = typename broadcast_keylist_trait<
                       std::tuple_element_t<KeyId, std::tuple<std::remove_reference_t<RangesT>...>>
