@@ -123,7 +123,6 @@ namespace ttg_parsec {
 
       /* get_parsec_data is overloaded for buffer and devicescratch */
       parsec_data_t* data = detail::get_parsec_data(view);
-      parsec_gpu_task_t *gpu_task = detail::parsec_ttg_caller->dev_ptr->gpu_task;
       parsec_gpu_exec_stream_t *stream = detail::parsec_ttg_caller->dev_ptr->stream;
 
       /* enqueue the transfer into the compute stream to come back once the compute and transfer are complete */

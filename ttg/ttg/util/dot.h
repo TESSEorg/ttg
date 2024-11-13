@@ -57,13 +57,12 @@ namespace ttg {
 
     void ttfunc(TTBase *tt) {
       std::string ttnm = nodename(tt);
-      bool is_ttg = true;
 
       const TTBase *ttc = reinterpret_cast<const TTBase*>(tt);
       build_ttg_hierarchy(ttc);
       if(!tt->is_ttg()) {
         std::stringstream ttss;
-        
+
         ttss << "        " << ttnm << " [shape=record,style=filled,fillcolor=gray90,label=\"{";
 
         size_t count = 0;
