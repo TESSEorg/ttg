@@ -14,17 +14,17 @@ TEST_CASE("constraints", "") {
   SECTION("manual") {
     ttg::Edge<Key, int> e;
     auto world = ttg::default_execution_context();
-    std::atomic<int> last_ord = 0;
+    std::atomic<int> check_ord = 1;
     std::atomic<int> cnt = 10;
     auto constraint = ttg::make_shared_constraint<ttg::SequencedKeysConstraint>([](const Key& k){ return k[1]; });
     auto tt = ttg::make_tt([&](const Key& key, const int& value){
-      int check_ord = last_ord;
-      std::cout << "key " << key[0] << ", " << key[1] << " check_ord " << check_ord << std::endl;
-      CHECK(((key[1] == check_ord) || (key[1] == check_ord+1)));
-      last_ord = key[1];
+      std::cout << "key " << key[0] << ", " << key[1] << " check_ord " << check_ord << " cnt " << cnt << std::endl;
+      CHECK((key[1] == check_ord));
       if (--cnt == 0) {
         cnt = 10;
-        constraint->release(check_ord+1);
+        check_ord++;
+        std::cout << "key " << key[0] << " releasing next ord " << check_ord << std::endl;
+        constraint->release(check_ord);
       }
     }, ttg::edges(e), ttg::edges());
     // every process executes all tasks
