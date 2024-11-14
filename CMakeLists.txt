@@ -121,6 +121,10 @@ endif(TTG_ENABLE_COROUTINES)
 #### CUDA: must come before PaRSEC
 ##########################
 if (TTG_ENABLE_CUDA)
+  # default to CUDA arch 5.2
+  if (NOT CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES 52)
+  endif (NOT CMAKE_CUDA_ARCHITECTURES)
   include(CheckLanguage)
   check_language(CUDA)
   if(CMAKE_CUDA_COMPILER)
