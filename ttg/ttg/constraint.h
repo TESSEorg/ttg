@@ -65,7 +65,7 @@ namespace ttg {
 
   template<typename Key,
            typename Ordinal = std::size_t,
-           typename Compare = std::less_equal<Ordinal>,
+           typename Compare = std::less<Ordinal>,
            typename Mapper = ttg::Void>
   struct SequencedKeysConstraint : public ConstraintBase<Key> {
 
@@ -95,9 +95,17 @@ namespace ttg {
       }
     };
 
+    bool comp_equal(const Ordinal& a, const Ordinal& b) const {
+      return (!m_order(a, b) && !m_order(b, a));
+    }
+
+    bool eligible(const Ordinal& ord) const {
+      return m_order(ord, m_current) || comp_equal(ord, m_current);
+    }
+
     bool check_key_impl(const key_type& key, Ordinal ord, ttg::TTBase *tt) {
       if (!m_stopped) {
-        if (m_order(ord, m_current)) {
+        if (eligible(ord)) {
           // key should be executed
           if (m_auto_release) { // only needed for auto-release
             m_active.fetch_add(1, std::memory_order_relaxed);
@@ -117,7 +125,7 @@ namespace ttg {
       }
       // key should be deferred
       auto g = this->lock_guard();
-      if (!m_stopped && m_order(ord, m_current)) {
+      if (!m_stopped && eligible(ord)) {
         // someone released this ordinal while we took the lock
         return true;
       }
@@ -176,7 +184,7 @@ namespace ttg {
         this->m_current = ord;
         return;
       }
-      if (!force_check && m_order(ord, this->m_current)) {
+      if (!force_check && eligible(ord)) {
         return; // already at the provided ordinal, nothing to be done
       }
       // trigger the next sequence(s) (m_sequence is ordered by ordinal)
@@ -185,14 +193,12 @@ namespace ttg {
         auto g = this->lock_guard();
         // set current ordinal
         this->m_current = ord;
-        {
-          for (auto it = this->m_sequence.begin(); it != this->m_sequence.end();) {
-            if (!this->m_order(it->first, this->m_current)) break;
-            // extract the next sequence
-            this->m_current = it->first;
-            seqs.push_back(std::move(it->second));
-            it = this->m_sequence.erase(it);
-          }
+        for (auto it = this->m_sequence.begin(); it != this->m_sequence.end();) {
+          if (!eligible(it->first)) break;
+          // extract the next sequence
+          this->m_current = it->first;
+          seqs.push_back(std::move(it->second));
+          it = this->m_sequence.erase(it);
         }
       }
       for (auto& elem : seqs) {
@@ -351,7 +357,7 @@ namespace ttg {
     -> SequencedKeysConstraint<
           std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>,
           std::decay_t<boost::callable_traits::return_type_t<Mapper>>,
-          std::less_equal<std::decay_t<boost::callable_traits::return_type_t<Mapper>>>,
+          std::less<std::decay_t<boost::callable_traits::return_type_t<Mapper>>>,
           std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>>, Mapper>
           >;
 
@@ -360,7 +366,7 @@ namespace ttg {
     -> SequencedKeysConstraint<
           std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>,
           std::decay_t<boost::callable_traits::return_type_t<Mapper>>,
-          std::less_equal<std::decay_t<boost::callable_traits::return_type_t<Mapper>>>,
+          std::less<std::decay_t<boost::callable_traits::return_type_t<Mapper>>>,
           std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>>, Mapper>
           >;
 
