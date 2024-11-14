@@ -75,6 +75,8 @@ namespace ttg {
     using compare_t = Compare;
     using base_t = ConstraintBase<Key>;
 
+    static_assert((!Compare{}(Ordinal{}, Ordinal{})), "Comparator must provide strict ordering.");
+
   protected:
     struct sequence_elem_t {
       std::map<ttg::TTBase*, std::vector<key_type>> m_keys;
