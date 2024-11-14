@@ -163,7 +163,7 @@ namespace btas {
   }
 }  // namespace btas
 #endif  // BTAS_IS_USABLE
-double gemm(double C, double A, double B) { return C + A * B; }
+inline void gemm(double& C, const double A, const double B) { C += A * B; }
 
 // template <typename _Scalar, int _Options, typename _StorageIndex>
 // struct colmajor_layout;
