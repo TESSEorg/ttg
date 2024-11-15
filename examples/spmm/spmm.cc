@@ -29,8 +29,7 @@
 #endif
 
 #include "ttg.h"
-
-using namespace ttg;
+#include "../ttg_matrix.h"
 
 #include "ttg/util/future.h"
 
@@ -39,12 +38,41 @@ using namespace ttg;
 
 #include "ttg/util/bug.h"
 
+#include "devicetensor.h"
+#include "devicegemm.h"
+
+using namespace ttg;
+
+#if defined(TTG_ENABLE_CUDA)
+#define HAVE_SPMM_DEVICE 1
+static constexpr ttg::ExecutionSpace space = ttg::ExecutionSpace::CUDA;
+#elif defined(TTG_ENABLE_HIP)
+#define HAVE_SPMM_DEVICE 1
+static constexpr ttg::ExecutionSpace space = ttg::ExecutionSpace::HIP;
+#elif defined(TTG_ENABLE_LEVEL_ZERO)
+#define HAVE_SPMM_DEVICE 1
+static constexpr ttg::ExecutionSpace space = ttg::ExecutionSpace::L0;
+#else
+static constexpr ttg::ExecutionSpace space = ttg::ExecutionSpace::Host;
+#endif
+
+/* set to true to automatically release constraints
+ * this removes the ability to control the window
+ * size and is equal to a window size of 1 */
+#define USE_AUTO_CONSTRAINT false
+
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 using scalar_t = double;
-using blk_t = btas::Tensor<scalar_t, btas::DEFAULT::range, btas::mohndle<btas::varray<scalar_t>, btas::Handle::shared_ptr>>;
 
-//#include <atomic>
-//static std::atomic<uint64_t> reduce_count = 0;
+#if HAVE_SPMM_DEVICE
+using blk_t = DeviceTensor<scalar_t, btas::DEFAULT::range,
+                           btas::mohndle<btas::varray<scalar_t,
+                                                      TiledArray::device_pinned_allocator<scalar_t>>,
+                                         btas::Handle::shared_ptr>>;
+#else   // HAVE_SPMM_DEVICE
+using blk_t = btas::Tensor<scalar_t, btas::DEFAULT::range, btas::mohndle<btas::varray<scalar_t>, btas::Handle::shared_ptr>>;
+#endif  // HAVE_SPMM_DEVICE
+
 
 #if defined(TTG_USE_PARSEC)
 namespace ttg {
@@ -101,7 +129,7 @@ using blk_t = double;
 template <typename T = blk_t>
 using SpMatrix = Eigen::SparseMatrix<T>;
 template <typename T = blk_t>
-using SpMatrixTriplet = Eigen::Triplet<T>;  // {row,col,value}
+using SpMatrixTriplet = ttg::matrix::Triplet<T>;  // {row,col,value}
 
 #if defined(BLOCK_SPARSE_GEMM) && defined(BTAS_IS_USABLE)
 
@@ -121,7 +149,7 @@ namespace btas {
   }
 
   template <typename T_, class Range_, class Store_>
-  btas::Tensor<T_, Range_, Store_> gemm(btas::Tensor<T_, Range_, Store_> &&C, const btas::Tensor<T_, Range_, Store_> &A,
+  void gemm(btas::Tensor<T_, Range_, Store_> &C, const btas::Tensor<T_, Range_, Store_> &A,
                                         const btas::Tensor<T_, Range_, Store_> &B) {
     using array = btas::DEFAULT::index<int>;
     if (C.empty()) {  // first contribution to C = allocate it and gemm with beta=0
@@ -131,11 +159,11 @@ namespace btas {
     else {   // subsequent contributions to C = gemm with beta=1
       btas::contract_222(1.0, A, array{1, 2}, B, array{2, 3}, 1.0, C, array{1, 3}, false, false);
     }
-    return std::move(C);
+    //return std::move(C);
   }
 }  // namespace btas
 #endif  // BTAS_IS_USABLE
-double gemm(double C, double A, double B) { return C + A * B; }
+inline void gemm(double& C, const double A, const double B) { C += A * B; }
 
 // template <typename _Scalar, int _Options, typename _StorageIndex>
 // struct colmajor_layout;
@@ -206,7 +234,9 @@ class Read_SpMatrix : public TT<Key<3>,
         const auto i = it.row();
         // IF the receiver uses the same keymap, these sends are local
         if (rank == this->ij_keymap_(Key<2>(std::initializer_list<long>({i, j})))) {
-          ::send<0>(Key<2>(std::initializer_list<long>({i, j})), it.value(), out);
+          ::send<0>(Key<2>(std::initializer_list<long>({i, j})),
+                           ttg::persistent(it.value()),
+                           out);
         }
       }
     }
@@ -230,14 +260,14 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, ttg:
       , write_back_(write_back)
   { }
 
-  void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
+  void op(const Key<2> &key, typename baseT::input_refs_tuple_type &&elem, std::tuple<> &) {
     if (write_back_) {
       std::lock_guard<std::mutex> lock(mtx_);
       ttg::trace("rank =", default_execution_context().rank(),
                 "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()), "spmm.cc Write_SpMatrix wrote {",
                 key[0], ",", key[1], "} = ", baseT::template get<0>(elem), " in ", static_cast<void *>(&matrix_),
                 " with mutex @", static_cast<void *>(&mtx_), " for object @", static_cast<void *>(this));
-      values_.emplace_back(key[0], key[1], baseT::template get<0>(elem));
+      values_.emplace_back(key[0], key[1], std::move(baseT::template get<0>(elem)));
     }
   }
 
@@ -269,7 +299,9 @@ class Write_SpMatrix : public TT<Key<2>, std::tuple<>, Write_SpMatrix<Blk>, ttg:
 
 /// @tparam KeyMap2 maps {i,j} to processor
 /// @tparam KeyMap3 maps {i,j,k} to processor
-template <typename Keymap2 = std::function<int(const Key<2> &)>, typename Keymap3 = std::function<int(const Key<3> &)>,
+template <ttg::ExecutionSpace Space = space,
+          typename Keymap2 = std::function<int(const Key<2> &)>,
+          typename Keymap3 = std::function<int(const Key<3> &)>,
           typename Blk = blk_t>
 class SpMM25D {
  public:
@@ -282,24 +314,31 @@ class SpMM25D {
           const std::vector<std::vector<long>> &b_cols_of_row,
           const std::vector<std::vector<long>> &b_rows_of_col, const std::vector<int> &mTiles,
           const std::vector<int> &nTiles, const std::vector<int> &kTiles, Keymap2 ij_keymap, Keymap3 ijk_keymap,
-          long R, long parallel_bcasts = 1)
+          long P, long Q, long R, long parallel_bcasts = 1, bool enable_device_map = true)
       : a_cols_of_row_(a_cols_of_row)
       , b_rows_of_col_(b_rows_of_col)
       , a_rows_of_col_(a_rows_of_col)
       , b_cols_of_row_(b_cols_of_row)
+      , k_cnt_(a_rows_of_col_.size()+1)
       , ij_keymap_(std::move(ij_keymap))
       , ijk_keymap_(std::move(ijk_keymap))
-      , parallel_bcasts_(parallel_bcasts) {
+      , parallel_bcasts_(std::max(parallel_bcasts, 1L))
+      , enable_device_map_(enable_device_map) {
     Edge<Key<2>, void> a_ctl, b_ctl;
     Edge<Key<2>, int> a_rowctl, b_colctl; // TODO: can we have multiple control inputs per TT?
-    bcast_a_ = std::make_unique<BcastA>(a, a_ctl, a_rowctl, local_a_ijk_, a_rows_of_col_, a_cols_of_row_, b_cols_of_row_,
-                                        ij_keymap_, ijk_keymap_, parallel_bcasts_);
+    auto constraint = ttg::make_shared_constraint<ttg::SequencedKeysConstraint<Key<2>>>(USE_AUTO_CONSTRAINT);
+    bcast_a_ = std::make_unique<BcastA>(a, local_a_ijk_, b_cols_of_row_, ij_keymap_, ijk_keymap_);
+    // add constraint with external mapper: key[1] represents `k`
+    bcast_a_->add_constraint(constraint, [](const Key<2>& key){ return key[1]; });
     local_bcast_a_ = std::make_unique<LocalBcastA>(local_a_ijk_, a_ijk_, b_cols_of_row_, ijk_keymap_);
-    bcast_b_ = std::make_unique<BcastB>(b, b_ctl, b_colctl, local_b_ijk_, a_rows_of_col_, b_cols_of_row_, b_rows_of_col_,
-                                        ij_keymap_, ijk_keymap_, parallel_bcasts_);
+    bcast_b_ = std::make_unique<BcastB>(b, local_b_ijk_, a_rows_of_col_, ij_keymap_, ijk_keymap_);
+    // add constraint with external mapper: key[0] represents `k`
+    bcast_b_->add_constraint(constraint, [](const Key<2>& key){ return key[0]; });
     local_bcast_b_ = std::make_unique<LocalBcastB>(local_b_ijk_, b_ijk_, a_rows_of_col_, ijk_keymap_);
-    multiplyadd_ = std::make_unique<MultiplyAdd>(a_ijk_, b_ijk_, c_ijk_, c_ij_p_, a_cols_of_row_,
-                                                 b_rows_of_col_, mTiles, nTiles, ijk_keymap_);
+    multiplyadd_ = std::make_unique<MultiplyAdd<Space>>(a_ijk_, b_ijk_, c_ijk_, c_ij_p_, a_cols_of_row_,
+                                                        b_rows_of_col_, mTiles, nTiles, ijk_keymap_, constraint,
+                                                        k_cnt_, P, Q, parallel_bcasts_, enable_device_map_);
+
     reduce_c_ = std::make_unique<ReduceC>(c_ij_p_, c, ij_keymap_);
     reduce_c_->template set_input_reducer<0>(
       [&](Blk &c_ij, const Blk &c_ij_p) {
@@ -314,6 +353,11 @@ class SpMM25D {
     auto world = ttg::default_execution_context();
     const auto my_rank = world.rank();
     std::vector<bool> c_ij_procmask(world.size(), false);
+    std::vector<unsigned long> first_k_map(world.size(), std::numeric_limits<unsigned long>::max());
+    std::size_t max_k = a_rows_of_col_.size();
+    std::vector<std::size_t> k_cnt;
+    k_cnt.resize(a_rows_of_col_.size(), 0);
+    int release_k = 0;
     for (auto i = 0ul; i != a_cols_of_row_.size(); ++i) {
       if (a_cols_of_row_[i].empty()) continue;
       for (auto j = 0ul; j != b_rows_of_col_.size(); ++j) {
@@ -326,7 +370,10 @@ class SpMM25D {
           while (have_k) {
             const auto pR = ijk_keymap_(Key<3>{i, j, k});
             assert(pR < c_ij_procmask.size());
+            k_cnt[k]++;
             c_ij_procmask[pR] = true;
+            // find the first k that is needed from us by this rank
+            first_k_map[pR] = std::min(first_k_map[pR], k);
             /* get next k */
             std::tie(k, have_k) = multiplyadd_->compute_next_k(i, j, k);
           }
@@ -338,61 +385,21 @@ class SpMM25D {
       }
     }
 
-    /* kick off the first broadcast in each row of A
-     * this is used to enforce strict ordering within a row of A */
-    for (int i = 0; i < a_cols_of_row_.size(); ++i) {
-      for (int k : a_cols_of_row_[i]) {
-        auto key = Key<2>(i, k);
-        if (world.rank() == ij_keymap_(key)) {
-          bcast_a_->template in<1>()->send(key, 0);
-          break;
-        }
-      }
+    k_cnt.push_back(1); // we always want to release the last k
+    assert(k_cnt.size() == k_cnt_.size());
+    // copy into atomic counters
+    std::size_t i = 0;
+    for (auto c : k_cnt) {
+      assert(i < k_cnt_.size());
+      k_cnt_[i++].store(c, std::memory_order_relaxed);
     }
 
-    /* initial ctl input for a number of bcasts for A
-     * this is used to limit the number of concurrent bcasts */
-    int to_start = parallel_bcasts;
-    for (int k = 0;
-          0 < to_start && k < a_rows_of_col_.size();
-          ++k) {
-      for (auto i : a_rows_of_col_[k]) {
-        auto key = Key<2>(i, k);
-        if (world.rank() == ij_keymap_(key)) {
-          //std::cout << "SPMM kick off BcastA " << key << std::endl;
-          bcast_a_->template in<2>()->sendk(key);
-          if (0 == --to_start) break;
-        }
-      }
-    }
-
-    /* kick off the first broadcast in each column of B
-     * this is used to enforce strict ordering within a column of B */
-    for (int j = 0; j < b_rows_of_col_.size(); ++j) {
-      for (int k : b_rows_of_col_[j]) {
-        auto key = Key<2>(k, j);
-        if (world.rank() == ij_keymap_(key)) {
-          //std::cout << "BcastB kick off " << key << std::endl;
-          bcast_b_->template in<1>()->send(key, 0);
-          break;
-        }
-      }
-    }
-
-    /* initial ctl input for bcasts for B */
-    to_start = parallel_bcasts;
-    for (int k = 0;
-          0 < to_start && k < b_cols_of_row_.size();
-          ++k) {
-      for (auto j : b_cols_of_row_[k]) {
-        auto key = Key<2>(k, j);
-        if (world.rank() == ij_keymap_(key)) {
-          //std::cout << "SPMM kick off BcastB " << key << std::endl;
-          bcast_b_->template in<2>()->sendk(key);
-          if (0 == --to_start) break;
-        }
-      }
-    }
+    /* release the first parallel_bcasts_ k that are non-zero */
+    auto k_cnt_iter = k_cnt.begin();
+    do {
+      k_cnt_iter = std::find_if(k_cnt_iter, k_cnt.end(), [](auto c){ return c > 0; });
+    } while (++k_cnt_iter != k_cnt.end() && std::distance(k_cnt_iter, k_cnt.end()) < parallel_bcasts_);
+    constraint->release(std::distance(k_cnt.begin(), k_cnt_iter));
 
     TTGUNUSED(bcast_a_);
     TTGUNUSED(bcast_b_);
@@ -402,7 +409,7 @@ class SpMM25D {
 
   /// Locally broadcast `A[i][k]` assigned to this processor `p` to matmul tasks `{i,j,k}` for all `j` such that
   /// `B[k][j]` exists AND `k` contribution to `C[i][j]` is assigned to this processor
-  class LocalBcastA : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastA, ttg::typelist<Blk>> {
+  class LocalBcastA : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastA, ttg::typelist<const Blk>> {
    public:
     using baseT = typename LocalBcastA::ttT;
 
@@ -439,32 +446,24 @@ class SpMM25D {
   };  // class LocalBcastA
 
   /// broadcast `A[i][k]` to all processors which will contain at least one `C[i][j]` such that `B[k][j]` exists
-  class BcastA : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>, Out<Key<2>, int>, Out<Key<2>, void>>, BcastA, ttg::typelist<Blk, int, void>> {
+  class BcastA : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastA, ttg::typelist<const Blk>> {
    public:
     using baseT = typename BcastA::ttT;
 
-    BcastA(Edge<Key<2>, Blk> &a_ik, Edge<Key<2>, void> &ctl,
-           Edge<Key<2>, int> &rowctl, Edge<Key<3>, Blk> &a_ikp,
-           const std::vector<std::vector<long>> &a_rows_of_col,
-           const std::vector<std::vector<long>> &a_cols_of_row,
+    BcastA(Edge<Key<2>, Blk> &a_ik, Edge<Key<3>, Blk> &a_ikp,
            const std::vector<std::vector<long>> &b_cols_of_row,
-           const Keymap2 &ij_keymap, const Keymap3 &ijk_keymap,
-           const int parallel_bcasts)
-        : baseT(edges(a_ik, rowctl, ctl), edges(a_ikp, rowctl, ctl), "SpMM25D::bcast_a", {"a_ik", "rowctl", "ctl"}, {"a_ikp", "rowctl", "ctl"}, ij_keymap)
-        , a_rows_of_col_(a_rows_of_col)
-        , a_cols_of_row_(a_cols_of_row)
+           const Keymap2 &ij_keymap, const Keymap3 &ijk_keymap)
+        : baseT(edges(a_ik), edges(a_ikp), "SpMM25D::bcast_a", {"a_ik"}, {"a_ikp"}, ij_keymap)
         , b_cols_of_row_(b_cols_of_row)
-        , ijk_keymap_(ijk_keymap)
-        , ij_keymap_(ij_keymap)
-        , parallel_bcasts_(parallel_bcasts) {
+        , ijk_keymap_(ijk_keymap) {
 
       this->set_priomap([](const Key<2>& key){
         return std::numeric_limits<int>::max() - key[0];
       });
     }
 
-    void op(const Key<2> &ik, typename baseT::input_values_tuple_type &&a_ik,
-            std::tuple<Out<Key<3>, Blk>, Out<Key<2>, int>, Out<Key<2>, void>> &outs) {
+    void op(const Key<2> &ik, typename baseT::input_refs_tuple_type &&a_ik,
+            std::tuple<Out<Key<3>, Blk>> &outs) {
       const auto i = ik[0]; // row
       const auto k = ik[1]; // col
       ttg::trace("BcastA(", i, ", ", k, ")");
@@ -482,86 +481,18 @@ class SpMM25D {
           ikp_keys.emplace_back(Key<3>({i, k, p}));
           procmap[p] = true;
         }
-        // TODO: debug
-        //if (p != world.rank() && ij_keymap_(Key<2>{k, j}) != p) {
-        //  std::cout << "[" << world.rank() << "] BCAST A " << ik << " for C update " << Key<3>({i, k, p}) << " on " << p << " has B from " << ij_keymap_(Key<2>{k, j}) << std::endl;
-        //}
       }
       ::broadcast<0>(ikp_keys, std::move(baseT::template get<0>(a_ik)), outs);
-
-      /* enable the next broadcast on this row */
-      int row = i;
-      int col = k;
-      auto rowit = std::find(a_cols_of_row_[row].begin(), a_cols_of_row_[row].end(), col);
-      for (++rowit; rowit != a_cols_of_row_[row].end(); ++rowit) {
-        Key<2> key = {row, *rowit};
-        if (world.rank() == this->get_keymap()(key)) {
-          ::send<1>(key, std::move(baseT::template get<1>(a_ik)), outs);
-          break;
-        }
-      }
-
-
-      /* enable next broadcast through a control message
-       * we don't check whether this tile is in B here, this is
-       * done inside the next task (see above)
-       * we walk the matrix A column-major in an attempt to send from top to bottom, left to right */
-      long to_skip = parallel_bcasts_;
-
-      auto colit = std::find(a_rows_of_col_[col].begin(), a_rows_of_col_[col].end(), row);
-      ++colit; // skip to next row
-      do {
-        for (; colit != a_rows_of_col_[col].end(); ++colit) {
-          Key<2> key = {*colit, col};
-          if (world.rank() == this->get_keymap()(key)) {
-            if (0 == --to_skip) {
-              //std::cout << "BcastA sending to " << key << " from " << ik << std::endl;
-              ::sendk<2>(key, outs);
-              return;
-            }
-          }
-        }
-        /* nothing for us in this column, move on to the next column */
-        if (++col < a_rows_of_col_.size()) {
-          colit = a_rows_of_col_[col].begin();
-        } else {
-          break;
-        }
-      } while (1);
-
-#if 0
-      do {
-        for (; it != a_cols_of_row_[i].end(); ++it) {
-          Key<2> key = {i, *it};
-          if (world.rank() == this->get_keymap()(key)) {
-            if (0 == --to_skip) {
-              ::sendk<1>(key, outs);
-              return;
-            }
-          }
-        }
-        if ((i+1) < num_rows) {
-          it = a_cols_of_row_[++i].begin();
-        } else {
-          break;
-        }
-      } while (1);
-#endif // 0
     }
 
    private:
-    //const std::vector<std::vector<long>> &a_cols_of_row_;
-    const std::vector<std::vector<long>> &a_rows_of_col_;
-    const std::vector<std::vector<long>> &a_cols_of_row_;
     const std::vector<std::vector<long>> &b_cols_of_row_;
     const Keymap3 &ijk_keymap_;
-    const Keymap2 &ij_keymap_;
-    const int parallel_bcasts_;
   };  // class BcastA
 
   /// Locally broadcast `B[k][j]` assigned to this processor `p` to matmul tasks `{i,j,k}` for all `k` such that
   /// `A[i][k]` exists AND `k` contribution to `C[i][j]` is assigned to this processor
-  class LocalBcastB : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastB, ttg::typelist<Blk>> {
+  class LocalBcastB : public TT<Key<3>, std::tuple<Out<Key<3>, Blk>>, LocalBcastB, ttg::typelist<const Blk>> {
    public:
     using baseT = typename LocalBcastB::ttT;
 
@@ -597,30 +528,24 @@ class SpMM25D {
   };  // class LocalBcastB
 
   /// broadcast `B[k][j]` to all processors which will contain at least one `C[i][j]` such that `A[i][k]` exists
-  class BcastB : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>, Out<Key<2>, int>, Out<Key<2>, void>>, BcastB, ttg::typelist<Blk, int, void>> {
+  class BcastB : public TT<Key<2>, std::tuple<Out<Key<3>, Blk>>, BcastB, ttg::typelist<const Blk>> {
    public:
     using baseT = typename BcastB::ttT;
 
-    BcastB(Edge<Key<2>, Blk> &b_kj, Edge<Key<2>, void> ctl, Edge<Key<2>, int> colctl, Edge<Key<3>, Blk> &b_kjp,
+    BcastB(Edge<Key<2>, Blk> &b_kj, Edge<Key<3>, Blk> &b_kjp,
            const std::vector<std::vector<long>> &a_rows_of_col,
-           const std::vector<std::vector<long>> &b_cols_of_row,
-           const std::vector<std::vector<long>> &b_rows_of_col,
-           const Keymap2 &ij_keymap, const Keymap3 &ijk_keymap,
-           const int parallel_bcasts)
-        : baseT(edges(b_kj, colctl, ctl), edges(b_kjp, colctl, ctl), "SpMM25D::bcast_b", {"b_kj", "colctl", "ctl"}, {"b_kjp", "colctl", "ctl"}, ij_keymap)
+           const Keymap2 &ij_keymap, const Keymap3 &ijk_keymap)
+        : baseT(edges(b_kj), edges(b_kjp), "SpMM25D::bcast_b", {"b_kj"}, {"b_kjp"}, ij_keymap)
         , a_rows_of_col_(a_rows_of_col)
-        , b_cols_of_row_(b_cols_of_row)
-        , b_rows_of_col_(b_rows_of_col)
         , ijk_keymap_(ijk_keymap)
-        , parallel_bcasts_(parallel_bcasts)
     {
       this->set_priomap([](const Key<2>& key){
         return std::numeric_limits<int>::max() - key[1];
       });
     }
 
-    void op(const Key<2> &kj, typename baseT::input_values_tuple_type &&b_kj,
-            std::tuple<Out<Key<3>, Blk>, Out<Key<2>, int>, Out<Key<2>, void>> &outs) {
+    void op(const Key<2> &kj, typename baseT::input_refs_tuple_type &&b_kj,
+            std::tuple<Out<Key<3>, Blk>> &outs) {
       const auto k = kj[0]; // row
       const auto j = kj[1]; // col
       // broadcast b_kj to all processors which will contain at least one c_ij such that a_ik exists
@@ -639,100 +564,75 @@ class SpMM25D {
         }
       }
       ::broadcast<0>(kjp_keys, std::move(baseT::template get<0>(b_kj)), outs);
-
-      /* enable the next broadcast on this row */
-      int row = k;
-      int col = j;
-      auto colit = std::find(b_rows_of_col_[col].begin(), b_rows_of_col_[col].end(), row);
-      for (++colit; colit != b_rows_of_col_[col].end(); ++colit) {
-        Key<2> key = {*colit, col};
-        if (world.rank() == this->get_keymap()(key)) {
-          //std::cout << "BcastB kick off " << key << std::endl;
-          ::send<1>(key, std::move(baseT::template get<1>(b_kj)), outs);
-          break;
-        }
-      }
-
-      /* enable next broadcast through a control message
-       * we don't check whether this tile is in A here, this is
-       * done inside the next task (see above)
-       * we run across a row to enable broadcasts */
-      long to_skip = parallel_bcasts_;
-
-      // iterator over the current row
-      auto rowit = std::find(b_cols_of_row_[row].begin(), b_cols_of_row_[row].end(), col);
-      ++rowit; // skip to next col
-      do {
-        for (; rowit != b_cols_of_row_[row].end(); ++rowit) {
-          Key<2> key = {row, *rowit};
-          if (world.rank() == this->get_keymap()(key)) {
-            if (0 == --to_skip) {
-              //std::cout << "BcastB sending to " << key << " from " << kj << " pb " << parallel_bcasts_ << std::endl;
-              ::sendk<2>(key, outs);
-              return;
-            } else {
-              //std::cout << "BcastB skipping " << key << " from " << kj << " pb " << parallel_bcasts_ << std::endl;
-            }
-          }
-        }
-        /* nothing for us in this row, move on to the next row */
-        if (++row != b_cols_of_row_.size()) {
-          rowit = b_cols_of_row_[row].begin();
-        } else {
-          break;
-        }
-      } while (1);
-
-
-#if 0
-      std::size_t num_rows = b_cols_of_row_.size();
-      auto it = std::find(b_cols_of_row_[k].begin(), b_cols_of_row_[k].end(), j);
-      ++it; // skip the current tile
-      long to_skip = parallel_bcasts_;
-      do {
-        for (; it != b_cols_of_row_[k].end(); ++it) {
-          Key<2> key = {k, *it};
-          if (world.rank() == this->get_keymap()(key)) {
-            if (0 == --to_skip) {
-              ::sendk<1>(key, outs);
-              return;
-            }
-          }
-        }
-        if ((k+1) < num_rows) {
-          it = b_cols_of_row_[++k].begin();
-        } else {
-          break;
-        }
-      } while (1);
-#endif // 0
     }
 
    private:
     const std::vector<std::vector<long>> &a_rows_of_col_;
-    const std::vector<std::vector<long>> &b_cols_of_row_;
-    const std::vector<std::vector<long>> &b_rows_of_col_;
     const Keymap3 &ijk_keymap_;
-    const int parallel_bcasts_;
   };  // class BcastB
 
   /// multiply task has 3 input flows: a_ijk, b_ijk, and c_ijk, c_ijk contains the running total for this layer of the
   /// 3-D process grid only
-  class MultiplyAdd : public TT<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd,
+  template<ttg::ExecutionSpace Space_>
+  class MultiplyAdd : public TT<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd<Space_>,
                                 ttg::typelist<const Blk, const Blk, Blk>> {
+    static constexpr const bool is_device_space = (Space_ != ttg::ExecutionSpace::Host);
+    using task_return_type = std::conditional_t<is_device_space, ttg::device::Task, void>;
+
+    void release_next_k(long k) {
+      assert(k_cnt_.size() > k);
+      long cnt = k_cnt_[k].fetch_sub(1, std::memory_order_relaxed)-1;
+      assert(cnt >= 0);
+      if (0 == cnt) {
+        auto release_k = k;
+        auto bcasts_ahead = parallel_bcasts_;
+        // this was the last gemm in this k, find the next one to release
+        while (++release_k < k_cnt_.size() &&
+                (0 == k_cnt_[release_k].load(std::memory_order_relaxed)
+                || --bcasts_ahead > 0))
+        { }
+        constraint->release(release_k);
+      }
+    }
+
+
    public:
     using baseT = typename MultiplyAdd::ttT;
+
+    /* communicate to the runtime which device we support (if any) */
+    static constexpr bool have_cuda_op = (Space_ == ttg::ExecutionSpace::CUDA);
+    static constexpr bool have_hip_op  = (Space_ == ttg::ExecutionSpace::HIP);
+    static constexpr bool have_level_zero_op = (Space_ == ttg::ExecutionSpace::L0);
 
     MultiplyAdd(Edge<Key<3>, Blk> &a_ijk, Edge<Key<3>, Blk> &b_ijk, Edge<Key<3>, Blk> &c_ijk, Edge<Key<2>, Blk> &c,
                 const std::vector<std::vector<long>> &a_cols_of_row,
                 const std::vector<std::vector<long>> &b_rows_of_col, const std::vector<int> &mTiles,
-                const std::vector<int> &nTiles, const Keymap3 &ijk_keymap)
+                const std::vector<int> &nTiles, const Keymap3 &ijk_keymap,
+                std::shared_ptr<ttg::SequencedKeysConstraint<Key<2>>> constraint,
+                std::vector<std::atomic<std::size_t>>& k_cnt,
+                long P, long Q,
+                std::size_t parallel_bcasts, bool enable_device_map)
         : baseT(edges(a_ijk, b_ijk, c_ijk), edges(c, c_ijk), "SpMM25D::MultiplyAdd", {"a_ijk", "b_ijk", "c_ijk"},
                 {"c_ij", "c_ijk"}, ijk_keymap)
         , a_cols_of_row_(a_cols_of_row)
-        , b_rows_of_col_(b_rows_of_col) {
+        , b_rows_of_col_(b_rows_of_col)
+        , k_cnt_(k_cnt)
+        , constraint(std::move(constraint))
+        , parallel_bcasts_(parallel_bcasts) {
       this->set_priomap([=,this](const Key<3> &ijk) { return this->prio(ijk); });  // map a key to an integral priority value
-
+      if constexpr (is_device_space) {
+        if (enable_device_map) {
+          int num_devices = ttg::device::num_devices();
+          int gp = std::sqrt(num_devices);
+          int gq = num_devices / gp;
+          this->set_devicemap(
+            [P,Q,gp,gq,num_devices](const Key<3> &ijk){
+              // TODO: include the number of rows/columns in this formula
+              auto device = (((ijk[0]/P)%gp)*gq) + (ijk[1]/Q)%gq;
+              return device;
+            });
+        }
+      }
       // for each {i,j} determine first k that contributes AND belongs to this node,
       // initialize input {i,j,first_k} flow to 0
       for (auto i = 0ul; i != a_cols_of_row_.size(); ++i) {
@@ -760,8 +660,8 @@ class SpMM25D {
       }
     }
 
-    void op(const Key<3> &ijk, typename baseT::input_refs_tuple_type &&_ijk,
-            std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>> &result) {
+    task_return_type op(const Key<3> &ijk, typename baseT::input_refs_tuple_type &&_ijk,
+                        std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>> &result) {
       const auto i = ijk[0];
       const auto j = ijk[1];
       const auto k = ijk[2];  // k==l same because 000 will always be on layer 0, 001 will be accessed on layer 1
@@ -774,25 +674,64 @@ class SpMM25D {
                  " C[",
                  i, "][", j, "]  += A[", i, "][", k, "] by B[", k, "][", j, "],  next_k? ",
                  (have_next_k ? std::to_string(next_k) : "does not exist"));
+      // release the constraint on the next round of broadcasts
+      release_next_k(k);
+      const blk_t& A = baseT::template get<0>(_ijk);
+      const blk_t& B = baseT::template get<1>(_ijk);
+      blk_t& C = baseT::template get<2>(_ijk);
+
+#if defined(BLOCK_SPARSE_GEMM)
+      if (C.empty()) {
+        C = blk_t(btas::Range(A.range().extent(0), B.range().extent(1)), 0.0);
+      }
+#endif // BLOCK_SPARSE_GEMM
+
+#ifdef HAVE_SPMM_DEVICE
+      /* pull all buffers onto the device */
+      co_await ttg::device::select(A.b, B.b, C.b);
+
+      /* everything is on the device, call the gemm */
+      device_gemm(C, A, B);
+
+      // pass the running total to the next flow, if needed
+      // otherwise write to the result flow
+      if (have_next_k) {
+        co_await ttg::device::forward(ttg::device::send<1>(
+                                                Key<3>({i, j, next_k}),
+                                                std::move(C),
+                                                result));
+      } else {  // done with all local contributions to C[i][j], reduce with others on the process to which C[i][j]
+                // belongs
+        co_await ttg::device::forward(ttg::device::send<0>(
+                                                Key<2>({i, j}),
+                                                std::move(C),
+                                                result));
+      }
+#else  // HAVE_SPMM_DEVICE
+      gemm(C, A, B);
       // compute the contrib, pass the running total to the next flow, if needed
       // otherwise write to the result flow
       if (have_next_k) {
         ::send<1>(
             Key<3>({i, j, next_k}),
-            gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
+            std::move(C),
             result);
       } else {  // done with all local contributions to C[i][j], reduce with others on the process to which C[i][j]
                 // belongs
         ::send<0>(
             Key<2>({i, j}),
-            gemm(std::move(baseT::template get<2>(_ijk)), baseT::template get<0>(_ijk), baseT::template get<1>(_ijk)),
+            std::move(C),
             result);
       }
+#endif // HAVE_SPMM_DEVICE
     }
 
    private:
     const std::vector<std::vector<long>> &a_cols_of_row_;
     const std::vector<std::vector<long>> &b_rows_of_col_;
+    std::vector<std::atomic<std::size_t>>& k_cnt_;
+    std::shared_ptr<ttg::SequencedKeysConstraint<Key<2>>> constraint;
+    std::size_t parallel_bcasts_;
 
     /* Compute the length of the remaining sequence on that tile */
     int32_t prio(const Key<3> &key) const {
@@ -936,11 +875,13 @@ class SpMM25D {
   std::unique_ptr<LocalBcastA> local_bcast_a_;
   std::unique_ptr<BcastB> bcast_b_;
   std::unique_ptr<LocalBcastB> local_bcast_b_;
-  std::unique_ptr<MultiplyAdd> multiplyadd_;
+  std::unique_ptr<MultiplyAdd<Space>> multiplyadd_;
   std::unique_ptr<ReduceC> reduce_c_;
+  std::vector<std::atomic<std::size_t>> k_cnt_;
   Keymap2 ij_keymap_;
   Keymap3 ijk_keymap_;
   long parallel_bcasts_;
+  bool enable_device_map_;
 };
 
 class Control : public TT<void, std::tuple<Out<Key<3>>>, Control> {
@@ -1139,7 +1080,7 @@ static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const c
   boost::minstd_rand gen(seed);
   boost::rmat_iterator<boost::minstd_rand, boost::directed_graph<>> rmat_it(gen, N, E, a, b, c, d);
 
-  using triplet_t = Eigen::Triplet<blk_t>;
+  using triplet_t = ttg::matrix::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
   for (int i = 0; i < N; i++) {
     nnz++;
@@ -1175,7 +1116,7 @@ static void initSpHardCoded(const std::function<int(const Key<2> &)> &keymap, Sp
   C.resize(m, n);
   // We initialize the same matrices on all the ranks, but we will use only the local part
   // following the keymap
-  using triplet_t = Eigen::Triplet<blk_t>;
+  using triplet_t = ttg::matrix::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
   A_elements.emplace_back(0, 1, 12.3);
   A_elements.emplace_back(0, 2, 10.7);
@@ -1222,7 +1163,7 @@ static void initBlSpHardCoded(const std::function<int(const Key<2> &)> &keymap, 
 
   int rank = ttg::default_execution_context().rank();
 
-  using triplet_t = Eigen::Triplet<blk_t>;
+  using triplet_t = ttg::matrix::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
   std::vector<triplet_t> Aref_elements;
 #if defined(BTAS_IS_USABLE)
@@ -1388,7 +1329,7 @@ static void initBlSpRandom(const std::function<int(const Key<2> &)> &keymap, siz
   std::mt19937 genv(seed + 1);
 
   std::uniform_int_distribution<> dist(minTs, maxTs);  // randomly pick any value in the range minTs, maxTs
-  using triplet_t = Eigen::Triplet<blk_t>;
+  using triplet_t = ttg::matrix::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
   std::vector<triplet_t> B_elements;
   std::vector<triplet_t> Aref_elements;
@@ -1512,7 +1453,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
                               const std::vector<std::vector<long>> &b_cols_of_row,
                               const std::vector<std::vector<long>> &b_rows_of_col, std::vector<int> &mTiles,
                               std::vector<int> &nTiles, std::vector<int> &kTiles, int M, int N, int K, int minTs,
-                              int maxTs, int P, int Q, int R, int parallel_bcasts) {
+                              int maxTs, int P, int Q, int R, int parallel_bcasts, bool enable_device_map) {
   int MT = (int)A.rows();
   int NT = (int)B.cols();
   int KT = (int)A.cols();
@@ -1539,7 +1480,7 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   assert(!has_value(c_status));
   //  SpMM25D a_times_b(world, eA, eB, eC, A, B);
   SpMM25D<> a_times_b(eA, eB, eC, A, B, a_cols_of_row, a_rows_of_col, b_cols_of_row, b_rows_of_col,
-                      mTiles, nTiles, kTiles, ij_keymap, ijk_keymap, R, parallel_bcasts);
+                      mTiles, nTiles, kTiles, ij_keymap, ijk_keymap, P, Q, R, parallel_bcasts, enable_device_map);
   TTGUNUSED(a);
   TTGUNUSED(b);
   TTGUNUSED(a_times_b);
@@ -1566,12 +1507,12 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   std::string rt("Unkown???");
 #endif
   if (ttg::default_execution_context().rank() == 0) {
-    std::cout << "TTG-" << rt << " PxQxR=   " << P << " " << Q << " " << R << " 1 average_NB= " << avg_nb << " M= " << M
+    std::cout << "TTG-" << rt << " PxQxR=   " << P << " " << Q << " " << R << " " << ttg::device::num_devices()
+              << " average_NB= " << avg_nb << " M= " << M
               << " N= " << N << " K= " << K << " t= " << minTs << " T=" << maxTs << " Tiling= " << tiling_type
               << " A_density= " << Adensity << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
               << " gflops/s= " << gflops / tc << std::endl;
   }
-  //std::cout << "num reductions " << reduce_count.load() << " tiles " << MT*KT << std::endl;
 }
 
 #if !defined(BLOCK_SPARSE_GEMM)
@@ -1635,20 +1576,6 @@ int main(int argc, char **argv) {
   bool timing;
   double gflops;
 
-  // warm up silicon by calling gemm a few times
-#ifdef BTAS_IS_USABLE
-  for (int i = 0; i < 20; i++) {
-    using baseT = typename btas::Tensor<double>;
-    btas::Tensor<double, btas::Range, std::vector<double>> At(30, 30);
-    btas::Tensor<double, btas::Range, std::vector<double>> Bt(30, 30);
-    btas::Tensor<double, btas::Range, std::vector<double>> Ct(30, 30);
-    At.fill(1.0);
-    Bt.fill(2.0);
-    Ct.fill(3.0);
-    btas::gemm(std::move(Ct), Bt, At);
-  }
-#endif  // BTAS_IS_USABLE
-
   int cores = -1;
   std::string nbCoreStr(getCmdOption(argv, argv + argc, "-c"));
   cores = parseOption(nbCoreStr, cores);
@@ -1658,6 +1585,12 @@ int main(int argc, char **argv) {
   } else {
     initialize(1, argv, cores);
   }
+
+#if defined(BTAS_IS_USABLE) && defined(TTG_PARSEC_IMPORTED)
+  // initialize MADNESS so that TA allocators can be created
+  madness::ParsecRuntime::initialize_with_existing_context(ttg::default_execution_context().impl().context());
+  madness::initialize(argc, argv, /* nthread = */ 1, /* quiet = */ true);
+#endif  // BTAS_IS_USABLE
 
   std::string debugStr(getCmdOption(argv, argv + argc, "-d"));
   auto debug = (unsigned int)parseOption(debugStr, 0);
@@ -1709,6 +1642,9 @@ int main(int argc, char **argv) {
         std::string pStr = getCmdOption(argv, argv + argc, "-b");
         parallel_bcasts = std::stol(pStr);
       }
+
+      /* whether we set a device mapping */
+      bool enable_device_map = !cmdOptionExists(argv, argv+argc, "--default-device-map");
 
       std::string PStr(getCmdOption(argv, argv + argc, "-P"));
       P = parseOption(PStr, P);
@@ -1842,6 +1778,9 @@ int main(int argc, char **argv) {
         minTs = parseOption(minTsStr, 32);
         std::string maxTsStr(getCmdOption(argv, argv + argc, "-T"));
         maxTs = parseOption(maxTsStr, 256);
+        if (minTs >= maxTs) {
+          maxTs = minTs;
+        }
         std::string avgStr(getCmdOption(argv, argv + argc, "-a"));
         double avg = parseOption(avgStr, 0.3);
         timing = (check == 0);
@@ -1867,9 +1806,17 @@ int main(int argc, char **argv) {
         // Start up engine
         execute();
         for (int nrun = 0; nrun < nb_runs; nrun++) {
+#if TTG_USE_PARSEC
+          /* flush all PaRSEC memory */
+          parsec_devices_release_memory();
+#endif // TTG_USE_PARSEC
           timed_measurement(A, B, ij_keymap, ijk_keymap, tiling_type, gflops, avg_nb, Adensity, Bdensity,
                             a_cols_of_row, a_rows_of_col, b_cols_of_row, b_rows_of_col, mTiles,
-                            nTiles, kTiles, M, N, K, minTs, maxTs, P, Q, R, parallel_bcasts);
+                            nTiles, kTiles, M, N, K, minTs, maxTs, P, Q, R, parallel_bcasts, enable_device_map);
+#if TTG_USE_PARSEC
+          /* reset PaRSEC's load tracking */
+          parsec_devices_reset_load(default_execution_context().impl().context());
+#endif // TTG_USE_PARSEC
         }
       } else {
         // flow graph needs to exist on every node
@@ -1890,7 +1837,7 @@ int main(int argc, char **argv) {
         assert(!has_value(c_status));
         //  SpMM25D a_times_b(world, eA, eB, eC, A, B);
         SpMM25D<> a_times_b(eA, eB, eC, A, B, a_cols_of_row, a_rows_of_col, b_cols_of_row,
-                            b_rows_of_col, mTiles, nTiles, kTiles, ij_keymap, ijk_keymap, R);
+                            b_rows_of_col, mTiles, nTiles, kTiles, ij_keymap, ijk_keymap, P, Q, R);
         TTGUNUSED(a_times_b);
         // calling the Dot constructor with 'true' argument disables the type
         if (default_execution_context().rank() == 0) std::cout << Dot{/*disable_type=*/true}(&control) << std::endl;
@@ -1939,6 +1886,10 @@ int main(int argc, char **argv) {
         //      }
       }
     }
+
+#if defined(BTAS_IS_USABLE) && defined(TTG_PARSEC_IMPORTED)
+    madness::finalize();
+#endif  // BTAS_IS_USABLE
 
     ttg_finalize();
 

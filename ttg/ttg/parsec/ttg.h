@@ -22,6 +22,7 @@
 #include "ttg/base/keymap.h"
 #include "ttg/base/tt.h"
 #include "ttg/base/world.h"
+#include "ttg/constraint.h"
 #include "ttg/edge.h"
 #include "ttg/execution.h"
 #include "ttg/func.h"
@@ -1173,6 +1174,7 @@ namespace ttg_parsec {
      protected:
       //  static std::map<int, ParsecBaseTT*> function_id_to_instance;
       parsec_hash_table_t tasks_table;
+      parsec_hash_table_t task_constraint_table;
       parsec_task_class_t self;
     };
 
@@ -1341,6 +1343,9 @@ namespace ttg_parsec {
     int num_pullins = 0;
 
     bool m_defer_writer = TTG_PARSEC_DEFER_WRITER;
+
+    std::vector<ttg::meta::detail::constraint_callback_t<keyT>> constraints_check;
+    std::vector<ttg::meta::detail::constraint_callback_t<keyT>> constraints_complete;
 
    public:
     ttg::World get_world() const override final { return world; }
@@ -1992,7 +1997,7 @@ namespace ttg_parsec {
       task_t *dummy;
       parsec_execution_stream_s *es = world.impl().execution_stream();
       parsec_thread_mempool_t *mempool = get_task_mempool();
-      dummy = new (parsec_thread_mempool_allocate(mempool)) task_t(mempool, &this->self);
+      dummy = new (parsec_thread_mempool_allocate(mempool)) task_t(mempool, &this->self, this);
       dummy->set_dummy(true);
       // TODO: do we need to copy static_stream_goal in dummy?
 
@@ -2568,6 +2573,83 @@ namespace ttg_parsec {
       }
     }
 
+    bool check_constraints(task_t *task) {
+      bool constrained = false;
+      if (constraints_check.size() > 0) {
+        if constexpr (ttg::meta::is_void_v<keyT>) {
+          constrained = !constraints_check[0]();
+        } else {
+          constrained = !constraints_check[0](task->key);
+        }
+      }
+      if (constrained) {
+        // store the task so we can later access it once it is released
+        parsec_hash_table_insert(&task_constraint_table, &task->tt_ht_item);
+      }
+      return !constrained;
+    }
+
+    template<typename Key = keyT>
+    std::enable_if_t<ttg::meta::is_void_v<Key>, void> release_constraint(std::size_t cid) {
+      // check the next constraint, if any
+      assert(cid < constraints_check.size());
+      bool release = true;
+      for (std::size_t i = cid+1; i < constraints_check.size(); i++) {
+        if (!constraints_check[i]()) {
+          release = false;
+          break;
+        }
+      }
+      if (release) {
+        // no constraint blocked us
+        task_t *task;
+        parsec_key_t hk = 0;
+        task = (task_t*)parsec_hash_table_remove(&task_constraint_table, hk);
+        assert(task != nullptr);
+        auto &world_impl = world.impl();
+        parsec_execution_stream_t *es = world_impl.execution_stream();
+        parsec_task_t *vp_task_rings[1] = { &task->parsec_task };
+        __parsec_schedule_vp(es, vp_task_rings, 0);
+      }
+    }
+
+    template<typename Key = keyT>
+    std::enable_if_t<!ttg::meta::is_void_v<Key>, void> release_constraint(std::size_t cid, const std::span<Key>& keys) {
+      assert(cid < constraints_check.size());
+      parsec_task_t *task_ring = nullptr;
+      for (auto& key : keys) {
+        task_t *task;
+        bool release = true;
+        for (std::size_t i = cid+1; i < constraints_check.size(); i++) {
+          if (!constraints_check[i](key)) {
+            release = false;
+            break;
+          }
+        }
+
+        if (release) {
+          // no constraint blocked this task, so go ahead and release
+          auto hk = reinterpret_cast<parsec_key_t>(&key);
+          task = (task_t*)parsec_hash_table_remove(&task_constraint_table, hk);
+          assert(task != nullptr);
+          if (task_ring == nullptr) {
+            /* the first task is set directly */
+            task_ring = &task->parsec_task;
+          } else {
+            /* push into the ring */
+            parsec_list_item_ring_push_sorted(&task_ring->super, &task->parsec_task.super,
+                                              offsetof(parsec_task_t, priority));
+          }
+        }
+      }
+      if (nullptr != task_ring) {
+        auto &world_impl = world.impl();
+        parsec_execution_stream_t *es = world_impl.execution_stream();
+        parsec_task_t *vp_task_rings[1] = { task_ring };
+        __parsec_schedule_vp(es, vp_task_rings, 0);
+      }
+    }
+
     void release_task(task_t *task,
                       parsec_task_t **task_ring = nullptr) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
@@ -2597,16 +2679,19 @@ namespace ttg_parsec {
           }
         }
         if (task->remove_from_hash) parsec_hash_table_remove(&tasks_table, hk);
-        if (nullptr == task_ring) {
-          parsec_task_t *vp_task_rings[1] = { &task->parsec_task };
-          __parsec_schedule_vp(es, vp_task_rings, 0);
-        } else if (*task_ring == nullptr) {
-          /* the first task is set directly */
-          *task_ring = &task->parsec_task;
-        } else {
-          /* push into the ring */
-          parsec_list_item_ring_push_sorted(&(*task_ring)->super, &task->parsec_task.super,
-                                            offsetof(parsec_task_t, priority));
+
+        if (check_constraints(task)) {
+          if (nullptr == task_ring) {
+            parsec_task_t *vp_task_rings[1] = { &task->parsec_task };
+            __parsec_schedule_vp(es, vp_task_rings, 0);
+          } else if (*task_ring == nullptr) {
+            /* the first task is set directly */
+            *task_ring = &task->parsec_task;
+          } else {
+            /* push into the ring */
+            parsec_list_item_ring_push_sorted(&(*task_ring)->super, &task->parsec_task.super,
+                                              offsetof(parsec_task_t, priority));
+          }
         }
       } else if constexpr (!ttg::meta::is_void_v<keyT>) {
         if ((baseobj->num_pullins + count == numins) && baseobj->is_lazy_pull()) {
@@ -3766,6 +3851,14 @@ namespace ttg_parsec {
         detail::release_data_copy(copy);
         task->copies[i] = nullptr;
       }
+
+      for (auto& c : task->tt->constraints_complete) {
+        if constexpr(std::is_void_v<keyT>) {
+          c();
+        } else {
+          c(task->key);
+        }
+      }
       return PARSEC_HOOK_RETURN_DONE;
     }
 
@@ -3919,6 +4012,9 @@ namespace ttg_parsec {
                                offsetof(parsec_task_t, mempool_owner), nbthreads);
 
       parsec_hash_table_init(&tasks_table, offsetof(detail::parsec_ttg_task_base_t, tt_ht_item), 8, tasks_hash_fcts,
+                             NULL);
+
+      parsec_hash_table_init(&task_constraint_table, offsetof(detail::parsec_ttg_task_base_t, tt_ht_item), 8, tasks_hash_fcts,
                              NULL);
     }
 
@@ -4289,6 +4385,57 @@ namespace ttg_parsec {
     /// @return the device map
     auto get_devicemap() { return devicemap; }
 
+    /// add a shared constraint
+    /// the constraint must provide a valid override of `check_key(key)`
+    template<typename Constraint>
+    void add_constraint(std::shared_ptr<Constraint> c) {
+      std::size_t cid = constraints_check.size();
+      if constexpr(ttg::meta::is_void_v<keyT>) {
+        c->add_listener([this, cid](){ this->release_constraint(cid); }, this);
+        constraints_check.push_back([c, this](){ return c->check(this); });
+        constraints_complete.push_back([c, this](const keyT& key){ c->complete(this); return true; });
+      } else {
+        c->add_listener([this, cid](const std::span<keyT>& keys){ this->release_constraint(cid, keys); }, this);
+        constraints_check.push_back([c, this](const keyT& key){ return c->check(key, this); });
+        constraints_complete.push_back([c, this](const keyT& key){ c->complete(key, this); return true; });
+      }
+    }
+
+    /// add a constraint
+    /// the constraint must provide a valid override of `check_key(key)`
+    template<typename Constraint>
+    void add_constraint(Constraint&& c) {
+      // need to make this a shared_ptr since it's shared between different callbacks
+      this->add_constraint(std::make_shared<Constraint>(std::forward<Constraint>(c)));
+    }
+
+    /// add a shared constraint
+    /// the constraint must provide a valid override of `check_key(key, map(key))`
+    /// ths overload can be used to provide different key mapping functions for each TT
+    template<typename Constraint, typename Mapper>
+    void add_constraint(std::shared_ptr<Constraint> c, Mapper&& map) {
+      static_assert(std::is_same_v<typename Constraint::key_type, keyT>);
+      std::size_t cid = constraints_check.size();
+      if constexpr(ttg::meta::is_void_v<keyT>) {
+        c->add_listener([this, cid](){ this->release_constraint(cid); }, this);
+        constraints_check.push_back([map, c, this](){ return c->check(map(), this); });
+        constraints_complete.push_back([map, c, this](){ c->complete(map(), this); return true; });
+      } else {
+        c->add_listener([this, cid](const std::span<keyT>& keys){ this->release_constraint(cid, keys); }, this);
+        constraints_check.push_back([map, c, this](const keyT& key){ return c->check(key, map(key), this); });
+        constraints_complete.push_back([map, c, this](const keyT& key){ c->complete(key, map(key), this); return true; });
+      }
+    }
+
+    /// add a shared constraint
+    /// the constraint must provide a valid override of `check_key(key, map(key))`
+    /// ths overload can be used to provide different key mapping functions for each TT
+    template<typename Constraint, typename Mapper>
+    void add_constraint(Constraint c, Mapper&& map) {
+      // need to make this a shared_ptr since it's shared between different callbacks
+      this->add_constraint(std::make_shared<Constraint>(std::forward<Constraint>(c)), std::forward<Mapper>(map));
+    }
+
     // Register the static_op function to associate it to instance_id
     void register_static_op_function(void) {
       int rank;
@@ -4425,8 +4572,13 @@ struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
       bool inserted = ttg_parsec::detail::add_copy_to_task(copy, caller);
       assert(inserted);
       copy_to_remove = copy; // we want to remove the copy from the task once done sending
-      do_release = false; // we don't release the copy since we didn't allocate it
+      do_release = true; // we don't release the copy since we didn't allocate it
       copy->add_ref(); // add a reference so that TTG does not attempt to delete this object
+      copy->add_ref(); // add another reference so that TTG never attempts to free this copy
+      if (copy->num_readers() == 0) {
+        /* add at least one reader (the current task) */
+        copy->increment_readers<false>();
+      }
     }
     return vref.value_ref;
   }

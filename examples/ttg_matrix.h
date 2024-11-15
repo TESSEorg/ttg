@@ -8,10 +8,52 @@
 #include <vector>
 
 #include "ttg/serialization/std/vector.h"
+#include "ttg/util/multiindex.h"
+
+#include <Eigen/SparseCore>
 
 namespace ttg {
 
   namespace matrix {
+
+    enum class ReadOnceTriplet { yes, no };
+
+    /// element of a sparse matrix = {row index, col index, value}
+
+    /// move-capable replacement for Eigen::Triplet
+    template<typename Value, ReadOnceTriplet ReadOnce = ReadOnceTriplet::yes, typename StorageIndex=typename Eigen::SparseMatrix<Value>::StorageIndex >
+    class Triplet {
+     public:
+      Triplet() = default;
+      Triplet(const Triplet&) = default;
+      Triplet(Triplet&&) = default;
+      Triplet& operator=(const Triplet&) = default;
+      Triplet& operator=(Triplet&&) = default;
+
+      Triplet(StorageIndex r, const StorageIndex c, const Value& v)
+          : m_row(r), m_col(c), m_value(v)
+      {}
+      Triplet(StorageIndex r, const StorageIndex c, Value&& v = Value{})
+          : m_row(r), m_col(c), m_value(std::move(v))
+      {}
+
+      /** \returns the row index of the element */
+      const StorageIndex& row() const { return m_row; }
+
+      /** \returns the column index of the element */
+      const StorageIndex& col() const { return m_col; }
+
+      /** \returns the value of the element */
+      std::conditional_t<ReadOnce == ReadOnceTriplet::yes, Value&&, const Value&> value() const {
+        if constexpr (ReadOnce == ReadOnceTriplet::yes)
+          return std::move(m_value);
+        else
+          return m_value;
+      }
+     protected:
+      StorageIndex m_row = -1, m_col = -1;
+      mutable Value m_value;
+    };
 
     // matrix shape = maps {column,row} index to {row,column} indices
     class Shape : public std::vector<std::vector<long>> {
@@ -192,22 +234,22 @@ namespace ttg {
     }
 
     // compute shape of an existing SpMatrix on rank 0
-    template <typename Blk = blk_t>
+    template <typename Blk>
     class ReadShape : public TT<void, std::tuple<Out<void, Shape>>, ReadShape<Blk>, ttg::typelist<void>> {
      public:
       using baseT = typename ReadShape::ttT;
       static constexpr const int owner = 0;  // where data resides
 
-      ReadShape(const char *label, const SpMatrix<Blk> &matrix, Edge<void, void> &in, Edge<void, Shape> &out)
+      ReadShape(const char *label, const Eigen::SparseMatrix<Blk> &matrix, Edge<void, void> &in, Edge<void, Shape> &out)
           : baseT(edges(in), edges(out), std::string("read_spmatrix_shape(") + label + ")", {"ctl"},
                   {std::string("shape[") + label + "]"},
                   /* keymap */ []() { return owner; })
           , matrix_(matrix) {}
 
-      void op(std::tuple<Out<void, Shape>> &out) { ::sendv<0>(Shape(matrix_), out); }
+      void op(std::tuple<Out<void, Shape>> &out) { ttg::sendv<0>(Shape(matrix_), out); }
 
      private:
-      const SpMatrix<Blk> &matrix_;
+      const Eigen::SparseMatrix<Blk> &matrix_;
     };
 
     // flow data from an existing SpMatrix on rank 0
@@ -217,38 +259,38 @@ namespace ttg {
     //   but will only be efficient if can do random access (slow with CSC format used by Eigen matrices)
     // - this could be generalized to read efficiently from a distributed data structure
     // Use Read_SpMatrix if need to read all data from a data structure localized on 1 process
-    template <typename Blk = blk_t>
-    class Read : public TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, ttg::typelist<void>> {
+    template <typename Blk>
+    class Read : public TT<MultiIndex<2>, std::tuple<Out<MultiIndex<2>, Blk>>, Read<Blk>, ttg::typelist<void>> {
      public:
-      using baseT = TT<Key<2>, std::tuple<Out<Key<2>, Blk>>, Read<Blk>, void>;
+      using baseT = TT<MultiIndex<2>, std::tuple<Out<MultiIndex<2>, Blk>>, Read<Blk>, void>;
       static constexpr const int owner = 0;  // where data resides
 
-      Read(const char *label, const SpMatrix<Blk> &matrix, Edge<Key<2>, void> &in, Edge<Key<2>, Blk> &out)
+      Read(const char *label, const Eigen::SparseMatrix<Blk> &matrix, Edge<MultiIndex<2>, void> &in, Edge<MultiIndex<2>, Blk> &out)
           : baseT(edges(in), edges(out), std::string("read_spmatrix(") + label + ")", {"ctl[ij]"},
                   {std::string(label) + "[ij]"},
                   /* keymap */ [](auto key) { return owner; })
           , matrix_(matrix) {}
 
-      void op(const Key<2> &key, std::tuple<Out<Key<2>, Blk>> &out) {
+      void op(const MultiIndex<2> &key, std::tuple<Out<MultiIndex<2>, Blk>> &out) {
         // random access in CSC format is inefficient, this is only to demonstrate the way to go for hash-based storage
         // for whatever reason coeffRef does not work on a const SpMatrix&
-        ::send<0>(key, static_cast<const Blk &>(const_cast<SpMatrix<Blk> &>(matrix_).coeffRef(key[0], key[1])), out);
+        ttg::send<0>(key, static_cast<const Blk &>(const_cast<Eigen::SparseMatrix<Blk> &>(matrix_).coeffRef(key[0], key[1])), out);
       }
 
      private:
-      const SpMatrix<Blk> &matrix_;
+      const Eigen::SparseMatrix<Blk> &matrix_;
     };
 
     // WriteShape commits shape to an existing SpMatrix on rank 0 and sends it on
     // since SpMatrix supports random inserts there is no need to commit the shape into the matrix, other than get the
     // dimensions
-    template <typename Blk = blk_t>
+    template <typename Blk>
     class WriteShape : public TT<void, std::tuple<Out<void, Shape>>, WriteShape<Blk>, ttg::typelist<Shape>> {
      public:
       using baseT = typename WriteShape::ttT;
       static constexpr const int owner = 0;  // where data resides
 
-      WriteShape(const char *label, SpMatrix<Blk> &matrix, Edge<void, Shape> &in, Edge<void, Shape> &out)
+      WriteShape(const char *label, Eigen::SparseMatrix<Blk> &matrix, Edge<void, Shape> &in, Edge<void, Shape> &out)
           : baseT(edges(in), edges(out), std::string("write_spmatrix_shape(") + label + ")",
                   {std::string("shape_in[") + label + "]"}, {std::string("shape_out[") + label + "]"},
                   /* keymap */ []() { return owner; })
@@ -256,28 +298,28 @@ namespace ttg {
 
       void op(typename baseT::input_values_tuple_type &&ins, std::tuple<Out<void, Shape>> &out) {
         const auto &shape = baseT::template get<0>(ins);
-        ::ttg::trace("Resizing ", static_cast<void *>(&matrix_));
+        ttg::trace("Resizing ", static_cast<void *>(&matrix_));
         matrix_.resize(shape.nrows(), shape.ncols());
-        ::sendv<0>(shape, out);
+        ttg::sendv<0>(shape, out);
       }
 
      private:
-      SpMatrix<Blk> &matrix_;
+      Eigen::SparseMatrix<Blk> &matrix_;
     };
 
     // flow (move?) data into an existing SpMatrix on rank 0
-    template <typename Blk = blk_t>
-    class Write : public TT<Key<2>, std::tuple<>, Write<Blk>, Blk, ttg::typelist<void>> {
+    template <typename Blk>
+    class Write : public TT<MultiIndex<2>, std::tuple<>, Write<Blk>, ttg::typelist<void>> {
      public:
       using baseT = typename Write::ttT;
 
-      Write(const char *label, SpMatrix<Blk> &matrix, Edge<Key<2>, Blk> &data_in, Edge<Key<2>, void> &ctl_in)
+      Write(const char *label, Eigen::SparseMatrix<Blk> &matrix, Edge<MultiIndex<2>, Blk> &data_in, Edge<MultiIndex<2>, void> &ctl_in)
           : baseT(edges(data_in, ctl_in), edges(), std::string("write_spmatrix(") + label + ")",
                   {std::string(label) + "[ij]", std::string("ctl[ij]")}, {},
                   /* keymap */ [](auto key) { return 0; })
           , matrix_(matrix) {}
 
-      void op(const Key<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
+      void op(const MultiIndex<2> &key, typename baseT::input_values_tuple_type &&elem, std::tuple<> &) {
         std::lock_guard<std::mutex> lock(mtx_);
         ttg::trace("rank =", default_execution_context().rank(),
                    "/ thread_id =", reinterpret_cast<std::uintptr_t>(pthread_self()),
@@ -309,8 +351,8 @@ namespace ttg {
 
      private:
       std::mutex mtx_;
-      SpMatrix<Blk> &matrix_;
-      std::vector<SpMatrixTriplet<Blk>> values_;
+      Eigen::SparseMatrix<Blk> &matrix_;
+      std::vector<Triplet<Blk>> values_;
       mutable std::shared_ptr<std::shared_future<void>> completion_status_;
     };
 
@@ -325,28 +367,28 @@ namespace ttg {
                   /* keymap */ []() { return owner; }) {}
 
       void op(typename baseT::input_values_tuple_type &&ins, std::tuple<Out<void, Shape>> &out) {
-        ::sendv<0>(Shape::add(baseT::template get<0>(ins), baseT::template get<1>(ins)), out);
+        ttg::sendv<0>(Shape::add(baseT::template get<0>(ins), baseT::template get<1>(ins)), out);
       }
     };
 
     // pushes all blocks given by the shape
-    class Push : public TT<void, std::tuple<Out<Key<2>, void>>, Push, ttg::typelist<Shape>> {
+    class Push : public TT<void, std::tuple<Out<MultiIndex<2>, void>>, Push, ttg::typelist<Shape>> {
      public:
       using baseT = typename Push::ttT;
       static constexpr const int owner = 0;  // where data resides
 
-      Push(const char *label, Edge<void, Shape> &in, Edge<Key<2>, void> &out)
+      Push(const char *label, Edge<void, Shape> &in, Edge<MultiIndex<2>, void> &out)
           : baseT(edges(in), edges(out), std::string("push_spmatrix(") + label + ")",
                   {std::string("shape[") + label + "]"}, {"ctl[ij]"},
                   /* keymap */ []() { return owner; }) {}
 
-      void op(typename baseT::input_values_tuple_type &&ins, std::tuple<Out<Key<2>, void>> &out) {
+      void op(typename baseT::input_values_tuple_type &&ins, std::tuple<Out<MultiIndex<2>, void>> &out) {
         const auto &shape = baseT::get<0>(ins);
         if (shape.type() == Shape::Type::col2row) {
           long colidx = 0;
           for (const auto &col : shape) {
             for (const auto rowidx : col) {
-              ::sendk<0>(Key<2>({rowidx, colidx}), out);
+              ttg::sendk<0>(MultiIndex<2>({rowidx, colidx}), out);
             }
             ++colidx;
           }
@@ -354,7 +396,7 @@ namespace ttg {
           long rowidx = 0;
           for (const auto &row : shape) {
             for (const auto colidx : row) {
-              ::sendk<0>(Key<2>({rowidx, colidx}), out);
+              ttg::sendk<0>(MultiIndex<2>({rowidx, colidx}), out);
             }
             ++rowidx;
           }
@@ -372,9 +414,9 @@ namespace ttg {
   class Matrix {
    public:
     using shape_t = matrix::Shape;
-    using data_edge_t = Edge<Key<2>, T>;
+    using data_edge_t = Edge<MultiIndex<2>, T>;
     using shape_edge_t = Edge<void, shape_t>;
-    using ctl_edge_t = Edge<Key<2>, void>;
+    using ctl_edge_t = Edge<MultiIndex<2>, void>;
 
     Matrix() = default;
 
@@ -403,7 +445,7 @@ namespace ttg {
     /// @return an std::future<void> object indicating the status; @c destination_matrix is ready if calling has_value()
     /// on the return value of this function is true.
     /// @note up to the user to ensure completion before reading destination_matrix
-    auto operator>>(SpMatrix<T> &destination_matrix) {
+    auto operator>>(Eigen::SparseMatrix<T> &destination_matrix) {
       // shape writer writes shape to destination_matrix
       ttg_register_ptr(world_, std::make_shared<matrix::WriteShape<T>>("Matrix.WriteShape", destination_matrix,
                                                                        shape_edge_, shape_writer_push_edge_));

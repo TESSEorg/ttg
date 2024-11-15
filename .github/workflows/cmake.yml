@@ -88,7 +88,7 @@ jobs:
       # and build directories, but this is only available with CMake 3.13 and higher.  
       # The CMake binaries on the Github Actions machines are (as of this writing) 3.12
       run: |
-        cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE $BUILD_CONFIG || (cat CMakeFiles/CMakeOutput.log && cat CMakeFiles/CMakeError.log)
+        cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE $BUILD_CONFIG || (cat CMakeFiles/CMakeConfigureLog.yaml)
 
     - name: Build
       working-directory: ${{github.workspace}}/build
@@ -113,11 +113,11 @@ jobs:
       working-directory: ${{github.workspace}}/build
       shell: bash
       run: |
-        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/helloworld -B test_install_devsamp_helloworld -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat test_install_devsamp_helloworld/CMakeFiles/CMakeOutput.log && cat test_install_devsamp_helloworld/CMakeFiles/CMakeError.log)
+        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/helloworld -B test_install_devsamp_helloworld -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat /home/runner/work/ttg/ttg/install/lib/cmake/ttg/ttg-config.cmake && test_install_devsamp_helloworld/CMakeFiles/CMakeConfigureLog.yaml)
         cmake --build test_install_devsamp_helloworld
         $MPIEXEC -n 2 test_install_devsamp_helloworld/helloworld-parsec
         $MPIEXEC -n 2 test_install_devsamp_helloworld/helloworld-mad
-        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/fibonacci -B test_install_devsamp_fibonacci -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat test_install_devsamp_fibonacci/CMakeFiles/CMakeOutput.log && cat test_install_devsamp_fibonacci/CMakeFiles/CMakeError.log)
+        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/fibonacci -B test_install_devsamp_fibonacci -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat /home/runner/work/ttg/ttg/install/lib/cmake/ttg/ttg-config.cmake && cat test_install_devsamp_fibonacci/CMakeFiles/CMakeConfigureLog.yaml)
         cmake --build test_install_devsamp_fibonacci
         $MPIEXEC -n 2 test_install_devsamp_fibonacci/fibonacci-parsec
         cmake -E make_directory test_install_userexamples
@@ -130,7 +130,7 @@ jobs:
         add_ttg_executable(iterative $GITHUB_WORKSPACE/doc/dox/user/examples/iterative.cc NOT_EXCLUDE_FROM_ALL)
         add_ttg_executable(distributed $GITHUB_WORKSPACE/doc/dox/user/examples/distributed.cc NOT_EXCLUDE_FROM_ALL)
         EOF
-        cmake -S test_install_userexamples -B test_install_userexamples/build -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat test_install_userexamples/CMakeFiles/CMakeOutput.log && cat test_install_userexamples/CMakeFiles/CMakeError.log)
+        cmake -S test_install_userexamples -B test_install_userexamples/build -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat /home/runner/work/ttg/ttg/install/lib/cmake/ttg/ttg-config.cmake && cat test_install_devsamp_fibonacci/CMakeFiles/CMakeConfigureLog.yaml)
         cmake --build test_install_userexamples/build
 
     - name: Build+Deploy Dox

@@ -572,15 +572,12 @@ namespace ttg_parsec {
     inline
     ttg_parsec_data_wrapper_t& ttg_parsec_data_wrapper_t::operator=(ttg_parsec_data_wrapper_t&& other) {
       m_data = std::move(other.m_data);
-      /* check whether the owning ttg_data_copy has already moved us */
-      if (other.m_ttg_copy != m_ttg_copy) {
-        /* remove from old ttg copy */
-        other.remove_from_owner();
+      /* remove from old ttg copy */
+      other.remove_from_owner();
 
-        if (nullptr != m_ttg_copy) {
-          /* register with the new ttg_copy */
-          m_ttg_copy->add_device_data(this);
-        }
+      if (nullptr != m_ttg_copy) {
+        /* register with the new ttg_copy */
+        m_ttg_copy->add_device_data(this);
       }
       return *this;
     }
