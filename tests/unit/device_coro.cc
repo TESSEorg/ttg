@@ -62,7 +62,7 @@ namespace madness {
   }  // namespace archive
 }  // namespace madness
 
-static_assert(madness::is_serializable_v<madness::archive::BufferInspectorArchive<ttg::detail::buffer_apply_dummy_fn>, derived_value_t>);
+static_assert(madness::is_serializable_v<madness::archive::BufferVisitorArchive<ttg::detail::buffer_apply_dummy_fn>, derived_value_t>);
 static_assert(ttg::detail::has_buffer_apply_v<nested_value_t>);
 
 

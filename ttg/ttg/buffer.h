@@ -61,13 +61,13 @@ namespace detail {
 namespace madness {
   namespace archive {
     template<typename Fn>
-    struct BufferInspectorArchive : public madness::archive::BaseOutputArchive {
+    struct BufferVisitorArchive : public madness::archive::BaseOutputArchive {
     private:
       Fn m_fn;
 
     public:
       template<typename _Fn>
-      BufferInspectorArchive(_Fn&& fn)
+      BufferVisitorArchive(_Fn&& fn)
       : m_fn(fn)
       { }
 
@@ -109,30 +109,30 @@ namespace madness {
 
     /* deduction guide */
     template<typename Fn>
-    BufferInspectorArchive(Fn&&) -> BufferInspectorArchive<Fn>;
+    BufferVisitorArchive(Fn&&) -> BufferVisitorArchive<Fn>;
   } // namespace archive
 
   template <typename Fn>
-  struct is_archive<archive::BufferInspectorArchive<Fn>> : std::true_type {};
+  struct is_archive<archive::BufferVisitorArchive<Fn>> : std::true_type {};
 
   template <typename Fn>
-  struct is_output_archive<archive::BufferInspectorArchive<Fn>> : std::true_type {};
+  struct is_output_archive<archive::BufferVisitorArchive<Fn>> : std::true_type {};
 
   template <typename Fn, typename T>
-  struct is_default_serializable_helper<archive::BufferInspectorArchive<Fn>, T,
+  struct is_default_serializable_helper<archive::BufferVisitorArchive<Fn>, T,
                                         std::enable_if_t<is_trivially_serializable<T>::value>>
   : std::true_type {};
 
   template <typename Fn, typename T, typename Allocator>
-  struct is_default_serializable_helper<archive::BufferInspectorArchive<Fn>, ttg::Buffer<T, Allocator>>
+  struct is_default_serializable_helper<archive::BufferVisitorArchive<Fn>, ttg::Buffer<T, Allocator>>
   : std::true_type {};
 } // namespace madness
 
 namespace ttg::detail {
   template<typename T, typename Fn>
-  requires(madness::is_serializable_v<madness::archive::BufferInspectorArchive<Fn>, std::decay<T>>)
+  requires(madness::is_serializable_v<madness::archive::BufferVisitorArchive<Fn>, std::decay<T>>)
   void buffer_apply(T&& t, Fn&& fn) {
-    madness::archive::BufferInspectorArchive ar(std::forward<Fn>(fn));
+    madness::archive::BufferVisitorArchive ar(std::forward<Fn>(fn));
     ar & t;
   }
 
@@ -140,7 +140,7 @@ namespace ttg::detail {
   using buffer_apply_dummy_fn = decltype([]<typename T, typename A>(const ttg::Buffer<T, A>&){});
 
   template<typename T>
-  struct has_buffer_apply_helper<T, std::enable_if_t<madness::is_serializable_v<madness::archive::BufferInspectorArchive<buffer_apply_dummy_fn>, std::decay_t<T>>>>
+  struct has_buffer_apply_helper<T, std::enable_if_t<madness::is_serializable_v<madness::archive::BufferVisitorArchive<buffer_apply_dummy_fn>, std::decay_t<T>>>>
   : std::true_type
   { };
 

@@ -3483,7 +3483,7 @@ namespace ttg_parsec {
             check_parsec_data(detail::get_parsec_data(buffer));
           });
       } else {
-        throw std::runtime_error("Value type must be serializable with ttg::BufferInspectorArchive");
+        throw std::runtime_error("Value type must be serializable with ttg::BufferVisitorArchive");
       }
     }
 
