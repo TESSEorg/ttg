@@ -41,10 +41,8 @@ inline void allocator_fini() { }
 template <typename T, class AllocatorT = Allocator<T>>
 class MatrixTile : public ttg::TTValue<MatrixTile<T, AllocatorT>> {
  public:
-  using metadata_t = typename std::tuple<std::size_t, std::size_t, std::size_t>;
-
-  using buffer_t  = typename ttg::Buffer<T, AllocatorT>;
-  using ttvalue_type = ttg::TTValue<MatrixTile<T, AllocatorT>>;
+  using buffer_t  = typename ttg::Buffer<T, Allocator>;
+  using ttvalue_type = ttg::TTValue<MatrixTile<T, Allocator>>;
 
  private:
   buffer_t _buffer;
@@ -76,12 +74,6 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, AllocatorT>> {
   , _cols(cols)
   , _lda(lda)
   { }
-
-  MatrixTile(const metadata_t& metadata)
-      : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::get<2>(metadata)) {}
-
-  MatrixTile(const metadata_t& metadata, T* data)
-      : MatrixTile(std::get<0>(metadata), std::get<1>(metadata), std::forward(data), std::get<2>(metadata)) {}
 
   /**
    * Constructor with outside memory. The tile will *not* delete this memory
@@ -124,15 +116,6 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, AllocatorT>> {
     std::copy_n(other.data(), _lda * _cols, this->data());
     return *this;
   }
-
-  void set_metadata(metadata_t meta) {
-    _rows = std::get<0>(meta);
-    _cols = std::get<1>(meta);
-    _lda = std::get<2>(meta);
-    this->realloc();
-  }
-
-  metadata_t get_metadata(void) const { return metadata_t{_rows, _cols, _lda}; }
 
   // Accessing the raw data
   T* data() { return _buffer.host_ptr(); }
@@ -199,23 +182,10 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, AllocatorT>> {
 
   template<typename Archive>
   void serialize(Archive& ar) {
-    ar & rows() & cols() & lda();
+    ar & _rows & _cols & _lda;
     ar & buffer();
   }
 };
-
-namespace ttg {
-
-  template <typename T>
-  struct SplitMetadataDescriptor<MatrixTile<T>> {
-    auto get_metadata(const MatrixTile<T>& t) { return t.get_metadata(); }
-
-    auto get_data(MatrixTile<T>& t) { return std::array<iovec, 1>({t.size() * sizeof(T), t.data()}); }
-
-    auto create_from_metadata(const typename MatrixTile<T>::metadata_t& meta) { return MatrixTile<T>(meta); }
-  };
-
-}  // namespace ttg
 
 #ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
 static_assert(madness::is_serializable_v<madness::archive::BufferOutputArchive, MatrixTile<float>>);
