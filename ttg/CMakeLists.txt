@@ -216,7 +216,11 @@ if (TARGET MADworld)
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/ttvalue.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/madness/watch.h)
   # N.B. ttg-mad can use MADNESS serialization only
-  add_ttg_library(ttg-mad "${ttg-mad-headers}" PUBLIC_HEADER "${ttg-mad-headers}" LINK_LIBRARIES "ttg;MADworld;ttg-serialization-madness" COMPILE_DEFINITIONS "WORLD_INSTANTIATE_STATIC_TEMPLATES=1")
+  add_ttg_library(ttg-mad "${ttg-mad-headers}"
+                  PUBLIC_HEADER "${ttg-mad-headers}"
+                  LINK_LIBRARIES "ttg;MADworld;ttg-serialization-madness"
+                  COMPILE_DEFINITIONS "WORLD_INSTANTIATE_STATIC_TEMPLATES=1"
+                  COMPILE_DEFINITIONS TTG_USE_MADNESS=1)
 endif(TARGET MADworld)
 
 ########################
@@ -246,5 +250,8 @@ if (TARGET PaRSEC::parsec)
   else()
     list(APPEND ttg-parsec-deps ttg-serialization)
   endif()
-  add_ttg_library(ttg-parsec "${ttg-parsec-headers}" PUBLIC_HEADER "${ttg-parsec-headers}" LINK_LIBRARIES "${ttg-parsec-deps}")
+  add_ttg_library(ttg-parsec "${ttg-parsec-headers}"
+                  PUBLIC_HEADER "${ttg-parsec-headers}"
+                  LINK_LIBRARIES "${ttg-parsec-deps}"
+                  COMPILE_DEFINITIONS TTG_USE_PARSEC=1)
 endif(TARGET PaRSEC::parsec)
