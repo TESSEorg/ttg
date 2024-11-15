@@ -11,6 +11,7 @@ jobs:
       matrix:
         build_type : [ Release, Debug ]
         os : [ macos-latest, ubuntu-22.04 ]
+        device : [host, cuda]
         include:
           - os: ubuntu-22.04
             cc: /usr/bin/gcc-12
@@ -18,8 +19,11 @@ jobs:
           - os: macos-latest
             cc: clang
             cxx: clang++
+        exclude:
+          - os: macos-latest
+            device: cuda
 
-    name: "${{ matrix.os }}: ${{ matrix.cxx }} ${{ matrix.build_type }}"
+    name: "${{ matrix.os }}: ${{ matrix.cxx }} ${{ matrix.device }} ${{ matrix.build_type }}"
     runs-on: ${{ matrix.os }}
     env:
       CXX : ${{ matrix.cxx }}
@@ -58,6 +62,15 @@ jobs:
         sudo apt-get -y install ninja-build g++-12 liblapack-dev libboost-dev libboost-serialization-dev libboost-random-dev libeigen3-dev openmpi-bin libopenmpi-dev libtbb-dev ccache flex bison cmake doxygen
         echo "MPIEXEC=/usr/bin/mpiexec" >> $GITHUB_ENV
 
+    - name: Install extra dependencies
+      if: ${{ matrix.device == 'cuda'}}
+      run: |
+        wget https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/cuda-keyring_1.1-1_all.deb
+        sudo dpkg -i cuda-keyring_1.1-1_all.deb
+        sudo apt update
+        sudo apt install -y cuda-toolkit
+        echo "CUDA_BUILD_OPTS=-DENABLE_CUDA=ON -DTTG_ENABLE_CUDA=ON -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-12.6 -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.6/bin/nvcc -DCMAKE_CUDA_HOST_COMPILER=${{ matrix.cxx }}" >> $GITHUB_ENV
+
     - name: Create Build Environment
       # Some projects don't allow in-source building, so create a separate build directory
       # We'll use this as our working directory for all subsequent commands
@@ -88,7 +101,7 @@ jobs:
       # and build directories, but this is only available with CMake 3.13 and higher.  
       # The CMake binaries on the Github Actions machines are (as of this writing) 3.12
       run: |
-        cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE $BUILD_CONFIG || (cat CMakeFiles/CMakeConfigureLog.yaml)
+        cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE $BUILD_CONFIG $CUDA_BUILD_OPTS || (cat CMakeFiles/CMakeConfigureLog.yaml)
 
     - name: Build
       working-directory: ${{github.workspace}}/build
@@ -96,13 +109,21 @@ jobs:
       # Execute the build.  You can specify a specific target with "--target <NAME>"
       run: ccache -p && ccache -z && cmake --build . && ccache -s
 
-    - name: Test
+    - name: Build [cuda]
+      if: ${{ matrix.device == 'cuda' }}
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      # Execute the build.  You can specify a specific target with "--target <NAME>"
+      run: ccache -p && ccache -z && cmake --build . --target bspmm-cuda-parsec testing_dpotrf_cuda-parsec chain-ttg-cuda-parsec && ccache -s
+
+    - name: Test [host]
+      if: ${{ matrix.device == 'host' }}
       working-directory: ${{github.workspace}}/build
       shell: bash
       # Execute tests defined by the CMake configuration.  
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       # run: ctest -C $BUILD_TYPE
-      run: cmake --build . --target check-ttg
+      run: ccache -p && ccache -z && cmake --build . --target check-ttg && ccache -s
 
     - name: Install
       working-directory: ${{github.workspace}}/build
@@ -134,7 +155,7 @@ jobs:
         cmake --build test_install_userexamples/build
 
     - name: Build+Deploy Dox
-      if: ${{ matrix.os == 'ubuntu-22.04' && matrix.build_type == 'Release' && github.ref == 'refs/heads/master' }}
+      if: ${{ matrix.os == 'ubuntu-22.04' && matrix.build_type == 'Release' && matrix.device == 'host' && github.ref == 'refs/heads/master' }}
       working-directory: ${{github.workspace}}/build
       shell: bash
       run: |
