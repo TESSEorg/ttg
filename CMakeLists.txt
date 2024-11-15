@@ -60,7 +60,7 @@ option(TTG_EXAMPLES "Whether to build examples" OFF)
 option(TTG_ENABLE_ASAN "Whether to enable address sanitizer" OFF)
 
 option(TTG_ENABLE_COROUTINES "Whether to enable C++ coroutines, needed for accelerator device support" ON)
-option(TTG_FETCH_BOOST "Whether to fetch+build Boost, if missing" OFF)
+option(TTG_FETCH_BOOST "Whether to fetch+build Boost, if missing" ON)
 option(TTG_IGNORE_BUNDLED_EXTERNALS "Whether to skip installation and use of bundled external dependencies (Boost.CallableTraits)" OFF)
 option(TTG_ENABLE_TRACE "Whether to enable ttg::trace() output" OFF)
 # See https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
