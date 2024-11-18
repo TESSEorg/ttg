@@ -95,7 +95,7 @@ namespace detail {
         constexpr const bool is_empty_allocator = std::is_same_v<Allocator, empty_allocator<value_type>>;
         assert(is_empty_allocator);
         m_ptr = std::move(ptr);
-        this->device_private = to_address(m_ptr);
+        this->device_private = const_cast<value_type*>(to_address(m_ptr));
       }
 
       void construct(std::size_t size,
@@ -133,7 +133,7 @@ namespace detail {
                                        const allocator_type& allocator = allocator_type()) {
       parsec_data_t *data = PARSEC_OBJ_NEW(parsec_data_t);
       data->owner_device = 0;
-      data->nb_elts = size;
+      data->nb_elts = size*sizeof(value_type);
 
       /* create the host copy and allocate host memory */
       data_copy_type *copy = PARSEC_OBJ_NEW(data_copy_type);
@@ -152,7 +152,7 @@ namespace detail {
     static parsec_data_t * create_data(PtrT& ptr, std::size_t size, ttg::scope scope) {
       parsec_data_t *data = PARSEC_OBJ_NEW(parsec_data_t);
       data->owner_device = 0;
-      data->nb_elts = size;
+      data->nb_elts = size*sizeof(value_type);
 
       /* create the host copy and allocate host memory */
       data_copy_type *copy = PARSEC_OBJ_NEW(data_copy_type);
@@ -196,7 +196,6 @@ struct Buffer {
 private:
   using delete_fn_t = std::function<void(element_type*)>;
 
-  using host_data_ptr = std::add_pointer_t<element_type>;
   parsec_data_t *m_data = nullptr;
   std::size_t m_count = 0;
 
@@ -218,7 +217,7 @@ public:
   { }
 
   Buffer(std::size_t n, ttg::scope scope = ttg::scope::SyncIn)
-  : m_data(detail::ttg_parsec_data_types<T*, Allocator>::create_data(n*sizeof(element_type), scope))
+  : m_data(detail::ttg_parsec_data_types<T*, Allocator>::create_data(n, scope))
   , m_count(n)
   { }
 
@@ -227,20 +226,20 @@ public:
    * The shared_ptr will ensure that the memory is not free'd before
    * the runtime has released all of its references.
    */
-  Buffer(std::shared_ptr<element_type[]> ptr, std::size_t n,
+  Buffer(std::shared_ptr<value_type[]> ptr, std::size_t n,
          ttg::scope scope = ttg::scope::SyncIn)
-  : m_data(detail::ttg_parsec_data_types<std::shared_ptr<element_type[]>,
-                                         detail::empty_allocator<element_type>>
-                                        ::create_data(ptr, n*sizeof(element_type), scope))
+  : m_data(detail::ttg_parsec_data_types<std::shared_ptr<value_type[]>,
+                                         detail::empty_allocator<value_type>>
+                                        ::create_data(ptr, n, scope))
   , m_count(n)
   { }
 
   template<typename Deleter>
-  Buffer(std::unique_ptr<element_type[], Deleter> ptr, std::size_t n,
+  Buffer(std::unique_ptr<value_type[], Deleter> ptr, std::size_t n,
          ttg::scope scope = ttg::scope::SyncIn)
-  : m_data(detail::ttg_parsec_data_types<std::unique_ptr<element_type[], Deleter>,
-                                         detail::empty_allocator<element_type>>
-                                        ::create_data(ptr, n*sizeof(element_type), scope))
+  : m_data(detail::ttg_parsec_data_types<std::unique_ptr<value_type[], Deleter>,
+                                         detail::empty_allocator<value_type>>
+                                        ::create_data(ptr, n, scope))
   , m_count(n)
   { }
 
@@ -433,7 +432,7 @@ public:
   /* Reallocate the buffer with count elements */
   void reset(std::size_t n, ttg::scope scope = ttg::scope::SyncIn) {
     release_data();
-    m_data = detail::ttg_parsec_data_types<T*, Allocator>::create_data(n*sizeof(element_type), scope);
+    m_data = detail::ttg_parsec_data_types<T*, Allocator>::create_data(n, scope);
     m_count = n;
   }
 
