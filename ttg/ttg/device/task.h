@@ -37,7 +37,7 @@ namespace ttg::device {
     template<typename... Ts, std::size_t... Is>
     auto extract_buffer_data(detail::to_device_t<Ts...>& a, std::index_sequence<Is...>) {
       using arg_types = std::tuple<Ts...>;
-      return std::array{
+      return std::array<device_input_data_t, sizeof...(Ts)>{
                 device_input_data_t{TTG_IMPL_NS::buffer_data(std::get<Is>(a.ties)),
                                     std::get<Is>(a.ties).scope(),
                                     ttg::meta::is_const_v<std::tuple_element_t<Is, arg_types>>,
