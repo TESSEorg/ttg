@@ -41,8 +41,8 @@ inline void allocator_fini() { }
 template <typename T, class AllocatorT = Allocator<T>>
 class MatrixTile : public ttg::TTValue<MatrixTile<T, AllocatorT>> {
  public:
-  using buffer_t  = typename ttg::Buffer<T, Allocator>;
-  using ttvalue_type = ttg::TTValue<MatrixTile<T, Allocator>>;
+  using buffer_t  = typename ttg::Buffer<T, AllocatorT>;
+  using ttvalue_type = ttg::TTValue<MatrixTile<T, AllocatorT>>;
 
  private:
   buffer_t _buffer;
