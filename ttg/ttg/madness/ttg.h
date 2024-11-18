@@ -14,6 +14,9 @@
 #include "ttg/madness/device.h"
 #include "ttg/madness/devicefunc.h"
 
+/* needed for make_tt */
+#include "ttg/device/task.h"
+
 #include "ttg/runtimes.h"
 #include "ttg/tt.h"
 #include "ttg/util/bug.h"

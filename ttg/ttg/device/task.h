@@ -9,6 +9,7 @@
 #include "ttg/fwd.h"
 #include "ttg/impl_selector.h"
 #include "ttg/ptr.h"
+#include "ttg/devicescope.h"
 
 #ifdef TTG_HAVE_COROUTINE
 
