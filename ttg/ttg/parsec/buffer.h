@@ -98,7 +98,8 @@ namespace detail {
         this->device_private = to_address(m_ptr);
       }
 
-      void construct(std::size_t size, const allocator_type& alloc = allocator_type()) {
+      void construct(std::size_t size,
+                     const allocator_type& alloc = allocator_type()) {
         constexpr const bool is_empty_allocator = std::is_same_v<Allocator, empty_allocator<value_type>>;
         assert(!is_empty_allocator);
         m_allocator = alloc;
@@ -110,65 +111,6 @@ namespace detail {
         this->deallocate();
       }
     };
-
-#if 0
-    /**
-     * derived from parsec_data_t managing an allocator for host memory
-     * and creating a host copy through a callback
-     */
-    struct data_type : public parsec_data_t {
-    private:
-      [[no_unique_address]]
-      Allocator host_allocator;
-
-      allocator_type& get_allocator_reference() { return static_cast<allocator_type&>(*this); }
-
-      element_type* do_allocate(std::size_t n) {
-        return allocator_traits::allocate(get_allocator_reference(), n);
-      }
-
-    public:
-
-      explicit data_type(const Allocator& host_alloc = Allocator())
-      : host_allocator(host_alloc)
-      { }
-
-      void* allocate(std::size_t size) {
-        return do_allocate(size);
-      }
-
-      void deallocate(void* ptr, std::size_t size) {
-        allocator_traits::deallocate(get_allocator_reference(), ptr, size);
-      }
-    };
-
-    /* Allocate the host copy for a given data_t */
-    static parsec_data_copy_t* data_copy_allocate(parsec_data_t* pdata, int device) {
-      if (device != 0) return nullptr; // we only allocate for the host
-      data_type* data = static_cast<data_type*>(pdata); // downcast
-      data_copy_type* copy = PARSEC_OBJ_NEW(data_copy_type);
-      copy->device_private = data->allocate(data->nb_elts);
-      return copy;
-    }
-    /**
-    * Create the PaRSEC object infrastructure for the data copy type
-    */
-    inline void data_construct(data_type* obj)
-    {
-      obj->allocate_cb = &data_copy_allocate;
-    }
-
-    static void data_destruct(data_type* obj)
-    {
-      /* cleanup alloctor instance */
-      obj->~data_type();
-    }
-
-    static constexpr PARSEC_OBJ_CLASS_INSTANCE(data_type, parsec_data_t,
-                                               data_copy_construct,
-                                               data_copy_destruct);
-
-#endif // 0
 
     /**
      * Create the PaRSEC object infrastructure for the data copy type
@@ -187,7 +129,7 @@ namespace detail {
                                             data_copy_construct,
                                             data_copy_destruct);
 
-    static parsec_data_t * create_data(std::size_t size,
+    static parsec_data_t * create_data(std::size_t size, ttg::scope scope,
                                        const allocator_type& allocator = allocator_type()) {
       parsec_data_t *data = PARSEC_OBJ_NEW(parsec_data_t);
       data->owner_device = 0;
@@ -201,12 +143,13 @@ namespace detail {
       /* adjust data flags */
       data->device_copies[0]->flags |= PARSEC_DATA_FLAG_PARSEC_MANAGED;
       data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-      data->device_copies[0]->version = 1;
+      /* setting version to 0 causes data not to be sent to the device */
+      data->device_copies[0]->version = (scope == ttg::scope::SyncIn) ? 1 : 0;
 
       return data;
     }
 
-    static parsec_data_t * create_data(PtrT& ptr, std::size_t size) {
+    static parsec_data_t * create_data(PtrT& ptr, std::size_t size, ttg::scope scope) {
       parsec_data_t *data = PARSEC_OBJ_NEW(parsec_data_t);
       data->owner_device = 0;
       data->nb_elts = size;
@@ -219,7 +162,8 @@ namespace detail {
       /* adjust data flags */
       data->device_copies[0]->flags |= PARSEC_DATA_FLAG_PARSEC_MANAGED;
       data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-      data->device_copies[0]->version = 1;
+      /* setting version to 0 causes data not to be sent to the device */
+      data->device_copies[0]->version = (scope == ttg::scope::SyncIn) ? 1 : 0;
 
       return data;
     }
@@ -273,8 +217,8 @@ public:
   Buffer()
   { }
 
-  Buffer(std::size_t n)
-  : m_data(detail::ttg_parsec_data_types<T*, Allocator>::create_data(n*sizeof(element_type)))
+  Buffer(std::size_t n, ttg::scope scope = ttg::scope::SyncIn)
+  : m_data(detail::ttg_parsec_data_types<T*, Allocator>::create_data(n*sizeof(element_type), scope))
   , m_count(n)
   { }
 
@@ -283,18 +227,20 @@ public:
    * The shared_ptr will ensure that the memory is not free'd before
    * the runtime has released all of its references.
    */
-  Buffer(std::shared_ptr<element_type[]> ptr, std::size_t n)
+  Buffer(std::shared_ptr<element_type[]> ptr, std::size_t n,
+         ttg::scope scope = ttg::scope::SyncIn)
   : m_data(detail::ttg_parsec_data_types<std::shared_ptr<element_type[]>,
                                          detail::empty_allocator<element_type>>
-                                        ::create_data(ptr, n*sizeof(element_type)))
+                                        ::create_data(ptr, n*sizeof(element_type), scope))
   , m_count(n)
   { }
 
   template<typename Deleter>
-  Buffer(std::unique_ptr<element_type[], Deleter> ptr, std::size_t n)
+  Buffer(std::unique_ptr<element_type[], Deleter> ptr, std::size_t n,
+         ttg::scope scope = ttg::scope::SyncIn)
   : m_data(detail::ttg_parsec_data_types<std::unique_ptr<element_type[], Deleter>,
                                          detail::empty_allocator<element_type>>
-                                        ::create_data(ptr, n*sizeof(element_type)))
+                                        ::create_data(ptr, n*sizeof(element_type), scope))
   , m_count(n)
   { }
 
