@@ -746,9 +746,8 @@ namespace ttg_parsec {
 
     template<typename T>
     inline void transfer_ownership_impl(T&& arg, int device) {
-      if constexpr(!std::is_const_v<std::remove_reference_t<T>> && ttg::detail::has_buffer_apply_v<T>) {
-        ttg::detail::buffer_apply(arg, [&](auto&& buffer){
-          auto *data = detail::get_parsec_data(buffer);
+      if constexpr(!std::is_const_v<std::remove_reference_t<T>>) {
+        detail::foreach_parsec_data(arg, [&](parsec_data_t *data){
           parsec_data_transfer_ownership_to_copy(data, device, PARSEC_FLOW_ACCESS_RW);
           /* make sure we increment the version since we will modify the data */
           data->device_copies[0]->version++;
@@ -3450,41 +3449,37 @@ namespace ttg_parsec {
     template<typename Value>
     void copy_mark_pushout(const Value& value) {
 
-      if constexpr (ttg::detail::has_buffer_apply_v<Value>) {
-        assert(detail::parsec_ttg_caller->dev_ptr && detail::parsec_ttg_caller->dev_ptr->gpu_task);
-        parsec_gpu_task_t *gpu_task = detail::parsec_ttg_caller->dev_ptr->gpu_task;
-        auto check_parsec_data = [&](parsec_data_t* data) {
-          if (data->owner_device != 0) {
-            /* find the flow */
-            int flowidx = 0;
-            while (flowidx < MAX_PARAM_COUNT &&
-                  gpu_task->flow[flowidx]->flow_flags != PARSEC_FLOW_ACCESS_NONE) {
-              if (detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in->original == data) {
-                /* found the right data, set the corresponding flow as pushout */
-                break;
-              }
-              ++flowidx;
+      assert(detail::parsec_ttg_caller->dev_ptr && detail::parsec_ttg_caller->dev_ptr->gpu_task);
+      parsec_gpu_task_t *gpu_task = detail::parsec_ttg_caller->dev_ptr->gpu_task;
+      auto check_parsec_data = [&](parsec_data_t* data) {
+        if (data->owner_device != 0) {
+          /* find the flow */
+          int flowidx = 0;
+          while (flowidx < MAX_PARAM_COUNT &&
+                gpu_task->flow[flowidx]->flow_flags != PARSEC_FLOW_ACCESS_NONE) {
+            if (detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in->original == data) {
+              /* found the right data, set the corresponding flow as pushout */
+              break;
             }
-            if (flowidx == MAX_PARAM_COUNT) {
-              throw std::runtime_error("Cannot add more than MAX_PARAM_COUNT flows to a task!");
-            }
-            if (gpu_task->flow[flowidx]->flow_flags == PARSEC_FLOW_ACCESS_NONE) {
-              /* no flow found, add one and mark it pushout */
-              detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in = data->device_copies[0];
-              gpu_task->flow_nb_elts[flowidx] = data->nb_elts;
-            }
-            /* need to mark the flow WRITE to make PaRSEC happy */
-            ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_WRITE;
-            gpu_task->pushout |= 1<<flowidx;
+            ++flowidx;
           }
-        };
-        ttg::detail::buffer_apply(value,
-          [&]<typename T, typename Allocator>(const ttg::Buffer<T, Allocator>& buffer){
-            check_parsec_data(detail::get_parsec_data(buffer));
-          });
-      } else {
-        throw std::runtime_error("Value type must be serializable with ttg::BufferVisitorArchive");
-      }
+          if (flowidx == MAX_PARAM_COUNT) {
+            throw std::runtime_error("Cannot add more than MAX_PARAM_COUNT flows to a task!");
+          }
+          if (gpu_task->flow[flowidx]->flow_flags == PARSEC_FLOW_ACCESS_NONE) {
+            /* no flow found, add one and mark it pushout */
+            detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in = data->device_copies[0];
+            gpu_task->flow_nb_elts[flowidx] = data->nb_elts;
+          }
+          /* need to mark the flow RW to make PaRSEC happy */
+          ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_RW;
+          gpu_task->pushout |= 1<<flowidx;
+        }
+      };
+      detail::foreach_parsec_data(value,
+        [&](parsec_data_t* data){
+          check_parsec_data(data);
+        });
     }
 
 

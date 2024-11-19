@@ -10,7 +10,10 @@ namespace ttg_parsec::detail {
     /* protect for non-serializable types, allowed if the TT has no device op */
     if constexpr (ttg::detail::has_buffer_apply_v<Value>) {
       ttg::detail::buffer_apply(value, [&]<typename B>(B&& b){
-        fn(detail::get_parsec_data(b));
+        parsec_data_t *data = detail::get_parsec_data(b);
+        if (nullptr != data) {
+          fn(data);
+        }
       });
     }
   }
