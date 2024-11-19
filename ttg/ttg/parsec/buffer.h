@@ -88,7 +88,12 @@ namespace detail {
 
     public:
 
-      /* allocation through PARSEC_OBJ_NEW, so no inline constructor */
+      /* default construction and move, but not copy */
+      data_copy_type() = default;
+      data_copy_type(const data_copy_type&) = delete;
+      data_copy_type(data_copy_type&&) = default;
+      data_copy_type& operator=(const data_copy_type&) = delete;
+      data_copy_type& operator=(data_copy_type&&) = default;
 
       void construct(PtrT ptr, std::size_t size) {
         m_allocator = allocator_type{};
@@ -117,7 +122,8 @@ namespace detail {
      */
     static void data_copy_construct(data_copy_type* obj)
     {
-      /* nothing to do */
+      /* placement new */
+      new(obj)(data_copy_type);
     }
 
     static void data_copy_destruct(data_copy_type* obj)
@@ -229,7 +235,7 @@ public:
   Buffer(std::shared_ptr<value_type[]> ptr, std::size_t n,
          ttg::scope scope = ttg::scope::SyncIn)
   : m_data(detail::ttg_parsec_data_types<std::shared_ptr<value_type[]>,
-                                         detail::empty_allocator<value_type>>
+                                         detail::empty_allocator<element_type>>
                                         ::create_data(ptr, n, scope))
   , m_count(n)
   { }
@@ -238,7 +244,7 @@ public:
   Buffer(std::unique_ptr<value_type[], Deleter> ptr, std::size_t n,
          ttg::scope scope = ttg::scope::SyncIn)
   : m_data(detail::ttg_parsec_data_types<std::unique_ptr<value_type[], Deleter>,
-                                         detail::empty_allocator<value_type>>
+                                         detail::empty_allocator<element_type>>
                                         ::create_data(ptr, n, scope))
   , m_count(n)
   { }
