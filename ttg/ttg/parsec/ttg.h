@@ -514,8 +514,9 @@ namespace ttg_parsec {
 #endif  // TTG_USE_USER_TERMDET
     }
 
-    template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs = ttg::typelist<>>
-    void register_tt_profiling(const TT<keyT, output_terminalsT, derivedT, input_valueTs> *t) {
+    template <typename keyT, typename output_terminalsT, typename derivedT,
+              typename input_valueTs = ttg::typelist<>, ttg::ExecutionSpace Space>
+    void register_tt_profiling(const TT<keyT, output_terminalsT, derivedT, input_valueTs, Space> *t) {
 #if defined(PARSEC_PROF_TRACE)
       std::stringstream ss;
       build_composite_name_rec(t->ttg_ptr(), ss);
@@ -1180,7 +1181,7 @@ namespace ttg_parsec {
 
   }  // namespace detail
 
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs>
+  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs, ttg::ExecutionSpace Space>
   class TT : public ttg::TTBase, detail::ParsecTTBase {
    private:
     /// preconditions
@@ -1217,29 +1218,17 @@ namespace ttg_parsec {
    public:
     /// @return true if derivedT::have_cuda_op exists and is defined to true
     static constexpr bool derived_has_cuda_op() {
-      if constexpr (ttg::meta::is_detected_v<have_cuda_op_non_type_t, derivedT>) {
-        return derivedT::have_cuda_op;
-      } else {
-        return false;
-      }
+      return Space == ttg::ExecutionSpace::CUDA;
     }
 
     /// @return true if derivedT::have_hip_op exists and is defined to true
     static constexpr bool derived_has_hip_op() {
-      if constexpr (ttg::meta::is_detected_v<have_hip_op_non_type_t, derivedT>) {
-        return derivedT::have_hip_op;
-      } else {
-        return false;
-      }
+      return Space == ttg::ExecutionSpace::HIP;
     }
 
     /// @return true if derivedT::have_hip_op exists and is defined to true
     static constexpr bool derived_has_level_zero_op() {
-      if constexpr (ttg::meta::is_detected_v<have_level_zero_op_non_type_t, derivedT>) {
-        return derivedT::have_level_zero_op;
-      } else {
-        return false;
-      }
+      return Space == ttg::ExecutionSpace::L0;
     }
 
     /// @return true if the TT supports device execution
@@ -1354,18 +1343,17 @@ namespace ttg_parsec {
     /// dispatches a call to derivedT::op
     /// @return void if called a synchronous function, or ttg::coroutine_handle<> if called a coroutine (if non-null,
     ///    points to the suspended coroutine)
-    template <ttg::ExecutionSpace Space, typename... Args>
+    template <typename... Args>
     auto op(Args &&...args) {
       derivedT *derived = static_cast<derivedT *>(this);
-      //if constexpr (Space == ttg::ExecutionSpace::Host) {
-        using return_type = decltype(derived->op(std::forward<Args>(args)...));
-        if constexpr (std::is_same_v<return_type,void>) {
-          derived->op(std::forward<Args>(args)...);
-          return;
-        }
-        else {
-          return derived->op(std::forward<Args>(args)...);
-        }
+      using return_type = decltype(derived->op(std::forward<Args>(args)...));
+      if constexpr (std::is_same_v<return_type,void>) {
+        derived->op(std::forward<Args>(args)...);
+        return;
+      }
+      else {
+        return derived->op(std::forward<Args>(args)...);
+      }
     }
 
     template <std::size_t i, typename terminalT, typename Key>
@@ -1418,7 +1406,6 @@ namespace ttg_parsec {
     /**
      * Submit callback called by PaRSEC once all input transfers have completed.
      */
-    template <ttg::ExecutionSpace Space>
     static int device_static_submit(parsec_device_gpu_module_t  *gpu_device,
                                     parsec_gpu_task_t           *gpu_task,
                                     parsec_gpu_exec_stream_t    *gpu_stream) {
@@ -1464,7 +1451,7 @@ namespace ttg_parsec {
 #endif // defined(PARSEC_HAVE_DEV_CUDA_SUPPORT) && defined(TTG_HAVE_CUDA)
 
       /* Here we call back into the coroutine again after the transfers have completed */
-      static_op<Space>(&task->parsec_task);
+      static_op(&task->parsec_task);
 
       ttg::device::detail::reset_current();
 
@@ -1494,7 +1481,6 @@ namespace ttg_parsec {
       return rc;
     }
 
-    template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t device_static_evaluate(parsec_task_t* parsec_task) {
 
       task_t *task = (task_t*)parsec_task;
@@ -1509,7 +1495,7 @@ namespace ttg_parsec {
         gpu_task->task_type = 0; // user task
         gpu_task->last_data_check_epoch = 0; // used internally
         gpu_task->pushout = 0;
-        gpu_task->submit = &TT::device_static_submit<Space>;
+        gpu_task->submit = &TT::device_static_submit;
 
         // one way to force the task device
         // currently this will probably break all of PaRSEC if this hint
@@ -1527,7 +1513,7 @@ namespace ttg_parsec {
         task->dev_ptr->task_class = *task->parsec_task.task_class;
 
         // first invocation of the coroutine to get the coroutine handle
-        static_op<Space>(parsec_task);
+        static_op(parsec_task);
 
         /* when we come back here, the flows in gpu_task are set (see register_device_memory) */
 
@@ -1577,7 +1563,6 @@ namespace ttg_parsec {
 
     }
 
-    template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t device_static_op(parsec_task_t* parsec_task) {
       static_assert(derived_has_device_op());
 
@@ -1649,7 +1634,6 @@ namespace ttg_parsec {
     }
 #endif  // TTG_HAVE_DEVICE
 
-    template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t static_op(parsec_task_t *parsec_task) {
 
       task_t *task = (task_t*)parsec_task;
@@ -1675,14 +1659,14 @@ namespace ttg_parsec {
 
         if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
           auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(task->key, std::move(input), obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->op(task->key, std::move(input), obj->output_terminals));
         } else if constexpr (!ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(task->key, obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->op(task->key, obj->output_terminals));
         } else if constexpr (ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
           auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(std::move(input), obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->op(std::move(input), obj->output_terminals));
         } else if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->op(obj->output_terminals));
         } else {
           ttg::abort();
         }
@@ -1758,7 +1742,6 @@ namespace ttg_parsec {
       return PARSEC_HOOK_RETURN_DONE;
     }
 
-    template <ttg::ExecutionSpace Space>
     static parsec_hook_return_t static_op_noarg(parsec_task_t *parsec_task) {
       task_t *task = static_cast<task_t*>(parsec_task);
 
@@ -1774,9 +1757,9 @@ namespace ttg_parsec {
         assert(detail::parsec_ttg_caller == NULL);
         detail::parsec_ttg_caller = task;
         if constexpr (!ttg::meta::is_void_v<keyT>) {
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(task->key, obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->op(task->key, obj->output_terminals));
         } else if constexpr (ttg::meta::is_void_v<keyT>) {
-          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->template op<Space>(obj->output_terminals));
+          TTG_PROCESS_TT_OP_RETURN(suspended_task_address, task->coroutine_id, baseobj->op(obj->output_terminals));
         } else  // unreachable
           ttg:: abort();
         detail::parsec_ttg_caller = NULL;
@@ -4330,7 +4313,7 @@ namespace ttg_parsec {
     void make_executable() override {
       world.impl().register_tt_profiling(this);
       register_static_op_function();
-      ttg::TTBase::make_executable();
+      ::ttg::TTBase::make_executable();
     }
 
     /// keymap accessor
@@ -4376,6 +4359,7 @@ namespace ttg_parsec {
             return ttg::device::Device(dm(key), ttg::ExecutionSpace::L0);
           } else {
             throw std::runtime_error("Unknown device type!");
+            return ttg::device::Device{};
           }
         };
       }
