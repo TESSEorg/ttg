@@ -247,8 +247,10 @@ if (TARGET PaRSEC::parsec)
   # parsec depends on TTG's serialization layer since it does not provide its own
   if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET ttg-serialization-boost)
     list(APPEND ttg-parsec-deps ttg-serialization-boost)
+  elseif(TARGET ttg-serialization-madness)
+    list(APPEND ttg-parsec-deps ttg-serialization-madness)
   else()
-    list(APPEND ttg-parsec-deps ttg-serialization)
+    message(WARNING "missing full-featured serialization support for ttg-parsec: either TTG_PARSEC_USE_BOOST_SERIALIZATION=OFF or Boost not found, and MADNESS not found")
   endif()
   add_ttg_library(ttg-parsec "${ttg-parsec-headers}"
                   PUBLIC_HEADER "${ttg-parsec-headers}"
