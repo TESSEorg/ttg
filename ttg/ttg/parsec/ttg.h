@@ -3837,6 +3837,7 @@ namespace ttg_parsec {
             task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
             detail::parsec_ttg_caller = nullptr;
           }
+          dev_task.destroy(); // safe to destroy the coroutine now
         }
 #endif // TTG_HAVE_DEVICE
         /* the coroutine should have completed and we cannot access the promise anymore */
