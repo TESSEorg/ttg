@@ -1507,7 +1507,7 @@ namespace ttg_parsec {
         PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_list_item_t);
         gpu_task->ec = parsec_task;
         gpu_task->task_type = 0; // user task
-        gpu_task->last_data_check_epoch = 0; // used internally
+        gpu_task->last_data_check_epoch = std::numeric_limits<uint64_t>::max(); // used internally
         gpu_task->pushout = 0;
         gpu_task->submit = &TT::device_static_submit<Space>;
 
