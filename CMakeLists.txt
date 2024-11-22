@@ -220,8 +220,6 @@ endif(MPI_FOUND)
 if (TTG_EXAMPLES)
     # TiledArray brings in BTAS AND linear algebra (BLAS++/LAPACK++)
     include(FindOrFetchTiledArray)
-    # OpenMP may also be used by some examples
-    find_package(OpenMP COMPONENTS CXX)
     # std::execution may also be used by some examples
     find_package(CXXStdExecution)
 endif (TTG_EXAMPLES)
