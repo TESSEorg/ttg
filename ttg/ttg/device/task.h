@@ -244,8 +244,7 @@ namespace ttg::device {
   }
 
 
-  template <std::size_t i, typename valueT, typename... out_keysT, typename... out_valuesT,
-            ttg::Runtime Runtime = ttg::ttg_runtime>
+  template <std::size_t i, typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
   inline detail::send_t sendv(valueT &&value) {
     return sendv(i, std::forward<valueT>(value));
   }
@@ -283,8 +282,7 @@ namespace ttg::device {
       }
     }
 
-    template <size_t KeyId, size_t I, size_t... Is, typename... RangesT, typename valueT,
-              typename... out_keysT, typename... out_valuesT>
+    template <size_t KeyId, size_t I, size_t... Is, typename... RangesT, typename valueT>
     inline void prepare_broadcast(const std::tuple<RangesT...> &keylists, valueT &&value) {
       using key_t = typename broadcast_keylist_trait<
                       std::tuple_element_t<KeyId, std::tuple<std::remove_reference_t<RangesT>...>>

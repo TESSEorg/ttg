@@ -1510,7 +1510,7 @@ namespace ttg_parsec {
         PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_list_item_t);
         gpu_task->ec = parsec_task;
         gpu_task->task_type = 0; // user task
-        gpu_task->last_data_check_epoch = 0; // used internally
+        gpu_task->last_data_check_epoch = std::numeric_limits<uint64_t>::max(); // used internally
         gpu_task->pushout = 0;
         gpu_task->submit = &TT::device_static_submit<Space>;
 
@@ -3840,6 +3840,7 @@ namespace ttg_parsec {
             task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
             detail::parsec_ttg_caller = nullptr;
           }
+          dev_task.destroy(); // safe to destroy the coroutine now
         }
 #endif // TTG_HAVE_DEVICE
         /* the coroutine should have completed and we cannot access the promise anymore */
