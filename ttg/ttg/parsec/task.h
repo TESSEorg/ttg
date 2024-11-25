@@ -11,20 +11,18 @@ namespace ttg_parsec {
   namespace detail {
 
     struct device_ptr_t {
-      parsec_gpu_task_t* gpu_task = nullptr;
+      parsec_gpu_task_t *gpu_task = nullptr;
       parsec_flow_t* flows = nullptr;
       parsec_gpu_exec_stream_t* stream = nullptr;
       parsec_device_gpu_module_t* device = nullptr;
       parsec_task_class_t task_class; // copy of the taskclass
     };
 
-    template<bool SupportDevice>
+    template<bool HasDeviceOp>
     struct device_state_t
     {
       static constexpr bool support_device = false;
       static constexpr size_t num_flows = 0;
-      device_state_t()
-      { }
       static constexpr device_ptr_t* dev_ptr() {
         return nullptr;
       }
@@ -32,10 +30,12 @@ namespace ttg_parsec {
 
     template<>
     struct device_state_t<true> {
-      static constexpr bool support_device = false;
+      static constexpr bool support_device = true;
       static constexpr size_t num_flows = MAX_PARAM_COUNT;
       parsec_flow_t m_flows[num_flows];
-      device_ptr_t m_dev_ptr = {nullptr, &m_flows[0], nullptr, nullptr}; // gpu_task will be allocated in each task
+      parsec_gpu_task_t device_task;
+      device_ptr_t m_dev_ptr = {&device_task, &m_flows[0], nullptr, nullptr};
+
       device_ptr_t* dev_ptr() {
         return &m_dev_ptr;
       }
