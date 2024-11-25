@@ -236,6 +236,7 @@ if (TARGET PaRSEC::parsec)
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/import.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ptr.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/parsec-ext.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/parsec_data.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/task.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/thread_local.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttg.h

@@ -17,7 +17,7 @@ if (NOT TARGET PaRSEC::parsec)
 
   FetchContent_Declare(
           PARSEC
-          GIT_REPOSITORY      https://github.com/ICLDisco/parsec.git
+          GIT_REPOSITORY      https://github.com/devreal/parsec-1.git
           GIT_TAG             ${TTG_TRACKED_PARSEC_TAG}
   )
   FetchContent_MakeAvailable(PARSEC)

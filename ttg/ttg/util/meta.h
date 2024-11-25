@@ -6,7 +6,6 @@
 
 #include "ttg/util/span.h"
 #include "ttg/util/typelist.h"
-#include "ttg/buffer.h"
 #include "ttg/ptr.h"
 #include "ttg/devicescratch.h"
 
@@ -311,14 +310,6 @@ namespace ttg {
 
     template<typename T>
     struct is_buffer : std::false_type
-    { };
-
-    template<typename T, typename A>
-    struct is_buffer<ttg::Buffer<T, A>> : std::true_type
-    { };
-
-    template<typename T, typename A>
-    struct is_buffer<const ttg::Buffer<T, A>> : std::true_type
     { };
 
     template<typename T>
