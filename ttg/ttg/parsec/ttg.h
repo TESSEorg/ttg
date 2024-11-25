@@ -1088,12 +1088,15 @@ namespace ttg_parsec {
     bool all_peer_access = true;
     /* check whether all GPUs can access all peer GPUs */
     for (int i = 0; (i < parsec_nb_devices) && all_peer_access; ++i) {
-      parsec_device_module_t *device = parsec_mca_device_get(i);
-      if (PARSEC_DEV_IS_GPU(device->type)) {
-        parsec_device_gpu_module_t *gpu_device = (parsec_device_gpu_module_t*)device;
+      parsec_device_module_t *idevice = parsec_mca_device_get(i);
+      if (PARSEC_DEV_IS_GPU(idevice->type)) {
+        parsec_device_gpu_module_t *gpu_device = (parsec_device_gpu_module_t*)idevice;
         for (int j = 0; (j < parsec_nb_devices) && all_peer_access; ++j) {
-          if (PARSEC_DEV_IS_GPU(device->type)) {
-            all_peer_access = all_peer_access && (gpu_device->peer_access_mask & (1<<j));
+          if (i != j) { // because no device can access itself, says PaRSEC
+            parsec_device_module_t *jdevice = parsec_mca_device_get(j);
+            if (PARSEC_DEV_IS_GPU(jdevice->type)) {
+              all_peer_access &= (gpu_device->peer_access_mask & (1<<j)) ? true : false;
+            }
           }
         }
       }
