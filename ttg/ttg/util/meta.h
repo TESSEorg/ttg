@@ -6,9 +6,6 @@
 
 #include "ttg/util/span.h"
 #include "ttg/util/typelist.h"
-#include "ttg/buffer.h"
-#include "ttg/ptr.h"
-#include "ttg/devicescratch.h"
 
 namespace ttg {
 
@@ -303,22 +300,11 @@ namespace ttg {
     { };
 
     template<typename T>
-    struct is_ptr<ttg::Ptr<T>> : std::true_type
-    { };
-
-    template<typename T>
     constexpr bool is_ptr_v = is_ptr<T>::value;
 
+    /* specialized by the implementation */
     template<typename T>
     struct is_buffer : std::false_type
-    { };
-
-    template<typename T, typename A>
-    struct is_buffer<ttg::Buffer<T, A>> : std::true_type
-    { };
-
-    template<typename T, typename A>
-    struct is_buffer<const ttg::Buffer<T, A>> : std::true_type
     { };
 
     template<typename T>
@@ -329,16 +315,14 @@ namespace ttg {
     { };
 
     template<typename T>
-    struct is_devicescratch<ttg::devicescratch<T>> : std::true_type
-    { };
-
-    template<typename T>
-    struct is_devicescratch<const ttg::devicescratch<T>> : std::true_type
-    { };
-
-    template<typename T>
     constexpr bool is_devicescratch_v = is_devicescratch<T>::value;
 
+    template<typename T>
+    struct is_const : std::is_const<T>
+    { };
+
+    template<typename T>
+    constexpr bool is_const_v = is_const<T>::value;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // typelist metafunctions

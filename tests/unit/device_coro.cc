@@ -426,13 +426,26 @@ TEST_CASE("Device", "coro") {
 #endif // TTG_HAVE_CUDA
       }
     };
-
     auto tt = ttg::make_tt<ttg::ExecutionSpace::CUDA>(fn, ttg::edges(edge), ttg::edges(edge),
                                                       "device_task", {"edge_in"}, {"edge_out"});
     ttg::make_graph_executable(tt);
     if (ttg::default_execution_context().rank() == 0) tt->invoke(0, value_t{});
     ttg::ttg_fence(ttg::default_execution_context());
   }
+
+  SECTION("empty-select") {
+    ttg::Edge<void, void> edge;
+    auto fn = []() -> ttg::device::Task {
+      co_await ttg::device::select();
+      /* nothing else to do */
+    };
+    auto tt = ttg::make_tt<ttg::ExecutionSpace::CUDA>(fn, ttg::edges(edge), ttg::edges(),
+                                                      "device_task", {"edge_in"}, {"edge_out"});
+    ttg::make_graph_executable(tt);
+    tt->invoke();
+    ttg::ttg_fence(ttg::default_execution_context());
+  };
+
 }
 
 #endif // TTG_IMPL_DEVICE_SUPPORT

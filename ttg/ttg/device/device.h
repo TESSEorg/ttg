@@ -51,6 +51,10 @@ namespace ttg::device {
     bool is_invalid() const {
       return (m_space == ttg::ExecutionSpace::Invalid);
     }
+
+    static Device host() {
+      return {};
+    }
   };
 } // namespace ttg::device
 
