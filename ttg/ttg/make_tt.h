@@ -17,7 +17,7 @@ class CallableWrapTT
     : public TT<
           keyT, output_terminalsT,
           CallableWrapTT<funcT, returnT, funcT_receives_input_tuple, funcT_receives_outterm_tuple, space, keyT, output_terminalsT, input_valuesT...>,
-          ttg::typelist<input_valuesT...>> {
+          ttg::typelist<input_valuesT...>, space> {
   using baseT = typename CallableWrapTT::ttT;
 
   using input_values_tuple_type = typename baseT::input_values_tuple_type;
@@ -43,11 +43,6 @@ class CallableWrapTT
 #else   // TTG_HAVE_COROUTINE
       void;
 #endif  // TTG_HAVE_COROUTINE
-
-public:
-  static constexpr bool have_cuda_op = (space == ttg::ExecutionSpace::CUDA);
-  static constexpr bool have_hip_op  = (space == ttg::ExecutionSpace::HIP);
-  static constexpr bool have_level_zero_op = (space == ttg::ExecutionSpace::L0);
 
 protected:
 
