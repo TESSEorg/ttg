@@ -10,6 +10,7 @@
 
 #include "ttg/base/terminal.h"
 #include "ttg/util/demangle.h"
+#include "ttg/util/trace.h"
 
 namespace ttg {
 

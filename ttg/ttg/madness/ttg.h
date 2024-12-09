@@ -8,12 +8,15 @@
 
 #include "ttg/impl_selector.h"
 
-/* include ttg header to make symbols available in case this header is included directly */
-#include "../../ttg.h"
 #include "ttg/base/keymap.h"
 #include "ttg/base/tt.h"
 #include "ttg/func.h"
 #include "ttg/madness/device.h"
+#include "ttg/madness/devicefunc.h"
+
+/* needed for make_tt */
+#include "ttg/device/task.h"
+
 #include "ttg/runtimes.h"
 #include "ttg/tt.h"
 #include "ttg/util/bug.h"
@@ -26,6 +29,9 @@
 #include "ttg/util/void.h"
 #include "ttg/world.h"
 #include "ttg/coroutine.h"
+
+/* include ttg header to make symbols available in case this header is included directly */
+#include "../../ttg.h"
 
 #include <array>
 #include <cassert>

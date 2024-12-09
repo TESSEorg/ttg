@@ -4,6 +4,12 @@
 #include "ttg/config.h"
 #include "ttg/fwd.h"
 
+#if defined(TTG_USE_PARSEC)
+#include "ttg/parsec/ttg.h"
+#elif defined(TTG_USE_MADNESS)
+#include "ttg/madness/ttg.h"
+#endif  // TTG_USE_{PARSEC|MADNESS}
+
 #include "ttg/runtimes.h"
 #include "ttg/util/demangle.h"
 #include "ttg/util/hash.h"
@@ -36,12 +42,6 @@
 #include "ttg/devicescope.h"
 #include "ttg/device/device.h"
 #include "ttg/device/task.h"
-
-#if defined(TTG_USE_PARSEC)
-#include "ttg/parsec/ttg.h"
-#elif defined(TTG_USE_MADNESS)
-#include "ttg/madness/ttg.h"
-#endif  // TTG_USE_{PARSEC|MADNESS}
 
 // these headers use the default backend
 #include "ttg/run.h"
