@@ -588,9 +588,9 @@ namespace ttg {
       for (auto &&successor : this->successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
-          return static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->prepare_send(keylist, value);
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->prepare_send(keylist, value);
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
-          return static_cast<In<keyT, valueT> *>(successor)->prepare_send(keylist, value);
+          static_cast<In<keyT, valueT> *>(successor)->prepare_send(keylist, value);
         }
       }
     }
@@ -601,9 +601,9 @@ namespace ttg {
       for (auto &&successor : this->successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
-          return static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->prepare_send(value);
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->prepare_send(value);
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
-          return static_cast<In<keyT, valueT> *>(successor)->prepare_send(value);
+          static_cast<In<keyT, valueT> *>(successor)->prepare_send(value);
         }
       }
     }
