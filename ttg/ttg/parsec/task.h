@@ -252,9 +252,9 @@ namespace ttg_parsec {
       template<ttg::ExecutionSpace Space>
       parsec_hook_return_t invoke_op() {
         if constexpr (Space == ttg::ExecutionSpace::Host) {
-          return TT::template static_op<Space>(&this->parsec_task);
+          return TT::static_op(&this->parsec_task);
         } else {
-          return TT::template device_static_op<Space>(&this->parsec_task);
+          return TT::device_static_op(&this->parsec_task);
         }
       }
 
@@ -263,7 +263,7 @@ namespace ttg_parsec {
         if constexpr (Space == ttg::ExecutionSpace::Host) {
           return PARSEC_HOOK_RETURN_DONE;
         } else {
-          return TT::template device_static_evaluate<Space>(&this->parsec_task);
+          return TT::device_static_evaluate(&this->parsec_task);
         }
       }
 
@@ -310,9 +310,9 @@ namespace ttg_parsec {
       template<ttg::ExecutionSpace Space>
       parsec_hook_return_t invoke_op() {
         if constexpr (Space == ttg::ExecutionSpace::Host) {
-          return TT::template static_op<Space>(&this->parsec_task);
+          return TT::static_op(&this->parsec_task);
         } else {
-          return TT::template device_static_op<Space>(&this->parsec_task);
+          return TT::device_static_op(&this->parsec_task);
         }
       }
 
@@ -321,7 +321,7 @@ namespace ttg_parsec {
         if constexpr (Space == ttg::ExecutionSpace::Host) {
           return PARSEC_HOOK_RETURN_DONE;
         } else {
-          return TT::template device_static_evaluate<Space>(&this->parsec_task);
+          return TT::device_static_evaluate(&this->parsec_task);
         }
       }
 

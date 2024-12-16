@@ -575,7 +575,7 @@ class SpMM25D {
   /// 3-D process grid only
   template<ttg::ExecutionSpace Space_>
   class MultiplyAdd : public TT<Key<3>, std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>>, MultiplyAdd<Space_>,
-                                ttg::typelist<const Blk, const Blk, Blk>> {
+                                ttg::typelist<const Blk, const Blk, Blk>, Space_> {
     static constexpr const bool is_device_space = (Space_ != ttg::ExecutionSpace::Host);
     using task_return_type = std::conditional_t<is_device_space, ttg::device::Task, void>;
 

@@ -190,8 +190,9 @@ namespace ttg_madness {
   /// values
   ///         flowing into this TT; a const type indicates nonmutating (read-only) use, nonconst type
   ///         indicates mutating use (e.g. the corresponding input can be used as scratch, moved-from, etc.)
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs>
-  class TT : public ttg::TTBase, public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs>> {
+  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs, ttg::ExecutionSpace Space>
+  class TT : public ttg::TTBase, public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs, Space>> {
+    static_assert(Space == ttg::ExecutionSpace::Host, "MADNESS backend only supports Host Execution Space");
     static_assert(ttg::meta::is_typelist_v<input_valueTs>,
                   "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
     using input_tuple_type = ttg::meta::typelist_to_tuple_t<input_valueTs>;
