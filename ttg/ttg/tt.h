@@ -188,12 +188,12 @@ namespace ttg {
       auto coro_return = invoke;                                                                                      \
       static_assert(std::is_same_v<return_type, void> ||                                                              \
                     std::is_base_of_v<ttg::coroutine_handle<ttg::resumable_task_state>, decltype(coro_return)>||      \
-                    std::is_base_of_v<ttg::coroutine_handle<ttg::device::detail::device_task_promise_type<Space>>,    \
+                    std::is_base_of_v<ttg::coroutine_handle<ttg::detail::cotask_promise_type<Space>>,                 \
                                       decltype(coro_return)>);                                                        \
       if constexpr (std::is_base_of_v<ttg::coroutine_handle<ttg::resumable_task_state>, decltype(coro_return)>)       \
         id = ttg::TaskCoroutineID::ResumableTask;                                                                     \
       else if constexpr (std::is_base_of_v<                                                                           \
-                                        ttg::coroutine_handle<ttg::device::detail::device_task_promise_type<Space>>,  \
+                                        ttg::coroutine_handle<ttg::detail::cotask_promise_type<Space>>,               \
                                         decltype(coro_return)>)                                                       \
         id = ttg::TaskCoroutineID::DeviceTask;                                                                        \
       else                                                                                                            \

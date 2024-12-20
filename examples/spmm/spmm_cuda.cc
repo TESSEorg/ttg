@@ -819,7 +819,7 @@ class SpMM25D {
       }
     }
 
-    ttg::device::Task op(const Key<3> &ijk, typename baseT::input_refs_tuple_type &&_ijk,
+    ttg::CoTask op(const Key<3> &ijk, typename baseT::input_refs_tuple_type &&_ijk,
             std::tuple<Out<Key<2>, Blk>, Out<Key<3>, Blk>> &result) {
       const auto i = ijk[0];
       const auto j = ijk[1];

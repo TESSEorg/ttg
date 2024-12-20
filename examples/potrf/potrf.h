@@ -97,7 +97,7 @@ namespace potrf {
     auto f_dev = [=, iallocator = std::move(iallocator)]
                     (const Key1& key, MatrixTile<T>&& tile_kk,
                      std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out)
-                  -> ttg::device::Task<ES> {
+                  -> ttg::CoTask<ES> {
       const auto K = key[0];
 
       /* compute successors before submitting the kernel
@@ -225,7 +225,7 @@ namespace potrf {
 #if defined(ENABLE_DEVICE_KERNEL)
     auto f = [=](const Key2& key, const MatrixTile<T>& tile_kk, MatrixTile<T>&& tile_mk,
                  std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key3, MatrixTile<T>>,
-                            ttg::Out<Key3, MatrixTile<T>>>& out) -> ttg::device::Task<ES> {
+                            ttg::Out<Key3, MatrixTile<T>>>& out) -> ttg::CoTask<ES> {
       const int M = key[0];
       const int K = key[1];  // the column equals the outer most look K (same as PO)
 
@@ -377,7 +377,7 @@ namespace potrf {
     using T = typename MatrixT::element_type;
 #if defined(ENABLE_DEVICE_KERNEL)
     auto f = [=](const Key2& key, const MatrixTile<T>& tile_mk, MatrixTile<T>&& tile_kk)
-            -> ttg::device::Task<ES> {
+            -> ttg::CoTask<ES> {
       const int K = key[0];
       const int M = key[1];
 
@@ -500,7 +500,7 @@ namespace potrf {
     using T = typename MatrixT::element_type;
 #if defined(ENABLE_DEVICE_KERNEL)
     auto f = [=](const Key3& key, const MatrixTile<T>& tile_mk, const MatrixTile<T>& tile_nk, MatrixTile<T>&& tile_mn)
-            -> ttg::device::Task<ES> {
+            -> ttg::CoTask<ES> {
       const int M = key[0];
       const int N = key[1];
       const int K = key[2];

@@ -16,8 +16,8 @@ namespace detail {
   };
 
   template<ttg::ExecutionSpace ES>
-  struct op_return_type<ttg::device::Task<ES>> {
-    using type = typename ttg::device::Task<ES>::base_type;
+  struct op_return_type<ttg::CoTask<ES>> {
+    using type = typename ttg::CoTask<ES>::base_type;
   };
 #endif // TTG_HAVE_COROUTINE
 
@@ -29,7 +29,7 @@ namespace detail {
   { };
 
   template<ttg::ExecutionSpace ES>
-  struct op_execution_space<ttg::device::Task<ES>> : std::integral_constant<ttg::ExecutionSpace, ES>
+  struct op_execution_space<ttg::CoTask<ES>> : std::integral_constant<ttg::ExecutionSpace, ES>
   { };
 
   template<typename T>
@@ -60,7 +60,7 @@ class CallableWrapTT
 
   using noref_funcT = std::remove_reference_t<funcT>;
   std::conditional_t<std::is_function_v<noref_funcT>, std::add_pointer_t<noref_funcT>, noref_funcT> func;
-  static_assert(!ttg::device::detail::is_device_task_v<void>);
+  static_assert(!ttg::detail::is_device_task_v<void>);
   using op_return_type = detail::op_return_type_t<returnT>;
 
 public:
@@ -85,12 +85,12 @@ protected:
           coro_handle = ret;
         }
         return coro_handle;
-      } else if constexpr (ttg::device::detail::is_device_task_v<returnT>) {
+      } else if constexpr (ttg::detail::is_device_task_v<returnT>) {
         typename returnT::base_type coro_handle = ret;
         return coro_handle;
       }
       if constexpr (!(std::is_same_v<returnT, ttg::resumable_task>
-                   || ttg::device::detail::is_device_task_v<returnT>))
+                   || ttg::detail::is_device_task_v<returnT>))
 #endif
       {
         static_assert(std::tuple_size_v<std::remove_reference_t<decltype(out)>> == 1,

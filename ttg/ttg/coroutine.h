@@ -213,10 +213,10 @@ namespace ttg {
   /////////////////////////////////////////////////////////////////////////////
 
   // fwd declare all coro promise types that have not been declared yet
-  namespace device::detail {
+  namespace detail {
     template<ttg::ExecutionSpace Space>
-    struct device_task_promise_type;
-  }  // namespace device::detail
+    struct cotask_promise_type;
+  } // namespace detail
 
   /// describes all types of coroutine tasks known to TTG
   /// @internal only exists to simplify metaprogramming in the backend code
@@ -225,7 +225,7 @@ namespace ttg {
     Invalid,
     /// -> ttg::resumable_task
     ResumableTask,
-    /// -> ttg::device::Task
+    /// -> ttg::CoTask
     DeviceTask
   };
 
