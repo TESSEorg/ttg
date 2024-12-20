@@ -92,8 +92,6 @@ int main(int argc, char **argv)
     check = false;
   }
 
-  static_assert(ttg::has_split_metadata<MatrixTile<double>>::value);
-
   if (world.rank() == 0) {
     std::cout << "Creating 2D block cyclic matrix with NB " << NB << " N " << N << " M " << M << " P " << P << " Q " << Q << std::endl;
   }

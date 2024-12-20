@@ -113,8 +113,6 @@ int main(int argc, char **argv)
     Q = (world.size() + P - 1)/P;
   }
 
-  static_assert(ttg::has_split_metadata<MatrixTile<double>>::value);
-
   if(verbose) {
     std::cout << "Creating 2D block cyclic matrix with NB " << NB << " N " << N << " M " << M << " P " << P << std::endl;
   }
