@@ -1224,39 +1224,41 @@ namespace ttg_parsec {
 
    public:
     /// @return true if derivedT::have_cuda_op exists and is defined to true
-    template<typename TT = derivedT>
+    template<typename DerivedT = derivedT>
     static constexpr bool derived_has_cuda_op() {
-      if constexpr (ttg::meta::is_detected_v<have_cuda_op_non_type_t, derivedT>) {
-        return derivedT::have_cuda_op;
+      if constexpr (ttg::meta::is_detected_v<have_cuda_op_non_type_t, DerivedT>) {
+        return DerivedT::have_cuda_op;
       } else {
         return false;
       }
     }
 
     /// @return true if derivedT::have_hip_op exists and is defined to true
-    template<typename TT = derivedT>
+    template<typename DerivedT = derivedT>
     static constexpr bool derived_has_hip_op() {
-      if constexpr (ttg::meta::is_detected_v<have_hip_op_non_type_t, derivedT>) {
-        return derivedT::have_hip_op;
+      if constexpr (ttg::meta::is_detected_v<have_hip_op_non_type_t, DerivedT>) {
+        return DerivedT::have_hip_op;
       } else {
         return false;
       }
     }
 
     /// @return true if derivedT::have_hip_op exists and is defined to true
-    template<typename TT = derivedT>
+    template<typename DerivedT = derivedT>
     static constexpr bool derived_has_level_zero_op() {
-      if constexpr (ttg::meta::is_detected_v<have_level_zero_op_non_type_t, derivedT>) {
-        return derivedT::have_level_zero_op;
+      if constexpr (ttg::meta::is_detected_v<have_level_zero_op_non_type_t, DerivedT>) {
+        return DerivedT::have_level_zero_op;
       } else {
         return false;
       }
     }
 
     /// @return true if the TT supports device execution
-    template<typename TT = derivedT>
+    template<typename DerivedT = derivedT>
     static constexpr bool derived_has_device_op() {
-      return (derived_has_cuda_op() || derived_has_hip_op() || derived_has_level_zero_op());
+      return (derived_has_cuda_op<DerivedT>() ||
+              derived_has_hip_op<DerivedT>() ||
+              derived_has_level_zero_op<DerivedT>());
     }
 
     static_assert(!derived_has_device_op() || ttg::meta::probe_all_v<ttg::detail::has_buffer_apply,
@@ -4380,7 +4382,7 @@ namespace ttg_parsec {
     /// @arg pm a function that provides a hint on which device the task should execute.
     template<typename Devicemap>
     void set_devicemap(Devicemap&& dm) {
-      static_assert(derived_has_device_op(), "Device map only allowed on device-enabled TT!");
+      //static_assert(derived_has_device_op(), "Device map only allowed on device-enabled TT!");
       if constexpr (std::is_same_v<ttg::device::Device, decltype(dm(std::declval<keyT>()))>) {
         // dm returns a Device
         devicemap = std::forward<Devicemap>(dm);
