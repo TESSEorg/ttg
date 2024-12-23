@@ -18,13 +18,10 @@ using namespace ttg;
 std::atomic<int> task_counter = 0;
 
 struct A : public ttg::TTValue<A> {
-  // TODO: allocate pinned memory
-  std::unique_ptr<int> v;
   ttg::Buffer<int> b;
-  A() : v(std::make_unique<int>(0)), b(v) { }
+  A() : b(1) { }
 
   A(A&& a) = default;
-  A(const A& a) : v(std::make_unique<int>(*a.v)), b(v) { }
 
   template <typename Archive>
   void serialize(Archive& ar) {
@@ -38,11 +35,11 @@ struct A : public ttg::TTValue<A> {
 };
 
 template <int num_flows>
-auto make_ttg(bool do_move);
+auto make_ttg();
 
 // flows task ids via values
 template <>
-auto make_ttg<1>(bool do_move) {
+auto make_ttg<1>() {
   Edge<int, A> I2N, N2N;
   Edge<void, A> N2S;
 
@@ -57,11 +54,7 @@ auto make_ttg<1>(bool do_move) {
     //++task_counter;
     co_await ttg::device::select(value.b);
     if (key < NUM_TASKS) {
-      if (do_move) {
-        co_await ttg::device::forward(ttg::device::send<0>(key+1, std::move(value)));
-      } else {
-        co_await ttg::device::forward(ttg::device::send<0>(key+1, value));
-      }
+      co_await ttg::device::forward(ttg::device::send<0>(key+1, std::move(value)));
     } else {
     }
   } , edges(fuse(I2N, N2N)), edges(N2N));
@@ -70,7 +63,7 @@ auto make_ttg<1>(bool do_move) {
 }
 
 template <>
-auto make_ttg<2>(bool do_move) {
+auto make_ttg<2>() {
   Edge<int, A> I2N1, I2N2;
   Edge<int, A> N2N1, N2N2;
   Edge<void, A> N2S1, N2S2;
@@ -83,13 +76,8 @@ auto make_ttg<2>(bool do_move) {
   auto next = make_tt<ES, int>([=](const int &key, A&& v1, A&& v2) -> ttg::device::Task {
     co_await ttg::device::select(v1.b, v2.b);
     if (key < NUM_TASKS) {
-      if (do_move) {
-        co_await ttg::device::forward(ttg::device::send<0>(key+1, std::move(v1)),
-                                      ttg::device::send<1>(key+1, std::move(v2)));
-      } else {
-        co_await ttg::device::forward(ttg::device::send<0>(key+1, v1),
-                                      ttg::device::send<1>(key+1, v2));
-      }
+      co_await ttg::device::forward(ttg::device::send<0>(key+1, std::move(v1)),
+                                    ttg::device::send<1>(key+1, std::move(v2)));
     }
   } , edges(fuse(I2N1, N2N1), fuse(I2N2, N2N2)), edges(N2N1, N2N2));
 
@@ -97,7 +85,7 @@ auto make_ttg<2>(bool do_move) {
 }
 
 template <>
-auto make_ttg<4>(bool do_move) {
+auto make_ttg<4>() {
   Edge<int, A> I2N1, I2N2, I2N3, I2N4;
   Edge<int, A> N2N1, N2N2, N2N3, N2N4;
   Edge<void, A> N2S1, N2S2, N2S3, N2S4;
@@ -113,17 +101,10 @@ auto make_ttg<4>(bool do_move) {
   auto next = make_tt<ES, int>([=](const int &key, A&& v1, A&& v2, A&& v3, A&& v4) -> ttg::device::Task {
     co_await ttg::device::select(v1.b, v2.b, v3.b, v4.b);
     if (key < NUM_TASKS) {
-      if (do_move) {
-        co_await ttg::device::forward(ttg::device::send<0>(key+1, std::move(v1)),
-                                      ttg::device::send<1>(key+1, std::move(v2)),
-                                      ttg::device::send<2>(key+1, std::move(v3)),
-                                      ttg::device::send<3>(key+1, std::move(v4)));
-      } else {
-        co_await ttg::device::forward(ttg::device::send<0>(key+1, v1),
-                                      ttg::device::send<1>(key+1, v2),
-                                      ttg::device::send<2>(key+1, v3),
-                                      ttg::device::send<3>(key+1, v4));
-      }
+      co_await ttg::device::forward(ttg::device::send<0>(key+1, std::move(v1)),
+                                    ttg::device::send<1>(key+1, std::move(v2)),
+                                    ttg::device::send<2>(key+1, std::move(v3)),
+                                    ttg::device::send<3>(key+1, std::move(v4)));
     }
   }, edges(fuse(I2N1, N2N1), fuse(I2N2, N2N2),
            fuse(I2N3, N2N3), fuse(I2N4, N2N4)),
@@ -133,7 +114,7 @@ auto make_ttg<4>(bool do_move) {
 }
 
 template <>
-auto make_ttg<8>(bool do_move) {
+auto make_ttg<8>() {
   Edge<int, A> I2N1, I2N2, I2N3, I2N4, I2N5, I2N6, I2N7, I2N8;
   Edge<int, A> N2N1, N2N2, N2N3, N2N4, N2N5, N2N6, N2N7, N2N8;
   Edge<void, A> N2S1, N2S2, N2S3, N2S4, N2S5, N2S6, N2S7, N2S8;
@@ -153,25 +134,14 @@ auto make_ttg<8>(bool do_move) {
   auto next = make_tt<ES, int>([=](const int &key, auto&& v1, auto&& v2, auto&& v3, auto&& v4, auto&& v5, auto&& v6, auto&& v7, auto&& v8) -> ttg::device::Task {
     co_await ttg::device::select(v1.b, v2.b, v3.b, v4.b, v5.b, v6.b, v7.b, v8.b);
     if (key < NUM_TASKS) {
-      if (do_move) {
-        co_await ttg::device::forward(ttg::device::send<0>(key+1, std::move(v1)),
-                                      ttg::device::send<1>(key+1, std::move(v2)),
-                                      ttg::device::send<2>(key+1, std::move(v3)),
-                                      ttg::device::send<3>(key+1, std::move(v4)),
-                                      ttg::device::send<4>(key+1, std::move(v5)),
-                                      ttg::device::send<5>(key+1, std::move(v6)),
-                                      ttg::device::send<6>(key+1, std::move(v7)),
-                                      ttg::device::send<7>(key+1, std::move(v8)));
-      } else {
-        co_await ttg::device::forward(ttg::device::send<0>(key+1, v1),
-                                      ttg::device::send<1>(key+1, v2),
-                                      ttg::device::send<2>(key+1, v3),
-                                      ttg::device::send<3>(key+1, v4),
-                                      ttg::device::send<4>(key+1, v5),
-                                      ttg::device::send<5>(key+1, v6),
-                                      ttg::device::send<6>(key+1, v7),
-                                      ttg::device::send<7>(key+1, v8));
-      }
+      co_await ttg::device::forward(ttg::device::send<0>(key+1, std::move(v1)),
+                                    ttg::device::send<1>(key+1, std::move(v2)),
+                                    ttg::device::send<2>(key+1, std::move(v3)),
+                                    ttg::device::send<3>(key+1, std::move(v4)),
+                                    ttg::device::send<4>(key+1, std::move(v5)),
+                                    ttg::device::send<5>(key+1, std::move(v6)),
+                                    ttg::device::send<6>(key+1, std::move(v7)),
+                                    ttg::device::send<7>(key+1, std::move(v8)));
     }
   }, edges(fuse(I2N1, N2N1), fuse(I2N2, N2N2), fuse(I2N3, N2N3), fuse(I2N4, N2N4), fuse(I2N5, N2N5), fuse(I2N6, N2N6), fuse(I2N7, N2N7), fuse(I2N8, N2N8)),
      edges(N2N1, N2N2, N2N3, N2N4, N2N5, N2N6, N2N7, N2N8));
@@ -181,7 +151,7 @@ auto make_ttg<8>(bool do_move) {
 
 // flows task ids via keys
 template <>
-auto make_ttg<0>(bool do_move) {
+auto make_ttg<0>() {
   Edge<int, void> I2N, N2N;
   Edge<void, int> N2S;
 
@@ -198,9 +168,9 @@ auto make_ttg<0>(bool do_move) {
 }
 
 template<int num_flows>
-void run_bench(bool do_move)
+void run_bench()
 {
-  auto [init, next] = make_ttg<num_flows>(do_move);
+  auto [init, next] = make_ttg<num_flows>();
 
   auto connected = make_graph_executable(init.get());
   assert(connected);
@@ -225,23 +195,18 @@ void run_bench(bool do_move)
 int main(int argc, char* argv[]) {
 
   int num_flows = 0;
-  int do_move = 1;
   ttg_initialize(argc, argv, -1);
 
   if (argc > 1) {
     num_flows = std::atoi(argv[1]);
   }
 
-  if (argc > 2) {
-    do_move = std::atoi(argv[2]);
-  }
-
   switch(num_flows) {
-  case 0: run_bench<0>(do_move); break;
-  case 1: run_bench<1>(do_move); break;
-  case 2: run_bench<2>(do_move); break;
-  case 4: run_bench<4>(do_move); break;
-  case 8: run_bench<8>(do_move); break;
+  case 0: run_bench<0>(); break;
+  case 1: run_bench<1>(); break;
+  case 2: run_bench<2>(); break;
+  case 4: run_bench<4>(); break;
+  case 8: run_bench<8>(); break;
   default: std::cout << "Unsupported number of flows: " << NUM_TASKS << std::endl;
   }
 
