@@ -71,8 +71,6 @@ int main(int argc, char **argv)
   int P = std::sqrt(world.size());
   int Q = (world.size() + P - 1)/P;
 
-  static_assert(ttg::has_split_metadata<MatrixTile<double>>::value);
-
   std::cout << "Creating 2D block cyclic matrix with NB " << NB << " N " << N << " M " << M << " P " << P << std::endl;
 
   parsec_matrix_sym_block_cyclic_t dcA;
