@@ -19,12 +19,12 @@ std::atomic<int> task_counter = 0;
 
 struct A : public ttg::TTValue<A> {
   // TODO: allocate pinned memory
-  int v = 0;
+  std::unique_ptr<int> v;
   ttg::Buffer<int> b;
-  A() : b(&v, 1) { }
+  A() : v(std::make_unique<int>(0)), b(v) { }
 
   A(A&& a) = default;
-  A(const A& a) : v(a.v), b(&v, 1) { }
+  A(const A& a) : v(std::make_unique<int>(*a.v)), b(v) { }
 
   template <typename Archive>
   void serialize(Archive& ar) {
