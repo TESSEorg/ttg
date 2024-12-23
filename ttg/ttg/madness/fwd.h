@@ -3,6 +3,7 @@
 
 #include "ttg/fwd.h"
 #include "ttg/util/typelist.h"
+#include "ttg/util/span.h"
 
 #include <future>
 
@@ -70,6 +71,9 @@ namespace ttg_madness {
 
   template<typename... Views>
   inline bool register_device_memory(std::tuple<Views&...> &views);
+
+  template<typename T, std::size_t N>
+  inline bool register_device_memory(const ttg::span<T, N>& span);
 
   template<typename... Buffer>
   inline void post_device_out(std::tuple<Buffer&...> &b);

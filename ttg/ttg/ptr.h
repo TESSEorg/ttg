@@ -3,6 +3,8 @@
 
 #include "ttg/fwd.h"
 
+#include "ttg/util/meta.h"
+
 namespace ttg {
 
 template<typename T>
@@ -17,6 +19,16 @@ template<typename T>
 inline Ptr<std::decay_t<T>> get_ptr(T&& obj) {
   return TTG_IMPL_NS::get_ptr(std::forward<T>(obj));
 }
+
+namespace meta {
+
+  /* specialize some traits */
+
+  template<typename T>
+  struct is_ptr<ttg::Ptr<T>> : std::true_type
+  { };
+
+} // namespace ptr
 
 #if 0
 namespace detail {
