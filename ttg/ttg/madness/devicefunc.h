@@ -1,6 +1,8 @@
 #ifndef TTG_MAD_DEVICEFUNC_H
 #define TTG_MAD_DEVICEFUNC_H
 
+#include "ttg/devicescope.h"
+
 #include "ttg/madness/buffer.h"
 
 namespace ttg_madness {
