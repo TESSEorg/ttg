@@ -1224,6 +1224,7 @@ namespace ttg_parsec {
 
    public:
     /// @return true if derivedT::have_cuda_op exists and is defined to true
+    template<typename TT = derivedT>
     static constexpr bool derived_has_cuda_op() {
       if constexpr (ttg::meta::is_detected_v<have_cuda_op_non_type_t, derivedT>) {
         return derivedT::have_cuda_op;
@@ -1233,6 +1234,7 @@ namespace ttg_parsec {
     }
 
     /// @return true if derivedT::have_hip_op exists and is defined to true
+    template<typename TT = derivedT>
     static constexpr bool derived_has_hip_op() {
       if constexpr (ttg::meta::is_detected_v<have_hip_op_non_type_t, derivedT>) {
         return derivedT::have_hip_op;
@@ -1242,6 +1244,7 @@ namespace ttg_parsec {
     }
 
     /// @return true if derivedT::have_hip_op exists and is defined to true
+    template<typename TT = derivedT>
     static constexpr bool derived_has_level_zero_op() {
       if constexpr (ttg::meta::is_detected_v<have_level_zero_op_non_type_t, derivedT>) {
         return derivedT::have_level_zero_op;
@@ -1251,6 +1254,7 @@ namespace ttg_parsec {
     }
 
     /// @return true if the TT supports device execution
+    template<typename TT = derivedT>
     static constexpr bool derived_has_device_op() {
       return (derived_has_cuda_op() || derived_has_hip_op() || derived_has_level_zero_op());
     }
