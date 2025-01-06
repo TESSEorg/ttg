@@ -442,6 +442,15 @@ public:
     m_count = n;
   }
 
+  /* Reallocate the buffer with count elements */
+  void reset(std::shared_ptr<value_type[]> ptr, std::size_t n, ttg::scope scope = ttg::scope::SyncIn) {
+    release_data();
+    m_data = detail::ttg_parsec_data_types<std::shared_ptr<value_type[]>,
+                                           detail::empty_allocator<element_type>>
+                                           ::create_data(ptr, n, scope);
+    m_count = n;
+  }
+
   /**
    * Resets the scope of the buffer.
    * If scope is SyncIn then the next time

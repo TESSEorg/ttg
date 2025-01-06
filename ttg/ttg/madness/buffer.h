@@ -258,6 +258,19 @@ public:
     m_count = n;
   }
 
+  /* Reallocate the buffer with count elements */
+  void reset(std::shared_ptr<element_type[]> ptr, std::size_t n, ttg::scope scope = ttg::scope::SyncIn) {
+
+    if (m_owned) {
+      deallocate();
+      m_owned = false;
+    }
+
+    m_sptr = std::move(ptr);
+    m_host_data = m_sptr.get();
+    m_count = n;
+  }
+
   /**
    * Resets the scope of the buffer. Ignored in MADNESS.
    */
