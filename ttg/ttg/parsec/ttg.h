@@ -4351,7 +4351,7 @@ namespace ttg_parsec {
     void make_executable() override {
       world.impl().register_tt_profiling(this);
       register_static_op_function();
-      ttg::TTBase::make_executable();
+      ::ttg::TTBase::make_executable();
     }
 
     /// keymap accessor
