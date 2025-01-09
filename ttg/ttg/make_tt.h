@@ -213,9 +213,9 @@ protected:
 
     auto invoke_func_empty_tuple = [&](auto&&... args){
       if constexpr(funcT_receives_input_tuple) {
-        invoke_func_handle_ret(std::tuple<>{}, std::forward<decltype(args)>(args)...);
+        return invoke_func_handle_ret(std::tuple<>{}, std::forward<decltype(args)>(args)...);
       } else {
-        invoke_func_handle_ret(std::forward<decltype(args)>(args)...);
+        return invoke_func_handle_ret(std::forward<decltype(args)>(args)...);
       }
     };
 

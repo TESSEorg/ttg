@@ -28,8 +28,6 @@ using namespace ttg;
 #include "../blockmatrix.h"
 #include "ttg/util/bug.h"
 
-//#include <omp.h> //
-
 #include "FW-APSP/FloydIterativeKernelDF.h"        // contains the iterative kernel
 #include "FW-APSP/FloydRecursiveSerialKernelDF.h"  // contains the recursive but serial kernels
 // #include "FloydRecursiveParallelKernel.h" // contains the recursive and parallel kernels

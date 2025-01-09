@@ -3,8 +3,11 @@
 
 #include "ttg/fwd.h"
 #include "ttg/util/typelist.h"
+#include "ttg/util/span.h"
 
 #include <future>
+
+#include <parsec.h>
 
 extern "C" struct parsec_context_s;
 
@@ -74,20 +77,21 @@ namespace ttg_parsec {
   inline Ptr<std::decay_t<T>> get_ptr(T&& obj);
 
   template<typename... Views>
-  inline bool register_device_memory(std::tuple<Views&...> &views);
+  bool register_device_memory(std::tuple<Views&...> &views);
+
+  template<typename T, std::size_t N>
+  bool register_device_memory(const ttg::span<T, N>& span);
 
   template<typename... Buffer>
-  inline void post_device_out(std::tuple<Buffer&...> &b);
+  void post_device_out(std::tuple<Buffer&...> &b);
 
   template<typename... Buffer>
-  inline void mark_device_out(std::tuple<Buffer&...> &b);
+  void mark_device_out(std::tuple<Buffer&...> &b);
 
   inline int num_devices();
 
-#if 0
-  template<typename... Args>
-  inline std::pair<bool, std::tuple<ptr<std::decay_t<Args>>...>> get_ptr(Args&&... args);
-#endif
+  template<typename T>
+  parsec_data_t* buffer_data(T&& buffer);
 
 }  // namespace ttg_parsec
 

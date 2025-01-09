@@ -11,6 +11,7 @@
 #include "ttg/util/iovec.h"
 #include "ttg/device/device.h"
 #include "ttg/parsec/device.h"
+#include "ttg/devicescope.h"
 
 #if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
 #include <cuda_runtime.h>
@@ -78,7 +79,12 @@ private:
 
 public:
 
-  Buffer() : Buffer(nullptr, 0)
+  Buffer()
+  : ttg_parsec_data_wrapper_t()
+  , allocator_type()
+  , m_host_data(nullptr)
+  , m_count(0)
+  , m_owned(false)
   { }
 
   /**
@@ -185,16 +191,33 @@ public:
     m_data->owner_device = parsec_id;
   }
 
+  bool is_current_on(ttg::device::Device dev) const {
+    if (empty()) return true; // empty is current everywhere
+    int parsec_id = detail::ttg_device_to_parsec_device(dev);
+    uint32_t max_version = 0;
+    for (int i = 0; i < parsec_nb_devices; ++i) {
+      if (nullptr == m_data->device_copies[i]) continue;
+      max_version = std::max(max_version, m_data->device_copies[i]->version);
+    }
+    return (m_data->device_copies[parsec_id] &&
+            m_data->device_copies[parsec_id]->version == max_version);
+  }
+
   /* Get the owner device ID, i.e., the last updated
-   * device buffer. */
+   * device buffer.
+   * NOTE: there may be more than one device with the current
+   *       data so the result may not always be what is expected.
+   *       Use is_current_on() to check for a specific device. */
   ttg::device::Device get_owner_device() const {
     assert(is_valid());
+    if (empty()) return ttg::device::current_device(); // empty is always valid
     return detail::parsec_device_to_ttg_device(m_data->owner_device);
   }
 
   /* Get the pointer on the currently active device. */
   pointer_type current_device_ptr() {
     assert(is_valid());
+    if (empty()) return nullptr;
     int device_id = detail::ttg_device_to_parsec_device(ttg::device::current_device());
     return static_cast<pointer_type>(m_data->device_copies[device_id]->device_private);
   }
@@ -202,6 +225,7 @@ public:
   /* Get the pointer on the currently active device. */
   const_pointer_type current_device_ptr() const {
     assert(is_valid());
+    if (empty()) return nullptr;
     int device_id = detail::ttg_device_to_parsec_device(ttg::device::current_device());
     return static_cast<const_pointer_type>(m_data->device_copies[device_id]->device_private);
   }
@@ -211,12 +235,14 @@ public:
    *        See \ref ttg::device::current_device for that. */
   pointer_type owner_device_ptr() {
     assert(is_valid());
+    if (empty()) return nullptr;
     return static_cast<pointer_type>(m_data->device_copies[m_data->owner_device]->device_private);
   }
 
   /* get the current device pointer */
   const_pointer_type owner_device_ptr() const {
     assert(is_valid());
+    if (empty()) return nullptr;
     return static_cast<const_pointer_type>(m_data->device_copies[m_data->owner_device]->device_private);
   }
 
@@ -224,6 +250,7 @@ public:
    */
   pointer_type device_ptr_on(const ttg::device::Device& device) {
     assert(is_valid());
+    if (empty()) return nullptr;
     int device_id = detail::ttg_device_to_parsec_device(device);
     return static_cast<pointer_type>(parsec_data_get_ptr(m_data.get(), device_id));
   }
@@ -232,15 +259,18 @@ public:
    */
   const_pointer_type device_ptr_on(const ttg::device::Device& device) const {
     assert(is_valid());
+    if (empty()) return nullptr;
     int device_id = detail::ttg_device_to_parsec_device(device);
     return static_cast<const_pointer_type>(parsec_data_get_ptr(m_data.get(), device_id));
   }
 
   pointer_type host_ptr() {
+    if (empty()) return nullptr;
     return static_cast<pointer_type>(parsec_data_get_ptr(m_data.get(), 0));
   }
 
   const_pointer_type host_ptr() const {
+    if (empty()) return nullptr;
     return static_cast<const_pointer_type>(parsec_data_get_ptr(m_data.get(), 0));
   }
 
@@ -285,15 +315,19 @@ public:
   }
 
   bool is_valid() const {
-    return !!m_data;
+    return (m_count == 0 || m_data);
   }
 
   operator bool() const {
-    return is_valid();
+    return !empty();
   }
 
   std::size_t size() const {
     return m_count;
+  }
+
+  bool empty() const {
+    return m_count == 0;
   }
 
   /* Reallocate the buffer with count elements */
@@ -363,8 +397,14 @@ public:
           m_data->device_copies[i]->version = 0;
         }
       }
-      m_data->owner_device = 0;
     }
+    m_data->owner_device = 0;
+  }
+
+  ttg::scope scope() const {
+    /* if the host owns the data and has a version of zero we only have to allocate data */
+    return (m_data->device_copies[0]->version == 0 && m_data->owner_device == 0)
+            ? ttg::scope::Allocate : ttg::scope::SyncIn;
   }
 
   void prefer_device(ttg::device::Device dev) {
@@ -433,8 +473,6 @@ public:
     }
   }
 #endif // TTG_SERIALIZATION_SUPPORTS_MADNESS
-
-
 };
 
 namespace detail {
