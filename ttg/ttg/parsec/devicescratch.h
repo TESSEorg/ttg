@@ -50,19 +50,6 @@ private:
     return data;
   }
 
-  void remove_from_flow() {
-    /* remove the scratch from the gpu-task flow */
-    assert(nullptr != detail::parsec_ttg_caller);
-    parsec_task_t *parsec_task = &detail::parsec_ttg_caller->parsec_task;
-    parsec_flow_t *flows = detail::parsec_ttg_caller->dev_ptr->flows;
-    for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
-      if (nullptr != parsec_task->data[i].data_in && parsec_task->data[i].data_in->original == m_data) {
-        flows[i].flow_flags = PARSEC_FLOW_ACCESS_NONE; // disable this flow
-        break;
-      }
-    }
-  }
-
   friend parsec_data_t* detail::get_parsec_data<T>(const ttg_parsec::devicescratch<T>&);
 
 public:
@@ -93,8 +80,6 @@ public:
   devicescratch& operator=(const devicescratch& db) = delete;
 
   ~devicescratch() {
-    /* remove data from flow */
-    //remove_from_flow();
     if (nullptr != m_data) {
       //parsec_data_destroy(m_data);
       //parsec_data_copy_detach(m_data, parsec_data_get_copy(m_data, 0), 0);
@@ -128,7 +113,7 @@ public:
   }
 
   std::size_t size() const {
-    return (m_data->nb_elts / sizeof(element_type));
+    return (m_data->span / sizeof(element_type));
   }
 
 };

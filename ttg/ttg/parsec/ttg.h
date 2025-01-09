@@ -1495,8 +1495,9 @@ namespace ttg_parsec {
     }
 
     /* callback to set in the device task structure */
-    static void release_device_task(void *ptr) {
-      /* nothing to do */
+    static void release_device_task(parsec_gpu_task_t *gpu_task) {
+      detail::parsec_ttg_gpu_task_t *task = static_cast<detail::parsec_ttg_gpu_task_t *>(gpu_task);
+      task->free_flows();
     }
 
     template <ttg::ExecutionSpace Space>
@@ -1506,36 +1507,20 @@ namespace ttg_parsec {
 
       /* set up the device task */
       parsec_gpu_task_t *gpu_task = task->dev_ptr->gpu_task;
-      /* TODO: needed? */
-      std::memset(gpu_task, 0, sizeof(*gpu_task));
       /* construct the GPU task */
-      PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_list_item_t);
+      PARSEC_OBJ_CONSTRUCT(gpu_task, parsec_gpu_task_t);
       gpu_task->ec = parsec_task;
-      gpu_task->task_type = 0; // user task
-      gpu_task->last_data_check_epoch = 0; // used internally
-      gpu_task->pushout = 0;
       gpu_task->submit = &TT::device_static_submit<Space>;
       gpu_task->release_device_task = &release_device_task;
 
       /* TODO: is this the right place to set the mask? */
       task->parsec_task.chore_mask = PARSEC_DEV_ALL;
 
-      /* copy over the task class, because that's what we need */
-      task->dev_ptr->task_class = *task->parsec_task.task_class;
 
       // first invocation of the coroutine to get the coroutine handle
       static_op<Space>(parsec_task);
 
       /* when we come back here, the flows in gpu_task are set (see register_device_memory) */
-
-      parsec_task_class_t& tc = task->dev_ptr->task_class;
-
-      // input flows are set up during register_device_memory as part of the first invocation above
-      for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
-        tc.in[i]  = gpu_task->flow[i];
-        tc.out[i] = gpu_task->flow[i];
-      }
-      tc.nb_flows = MAX_PARAM_COUNT;
 
       /* set the device hint on the data */
       TT *tt = task->tt;
@@ -1546,9 +1531,9 @@ namespace ttg_parsec {
         } else {
           parsec_dev = detail::ttg_device_to_parsec_device(tt->devicemap(task->key));
         }
-        for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
+        for (int i = 0; i < gpu_task->nb_flows; ++i) {
           /* only set on mutable data since we have exclusive access */
-          if (tc.in[i]->flow_flags & PARSEC_FLOW_ACCESS_WRITE) {
+          if (gpu_task->flow_info[i].flow->flow_flags & PARSEC_FLOW_ACCESS_WRITE) {
             parsec_data_t *data = parsec_task->data[i].data_in->original;
             /* only set the preferred device if the host has the latest copy
               * as otherwise we may end up with the wrong data if there is a newer
@@ -1559,9 +1544,6 @@ namespace ttg_parsec {
           }
         }
       }
-
-      /* set the new task class that contains the flows */
-      task->parsec_task.task_class = &task->dev_ptr->task_class;
 
       /* select this one */
       return PARSEC_HOOK_RETURN_DONE;
@@ -3413,24 +3395,21 @@ namespace ttg_parsec {
         if (data->owner_device != 0) {
           /* find the flow */
           int flowidx = 0;
-          while (flowidx < MAX_PARAM_COUNT &&
-                gpu_task->flow[flowidx]->flow_flags != PARSEC_FLOW_ACCESS_NONE) {
+          while (flowidx < gpu_task->nb_flows) {
             if (detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in->original == data) {
               /* found the right data, set the corresponding flow as pushout */
               break;
             }
             ++flowidx;
           }
-          if (flowidx == MAX_PARAM_COUNT) {
-            throw std::runtime_error("Cannot add more than MAX_PARAM_COUNT flows to a task!");
-          }
-          if (gpu_task->flow[flowidx]->flow_flags == PARSEC_FLOW_ACCESS_NONE) {
+          assert(flowidx < gpu_task->nb_flows);
+          if (gpu_task->flow_info[flowidx].flow->flow_flags == PARSEC_FLOW_ACCESS_NONE) {
             /* no flow found, add one and mark it pushout */
             detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in = data->device_copies[0];
-            gpu_task->flow_nb_elts[flowidx] = data->nb_elts;
+            gpu_task->flow_info[flowidx].flow_span = data->span;
           }
           /* need to mark the flow RW to make PaRSEC happy */
-          ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_RW;
+          ((parsec_flow_t *)gpu_task->flow_info[flowidx].flow)->flow_flags |= PARSEC_FLOW_ACCESS_RW;
           gpu_task->pushout |= 1<<flowidx;
         }
       };
