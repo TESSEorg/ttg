@@ -10,21 +10,41 @@ namespace ttg_parsec {
 
   namespace detail {
 
-    struct device_ptr_t {
-      parsec_gpu_task_t* gpu_task = nullptr;
-      parsec_flow_t* flows = nullptr;
-      parsec_gpu_exec_stream_t* stream = nullptr;
-      parsec_device_gpu_module_t* device = nullptr;
-      parsec_task_class_t task_class; // copy of the taskclass
+    struct parsec_ttg_gpu_task_t : public parsec_gpu_task_t {
+      std::byte *memory = nullptr;
+      void allocate_flows(std::size_t size) {
+        if (this->memory != nullptr) free_flows();
+        constexpr const auto align = std::align_val_t(std::max(alignof(parsec_flow_t), alignof(parsec_gpu_flow_info_t)));
+        this->memory = new(align) std::byte[size * (sizeof(parsec_flow_t) + sizeof(parsec_gpu_flow_info_s))];
+        parsec_flow_t *flows = (parsec_flow_t*)this->memory;
+        this->flow_info = (parsec_gpu_flow_info_t*)(this->memory + size * sizeof(parsec_flow_t));
+        for (std::size_t i = 0; i < size; ++i) {
+          this->flow_info[i].flow = &flows[i];
+          flows[i].flow_index = i;
+          flows[i].flow_flags = 0;
+          flows[i].flow_datatype_mask = ~0;
+        }
+        this->nb_flows  = size;
+      }
+
+      void free_flows() {
+        if (this->memory != nullptr) {
+          delete[] this->memory;
+          this->memory = nullptr;
+        }
+      }
     };
 
-    template<bool SupportDevice>
+    struct device_ptr_t {
+      parsec_ttg_gpu_task_t *gpu_task = nullptr;
+      parsec_gpu_exec_stream_t* stream = nullptr;
+      parsec_device_gpu_module_t* device = nullptr;
+    };
+
+    template<bool HasDeviceOp>
     struct device_state_t
     {
       static constexpr bool support_device = false;
-      static constexpr size_t num_flows = 0;
-      device_state_t()
-      { }
       static constexpr device_ptr_t* dev_ptr() {
         return nullptr;
       }
@@ -32,10 +52,10 @@ namespace ttg_parsec {
 
     template<>
     struct device_state_t<true> {
-      static constexpr bool support_device = false;
-      static constexpr size_t num_flows = MAX_PARAM_COUNT;
-      parsec_flow_t m_flows[num_flows];
-      device_ptr_t m_dev_ptr = {nullptr, &m_flows[0], nullptr, nullptr}; // gpu_task will be allocated in each task
+      static constexpr bool support_device = true;
+      parsec_ttg_gpu_task_t device_task;
+      device_ptr_t m_dev_ptr = {&device_task, nullptr, nullptr};
+
       device_ptr_t* dev_ptr() {
         return &m_dev_ptr;
       }
