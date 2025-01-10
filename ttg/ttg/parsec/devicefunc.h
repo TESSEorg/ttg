@@ -114,8 +114,8 @@ namespace ttg_parsec {
     uint8_t i; // only limited number of flows
     detail::parsec_ttg_task_base_t *caller = detail::parsec_ttg_caller;
     assert(nullptr != caller->dev_ptr);
+    caller->dev_ptr->gpu_task->allocate_flows(span.size());
     parsec_gpu_task_t *gpu_task = caller->dev_ptr->gpu_task;
-    parsec_flow_t *flows = caller->dev_ptr->flows;
 
     bool is_current = false;
     for (i = 0; i < span.size(); ++i) {
@@ -140,14 +140,15 @@ namespace ttg_parsec {
 
         /* build the flow */
         /* TODO: reuse the flows of the task class? How can we control the sync direction then? */
-        flows[i] = parsec_flow_t{.name = nullptr,
+        *((parsec_flow_t*)gpu_task->flow_info[i].flow) =
+                  parsec_flow_t{.name = nullptr,
                                 .sym_type = PARSEC_SYM_INOUT,
                                 .flow_flags = static_cast<uint8_t>(access),
                                 .flow_index = i,
                                 .flow_datatype_mask = ~0 };
 
-        gpu_task->flow_nb_elts[i] = data->nb_elts; // size in bytes
-        gpu_task->flow[i] = &flows[i];
+        gpu_task->flow_info[i].flow_span = data->span; // size in bytes
+        gpu_task->flow_info[i].flow_dc = nullptr;
 
         /* set the input data copy, parsec will take care of the transfer
         * and the buffer will look at the parsec_data_t for the current pointer */
@@ -158,25 +159,17 @@ namespace ttg_parsec {
 
       } else {
         /* ignore the flow */
-        flows[i] = parsec_flow_t{.name = nullptr,
+        *((parsec_flow_t*)gpu_task->flow_info[i].flow) =
+                   parsec_flow_t{.name = nullptr,
                                  .sym_type = PARSEC_FLOW_ACCESS_NONE,
                                  .flow_flags = 0,
                                  .flow_index = i,
                                  .flow_datatype_mask = ~0 };
-        gpu_task->flow[i] = &flows[i];
-        gpu_task->flow_nb_elts[i] = 0; // size in bytes
+        gpu_task->flow_info[i].flow_span = 0; // size in bytes
         caller->parsec_task.data[i].data_in = nullptr;
       }
     }
 
-    /* reset all remaining entries in the current task */
-    for (; i < MAX_PARAM_COUNT; ++i) {
-      detail::parsec_ttg_caller->parsec_task.data[i].data_in = nullptr;
-      detail::parsec_ttg_caller->dev_ptr->flows[i].flow_flags = PARSEC_FLOW_ACCESS_NONE;
-      detail::parsec_ttg_caller->dev_ptr->flows[i].flow_index = i;
-      detail::parsec_ttg_caller->dev_ptr->gpu_task->flow[i] = &detail::parsec_ttg_caller->dev_ptr->flows[i];
-      detail::parsec_ttg_caller->dev_ptr->gpu_task->flow_nb_elts[i] = 0;
-    }
     // we cannot allow the calling thread to submit kernels so say we're not ready
     return is_current;
   }
@@ -198,7 +191,7 @@ namespace ttg_parsec {
         int ret = device_module->memcpy_async(device_module, stream,
                                               data->device_copies[0]->device_private,
                                               data->device_copies[data->owner_device]->device_private,
-                                              data->nb_elts, parsec_device_gpu_transfer_direction_d2h);
+                                              data->span, parsec_device_gpu_transfer_direction_d2h);
         assert(ret == PARSEC_SUCCESS);
       }
       if constexpr (sizeof...(Is) > 0) {

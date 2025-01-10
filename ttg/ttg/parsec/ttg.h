@@ -1466,10 +1466,10 @@ namespace ttg_parsec {
       ttg::device::detail::reset_current();
 
       auto discard_tmp_flows = [&](){
-        for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
-          if (gpu_task->flow[i]->flow_flags & TTG_PARSEC_FLOW_ACCESS_TMP) {
+        for (int i = 0; i < gpu_task->nb_flows; ++i) {
+          if (gpu_task->flow_info[i].flow->flow_flags & TTG_PARSEC_FLOW_ACCESS_TMP) {
             /* temporary flow, discard by setting it to read-only to avoid evictions */
-            const_cast<parsec_flow_t*>(gpu_task->flow[i])->flow_flags = PARSEC_FLOW_ACCESS_READ;
+            const_cast<parsec_flow_t*>(gpu_task->flow_info[i].flow)->flow_flags = PARSEC_FLOW_ACCESS_READ;
             task->parsec_task.data[i].data_out->readers = 1;
           }
         }

@@ -16,17 +16,15 @@ namespace ttg_parsec {
         if (this->memory != nullptr) free_flows();
         constexpr const auto align = std::align_val_t(std::max(alignof(parsec_flow_t), alignof(parsec_gpu_flow_info_t)));
         this->memory = new(align) std::byte[size * (sizeof(parsec_flow_t) + sizeof(parsec_gpu_flow_info_s))];
-        if (this->flow_info != nullptr) {
-          parsec_flow_t *flows = (parsec_flow_t*)this->memory;
-          this->flow_info = (parsec_gpu_flow_info_t*)(this->memory + size * sizeof(parsec_flow_t));
-          for (std::size_t i = 0; i < size; ++i) {
-            this->flow_info[i].flow = &flows[i];
-            flows[i].flow_index = i;
-            flows[i].flow_flags = 0;
-            flows[i].flow_datatype_mask = ~0;
-          }
-          this->nb_flows  = size;
+        parsec_flow_t *flows = (parsec_flow_t*)this->memory;
+        this->flow_info = (parsec_gpu_flow_info_t*)(this->memory + size * sizeof(parsec_flow_t));
+        for (std::size_t i = 0; i < size; ++i) {
+          this->flow_info[i].flow = &flows[i];
+          flows[i].flow_index = i;
+          flows[i].flow_flags = 0;
+          flows[i].flow_datatype_mask = ~0;
         }
+        this->nb_flows  = size;
       }
 
       void free_flows() {
