@@ -9,7 +9,9 @@
 
 namespace ttg_madness {
 
-  template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs = ttg::typelist<>>
+  template <typename keyT, typename output_terminalsT, typename derivedT,
+            typename input_valueTs = ttg::typelist<>,
+            ttg::ExecutionSpace Space = ttg::ExecutionSpace::Host>
   class TT;
 
   /// \internal the OG name
