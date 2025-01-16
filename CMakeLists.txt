@@ -52,7 +52,7 @@ set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
 ########################################
 #### user-defined configuration options
 ########################################
-option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" ON)
+option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" OFF)
 option(TTG_ENABLE_CUDA "Whether to TTG will look for CUDA" OFF)
 option(TTG_ENABLE_HIP "Whether to TTG will look for HIP" OFF)
 option(TTG_ENABLE_LEVEL_ZERO "Whether to TTG will look for Intel oneAPI Level Zero" OFF)
