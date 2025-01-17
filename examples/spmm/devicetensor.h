@@ -229,9 +229,33 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     using tensor_type::cbegin;
     using tensor_type::end;
     using tensor_type::cend;
-
 };
 
+namespace madness {
+  namespace archive {
+    template <class Archive, typename _T, class _Range, class _Store>
+    struct ArchiveLoadImpl<Archive, DeviceTensor<_T, _Range, _Store>> {
+      static inline void load(const Archive& ar,
+                              DeviceTensor<_T, _Range, _Store>& t) {
+        _Range range{};
+        ar& range;
+        t = DeviceTensor<_T, _Range, _Store>(std::move(range));
+        /* pick the buffer out of the archive
+         * this should not change the buffer since it's
+         * already been allocated above */
+        ar & t.b;
+      }
+    };
+
+    template <class Archive, typename _T, class _Range, class _Store>
+    struct ArchiveStoreImpl<Archive, DeviceTensor<_T, _Range, _Store>> {
+      static inline void store(const Archive& ar,
+                               const DeviceTensor<_T, _Range, _Store>& t) {
+        ar& t.range() & t.b;
+      }
+    };
+  }  // namespace archive
+}  // namespace madness
 #endif // defined(BTAS_IS_USABLE)
 
 #endif // HAVE_DEVICETENSOR_H

@@ -200,8 +200,6 @@ struct Buffer {
                 "Only trivially copyable types are supported for devices.");
 
 private:
-  using delete_fn_t = std::function<void(element_type*)>;
-
   parsec_data_t *m_data = nullptr;
   std::size_t m_count = 0;
 
@@ -219,8 +217,7 @@ private:
 
 public:
 
-  Buffer()
-  { }
+  Buffer() = default;
 
   Buffer(std::size_t n, ttg::scope scope = ttg::scope::SyncIn)
   : m_data(detail::ttg_parsec_data_types<T*, Allocator>::create_data(n, scope))
@@ -250,8 +247,8 @@ public:
   { }
 
   virtual ~Buffer() {
-    release_data();
     unpin(); // make sure the copies are not pinned
+    release_data();
   }
 
   /* allow moving device buffers */
@@ -437,6 +434,7 @@ public:
 
   /* Reallocate the buffer with count elements */
   void reset(std::size_t n, ttg::scope scope = ttg::scope::SyncIn) {
+    if (n == m_count) return;
     release_data();
     m_data = detail::ttg_parsec_data_types<T*, Allocator>::create_data(n, scope);
     m_count = n;
@@ -526,9 +524,16 @@ public:
     } else {
       std::size_t s;
       ar & s;
-      //std::cout << "serialize(IN) buffer " << this << " size " << s << std::endl;
-      /* initialize internal pointers and then reset */
-      reset(s);
+      /* if we have been initialized already we just make sure the size matches */
+      if (m_data != nullptr) {
+        if (s != size()) {
+          throw std::runtime_error("Buffer size mismatch in deserialization!");
+        }
+      } else {
+        //std::cout << "serialize(IN) buffer " << this << " size " << s << std::endl;
+        /* initialize internal pointers and then reset */
+        reset(s);
+      }
     }
   }
 #endif // TTG_SERIALIZATION_SUPPORTS_MADNESS
