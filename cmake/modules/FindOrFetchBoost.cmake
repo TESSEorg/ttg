@@ -16,6 +16,7 @@ endif()
 set(required_components
         headers
         callable_traits
+        type_index
 )
 set(optional_components
 )
