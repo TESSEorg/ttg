@@ -49,7 +49,7 @@ jobs:
     - name: Install prerequisite MacOS packages
       if: ${{ matrix.os == 'macos-latest' }}
       run: |
-        brew install ninja boost eigen open-mpi bison ccache
+        brew install ninja eigen open-mpi bison ccache
         echo "MPIEXEC=/opt/homebrew/bin/mpiexec" >> $GITHUB_ENV
 
     - name: Install prerequisites Ubuntu packages
@@ -58,7 +58,7 @@ jobs:
         wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | sudo tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
         sudo apt-add-repository "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
         sudo apt-get update
-        sudo apt-get -y install ninja-build g++-12 liblapack-dev libboost-dev libboost-serialization-dev libboost-random-dev libeigen3-dev openmpi-bin libopenmpi-dev libtbb-dev ccache flex bison cmake doxygen
+        sudo apt-get -y install ninja-build g++-12 liblapack-dev libeigen3-dev openmpi-bin libopenmpi-dev libtbb-dev ccache flex bison cmake doxygen
         echo "MPIEXEC=/usr/bin/mpiexec" >> $GITHUB_ENV
 
     - name: Install extra dependencies
