@@ -25,6 +25,8 @@ if (TTG_PARSEC_USE_BOOST_SERIALIZATION)
             serialization
             iostreams
     )
+else()
+    list(APPEND BOOST_EXCLUDE_LIBRARIES iostreams)  # install of this library fails unless it's already built
 endif()
 if (BUILD_EXAMPLES)
     list(APPEND optional_components
