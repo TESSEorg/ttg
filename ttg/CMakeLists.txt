@@ -245,7 +245,7 @@ if (TARGET PaRSEC::parsec)
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttvalue.h
           )
   find_package(MPI)
-  set(ttg-parsec-deps "ttg;MPI::MPI_CXX;PaRSEC::parsec;Boost::type_index")
+  set(ttg-parsec-deps "ttg;MPI::MPI_CXX;PaRSEC::parsec")
   # parsec depends on TTG's serialization layer since it does not provide its own
   if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET ttg-serialization-boost)
     list(APPEND ttg-parsec-deps ttg-serialization-boost)

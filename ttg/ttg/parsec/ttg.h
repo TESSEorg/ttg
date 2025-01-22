@@ -121,8 +121,6 @@
 
 #include "ttg/device/device.h"
 
-#include <boost/type_index.hpp>
-
 #undef TTG_PARSEC_DEBUG_TRACK_DATA_COPIES
 
 /* PaRSEC function declarations */
@@ -1042,7 +1040,7 @@ namespace ttg_parsec {
           }
         }
         else {
-          throw std::logic_error(std::string("TTG::PaRSEC: need to copy a datum of type") + boost::typeindex::type_id<std::decay_t<Value>>().pretty_name() + " but the type is not copyable");
+          throw std::logic_error(std::string("TTG::PaRSEC: need to copy a datum of type") + typeid(std::decay_t<Value>).name() + " but the type is not copyable");
         }
       }
       return copy_res;
@@ -2028,7 +2026,7 @@ namespace ttg_parsec {
           if (std::size(keylist) == 1)
             set_arg_local_impl<i>(key, std::move(*reinterpret_cast<valueT *>(copy->get_ptr())), copy, &task_ring);
           else {
-            throw std::logic_error(std::string("TTG::PaRSEC: need to copy a datum of type") + boost::typeindex::type_id<std::decay_t<valueT>>().pretty_name() + " but the type is not copyable");
+            throw std::logic_error(std::string("TTG::PaRSEC: need to copy a datum of type") + typeid(std::decay_t<valueT>).name() + " but the type is not copyable");
           }
         }
       }
@@ -3661,7 +3659,7 @@ namespace ttg_parsec {
             set_arg<i, keyT, const valueT &>(value);
           }
           else {
-            throw std::logic_error(std::string("TTG::PaRSEC: send_callback is invoked on datum of type ") + boost::typeindex::type_id<valueT>().pretty_name() + " which is not copy constructible, std::move datum into send/broadcast statement");
+            throw std::logic_error(std::string("TTG::PaRSEC: send_callback is invoked on datum of type ") + typeid(std::decay_t<valueT>).name() + " which is not copy constructible, std::move datum into send/broadcast statement");
           }
         };
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
