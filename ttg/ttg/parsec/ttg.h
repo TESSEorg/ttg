@@ -2739,6 +2739,11 @@ namespace ttg_parsec {
 
     template<typename Value, typename Key>
     bool can_inline_data(Value* value_ptr, detail::ttg_data_copy_t *copy, const Key& key, std::size_t num_keys) {
+      if constexpr (derived_has_device_op()) {
+        /* don't inline if data is possibly on the device */
+        return false;
+      }
+      /* non-device data */
       using decvalueT = std::decay_t<Value>;
       bool inline_data = false;
       /* check whether to send data in inline */
