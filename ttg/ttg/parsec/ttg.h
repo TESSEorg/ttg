@@ -48,6 +48,7 @@
 #include "ttg/parsec/devicefunc.h"
 #include "ttg/parsec/ttvalue.h"
 #include "ttg/device/task.h"
+#include "ttg/parsec/parsec_data.h"
 
 #include <algorithm>
 #include <array>
@@ -119,8 +120,6 @@
 #include "ttg/parsec/parsec-ext.h"
 
 #include "ttg/device/device.h"
-
-#include <boost/type_index.hpp>
 
 #undef TTG_PARSEC_DEBUG_TRACK_DATA_COPIES
 
@@ -744,18 +743,24 @@ namespace ttg_parsec {
     }
 #endif // 0
 
-    template<typename TT, std::size_t I>
-    inline void transfer_ownership_impl(ttg_data_copy_t *copy, int device) {
-      if constexpr(!std::is_const_v<std::tuple_element_t<I, typename TT::input_values_tuple_type>>) {
-        copy->transfer_ownership(PARSEC_FLOW_ACCESS_RW, device);
-        copy->inc_current_version();
+    template<typename T>
+    inline void transfer_ownership_impl(T&& arg, int device) {
+      if constexpr(!std::is_const_v<std::remove_reference_t<T>>) {
+        detail::foreach_parsec_data(arg, [&](parsec_data_t *data){
+          parsec_data_transfer_ownership_to_copy(data, device, PARSEC_FLOW_ACCESS_RW);
+          /* make sure we increment the version since we will modify the data */
+          data->device_copies[0]->version++;
+        });
       }
     }
 
     template<typename TT, std::size_t... Is>
     inline void transfer_ownership(parsec_ttg_task_t<TT> *me, int device, std::index_sequence<Is...>) {
       /* transfer ownership of each data */
-      int junk[] = {0, (transfer_ownership_impl<TT, Is>(me->copies[Is], device), 0)...};
+      int junk[] = {0,
+                    (transfer_ownership_impl(
+                        *reinterpret_cast<std::remove_reference_t<std::tuple_element_t<Is, typename TT::input_refs_tuple_type>> *>(
+                          me->copies[Is]->get_ptr()), device), 0)...};
       junk[0]++;
     }
 
@@ -1035,7 +1040,7 @@ namespace ttg_parsec {
           }
         }
         else {
-          throw std::logic_error(std::string("TTG::PaRSEC: need to copy a datum of type") + boost::typeindex::type_id<std::decay_t<Value>>().pretty_name() + " but the type is not copyable");
+          throw std::logic_error(std::string("TTG::PaRSEC: need to copy a datum of type") + typeid(std::decay_t<Value>).name() + " but the type is not copyable");
         }
       }
       return copy_res;
@@ -1218,24 +1223,34 @@ namespace ttg_parsec {
 
    public:
     /// @return true if derivedT::have_cuda_op exists and is defined to true
+    template<typename DerivedT = derivedT>
     static constexpr bool derived_has_cuda_op() {
       return Space == ttg::ExecutionSpace::CUDA;
     }
 
     /// @return true if derivedT::have_hip_op exists and is defined to true
+    template<typename DerivedT = derivedT>
     static constexpr bool derived_has_hip_op() {
       return Space == ttg::ExecutionSpace::HIP;
     }
 
     /// @return true if derivedT::have_hip_op exists and is defined to true
+    template<typename DerivedT = derivedT>
     static constexpr bool derived_has_level_zero_op() {
       return Space == ttg::ExecutionSpace::L0;
     }
 
     /// @return true if the TT supports device execution
+    template<typename DerivedT = derivedT>
     static constexpr bool derived_has_device_op() {
-      return (derived_has_cuda_op() || derived_has_hip_op() || derived_has_level_zero_op());
+      return (derived_has_cuda_op<DerivedT>() ||
+              derived_has_hip_op<DerivedT>() ||
+              derived_has_level_zero_op<DerivedT>());
     }
+
+    static_assert(!derived_has_device_op() || ttg::meta::probe_all_v<ttg::detail::has_buffer_apply,
+                                                                     ttg::edges_to_output_value_types<output_terminalsT>>,
+                  "Data sent from a device-capable template task must be serializable.");
 
     using ttT = TT;
     using key_type = keyT;
@@ -1919,11 +1934,6 @@ namespace ttg_parsec {
     uint64_t pack(T &obj, void *bytes, uint64_t pos, detail::ttg_data_copy_t *copy = nullptr) {
       using dd_t = ttg::default_data_descriptor<ttg::meta::remove_cvr_t<T>>;
       uint64_t payload_size = dd_t::payload_size(&obj);
-      if (copy) {
-        /* reset any tracked data, we don't care about the packing from the payload size */
-        copy->iovec_reset();
-      }
-
       if constexpr (!dd_t::serialize_size_is_const) {
         pos = ttg::default_data_descriptor<uint64_t>::pack_payload(&payload_size, sizeof(uint64_t), pos, bytes);
       }
@@ -2016,7 +2026,7 @@ namespace ttg_parsec {
           if (std::size(keylist) == 1)
             set_arg_local_impl<i>(key, std::move(*reinterpret_cast<valueT *>(copy->get_ptr())), copy, &task_ring);
           else {
-            throw std::logic_error(std::string("TTG::PaRSEC: need to copy a datum of type") + boost::typeindex::type_id<std::decay_t<valueT>>().pretty_name() + " but the type is not copyable");
+            throw std::logic_error(std::string("TTG::PaRSEC: need to copy a datum of type") + typeid(std::decay_t<valueT>).name() + " but the type is not copyable");
           }
         }
       }
@@ -2112,8 +2122,6 @@ namespace ttg_parsec {
 #endif // 0
             /* unpack the object, potentially discovering iovecs */
             pos = unpack(*static_cast<decvalueT *>(copy->get_ptr()), msg->bytes, pos);
-            //std::cout << "set_arg_from_msg iovec_begin num_iovecs " << num_iovecs << " distance " << std::distance(copy->iovec_begin(), copy->iovec_end()) << std::endl;
-            assert(std::distance(copy->iovec_begin(), copy->iovec_end()) == num_iovecs);
           }
 
           if (num_iovecs == 0) {
@@ -2130,67 +2138,79 @@ namespace ttg_parsec {
             bool inline_data = msg->tt_id.inline_data;
 
             int nv = 0;
+            parsec_ce_tag_t cbtag;
             /* start the RMA transfers */
-            auto handle_iovecs_fn =
-              [&](auto&& iovecs) {
+            auto create_activation_fn = [&]() {
+              /* extract the callback tag */
+              std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
+              pos += sizeof(cbtag);
 
-                if (inline_data) {
-                  /* unpack the data from the message */
-                  for (auto &&iov : iovecs) {
-                    ++nv;
-                    std::memcpy(iov.data, msg->bytes + pos, iov.num_bytes);
-                    pos += iov.num_bytes;
-                  }
-                } else {
-                  /* extract the callback tag */
-                  parsec_ce_tag_t cbtag;
-                  std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
-                  pos += sizeof(cbtag);
+              /* create the value from the metadata */
+              auto activation = new detail::rma_delayed_activate(
+                  std::move(keylist), copy, num_iovecs, [this](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
+                    set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
+                    this->world.impl().decrement_inflight_msg();
+                  });
+              return activation;
+            };
+            auto read_inline_data = [&](auto&& iovec){
+              /* unpack the data from the message */
+              ++nv;
+              std::memcpy(iovec.data, msg->bytes + pos, iovec.num_bytes);
+              pos += iovec.num_bytes;
+            };
+            auto handle_iovec_fn = [&](auto&& iovec, auto activation) {
+              using ActivationT = std::decay_t<decltype(*activation)>;
 
-                  /* create the value from the metadata */
-                  auto activation = new detail::rma_delayed_activate(
-                      std::move(keylist), copy, num_iovecs, [this](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
-                        set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
-                        this->world.impl().decrement_inflight_msg();
-                      });
+              ++nv;
+              parsec_ce_mem_reg_handle_t rreg;
+              int32_t rreg_size_i;
+              std::memcpy(&rreg_size_i, msg->bytes + pos, sizeof(rreg_size_i));
+              pos += sizeof(rreg_size_i);
+              rreg = static_cast<parsec_ce_mem_reg_handle_t>(msg->bytes + pos);
+              pos += rreg_size_i;
+              // std::intptr_t *fn_ptr = reinterpret_cast<std::intptr_t *>(msg->bytes + pos);
+              // pos += sizeof(*fn_ptr);
+              std::intptr_t fn_ptr;
+              std::memcpy(&fn_ptr, msg->bytes + pos, sizeof(fn_ptr));
+              pos += sizeof(fn_ptr);
 
-                  using ActivationT = std::decay_t<decltype(*activation)>;
-
-                  for (auto &&iov : iovecs) {
-                    ++nv;
-                    parsec_ce_mem_reg_handle_t rreg;
-                    int32_t rreg_size_i;
-                    std::memcpy(&rreg_size_i, msg->bytes + pos, sizeof(rreg_size_i));
-                    pos += sizeof(rreg_size_i);
-                    rreg = static_cast<parsec_ce_mem_reg_handle_t>(msg->bytes + pos);
-                    pos += rreg_size_i;
-                    // std::intptr_t *fn_ptr = reinterpret_cast<std::intptr_t *>(msg->bytes + pos);
-                    // pos += sizeof(*fn_ptr);
-                    std::intptr_t fn_ptr;
-                    std::memcpy(&fn_ptr, msg->bytes + pos, sizeof(fn_ptr));
-                    pos += sizeof(fn_ptr);
-
-                    /* register the local memory */
-                    parsec_ce_mem_reg_handle_t lreg;
-                    size_t lreg_size;
-                    parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
-                                            iov.num_bytes, &lreg, &lreg_size);
-                    world.impl().increment_inflight_msg();
-                    /* TODO: PaRSEC should treat the remote callback as a tag, not a function pointer! */
-                    //std::cout << "set_arg_from_msg: get rreg " << rreg << " remote " << remote << std::endl;
-                    parsec_ce.get(&parsec_ce, lreg, 0, rreg, 0, iov.num_bytes, remote,
-                                  &detail::get_complete_cb<ActivationT>, activation,
-                                  /*world.impl().parsec_ttg_rma_tag()*/
-                                  cbtag, &fn_ptr, sizeof(std::intptr_t));
-                  }
-                }
+              /* register the local memory */
+              parsec_ce_mem_reg_handle_t lreg;
+              size_t lreg_size;
+              parsec_ce.mem_register(iovec.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iovec.num_bytes, parsec_datatype_int8_t,
+                                     iovec.num_bytes, &lreg, &lreg_size);
+              world.impl().increment_inflight_msg();
+              /* TODO: PaRSEC should treat the remote callback as a tag, not a function pointer! */
+              //std::cout << "set_arg_from_msg: get rreg " << rreg << " remote " << remote << std::endl;
+              parsec_ce.get(&parsec_ce, lreg, 0, rreg, 0, iovec.num_bytes, remote,
+                            &detail::get_complete_cb<ActivationT>, activation,
+                            /*world.impl().parsec_ttg_rma_tag()*/
+                            cbtag, &fn_ptr, sizeof(std::intptr_t));
             };
             if constexpr (ttg::has_split_metadata<decvalueT>::value) {
               ttg::SplitMetadataDescriptor<decvalueT> descr;
-              handle_iovecs_fn(descr.get_data(val));
+              if (inline_data) {
+                for (auto&& iov : descr.get_data(val)) {
+                  read_inline_data(iov);
+                }
+              } else {
+                auto activation = create_activation_fn();
+                for (auto&& iov : descr.get_data(val)) {
+                  handle_iovec_fn(iov, activation);
+                }
+              }
             } else if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
-              handle_iovecs_fn(copy->iovec_span());
-              copy->iovec_reset();
+              if (inline_data) {
+                detail::foreach_parsec_data(val, [&](parsec_data_t* data){
+                  read_inline_data(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private});
+                });
+              } else {
+                auto activation = create_activation_fn();
+                detail::foreach_parsec_data(val, [&](parsec_data_t* data){
+                  handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private}, activation);
+                });
+              }
             }
 
             assert(num_iovecs == nv);
@@ -2719,6 +2739,11 @@ namespace ttg_parsec {
 
     template<typename Value, typename Key>
     bool can_inline_data(Value* value_ptr, detail::ttg_data_copy_t *copy, const Key& key, std::size_t num_keys) {
+      if constexpr (derived_has_device_op()) {
+        /* don't inline if data is possibly on the device */
+        return false;
+      }
+      /* non-device data */
       using decvalueT = std::decay_t<Value>;
       bool inline_data = false;
       /* check whether to send data in inline */
@@ -2734,8 +2759,7 @@ namespace ttg_parsec {
       } else {
         /* TODO: how can we query the iovecs of the buffers here without actually packing the data? */
         metadata_size = ttg::default_data_descriptor<ttg::meta::remove_cvr_t<Value>>::payload_size(value_ptr);
-        iov_size = std::accumulate(copy->iovec_begin(), copy->iovec_end(), 0,
-                                    [](std::size_t s, auto& iov){ return s + iov.num_bytes; });
+        detail::foreach_parsec_data(*value_ptr, [&](parsec_data_t* data){ iov_size += data->nb_elts; });
       }
       /* key is packed at the end */
       std::size_t key_pack_size = ttg::default_data_descriptor<Key>::payload_size(&key);
@@ -2803,55 +2827,54 @@ namespace ttg_parsec {
         bool inline_data = can_inline_data(value_ptr, copy, key, 1);
         msg->tt_id.inline_data = inline_data;
 
-        auto handle_iovec_fn = [&](auto&& iovecs){
-
-          if (inline_data) {
-            /* inline data is packed right after the tt_id in the message */
-            for (auto &&iov : iovecs) {
-              std::memcpy(msg->bytes + pos, iov.data, iov.num_bytes);
-              pos += iov.num_bytes;
-            }
-          } else {
-
+        auto write_header_fn = [&]() {
+          if (!inline_data) {
             /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
             * raw function pointer instead of a preregistered AM tag, so play that game.
             * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
             parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
             std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
             pos += sizeof(cbtag);
+          }
+        };
+        auto handle_iovec_fn = [&](auto&& iovec){
+
+          if (inline_data) {
+            /* inline data is packed right after the tt_id in the message */
+            std::memcpy(msg->bytes + pos, iovec.data, iovec.num_bytes);
+            pos += iovec.num_bytes;
+          } else {
 
             /**
              * register the generic iovecs and pack the registration handles
              * memory layout: [<lreg_size, lreg, release_cb_ptr>, ...]
              */
-            for (auto &&iov : iovecs) {
-              copy = detail::register_data_copy<decvalueT>(copy, nullptr, true);
-              parsec_ce_mem_reg_handle_t lreg;
-              size_t lreg_size;
-              /* TODO: only register once when we can broadcast the data! */
-              parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
-                                    iov.num_bytes, &lreg, &lreg_size);
-              auto lreg_ptr = std::shared_ptr<void>{lreg, [](void *ptr) {
-                                                      parsec_ce_mem_reg_handle_t memreg = (parsec_ce_mem_reg_handle_t)ptr;
-                                                      parsec_ce.mem_unregister(&memreg);
-                                                    }};
-              int32_t lreg_size_i = lreg_size;
-              std::memcpy(msg->bytes + pos, &lreg_size_i, sizeof(lreg_size_i));
-              pos += sizeof(lreg_size_i);
-              std::memcpy(msg->bytes + pos, lreg, lreg_size);
-              pos += lreg_size;
-              //std::cout << "set_arg_impl lreg " << lreg << std::endl;
-              /* TODO: can we avoid the extra indirection of going through std::function? */
-              std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
-                /* shared_ptr of value and registration captured by value so resetting
-                * them here will eventually release the memory/registration */
-                detail::release_data_copy(copy);
-                lreg_ptr.reset();
-              });
-              std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
-              std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
-              pos += sizeof(fn_ptr);
-            }
+            copy = detail::register_data_copy<decvalueT>(copy, nullptr, true);
+            parsec_ce_mem_reg_handle_t lreg;
+            size_t lreg_size;
+            /* TODO: only register once when we can broadcast the data! */
+            parsec_ce.mem_register(iovec.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iovec.num_bytes, parsec_datatype_int8_t,
+                                   iovec.num_bytes, &lreg, &lreg_size);
+            auto lreg_ptr = std::shared_ptr<void>{lreg, [](void *ptr) {
+                                                    parsec_ce_mem_reg_handle_t memreg = (parsec_ce_mem_reg_handle_t)ptr;
+                                                    parsec_ce.mem_unregister(&memreg);
+                                                  }};
+            int32_t lreg_size_i = lreg_size;
+            std::memcpy(msg->bytes + pos, &lreg_size_i, sizeof(lreg_size_i));
+            pos += sizeof(lreg_size_i);
+            std::memcpy(msg->bytes + pos, lreg, lreg_size);
+            pos += lreg_size;
+            //std::cout << "set_arg_impl lreg " << lreg << std::endl;
+            /* TODO: can we avoid the extra indirection of going through std::function? */
+            std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
+              /* shared_ptr of value and registration captured by value so resetting
+              * them here will eventually release the memory/registration */
+              detail::release_data_copy(copy);
+              lreg_ptr.reset();
+            });
+            std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
+            std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
+            pos += sizeof(fn_ptr);
           }
         };
 
@@ -2863,16 +2886,20 @@ namespace ttg_parsec {
           auto metadata = descr.get_metadata(*const_cast<decvalueT *>(value_ptr));
           pos = pack(metadata, msg->bytes, pos);
           //std::cout << "set_arg_impl splitmd num_iovecs " << num_iovecs << std::endl;
-          handle_iovec_fn(iovs);
+          write_header_fn();
+          for (auto&& iov : iovs) {
+            handle_iovec_fn(iov);
+          }
         } else if constexpr (!ttg::has_split_metadata<std::decay_t<Value>>::value) {
           /* serialize the object */
-          //std::cout << "PRE pack num_iovecs " << std::distance(copy->iovec_begin(), copy->iovec_end()) << std::endl;
           pos = pack(*value_ptr, msg->bytes, pos, copy);
-          num_iovecs = std::distance(copy->iovec_begin(), copy->iovec_end());
+          detail::foreach_parsec_data(value, [&](parsec_data_t *data){ ++num_iovecs; });
           //std::cout << "POST pack num_iovecs " << num_iovecs << std::endl;
           /* handle any iovecs contained in it */
-          handle_iovec_fn(copy->iovec_span());
-          copy->iovec_reset();
+          write_header_fn();
+          detail::foreach_parsec_data(value, [&](parsec_data_t *data){
+            handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private});
+          });
         }
 
         msg->tt_id.num_iovecs = num_iovecs;
@@ -2995,39 +3022,36 @@ namespace ttg_parsec {
         msg->tt_id.inline_data = inline_data;
 
         std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs;
-        auto handle_iovs_fn = [&](auto&& iovs){
-
-          if (inline_data) {
-            /* inline data is packed right after the tt_id in the message */
-            for (auto &&iov : iovs) {
-              std::memcpy(msg->bytes + pos, iov.data, iov.num_bytes);
-              pos += iov.num_bytes;
-            }
-          } else {
-
+        auto write_iov_header = [&](){
+          if (!inline_data) {
             /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
               * raw function pointer instead of a preregistered AM tag, so play that game.
               * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
             parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
             std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
             pos += sizeof(cbtag);
-
-            for (auto &&iov : iovs) {
-              parsec_ce_mem_reg_handle_t lreg;
-              size_t lreg_size;
-              parsec_ce.mem_register(iov.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iov.num_bytes, parsec_datatype_int8_t,
-                                    iov.num_bytes, &lreg, &lreg_size);
-              /* TODO: use a static function for deregistration here? */
-              memregs.push_back(std::make_pair(static_cast<int32_t>(lreg_size),
-                                              /* TODO: this assumes that parsec_ce_mem_reg_handle_t is void* */
-                                              std::shared_ptr<void>{lreg, [](void *ptr) {
-                                                                      parsec_ce_mem_reg_handle_t memreg =
-                                                                          (parsec_ce_mem_reg_handle_t)ptr;
-                                                                      //std::cout << "broadcast_arg memunreg lreg " << memreg << std::endl;
-                                                                      parsec_ce.mem_unregister(&memreg);
-                                                                    }}));
-              //std::cout << "broadcast_arg memreg lreg " << lreg << std::endl;
-            }
+          }
+        };
+        auto handle_iov_fn = [&](auto&& iovec){
+          if (inline_data) {
+            /* inline data is packed right after the tt_id in the message */
+            std::memcpy(msg->bytes + pos, iovec.data, iovec.num_bytes);
+            pos += iovec.num_bytes;
+          } else {
+            parsec_ce_mem_reg_handle_t lreg;
+            size_t lreg_size;
+            parsec_ce.mem_register(iovec.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iovec.num_bytes, parsec_datatype_int8_t,
+                                   iovec.num_bytes, &lreg, &lreg_size);
+            /* TODO: use a static function for deregistration here? */
+            memregs.push_back(std::make_pair(static_cast<int32_t>(lreg_size),
+                                            /* TODO: this assumes that parsec_ce_mem_reg_handle_t is void* */
+                                            std::shared_ptr<void>{lreg, [](void *ptr) {
+                                                                    parsec_ce_mem_reg_handle_t memreg =
+                                                                        (parsec_ce_mem_reg_handle_t)ptr;
+                                                                    //std::cout << "broadcast_arg memunreg lreg " << memreg << std::endl;
+                                                                    parsec_ce.mem_unregister(&memreg);
+                                                                  }}));
+            //std::cout << "broadcast_arg memreg lreg " << lreg << std::endl;
           }
         };
 
@@ -3039,14 +3063,21 @@ namespace ttg_parsec {
           auto iovs = descr.get_data(*const_cast<decvalueT *>(&value));
           num_iovs = std::distance(std::begin(iovs), std::end(iovs));
           memregs.reserve(num_iovs);
-          handle_iovs_fn(iovs);
+          write_iov_header();
+          for (auto &&iov : iovs) {
+            handle_iov_fn(iov);
+          }
           //std::cout << "broadcast_arg splitmd num_iovecs " << num_iovs << std::endl;
         } else if constexpr (!ttg::has_split_metadata<std::decay_t<Value>>::value) {
           /* serialize the object once */
           pos = pack(value, msg->bytes, pos, copy);
-          num_iovs = std::distance(copy->iovec_begin(), copy->iovec_end());
-          handle_iovs_fn(copy->iovec_span());
-          copy->iovec_reset();
+          detail::foreach_parsec_data(value, [&](parsec_data_t *data){ ++num_iovs; });
+          memregs.reserve(num_iovs);
+          write_iov_header();
+          detail::foreach_parsec_data(value, [&](parsec_data_t *data){
+            handle_iov_fn(ttg::iovec{data->nb_elts,
+                                     data->device_copies[data->owner_device]->device_private});
+          });
         }
 
         msg->tt_id.num_iovecs = num_iovs;
@@ -3407,7 +3438,8 @@ namespace ttg_parsec {
       }
     }
 
-    void copy_mark_pushout(detail::ttg_data_copy_t *copy) {
+    template<typename Value>
+    void copy_mark_pushout(const Value& value) {
 
       assert(detail::parsec_ttg_caller->dev_ptr && detail::parsec_ttg_caller->dev_ptr->gpu_task);
       parsec_gpu_task_t *gpu_task = detail::parsec_ttg_caller->dev_ptr->gpu_task;
@@ -3431,12 +3463,15 @@ namespace ttg_parsec {
             detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in = data->device_copies[0];
             gpu_task->flow_nb_elts[flowidx] = data->nb_elts;
           }
-          /* need to mark the flow WRITE to convince PaRSEC that the data changed */
-          ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_WRITE;
+          /* need to mark the flow RW to make PaRSEC happy */
+          ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_RW;
           gpu_task->pushout |= 1<<flowidx;
         }
       };
-      copy->foreach_parsec_data(check_parsec_data);
+      detail::foreach_parsec_data(value,
+        [&](parsec_data_t* data){
+          check_parsec_data(data);
+        });
     }
 
 
@@ -3468,7 +3503,7 @@ namespace ttg_parsec {
       auto &reducer = std::get<i>(input_reducers);
       if (reducer) {
         /* reductions are currently done only on the host so push out */
-        copy_mark_pushout(copy);
+        copy_mark_pushout(value);
         caller->data_flags |= detail::ttg_parsec_data_flags::MARKED_PUSHOUT;
         return;
       }
@@ -3531,7 +3566,7 @@ namespace ttg_parsec {
       }
 
       if (need_pushout) {
-        copy_mark_pushout(copy);
+        copy_mark_pushout(value);
         caller->data_flags |= detail::ttg_parsec_data_flags::MARKED_PUSHOUT;
       }
     }
@@ -3629,7 +3664,7 @@ namespace ttg_parsec {
             set_arg<i, keyT, const valueT &>(value);
           }
           else {
-            throw std::logic_error(std::string("TTG::PaRSEC: send_callback is invoked on datum of type ") + boost::typeindex::type_id<valueT>().pretty_name() + " which is not copy constructible, std::move datum into send/broadcast statement");
+            throw std::logic_error(std::string("TTG::PaRSEC: send_callback is invoked on datum of type ") + typeid(std::decay_t<valueT>).name() + " which is not copy constructible, std::move datum into send/broadcast statement");
           }
         };
         auto setsize_callback = [this](std::size_t size) { set_argstream_size<i>(size); };
@@ -3777,22 +3812,6 @@ namespace ttg_parsec {
 
     parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
 
-    template<std::size_t I>
-    inline static void increment_data_version_impl(task_t *task) {
-      if constexpr (!std::is_const_v<std::tuple_element_t<I, typename TT::input_values_tuple_type>>) {
-        if (task->copies[I] != nullptr){
-          task->copies[I]->inc_current_version();
-        }
-      }
-    }
-
-    template<std::size_t... Is>
-    inline static void increment_data_versions(task_t *task, std::index_sequence<Is...>) {
-      /* increment version of each mutable data */
-      int junk[] = {0, (increment_data_version_impl<Is>(task), 0)...};
-      junk[0]++;
-    }
-
     static parsec_hook_return_t complete_task_and_release(parsec_execution_stream_t *es, parsec_task_t *parsec_task) {
 
       //std::cout << "complete_task_and_release: task " << parsec_task << std::endl;
@@ -3805,10 +3824,6 @@ namespace ttg_parsec {
         assert(task->coroutine_id != ttg::TaskCoroutineID::Invalid);
 #ifdef TTG_HAVE_DEVICE
         if (task->coroutine_id == ttg::TaskCoroutineID::DeviceTask) {
-          /* increment versions of all data we might have modified
-           * this must happen before we issue the sends */
-          //increment_data_versions(task, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
-
           // get the device task from the coroutine handle
           auto dev_task = ttg::device::detail::device_task_handle_type::from_address(task->suspended_task_address);
 
@@ -4353,7 +4368,7 @@ namespace ttg_parsec {
     /// @arg pm a function that provides a hint on which device the task should execute.
     template<typename Devicemap>
     void set_devicemap(Devicemap&& dm) {
-      static_assert(derived_has_device_op(), "Device map only allowed on device-enabled TT!");
+      //static_assert(derived_has_device_op(), "Device map only allowed on device-enabled TT!");
       if constexpr (std::is_same_v<ttg::device::Device, decltype(dm(std::declval<keyT>()))>) {
         // dm returns a Device
         devicemap = std::forward<Devicemap>(dm);

@@ -178,6 +178,14 @@ namespace ttg {
     typedef std::tuple<typename edgesT::output_terminal_type...> type;
   };
 
+  template<typename edgesT>
+  struct edges_to_output_value_types;
+
+  template<typename... edgesT>
+  struct edges_to_output_value_types<std::tuple<edgesT...>> {
+    typedef std::tuple<typename edgesT::value_type...> type;
+  };
+
   namespace detail {
     template <typename keyT, typename valuesT>
     struct edges_tuple;

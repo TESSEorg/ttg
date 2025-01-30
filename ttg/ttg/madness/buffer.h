@@ -4,6 +4,7 @@
 #include "ttg/serialization/traits.h"
 
 #include "ttg/device/device.h"
+#include <memory>
 
 namespace ttg_madness {
 
@@ -23,8 +24,8 @@ struct Buffer : private Allocator {
 
 private:
   using delete_fn_t = std::function<void(element_type*)>;
-
   using host_data_ptr   = std::add_pointer_t<element_type>;
+  std::shared_ptr<element_type[]> m_sptr; // to capture smart pointers
   host_data_ptr m_host_data = nullptr;
   std::size_t m_count = 0;
   bool m_owned= false;
@@ -48,7 +49,7 @@ public:
   Buffer() : Buffer(nullptr, 0)
   { }
 
-  Buffer(std::size_t n)
+  Buffer(std::size_t n, ttg::scope scope = ttg::scope::SyncIn)
   : allocator_type()
   , m_host_data(allocate(n))
   , m_count(n)
@@ -58,9 +59,22 @@ public:
   /* Constructing a buffer using application-managed memory.
    * The memory pointed to by ptr must be accessible during
    * the life-time of the buffer. */
-  Buffer(element_type* ptr, std::size_t n = 1)
+  template<typename Deleter>
+  Buffer(std::unique_ptr<element_type[], Deleter> ptr, std::size_t n, ttg::scope scope = ttg::scope::SyncIn)
   : allocator_type()
-  , m_host_data(ptr)
+  , m_sptr(std::move(ptr))
+  , m_host_data(m_sptr.get())
+  , m_count(n)
+  , m_owned(false)
+  { }
+
+  /* Constructing a buffer using application-managed memory.
+   * The memory pointed to by ptr must be accessible during
+   * the life-time of the buffer. */
+  Buffer(std::shared_ptr<element_type[]> ptr, std::size_t n, ttg::scope scope = ttg::scope::SyncIn)
+  : allocator_type()
+  , m_sptr(std::move(ptr))
+  , m_host_data(m_sptr.get())
   , m_count(n)
   , m_owned(false)
   { }
@@ -227,7 +241,7 @@ public:
   }
 
   /* Reallocate the buffer with count elements */
-  void reset(std::size_t n) {
+  void reset(std::size_t n, ttg::scope scope = ttg::scope::SyncIn) {
 
     if (m_owned) {
       deallocate();
@@ -244,46 +258,27 @@ public:
     m_count = n;
   }
 
-  /* Reset the buffer to use the ptr to count elements */
-  void reset(T* ptr, std::size_t n = 1) {
-    /* TODO: can we resize if count is smaller than m_count? */
-    if (n == m_count) {
-      return;
-    }
+  /* Reallocate the buffer with count elements */
+  void reset(std::shared_ptr<element_type[]> ptr, std::size_t n, ttg::scope scope = ttg::scope::SyncIn) {
 
     if (m_owned) {
       deallocate();
+      m_owned = false;
     }
 
-    if (nullptr == ptr) {
-      m_host_data = nullptr;
-      m_count = 0;
-      m_owned = false;
-    } else {
-      m_host_data = ptr;
-      m_count = n;
-      m_owned = false;
-    }
+    m_sptr = std::move(ptr);
+    m_host_data = m_sptr.get();
+    m_count = n;
+  }
+
+  /**
+   * Resets the scope of the buffer. Ignored in MADNESS.
+   */
+  void reset_scope(ttg::scope scope) {
+    /* nothing to do here */
   }
 
   /* serialization support */
-
-#if defined(TTG_SERIALIZATION_SUPPORTS_BOOST) && 0
-  template <typename Archive>
-  void serialize(Archive& ar, const unsigned int version) {
-    if constexpr (ttg::detail::is_output_archive_v<Archive>) {
-      std::size_t s = size();
-      ar& s;
-      /* TODO: how to serialize the array? */
-    } else {
-      std::size_t s;
-      ar & s;
-      /* initialize internal pointers and then reset */
-      reset(s);
-      /* TODO: how to deserialize the array? */
-    }
-  }
-#endif // TTG_SERIALIZATION_SUPPORTS_BOOST
 
 #if defined(TTG_SERIALIZATION_SUPPORTS_MADNESS)
   template <typename Archive>
@@ -293,12 +288,12 @@ public:
     if constexpr (ttg::detail::is_output_archive_v<Archive>) {
       std::size_t s = size();
       ar& s;
-      ar << wrap(host_ptr(), s);
+      ar << madness::archive::wrap(host_ptr(), s);
     } else {
       std::size_t s;
       ar & s;
       reset(s);
-      ar >> wrap(host_ptr(), s);  // MatrixTile<T>(bm.rows(), bm.cols());
+      ar >> madness::archive::wrap(host_ptr(), s);  // MatrixTile<T>(bm.rows(), bm.cols());
     }
   }
 #endif // TTG_SERIALIZATION_SUPPORTS_MADNESS

@@ -42,7 +42,6 @@ jobs:
         -DMPIEXEC_PREFLAGS='--bind-to;none;--allow-run-as-root'
         -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install
         -DTTG_EXAMPLES=ON
-        -DCMAKE_CXX_STANDARD=20
 
     steps:
     - uses: actions/checkout@v4
@@ -50,7 +49,7 @@ jobs:
     - name: Install prerequisite MacOS packages
       if: ${{ matrix.os == 'macos-latest' }}
       run: |
-        brew install ninja boost eigen open-mpi bison ccache
+        brew install ninja eigen open-mpi bison ccache
         echo "MPIEXEC=/opt/homebrew/bin/mpiexec" >> $GITHUB_ENV
 
     - name: Install prerequisites Ubuntu packages
@@ -59,7 +58,7 @@ jobs:
         wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | sudo tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
         sudo apt-add-repository "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
         sudo apt-get update
-        sudo apt-get -y install ninja-build g++-12 liblapack-dev libboost-dev libboost-serialization-dev libboost-random-dev libeigen3-dev openmpi-bin libopenmpi-dev libtbb-dev ccache flex bison cmake doxygen
+        sudo apt-get -y install ninja-build g++-12 liblapack-dev libeigen3-dev openmpi-bin libopenmpi-dev libtbb-dev ccache flex bison cmake doxygen
         echo "MPIEXEC=/usr/bin/mpiexec" >> $GITHUB_ENV
 
     - name: Install extra dependencies
@@ -69,7 +68,7 @@ jobs:
         sudo dpkg -i cuda-keyring_1.1-1_all.deb
         sudo apt update
         sudo apt install -y cuda-toolkit
-        echo "CUDA_BUILD_OPTS=-DENABLE_CUDA=ON -DTTG_ENABLE_CUDA=ON -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-12.6 -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.6/bin/nvcc -DCMAKE_CUDA_HOST_COMPILER=${{ matrix.cxx }}" >> $GITHUB_ENV
+        echo "CUDA_BUILD_OPTS=-DENABLE_CUDA=ON -DTTG_ENABLE_CUDA=ON -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-12 -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12/bin/nvcc -DCMAKE_CUDA_HOST_COMPILER=${{ matrix.cxx }}" >> $GITHUB_ENV
 
     - name: Create Build Environment
       # Some projects don't allow in-source building, so create a separate build directory

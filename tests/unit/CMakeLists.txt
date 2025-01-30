@@ -31,8 +31,10 @@ add_ttg_executable(serialization serialization.cc unit_main.cpp
                    COMPILE_DEFINITIONS $<$<TARGET_EXISTS:BTAS::BTAS>:TTG_HAS_BTAS=1>)
 
 # Boost serialization test: checks low-level codegen
-add_ttg_executable(serialization_boost serialization_boost.cc
-        LINK_LIBRARIES ttg-serialization-boost RUNTIMES "parsec")
+if (TTG_PARSEC_USE_BOOST_SERIALIZATION)
+    add_ttg_executable(serialization_boost serialization_boost.cc
+                        LINK_LIBRARIES ttg-serialization-boost RUNTIMES "parsec")
+endif(TTG_PARSEC_USE_BOOST_SERIALIZATION)
 
 # TODO: convert into unit test
 #if (TARGET MADworld)
