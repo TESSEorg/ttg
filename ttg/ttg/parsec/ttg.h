@@ -2188,6 +2188,41 @@ namespace ttg_parsec {
                             /*world.impl().parsec_ttg_rma_tag()*/
                             cbtag, &fn_ptr, sizeof(std::intptr_t));
             };
+            /* make sure all buffers are properly allocated */
+            ttg::detail::buffer_apply(val, [&]<typename T, typename A>(const ttg::Buffer<T, A>& b){
+              do {
+                /* cast away const */
+                auto& buffer = const_cast<ttg::Buffer<T, A>&>(b);
+                /* remember which device we used last time */
+                static auto last_device = ttg::device::Device{0, Space};
+                ttg::device::Device device;
+                if (inline_data || !world.impl().mpi_support(Space))  {
+                  device = ttg::device::Device::host(); // have to allocate on host
+                } else if (!keylist.empty() && devicemap) {
+                  device = devicemap(keylist[0]); // pick a device we know will use the data
+                } else {
+                  device = last_device; // use the previously used device
+                }
+                // remember where we started so we can cycle through all devices once
+                auto start_device = device;
+                /* try to allocate on any device */
+                try {
+                  buffer.allocate_on(device);
+                  buffer.set_owner_device(device);
+                  break;
+                } catch (const std::bad_alloc&) {
+                  device = device.cycle();
+                  if (device == start_device) {
+                    /* make sure we have memory on the host */
+                    buffer.allocate_on(ttg::device::Device::host());
+                    break; // failed to find a device that works
+                  }
+                  last_device = device;
+                }
+              } while(true);
+            });
+
+            /* kick off transfers */
             if constexpr (ttg::has_split_metadata<decvalueT>::value) {
               ttg::SplitMetadataDescriptor<decvalueT> descr;
               if (inline_data) {
@@ -3550,14 +3585,7 @@ namespace ttg_parsec {
 
       /* check if there are non-local successors if it's a device task */
       if (!need_pushout) {
-        bool device_supported = false;
-        if constexpr (derived_has_cuda_op()) {
-          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::CUDA);
-        } else if constexpr (derived_has_hip_op()) {
-          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::HIP);
-        } else if constexpr (derived_has_level_zero_op()) {
-          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::L0);
-        }
+        bool device_supported = world.impl().mpi_support(Space);
         /* if MPI supports the device we don't care whether we have remote peers
          * because we can send from the device directly */
         if (!device_supported) {

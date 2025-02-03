@@ -7,6 +7,8 @@
 #include <parsec.h>
 #include <parsec/data_internal.h>
 #include <parsec/mca/device/device.h>
+#include <parsec/mca/device/device_gpu.h>
+#include <parsec/utils/zone_malloc.h>
 #include "ttg/parsec/ttg_data_copy.h"
 #include "ttg/parsec/parsec-ext.h"
 #include "ttg/util/iovec.h"
@@ -285,7 +287,7 @@ public:
 
   /* set the current device, useful when a device
    * buffer was modified outside of a TTG */
-  void set_current_device(const ttg::device::Device& device) {
+  void set_owner_device(const ttg::device::Device& device) {
     assert(is_valid());
     int parsec_id = detail::ttg_device_to_parsec_device(device);
     /* make sure it's a valid device */
@@ -382,9 +384,31 @@ public:
     return (parsec_data_get_ptr(m_data, device_id) != nullptr);
   }
 
-  void allocate_on(const ttg::device::Device& device_id) {
-    /* TODO: need exposed PaRSEC memory allocator */
-    throw std::runtime_error("not implemented yet");
+  void allocate_on(const ttg::device::Device& device) {
+    if (is_valid_on(device)) return; // already allocated
+    if (!m_data) throw std::runtime_error("Cannot allocate on an empty buffer!");
+    int parsec_id = detail::ttg_device_to_parsec_device(device);
+    assert(parsec_nb_devices > parsec_id);
+    assert(m_data != nullptr);
+    if (m_data->device_copies[parsec_id] == nullptr) {
+      if (device.is_device()) {
+        /* create the device copy */
+        parsec_device_gpu_module_t *device_module = (parsec_device_gpu_module_t*)parsec_mca_device_get(parsec_id);
+        /* thread-safe allocation */
+        T* ptr = (T*)zone_malloc(device_module->memory, m_count*sizeof(T));
+        if (nullptr == ptr) {
+          throw std::bad_alloc{};
+        }
+        auto copy = parsec_data_copy_new(m_data, parsec_id, parsec_datatype_int8_t, 0);
+        copy->flags |= PARSEC_DATA_FLAG_PARSEC_MANAGED;
+        copy->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+        copy->device_private = ptr;
+        m_data->device_copies[parsec_id] =  copy;
+      } else {
+        reset(m_count, ttg::scope::SyncIn);
+      }
+      m_data->device_copies[parsec_id]->version = 0;
+    }
   }
 
   /* TODO: can we do this automatically?
@@ -434,7 +458,6 @@ public:
 
   /* Reallocate the buffer with count elements */
   void reset(std::size_t n, ttg::scope scope = ttg::scope::SyncIn) {
-    if (n == m_count) return;
     release_data();
     m_data = detail::ttg_parsec_data_types<T*, Allocator>::create_data(n, scope);
     m_count = n;

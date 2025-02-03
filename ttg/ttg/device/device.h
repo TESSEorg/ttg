@@ -10,6 +10,10 @@
 
 namespace ttg::device {
 
+
+  /* fwd-decl */
+  inline int num_devices();
+
   /// Represents a device in a specific execution space
   class Device {
     int m_id = 0;
@@ -52,8 +56,20 @@ namespace ttg::device {
       return (m_space == ttg::ExecutionSpace::Invalid);
     }
 
+    /* next device, cycling through all devices */
+    Device cycle() const {
+      if (m_space == ttg::ExecutionSpace::Host) {
+        return {};
+      }
+      return {(m_id + 1) % num_devices(), m_space};
+    }
+
     static Device host() {
       return {};
+    }
+
+    bool operator==(const Device& other) const {
+      return m_id == other.m_id && m_space == other.m_space;
     }
   };
 } // namespace ttg::device
