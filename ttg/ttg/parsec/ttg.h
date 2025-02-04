@@ -2933,7 +2933,11 @@ namespace ttg_parsec {
           /* handle any iovecs contained in it */
           write_header_fn();
           detail::foreach_parsec_data(value, [&](parsec_data_t *data){
-            handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private});
+            auto device = data->owner_device;
+            if (!world.impl().mpi_support(Space)) {
+              device = 0;
+            }
+            handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[device]->device_private});
           });
         }
 
@@ -3110,8 +3114,12 @@ namespace ttg_parsec {
           memregs.reserve(num_iovs);
           write_iov_header();
           detail::foreach_parsec_data(value, [&](parsec_data_t *data){
+            auto device = data->owner_device;
+            if (!world.impl().mpi_support(Space)) {
+              device = 0;
+            }
             handle_iov_fn(ttg::iovec{data->nb_elts,
-                                     data->device_copies[data->owner_device]->device_private});
+                                     data->device_copies[device]->device_private});
           });
         }
 
