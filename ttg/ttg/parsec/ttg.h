@@ -949,10 +949,6 @@ namespace ttg_parsec {
       int32_t readers = copy_in->num_readers();
       assert(readers != 0);
 
-      /* try hard to defer writers if we cannot make copies
-       * if deferral fails we have to bail out */
-      bool defer_writer = (!std::is_copy_constructible_v<std::decay_t<Value>>) || task->defer_writer;
-
       if (readonly && !copy_in->is_mutable()) {
         /* simply increment the number of readers */
         readers = copy_in->increment_readers();
@@ -991,6 +987,11 @@ namespace ttg_parsec {
          *       (current task) or there are others, in which we case won't
          *       touch it.
          */
+        /* try hard to defer writers if we cannot make copies
+         * if deferral fails we have to bail out */
+        bool defer_writer = (!std::is_copy_constructible_v<std::decay_t<Value>>) ||
+                            ((nullptr != task) && task->defer_writer);
+
         if (1 == copy_in->num_readers() && !defer_writer) {
           /**
            * no other readers, mark copy as mutable and defer the release
