@@ -2191,21 +2191,21 @@ namespace ttg_parsec {
             };
             /* make sure all buffers are properly allocated */
             ttg::detail::buffer_apply(val, [&]<typename T, typename A>(const ttg::Buffer<T, A>& b){
+              /* cast away const */
+              auto& buffer = const_cast<ttg::Buffer<T, A>&>(b);
+              /* remember which device we used last time */
+              static auto last_device = ttg::device::Device{0, Space};
+              ttg::device::Device device;
+              if (inline_data || !world.impl().mpi_support(Space))  {
+                device = ttg::device::Device::host(); // have to allocate on host
+              } else if (!keylist.empty() && devicemap) {
+                device = devicemap(keylist[0]); // pick a device we know will use the data
+              } else {
+                device = last_device; // use the previously used device
+              }
+              // remember where we started so we can cycle through all devices once
+              auto start_device = device;
               do {
-                /* cast away const */
-                auto& buffer = const_cast<ttg::Buffer<T, A>&>(b);
-                /* remember which device we used last time */
-                static auto last_device = ttg::device::Device{0, Space};
-                ttg::device::Device device;
-                if (inline_data || !world.impl().mpi_support(Space))  {
-                  device = ttg::device::Device::host(); // have to allocate on host
-                } else if (!keylist.empty() && devicemap) {
-                  device = devicemap(keylist[0]); // pick a device we know will use the data
-                } else {
-                  device = last_device; // use the previously used device
-                }
-                // remember where we started so we can cycle through all devices once
-                auto start_device = device;
                 /* try to allocate on any device */
                 try {
                   buffer.allocate_on(device);
