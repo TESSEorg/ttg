@@ -2148,9 +2148,13 @@ namespace ttg_parsec {
 
               /* create the value from the metadata */
               auto activation = new detail::rma_delayed_activate(
-                  std::move(keylist), copy, num_iovecs, [this](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
+                  std::move(keylist), copy, num_iovecs, [this, &val](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
                     set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
                     this->world.impl().decrement_inflight_msg();
+                    detail::foreach_parsec_data(val, [&](parsec_data_t* data){
+                      /* decrement readers we incremented before the transfer */
+                      parsec_atomic_fetch_dec_int32(&data->device_copies[data->owner_device]->readers);
+                    });
                   });
               return activation;
             };
@@ -2244,6 +2248,7 @@ namespace ttg_parsec {
               } else {
                 auto activation = create_activation_fn();
                 detail::foreach_parsec_data(val, [&](parsec_data_t* data){
+                  parsec_atomic_fetch_inc_int32(&data->device_copies[data->owner_device]->readers);
                   handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private}, activation);
                 });
               }
@@ -2863,6 +2868,18 @@ namespace ttg_parsec {
         bool inline_data = can_inline_data(value_ptr, copy, key, 1);
         msg->tt_id.inline_data = inline_data;
 
+        /* increment readers to make sure the copy stays alive */
+        /* TODO: use buffer::pin_on() here once that is implemented */
+        detail::foreach_parsec_data(value, [](parsec_data_t* data){
+          parsec_atomic_fetch_add_int32(&data->device_copies[data->owner_device]->readers, 1);
+        });
+        /* shared_ptr captured by fn below to decrement readers once all transfers have completed */
+        auto value_sptr = std::shared_ptr<decvalueT>(const_cast<decvalueT*>(&value), [](decvalueT* ptr){
+          detail::foreach_parsec_data(*ptr, [](parsec_data_t* data){
+            parsec_atomic_fetch_sub_int32(&data->device_copies[data->owner_device]->readers, 1);
+          });
+        });
+
         auto write_header_fn = [&]() {
           if (!inline_data) {
             /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
@@ -2907,6 +2924,7 @@ namespace ttg_parsec {
               * them here will eventually release the memory/registration */
               detail::release_data_copy(copy);
               lreg_ptr.reset();
+              value_sptr.reset(); // decrement the readers
             });
             std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
             std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
@@ -3149,6 +3167,17 @@ namespace ttg_parsec {
            * NOTE: we need to pack these for every receiver to ensure correct ref-counting of the registration
            */
           if (!inline_data) {
+            /* increment readers to make sure the copy stays alive */
+            /* TODO: use buffer::pin_on() here once that is implemented */
+            detail::foreach_parsec_data(value, [](parsec_data_t* data){
+              parsec_atomic_fetch_add_int32(&data->device_copies[data->owner_device]->readers, 1);
+            });
+            /* shared_ptr captured by fn below to decrement readers once all transfers have completed */
+            auto value_ptr = std::shared_ptr<decvalueT>(const_cast<decvalueT*>(&value), [](decvalueT* ptr){
+              detail::foreach_parsec_data(*ptr, [](parsec_data_t* data){
+                parsec_atomic_fetch_sub_int32(&data->device_copies[data->owner_device]->readers, 1);
+              });
+            });
             for (int idx = 0; idx < num_iovs; ++idx) {
               // auto [lreg_size, lreg_ptr] = memregs[idx];
               int32_t lreg_size;
@@ -3167,6 +3196,7 @@ namespace ttg_parsec {
                   * them here will eventually release the memory/registration */
                 detail::release_data_copy(copy);
                 lreg_ptr.reset();
+                value_ptr.reset(); // unpin the copies
               });
               std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
               std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
