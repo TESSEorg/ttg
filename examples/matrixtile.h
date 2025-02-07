@@ -183,6 +183,15 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, AllocatorT>> {
   template<typename Archive>
   void serialize(Archive& ar) {
     ar & _rows & _cols & _lda;
+#ifdef DEBUG_TILES_VALUES
+    if (ttg::detail::is_output_archive_v<Archive>) {
+      ar & norm();
+    } else {
+      T n;
+      ar & n;
+      set_norm(n);
+    }
+#endif // DEBUG_TILES_VALUES
     ar & buffer();
   }
 };
