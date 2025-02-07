@@ -26,6 +26,10 @@ namespace ttg::device {
     , m_space(space)
     { }
 
+    Device(const Device&) = default;
+    Device& operator=(const Device&) = default;
+
+
     int id() const {
       if (is_host()) {
         throw std::runtime_error("No valid ID for Host execution space!");

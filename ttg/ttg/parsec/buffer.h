@@ -295,6 +295,7 @@ public:
     /* make sure it's a valid copy */
     assert(m_data->device_copies[parsec_id] != nullptr);
     m_data->owner_device = parsec_id;
+    m_data->device_copies[parsec_id]->version = m_data->device_copies[0]->version + 1;
   }
 
   bool is_current_on(ttg::device::Device dev) const {
