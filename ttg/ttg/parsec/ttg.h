@@ -87,6 +87,7 @@
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
 #include <parsec/remote_dep.h>
+#include <parsec/utils/mca_param.h>
 
 #ifdef PARSEC_HAVE_DEV_CUDA_SUPPORT
 #include <parsec/mca/device/cuda/device_cuda.h>
@@ -317,6 +318,18 @@ namespace ttg_parsec {
 #endif
       }
 #endif
+
+#ifdef PARSEC_PROF_GRAPHER
+      /* check if PaRSEC's dot tracing is enabled */
+      int dot_param_idx;
+      dot_param_idx = parsec_mca_param_find("profile", NULL, "dot");
+
+      if (dot_param_idx != PARSEC_ERROR) {
+        char *filename;
+        parsec_mca_param_lookup_string(dot_param_idx, &filename);
+        dag_on(filename);
+      }
+#endif // PARSEC_PROF_GRAPHER
 
       if( NULL != parsec_ce.tag_register) {
         parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, this, detail::PARSEC_TTG_MAX_AM_SIZE);
