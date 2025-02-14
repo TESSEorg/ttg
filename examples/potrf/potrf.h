@@ -680,16 +680,22 @@ namespace potrf {
     auto keymap3 = [&](const Key3& key) { return A.rank_of(key[0], key[1]); };
 
     /**
-     * Device map hints: we try to keep tiles on one row on the same device to minimize
-     * data movement between devices. This provides hints for load-balancing up front
-     * and avoids movement of the TRSM result to GEMM tasks.
+     * Set a device map, 2d block-cyclic
      */
-    auto devmap1 = [&](const Key1& key) { return (key[0] / A.P()) % ttg::device::num_devices(); };
+    int num_devices = ttg::device::num_devices();
+    int gp = std::sqrt(num_devices);
+    int gq = (num_devices > 0) ? (num_devices / gp) : 1;
+    auto mapper = [&A, gp,gq,num_devices](int i){
+              auto device = (((i/A.P())%gp)*gq) + (i/A.Q())%gq;
+              return device;
+            };
 
-    auto devmap2a = [&](const Key2& key) { return (key[0] / A.P()) % ttg::device::num_devices(); };
-    auto devmap2b = [&](const Key2& key) { return (key[1] / A.P()) % ttg::device::num_devices(); };
+    auto devmap1 = [=](const Key1& key) { return mapper(key[0]); };
 
-    auto devmap3 = [&](const Key3& key) { return (key[0] / A.P()) % ttg::device::num_devices(); };
+    auto devmap2a = [=](const Key2& key) { return mapper(key[0]); };
+    auto devmap2b = [=](const Key2& key) { return mapper(key[1]); };
+
+    auto devmap3 = [=](const Key3& key) { return mapper(key[0]); };
 
     ttg::Edge<Key1, MatrixTile<T>> syrk_potrf("syrk_potrf"), disp_potrf("disp_potrf");
 
