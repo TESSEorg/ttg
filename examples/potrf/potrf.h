@@ -686,10 +686,20 @@ namespace potrf {
      */
     auto devmap1 = [&](const Key1& key) { return (key[0] / A.P()) % ttg::device::num_devices(); };
 
-    auto devmap2a = [&](const Key2& key) { return (key[0] / A.P()) % ttg::device::num_devices(); };
-    auto devmap2b = [&](const Key2& key) { return (key[1] / A.P()) % ttg::device::num_devices(); };
+    int num_devices = ttg::device::num_devices();
+    int gp = std::sqrt(num_devices);
+    int gq = num_devices / gp;
+    auto mapper = [&A, gp,gq,num_devices](int i){
+              auto device = (((i/A.P())%gp)*gq) + (i/A.Q())%gq;
+              return device;
+            };
 
-    auto devmap3 = [&](const Key3& key) { return (key[0] / A.P()) % ttg::device::num_devices(); };
+    auto devmap1 = [=](const Key1& key) { return mapper(key[0]); };
+
+    auto devmap2a = [=](const Key2& key) { return mapper(key[0]); };
+    auto devmap2b = [=](const Key2& key) { return mapper(key[1]); };
+
+    auto devmap3 = [=](const Key3& key) { return mapper(key[0]); };
 
     ttg::Edge<Key1, MatrixTile<T>> syrk_potrf("syrk_potrf"), disp_potrf("disp_potrf");
 
