@@ -108,6 +108,16 @@ int main(int argc, char **argv)
   dcA.mat = parsec_data_allocate((size_t)dcA.super.nb_local_tiles *
                                  (size_t)dcA.super.bsiz *
                                  (size_t)parsec_datadist_getsizeoftype(dcA.super.mtype));
+
+  /* would be nice to have proper abstractions for this */
+  parsec_data_collection_t *o = &(dcA.super.super);
+  for (int devid = 1; devid < parsec_nb_devices; ++devid) {
+    auto* device = parsec_mca_device_get(devid);
+    if (device->memory_register) {
+      o->register_memory(o, device); // TODO: check device IDs
+    }
+  }
+
   parsec_data_collection_set_key((parsec_data_collection_t*)&dcA, (char*)"Matrix A");
 
   if(!check) {
