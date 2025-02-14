@@ -2097,30 +2097,6 @@ namespace ttg_parsec {
             copy = detail::create_new_datacopy(descr.create_from_metadata(metadata));
           } else if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
             copy = detail::create_new_datacopy(decvalueT{});
-#if 0
-            // TODO: first attempt at sending directly to the device
-            parsec_gpu_data_copy_t* gpu_elem;
-            gpu_elem = PARSEC_DATA_GET_COPY(master, gpu_device->super.device_index);
-            int i = detail::first_device_id;
-            int devid = detail::first_device_id;
-            while (i < parsec_nb_devices) {
-              if (nullptr == gpu_elem) {
-                gpu_elem = PARSEC_OBJ_NEW(parsec_data_copy_t);
-                gpu_elem->flags = PARSEC_DATA_FLAG_PARSEC_OWNED | PARSEC_DATA_FLAG_PARSEC_MANAGED;
-                gpu_elem->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
-                gpu_elem->version = 0;
-                gpu_elem->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
-              }
-              if (nullptr == gpu_elem->device_private) {
-                gpu_elem->device_private = zone_malloc(gpu_device->memory, gpu_task->flow_nb_elts[i]);
-                if (nullptr == gpu_elem->device_private) {
-                  devid++;
-                  continue;
-                }
-                break;
-              }
-            }
-#endif // 0
             /* unpack the object, potentially discovering iovecs */
             pos = unpack(*static_cast<decvalueT *>(copy->get_ptr()), msg->bytes, pos);
           }
