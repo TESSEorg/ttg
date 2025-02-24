@@ -87,6 +87,8 @@ namespace detail {
             auto ptr = m_ptr;
             this->device_private = nullptr;
             this->m_ptr = nullptr;
+            this->version = 0;
+            this->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
             allocator_traits::deallocate(m_allocator, ptr, this->m_size);
           }
         }
@@ -181,9 +183,16 @@ namespace detail {
 
       /* adjust data flags */
       data->device_copies[0]->flags |= PARSEC_DATA_FLAG_PARSEC_MANAGED;
-      data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-      /* setting version to 0 causes data not to be sent to the device */
-      data->device_copies[0]->version = (scope == ttg::scope::SyncIn) ? 1 : 0;
+      if (scope == ttg::scope::SyncIn){
+        data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_EXCLUSIVE;
+        data->device_copies[0]->version = 1;
+        data->owner_device = 0;
+      } else {
+        data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
+        /* setting version to 0 causes data not to be sent to the device */
+        data->device_copies[0]->version = 0;
+        data->owner_device = -1;
+      }
 
       return data;
     }
@@ -200,9 +209,16 @@ namespace detail {
 
       /* adjust data flags */
       data->device_copies[0]->flags |= PARSEC_DATA_FLAG_PARSEC_MANAGED;
-      data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-      /* setting version to 0 causes data not to be sent to the device */
-      data->device_copies[0]->version = (scope == ttg::scope::SyncIn) ? 1 : 0;
+      if (scope == ttg::scope::SyncIn){
+        data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_EXCLUSIVE;
+        data->device_copies[0]->version = 1;
+        data->owner_device = 0;
+      } else {
+        data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
+        /* setting version to 0 causes data not to be sent to the device */
+        data->device_copies[0]->version = 0;
+        data->owner_device = -1;
+      }
 
       return data;
     }
