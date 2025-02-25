@@ -186,12 +186,10 @@ namespace detail {
       if (scope == ttg::scope::SyncIn){
         data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_EXCLUSIVE;
         data->device_copies[0]->version = 1;
-        data->owner_device = 0;
       } else {
         data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
         /* setting version to 0 causes data not to be sent to the device */
         data->device_copies[0]->version = 0;
-        data->owner_device = -1;
       }
 
       return data;
@@ -212,12 +210,10 @@ namespace detail {
       if (scope == ttg::scope::SyncIn){
         data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_EXCLUSIVE;
         data->device_copies[0]->version = 1;
-        data->owner_device = 0;
       } else {
         data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
         /* setting version to 0 causes data not to be sent to the device */
         data->device_copies[0]->version = 0;
-        data->owner_device = -1;
       }
 
       return data;
@@ -556,7 +552,7 @@ public:
   ttg::scope scope() const {
     /* if the host owns the data and has a version of zero we only have to allocate data */
     if (nullptr == m_data) return ttg::scope::Invalid;
-    return (m_data->device_copies[0]->version == 0 && m_data->owner_device == 0)
+    return (m_data->device_copies[0]->version == 0)
             ? ttg::scope::Allocate : ttg::scope::SyncIn;
   }
 
