@@ -161,6 +161,10 @@ namespace ttg_parsec {
         assert(nullptr != data->device_copies[0]->original);
         caller->parsec_task.data[i].data_in = data->device_copies[0];
         caller->parsec_task.data[i].source_repo_entry = NULL;
+        // sanity check: we cannot sync in something that does not exist
+        if (scope == ttg::scope::SyncIn && data->device_copies[0]->version > 0) {
+          assert(data->device_copies[0]->device_private != NULL);
+        }
 
       } else {
         /* ignore the flow */
