@@ -203,7 +203,7 @@ namespace ttg_parsec {
       parsec_gpu_exec_stream_t *stream = detail::parsec_ttg_caller->dev_ptr->stream;
 
       /* enqueue the transfer into the compute stream to come back once the compute and transfer are complete */
-      if (data->owner_device != 0) {
+      if (nullptr != data && data->owner_device != 0) {
         parsec_device_gpu_module_t *device_module = detail::parsec_ttg_caller->dev_ptr->device;
         if (nullptr == data->device_copies[0]->device_private) {
           assert(nullptr != data->device_copies[0]->alloc_cb);
