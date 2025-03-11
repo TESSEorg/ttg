@@ -137,6 +137,7 @@ namespace detail {
            * a way to request host memory from us. */
           this->alloc_cb = &allocate;
           this->release_cb  = &deallocate;
+          this->device_private = nullptr;
         } else {
           /* the user requested that the data be sync'ed into the device
            * so we need to provide host memory for the user to fill prior */

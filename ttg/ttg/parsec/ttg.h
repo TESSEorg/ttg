@@ -1562,7 +1562,7 @@ namespace ttg_parsec {
           }
           for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
             /* only set on mutable data since we have exclusive access */
-            if (tc.in[i]->flow_flags & PARSEC_FLOW_ACCESS_WRITE) {
+            if (tc.in[i] != nullptr && (tc.in[i]->flow_flags & PARSEC_FLOW_ACCESS_WRITE)) {
               parsec_data_t *data = parsec_task->data[i].data_in->original;
               /* only set the preferred device if the host has the latest copy
                * as otherwise we may end up with the wrong data if there is a newer

@@ -31,10 +31,8 @@ namespace ttg_parsec {
         if constexpr (std::is_const_v<view_type>) {
           // keep the flow at RW if it was RW to make sure we pull the data back out eventually
           access = PARSEC_FLOW_ACCESS_READ;
-        } else if constexpr (ttg::meta::is_devicescratch_v<view_type>) {
-          if (view.scope() == ttg::scope::Allocate) {
-            access = PARSEC_FLOW_ACCESS_WRITE;
-          }
+        } else if (view.scope() == ttg::scope::Allocate) {
+          access = PARSEC_FLOW_ACCESS_WRITE;
         }
 
         /* build the flow */
@@ -125,7 +123,6 @@ namespace ttg_parsec {
 
     bool is_current = false;
     for (i = 0; i < span.size(); ++i) {
-      /* get_parsec_data is overloaded for buffer and devicescratch */
       parsec_data_t* data = span[i].impl_data;
       ttg::scope scope = span[i].scope;
       bool is_const = span[i].is_const;
@@ -133,10 +130,10 @@ namespace ttg_parsec {
 
       if (nullptr != data) {
         auto access = PARSEC_FLOW_ACCESS_RW;
-        if (ttg::scope::Allocate == scope) {
-          access = PARSEC_FLOW_ACCESS_WRITE;
-        } else if (is_const) {
+        if (is_const) {
           access = PARSEC_FLOW_ACCESS_READ;
+        } else if (ttg::scope::Allocate == scope) {
+          access = PARSEC_FLOW_ACCESS_WRITE;
         }
 
         if (is_scratch) {
@@ -163,7 +160,14 @@ namespace ttg_parsec {
         caller->parsec_task.data[i].source_repo_entry = NULL;
         // sanity check: we cannot sync in something that does not exist
         if (scope == ttg::scope::SyncIn && data->device_copies[0]->version > 0) {
-          assert(data->device_copies[0]->device_private != NULL);
+#ifndef NDEBUG
+          // have to lock the data to avoid a race condition with the GPU manager
+          parsec_atomic_lock(&data->lock);
+          if (scope == ttg::scope::SyncIn && data->device_copies[0]->version > 0) {
+            assert(data->device_copies[0]->device_private != NULL);
+          }
+          parsec_atomic_unlock(&data->lock);
+#endif
         }
 
       } else {
