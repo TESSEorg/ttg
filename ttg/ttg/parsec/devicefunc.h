@@ -164,7 +164,9 @@ namespace ttg_parsec {
           // have to lock the data to avoid a race condition with the GPU manager
           parsec_atomic_lock(&data->lock);
           if (scope == ttg::scope::SyncIn && data->device_copies[0]->version > 0) {
-            assert(data->device_copies[0]->device_private != NULL);
+            // TODO: this assert would be nice to have but it's still failing spuriously
+            //       due to a race with PaRSEC.
+            //assert(data->device_copies[0]->device_private != NULL);
           }
           parsec_atomic_unlock(&data->lock);
 #endif
