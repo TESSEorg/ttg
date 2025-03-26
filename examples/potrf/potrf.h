@@ -125,37 +125,29 @@ namespace potrf {
 
       // Instead of using scratch here, we should have hostWS and hostInfo globals and use to_device
       // this would reduce the number of I/O operations to devices
-      double *hostWS = new double[Lwork];
-      ttg::devicescratch<double> devWS = ttg::make_scratch(hostWS, ttg::scope::Allocate, Lwork);
-      int *hostInfo = iallocator->allocate(1);
-      ttg::devicescratch<int> devInfo = ttg::make_scratch(hostInfo, ttg::scope::Allocate);
-
-      *hostInfo = -32;
+      auto ws   = ttg::Buffer<T, Allocator<T>>(Lwork, ttg::scope::Allocate);
+      auto devInfo = ttg::Buffer<int, Allocator<int>>(1, ttg::scope);
 
 #ifdef DEBUG_TILES_VALUES
       std::array<T, 2> norms;
       //auto norms_s  = ttg::make_scratch(norms.data(), ttg::scope::Allocate, norms.size());
       /* the workspace and the devInfo must be device-level pointers */
-      //co_await ttg::to_device(tile_kk.buffer(), devWS, devInfo, norms_s);
-      co_await ttg::device::select(tile_kk.buffer(), devWS, devInfo);
+      //co_await ttg::to_device(tile_kk.buffer(), ws, devInfo, norms_s);
+      co_await ttg::device::select(tile_kk.buffer(), ws, devInfo);
 
       /* compute the norm at input */
       static_assert(std::is_same_v<double, T>, "Norm debugging only implementation for T=double");
       device_norm(tile_kk, &norms[0]);
 #else
       /* the workspace and the devInfo must be device-level pointers */
-      co_await ttg::device::select(tile_kk.buffer(), devWS, devInfo);
+      co_await ttg::device::select(tile_kk.buffer(), ws, devInfo);
 #endif // DEBUG_TILES_VALUES
 
       int device = ttg::device::current_device();
       //std::cout << "POTRF [" << K << "] on " << device << std::endl;
 
-
-      //std::cout << "devWS host ptr " << hostWS << " device ptr " << devWS.device_ptr() << " size " <<  devWS.size()
-      //          << " devInfo host ptr " << hostInfo << " device ptr " << devInfo.device_ptr() << "size "  << devInfo.size() << std::endl;
-
       /* everything is on the device, call the POTRF */
-      device_potrf(tile_kk, devWS.device_ptr(), Lwork, devInfo.device_ptr());
+      device_potrf(tile_kk, ws.current_device_ptr(), Lwork, devInfo.current_device_ptr());
 
 #ifdef DEBUG_TILES_VALUES
       /* compute the norm at input */
@@ -172,10 +164,8 @@ namespace potrf {
       co_await ttg::device::wait(devInfo);
 #endif // DEBUG_TILES_VALUES
 
-      delete[] hostWS;
-      int info = *hostInfo;
+      int info = *devInfo.host_ptr();
       assert(info == 0);
-      iallocator->deallocate(hostInfo, 1);
       if( info == 0 ) {
         co_await ttg::device::forward(ttg::device::broadcast<0, 1>(std::make_tuple(Key2(K, K), std::move(keylist)), std::move(tile_kk), out));
         // Anything after this co_await is never executed

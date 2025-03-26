@@ -256,12 +256,13 @@ private:
     if (nullptr == m_data) return;
     for (int i = 1; i < parsec_nb_devices; ++i) {
       if (nullptr == m_data->device_copies[i]) continue;
-      if (0 == (m_data->device_copies[i]->flags & PARSEC_DATA_FLAG_PARSEC_OWNED)) {
+      auto copy = m_data->device_copies[i];
+      if (0 == (copy->flags & PARSEC_DATA_FLAG_PARSEC_OWNED)) {
         /* we own this copy so we have to release it */
         parsec_device_gpu_module_t *device_module = (parsec_device_gpu_module_t*)parsec_mca_device_get(i);
-        zone_free(device_module->memory, m_data->device_copies[i]->device_private);
-        m_data->device_copies[i]->device_private = nullptr;
-        parsec_data_copy_detach(m_data, m_data->device_copies[i], i);
+        zone_free(device_module->memory, copy->device_private);
+        copy->device_private = nullptr;
+        parsec_data_copy_detach(m_data, copy, i);
       }
     }
     /* discard the parsec data so it can be collected by the runtime
