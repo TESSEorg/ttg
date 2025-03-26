@@ -126,7 +126,7 @@ namespace potrf {
       // Instead of using scratch here, we should have hostWS and hostInfo globals and use to_device
       // this would reduce the number of I/O operations to devices
       auto ws   = ttg::Buffer<T, Allocator<T>>(Lwork, ttg::scope::Allocate);
-      auto devInfo = ttg::Buffer<int, Allocator<int>>(1, ttg::scope);
+      auto devInfo = ttg::Buffer<int, Allocator<int>>(1, ttg::scope::Allocate);
 
 #ifdef DEBUG_TILES_VALUES
       std::array<T, 2> norms;
