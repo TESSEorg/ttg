@@ -8,7 +8,7 @@
 #include <ttg.h>
 #include <ttg/serialization/std/tuple.h>
 
-#include "plgsy.h"
+#include "init_matrix.h"
 #include "pmw.h"
 #include "result.h"
 #include "trtri_L.h"
@@ -105,26 +105,16 @@ int main(int argc, char **argv)
 
   if(!check) {
 
-    ttg::Edge<Key2, void> startup("startup");
+    ttg::Edge<Key2, MatrixTile<double>> startup("startup");
     ttg::Edge<Key2, MatrixTile<double>> totrtri("To TRTRI");
     ttg::Edge<Key2, MatrixTile<double>> result("To result");
 
     MatrixT<double> A{&dcA};
     int random_seed = 3872;
 
-    auto init_tt =  ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, void>>& out) {
-      for(int i = 0; i < A.rows(); i++) {
-        for(int j = 0; inmatrix(i, j, uplo) && j < A.cols(); j++) {
-          if(A.is_local(i, j)) {
-            if(ttg::tracing()) ttg::print("init(", Key2{i, j}, ")");
-            ttg::sendk<0>(Key2{i, j}, out);
-          }
-        }
-      }
-    }, ttg::edges(), ttg::edges(startup), "Startup Trigger", {}, {"startup"});
-    init_tt->set_keymap([&]() {return world.rank();});
+    init_matrix(A, random_seed, cow_hint);
 
-    auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, totrtri, cow_hint);
+    auto init_tt = make_load_tt(A, totrtri, cow_hint);
     decltype(trtri_LOWER::make_trtri_ttg(A, lapack::Diag::NonUnit, totrtri, result, cow_hint)) trtri_ttg;
     if(uplo == lapack::Uplo::Lower)
       trtri_ttg = trtri_LOWER::make_trtri_ttg(A, lapack::Diag::NonUnit, totrtri, result, cow_hint);
@@ -163,29 +153,7 @@ int main(int argc, char **argv)
     MatrixT<double> A{&dcA};
     int random_seed = 3872;
 
-    auto init_tt =  ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, void>>& out) {
-      for(int i = 0; i < A.rows(); i++) {
-        for(int j = 0; inmatrix(i, j, uplo) && j < A.cols(); j++) {
-          if(A.is_local(i, j)) {
-            if(ttg::tracing()) ttg::print("init(", Key2{i, j}, ")");
-            ttg::sendk<0>(Key2{i, j}, out);
-          }
-        }
-      }
-    }, ttg::edges(), ttg::edges(startup), "Startup Trigger", {}, {"startup"});
-    init_tt->set_keymap([&]() {return world.rank();});
-
-    auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, result, cow_hint);
-    auto result_ttg = make_result_ttg(A, result, cow_hint);
-
-    auto connected = make_graph_executable(init_tt.get());
-    assert(connected);
-    TTGUNUSED(connected);
-
-    init_tt->invoke();
-
-    ttg::execute(world);
-    ttg::fence(world);
+    init_matrix(A, random_seed, cow_hint);
 
     double *A0 = A.getLAPACKMatrix();
 
@@ -199,7 +167,7 @@ int main(int argc, char **argv)
       trtri_ttg = trtri_UPPER::make_trtri_ttg(A, lapack::Diag::NonUnit, totrtri, result2, cow_hint);
     auto result2_ttg = make_result_ttg(A, result2, cow_hint);
 
-    connected = make_graph_executable(load_plgsy.get());
+    bool connected = make_graph_executable(load_plgsy.get());
     assert(connected);
     TTGUNUSED(connected);
 

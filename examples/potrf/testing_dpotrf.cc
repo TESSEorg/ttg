@@ -1,10 +1,10 @@
 #include <ttg.h>
 #include <ttg/serialization/std/tuple.h>
 
-#include "plgsy.h"
 #include "pmw.h"
 #include "potrf.h"
 #include "result.h"
+#include "init_matrix.h"
 
 #include <iomanip>
 
@@ -123,9 +123,6 @@ int main(int argc, char **argv)
   if(!check) {
     for (int i = 0; i < niter; ++i) {
       parsec_devices_release_memory();
-      ttg::Edge<Key2, void> startup("startup");
-      ttg::Edge<Key2, MatrixTile<double>> topotrf("To POTRF");
-      ttg::Edge<Key2, MatrixTile<double>> result("To result");
 
       //Matrix<double>* A = new Matrix<double>(n_rows, n_cols, NB, NB);
       MatrixT<double> A{&dcA};
@@ -133,30 +130,22 @@ int main(int argc, char **argv)
       /* This works only with the parsec backend! */
       int random_seed = 3872;
 
-      auto init_tt =  ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, void>>& out) {
-        for(int i = 0; i < A.rows(); i++) {
-          for(int j = 0; j <= i && j < A.cols(); j++) {
-            if(A.is_local(i, j)) {
-              if(ttg::tracing()) ttg::print("init(", Key2{i, j}, ")");
-              ttg::sendk<0>(Key2{i, j}, out);
-            }
-          }
-        }
-      }, ttg::edges(), ttg::edges(startup), "Startup Trigger", {}, {"startup"});
-      init_tt->set_keymap([&]() {return world.rank();});
+      init_matrix(A, random_seed, cow_hint);
+      ttg::Edge<Key2, MatrixTile<double>> startup("startup");
+      ttg::Edge<Key2, MatrixTile<double>> result("To result");
 
-      auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, topotrf, cow_hint);
-      auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, result, cow_hint, enable_device_map);
-      auto result_ttg = make_result_ttg(A, result, cow_hint);
+      auto potrf_init_tt = make_load_tt(A, startup, cow_hint);
+      auto potrf_ttg = potrf::make_potrf_ttg(A, startup, result, cow_hint, enable_device_map);
+      auto potrf_result_ttg = make_result_ttg(A, result, cow_hint);
 
-      auto connected = make_graph_executable(init_tt.get());
+      auto connected = make_graph_executable(potrf_init_tt.get());
       assert(connected);
       TTGUNUSED(connected);
 
       if (world.rank() == 0) {
         if (print_dot) {
           std::cout << "==== begin dot ====\n";
-          std::cout << ttg::Dot()(init_tt.get()) << std::endl;
+          std::cout << ttg::Dot()(potrf_init_tt.get()) << std::endl;
           std::cout << "==== end dot ====\n";
         }
         beg = std::chrono::high_resolution_clock::now();
@@ -166,7 +155,7 @@ int main(int argc, char **argv)
         beg = std::chrono::high_resolution_clock::now();
       }
 
-      init_tt->invoke();
+      potrf_init_tt->invoke();
       ttg::execute(world);
       ttg::fence(world);
 
@@ -184,51 +173,26 @@ int main(int argc, char **argv)
 
     world.dag_off();
   } else {
-    ttg::Edge<Key2, void> startup("startup");
-    ttg::Edge<Key2, MatrixTile<double>> result("To result");
-
     MatrixT<double> A{&dcA};
     int random_seed = 3872;
 
-    auto init_tt =  ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, void>>& out) {
-      for(int i = 0; i < A.rows(); i++) {
-        for(int j = 0; j <= i && j < A.cols(); j++) {
-          if(A.is_local(i, j)) {
-            if(ttg::tracing()) ttg::print("init(", Key2{i, j}, ")");
-            ttg::sendk<0>(Key2{i, j}, out);
-          }
-        }
-      }
-    }, ttg::edges(), ttg::edges(startup), "Startup Trigger", {}, {"startup"});
-    init_tt->set_keymap([&]() {return world.rank();});
+    init_matrix(A, random_seed, cow_hint);
+    double *A0 = A.getLAPACKMatrix();
 
-    auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, result, cow_hint);
-    auto result_ttg = make_result_ttg(A, result, cow_hint);
+    ttg::Edge<Key2, MatrixTile<double>> topotrf("To POTRF");
+    ttg::Edge<Key2, MatrixTile<double>> toresult("To Result");
 
-    auto connected = make_graph_executable(init_tt.get());
+    auto init_tt = make_load_tt(A, topotrf, cow_hint);
+    auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, toresult, cow_hint);
+    auto result2_ttg = make_result_ttg(A, toresult, cow_hint);
+
+    bool connected = make_graph_executable(init_tt.get());
     assert(connected);
     TTGUNUSED(connected);
 
     init_tt->invoke();
 
     ttg::execute(world);
-    ttg::fence(world);
-
-    double *A0 = A.getLAPACKMatrix();
-
-    ttg::Edge<Key2, MatrixTile<double>> topotrf("To POTRF");
-    ttg::Edge<Key2, MatrixTile<double>> toresult("To Result");
-
-    auto load_plgsy = make_load_tt(A, topotrf, cow_hint);
-    auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, toresult, cow_hint);
-    auto result2_ttg = make_result_ttg(A, toresult, cow_hint);
-
-    connected = make_graph_executable(load_plgsy.get());
-    assert(connected);
-    TTGUNUSED(connected);
-
-    load_plgsy->invoke();
-
     ttg::fence(world);
 
     /* Copy result matrix (which is local) into a single LAPACK format matrix */

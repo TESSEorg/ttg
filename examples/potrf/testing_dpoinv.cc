@@ -8,7 +8,7 @@
 #include <ttg.h>
 #include <ttg/serialization/std/tuple.h>
 
-#include "plgsy.h"
+#include "init_matrix.h"
 #include "pmw.h"
 #include "potrf.h"
 #include "potri.h"
@@ -134,48 +134,10 @@ int main(int argc, char **argv)
   /********************** Step 0: Generation  **********************/
 
   for(int t = 0; t <= nruns; t++) {
-    ttg::Edge<Key2, void> startup("startup PLGSY");
-    ttg::Edge<Key2, MatrixTile<double>> toresplgsy("store PLGSY");
     MatrixT<double> A{&dcA};
     int random_seed = 3872;
 
-    auto init_tt =  ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, void>>& out) {
-      for(int i = 0; i < A.rows(); i++) {
-        for(int j = 0; j <= i && j < A.cols(); j++) {
-          if(A.is_local(i, j)) {
-            if(ttg::tracing()) ttg::print("init(", Key2{i, j}, ")");
-            ttg::sendk<0>(Key2{i, j}, out);
-          }
-        }
-      }
-    }, ttg::edges(), ttg::edges(startup), "Startup Trigger for PLGSY", {}, {"startup"});
-    init_tt->set_keymap([&]() {return world.rank();});
-    init_tt->set_defer_writer(defer_cow_hint);
-    auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, toresplgsy, defer_cow_hint);
-    auto store_plgsy_ttg = make_result_ttg(A, toresplgsy, defer_cow_hint);
-
-    auto connected = make_graph_executable(init_tt.get());
-    assert(connected);
-    TTGUNUSED(connected);
-
-    if(verbose) {
-      std::cout << "Graph is connected: " << connected << std::endl;
-    }
-
-    if (world.rank() == 0) {
-#if 1
-      if(verbose) {
-        std::cout << "==== begin dot ====\n";
-        std::cout << ttg::Dot()(init_tt.get()) << std::endl;
-        std::cout << "==== end dot ====\n";
-      }
-#endif // 0
-    }
-    init_tt->invoke();
-
-    if(t == 0)
-      ttg::execute(world);
-    ttg::fence(world);
+    init_matrix(A, random_seed, defer_cow_hint);
 
     if(sequential > 0) {
       ttg::Edge<Key2, MatrixTile<double>> topotrf("To POTRF");
@@ -183,11 +145,11 @@ int main(int argc, char **argv)
       std::chrono::time_point<std::chrono::high_resolution_clock> begpotrf, endpotrf;
 
       /********************** First Step: POTRF  **********************/
-      auto load_plgsy = make_load_tt(A, topotrf, defer_cow_hint);
+      auto init_tt = make_startup(A, topotrf);
       auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, torespotrf, defer_cow_hint);
       auto store_potrf_ttg = make_result_ttg(A, torespotrf, defer_cow_hint);
 
-      connected = make_graph_executable(load_plgsy.get());
+      bool connected = make_graph_executable(init_tt.get());
       assert(connected);
       TTGUNUSED(connected);
 
@@ -199,14 +161,14 @@ int main(int argc, char **argv)
     #if 1
         if(verbose) {
           std::cout << "==== begin dot ====\n";
-          std::cout << ttg::Dot()(load_plgsy.get()) << std::endl;
+          std::cout << ttg::Dot()(init_tt.get()) << std::endl;
           std::cout << "==== end dot ====\n";
         }
     #endif // 0
         beg = std::chrono::high_resolution_clock::now();
         begpotrf = beg;
       }
-      load_plgsy->invoke();
+      init_tt->invoke();
 
       ttg::fence(world);
       if (world.rank() == 0) {
@@ -224,7 +186,7 @@ int main(int argc, char **argv)
         auto potri_ttg = potri::make_potri_ttg(A, topotri, toresult, defer_cow_hint);
         auto store_potri_ttg = make_result_ttg(A, toresult, defer_cow_hint);
 
-        connected = make_graph_executable(load_potrf.get());
+        bool connected = make_graph_executable(load_potrf.get());
         assert(connected);
         TTGUNUSED(connected);
         if(verbose) {
@@ -274,7 +236,7 @@ int main(int argc, char **argv)
         auto trtri_ttg = trtri_LOWER::make_trtri_ttg(A, lapack::Diag::NonUnit, totrtri, torestrtri, defer_cow_hint);
         auto store_trtri_ttg = make_result_ttg(A, torestrtri, defer_cow_hint);
 
-        connected = make_graph_executable(load_potrf.get());
+        bool connected = make_graph_executable(load_potrf.get());
         assert(connected);
         TTGUNUSED(connected);
         if(verbose) {
@@ -304,7 +266,7 @@ int main(int argc, char **argv)
         auto lauum_ttg = lauum::make_lauum_ttg(A, tolauum, toresult, defer_cow_hint);
         auto result = make_result_ttg(A, toresult, defer_cow_hint);
 
-        connected = make_graph_executable(load_trtri.get());
+        bool connected = make_graph_executable(load_trtri.get());
         assert(connected);
         TTGUNUSED(connected);
         if( verbose ) {
@@ -351,12 +313,13 @@ int main(int argc, char **argv)
       ttg::Edge<Key2, MatrixTile<double>> topotri("To POTRI");
       ttg::Edge<Key2, MatrixTile<double>> result("To result");
 
-      auto load_plgsy = make_load_tt(A, topotrf, defer_cow_hint);
+      init_matrix(A, random_seed, defer_cow_hint);
+      auto load_potrf = make_load_tt(A, topotrf, defer_cow_hint);
       auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, topotri, defer_cow_hint);
       auto potri_ttg = potri::make_potri_ttg(A, topotri, result, defer_cow_hint);
       auto result_ttg = make_result_ttg(A, result, defer_cow_hint);
 
-      auto connected = make_graph_executable(load_plgsy.get());
+      auto connected = make_graph_executable(load_potrf.get());
       assert(connected);
       TTGUNUSED(connected);
       if(verbose) {
@@ -367,13 +330,13 @@ int main(int argc, char **argv)
   #if 1
         if(verbose) {
           std::cout << "==== begin dot ====\n";
-          std::cout << ttg::Dot()(load_plgsy.get()) << std::endl;
+          std::cout << ttg::Dot()(load_potrf.get()) << std::endl;
           std::cout << "==== end dot ====\n";
         }
   #endif // 0
         beg = std::chrono::high_resolution_clock::now();
       }
-      load_plgsy->invoke();
+      load_potrf->invoke();
 
       ttg::fence(world);
       if (world.rank() == 0 && t > 0) {
