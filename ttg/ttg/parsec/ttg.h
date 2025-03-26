@@ -2034,7 +2034,8 @@ namespace ttg_parsec {
 
       if (nullptr != task_ring) {
         auto &world_impl = world.impl();
-        __parsec_schedule(world_impl.execution_stream(), task_ring, 0);
+        parsec_task_t *vp_task_ring[1] = { task_ring };
+        __parsec_schedule_vp(world_impl.execution_stream(), vp_task_ring, 0);
       }
 
       /* restore the previous task */
@@ -2636,7 +2637,8 @@ namespace ttg_parsec {
         assert(task != nullptr);
         auto &world_impl = world.impl();
         parsec_execution_stream_t *es = world_impl.execution_stream();
-        __parsec_schedule(es, &task->parsec_task, 0);
+        parsec_task_t *vp_task_rings[1] = { &task->parsec_task };
+        __parsec_schedule_vp(es, vp_task_rings, 0);
       }
     }
 
@@ -2672,7 +2674,8 @@ namespace ttg_parsec {
       if (nullptr != task_ring) {
         auto &world_impl = world.impl();
         parsec_execution_stream_t *es = world_impl.execution_stream();
-        __parsec_schedule(es, task_ring, 0);
+        parsec_task_t *vp_task_rings[1] = { task_ring };
+        __parsec_schedule_vp(es, vp_task_rings, 0);
       }
     }
 
@@ -2708,7 +2711,8 @@ namespace ttg_parsec {
 
         if (check_constraints(task)) {
           if (nullptr == task_ring) {
-            __parsec_schedule(es, &task->parsec_task, 0);
+            parsec_task_t *vp_task_rings[1] = { &task->parsec_task };
+            __parsec_schedule_vp(es, vp_task_rings, 0);
           } else if (*task_ring == nullptr) {
             /* the first task is set directly */
             *task_ring = &task->parsec_task;
@@ -2995,7 +2999,8 @@ namespace ttg_parsec {
       }
       /* submit all ready tasks at once */
       if (nullptr != task_ring) {
-        __parsec_schedule(world.impl().execution_stream(), task_ring, 0);
+        parsec_task_t *vp_task_ring[1] = { task_ring };
+        __parsec_schedule_vp(world.impl().execution_stream(), vp_task_ring, 0);
       }
 #if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
       if(world.impl().profiling()) {
