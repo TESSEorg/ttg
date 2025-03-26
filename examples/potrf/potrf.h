@@ -170,6 +170,9 @@ namespace potrf {
       int info = *devInfo.host_ptr();
       assert(info == 0);
       if( info == 0 ) {
+        // release the workspace and the devInfo
+        ws.clear();
+        devInfo.clear();
         co_await ttg::device::forward(ttg::device::broadcast<0, 1>(std::make_tuple(Key2(K, K), std::move(keylist)), std::move(tile_kk), out));
         // Anything after this co_await is never executed
         // co_return would look better, but co_return would destroy keylist before the runtime can handle it

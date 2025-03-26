@@ -530,6 +530,14 @@ public:
   }
 
   /**
+   * Clears the buffer. After this operation, the buffer is empty.
+   */
+  void clear() {
+    release_data();
+    m_count = 0;
+  }
+
+  /**
    * Resets the scope of the buffer.
    * If scope is SyncIn then the next time
    * the buffer is made available on a device the host
