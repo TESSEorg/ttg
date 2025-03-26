@@ -156,6 +156,9 @@ namespace potrf {
       /* wait for the kernel to complete */
       co_await ttg::device::wait(devInfo);
       // check that we got the input tile we expected
+      if (!check_norm(tile_kk.norm(), norms[0])) {
+        std::cout << "POTRF " << key << ": norm check failed for tile " << K << " expected " << tile_kk.norm() << " found " << norms[0] << std::endl;
+      }
       assert(check_norm(tile_kk.norm(), norms[0]));
       // set the new norm
       tile_kk.set_norm(norms[1]);
@@ -300,6 +303,12 @@ namespace potrf {
       device_norm(tile_mk, &norms[2]);
       /* wait for the kernel to complete */
       co_await ttg::device::wait();
+      if (!check_norm(tile_kk.norm(), norms[0])) {
+        std::cout << "TRSM " << key << ": norm check failed for tile " << K << " expected " << tile_kk.norm() << " found " << norms[0] << std::endl;
+      }
+      if (!check_norm(tile_mk.norm(), norms[1])) {
+        std::cout << "TRSM " << key << ": tile_mk " << M << ", " << K << " expected norm " << tile_mk.norm() << "but found " << norms[1] << std::endl;
+      }
       // check that we got the input tiles we expected
       assert(check_norm(tile_kk.norm(), norms[0]));
       assert(check_norm(tile_mk.norm(), norms[1]));
@@ -429,6 +438,12 @@ namespace potrf {
       device_norm(tile_kk, &norms[2]);
       /* wait for the kernel to complete */
       co_await ttg::device::wait();
+      if (!check_norm(tile_mk.norm(), norms[0])) {
+        std::cout << "SYRK: tile_mk " << M << ", " << K << " expected norm " << tile_mk.norm() << "but found " << norms[0] << std::endl;
+      }
+      if (!check_norm(tile_kk.norm(), norms[1])) {
+        std::cout << "SYRK: tile_kk " << K << " expected norm " << tile_kk.norm() << "but found " << norms[1] << std::endl;
+      }
       // check that we got the input tiles we expected
       assert(check_norm(tile_mk.norm(), norms[0]));
       assert(check_norm(tile_kk.norm(), norms[1]));
