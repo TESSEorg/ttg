@@ -2866,7 +2866,7 @@ namespace ttg_parsec {
             pos += sizeof(cbtag);
           }
         };
-        auto handle_iovec_fn = [&](auto&& iovec){
+        auto handle_iovec_fn = [&](auto&& iovec, parsec_data_copy_t *device_copy = nullptr) {
 
           if (inline_data) {
             /* inline data is packed right after the tt_id in the message */
@@ -2884,9 +2884,13 @@ namespace ttg_parsec {
             /* TODO: only register once when we can broadcast the data! */
             parsec_ce.mem_register(iovec.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iovec.num_bytes, parsec_datatype_int8_t,
                                    iovec.num_bytes, &lreg, &lreg_size);
-            auto lreg_ptr = std::shared_ptr<void>{lreg, [](void *ptr) {
+            auto lreg_ptr = std::shared_ptr<void>{lreg, [device_copy](void *ptr) {
                                                     parsec_ce_mem_reg_handle_t memreg = (parsec_ce_mem_reg_handle_t)ptr;
                                                     parsec_ce.mem_unregister(&memreg);
+                                                    if (device_copy != nullptr) {
+                                                      /* remove a reader */
+                                                      parsec_atomic_fetch_sub_int32(&device_copy->readers, 1);
+                                                    }
                                                   }};
             int32_t lreg_size_i = lreg_size;
             std::memcpy(msg->bytes + pos, &lreg_size_i, sizeof(lreg_size_i));
@@ -2928,11 +2932,14 @@ namespace ttg_parsec {
           /* handle any iovecs contained in it */
           write_header_fn();
           detail::foreach_parsec_data(value, [&](parsec_data_t *data){
-            auto device = data->owner_device;
-            if (!world.impl().mpi_support(Space)) {
-              device = 0;
+            int device = 0;
+            parsec_data_copy_t* device_copy = nullptr;
+            if (world.impl().mpi_support(Space) && Space != ttg::ExecutionSpace::Host) {
+              /* Try to find a device that is not the host and has the latest version. */
+              std::tie(device, device_copy) = detail::find_device_copy(data);
             }
-            handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[device]->device_private});
+            handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[device]->device_private},
+                            device_copy);
           });
         }
 
@@ -3066,7 +3073,7 @@ namespace ttg_parsec {
             pos += sizeof(cbtag);
           }
         };
-        auto handle_iov_fn = [&](auto&& iovec){
+        auto handle_iov_fn = [&](auto&& iovec, parsec_data_copy_t *device_copy = nullptr){
           if (inline_data) {
             /* inline data is packed right after the tt_id in the message */
             std::memcpy(msg->bytes + pos, iovec.data, iovec.num_bytes);
@@ -3077,14 +3084,21 @@ namespace ttg_parsec {
             parsec_ce.mem_register(iovec.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iovec.num_bytes, parsec_datatype_int8_t,
                                    iovec.num_bytes, &lreg, &lreg_size);
             /* TODO: use a static function for deregistration here? */
-            memregs.push_back(std::make_pair(static_cast<int32_t>(lreg_size),
-                                            /* TODO: this assumes that parsec_ce_mem_reg_handle_t is void* */
-                                            std::shared_ptr<void>{lreg, [](void *ptr) {
-                                                                    parsec_ce_mem_reg_handle_t memreg =
-                                                                        (parsec_ce_mem_reg_handle_t)ptr;
-                                                                    //std::cout << "broadcast_arg memunreg lreg " << memreg << std::endl;
-                                                                    parsec_ce.mem_unregister(&memreg);
-                                                                  }}));
+            memregs.push_back(
+              std::make_pair(static_cast<int32_t>(lreg_size),
+                             /* TODO: this assumes that parsec_ce_mem_reg_handle_t is void* */
+                             std::shared_ptr<void>{lreg,
+                                                  [device_copy](void *ptr) {
+                                                    parsec_ce_mem_reg_handle_t memreg =
+                                                        (parsec_ce_mem_reg_handle_t)ptr;
+                                                    //std::cout << "broadcast_arg memunreg lreg " << memreg << std::endl;
+                                                    parsec_ce.mem_unregister(&memreg);
+                                                    if (device_copy != nullptr) {
+                                                      /* remove a reader */
+                                                      parsec_atomic_fetch_sub_int32(&device_copy->readers, 1);
+                                                    }
+                                                  }})
+            );
             //std::cout << "broadcast_arg memreg lreg " << lreg << std::endl;
           }
         };
@@ -3109,12 +3123,15 @@ namespace ttg_parsec {
           memregs.reserve(num_iovs);
           write_iov_header();
           detail::foreach_parsec_data(value, [&](parsec_data_t *data){
-            auto device = data->owner_device;
-            if (!world.impl().mpi_support(Space)) {
-              device = 0;
+            int device = 0;
+            parsec_data_copy_t* device_copy = nullptr;
+            if (world.impl().mpi_support(Space) && Space != ttg::ExecutionSpace::Host) {
+              /* Try to find a device that is not the host and has the latest version. */
+              std::tie(device, device_copy) = detail::find_device_copy(data);
             }
             handle_iov_fn(ttg::iovec{data->nb_elts,
-                                     data->device_copies[device]->device_private});
+                                     data->device_copies[device]->device_private},
+                          device_copy);
           });
         }
 
