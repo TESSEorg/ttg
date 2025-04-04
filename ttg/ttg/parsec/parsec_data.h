@@ -29,6 +29,7 @@ namespace ttg_parsec::detail {
     int device = 0;
     parsec_data_copy_t* device_copy = nullptr;
     for (int i = 1; i < parsec_nb_devices; ++i) {
+      if (data->device_copies[i] == nullptr) continue;
       if (data->device_copies[i]->version >= version) {
         device = i;
         version = data->device_copies[i]->version;
