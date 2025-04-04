@@ -254,17 +254,6 @@ private:
 
   void release_data() {
     if (nullptr == m_data) return;
-    for (int i = 1; i < parsec_nb_devices; ++i) {
-      if (nullptr == m_data->device_copies[i]) continue;
-      auto copy = m_data->device_copies[i];
-      if (0 == (copy->flags & PARSEC_DATA_FLAG_PARSEC_OWNED)) {
-        /* we own this copy so we have to release it */
-        parsec_device_gpu_module_t *device_module = (parsec_device_gpu_module_t*)parsec_mca_device_get(i);
-        zone_free(device_module->memory, copy->device_private);
-        copy->device_private = nullptr;
-        parsec_data_copy_detach(m_data, copy, i);
-      }
-    }
     /* discard the parsec data so it can be collected by the runtime
      * and the buffer be free'd in the parsec_data_copy_t destructor */
     parsec_data_discard(m_data);
@@ -456,8 +445,9 @@ public:
         if (nullptr == ptr) {
           throw std::bad_alloc{};
         }
-        /* let parsec manage the object (mirror it to other devices) but keep the ownership */
-        auto copy = parsec_data_copy_new(m_data, parsec_id, parsec_datatype_int8_t, PARSEC_DATA_FLAG_PARSEC_MANAGED);
+        /* transfer ownership of the memory to PaRSEC (so it can be pushed out if needed) */
+        auto copy = parsec_data_copy_new(m_data, parsec_id, parsec_datatype_int8_t,
+                                         PARSEC_DATA_FLAG_PARSEC_MANAGED | PARSEC_DATA_FLAG_PARSEC_OWNED);
         copy->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
         copy->device_private = ptr;
         m_data->device_copies[parsec_id] =  copy;
