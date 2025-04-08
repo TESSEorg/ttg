@@ -2844,18 +2844,6 @@ namespace ttg_parsec {
         bool inline_data = can_inline_data(value_ptr, copy, key, 1);
         msg->tt_id.inline_data = inline_data;
 
-        /* increment readers to make sure the copy stays alive */
-        /* TODO: use buffer::pin_on() here once that is implemented */
-        detail::foreach_parsec_data(value, [](parsec_data_t* data){
-          parsec_atomic_fetch_add_int32(&data->device_copies[data->owner_device]->readers, 1);
-        });
-        /* shared_ptr captured by fn below to decrement readers once all transfers have completed */
-        auto value_sptr = std::shared_ptr<decvalueT>(const_cast<decvalueT*>(&value), [](decvalueT* ptr){
-          detail::foreach_parsec_data(*ptr, [](parsec_data_t* data){
-            parsec_atomic_fetch_sub_int32(&data->device_copies[data->owner_device]->readers, 1);
-          });
-        });
-
         auto write_header_fn = [&]() {
           if (!inline_data) {
             /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
@@ -2902,9 +2890,8 @@ namespace ttg_parsec {
             std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
               /* shared_ptr of value and registration captured by value so resetting
               * them here will eventually release the memory/registration */
-              detail::release_data_copy(copy);
               lreg_ptr.reset();
-              value_sptr.reset(); // decrement the readers
+              detail::release_data_copy(copy);
             });
             std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
             std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
@@ -3160,17 +3147,6 @@ namespace ttg_parsec {
            * NOTE: we need to pack these for every receiver to ensure correct ref-counting of the registration
            */
           if (!inline_data) {
-            /* increment readers to make sure the copy stays alive */
-            /* TODO: use buffer::pin_on() here once that is implemented */
-            detail::foreach_parsec_data(value, [](parsec_data_t* data){
-              parsec_atomic_fetch_add_int32(&data->device_copies[data->owner_device]->readers, 1);
-            });
-            /* shared_ptr captured by fn below to decrement readers once all transfers have completed */
-            auto value_ptr = std::shared_ptr<decvalueT>(const_cast<decvalueT*>(&value), [](decvalueT* ptr){
-              detail::foreach_parsec_data(*ptr, [](parsec_data_t* data){
-                parsec_atomic_fetch_sub_int32(&data->device_copies[data->owner_device]->readers, 1);
-              });
-            });
             for (int idx = 0; idx < num_iovs; ++idx) {
               // auto [lreg_size, lreg_ptr] = memregs[idx];
               int32_t lreg_size;
@@ -3187,9 +3163,8 @@ namespace ttg_parsec {
               std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
                 /* shared_ptr of value and registration captured by value so resetting
                   * them here will eventually release the memory/registration */
-                detail::release_data_copy(copy);
                 lreg_ptr.reset();
-                value_ptr.reset(); // unpin the copies
+                detail::release_data_copy(copy);
               });
               std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
               std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
