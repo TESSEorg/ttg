@@ -9,11 +9,19 @@
 
 #include <ttg/serialization/splitmd_data_descriptor.h>
 
+template<typename T>
+struct is_device_allocator : std::false_type {};
+
+template<typename T>
+struct is_device_allocator_v : is_device_allocator<T>::value {};
 
 #include <TiledArray/external/device.h>
 #if defined(TILEDARRAY_HAS_DEVICE)
 template<typename T>
 using Allocator = TiledArray::device_pinned_allocator<T>;
+
+template<typename T>
+struct is_device_allocator<TiledArray::device_pinned_allocator<T>> : std::true_type {};
 
 inline void allocator_init(int argc, char **argv) {
   // initialize MADNESS so that TA allocators can be created
