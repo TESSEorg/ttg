@@ -50,6 +50,7 @@ set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/devicescope.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/devicescratch.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/edge.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/env.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/execution.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/func.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/fwd.h
@@ -132,6 +133,8 @@ if (TTG_HAVE_LEVEL_ZERO)
   list(APPEND ttg-deps level_zero::ze_loader)
 endif (TTG_HAVE_LEVEL_ZERO)
 
+list(APPEND ttg-deps umpire-cxx-allocator)
+
 set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers};${ttg_device_headers})
 if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
   list(APPEND ttg-sources ${ttg-external-headers})
@@ -139,6 +142,8 @@ if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
 endif()
 
 add_ttg_library(ttg "${ttg-sources}" PUBLIC_HEADER "${ttg-public-headers}" LINK_LIBRARIES "${ttg-deps}" INCLUDE_DIRECTORIES "${ttg-incs}" COMPILE_DEFINITIONS "${ttg-defs}")
+# for non-fetchcontentable packages like Umpire need to add dependence of TTG on Umpire's custom build target
+add_dependencies(ttg ttg-imported-packages-build)
 
 ########################
 ####### Serialization
