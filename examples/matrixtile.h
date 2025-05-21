@@ -10,10 +10,11 @@
 #include <ttg/serialization/splitmd_data_descriptor.h>
 
 
-#include <TiledArray/external/device.h>
+#include <ttg/env.h>
+
 #if defined(TILEDARRAY_HAS_DEVICE)
 template<typename T>
-using Allocator = TiledArray::device_pinned_allocator<T>;
+using Allocator = ttg::pinned_allocator_t<T>;
 
 inline void allocator_init(int argc, char **argv) {
   // initialize MADNESS so that TA allocators can be created
