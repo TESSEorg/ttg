@@ -962,10 +962,6 @@ namespace ttg_parsec {
       int32_t readers = copy_in->num_readers();
       assert(readers != 0);
 
-      /* try hard to defer writers if we cannot make copies
-       * if deferral fails we have to bail out */
-      bool defer_writer = (!std::is_copy_constructible_v<std::decay_t<Value>>) || task->defer_writer;
-
       if (readonly && !copy_in->is_mutable()) {
         /* simply increment the number of readers */
         readers = copy_in->increment_readers();
@@ -1004,6 +1000,11 @@ namespace ttg_parsec {
          *       (current task) or there are others, in which we case won't
          *       touch it.
          */
+        /* try hard to defer writers if we cannot make copies
+         * if deferral fails we have to bail out */
+        bool defer_writer = (!std::is_copy_constructible_v<std::decay_t<Value>>) ||
+                            ((nullptr != task) && task->defer_writer);
+
         if (1 == copy_in->num_readers() && !defer_writer) {
           /**
            * no other readers, mark copy as mutable and defer the release
@@ -2109,30 +2110,6 @@ namespace ttg_parsec {
             copy = detail::create_new_datacopy(descr.create_from_metadata(metadata));
           } else if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
             copy = detail::create_new_datacopy(decvalueT{});
-#if 0
-            // TODO: first attempt at sending directly to the device
-            parsec_gpu_data_copy_t* gpu_elem;
-            gpu_elem = PARSEC_DATA_GET_COPY(master, gpu_device->super.device_index);
-            int i = detail::first_device_id;
-            int devid = detail::first_device_id;
-            while (i < parsec_nb_devices) {
-              if (nullptr == gpu_elem) {
-                gpu_elem = PARSEC_OBJ_NEW(parsec_data_copy_t);
-                gpu_elem->flags = PARSEC_DATA_FLAG_PARSEC_OWNED | PARSEC_DATA_FLAG_PARSEC_MANAGED;
-                gpu_elem->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
-                gpu_elem->version = 0;
-                gpu_elem->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
-              }
-              if (nullptr == gpu_elem->device_private) {
-                gpu_elem->device_private = zone_malloc(gpu_device->memory, gpu_task->flow_nb_elts[i]);
-                if (nullptr == gpu_elem->device_private) {
-                  devid++;
-                  continue;
-                }
-                break;
-              }
-            }
-#endif // 0
             /* unpack the object, potentially discovering iovecs */
             pos = unpack(*static_cast<decvalueT *>(copy->get_ptr()), msg->bytes, pos);
           }
@@ -2160,9 +2137,13 @@ namespace ttg_parsec {
 
               /* create the value from the metadata */
               auto activation = new detail::rma_delayed_activate(
-                  std::move(keylist), copy, num_iovecs, [this](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
+                  std::move(keylist), copy, num_iovecs, [this, &val](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
                     set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
                     this->world.impl().decrement_inflight_msg();
+                    detail::foreach_parsec_data(val, [&](parsec_data_t* data){
+                      /* decrement readers we incremented before the transfer */
+                      parsec_atomic_fetch_dec_int32(&data->device_copies[data->owner_device]->readers);
+                    });
                   });
               return activation;
             };
@@ -2201,6 +2182,41 @@ namespace ttg_parsec {
                             /*world.impl().parsec_ttg_rma_tag()*/
                             cbtag, &fn_ptr, sizeof(std::intptr_t));
             };
+            /* make sure all buffers are properly allocated */
+            ttg::detail::buffer_apply(val, [&]<typename T, typename A>(const ttg::Buffer<T, A>& b){
+              /* cast away const */
+              auto& buffer = const_cast<ttg::Buffer<T, A>&>(b);
+              /* remember which device we used last time */
+              static auto last_device = ttg::device::Device{0, Space};
+              ttg::device::Device device;
+              if (inline_data || !world.impl().mpi_support(Space))  {
+                device = ttg::device::Device::host(); // have to allocate on host
+              } else if (!keylist.empty() && devicemap) {
+                device = devicemap(keylist[0]); // pick a device we know will use the data
+              } else {
+                device = last_device; // use the previously used device
+              }
+              // remember where we started so we can cycle through all devices once
+              auto start_device = device;
+              do {
+                /* try to allocate on any device */
+                try {
+                  buffer.allocate_on(device);
+                  buffer.set_owner_device(device);
+                  break;
+                } catch (const std::bad_alloc&) {
+                  device = device.cycle();
+                  if (device == start_device) {
+                    /* make sure we have memory on the host */
+                    buffer.allocate_on(ttg::device::Device::host());
+                    break; // failed to find a device that works
+                  }
+                  last_device = device;
+                }
+              } while(true);
+            });
+
+            /* kick off transfers */
             if constexpr (ttg::has_split_metadata<decvalueT>::value) {
               ttg::SplitMetadataDescriptor<decvalueT> descr;
               if (inline_data) {
@@ -2221,6 +2237,7 @@ namespace ttg_parsec {
               } else {
                 auto activation = create_activation_fn();
                 detail::foreach_parsec_data(val, [&](parsec_data_t* data){
+                  parsec_atomic_fetch_inc_int32(&data->device_copies[data->owner_device]->readers);
                   handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private}, activation);
                 });
               }
@@ -2840,6 +2857,18 @@ namespace ttg_parsec {
         bool inline_data = can_inline_data(value_ptr, copy, key, 1);
         msg->tt_id.inline_data = inline_data;
 
+        /* increment readers to make sure the copy stays alive */
+        /* TODO: use buffer::pin_on() here once that is implemented */
+        detail::foreach_parsec_data(value, [](parsec_data_t* data){
+          parsec_atomic_fetch_add_int32(&data->device_copies[data->owner_device]->readers, 1);
+        });
+        /* shared_ptr captured by fn below to decrement readers once all transfers have completed */
+        auto value_sptr = std::shared_ptr<decvalueT>(const_cast<decvalueT*>(&value), [](decvalueT* ptr){
+          detail::foreach_parsec_data(*ptr, [](parsec_data_t* data){
+            parsec_atomic_fetch_sub_int32(&data->device_copies[data->owner_device]->readers, 1);
+          });
+        });
+
         auto write_header_fn = [&]() {
           if (!inline_data) {
             /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
@@ -2884,6 +2913,7 @@ namespace ttg_parsec {
               * them here will eventually release the memory/registration */
               detail::release_data_copy(copy);
               lreg_ptr.reset();
+              value_sptr.reset(); // decrement the readers
             });
             std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
             std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
@@ -2911,7 +2941,11 @@ namespace ttg_parsec {
           /* handle any iovecs contained in it */
           write_header_fn();
           detail::foreach_parsec_data(value, [&](parsec_data_t *data){
-            handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private});
+            auto device = data->owner_device;
+            if (!world.impl().mpi_support(Space)) {
+              device = 0;
+            }
+            handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[device]->device_private});
           });
         }
 
@@ -3088,8 +3122,12 @@ namespace ttg_parsec {
           memregs.reserve(num_iovs);
           write_iov_header();
           detail::foreach_parsec_data(value, [&](parsec_data_t *data){
+            auto device = data->owner_device;
+            if (!world.impl().mpi_support(Space)) {
+              device = 0;
+            }
             handle_iov_fn(ttg::iovec{data->nb_elts,
-                                     data->device_copies[data->owner_device]->device_private});
+                                     data->device_copies[device]->device_private});
           });
         }
 
@@ -3118,6 +3156,17 @@ namespace ttg_parsec {
            * NOTE: we need to pack these for every receiver to ensure correct ref-counting of the registration
            */
           if (!inline_data) {
+            /* increment readers to make sure the copy stays alive */
+            /* TODO: use buffer::pin_on() here once that is implemented */
+            detail::foreach_parsec_data(value, [](parsec_data_t* data){
+              parsec_atomic_fetch_add_int32(&data->device_copies[data->owner_device]->readers, 1);
+            });
+            /* shared_ptr captured by fn below to decrement readers once all transfers have completed */
+            auto value_ptr = std::shared_ptr<decvalueT>(const_cast<decvalueT*>(&value), [](decvalueT* ptr){
+              detail::foreach_parsec_data(*ptr, [](parsec_data_t* data){
+                parsec_atomic_fetch_sub_int32(&data->device_copies[data->owner_device]->readers, 1);
+              });
+            });
             for (int idx = 0; idx < num_iovs; ++idx) {
               // auto [lreg_size, lreg_ptr] = memregs[idx];
               int32_t lreg_size;
@@ -3136,6 +3185,7 @@ namespace ttg_parsec {
                   * them here will eventually release the memory/registration */
                 detail::release_data_copy(copy);
                 lreg_ptr.reset();
+                value_ptr.reset(); // unpin the copies
               });
               std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
               std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
@@ -3563,14 +3613,7 @@ namespace ttg_parsec {
 
       /* check if there are non-local successors if it's a device task */
       if (!need_pushout) {
-        bool device_supported = false;
-        if constexpr (derived_has_cuda_op()) {
-          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::CUDA);
-        } else if constexpr (derived_has_hip_op()) {
-          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::HIP);
-        } else if constexpr (derived_has_level_zero_op()) {
-          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::L0);
-        }
+        bool device_supported = world.impl().mpi_support(Space);
         /* if MPI supports the device we don't care whether we have remote peers
          * because we can send from the device directly */
         if (!device_supported) {
