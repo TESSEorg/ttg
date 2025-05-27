@@ -850,6 +850,7 @@ namespace ttg_parsec {
           : _keylist(std::move(key)), _outstanding_transfers(num_transfers), _cb(cb), _copy(copy) {}
 
       bool complete_transfer(void) {
+        assert(_outstanding_transfers > 0);
         int left = --_outstanding_transfers;
         if (0 == left) {
           _cb(std::move(_keylist), _copy);
@@ -2122,6 +2123,7 @@ namespace ttg_parsec {
               std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
               pos += sizeof(cbtag);
 
+              copy->add_ref(); // so we can safely decrement the readers in the activation
               /* create the value from the metadata */
               auto activation = new detail::rma_delayed_activate(
                   std::move(keylist), copy, num_iovecs, [this, &val](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
@@ -2131,6 +2133,7 @@ namespace ttg_parsec {
                       /* decrement readers we incremented before the transfer */
                       parsec_atomic_fetch_dec_int32(&data->device_copies[data->owner_device]->readers);
                     });
+                    copy->drop_ref();
                   });
               return activation;
             };
