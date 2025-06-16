@@ -1,0 +1,96 @@
+name: Linux build @ ICL
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type : [ Release, Debug ]
+        device : [ cpu, gpu_nvidia, gpu_amd, gpu_intel ]
+    name: "${{ matrix.build_type }} ${{matrix.device}}"
+    runs-on: ${{ matrix.device }}
+    env:
+      OMPI_MCA_btl_vader_single_copy_mechanism : none
+      PARSEC_MCA_runtime_bind_threads : 0
+      BUILD_CONFIG : >
+        -G Ninja
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DBUILD_SHARED_LIBS=OFF
+        -DMPIEXEC_PREFLAGS='--bind-to;none;--allow-run-as-root'
+        -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install
+        -DTTG_EXAMPLES=ON
+      SPACK_SETUP : /apps/spacks/current/github_env/share/spack/setup-env.sh
+      SETUP : ${{github.workspace}}/.github/workflows/env_setup.sh
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Create Build Environment
+      run:  |
+        . $SETUP
+        cmake -E make_directory ${{github.workspace}}/build
+
+    - name: Configure CMake
+      shell: bash
+      working-directory: ${{github.workspace}}/build
+      run: |
+        . $SETUP
+        cmake $GITHUB_WORKSPACE -L -DCMAKE_BUILD_TYPE=$BUILD_TYPE $BUILD_CONFIG \
+           -DTTG_ENABLE_CUDA=$CUDA \
+           -DTTG_ENABLE_HIP=$HIP \
+           -DTTG_ENABLE_LEVEL_ZERO=$LEVEL_ZERO
+
+    - name: Build
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: |
+        . $SETUP
+        cmake --build .
+
+    - name: Build [cuda]
+      if: ${{ matrix.device == 'gpu_nvidia' }}
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: |
+        . $SETUP
+        cmake --build . --target bspmm-cuda-parsec testing_dpotrf_cuda-parsec chain-ttg-cuda-parsec
+
+    - name: Test
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: |
+        . $SETUP
+        cmake --build . --target check-ttg
+
+    - name: Install
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: |
+        . $SETUP
+        cmake --build . --target install
+
+    - name: Test Install Tree
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: |
+        . $SETUP
+        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/helloworld -B test_install_devsamp_helloworld -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat /home/runner/work/ttg/ttg/install/lib/cmake/ttg/ttg-config.cmake && test_install_devsamp_helloworld/CMakeFiles/CMakeConfigureLog.yaml)
+        cmake --build test_install_devsamp_helloworld
+        mpirun -n 2 test_install_devsamp_helloworld/helloworld-parsec
+        mpirun -n 2 test_install_devsamp_helloworld/helloworld-mad
+        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/fibonacci -B test_install_devsamp_fibonacci -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat /home/runner/work/ttg/ttg/install/lib/cmake/ttg/ttg-config.cmake && cat test_install_devsamp_fibonacci/CMakeFiles/CMakeConfigureLog.yaml)
+        cmake --build test_install_devsamp_fibonacci
+        mpirun -n 2 test_install_devsamp_fibonacci/fibonacci-parsec
+        cmake -E make_directory test_install_userexamples
+        cat > test_install_userexamples/CMakeLists.txt <<EOF
+        cmake_minimum_required(VERSION 3.14)
+        project(test)
+        find_package(ttg REQUIRED)
+        add_ttg_executable(simple $GITHUB_WORKSPACE/doc/dox/user/examples/simple.cc NOT_EXCLUDE_FROM_ALL)
+        add_ttg_executable(reducing $GITHUB_WORKSPACE/doc/dox/user/examples/reducing.cc NOT_EXCLUDE_FROM_ALL)
+        add_ttg_executable(iterative $GITHUB_WORKSPACE/doc/dox/user/examples/iterative.cc NOT_EXCLUDE_FROM_ALL)
+        add_ttg_executable(distributed $GITHUB_WORKSPACE/doc/dox/user/examples/distributed.cc NOT_EXCLUDE_FROM_ALL)
+        EOF
+        cmake -S test_install_userexamples -B test_install_userexamples/build -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat /home/runner/work/ttg/ttg/install/lib/cmake/ttg/ttg-config.cmake && cat test_install_devsamp_fibonacci/CMakeFiles/CMakeConfigureLog.yaml)
+        cmake --build test_install_userexamples/build

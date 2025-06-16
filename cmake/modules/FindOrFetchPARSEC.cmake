@@ -14,6 +14,8 @@ if (NOT TARGET PaRSEC::parsec)
   set(PARSEC_WITH_DEVEL_HEADERS ON CACHE BOOL "Install PaRSEC headers")
   set(BUILD_TOOLS ON CACHE BOOL "Do not build PaRSEC tools")
   set(PARSEC_GPU_WITH_CUDA ${TTG_ENABLE_CUDA} CACHE BOOL "Enable CUDA support in PaRSEC runtime?")
+  set(PARSEC_GPU_WITH_HIP ${TTG_ENABLE_HIP} CACHE BOOL "Enable HIP support in PaRSEC runtime?")
+  set(PARSEC_GPU_WITH_LEVEL_ZERO ${TTG_ENABLE_LEVEL_ZERO} CACHE BOOL "Enable LEVEL_ZERO support in PaRSEC runtime?")
 
   FetchContent_Declare(
           PARSEC
