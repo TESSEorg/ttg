@@ -411,8 +411,6 @@ namespace ttg_parsec {
         parsec_enqueue(ctx, tpool);
         tpool->tdm.module->taskpool_addto_runtime_actions(tpool, 1);
         tpool->tdm.module->taskpool_ready(tpool);
-        // make sure all processes are ready to receive messages
-        MPI_Barrier(comm());
         [[maybe_unused]] auto ret = parsec_context_start(ctx);
         // ignore ret since all of its nonzero values are OK (e.g. -1 due to ctx already being active)
         parsec_taskpool_started = true;
