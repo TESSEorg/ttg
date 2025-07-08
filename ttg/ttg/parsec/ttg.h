@@ -200,24 +200,26 @@ namespace ttg_parsec {
       tp = parsec_taskpool_lookup(msg->taskpool_id);
       assert(NULL != tp);
       static_map_mutex.lock();
-      try {
-        auto op_pair = static_id_to_op_map.at(op_id);
-        static_map_mutex.unlock();
-        tp->tdm.module->incoming_message_start(tp, src_rank, NULL, NULL, 0, NULL);
-        static_set_arg_fct = op_pair.first;
-        static_set_arg_fct(data, size, op_pair.second);
-        tp->tdm.module->incoming_message_end(tp, NULL);
-        return 0;
-      } catch (const std::out_of_range &e) {
-        void *data_cpy = malloc(size);
-        assert(data_cpy != 0);
-        memcpy(data_cpy, data, size);
-        ttg::trace("ttg_parsec(", ttg_default_execution_context().rank(), ") Delaying delivery of message (", src_rank,
-                   ", ", op_id, ", ", data_cpy, ", ", size, ")");
-        delayed_unpack_actions.insert(std::make_pair(op_id, std::make_tuple(src_rank, data_cpy, size)));
-        static_map_mutex.unlock();
-        return 1;
+      if (PARSEC_TERM_TP_NOT_READY != tp->tdm.module->taskpool_state(tp)) {
+        try {
+          auto op_pair = static_id_to_op_map.at(op_id);
+          static_map_mutex.unlock();
+          tp->tdm.module->incoming_message_start(tp, src_rank, NULL, NULL, 0, NULL);
+          static_set_arg_fct = op_pair.first;
+          static_set_arg_fct(data, size, op_pair.second);
+          tp->tdm.module->incoming_message_end(tp, NULL);
+          return 0;
+        } catch (const std::out_of_range &e)
+        { /* fall-through */ }
       }
+      void *data_cpy = malloc(size);
+      assert(data_cpy != 0);
+      memcpy(data_cpy, data, size);
+      ttg::trace("ttg_parsec(", ttg_default_execution_context().rank(), ") Delaying delivery of message (", src_rank,
+                 ", ", op_id, ", ", data_cpy, ", ", size, ")");
+      delayed_unpack_actions.insert(std::make_pair(op_id, std::make_tuple(src_rank, data_cpy, size)));
+      static_map_mutex.unlock();
+      return 1;
     }
 
     static int get_remote_complete_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg, size_t msg_size,
