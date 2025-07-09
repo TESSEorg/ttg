@@ -25,7 +25,7 @@ TTG is usable only on POSIX systems.
 - [Umpire C++ allocator](github.com/ValeevGroup/umpire-cxx-allocator) -- a C++ allocator for [LLNL/Umpire](https://github.com/LLNL/Umpire), a portable memory manager. Umpire itself is a prerequisite of this, and can be built from source.
 
 While the list of prerequisites is short, note that the runtimes have many more mandatory prerequisites; these are discussed under `transitive prerequisites` below.
-Also: it is _strongly_ recommended that the runtimes and the memory manager are built as parts of the TTG build process (this requires some of the optional prerequisites, listed below). This will make sure that the correct versions of these prerequsites and their dependents are used.
+Also: it is _strongly_ recommended that the runtimes and the memory manager are built as parts of the TTG build process (this requires some of the optional prerequisites, listed below). This will make sure that the correct versions of these prerequisites and their dependents are used.
 
 ## optional prerequisites
 - [Git](https://git-scm.com): needed to obtain the source code for any prerequisite built from source code as part of TTG, such as PaRSEC or MADNESS runtimes
