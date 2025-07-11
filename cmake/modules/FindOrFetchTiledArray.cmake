@@ -16,8 +16,9 @@ if (TARGET tiledarray)
 
 else (TARGET tiledarray)
 
-  # enable CUDA if TTG has it
-  set(ENABLE_CUDA ${TTG_HAVE_CUDA} CACHE BOOL "Enable CUDA")
+  # enable device runtime if TTG has it
+  set(TA_CUDA ${TTG_HAVE_CUDA} CACHE BOOL "Enable CUDA support in TiledArray")
+  set(TA_HIP ${TTG_HAVE_HIP} CACHE BOOL "Enable HIP support in TiledArray")
 
   # update CMake cache for TA
   if (DEFINED MADNESS_CMAKE_EXTRA_ARGS)

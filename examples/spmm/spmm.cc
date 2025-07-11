@@ -67,7 +67,7 @@ using scalar_t = double;
 #if HAVE_SPMM_DEVICE
 using blk_t = DeviceTensor<scalar_t, btas::DEFAULT::range,
                            btas::mohndle<btas::varray<scalar_t,
-                                                      TiledArray::device_pinned_allocator<scalar_t>>,
+                                                      ttg::pinned_allocator_t<scalar_t>>,
                                          btas::Handle::shared_ptr>>;
 #else   // HAVE_SPMM_DEVICE
 using blk_t = btas::Tensor<scalar_t, btas::DEFAULT::range, btas::mohndle<btas::varray<scalar_t>, btas::Handle::shared_ptr>>;
@@ -1586,12 +1586,6 @@ int main(int argc, char **argv) {
     initialize(1, argv, cores);
   }
 
-#if defined(BTAS_IS_USABLE) && defined(TTG_PARSEC_IMPORTED)
-  // initialize MADNESS so that TA allocators can be created
-  madness::ParsecRuntime::initialize_with_existing_context(ttg::default_execution_context().impl().context());
-  madness::initialize(argc, argv, /* nthread = */ 1, /* quiet = */ true);
-#endif  // BTAS_IS_USABLE
-
   std::string debugStr(getCmdOption(argv, argv + argc, "-d"));
   auto debug = (unsigned int)parseOption(debugStr, 0);
 
@@ -1886,10 +1880,6 @@ int main(int argc, char **argv) {
         //      }
       }
     }
-
-#if defined(BTAS_IS_USABLE) && defined(TTG_PARSEC_IMPORTED)
-    madness::finalize();
-#endif  // BTAS_IS_USABLE
 
     ttg_finalize();
 
