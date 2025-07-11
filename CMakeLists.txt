@@ -188,8 +188,10 @@ set(TTG_HAVE_DEVICE ${_ttg_have_device} CACHE BOOL "True if TTG has support for 
 #### mandatory prerequisites
 ############################
 add_custom_target(ttg-imported-packages-build)
-# umpire-cxx-allocator
-include(FindOrFetchUmpireCXXAllocator)
+# umpire-cxx-allocator only used for device code
+if (TTG_HAVE_CUDA OR TTG_HAVE_HIP OR TTG_HAVE_LEVEL_ZERO)
+  include(FindOrFetchUmpireCXXAllocator)
+endif()
 add_dependencies(ttg-imported-packages-build vrg-build-external-projects)
 # PaRSEC
 include(FindOrFetchPARSEC)
