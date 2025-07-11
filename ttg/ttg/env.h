@@ -41,12 +41,12 @@ namespace ttg {
     }
 
     // clang-format off
-  /// initialize the instance using explicit params
-  /// \param world the world to use for initialization
-  /// \param page_size memory added to the pools supporting `this->um_allocator()`, `this->device_allocator()`, and `this->pinned_allocator()` in chunks of at least
-  ///                  this size (bytes) [default=2^25]
-  /// \param pinned_alloc_limit the maximum total amount of memory (in bytes) that
-  ///        allocator returned by `this->pinned_allocator()` can allocate [default=2^40]
+    /// initialize the instance using explicit params
+    /// \param world the world to use for initialization
+    /// \param page_size memory added to the pools supporting `this->um_allocator()`, `this->device_allocator()`, and `this->pinned_allocator()` in chunks of at least
+    ///                  this size (bytes) [default=2^25]
+    /// \param pinned_alloc_limit the maximum total amount of memory (in bytes) that
+    ///        allocator returned by `this->pinned_allocator()` can allocate [default=2^40]
     // clang-format on
     static void initialize(const std::uint64_t page_size = (1ul << 25),
                            const std::uint64_t pinned_alloc_limit = (1ul << 40)) {
@@ -93,9 +93,9 @@ namespace ttg {
     auto& pinned_allocator() { return pinned_allocator_; }
 
     // clang-format off
-  /// @return the max actual amount of memory held by pinned_allocator()
-  /// @details returns the value provided by `umpire::strategy::QuickPool::getHighWatermark()`
-  /// @note if there is only 1 Umpire allocator using PINNED memory this should be identical to the value returned by `umpire::ResourceManager::getInstance().getAllocator("PINNED").getHighWatermark()`
+    /// @return the max actual amount of memory held by pinned_allocator()
+    /// @details returns the value provided by `umpire::strategy::QuickPool::getHighWatermark()`
+    /// @note if there is only 1 Umpire allocator using PINNED memory this should be identical to the value returned by `umpire::ResourceManager::getInstance().getAllocator("PINNED").getHighWatermark()`
     // clang-format on
     std::size_t pinned_allocator_getActualHighWatermark() {
       assert(dynamic_cast<::umpire::strategy::QuickPool*>(
