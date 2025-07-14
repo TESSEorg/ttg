@@ -63,6 +63,10 @@ namespace detail {
     using allocator_type = typename allocator_traits::allocator_type;
     using value_type = typename allocator_traits::value_type;
 
+    /* always allocate host memory if the host is the only execution space available */
+    static constexpr bool always_allocate_on_host
+                          = (ttg::device::available_execution_space == ttg::ExecutionSpace::Host);
+
     /* used as a hook into the PaRSEC object management system
      * so we can release the memory back to the allocator once
      * data copy is destroyed */
@@ -71,26 +75,31 @@ namespace detail {
     private:
       [[no_unique_address]]
       allocator_type m_allocator;
-      PtrT m_ptr; // keep a reference if PtrT is a shared_ptr
+      PtrT m_ptr;
       std::size_t m_size;
 
       void do_allocate() {
-        if constexpr (std::is_pointer_v<PtrT>) {
-          m_ptr = allocator_traits::allocate(m_allocator, m_size);
+        /* some allocators may throw if they are out of memory */
+        try {
+          m_ptr = std::shared_ptr<value_type[]>(allocator_traits::allocate(m_allocator, m_size),
+                                                [&](value_type* ptr) {
+                                                  allocator_traits::deallocate(m_allocator, ptr, m_size);
+                                                });
+        } catch(...) {
+          /* fall-back to regular memory if the allocator runs dry */
+          m_ptr = std::make_shared<value_type[]>(m_size);
         }
-        this->device_private = m_ptr;
+        this->device_private = m_ptr.get();
       }
 
       void do_deallocate() {
-        if constexpr (std::is_pointer_v<PtrT>) {
-          if (this->device_private != nullptr) {
-            auto ptr = m_ptr;
-            this->device_private = nullptr;
-            this->m_ptr = nullptr;
-            this->version = 0;
-            this->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
-            allocator_traits::deallocate(m_allocator, ptr, this->m_size);
-          }
+        if (this->device_private != nullptr) {
+          auto ptr = std::move(m_ptr);
+          this->device_private = nullptr;
+          this->m_ptr = nullptr;
+          this->version = 0;
+          this->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
+          ptr.reset(); // deallocate the shared pointer
         }
       }
 
@@ -113,7 +122,8 @@ namespace detail {
       data_copy_type& operator=(const data_copy_type&) = delete;
       data_copy_type& operator=(data_copy_type&&) = default;
 
-      void construct(PtrT ptr, std::size_t size) {
+      template<typename Ptr>
+      void construct(Ptr&& ptr, std::size_t size) {
         m_allocator = allocator_type{};
         constexpr const bool is_empty_allocator = std::is_same_v<Allocator, empty_allocator<value_type>>;
         assert(is_empty_allocator);
@@ -123,26 +133,26 @@ namespace detail {
         this->device_private = const_cast<value_type*>(to_address(m_ptr));
       }
 
+      template<typename AllocatorT = allocator_type>
       void construct(std::size_t size,
                      ttg::scope scope,
-                     const allocator_type& alloc = allocator_type()) {
-        constexpr const bool is_empty_allocator = std::is_same_v<Allocator, empty_allocator<value_type>>;
+                     AllocatorT&& alloc = AllocatorT()) {
+        constexpr const bool is_empty_allocator = std::is_same_v<AllocatorT, empty_allocator<value_type>>;
         assert(!is_empty_allocator);
-        m_allocator = alloc;
+        m_allocator = std::forward<AllocatorT>(alloc);
         this->m_size = size;
         this->dtt = parsec_datatype_int8_t;
-        if (scope == ttg::scope::Allocate) {
+        if (always_allocate_on_host || scope == ttg::scope::SyncIn) {
+          /* the user requested that the data be sync'ed into the device
+           * so we need to provide host memory for the user to fill prior */
+          do_allocate();
+        } else {
           /* if the user only requests an allocation on the device
            * we don't allocate host memory but provide PaRSEC with
            * a way to request host memory from us. */
           this->alloc_cb = &allocate;
           this->release_cb  = &deallocate;
           this->device_private = nullptr;
-        } else {
-          /* the user requested that the data be sync'ed into the device
-           * so we need to provide host memory for the user to fill prior */
-          do_allocate();
-          this->device_private = m_ptr;
         }
       }
 
@@ -184,7 +194,7 @@ namespace detail {
 
       /* adjust data flags */
       data->device_copies[0]->flags |= PARSEC_DATA_FLAG_PARSEC_MANAGED;
-      if (scope == ttg::scope::SyncIn){
+      if (always_allocate_on_host || scope == ttg::scope::SyncIn){
         data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_EXCLUSIVE;
         data->device_copies[0]->version = 1;
       } else {
@@ -208,7 +218,7 @@ namespace detail {
 
       /* adjust data flags */
       data->device_copies[0]->flags |= PARSEC_DATA_FLAG_PARSEC_MANAGED;
-      if (scope == ttg::scope::SyncIn){
+      if (always_allocate_on_host || scope == ttg::scope::SyncIn){
         data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_EXCLUSIVE;
         data->device_copies[0]->version = 1;
       } else {
@@ -266,7 +276,7 @@ public:
   Buffer() = default;
 
   Buffer(std::size_t n, ttg::scope scope = ttg::scope::SyncIn)
-  : m_data(detail::ttg_parsec_data_types<T*, Allocator>::create_data(n, scope))
+  : m_data(detail::ttg_parsec_data_types<std::shared_ptr<value_type[]>, Allocator>::create_data(n, scope))
   , m_count(n)
   { }
 
@@ -506,7 +516,7 @@ public:
   /* Reallocate the buffer with count elements */
   void reset(std::size_t n, ttg::scope scope = ttg::scope::SyncIn) {
     release_data();
-    m_data = detail::ttg_parsec_data_types<T*, Allocator>::create_data(n, scope);
+    m_data = detail::ttg_parsec_data_types<std::shared_ptr<value_type[]>, Allocator>::create_data(n, scope);
     m_count = n;
   }
 
