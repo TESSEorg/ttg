@@ -3506,10 +3506,11 @@ namespace ttg_parsec {
           if (gpu_task->flow[flowidx]->flow_flags == PARSEC_FLOW_ACCESS_NONE) {
             /* no flow found, add one and mark it pushout */
             detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in = data->device_copies[0];
+            detail::parsec_ttg_caller->parsec_task.data[flowidx].data_out = data->device_copies[data->owner_device];
             gpu_task->flow_nb_elts[flowidx] = data->nb_elts;
           }
-          /* need to mark the flow RW to make PaRSEC happy */
-          ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_RW;
+          /* need to mark the flow WRITE, otherwise PaRSEC will not do the pushout */
+          ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_WRITE;
           gpu_task->pushout |= 1<<flowidx;
         }
       };
