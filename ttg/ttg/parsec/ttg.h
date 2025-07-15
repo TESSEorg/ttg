@@ -1439,7 +1439,13 @@ namespace ttg_parsec {
       // get the promise which contains the views
       auto dev_data = dev_task.promise();
 
-      /* we should still be waiting for the transfer to complete */
+      if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT) {
+        /* The device task is sending out already but we go through the device scheduler
+         * for a pushout. We just report this task done, no callbacks to invoke. */
+        return PARSEC_HOOK_RETURN_DONE;
+      }
+
+      /* we're waiting for the initial transfers or for the kernel to complete */
       assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_TRANSFER ||
              dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_KERNEL);
 
@@ -1522,6 +1528,17 @@ namespace ttg_parsec {
         gpu_task->last_data_check_epoch = std::numeric_limits<uint64_t>::max(); // used internally
         gpu_task->pushout = 0;
         gpu_task->submit = &TT::device_static_submit;
+        parsec_flow_t *flows = task->dev_ptr->flows;
+        /* set up flow information so it is available for pushout */
+        for (uint8_t i = 0; i < MAX_PARAM_COUNT; ++i) {
+          gpu_task->flow[i] = &flows[i]; // will be set in register_device_memory
+          /* ignore the flow */
+          flows[i] = parsec_flow_t{.name = nullptr,
+                                   .sym_type = PARSEC_FLOW_ACCESS_NONE,
+                                   .flow_flags = 0,
+                                   .flow_index = i,
+                                   .flow_datatype_mask = ~0 };
+        }
 
         // one way to force the task device
         // currently this will probably break all of PaRSEC if this hint
@@ -1607,9 +1624,18 @@ namespace ttg_parsec {
       // get the promise which contains the views
       ttg::device::detail::device_task_promise_type& dev_data = dev_task.promise();
 
-      if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT ||
-          dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_COMPLETE) {
-        /* the task jumped directly to send or returned so we're done */
+      parsec_gpu_task_t *gpu_task = task->dev_ptr->gpu_task;
+
+      if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT) {
+        /* check if any of the copies needs to be pushed out
+         * if so, we need to push the task into the scheduler where the pushout can happen */
+        if (gpu_task->pushout == 0) {
+          return PARSEC_HOOK_RETURN_DONE;
+        }
+      }
+
+      if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_COMPLETE) {
+        /* the task returned immediately so we're done */
         return PARSEC_HOOK_RETURN_DONE;
       }
 
@@ -1617,7 +1643,6 @@ namespace ttg_parsec {
       assert(NULL != device);
 
       task->dev_ptr->device = device;
-      parsec_gpu_task_t *gpu_task = task->dev_ptr->gpu_task;
       parsec_execution_stream_s *es = task->tt->world.impl().execution_stream();
 
       switch(device->super.type) {
@@ -3493,6 +3518,7 @@ namespace ttg_parsec {
           /* find the flow */
           int flowidx = 0;
           while (flowidx < MAX_PARAM_COUNT &&
+                gpu_task->flow[flowidx] != nullptr &&
                 gpu_task->flow[flowidx]->flow_flags != PARSEC_FLOW_ACCESS_NONE) {
             if (detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in->original == data) {
               /* found the right data, set the corresponding flow as pushout */

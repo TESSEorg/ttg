@@ -142,7 +142,8 @@ namespace ttg_parsec {
         }
 
         /* build the flow */
-        /* TODO: reuse the flows of the task class? How can we control the sync direction then? */
+        /* TODO: we can probably remove the initialization here
+         *       because that's been done on task creation */
         flows[i] = parsec_flow_t{.name = nullptr,
                                 .sym_type = PARSEC_SYM_INOUT,
                                 .flow_flags = static_cast<uint8_t>(access),
@@ -174,6 +175,8 @@ namespace ttg_parsec {
 
       } else {
         /* ignore the flow */
+        /* TODO: we can probably remove the initialization here
+         *       because that's been done on task creation */
         flows[i] = parsec_flow_t{.name = nullptr,
                                  .sym_type = PARSEC_FLOW_ACCESS_NONE,
                                  .flow_flags = 0,
