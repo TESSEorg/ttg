@@ -77,11 +77,6 @@ TEST_CASE("Device", "coro") {
     i = 0;
     ttg::detail::buffer_apply(v2, [&]<typename T>(const ttg::Buffer<T>& b){ i++; });
   }
-}
-
-#if defined(TTG_HAVE_DEVICE) && defined(TTG_IMPL_DEVICE_SUPPORT)
-
-TEST_CASE("Device", "coro") {
 
   SECTION("devicebuf") {
 
@@ -497,8 +492,8 @@ TEST_CASE("Device", "coro") {
     ttg::ttg_fence(ttg::default_execution_context());
   };
 
-}
-
 #endif // TTG_IMPL_DEVICE_SUPPORT
+
+}
 
 #endif // TTG_SERIALIZATION_SUPPORTS_MADNESS
