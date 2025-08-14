@@ -450,7 +450,7 @@ public:
       if (device.is_device()) {
         /* create the device copy */
         parsec_device_gpu_module_t *device_module = (parsec_device_gpu_module_t*)parsec_mca_device_get(parsec_id);
-        /* thread-safe allocation */
+        /* thread-safe allocation from PaRSEC */
         T* ptr = (T*)zone_malloc(device_module->memory, m_count*sizeof(T));
         if (nullptr == ptr) {
           throw std::bad_alloc{};
@@ -620,8 +620,8 @@ public:
         }
       } else {
         //std::cout << "serialize(IN) buffer " << this << " size " << s << std::endl;
-        /* initialize internal pointers and then reset */
-        reset(s);
+        /* initialize but don't force allocation on the host */
+        reset(s, ttg::scope::Allocate);
       }
     }
   }
