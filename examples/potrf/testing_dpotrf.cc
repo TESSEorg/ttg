@@ -37,6 +37,7 @@ int main(int argc, char **argv)
   char *opt = nullptr;
   int ret = EXIT_SUCCESS;
   int niter = 3;
+  bool print_dot = false;
 
   if( (opt = getCmdOption(argv+1, argv+argc, "-N")) != nullptr ) {
     N = M = atoi(opt);
@@ -57,6 +58,10 @@ int main(int argc, char **argv)
   if( (opt = getCmdOption(argv+1, argv+argc, "-n")) != nullptr) {
     niter = atoi(opt);
   }
+
+  /* whether to print the TTG dot */
+  print_dot = cmdOptionExists(argv+1, argv+argc, "-dot");
+
 
   bool check = !cmdOptionExists(argv+1, argv+argc, "-x");
   bool cow_hint = !cmdOptionExists(argv+1, argv+argc, "-w");
@@ -103,6 +108,16 @@ int main(int argc, char **argv)
   dcA.mat = parsec_data_allocate((size_t)dcA.super.nb_local_tiles *
                                  (size_t)dcA.super.bsiz *
                                  (size_t)parsec_datadist_getsizeoftype(dcA.super.mtype));
+
+  /* would be nice to have proper abstractions for this */
+  parsec_data_collection_t *o = &(dcA.super.super);
+  for (int devid = 1; devid < parsec_nb_devices; ++devid) {
+    auto* device = parsec_mca_device_get(devid);
+    if (device->memory_register) {
+      o->register_memory(o, device); // TODO: check device IDs
+    }
+  }
+
   parsec_data_collection_set_key((parsec_data_collection_t*)&dcA, (char*)"Matrix A");
 
   if(!check) {
@@ -139,9 +154,11 @@ int main(int argc, char **argv)
       TTGUNUSED(connected);
 
       if (world.rank() == 0) {
-        std::cout << "==== begin dot ====\n";
-        std::cout << ttg::Dot()(init_tt.get()) << std::endl;
-        std::cout << "==== end dot ====\n";
+        if (print_dot) {
+          std::cout << "==== begin dot ====\n";
+          std::cout << ttg::Dot()(init_tt.get()) << std::endl;
+          std::cout << "==== end dot ====\n";
+        }
         beg = std::chrono::high_resolution_clock::now();
       }
 
