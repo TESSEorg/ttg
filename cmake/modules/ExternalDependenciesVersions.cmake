@@ -1,7 +1,7 @@
 # for each dependency track both current and previous id (the variable for the latter must contain PREVIOUS)
 # to be able to auto-update them
 
-set(TTG_TRACKED_VG_CMAKE_KIT_TAG cda539db32be6e8171f5cbebdb1a7c38d5ab4b34)  # provides FindOrFetchLinalgPP and "real" FindOrFetchBoost
+set(TTG_TRACKED_VG_CMAKE_KIT_TAG 4c949fd7ccfe4b4f0e103288a5c0f557c6e740c0)  # provides FindOrFetchLinalgPP and "real" FindOrFetchBoost
 set(TTG_TRACKED_CATCH2_VERSION 3.5.0)
 set(TTG_TRACKED_MADNESS_TAG 71d0936adf013ca96967cb517beae30bd15521d0)
 set(TTG_TRACKED_PARSEC_TAG parsec-for-ttg)
