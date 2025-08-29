@@ -93,6 +93,12 @@ namespace ttg_parsec {
 
   inline int num_devices();
 
+  template <typename keyT, typename valueT>
+  void broadcast_keygen(const keyT& key, const valueT& value);
+
+  template <typename keyT, typename valueT>
+  void prepare_keygen(const keyT& key, const valueT& value);
+
   template<typename T>
   parsec_data_t* buffer_data(T&& buffer);
 

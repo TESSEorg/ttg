@@ -88,34 +88,42 @@ namespace potrf {
   }
 #endif // ENABLE_DEVICE_KERNEL
 
+
+  /**
+   * Device version of POTRF
+   */
   template <typename MatrixT>
   auto make_potrf(MatrixT& A,
                   ttg::Edge<Key1, MatrixTile<typename MatrixT::element_type>>& input_disp,  // from the dispatcher
                   ttg::Edge<Key1, MatrixTile<typename MatrixT::element_type>>& input,
                   ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_trsm,
-                  ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_result) {
+                  ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_result,
+                  bool use_keygen_bcast = true) {
     using T = typename MatrixT::element_type;
-#if defined(ENABLE_DEVICE_KERNEL)
     auto iallocator = std::make_shared<Allocator<int>>();
+
+    auto successor_fn = [=](const Key1& key){
+      const auto K = key[0];
+      std::vector<Key2> keylist;
+      keylist.reserve(A.rows() - K);
+      for (int m = K + 1; m < A.rows(); ++m) {
+        /* send tile to trsm */
+        if (ttg::tracing()) ttg::print("POTRF(", key, "): sending output to TRSM(", Key2{m, K}, ")");
+        keylist.push_back(Key2(m, K));
+      }
+      return std::make_tuple(Key2(K, K), std::move(keylist));
+    };
+
     //std::cout << "Creating CUDA POTRF task " << std::endl;
     auto f_dev = [=, iallocator = std::move(iallocator)]
-                    (const Key1& key, MatrixTile<T>&& tile_kk,
-                     std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out) TASKRET {
+                    (const Key1& key, MatrixTile<T>&& tile_kk) TASKRET {
       const auto K = key[0];
+
+#if defined(ENABLE_DEVICE_KERNEL)
 
       /* compute successors before submitting the kernel
        * TODO: this is parsec specific since this code is still executing on the worker threads
        */
-      std::vector<Key2> keylist;
-      keylist.reserve(A.rows() - K);
-      /* TODO: reverse order of arrays */
-      //std::cout << "POTRF K " << K << " A.rows " << A.rows() << std::endl;
-      for (int m = K + 1; m < A.rows(); ++m) {
-        /* send tile to trsm */
-        //std::cout << "POTRF successor " << Key2(m, K) << std::endl;
-        keylist.push_back(Key2(m, K));
-      }
-
       /* pull the matrix onto the device, as computing the workspace size might in theory depend on the data */
       //TODO: extend MatrixTile<T> to be heterogeneous-aware. Look at spmm-cuda.cc 50-253
       //       Need to include a ttg::buffer<T> _data instead of a shared_ptr;
@@ -174,7 +182,11 @@ namespace potrf {
         // release the workspace and the devInfo
         ws.clear();
         devInfo.clear();
-        co_await ttg::device::forward(ttg::device::broadcast<0, 1>(std::make_tuple(Key2(K, K), std::move(keylist)), std::move(tile_kk), out));
+        if (use_keygen_bcast) {
+          co_await ttg::device::forward(ttg::device::broadcast_keygen(key, std::move(tile_kk)));
+        }
+          co_await ttg::device::forward(ttg::device::broadcast<0, 1>(successor_fn(key), std::move(tile_kk)));
+        }
         // Anything after this co_await is never executed
         // co_return would look better, but co_return would destroy keylist before the runtime can handle it
       } else {
@@ -182,18 +194,7 @@ namespace potrf {
         std::cerr << "Factorization of tile " << K << " failed: " << info << std::endl;
         ttg::abort();
       }
-    };
-    return ttg::make_tt<ES>(f_dev, ttg::edges(ttg::fuse(input, input_disp)), ttg::edges(output_result, output_trsm), "POTRF",
-                        {"tile_kk/dispatcher"}, {"output_result", "output_trsm"});
 #else /* defined(ENABLE_DEVICE_KERNEL) */
-    auto f = [=](const Key1& key, MatrixTile<T>&& tile_kk,
-                 std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out) {
-      const int K = key[0];
-
-      if (ttg::tracing()) ttg::print("POTRF(", key, ")");
-#if defined(DEBUG_TILES_VALUES)
-      //std::cout << "Before POTRF(" << key << "), A(" << K << ", " << K << ") is " << tile_kk;
-#endif
 
       auto info = lapack::potrf(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.lda());
       assert(info == 0);
@@ -203,19 +204,25 @@ namespace potrf {
 #endif
 
       /* send the tile to outputs */
-      std::vector<Key2> keylist;
-      keylist.reserve(A.rows() - K);
-      /* TODO: reverse order of arrays */
-      for (int m = K + 1; m < A.rows(); ++m) {
-        /* send tile to trsm */
-        if (ttg::tracing()) ttg::print("POTRF(", key, "): sending output to TRSM(", Key2{m, K}, ")");
-        keylist.push_back(Key2(m, K));
+      if (use_keygen_bcast) {
+        ttg::broadcast_keygen(key, std::move(tile_kk));
+      } else {
+        ttg::broadcast<0, 1>(successor_fn(key), std::move(tile_kk));
       }
-      ttg::broadcast<0, 1>(std::make_tuple(Key2(K, K), keylist), std::move(tile_kk), out);
-    };
-    return ttg::make_tt(f, ttg::edges(ttg::fuse(input, input_disp)), ttg::edges(output_result, output_trsm), "POTRF",
-                        {"tile_kk/dispatcher"}, {"output_result", "output_trsm"});
+
 #endif // defined(ENABLE_DEVICE_KERNEL)
+    };
+    auto tt = ttg::make_tt<ES>(f_dev, ttg::edges(ttg::fuse(input, input_disp)), ttg::edges(output_result, output_trsm), "POTRF",
+                               {"tile_kk/dispatcher"}, {"output_result", "output_trsm"});
+    if (use_keygen_bcast) {
+      tt->set_broadcast_keygen([=](const Key1& key, auto& bcast_key_tuple){
+        auto [bcast_key_kk, bcast_key_list] = successor_fn(key);
+        std::get<0>(bcast_key_tuple).push_back(bcast_key_kk);
+        std::get<1>(bcast_key_tuple) = std::move(bcast_key_list);
+      });
+    }
+
+    return tt;
   }
 
   template <typename MatrixT>
@@ -226,22 +233,13 @@ namespace potrf {
                  ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_diag,  // to SYRK
                  ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& output_row,   // to GEMM
                  ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& output_col,   // to GEMM
-                 ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_result) {
+                 ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_result,
+                 bool use_keygen_bcast = true) {
     using T = typename MatrixT::element_type;
-#if defined(ENABLE_DEVICE_KERNEL)
-    auto f = [=](const Key2& key, const MatrixTile<T>& tile_kk, MatrixTile<T>&& tile_mk,
-                 std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key3, MatrixTile<T>>,
-                            ttg::Out<Key3, MatrixTile<T>>>& out) TASKRET {
+
+    auto successor_fn = [=](const Key2& key){
       const int M = key[0];
       const int K = key[1];  // the column equals the outer most look K (same as PO)
-
-      auto mb = tile_mk.rows();
-      auto nb = tile_mk.cols();
-
-      /* in trsm, tile_mk is mb x nb, and tile_kk needs to be lda x nb because side = Right */
-      assert(nb == tile_kk.rows());
-
-      if (ttg::tracing()) ttg::print("TRSM(", key, ")");
 
       /* populate successor keys while we're on the worker thread */
       std::vector<Key3> keylist_row;
@@ -264,7 +262,22 @@ namespace potrf {
         keylist_col.push_back(Key3(m, M, K));
       }
 
+      return std::make_tuple(key, Key2{K, M}, std::move(keylist_row), std::move(keylist_col));
+    };
 
+    auto f = [=](const Key2& key, const MatrixTile<T>& tile_kk, MatrixTile<T>&& tile_mk) TASKRET {
+      const int M = key[0];
+      const int K = key[1];  // the column equals the outer most look K (same as PO)
+
+      auto mb = tile_mk.rows();
+      auto nb = tile_mk.cols();
+
+      /* in trsm, tile_mk is mb x nb, and tile_kk needs to be lda x nb because side = Right */
+      assert(nb == tile_kk.rows());
+
+      if (ttg::tracing()) ttg::print("TRSM(", key, ")");
+
+#if defined(ENABLE_DEVICE_KERNEL)
 #ifdef DEBUG_TILES_VALUES
       std::array<T, 3> norms; // input for tile_kk & tile_mk and output
       //auto norms_s = ttg::make_scratch(norms.data(), ttg::scope::Allocate, norms.size());
@@ -319,27 +332,18 @@ namespace potrf {
       // set the new norm
       tile_mk.set_norm(norms[2]);
 #endif // DEBUG_TILES_VALUES
-
-      co_await ttg::device::forward(ttg::device::broadcast<0, 1, 2, 3>(std::make_tuple(key, Key2(K, M), keylist_row, keylist_col),
-                                                                       std::move(tile_mk), out));
-    };
-    return ttg::make_tt<ES>(f, ttg::edges(input_kk, ttg::fuse(input_mk, input_disp)),
-                            ttg::edges(output_result, output_diag, output_row, output_col), "TRSM",
-                            {"tile_kk", "tile_mk/dispatcher"}, {"output_result", "tile_mk", "output_row", "output_col"});
+      if (use_keygen_bcast) {
+        co_await ttg::device::forward(ttg::device::broadcast_keygen(key, std::move(tile_mk)));
+      } else {
+        co_await ttg::device::forward(ttg::device::broadcast<0, 1, 2, 3>(successor_fn(key),
+                                                                         std::move(tile_mk)));
+      }
 #else // defined(ENABLE_DEVICE_KERNEL)
-    auto f = [=](const Key2& key, const MatrixTile<T>& tile_kk, MatrixTile<T>&& tile_mk,
-                 std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key3, MatrixTile<T>>,
-                            ttg::Out<Key3, MatrixTile<T>>>& out) {
-      const int M = key[0];
-      const int K = key[1];  // the column equals the outer most look K (same as PO)
 
-      auto mb = tile_mk.rows();
-      auto nb = tile_mk.cols();
+      /**
+       * Host version
+       */
 
-      /* in trsm, tile_mk is mb x nb, and tile_kk needs to be lda x nb because side = Right */
-      assert(nb == tile_kk.rows());
-
-      if (ttg::tracing()) ttg::print("TRSM(", key, ")");
 #if defined(DEBUG_TILES_VALUES)
       //std::cout << "Before TRSM(" << key << "), A(" << K << ", " << K << ") is " << tile_kk << " and A(" << M << ", "
       //          << K << ") is " << tile_mk;
@@ -352,32 +356,27 @@ namespace potrf {
       //std::cout << "After TRSM(" << key << "), A(" << K << ", " << K << ") is " << tile_mk << std::endl;
 #endif
 
-      std::vector<Key3> keylist_row;
-      keylist_row.reserve(M - K);
-      std::vector<Key3> keylist_col;
-      keylist_col.reserve(A.rows() - M - 1);
-
-      /* send tile to syrk on diagonal */
-      if (ttg::tracing()) ttg::print("TRSM(", key, "): sending output to syrk(", Key2{K, M}, ")");
-
-      /* send the tile to all gemms across in row i */
-      for (int n = K + 1; n < M; ++n) {
-        if (ttg::tracing()) ttg::print("TRSM(", key, "): sending output to gemm( ", Key3{M, n, K}, ")");
-        keylist_row.push_back(Key3(M, n, K));
+      if (use_keygen_bcast) {
+        ttg::broadcast_keygen(key, std::move(tile_mk));
+      } else {
+        ttg::broadcast<0, 1, 2, 3>(successor_fn(key), std::move(tile_mk));
       }
 
-      /* send the tile to all gemms down in column i */
-      for (int m = M + 1; m < A.rows(); ++m) {
-        if (ttg::tracing()) ttg::print("TRSM(", key, "): sending output to gemm( ", Key3{m, M, K}, ")");
-        keylist_col.push_back(Key3(m, M, K));
-      }
-
-      ttg::broadcast<0, 1, 2, 3>(std::make_tuple(key, Key2(K, M), keylist_row, keylist_col), std::move(tile_mk), out);
-    };
-    return ttg::make_tt(f, ttg::edges(input_kk, ttg::fuse(input_mk, input_disp)),
-                        ttg::edges(output_result, output_diag, output_row, output_col), "TRSM",
-                        {"tile_kk", "tile_mk/dispatcher"}, {"output_result", "tile_mk", "output_row", "output_col"});
 #endif // defined(ENABLE_DEVICE_KERNEL)
+    };
+    auto tt = ttg::make_tt<ES>(f, ttg::edges(input_kk, ttg::fuse(input_mk, input_disp)),
+                               ttg::edges(output_result, output_diag, output_row, output_col), "TRSM",
+                               {"tile_kk", "tile_mk/dispatcher"}, {"output_result", "tile_mk", "output_row", "output_col"});
+    if (use_keygen_bcast) {
+      tt->set_broadcast_keygen([=](const Key2& key, auto& bcast_key_tuple){
+        auto [bcast_key_result, bcast_key_syrk, bcast_key_list_row, bcast_key_list_col] = successor_fn(key);
+        std::get<0>(bcast_key_tuple).push_back(bcast_key_result);
+        std::get<1>(bcast_key_tuple).push_back(bcast_key_syrk);
+        std::get<2>(bcast_key_tuple) = std::move(bcast_key_list_row);
+        std::get<3>(bcast_key_tuple) = std::move(bcast_key_list_col);
+      });
+    }
+    return tt;
   }
 
   template <typename MatrixT>
@@ -389,8 +388,7 @@ namespace potrf {
                  ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output_syrk) {
     using T = typename MatrixT::element_type;
 #if defined(ENABLE_DEVICE_KERNEL)
-    auto f = [=](const Key2& key, const MatrixTile<T>& tile_mk, MatrixTile<T>&& tile_kk,
-                 std::tuple<ttg::Out<Key1, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out) TASKRET {
+    auto f = [=](const Key2& key, const MatrixTile<T>& tile_mk, MatrixTile<T>&& tile_kk) TASKRET {
       const int K = key[0];
       const int M = key[1];
 
@@ -468,8 +466,7 @@ namespace potrf {
     return ttg::make_tt<ES>(f, ttg::edges(input_mk, ttg::fuse(input_kk, input_disp)), ttg::edges(output_potrf, output_syrk),
                             "SYRK", {"tile_mk", "tile_kk/dispatcher"}, {"output_potrf", "output_syrk"});
 #else // defined(ENABLE_DEVICE_KERNEL)
-    auto f = [=](const Key2& key, const MatrixTile<T>& tile_mk, MatrixTile<T>&& tile_kk,
-                 std::tuple<ttg::Out<Key1, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>>& out) {
+    auto f = [=](const Key2& key, const MatrixTile<T>& tile_mk, MatrixTile<T>&& tile_kk) {
       const int K = key[0];
       const int M = key[1];
 
@@ -496,11 +493,11 @@ namespace potrf {
       if (M == K + 1) {
         /* send the tile to potrf */
         if (ttg::tracing()) ttg::print("SYRK(", key, "): sending output to POTRF(", Key1{K + 1}, ")");
-        ttg::send<0>(Key1(K + 1), std::move(tile_kk), out);
+        ttg::send<0>(Key1(K + 1), std::move(tile_kk));
       } else {
         /* send output to next syrk */
         if (ttg::tracing()) ttg::print("SYRK(", key, "): sending output to SYRK(", Key2{K + 1, M}, ")");
-        ttg::send<1>(Key2(K + 1, M), std::move(tile_kk), out);
+        ttg::send<1>(Key2(K + 1, M), std::move(tile_kk));
       }
     };
     return ttg::make_tt(f, ttg::edges(input_mk, ttg::fuse(input_kk, input_disp)), ttg::edges(output_potrf, output_syrk),
@@ -518,8 +515,7 @@ namespace potrf {
                  ttg::Edge<Key3, MatrixTile<typename MatrixT::element_type>>& output_gemm) {
     using T = typename MatrixT::element_type;
 #if defined(ENABLE_DEVICE_KERNEL)
-    auto f = [=](const Key3& key, const MatrixTile<T>& tile_mk, const MatrixTile<T>& tile_nk, MatrixTile<T>&& tile_mn,
-                 std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key3, MatrixTile<T>>>& out) TASKRET {
+    auto f = [=](const Key3& key, const MatrixTile<T>& tile_mk, const MatrixTile<T>& tile_nk, MatrixTile<T>&& tile_mn) TASKRET {
       const int M = key[0];
       const int N = key[1];
       const int K = key[2];
@@ -587,19 +583,18 @@ namespace potrf {
       if (N == K + 1) {
         /* send the tile to trsm */
         if (ttg::tracing()) ttg::print("GEMM(", key, "): sending output to TRSM(", Key2{M, N}, ")");
-        co_await ttg::device::send<0>(Key2(M, N), std::move(tile_mn), out);
+        co_await ttg::device::send<0>(Key2(M, N), std::move(tile_mn));
       } else {
         /* send the tile to the next gemm */
         if (ttg::tracing()) ttg::print("GEMM(", key, "): sending output to GEMM(", Key3{M, N, K + 1}, ")");
-        co_await ttg::device::send<1>(Key3(M, N, K + 1), std::move(tile_mn), out);
+        co_await ttg::device::send<1>(Key3(M, N, K + 1), std::move(tile_mn));
       }
     };
     return ttg::make_tt<ES>(f, ttg::edges(input_mk, input_nk, ttg::fuse(input_disp, input_mn)),
                             ttg::edges(output_trsm, output_gemm), "GEMM", {"input_mk", "input_kn", "input_mn/dispatcher"},
                             {"output_trsm", "outout_gemm"});
 #else // defined(ENABLE_DEVICE_KERNEL)
-    auto f = [=](const Key3& key, const MatrixTile<T>& tile_mk, const MatrixTile<T>& tile_nk, MatrixTile<T>&& tile_mn,
-                 std::tuple<ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key3, MatrixTile<T>>>& out) {
+    auto f = [=](const Key3& key, const MatrixTile<T>& tile_mk, const MatrixTile<T>& tile_nk, MatrixTile<T>&& tile_mn) {
       const int M = key[0];
       const int N = key[1];
       const int K = key[2];
@@ -626,11 +621,11 @@ namespace potrf {
       if (N == K + 1) {
         /* send the tile to trsm */
         if (ttg::tracing()) ttg::print("GEMM(", key, "): sending output to TRSM(", Key2{M, N}, ")");
-        ttg::send<0>(Key2(M, N), std::move(tile_mn), out);
+        ttg::send<0>(Key2(M, N), std::move(tile_mn));
       } else {
         /* send the tile to the next gemm */
         if (ttg::tracing()) ttg::print("GEMM(", key, "): sending output to GEMM(", Key3{M, N, K + 1}, ")");
-        ttg::send<1>(Key3(M, N, K + 1), std::move(tile_mn), out);
+        ttg::send<1>(Key3(M, N, K + 1), std::move(tile_mn));
       }
     };
     return ttg::make_tt(f, ttg::edges(input_mk, input_nk, ttg::fuse(input_disp, input_mn)),
@@ -643,20 +638,18 @@ namespace potrf {
   auto make_dispatcher(ttg::Edge<Key2, MatrixTile<T>>& input, ttg::Edge<Key1, MatrixTile<T>>& to_potrf,
                        ttg::Edge<Key2, MatrixTile<T>>& to_trsm, ttg::Edge<Key2, MatrixTile<T>>& to_syrk,
                        ttg::Edge<Key3, MatrixTile<T>>& to_gemm) {
-    auto f = [=](const Key2& key, const MatrixTile<T>& tile,
-                 std::tuple<ttg::Out<Key1, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>, ttg::Out<Key2, MatrixTile<T>>,
-                            ttg::Out<Key3, MatrixTile<T>>>& out) {
+    auto f = [=](const Key2& key, const MatrixTile<T>& tile) {
       if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ")");
       if (0 == key[0] && 0 == key[1]) {
         // First element goes to POTRF
         if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to POTRF(", Key1{key[0]}, ")");
-        ttg::send<0>(Key1{key[0]}, tile, out);
+        ttg::send<0>(Key1{key[0]}, tile);
         return;
       }
       if (key[0] == key[1]) {
         // Other diagonal elements go to SYRK
         if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to SYRK(", Key2{0, key[0]}, ")");
-        ttg::send<2>(Key2{0, key[0]}, tile, out);
+        ttg::send<2>(Key2{0, key[0]}, tile);
         return;
       }
       // We only consider the lower triangular
@@ -664,12 +657,12 @@ namespace potrf {
       if (0 == key[1]) {
         // First column goes to TRSM
         if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to TRSM(", key, ")");
-        ttg::send<1>(key, tile, out);
+        ttg::send<1>(key, tile);
         return;
       }
       // Rest goes to GEMM
       if (ttg::tracing()) ttg::print("POTRF_Dispatch(", key, ") sending to GEMM(", Key3{key[0], key[1], 0}, ")");
-      ttg::send<3>(Key3{key[0], key[1], 0}, tile, out);
+      ttg::send<3>(Key3{key[0], key[1], 0}, tile);
     };
 
     return ttg::make_tt(f, ttg::edges(input), ttg::edges(to_potrf, to_trsm, to_syrk, to_gemm), "POTRF Dispatch",

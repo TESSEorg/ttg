@@ -43,12 +43,14 @@
 
 #include "ttg/parsec/fwd.h"
 
+#include "ttg/parsec/broadcast_keygen.h"
 #include "ttg/parsec/buffer.h"
 #include "ttg/parsec/devicescratch.h"
 #include "ttg/parsec/thread_local.h"
 #include "ttg/parsec/devicefunc.h"
 #include "ttg/parsec/ttvalue.h"
 #include "ttg/device/task.h"
+#include "ttg/parsec/tt.h"
 #include "ttg/parsec/parsec_data.h"
 
 #include <algorithm>
@@ -145,7 +147,9 @@ namespace ttg_parsec {
       MSG_SET_ARG = 0,
       MSG_SET_ARGSTREAM_SIZE = 1,
       MSG_FINALIZE_ARGSTREAM_SIZE = 2,
-      MSG_GET_FROM_PULL = 3 } fn_id_t;
+      MSG_GET_FROM_PULL = 3,
+      MSG_BCAST_KEYGEN = 4,
+    } fn_id_t;
     uint32_t taskpool_id = std::numeric_limits<uint32_t>::max();
     uint64_t op_id = std::numeric_limits<uint64_t>::max();
     std::size_t key_offset = 0;
@@ -853,22 +857,21 @@ namespace ttg_parsec {
     }
 
 
-    template <typename KeyT, typename ActivationCallbackT>
+    template <typename ActivationCallbackT>
     class rma_delayed_activate {
-      std::vector<KeyT> _keylist;
       std::atomic<int> _outstanding_transfers;
       ActivationCallbackT _cb;
       detail::ttg_data_copy_t *_copy;
 
      public:
-      rma_delayed_activate(std::vector<KeyT> &&key, detail::ttg_data_copy_t *copy, int num_transfers, ActivationCallbackT cb)
-          : _keylist(std::move(key)), _outstanding_transfers(num_transfers), _cb(cb), _copy(copy) {}
+      rma_delayed_activate(detail::ttg_data_copy_t *copy, int num_transfers, ActivationCallbackT cb)
+          : _outstanding_transfers(num_transfers), _cb(cb), _copy(copy) {}
 
       bool complete_transfer(void) {
         assert(_outstanding_transfers > 0);
         int left = --_outstanding_transfers;
         if (0 == left) {
-          _cb(std::move(_keylist), _copy);
+          _cb(_copy);
           return true;
         }
         return false;
@@ -1192,20 +1195,8 @@ namespace ttg_parsec {
     delete[] buf;
   }
 
-  namespace detail {
-
-    struct ParsecTTBase {
-     protected:
-      //  static std::map<int, ParsecBaseTT*> function_id_to_instance;
-      parsec_hash_table_t tasks_table;
-      parsec_hash_table_t task_constraint_table;
-      parsec_task_class_t self;
-    };
-
-  }  // namespace detail
-
   template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs, ttg::ExecutionSpace Space>
-  class TT : public ttg::TTBase, detail::ParsecTTBase {
+  class TT : public ttg::TTBase, public ttg_parsec::detail::TTBase {
    private:
     /// preconditions
     static_assert(ttg::meta::is_typelist_v<input_valueTs>,
@@ -1303,6 +1294,34 @@ namespace ttg_parsec {
 
     friend detail::parsec_ttg_task_base_t;
     friend task_t;
+
+    /**
+     * Type of tuple of vectors/bool passed to output generators.
+     */
+    using output_key_types = typename ttg::edges_to_output_key_types<output_edges_type>::type;
+    template<typename T>
+    struct broadcast_keygen_tuple_type_helper;
+    template<typename... Ts>
+    struct broadcast_keygen_tuple_type_helper<std::tuple<Ts...>> {
+      using type = typename ttg::meta::replace_any<std::tuple<std::vector<Ts>...>,
+                                                   std::vector<void>, bool>::type;
+    };
+
+    using broadcast_keygen_tuple_type = typename broadcast_keygen_tuple_type_helper<output_key_types>::type;
+    template<typename T, bool IsVoid = ttg::meta::is_void_v<T>>
+    struct broadcast_keygen_callback {
+      using type = std::function<void(const T&, broadcast_keygen_tuple_type&)>;
+    };
+
+    template<typename T>
+    struct broadcast_keygen_callback<T, true> {
+      using type = std::function<void(broadcast_keygen_tuple_type&)>;
+    };
+
+    using broadcast_keygen_callback_t = typename broadcast_keygen_callback<key_type>::type;
+
+    /* output generator callback */
+    broadcast_keygen_callback_t broadcast_keygen_cb;
 
     /* the offset of the key placed after the task structure in the memory from mempool */
     constexpr static const size_t task_key_offset = sizeof(task_t);
@@ -1585,7 +1604,7 @@ namespace ttg_parsec {
         tc.nb_flows = MAX_PARAM_COUNT;
 
         /* set the device hint on the data */
-        TT *tt = task->tt;
+        TT *tt = task->tt_ptr();
         if (tt->devicemap) {
           int parsec_dev;
           if constexpr (std::is_void_v<keyT>) {
@@ -1658,7 +1677,7 @@ namespace ttg_parsec {
       assert(NULL != device);
 
       task->dev_ptr->device = device;
-      parsec_execution_stream_s *es = task->tt->world.impl().execution_stream();
+      parsec_execution_stream_s *es = task->tt_ptr()->world.impl().execution_stream();
 
       switch(device->super.type) {
 
@@ -1694,7 +1713,7 @@ namespace ttg_parsec {
         default:
           break;
       }
-      ttg::print_error(task->tt->get_name(), " : received mismatching device type ", (int)device->super.type, " from PaRSEC");
+      ttg::print_error(task->tt_ptr()->get_name(), " : received mismatching device type ", (int)device->super.type, " from PaRSEC");
       ttg::abort();
       return PARSEC_HOOK_RETURN_DONE; // will not be reacehed
     }
@@ -1710,7 +1729,7 @@ namespace ttg_parsec {
         nullptr;
 #endif // TTG_HAVE_COROUTINE
       //std::cout << "static_op: suspended_task_address " << suspended_task_address << std::endl;
-      ttT *baseobj = task->tt;
+      ttT *baseobj = task->tt_ptr();
       derivedT *obj = static_cast<derivedT *>(baseobj);
       if (suspended_task_address == nullptr) {  // task is a coroutine that has not started or an ordinary function
 
@@ -1747,22 +1766,22 @@ namespace ttg_parsec {
           assert(detail::parsec_ttg_caller == nullptr);
           detail::parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
           // TODO: unify the outputs tls handling
-          auto old_output_tls_ptr = task->tt->outputs_tls_ptr_accessor();
-          task->tt->set_outputs_tls_ptr();
+          auto old_output_tls_ptr = task->tt_ptr()->outputs_tls_ptr_accessor();
+          task->tt_ptr()->set_outputs_tls_ptr();
           coro.resume();
           if (coro.completed()) {
             coro.destroy();
             suspended_task_address = nullptr;
           }
-          task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
+          task->tt_ptr()->set_outputs_tls_ptr(old_output_tls_ptr);
           detail::parsec_ttg_caller = nullptr;
         } else
 #endif  // TTG_HAVE_DEVICE
       if (task->coroutine_id == ttg::TaskCoroutineID::ResumableTask) {
         auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address));
         assert(ret.ready());
-        auto old_output_tls_ptr = task->tt->outputs_tls_ptr_accessor();
-        task->tt->set_outputs_tls_ptr();
+        auto old_output_tls_ptr = task->tt_ptr()->outputs_tls_ptr_accessor();
+        task->tt_ptr()->set_outputs_tls_ptr();
         ret.resume();
         if (ret.completed()) {
           ret.destroy();
@@ -1779,7 +1798,7 @@ namespace ttg_parsec {
           }
           assert(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address).promise().ready());
         }
-        task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
+        task->tt_ptr()->set_outputs_tls_ptr(old_output_tls_ptr);
         detail::parsec_ttg_caller = nullptr;
         task->suspended_task_address = suspended_task_address;
       }
@@ -1859,7 +1878,7 @@ namespace ttg_parsec {
       constexpr const bool input_is_const = std::is_const_v<value_t>;
       rtask_t *rtask = (rtask_t*)parsec_task;
       task_t *parent_task = static_cast<task_t*>(rtask->parent_task);
-      ttT *baseobj = parent_task->tt;
+      ttT *baseobj = parent_task->tt_ptr();
       derivedT *obj = static_cast<derivedT *>(baseobj);
 
       auto& reducer = std::get<i>(baseobj->input_reducers);
@@ -1974,7 +1993,7 @@ namespace ttg_parsec {
     }
 
     template <typename T>
-    uint64_t pack(T &obj, void *bytes, uint64_t pos, detail::ttg_data_copy_t *copy = nullptr) {
+    uint64_t pack(T &obj, void *bytes, uint64_t pos) {
       using dd_t = ttg::default_data_descriptor<ttg::meta::remove_cvr_t<T>>;
       uint64_t payload_size = dd_t::payload_size(&obj);
       if constexpr (!dd_t::serialize_size_is_const) {
@@ -2023,6 +2042,10 @@ namespace ttg_parsec {
           (obj->*member)(data, size);
           break;
         }
+        case msg_header_t::MSG_BCAST_KEYGEN: {
+          obj->set_arg_from_msg_keygen(data, size);
+          break;
+        }
         default:
           ttg::abort();
       }
@@ -2037,7 +2060,7 @@ namespace ttg_parsec {
     }
 
     template <size_t i, typename valueT>
-    void set_arg_from_msg_keylist(ttg::span<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
+    void set_arg_from_msg_keylist(const ttg::span<const keyT> &keylist, detail::ttg_data_copy_t *copy) {
       /* create a dummy task that holds the copy, which can be reused by others */
       task_t *dummy;
       parsec_execution_stream_s *es = world.impl().execution_stream();
@@ -2090,6 +2113,175 @@ namespace ttg_parsec {
       parsec_thread_mempool_free(mempool, dummy_parsec_task);
     }
 
+
+    template <typename ValueT, typename ReleaseFn>
+    void set_arg_fetch_value_and_release(detail::msg_t *msg,
+                                         const std::set<ttg::device::Device>& deviceset,
+                                         ReleaseFn&& release) {
+      int32_t num_iovecs = msg->tt_id.num_iovecs;
+      uint64_t pos = 0;
+      //bool inline_data = msg->inline_data;
+      detail::ttg_data_copy_t *copy;
+      if constexpr (ttg::has_split_metadata<ValueT>::value) {
+        ttg::SplitMetadataDescriptor<ValueT> descr;
+        using metadata_t = decltype(descr.get_metadata(std::declval<ValueT>()));
+
+        /* unpack the metadata */
+        metadata_t metadata;
+        pos = unpack(metadata, msg->bytes, pos);
+
+        //std::cout << "set_arg_from_msg splitmd num_iovecs " << num_iovecs << std::endl;
+
+        copy = detail::create_new_datacopy(descr.create_from_metadata(metadata));
+      } else {
+        copy = detail::create_new_datacopy(ValueT{});
+        /* unpack the object, potentially discovering iovecs */
+        pos = unpack(*static_cast<ValueT *>(copy->get_ptr()), msg->bytes, pos);
+      }
+
+      if (num_iovecs == 0) {
+        release(copy);
+        //set_arg_from_msg_keylist<i, ValueT>(ttg::span<keyT>(&keylist[0], num_keys), copy);
+      } else {
+        /* unpack the header and start the RMA transfers */
+
+        /* get the remote rank */
+        int remote = msg->tt_id.sender;
+        assert(remote < world.size());
+
+        auto &val = *static_cast<ValueT *>(copy->get_ptr());
+
+        bool inline_data = msg->tt_id.inline_data;
+
+        int nv = 0;
+        parsec_ce_tag_t cbtag;
+        /* start the RMA transfers */
+        auto create_activation_fn = [&]() {
+          /* extract the callback tag */
+          std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
+          pos += sizeof(cbtag);
+
+          copy->add_ref(); // so we can safely decrement the readers in the activation
+          /* create the value from the metadata */
+          auto activation = new detail::rma_delayed_activate(copy, num_iovecs,
+            [this, &val, release](detail::ttg_data_copy_t *copy) {
+                release(copy);
+                //set_arg_from_msg_keylist<i, ValueT>(keylist, copy);
+                this->world.impl().decrement_inflight_msg();
+                detail::foreach_parsec_data(val, [&](parsec_data_t* data){
+                  /* decrement readers we incremented before the transfer */
+                  parsec_atomic_fetch_dec_int32(&data->device_copies[data->owner_device]->readers);
+                });
+                copy->drop_ref();
+              });
+          return activation;
+        };
+        auto read_inline_data = [&](auto&& iovec){
+          /* unpack the data from the message */
+          ++nv;
+          std::memcpy(iovec.data, msg->bytes + pos, iovec.num_bytes);
+          pos += iovec.num_bytes;
+        };
+        auto handle_iovec_fn = [&](auto&& iovec, auto activation) {
+          using ActivationT = std::decay_t<decltype(*activation)>;
+
+          ++nv;
+          parsec_ce_mem_reg_handle_t rreg;
+          int32_t rreg_size_i;
+          std::memcpy(&rreg_size_i, msg->bytes + pos, sizeof(rreg_size_i));
+          pos += sizeof(rreg_size_i);
+          rreg = static_cast<parsec_ce_mem_reg_handle_t>(msg->bytes + pos);
+          pos += rreg_size_i;
+          // std::intptr_t *fn_ptr = reinterpret_cast<std::intptr_t *>(msg->bytes + pos);
+          // pos += sizeof(*fn_ptr);
+          std::intptr_t fn_ptr;
+          std::memcpy(&fn_ptr, msg->bytes + pos, sizeof(fn_ptr));
+          pos += sizeof(fn_ptr);
+
+          /* register the local memory */
+          parsec_ce_mem_reg_handle_t lreg;
+          size_t lreg_size;
+          parsec_ce.mem_register(iovec.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iovec.num_bytes, parsec_datatype_int8_t,
+                                  iovec.num_bytes, &lreg, &lreg_size);
+          world.impl().increment_inflight_msg();
+          /* TODO: PaRSEC should treat the remote callback as a tag, not a function pointer! */
+          //std::cout << "set_arg_from_msg: get rreg " << rreg << " remote " << remote << std::endl;
+          parsec_ce.get(&parsec_ce, lreg, 0, rreg, 0, iovec.num_bytes, remote,
+                        &detail::get_complete_cb<ActivationT>, activation,
+                        /*world.impl().parsec_ttg_rma_tag()*/
+                        cbtag, &fn_ptr, sizeof(std::intptr_t));
+        };
+        /* make sure all buffers are properly allocated */
+        ttg::detail::buffer_apply(val, [&]<typename T, typename A>(const ttg::Buffer<T, A>& b){
+          /* cast away const */
+          auto& buffer = const_cast<ttg::Buffer<T, A>&>(b);
+          /* remember which device we used last time */
+          static auto last_device = ttg::device::Device{0, Space};
+          ttg::device::Device device;
+          if (inline_data ||                      // all data has been inlined
+              !world.impl().mpi_support(Space) || // no support for device communication
+              deviceset.find(ttg::device::Device::host()) != deviceset.end()) // at least one successor is on the host
+          {
+            device = ttg::device::Device::host();
+          } else if (!deviceset.empty()) {
+            device = *deviceset.begin(); // pick a device we know will use the data
+          }
+          // remember where we started so we can cycle through all devices once
+          auto start_device = device;
+          do {
+            /* try to allocate on any device */
+            try {
+              buffer.allocate_on(device);
+              buffer.set_owner_device(device);
+              break;
+            } catch (const std::bad_alloc&) {
+              device = device.cycle();
+              if (device == start_device) {
+                /* make sure we have memory on the host */
+                buffer.allocate_on(ttg::device::Device::host());
+                break; // failed to find a device that works
+              }
+              last_device = device;
+            }
+          } while(true);
+        });
+
+        /* kick off transfers */
+        if constexpr (ttg::has_split_metadata<ValueT>::value) {
+          ttg::SplitMetadataDescriptor<ValueT> descr;
+          if (inline_data) {
+            for (auto&& iov : descr.get_data(val)) {
+              read_inline_data(iov);
+            }
+          } else {
+            auto activation = create_activation_fn();
+            for (auto&& iov : descr.get_data(val)) {
+              handle_iovec_fn(iov, activation);
+            }
+          }
+        } else if constexpr (!ttg::has_split_metadata<ValueT>::value) {
+          if (inline_data) {
+            detail::foreach_parsec_data(val, [&](parsec_data_t* data){
+              read_inline_data(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private});
+            });
+          } else {
+            auto activation = create_activation_fn();
+            detail::foreach_parsec_data(val, [&](parsec_data_t* data){
+              parsec_atomic_fetch_inc_int32(&data->device_copies[data->owner_device]->readers);
+              handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private}, activation);
+            });
+          }
+        }
+
+        assert(num_iovecs == nv);
+
+        if (inline_data) {
+          release(copy);
+          //set_arg_from_msg_keylist<i, ValueT>(ttg::span<keyT>(&keylist[0], num_keys), copy);
+        }
+      }
+    }
+
     // there are 6 types of set_arg:
     // - case 1: nonvoid Key, complete Value type
     // - case 2: nonvoid Key, void Value, mixed (data+control) inputs
@@ -2098,7 +2290,6 @@ namespace ttg_parsec {
     // - case 5:    void Key, void Value, mixed (data+control) inputs
     // - case 6:    void Key, void Value, no inputs
     // implementation of these will be further split into "local-only" and global+local
-
     template <std::size_t i>
     void set_arg_from_msg(void *data, std::size_t size) {
       using valueT = std::tuple_element_t<i, actual_input_tuple_type>;
@@ -2120,169 +2311,21 @@ namespace ttg_parsec {
           keylist.push_back(std::move(key));
         }
         key_end_pos = pos;
-        /* jump back to the beginning of the message to get the value */
-        pos = 0;
+        // sanity check
+        assert(size == (key_end_pos + sizeof(msg_header_t)));
         // case 1
         if constexpr (!ttg::meta::is_void_v<valueT>) {
           using decvalueT = std::decay_t<valueT>;
-          int32_t num_iovecs = msg->tt_id.num_iovecs;
-          //bool inline_data = msg->inline_data;
-          detail::ttg_data_copy_t *copy;
-          if constexpr (ttg::has_split_metadata<decvalueT>::value) {
-            ttg::SplitMetadataDescriptor<decvalueT> descr;
-            using metadata_t = decltype(descr.get_metadata(std::declval<decvalueT>()));
-
-            /* unpack the metadata */
-            metadata_t metadata;
-            pos = unpack(metadata, msg->bytes, pos);
-
-            //std::cout << "set_arg_from_msg splitmd num_iovecs " << num_iovecs << std::endl;
-
-            copy = detail::create_new_datacopy(descr.create_from_metadata(metadata));
-          } else if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
-            copy = detail::create_new_datacopy(decvalueT{});
-            /* unpack the object, potentially discovering iovecs */
-            pos = unpack(*static_cast<decvalueT *>(copy->get_ptr()), msg->bytes, pos);
-          }
-
-          if (num_iovecs == 0) {
-            set_arg_from_msg_keylist<i, decvalueT>(ttg::span<keyT>(&keylist[0], num_keys), copy);
+          std::set<ttg::device::Device> deviceset;
+          if (derived_has_device_op() && devicemap && ttg::device::num_devices() > 0) {
+            deviceset.insert(devicemap(keylist[0]));
           } else {
-            /* unpack the header and start the RMA transfers */
-
-            /* get the remote rank */
-            int remote = msg->tt_id.sender;
-            assert(remote < world.size());
-
-            auto &val = *static_cast<decvalueT *>(copy->get_ptr());
-
-            bool inline_data = msg->tt_id.inline_data;
-
-            int nv = 0;
-            parsec_ce_tag_t cbtag;
-            /* start the RMA transfers */
-            auto create_activation_fn = [&]() {
-              /* extract the callback tag */
-              std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
-              pos += sizeof(cbtag);
-
-              copy->add_ref(); // so we can safely decrement the readers in the activation
-              /* create the value from the metadata */
-              auto activation = new detail::rma_delayed_activate(
-                  std::move(keylist), copy, num_iovecs, [this, &val](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
-                    set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
-                    this->world.impl().decrement_inflight_msg();
-                    detail::foreach_parsec_data(val, [&](parsec_data_t* data){
-                      /* decrement readers we incremented before the transfer */
-                      parsec_atomic_fetch_dec_int32(&data->device_copies[data->owner_device]->readers);
-                    });
-                    copy->drop_ref();
-                  });
-              return activation;
-            };
-            auto read_inline_data = [&](auto&& iovec){
-              /* unpack the data from the message */
-              ++nv;
-              std::memcpy(iovec.data, msg->bytes + pos, iovec.num_bytes);
-              pos += iovec.num_bytes;
-            };
-            auto handle_iovec_fn = [&](auto&& iovec, auto activation) {
-              using ActivationT = std::decay_t<decltype(*activation)>;
-
-              ++nv;
-              parsec_ce_mem_reg_handle_t rreg;
-              int32_t rreg_size_i;
-              std::memcpy(&rreg_size_i, msg->bytes + pos, sizeof(rreg_size_i));
-              pos += sizeof(rreg_size_i);
-              rreg = static_cast<parsec_ce_mem_reg_handle_t>(msg->bytes + pos);
-              pos += rreg_size_i;
-              // std::intptr_t *fn_ptr = reinterpret_cast<std::intptr_t *>(msg->bytes + pos);
-              // pos += sizeof(*fn_ptr);
-              std::intptr_t fn_ptr;
-              std::memcpy(&fn_ptr, msg->bytes + pos, sizeof(fn_ptr));
-              pos += sizeof(fn_ptr);
-
-              /* register the local memory */
-              parsec_ce_mem_reg_handle_t lreg;
-              size_t lreg_size;
-              parsec_ce.mem_register(iovec.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iovec.num_bytes, parsec_datatype_int8_t,
-                                     iovec.num_bytes, &lreg, &lreg_size);
-              world.impl().increment_inflight_msg();
-              /* TODO: PaRSEC should treat the remote callback as a tag, not a function pointer! */
-              //std::cout << "set_arg_from_msg: get rreg " << rreg << " remote " << remote << std::endl;
-              parsec_ce.get(&parsec_ce, lreg, 0, rreg, 0, iovec.num_bytes, remote,
-                            &detail::get_complete_cb<ActivationT>, activation,
-                            /*world.impl().parsec_ttg_rma_tag()*/
-                            cbtag, &fn_ptr, sizeof(std::intptr_t));
-            };
-            /* make sure all buffers are properly allocated */
-            ttg::detail::buffer_apply(val, [&]<typename T, typename A>(const ttg::Buffer<T, A>& b){
-              /* cast away const */
-              auto& buffer = const_cast<ttg::Buffer<T, A>&>(b);
-              /* remember which device we used last time */
-              static auto last_device = ttg::device::Device{0, Space};
-              ttg::device::Device device;
-              if (inline_data || !world.impl().mpi_support(Space))  {
-                device = ttg::device::Device::host(); // have to allocate on host
-              } else if (!keylist.empty() && devicemap) {
-                device = devicemap(keylist[0]); // pick a device we know will use the data
-              } else {
-                device = last_device; // use the previously used device
-              }
-              // remember where we started so we can cycle through all devices once
-              auto start_device = device;
-              do {
-                /* try to allocate on any device */
-                try {
-                  buffer.allocate_on(device);
-                  buffer.set_owner_device(device);
-                  break;
-                } catch (const std::bad_alloc&) {
-                  device = device.cycle();
-                  if (device == start_device) {
-                    /* make sure we have memory on the host */
-                    buffer.allocate_on(ttg::device::Device::host());
-                    break; // failed to find a device that works
-                  }
-                  last_device = device;
-                }
-              } while(true);
-            });
-
-            /* kick off transfers */
-            if constexpr (ttg::has_split_metadata<decvalueT>::value) {
-              ttg::SplitMetadataDescriptor<decvalueT> descr;
-              if (inline_data) {
-                for (auto&& iov : descr.get_data(val)) {
-                  read_inline_data(iov);
-                }
-              } else {
-                auto activation = create_activation_fn();
-                for (auto&& iov : descr.get_data(val)) {
-                  handle_iovec_fn(iov, activation);
-                }
-              }
-            } else if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
-              if (inline_data) {
-                detail::foreach_parsec_data(val, [&](parsec_data_t* data){
-                  read_inline_data(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private});
-                });
-              } else {
-                auto activation = create_activation_fn();
-                detail::foreach_parsec_data(val, [&](parsec_data_t* data){
-                  parsec_atomic_fetch_inc_int32(&data->device_copies[data->owner_device]->readers);
-                  handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private}, activation);
-                });
-              }
-            }
-
-            assert(num_iovecs == nv);
-            assert(size == (key_end_pos + sizeof(msg_header_t)));
-
-            if (inline_data) {
-              set_arg_from_msg_keylist<i, decvalueT>(ttg::span<keyT>(&keylist[0], num_keys), copy);
-            }
+            deviceset.insert(ttg::device::Device::host());
           }
+          set_arg_fetch_value_and_release<decvalueT>(msg, deviceset,
+            [this, keylist = std::move(keylist), num_keys](detail::ttg_data_copy_t *copy) {
+              set_arg_from_msg_keylist<i, decvalueT>(ttg::span(&keylist[0], keylist.size()), copy);
+            });
           // case 2 and 3
         } else if constexpr (!ttg::meta::is_void_v<keyT> && std::is_void_v<valueT>) {
           for (auto &&key : keylist) {
@@ -2292,16 +2335,62 @@ namespace ttg_parsec {
         // case 4
       } else if constexpr (ttg::meta::is_void_v<keyT> && !std::is_void_v<valueT>) {
         using decvalueT = std::decay_t<valueT>;
-        decvalueT val;
-        /* TODO: handle split-metadata case as with non-void keys */
-        unpack(val, msg->bytes, 0);
-        set_arg<i, keyT, valueT>(std::move(val));
+        std::set<ttg::device::Device> deviceset;
+        if (derived_has_device_op() && devicemap && ttg::device::num_devices() > 0) {
+          deviceset.insert(devicemap());
+        } else {
+          deviceset.insert(ttg::device::Device::host());
+        }
+        set_arg_fetch_value_and_release<decvalueT>(msg, deviceset,
+          [this](detail::ttg_data_copy_t *copy) {
+            set_arg<i, keyT, decvalueT>(*reinterpret_cast<decvalueT *>(copy->get_ptr()), copy);
+          });
         // case 5 and 6
       } else if constexpr (ttg::meta::is_void_v<keyT> && std::is_void_v<valueT>) {
         set_arg<i, keyT, ttg::Void>(ttg::Void{});
       } else {  // unreachable
         ttg::abort();
       }
+    }
+
+    void set_arg_from_msg_keygen(void *data, std::size_t size) {
+      static constexpr const bool has_value = std::tuple_size_v<output_terminals_type> > 0;
+      using msg_t = detail::msg_t;
+      msg_t *msg = static_cast<msg_t *>(data);
+
+      if constexpr (has_value && !ttg::meta::is_void_v<keyT>) {
+        using value_type = typename std::tuple_element_t<0, output_terminals_type>::value_type;
+        uint64_t pos = msg->tt_id.key_offset;
+        keyT key;
+        pos = unpack(key, msg->bytes, pos);
+
+        auto world = ttg::default_execution_context();
+        int myrank = world.rank();
+        auto bcast_key_tuple = broadcast_keygen_tuple_type();
+        auto local_bcast_keys_tuple = broadcast_keygen_tuple_type();
+        std::optional<std::set<ttg::device::Device>> deviceset = std::set<ttg::device::Device>();
+        std::optional<std::set<int>> procset = std::nullopt;
+        broadcast_keygen_cb(key, bcast_key_tuple);
+
+        /* collect the processes that are involved */
+        keygen_query_successor(bcast_key_tuple,
+                               procset, // we don't care about the successor processes
+                               deviceset,
+                               myrank, local_bcast_keys_tuple,
+                               std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
+
+        set_arg_fetch_value_and_release<value_type>(msg, deviceset.value(),
+          [this,
+           local_bcast_keys_tuple = std::move(local_bcast_keys_tuple)](detail::ttg_data_copy_t *copy) {
+            value_type& value = *reinterpret_cast<value_type *>(copy->get_ptr());
+            bcast_keygen_local(local_bcast_keys_tuple, value,
+                               std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
+          });
+
+      } else {
+        throw std::logic_error("TTG::PaRSEC: void keys in keygen broadcast currently not supported!");
+      }
+
     }
 
     template <std::size_t i>
@@ -2728,6 +2817,10 @@ namespace ttg_parsec {
       }
     }
 
+    virtual void release_task(detail::parsec_ttg_task_base_t* task) override final {
+      release_task(static_cast<task_t*>(task));
+    }
+
     void release_task(task_t *task,
                       parsec_task_t **task_ring = nullptr) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
@@ -2744,7 +2837,7 @@ namespace ttg_parsec {
       }
 
       auto &world_impl = world.impl();
-      ttT *baseobj = task->tt;
+      ttT *baseobj = task->tt_ptr();
 
       if (count == numins) {
         parsec_execution_stream_t *es = world_impl.execution_stream();
@@ -2962,7 +3055,7 @@ namespace ttg_parsec {
           }
         } else if constexpr (!ttg::has_split_metadata<std::decay_t<Value>>::value) {
           /* serialize the object */
-          pos = pack(*value_ptr, msg->bytes, pos, copy);
+          pos = pack(*value_ptr, msg->bytes, pos);
           detail::foreach_parsec_data(value, [&](parsec_data_t *data){ ++num_iovecs; });
           //std::cout << "POST pack num_iovecs " << num_iovecs << std::endl;
           /* handle any iovecs contained in it */
@@ -3052,6 +3145,88 @@ namespace ttg_parsec {
 #endif
     }
 
+
+    template<typename Value>
+    std::vector<std::pair<int32_t, std::shared_ptr<void>>>
+    register_bcast_data(const Value& value, bool inline_data, std::unique_ptr<detail::msg_t>& msg, uint64_t& pos) {
+
+        std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs;
+        int32_t num_iovs = 0;
+        auto write_iov_header = [&](){
+          if (!inline_data) {
+            /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
+              * raw function pointer instead of a preregistered AM tag, so play that game.
+              * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
+            parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
+            std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
+            pos += sizeof(cbtag);
+          }
+        };
+
+        auto handle_bcast_iov = [&](auto&& iovec, auto* device_copy = nullptr){
+          if (inline_data) {
+            /* inline data is packed right after the tt_id in the message */
+            std::memcpy(msg->bytes + pos, iovec.data, iovec.num_bytes);
+            pos += iovec.num_bytes;
+          } else {
+            parsec_ce_mem_reg_handle_t lreg;
+            size_t lreg_size;
+            parsec_ce.mem_register(iovec.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iovec.num_bytes, parsec_datatype_int8_t,
+                                   iovec.num_bytes, &lreg, &lreg_size);
+            /* TODO: use a static function for deregistration here? */
+            memregs.push_back(
+              std::make_pair(static_cast<int32_t>(lreg_size),
+                             /* TODO: this assumes that parsec_ce_mem_reg_handle_t is void* */
+                             std::shared_ptr<void>{lreg,
+                                                  [device_copy](void *ptr) {
+                                                    parsec_ce_mem_reg_handle_t memreg =
+                                                        (parsec_ce_mem_reg_handle_t)ptr;
+                                                    //std::cout << "broadcast_arg memunreg lreg " << memreg << std::endl;
+                                                    parsec_ce.mem_unregister(&memreg);
+                                                    if (device_copy != nullptr) {
+                                                      /* remove a reader */
+                                                      parsec_atomic_fetch_sub_int32(&device_copy->readers, 1);
+                                                    }
+                                                  }})
+            );
+            //std::cout << "broadcast_arg memreg lreg " << lreg << std::endl;
+          }
+        };
+
+        if constexpr (ttg::has_split_metadata<std::decay_t<Value>>::value) {
+          ttg::SplitMetadataDescriptor<Value> descr;
+          /* pack the metadata */
+          auto metadata = descr.get_metadata(value);
+          pos = pack(metadata, msg->bytes, pos);
+          auto iovs = descr.get_data(*const_cast<Value *>(&value));
+          num_iovs = std::distance(std::begin(iovs), std::end(iovs));
+          memregs.reserve(num_iovs);
+          write_iov_header();
+          for (auto &&iov : iovs) {
+            handle_bcast_iov(iov);
+          }
+          //std::cout << "broadcast_arg splitmd num_iovecs " << num_iovs << std::endl;
+        } else if constexpr (!ttg::has_split_metadata<std::decay_t<Value>>::value) {
+          /* serialize the object once */
+          pos = pack(value, msg->bytes, pos);
+          detail::foreach_parsec_data(value, [&](parsec_data_t *data){ ++num_iovs; });
+          memregs.reserve(num_iovs);
+          write_iov_header();
+          detail::foreach_parsec_data(value, [&](parsec_data_t *data){
+            int device = 0;
+            parsec_data_copy_t* device_copy = nullptr;
+            if (world.impl().mpi_support(Space) && Space != ttg::ExecutionSpace::Host) {
+              /* Try to find a device that is not the host and has the latest version. */
+              std::tie(device, device_copy) = detail::find_device_copy(data);
+            }
+            handle_bcast_iov(ttg::iovec{data->nb_elts,
+                                        data->device_copies[device]->device_private},
+                             device_copy);
+          });
+        }
+        return memregs;
+    }
+
     template <std::size_t i, typename Key, typename Value>
     std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>,
                      void>
@@ -3099,77 +3274,7 @@ namespace ttg_parsec {
         msg->tt_id.inline_data = inline_data;
 
         std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs;
-        auto write_iov_header = [&](){
-          if (!inline_data) {
-            /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
-              * raw function pointer instead of a preregistered AM tag, so play that game.
-              * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
-            parsec_ce_tag_t cbtag = reinterpret_cast<parsec_ce_tag_t>(&detail::get_remote_complete_cb);
-            std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
-            pos += sizeof(cbtag);
-          }
-        };
-        auto handle_iov_fn = [&](auto&& iovec, parsec_data_copy_t *device_copy = nullptr){
-          if (inline_data) {
-            /* inline data is packed right after the tt_id in the message */
-            std::memcpy(msg->bytes + pos, iovec.data, iovec.num_bytes);
-            pos += iovec.num_bytes;
-          } else {
-            parsec_ce_mem_reg_handle_t lreg;
-            size_t lreg_size;
-            parsec_ce.mem_register(iovec.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iovec.num_bytes, parsec_datatype_int8_t,
-                                   iovec.num_bytes, &lreg, &lreg_size);
-            /* TODO: use a static function for deregistration here? */
-            memregs.push_back(
-              std::make_pair(static_cast<int32_t>(lreg_size),
-                             /* TODO: this assumes that parsec_ce_mem_reg_handle_t is void* */
-                             std::shared_ptr<void>{lreg,
-                                                  [device_copy](void *ptr) {
-                                                    parsec_ce_mem_reg_handle_t memreg =
-                                                        (parsec_ce_mem_reg_handle_t)ptr;
-                                                    //std::cout << "broadcast_arg memunreg lreg " << memreg << std::endl;
-                                                    parsec_ce.mem_unregister(&memreg);
-                                                    if (device_copy != nullptr) {
-                                                      /* remove a reader */
-                                                      parsec_atomic_fetch_sub_int32(&device_copy->readers, 1);
-                                                    }
-                                                  }})
-            );
-            //std::cout << "broadcast_arg memreg lreg " << lreg << std::endl;
-          }
-        };
-
-        if constexpr (ttg::has_split_metadata<std::decay_t<Value>>::value) {
-          ttg::SplitMetadataDescriptor<decvalueT> descr;
-          /* pack the metadata */
-          auto metadata = descr.get_metadata(value);
-          pos = pack(metadata, msg->bytes, pos);
-          auto iovs = descr.get_data(*const_cast<decvalueT *>(&value));
-          num_iovs = std::distance(std::begin(iovs), std::end(iovs));
-          memregs.reserve(num_iovs);
-          write_iov_header();
-          for (auto &&iov : iovs) {
-            handle_iov_fn(iov);
-          }
-          //std::cout << "broadcast_arg splitmd num_iovecs " << num_iovs << std::endl;
-        } else if constexpr (!ttg::has_split_metadata<std::decay_t<Value>>::value) {
-          /* serialize the object once */
-          pos = pack(value, msg->bytes, pos, copy);
-          detail::foreach_parsec_data(value, [&](parsec_data_t *data){ ++num_iovs; });
-          memregs.reserve(num_iovs);
-          write_iov_header();
-          detail::foreach_parsec_data(value, [&](parsec_data_t *data){
-            int device = 0;
-            parsec_data_copy_t* device_copy = nullptr;
-            if (world.impl().mpi_support(Space) && Space != ttg::ExecutionSpace::Host) {
-              /* Try to find a device that is not the host and has the latest version. */
-              std::tie(device, device_copy) = detail::find_device_copy(data);
-            }
-            handle_iov_fn(ttg::iovec{data->nb_elts,
-                                     data->device_copies[device]->device_private},
-                          device_copy);
-          });
-        }
+        memregs = register_bcast_data(value, inline_data, msg, pos);
 
         msg->tt_id.num_iovecs = num_iovs;
 
@@ -3244,6 +3349,206 @@ namespace ttg_parsec {
       } else {
         /* handle local keys */
         broadcast_arg_local<i>(keylist.begin(), keylist.end(), value);
+      }
+    }
+
+
+    template<std::size_t I, std::size_t... Is>
+    void keygen_query_successor(auto& bcast_key_tuple,
+                                std::optional<std::set<int>>& procset,
+                                std::optional<std::set<ttg::device::Device>>& deviceset,
+                                int local_rank,
+                                auto& local_bcast_keys_tuple,
+                                std::index_sequence<I, Is...>)
+    {
+      using key_type = typename std::tuple_element_t<I, output_terminalsT>::key_type;
+      if constexpr (ttg::meta::is_void_v<key_type>) {
+        // the key is void so the entry is bool
+        if (std::get<I>(bcast_key_tuple)) {
+          std::get<I>(output_terminals).query_processes(
+                                          [&](int proc, ttg::device::Device device){
+                                            if (procset) procset->insert(proc);
+                                            if (proc == local_rank) {
+                                              if (deviceset) deviceset->insert(device);
+                                              std::get<I>(local_bcast_keys_tuple) = true;
+                                            }
+                                          });
+        }
+      } else {
+        auto& keyvec = std::get<I>(bcast_key_tuple);
+        using key_type = typename std::tuple_element_t<I, output_terminalsT>::key_type;
+        static_assert(std::is_same_v<typename std::decay_t<decltype(keyvec)>::value_type, key_type>,
+                      "key type mismatch");
+        if (keyvec.size()) {
+          std::function<void(const key_type&, int, ttg::device::Device)> func =
+            [&](const key_type& key, int proc,
+                ttg::device::Device device){
+              if (procset) procset->insert(proc);
+              if (proc == local_rank) {
+                if (deviceset) deviceset->insert(device);
+                std::get<I>(local_bcast_keys_tuple).push_back(key);
+              }
+            };
+          std::get<I>(output_terminals).query_processes(ttg::span(keyvec.data(), keyvec.size()),
+                                                        func);
+        }
+      }
+      // recurse to next element in tuple
+      if constexpr (sizeof...(Is) > 0) {
+        keygen_query_successor(bcast_key_tuple, procset, deviceset, local_rank, local_bcast_keys_tuple, std::index_sequence<Is...>());
+      }
+    }
+
+    /**
+     * Invoke all output terminals on the keys in the provided tuple.
+     */
+    template<std::size_t I, std::size_t... Is>
+    void bcast_keygen_local(auto& local_bcast_keys_tuple, auto& value, std::index_sequence<I, Is...>)
+    {
+      if constexpr (ttg::meta::is_void_v<typename std::tuple_element_t<I, output_terminalsT>::key_type>) {
+        // key is void so entry is bool
+        if (std::get<I>(local_bcast_keys_tuple)) {
+          std::get<I>(output_terminals).sendv(value);
+        }
+      } else {
+        auto& keyvec = std::get<I>(local_bcast_keys_tuple);
+        using key_type = std::tuple_element_t<I, output_terminalsT>::key_type;
+        if (keyvec.size()) {
+          std::get<I>(output_terminals).broadcast(keyvec, value);
+        }
+      }
+      if constexpr (sizeof...(Is) > 0) {
+        bcast_keygen_local(local_bcast_keys_tuple, value, std::index_sequence<Is...>());
+      }
+    }
+
+    virtual void broadcast_keygen(const void *key_ptr, const void *value_ptr) override final {
+      // assuming that all output types are the same
+      if constexpr (std::tuple_size_v<output_terminalsT> > 0 && !ttg::meta::is_void_v<key_type>) {
+        using value_type = std::tuple_element_t<0, ttg::edges_to_output_value_types_t<output_edges_type>>;
+        const key_type& key = *static_cast<const key_type*>(key_ptr);
+        const value_type& value = *static_cast<const value_type*>(value_ptr);
+        auto world = ttg::default_execution_context();
+        int myrank = world.rank();
+        auto bcast_key_tuple = broadcast_keygen_tuple_type();
+        auto local_bcast_keys_tuple = broadcast_keygen_tuple_type();
+        broadcast_keygen_cb(key, bcast_key_tuple);
+
+        /* collect the processes that are involved */
+        std::optional<std::set<int>> procset = std::set<int>();
+        std::optional<std::set<ttg::device::Device>> deviceset = std::nullopt;
+        keygen_query_successor(bcast_key_tuple, procset, deviceset, // ignore the devices here
+                              myrank, local_bcast_keys_tuple,
+                              std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
+
+        int num_remote_peers = (procset->contains(myrank) ? procset->size() - 1 : procset->size());
+
+        auto &world_impl = world.impl();
+        /* broadcast the key and value to all successor processes */
+        if (num_remote_peers > 0) {
+          uint64_t pos = 0;
+          using msg_type = detail::msg_t;
+          std::unique_ptr<msg_type> msg = std::make_unique<msg_type>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                                              msg_header_t::MSG_BCAST_KEYGEN, 0, world_impl.rank());
+          auto* copy = detail::find_copy_in_task(detail::parsec_ttg_caller, &value);
+          assert(nullptr != copy);
+          /* TODO: this assumes the worst case: that all keys are packed at once (i.e., go to the same remote). Can we do better?*/
+          bool inline_data = can_inline_data(&value, copy, key, 1);
+          msg->tt_id.inline_data = inline_data;
+
+          /* register the memory regions */
+          std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs;
+          memregs = register_bcast_data(value, inline_data, msg, pos);
+          msg->tt_id.num_iovecs = memregs.size();
+          int num_iovs = memregs.size();
+
+          /* Repack registrations and register readers for each peer
+          * so that each peer can release the data once their transfer is done.
+          * The last peer to complete will release the registration. */
+          uint64_t save_pos = pos;
+
+          for (auto iter = procset->begin(); iter != procset->end(); ++iter) {
+            int proc = *iter;
+            if (proc == myrank) continue; // local rank will be handled below
+            using msg_t = detail::msg_t;
+            pos = save_pos;
+
+            if (!inline_data) {
+              for (int idx = 0; idx < num_iovs; ++idx) {
+                int32_t lreg_size;
+                std::shared_ptr<void> lreg_ptr;
+                std::tie(lreg_size, lreg_ptr) = memregs[idx];
+                std::memcpy(msg->bytes + pos, &lreg_size, sizeof(lreg_size));
+                pos += sizeof(lreg_size);
+                std::memcpy(msg->bytes + pos, lreg_ptr.get(), lreg_size);
+                pos += lreg_size;
+                /* mark another reader on the copy */
+                copy = detail::register_data_copy<value_type>(copy, nullptr, true);
+                /* create a function that will be invoked upon RMA completion at the target */
+                std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
+                  /* shared_ptr of value and registration captured by value so resetting
+                  * them here (through get_remote_complete_cb) will eventually release
+                  * the memory/registration */
+                  lreg_ptr.reset();
+                  detail::release_data_copy(copy);
+                });
+                std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
+                std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
+                pos += sizeof(fn_ptr);
+              }
+            }
+
+            parsec_taskpool_t *tp = world_impl.taskpool();
+            tp->tdm.module->outgoing_message_start(tp, proc, NULL);
+            tp->tdm.module->outgoing_message_pack(tp, proc, NULL, NULL, 0);
+            parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), proc, static_cast<void *>(msg.get()),
+                              sizeof(msg_header_t) + pos);
+          }
+        }
+
+        if (procset->contains(myrank)) {
+          // local broadcast
+          bcast_keygen_local(local_bcast_keys_tuple, value,
+                            std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
+        }
+      } else {
+        throw std::runtime_error("Error: broadcast_keygen invoked on a ttg::Task with no output terminals");
+      }
+    }
+
+
+    template<typename Value, std::size_t I, std::size_t... Is>
+    void do_prepare_keygen(auto& key_tuple,
+                           const Value& value,
+                           std::index_sequence<I, Is...>)
+    {
+      using key_type = typename std::tuple_element_t<I, output_terminalsT>::key_type;
+      if constexpr (ttg::meta::is_void_v<key_type>) {
+        std::get<I>(output_terminals).prepare_send(value);
+      } else {
+        // the key is void so the entry is bool
+        std::get<I>(output_terminals).prepare_send(std::get<I>(key_tuple), value);
+      }
+      // recurse to next element in tuple
+      if constexpr (sizeof...(Is) > 0) {
+        do_prepare_keygen(key_tuple, value, std::index_sequence<Is...>{});
+      }
+    }
+
+    /**
+     * Prepares the key generation for a broadcast operation.
+     * Inspects the value for whether it needs to be pushed out.
+     */
+    virtual void prepare_keygen(const void *key_ptr, const void *value_ptr) override final {
+      if constexpr (std::tuple_size_v<output_terminalsT> > 0 && !ttg::meta::is_void_v<key_type>) {
+        // assuming all outputs have the same value for now
+        using value_type = std::tuple_element_t<0, ttg::edges_to_output_value_types_t<output_edges_type>>;
+        const auto& value = *static_cast<const value_type*>(value_ptr);
+        const key_type& key = *static_cast<const key_type*>(key_ptr);
+        auto bcast_key_tuple = broadcast_keygen_tuple_type();
+        broadcast_keygen_cb(key, bcast_key_tuple);
+
+        do_prepare_keygen(bcast_key_tuple, value, std::make_index_sequence<std::tuple_size_v<decltype(bcast_key_tuple)>>{});
       }
     }
 
@@ -3720,12 +4025,24 @@ namespace ttg_parsec {
           broadcast_arg<i, keyT, valueT>(keylist, value);
         };
         auto prepare_send_callback = [this](const ttg::span<const keyT> &keylist, const valueT &value) {
-            prepare_send<i, keyT, valueT>(keylist, value);
+          prepare_send<i, keyT, valueT>(keylist, value);
+        };
+        auto query_processes = [this](const ttg::span<const keyT> &keylist, std::function<void(keyT, int, ttg::device::Device)> cb) {
+          if constexpr(derived_has_device_op()) {
+            for (auto& key : keylist) {
+              cb(key, keymap(key), devicemap(key));
+            }
+          } else {
+            for (auto& key : keylist) {
+              cb(key, keymap(key), ttg::device::Device{});
+            }
+          }
         };
         auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
         auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
         input.set_callback(send_callback, move_callback, broadcast_callback,
-                           setsize_callback, finalize_callback, prepare_send_callback);
+                           setsize_callback, finalize_callback, prepare_send_callback,
+                           query_processes);
       }
       //////////////////////////////////////////////////////////////////
       // case 2: nonvoid key, void value, mixed inputs
@@ -3931,10 +4248,10 @@ namespace ttg_parsec {
           if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT) {
             /* set the current task, needed inside the sends */
             detail::parsec_ttg_caller = task;
-            auto old_output_tls_ptr = task->tt->outputs_tls_ptr_accessor();
-            task->tt->set_outputs_tls_ptr();
+            auto old_output_tls_ptr = task->tt_ptr()->outputs_tls_ptr_accessor();
+            task->tt_ptr()->set_outputs_tls_ptr();
             dev_data.do_sends(); // all sends happen here
-            task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
+            task->tt_ptr()->set_outputs_tls_ptr(old_output_tls_ptr);
             detail::parsec_ttg_caller = nullptr;
           }
           dev_task.destroy(); // safe to destroy the coroutine now
@@ -3953,7 +4270,7 @@ namespace ttg_parsec {
         task->copies[i] = nullptr;
       }
 
-      for (auto& c : task->tt->constraints_complete) {
+      for (auto& c : task->tt_ptr()->constraints_complete) {
         if constexpr(std::is_void_v<keyT>) {
           c();
         } else {
@@ -4027,8 +4344,7 @@ namespace ttg_parsec {
 #endif
 
       world_impl.taskpool()->nb_task_classes = std::max(world_impl.taskpool()->nb_task_classes, static_cast<decltype(world_impl.taskpool()->nb_task_classes)>(self.task_class_id+1));
-      //    function_id_to_instance[self.task_class_id] = this;
-      //self.incarnations = incarnations_array.data();
+
 //#if 0
       if constexpr (derived_has_cuda_op()) {
         self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
@@ -4373,7 +4689,7 @@ namespace ttg_parsec {
       if constexpr (ttg::meta::is_void_v<keyT> && ttg::meta::is_empty_tuple_v<input_values_tuple_type>)
         invoke<keyT>();
       else
-        TTBase::invoke();
+        ttg::TTBase::invoke();
     }
 
   private:
@@ -4536,6 +4852,24 @@ namespace ttg_parsec {
     void add_constraint(Constraint c, Mapper&& map) {
       // need to make this a shared_ptr since it's shared between different callbacks
       this->add_constraint(std::make_shared<Constraint>(std::forward<Constraint>(c)), std::forward<Mapper>(map));
+    }
+
+    /**
+     * Sets the output generator for the task.
+     * Output generators take a tuple of vectors of output key types, one for each output
+     * terminal.
+     * Currently only supported on TTs with one output value type, i.e., all output terminals
+     * must produce the same output value type.
+     * The callback has the form `void(const key_type&, broadcast_keygen_tuple_type&)`, i.e.,
+     * it takes the a task's key and generates into the tuple the result keys.
+     * Inside the task, only one bcast_gen call may be made, with the task's key and
+     * the value that will then be sent to all keys provided by the output generator.
+     */
+    template<typename OutGen>
+    void set_broadcast_keygen(OutGen &&gen) {
+      static_assert(1 == std::tuple_size_v<ttg::meta::unique_tuple_types_t<ttg::edges_to_output_value_types_t<output_edges_type>>>,
+                    "Generator-based broadcast currently supports only one output value type!");
+      broadcast_keygen_cb = std::forward<OutGen>(gen);
     }
 
     // Register the static_op function to associate it to instance_id

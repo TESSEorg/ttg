@@ -12,6 +12,10 @@ namespace ttg {
 
   class Void;
 
+  namespace device {
+    class Device; // fwd-decl
+  } // namespace device
+
   namespace meta {
 
 #if __cplusplus >= 201703L
@@ -646,6 +650,53 @@ namespace ttg {
     static_assert(is_empty_tuple_v<std::tuple<Void>>, "ouch");
     static_assert(is_empty_tuple_v<std::tuple<Void, Void, Void>>, "ouch");
 
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// Given a tuple of types, collect all unique types into a result tuple.
+    /// Example: unique_tuple_t<std::tuple<int, double, int, float>> == std::tuple<int, double, float>
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    template <typename Tuple, typename Result = std::tuple<>>
+    struct unique_tuple_types_impl;
+
+    template <typename Result>
+    struct unique_tuple_types_impl<std::tuple<>, Result> {
+      using type = Result;
+    };
+
+    template <typename T, typename... Ts, typename... Us>
+    struct unique_tuple_types_impl<std::tuple<T, Ts...>, std::tuple<Us...>> {
+      using type = std::conditional_t<
+          (std::is_same_v<T, Us> || ...),
+          typename unique_tuple_types_impl<std::tuple<Ts...>, std::tuple<Us...>>::type,
+          typename unique_tuple_types_impl<std::tuple<Ts...>, std::tuple<Us..., T>>::type>;
+    };
+
+    template <typename Tuple>
+    using unique_tuple_types_t = typename unique_tuple_types_impl<Tuple>::type;
+
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// Given a tuple of types, replace all occurences of void and Void with a given type.
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    template<typename Tuple, typename T, typename R>
+    struct replace_any;
+
+    template<typename T, typename R>
+    struct replace_any<std::tuple<>, T, R> {
+      using type = std::tuple<>;
+    };
+
+    template<typename Head, typename... Tail, typename T, typename R>
+    struct replace_any<std::tuple<Head, Tail...>, T, R> {
+      using type = decltype(std::tuple_cat(
+        std::conditional_t<std::is_same_v<Head, T>, std::tuple<R>, std::tuple<Head>>{},
+        typename replace_any<std::tuple<Tail...>, T, R>::type{}
+      ));
+    };
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // nonesuch struct from Library Fundamentals V2, source from https://en.cppreference.com/w/cpp/experimental/nonesuch
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -897,6 +948,10 @@ namespace ttg {
       template <typename Key, typename Value>
       using prepare_send_callback_t = typename prepare_send_callback<Key, Value>::type;
 
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // constraint_callback_t<Key, Value> = std::function<bool(Key &)> protected against void key
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
       template<typename Key, typename Enabler = void>
       struct constraint_callback;
 
@@ -912,6 +967,28 @@ namespace ttg {
 
       template<typename Key>
       using constraint_callback_t = typename constraint_callback<Key>::type;
+
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // query_processes_callback_t<Key, Value> = std::function<void(span<Key> &, std::vector<int>&)> protected against void key
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+      template<typename Key, typename Enabler = void>
+      struct query_processes_callback;
+
+      template<typename Key>
+      struct query_processes_callback<Key, std::enable_if_t<!is_void_v<Key>>> {
+        using type = std::function<void(const ttg::span<Key> &,
+                                        std::function<void(const Key&, int, ttg::device::Device)>&)>;
+      };
+
+      template<typename Key>
+      struct query_processes_callback<Key, std::enable_if_t<is_void_v<Key>>> {
+        using type = std::function<void(std::function<void(int, ttg::device::Device)>&&)>;
+      };
+
+      template<typename Key>
+      using query_processes_callback_t = typename query_processes_callback<Key>::type;
+
 
     }  // namespace detail
 
