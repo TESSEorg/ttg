@@ -74,6 +74,10 @@ namespace ttg::device {
     bool operator==(const Device& other) const {
       return m_id == other.m_id && m_space == other.m_space;
     }
+
+    bool operator<(const Device& other) const {
+      return std::tie(m_id, m_space) < std::tie(other.m_id, other.m_space);
+    }
   };
 } // namespace ttg::device
 
