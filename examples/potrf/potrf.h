@@ -184,7 +184,7 @@ namespace potrf {
         devInfo.clear();
         if (use_keygen_bcast) {
           co_await ttg::device::forward(ttg::device::broadcast_keygen(key, std::move(tile_kk)));
-        }
+        } else {
           co_await ttg::device::forward(ttg::device::broadcast<0, 1>(successor_fn(key), std::move(tile_kk)));
         }
         // Anything after this co_await is never executed
@@ -456,11 +456,11 @@ namespace potrf {
       if (M == K + 1) {
         /* send the tile to potrf */
         if (ttg::tracing()) ttg::print("SYRK(", key, "): sending output to POTRF(", Key1{K + 1}, ")");
-        co_await ttg::device::send<0>(Key1(K + 1), std::move(tile_kk), out);
+        co_await ttg::device::send<0>(Key1(K + 1), std::move(tile_kk));
       } else {
         /* send output to next syrk */
         if (ttg::tracing()) ttg::print("SYRK(", key, "): sending output to SYRK(", Key2{K + 1, M}, ")");
-        co_await ttg::device::send<1>(Key2(K + 1, M), std::move(tile_kk), out);
+        co_await ttg::device::send<1>(Key2(K + 1, M), std::move(tile_kk));
       }
     };
     return ttg::make_tt<ES>(f, ttg::edges(input_mk, ttg::fuse(input_kk, input_disp)), ttg::edges(output_potrf, output_syrk),
