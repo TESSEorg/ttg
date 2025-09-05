@@ -92,6 +92,10 @@ int main(int argc, char **argv)
     Q = atoi(opt);
   }
 
+  if (world.size() != P*Q) {
+    throw std::runtime_error("P*Q must be equal to the number of processes");
+  }
+
 
   if(check && (P>1 || Q>1)) {
     std::cerr << "Check is disabled for distributed runs at this time" << std::endl;
