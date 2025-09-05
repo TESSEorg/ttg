@@ -44,6 +44,7 @@
 #include "ttg/parsec/fwd.h"
 
 #include "ttg/parsec/broadcast_keygen.h"
+#include "ttg/parsec/broadcast.h"
 #include "ttg/parsec/buffer.h"
 #include "ttg/parsec/devicescratch.h"
 #include "ttg/parsec/thread_local.h"
@@ -2400,7 +2401,7 @@ namespace ttg_parsec {
         auto bcast_key_tuple = broadcast_keygen_tuple_type();
         auto local_bcast_keys_tuple = broadcast_keygen_tuple_type();
         std::optional<std::set<ttg::device::Device>> deviceset = std::set<ttg::device::Device>();
-        std::optional<std::set<int>> procset = std::nullopt;
+        std::optional<std::set<int>> procset = std::set<int>();
         broadcast_keygen_cb(key, bcast_key_tuple);
 
         /* collect the processes that are involved */
@@ -2411,14 +2412,13 @@ namespace ttg_parsec {
                                std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
 
         set_arg_fetch_value_and_release<value_type>(msg, deviceset.value(),
-          [this, local_bcast_keys_tuple = std::move(local_bcast_keys_tuple)]
+          [this, key, procset = std::move(procset), local_bcast_keys_tuple = std::move(local_bcast_keys_tuple)]
           (detail::ttg_data_copy_t *copy) {
             value_type& value = *reinterpret_cast<value_type *>(copy->get_ptr());
 
             auto dtm = DummyTaskManager(this, copy); // set the parsec_ttg_caller and holds on to it until the end of the function
 
-            bcast_keygen_local(local_bcast_keys_tuple, value,
-                               std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
+            broadcast_keygen_select(local_bcast_keys_tuple, procset.value(), key, value);
           });
 
       } else {
@@ -3456,99 +3456,136 @@ namespace ttg_parsec {
       }
     }
 
+
+    template<template<class> class Bcast, typename Key, typename Value>
+    void broadcast_keygen_impl(const auto& local_bcast_keys_tuple,
+                               const auto& procset,
+                               const Key& key,
+                               const Value& value) {
+
+      int myrank = world.rank();
+      int root = keymap(key);
+      auto bcast = Bcast(root, myrank, procset.begin(), procset.end());
+
+      if (bcast.has_peers()) {
+
+        using msg_type = detail::msg_t;
+        auto& world_impl = world.impl();
+        uint64_t pos = 0;
+        std::unique_ptr<msg_type> msg = std::make_unique<msg_type>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+                                                            msg_header_t::MSG_BCAST_KEYGEN, 0, world_impl.rank());
+        auto* copy = detail::find_copy_in_task(detail::parsec_ttg_caller, &value);
+        assert(nullptr != copy);
+        /* TODO: this assumes the worst case: that all keys are packed at once (i.e., go to the same remote). Can we do better?*/
+        bool inline_data = can_inline_data(&value, copy, key, 1);
+        msg->tt_id.inline_data = inline_data;
+
+        /* register the memory regions */
+        std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs;
+        memregs = register_bcast_data(value, inline_data, msg, pos);
+        msg->tt_id.num_iovecs = memregs.size();
+        int num_iovs = memregs.size();
+
+        /* Repack registrations and register readers for each peer
+        * so that each peer can release the data once their transfer is done.
+        * The last peer to complete will release the registration. */
+        uint64_t save_pos = pos;
+
+        bcast([&](int proc) {
+          assert(proc != myrank);
+          if (proc == myrank) return; // local rank will be handled below
+          using msg_t = detail::msg_t;
+          pos = save_pos;
+
+          if (!inline_data) {
+            for (int idx = 0; idx < num_iovs; ++idx) {
+              int32_t lreg_size;
+              std::shared_ptr<void> lreg_ptr;
+              std::tie(lreg_size, lreg_ptr) = memregs[idx];
+              std::memcpy(msg->bytes + pos, &lreg_size, sizeof(lreg_size));
+              pos += sizeof(lreg_size);
+              std::memcpy(msg->bytes + pos, lreg_ptr.get(), lreg_size);
+              pos += lreg_size;
+              /* mark another reader on the copy */
+              copy = detail::register_data_copy<Value>(copy, nullptr, true);
+              /* create a function that will be invoked upon RMA completion at the target */
+              std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
+                /* shared_ptr of value and registration captured by value so resetting
+                * them here (through get_remote_complete_cb) will eventually release
+                * the memory/registration */
+                lreg_ptr.reset();
+                detail::release_data_copy(copy);
+              });
+              std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
+              std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
+              pos += sizeof(fn_ptr);
+            }
+          }
+
+          /* pack the key and set the right offset */
+          msg->tt_id.key_offset = pos;
+          pos = pack(key, msg->bytes, pos);
+
+          parsec_taskpool_t *tp = world_impl.taskpool();
+          tp->tdm.module->outgoing_message_start(tp, proc, NULL);
+          tp->tdm.module->outgoing_message_pack(tp, proc, NULL, NULL, 0);
+          parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), proc, static_cast<void *>(msg.get()),
+                            sizeof(msg_header_t) + pos);
+        });
+      }
+
+      if (procset.contains(myrank)) {
+        // local broadcast
+        bcast_keygen_local(local_bcast_keys_tuple, value,
+                          std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
+      }
+    }
+
+    template<typename Key, typename Value>
+    void broadcast_keygen(const Key& key, const Value& value) {
+      int myrank = world.rank();
+      int root = keymap(key);
+      auto bcast_key_tuple = broadcast_keygen_tuple_type();
+      auto local_bcast_keys_tuple = broadcast_keygen_tuple_type();
+      broadcast_keygen_cb(key, bcast_key_tuple);
+
+      /* collect the processes that are involved */
+      std::optional<std::set<int>> procset = std::set<int>();
+      std::optional<std::set<ttg::device::Device>> deviceset = std::nullopt;
+      keygen_query_successor(bcast_key_tuple, procset, deviceset, // ignore the devices here
+                             myrank, local_bcast_keys_tuple,
+                             std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
+
+      broadcast_keygen_select(local_bcast_keys_tuple, procset.value(), key, value);
+    }
+
+    template<typename Key, typename Value>
+    void broadcast_keygen_select(const auto& local_bcast_keys_tuple,
+                                 const auto& procset,
+                                 const Key& key,
+                                 const Value& value) {
+      BroadcastType bcast_type = get_broadcast_type();
+      switch (bcast_type) {
+        case BroadcastType::Pipe:
+          broadcast_keygen_impl<BroadcastPipe>(local_bcast_keys_tuple, procset, key, value);
+          break;
+        case BroadcastType::Star:
+          broadcast_keygen_impl<BroadcastStar>(local_bcast_keys_tuple, procset, key, value);
+          break;
+        default:
+          throw std::runtime_error("Error: unknown broadcast type");
+      }
+    }
+
+
     virtual void broadcast_keygen(const void *key_ptr, const void *value_ptr) override final {
       // assuming that all output types are the same
       if constexpr (std::tuple_size_v<output_terminalsT> > 0 && !ttg::meta::is_void_v<key_type>) {
         using value_type = std::tuple_element_t<0, ttg::edges_to_output_value_types_t<output_edges_type>>;
         const key_type& key = *static_cast<const key_type*>(key_ptr);
         const value_type& value = *static_cast<const value_type*>(value_ptr);
-        auto world = ttg::default_execution_context();
-        int myrank = world.rank();
-        auto bcast_key_tuple = broadcast_keygen_tuple_type();
-        auto local_bcast_keys_tuple = broadcast_keygen_tuple_type();
-        broadcast_keygen_cb(key, bcast_key_tuple);
 
-        /* collect the processes that are involved */
-        std::optional<std::set<int>> procset = std::set<int>();
-        std::optional<std::set<ttg::device::Device>> deviceset = std::nullopt;
-        keygen_query_successor(bcast_key_tuple, procset, deviceset, // ignore the devices here
-                              myrank, local_bcast_keys_tuple,
-                              std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
-
-        int num_remote_peers = (procset->contains(myrank) ? procset->size() - 1 : procset->size());
-
-        auto &world_impl = world.impl();
-        /* broadcast the key and value to all successor processes */
-        if (num_remote_peers > 0) {
-          uint64_t pos = 0;
-          using msg_type = detail::msg_t;
-          std::unique_ptr<msg_type> msg = std::make_unique<msg_type>(get_instance_id(), world_impl.taskpool()->taskpool_id,
-                                                              msg_header_t::MSG_BCAST_KEYGEN, 0, world_impl.rank());
-          auto* copy = detail::find_copy_in_task(detail::parsec_ttg_caller, &value);
-          assert(nullptr != copy);
-          /* TODO: this assumes the worst case: that all keys are packed at once (i.e., go to the same remote). Can we do better?*/
-          bool inline_data = can_inline_data(&value, copy, key, 1);
-          msg->tt_id.inline_data = inline_data;
-
-          /* register the memory regions */
-          std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs;
-          memregs = register_bcast_data(value, inline_data, msg, pos);
-          msg->tt_id.num_iovecs = memregs.size();
-          int num_iovs = memregs.size();
-
-          /* Repack registrations and register readers for each peer
-          * so that each peer can release the data once their transfer is done.
-          * The last peer to complete will release the registration. */
-          uint64_t save_pos = pos;
-
-          for (auto iter = procset->begin(); iter != procset->end(); ++iter) {
-            int proc = *iter;
-            if (proc == myrank) continue; // local rank will be handled below
-            using msg_t = detail::msg_t;
-            pos = save_pos;
-
-            if (!inline_data) {
-              for (int idx = 0; idx < num_iovs; ++idx) {
-                int32_t lreg_size;
-                std::shared_ptr<void> lreg_ptr;
-                std::tie(lreg_size, lreg_ptr) = memregs[idx];
-                std::memcpy(msg->bytes + pos, &lreg_size, sizeof(lreg_size));
-                pos += sizeof(lreg_size);
-                std::memcpy(msg->bytes + pos, lreg_ptr.get(), lreg_size);
-                pos += lreg_size;
-                /* mark another reader on the copy */
-                copy = detail::register_data_copy<value_type>(copy, nullptr, true);
-                /* create a function that will be invoked upon RMA completion at the target */
-                std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
-                  /* shared_ptr of value and registration captured by value so resetting
-                  * them here (through get_remote_complete_cb) will eventually release
-                  * the memory/registration */
-                  lreg_ptr.reset();
-                  detail::release_data_copy(copy);
-                });
-                std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
-                std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
-                pos += sizeof(fn_ptr);
-              }
-            }
-
-            /* pack the key and set the right offset */
-            msg->tt_id.key_offset = pos;
-            pos = pack(key, msg->bytes, pos);
-
-            parsec_taskpool_t *tp = world_impl.taskpool();
-            tp->tdm.module->outgoing_message_start(tp, proc, NULL);
-            tp->tdm.module->outgoing_message_pack(tp, proc, NULL, NULL, 0);
-            parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), proc, static_cast<void *>(msg.get()),
-                              sizeof(msg_header_t) + pos);
-          }
-        }
-
-        if (procset->contains(myrank)) {
-          // local broadcast
-          bcast_keygen_local(local_bcast_keys_tuple, value,
-                            std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
-        }
+        broadcast_keygen(key, value);
       } else {
         throw std::runtime_error("Error: broadcast_keygen invoked on a ttg::Task with no output terminals");
       }
