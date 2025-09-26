@@ -446,7 +446,7 @@ public:
     int parsec_id = detail::ttg_device_to_parsec_device(device);
     assert(parsec_nb_devices > parsec_id);
     assert(m_data != nullptr);
-    if (m_data->device_copies[parsec_id] == nullptr) {
+    if (m_data->device_copies[parsec_id] == nullptr || m_data->device_copies[parsec_id]->device_private == nullptr) {
       if (device.is_device()) {
         /* create the device copy */
         parsec_device_gpu_module_t *device_module = (parsec_device_gpu_module_t*)parsec_mca_device_get(parsec_id);
@@ -455,10 +455,15 @@ public:
         if (nullptr == ptr) {
           throw std::bad_alloc{};
         }
-        /* transfer ownership of the memory to PaRSEC (so it can be pushed out if needed) */
-        auto copy = parsec_data_copy_new(m_data, parsec_id, parsec_datatype_int8_t,
-                                         PARSEC_DATA_FLAG_PARSEC_MANAGED | PARSEC_DATA_FLAG_PARSEC_OWNED);
-        copy->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+        parsec_data_copy_t* copy = nullptr;
+        if (m_data->device_copies[parsec_id] == nullptr) {
+          /* transfer ownership of the memory to PaRSEC (so it can be pushed out if needed) */
+          copy = parsec_data_copy_new(m_data, parsec_id, parsec_datatype_int8_t,
+                                      PARSEC_DATA_FLAG_PARSEC_MANAGED | PARSEC_DATA_FLAG_PARSEC_OWNED);
+        } else {
+          copy = m_data->device_copies[parsec_id];
+        }
+        copy->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
         copy->device_private = ptr;
         m_data->device_copies[parsec_id] =  copy;
       } else {
