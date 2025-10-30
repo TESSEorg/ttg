@@ -87,6 +87,7 @@
 #include <parsec/parsec_internal.h>
 #include <parsec/scheduling.h>
 #include <parsec/remote_dep.h>
+#include <parsec/utils/mca_param.h>
 
 #ifdef PARSEC_HAVE_DEV_CUDA_SUPPORT
 #include <parsec/mca/device/cuda/device_cuda.h>
@@ -134,7 +135,7 @@ namespace ttg_parsec {
   typedef std::pair<static_set_arg_fct_type, ttg::TTBase *> static_set_arg_fct_call_t;
   inline std::map<uint64_t, static_set_arg_fct_call_t> static_id_to_op_map;
   inline std::mutex static_map_mutex;
-  typedef std::tuple<int, void *, size_t> static_set_arg_fct_arg_t;
+  typedef std::tuple<int, std::unique_ptr<std::byte[]>, size_t> static_set_arg_fct_arg_t;
   inline std::multimap<uint64_t, static_set_arg_fct_arg_t> delayed_unpack_actions;
 
   struct msg_header_t {
@@ -199,24 +200,25 @@ namespace ttg_parsec {
       tp = parsec_taskpool_lookup(msg->taskpool_id);
       assert(NULL != tp);
       static_map_mutex.lock();
-      try {
-        auto op_pair = static_id_to_op_map.at(op_id);
-        static_map_mutex.unlock();
-        tp->tdm.module->incoming_message_start(tp, src_rank, NULL, NULL, 0, NULL);
-        static_set_arg_fct = op_pair.first;
-        static_set_arg_fct(data, size, op_pair.second);
-        tp->tdm.module->incoming_message_end(tp, NULL);
-        return 0;
-      } catch (const std::out_of_range &e) {
-        void *data_cpy = malloc(size);
-        assert(data_cpy != 0);
-        memcpy(data_cpy, data, size);
-        ttg::trace("ttg_parsec(", ttg_default_execution_context().rank(), ") Delaying delivery of message (", src_rank,
-                   ", ", op_id, ", ", data_cpy, ", ", size, ")");
-        delayed_unpack_actions.insert(std::make_pair(op_id, std::make_tuple(src_rank, data_cpy, size)));
-        static_map_mutex.unlock();
-        return 1;
+      if (PARSEC_TERM_TP_NOT_READY != tp->tdm.module->taskpool_state(tp)) {
+        try {
+          auto op_pair = static_id_to_op_map.at(op_id);
+          static_map_mutex.unlock();
+          tp->tdm.module->incoming_message_start(tp, src_rank, NULL, NULL, 0, NULL);
+          static_set_arg_fct = op_pair.first;
+          static_set_arg_fct(data, size, op_pair.second);
+          tp->tdm.module->incoming_message_end(tp, NULL);
+          return 0;
+        } catch (const std::out_of_range &e)
+        { /* fall-through */ }
       }
+      auto data_cpy = std::make_unique_for_overwrite<std::byte[]>(size);
+      memcpy(data_cpy.get(), data, size);
+      ttg::trace("ttg_parsec(", ttg_default_execution_context().rank(), ") Delaying delivery of message (", src_rank,
+                 ", ", op_id, ", ", data_cpy, ", ", size, ")");
+      delayed_unpack_actions.insert(std::make_pair(op_id, std::make_tuple(src_rank, std::move(data_cpy), size)));
+      static_map_mutex.unlock();
+      return 1;
     }
 
     static int get_remote_complete_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg, size_t msg_size,
@@ -317,6 +319,18 @@ namespace ttg_parsec {
 #endif
       }
 #endif
+
+#ifdef PARSEC_PROF_GRAPHER
+      /* check if PaRSEC's dot tracing is enabled */
+      int dot_param_idx;
+      dot_param_idx = parsec_mca_param_find("profile", NULL, "dot");
+
+      if (dot_param_idx != PARSEC_ERROR) {
+        char *filename;
+        parsec_mca_param_lookup_string(dot_param_idx, &filename);
+        dag_on(filename);
+      }
+#endif // PARSEC_PROF_GRAPHER
 
       if( NULL != parsec_ce.tag_register) {
         parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, this, detail::PARSEC_TTG_MAX_AM_SIZE);
@@ -4528,19 +4542,18 @@ namespace ttg_parsec {
         std::vector<static_set_arg_fct_arg_t> tmp;
         for (auto it = se.first; it != se.second;) {
           assert(it->first == get_instance_id());
-          tmp.push_back(it->second);
+          tmp.push_back(std::move(it->second));
           it = delayed_unpack_actions.erase(it);
         }
         static_map_mutex.unlock();
 
-        for (auto it : tmp) {
+        for (auto& it : tmp) {
           if(ttg::tracing())
             ttg::print("ttg_parsec(", rank, ") Unpacking delayed message (", ", ", get_instance_id(), ", ",
-                       std::get<1>(it), ", ", std::get<2>(it), ")");
-          int rc = detail::static_unpack_msg(&parsec_ce, world_impl.parsec_ttg_tag(), std::get<1>(it), std::get<2>(it),
+                       std::get<1>(it).get(), ", ", std::get<2>(it), ")");
+          int rc = detail::static_unpack_msg(&parsec_ce, world_impl.parsec_ttg_tag(), std::get<1>(it).get(), std::get<2>(it),
                                              std::get<0>(it), NULL);
           assert(rc == 0);
-          free(std::get<1>(it));
         }
 
         tmp.clear();
