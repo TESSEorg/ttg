@@ -492,8 +492,6 @@ TEST_CASE("Device", "coro") {
     ttg::ttg_fence(ttg::default_execution_context());
   };
 
-#endif // TTG_IMPL_DEVICE_SUPPORT
-
 }
 
 #endif // TTG_SERIALIZATION_SUPPORTS_MADNESS
