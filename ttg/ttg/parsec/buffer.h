@@ -82,8 +82,8 @@ namespace detail {
         /* some allocators may throw if they are out of memory */
         try {
           m_ptr = std::shared_ptr<value_type[]>(allocator_traits::allocate(m_allocator, m_size),
-                                                [&](value_type* ptr) {
-                                                  allocator_traits::deallocate(m_allocator, ptr, m_size);
+                                                [allocator = m_allocator, size = m_size](value_type* ptr) mutable {
+                                                  allocator_traits::deallocate(allocator, ptr, size);
                                                 });
         } catch(...) {
           /* fall-back to regular memory if the allocator runs dry */
@@ -96,7 +96,6 @@ namespace detail {
         if (this->device_private != nullptr) {
           auto ptr = std::move(m_ptr);
           this->device_private = nullptr;
-          this->m_ptr = nullptr;
           this->version = 0;
           this->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
           ptr.reset(); // deallocate the shared pointer
@@ -552,7 +551,7 @@ public:
   void reset_scope(ttg::scope scope) {
     if (scope == ttg::scope::Allocate) {
       m_data->device_copies[0]->version = 0;
-    } else if (scope == ttg::scope::Invalid) {
+    } else if (scope == ttg::scope::SyncIn) {
       m_data->device_copies[0]->version = 1;
       /* reset all other copies to force a sync-in */
       for (int i = 0; i < parsec_nb_devices; ++i) {
