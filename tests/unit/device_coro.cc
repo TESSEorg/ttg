@@ -42,7 +42,7 @@ struct derived_value_t {
   nested_value_t v;
 };
 
-#if defined(TTG_SERIALIZATION_SUPPORTS_MADNESS) && defined(TTG_IMPL_DEVICE_SUPPORT)
+#if defined(TTG_SERIALIZATION_SUPPORTS_MADNESS) && defined(TTG_IMPL_DEVICE_SUPPORT) && defined(TTG_HAVE_CUDA)
 namespace madness {
   namespace archive {
 
