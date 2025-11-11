@@ -42,6 +42,7 @@ int main(int argc, char **argv)
   char *opt = nullptr;
   int sequential=0;
   int ret = EXIT_SUCCESS;
+  bool connected;
 
   if( (opt = getCmdOption(argv+1, argv+argc, "-N")) != nullptr ) {
     N = M = atoi(opt);
@@ -145,11 +146,11 @@ int main(int argc, char **argv)
       std::chrono::time_point<std::chrono::high_resolution_clock> begpotrf, endpotrf;
 
       /********************** First Step: POTRF  **********************/
-      auto init_tt = make_startup(A, topotrf);
+      auto init_tt = make_load_tt(A, topotrf, defer_cow_hint);
       auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, torespotrf, defer_cow_hint);
       auto store_potrf_ttg = make_result_ttg(A, torespotrf, defer_cow_hint);
 
-      bool connected = make_graph_executable(init_tt.get());
+      connected = make_graph_executable(init_tt.get());
       assert(connected);
       TTGUNUSED(connected);
 
@@ -186,7 +187,7 @@ int main(int argc, char **argv)
         auto potri_ttg = potri::make_potri_ttg(A, topotri, toresult, defer_cow_hint);
         auto store_potri_ttg = make_result_ttg(A, toresult, defer_cow_hint);
 
-        bool connected = make_graph_executable(load_potrf.get());
+        connected = make_graph_executable(load_potrf.get());
         assert(connected);
         TTGUNUSED(connected);
         if(verbose) {
@@ -236,7 +237,7 @@ int main(int argc, char **argv)
         auto trtri_ttg = trtri_LOWER::make_trtri_ttg(A, lapack::Diag::NonUnit, totrtri, torestrtri, defer_cow_hint);
         auto store_trtri_ttg = make_result_ttg(A, torestrtri, defer_cow_hint);
 
-        bool connected = make_graph_executable(load_potrf.get());
+        connected = make_graph_executable(load_potrf.get());
         assert(connected);
         TTGUNUSED(connected);
         if(verbose) {
@@ -266,7 +267,7 @@ int main(int argc, char **argv)
         auto lauum_ttg = lauum::make_lauum_ttg(A, tolauum, toresult, defer_cow_hint);
         auto result = make_result_ttg(A, toresult, defer_cow_hint);
 
-        bool connected = make_graph_executable(load_trtri.get());
+        connected = make_graph_executable(load_trtri.get());
         assert(connected);
         TTGUNUSED(connected);
         if( verbose ) {
