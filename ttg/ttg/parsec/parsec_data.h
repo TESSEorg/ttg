@@ -34,10 +34,11 @@ namespace ttg_parsec::detail {
         device = i;
         version = data->device_copies[i]->version;
         device_copy = data->device_copies[i];
-        /* add a reader */
-        parsec_atomic_fetch_add_int32(&device_copy->readers, 1);
-        break; // found a device with the latest version
       }
+    }
+    if (device != 0) {
+        /* add a reader to the device copy */
+        parsec_atomic_fetch_add_int32(&device_copy->readers, 1);
     }
     parsec_atomic_unlock(&data->lock);
     return {device, device_copy};
