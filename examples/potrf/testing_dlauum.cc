@@ -82,7 +82,6 @@ int main(int argc, char **argv)
                                  (size_t)parsec_datadist_getsizeoftype(dcA.super.mtype));
   parsec_data_collection_set_key((parsec_data_collection_t*)&dcA, (char*)"Matrix A");
 
-  ttg::Edge<Key2, MatrixTile<double>> startup("startup");
   ttg::Edge<Key2, MatrixTile<double>> tolauum("To LAUUM");
   ttg::Edge<Key2, MatrixTile<double>> result("To result");
 
@@ -94,7 +93,7 @@ int main(int argc, char **argv)
 
   init_matrix(A, random_seed, defer_cow_hint);
 
-  auto init_tt = make_load_tt(A, startup, defer_cow_hint);
+  auto init_tt = make_load_tt(A, tolauum, defer_cow_hint);
   auto lauum_ttg = lauum::make_lauum_ttg(A, tolauum, result, defer_cow_hint);
   auto result_ttg = make_result_ttg(A, result, defer_cow_hint);
 
