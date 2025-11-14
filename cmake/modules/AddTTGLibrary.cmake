@@ -45,7 +45,7 @@ macro(add_ttg_library)
       endforeach(_dep)
 
       target_compile_definitions(${_library} PUBLIC "${ADD_TTG_LIBRARY_COMPILE_DEFINITIONS}")
-      target_compile_features(${_library} PUBLIC cxx_std_17)
+      target_compile_features(${_library} PUBLIC cxx_std_20)
 
       target_include_directories(${_library} PUBLIC
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
@@ -78,7 +78,7 @@ macro(add_ttg_library)
         endforeach(_dep)
 
         target_compile_definitions(${_library} INTERFACE "${ADD_TTG_LIBRARY_COMPILE_DEFINITIONS}")
-        target_compile_features(${_library} INTERFACE cxx_std_17)
+        target_compile_features(${_library} INTERFACE cxx_std_20)
 
         # Use current CMAKE_CXX_FLAGS to compile targets dependent on this library
         string (REPLACE " " ";" CMAKE_CXX_FLAG_LIST "${CMAKE_CXX_FLAGS}")
