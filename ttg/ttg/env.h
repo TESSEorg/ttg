@@ -10,6 +10,7 @@
 #include <umpire/strategy/QuickPool.hpp>
 #include <umpire/strategy/SizeLimiter.hpp>
 
+#include <cassert>
 #include <memory>
 #include <mutex>
 

@@ -20,7 +20,7 @@ if (NOT TARGET umpire-cxx-allocator)
   FetchContent_Declare(
       umpire-cxx-allocator
       GIT_REPOSITORY      https://github.com/ValeevGroup/umpire-cxx-allocator.git
-      GIT_TAG             ${TTG_TRACKED_UMPIRE-CXX-ALLOCATOR_TAG}
+      GIT_TAG             ${TTG_TRACKED_UMPIRE_CXX_ALLOCATOR_TAG}
   )
   FetchContent_MakeAvailable(umpire-cxx-allocator)
   FetchContent_GetProperties(umpire-cxx-allocator
