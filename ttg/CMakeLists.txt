@@ -103,6 +103,15 @@ if (TARGET Boost::headers)
   else()
       list(APPEND ttg-deps Boost::headers)
   endif()
+  # N.B. if building boost from source, must deal with some boost targets that are not built automatically if install is invoked
+  #      always build such targets even if not using
+  if (TTG_BUILT_BOOST_FROM_SOURCE)
+      foreach(_target IN LISTS Boost_MODULAR_TARGETS_NOT_BUILT_BY_INSTALL)
+          if (TARGET Boost::${_target} AND Boost::${_target} IN_LIST Boost_FOUND_TARGETS)
+              list(APPEND ttg-deps Boost::${_target})
+          endif()
+      endforeach()
+  endif()
 else () # if Boost::headers is missing must use bundled Boost.CallableTraits
   list(APPEND ttg-defs "TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1")
   list(APPEND ttg-incs
