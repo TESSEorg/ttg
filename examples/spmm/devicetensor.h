@@ -10,9 +10,8 @@
 #include <btas/btas.h>
 #include <btas/optimize/contract.h>
 #include <btas/util/mohndle.h>
-#include <TiledArray/external/device.h>
+#include <ttg/env.h>
 #include "../devblas_helper.h"
-#include <madness/world/parsec.h>  // need to initialize MADNESS purely for the purposes of TA allocators
 #else
 #warning "found btas/features.h but Boost.Iterators is missing, hence BTAS is unusable ... add -I/path/to/boost"
 #endif
@@ -35,7 +34,7 @@ namespace detail {
 /**
  * Derives from btas::Tensor and wraps a ttg::Buffer
  * to enable device support in SPMM. The ttg::Buffer
- * does not own the host memory but mananages the device
+ * does not own the host memory but manages the device
  * memory.
  */
 template <typename _T, class _Range, class _Storage>

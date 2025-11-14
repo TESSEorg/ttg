@@ -15,10 +15,11 @@ struct is_device_allocator : std::false_type {};
 template<typename T>
 struct is_device_allocator_v : is_device_allocator<T>::value {};
 
-#include <TiledArray/external/device.h>
+#include <ttg/env.h>
+
 #if defined(TILEDARRAY_HAS_DEVICE)
 template<typename T>
-using Allocator = TiledArray::device_pinned_allocator<T>;
+using Allocator = ttg::pinned_allocator_t<T>;
 
 template<typename T>
 struct is_device_allocator<TiledArray::device_pinned_allocator<T>> : std::true_type {};

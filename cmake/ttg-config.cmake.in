@@ -32,6 +32,11 @@ if (NOT TARGET PaRSEC::parsec AND PaRSEC_CONFIG)
   find_package(PaRSEC CONFIG QUIET REQUIRED COMPONENTS parsec PATHS "${PaRSEC_CONFIG_DIR}" NO_DEFAULT_PATH)
 endif()
 
+if (NOT TARGET umpire-cxx-allocator)
+  get_filename_component(umpire-cxx-allocator_DIR "@umpire-cxx-allocator_CONFIG@" DIRECTORY)
+  find_dependency(umpire-cxx-allocator 1.0.0 QUIET CONFIG REQUIRED HINTS "${umpire-cxx-allocator_DIR}")
+endif()
+
 # if C++ coroutines were used discover same version of them
 if (NOT TARGET std::coroutine AND CXX_COROUTINE_COMPONENT)
   find_package(CXXStdCoroutine MODULE QUIET REQUIRED COMPONENTS "${CXX_COROUTINE_COMPONENT}")
