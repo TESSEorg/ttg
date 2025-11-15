@@ -93,8 +93,10 @@ endif (BUILD_TESTING)
 ###########################
 #### optional prerequisites
 ###########################
-# Boost
-include("${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchBoost.cmake")
+# Boost: only truly needed if TTG_PARSEC_USE_BOOST_SERIALIZATION=ON or building examples
+if (TTG_PARSEC_USE_BOOST_SERIALIZATION OR TTG_EXAMPLES)
+  include("${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchBoost.cmake")
+endif()
 
 if (TTG_ENABLE_COROUTINES)
     set(SKIP_COROUTINE_DETECTION FALSE)
