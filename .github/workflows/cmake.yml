@@ -165,6 +165,8 @@ jobs:
         git config --global user.email "eduard@valeyev.net"
         git config --global user.name "GitHub Actions"
         cmake --build . --target html
+        ls -l ./doc/dox
+        ls -l ${{github.workspace}}/build/doc/dox
         git clone --depth=1 https://github.com/TESSEorg/ttg.git --branch gh-pages --single-branch ttg-docs-current
         git clone --depth=1 https://github.com/TESSEorg/ttg.git --branch gh-pages-template --single-branch ttg-docs-template
         cmake -E make_directory ttg-docs
