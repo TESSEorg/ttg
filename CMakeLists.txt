@@ -93,8 +93,10 @@ endif (BUILD_TESTING)
 ###########################
 #### optional prerequisites
 ###########################
-# Boost
-include("${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchBoost.cmake")
+# Boost: only truly needed if TTG_PARSEC_USE_BOOST_SERIALIZATION=ON or building examples
+if (TTG_PARSEC_USE_BOOST_SERIALIZATION OR TTG_EXAMPLES)
+  include("${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchBoost.cmake")
+endif()
 
 if (TTG_ENABLE_COROUTINES)
     set(SKIP_COROUTINE_DETECTION FALSE)
@@ -184,9 +186,15 @@ if (TTG_HAVE_CUDA OR TTG_HAVE_HIP OR TTG_HAVE_LEVEL_ZERO)
 endif()
 set(TTG_HAVE_DEVICE ${_ttg_have_device} CACHE BOOL "True if TTG has support for any device programming model")
 
-##########################
-#### prerequisite runtimes
-##########################
+############################
+#### mandatory prerequisites
+############################
+add_custom_target(ttg-imported-packages-build)
+# umpire-cxx-allocator only used for device code
+if (TTG_HAVE_CUDA OR TTG_HAVE_HIP OR TTG_HAVE_LEVEL_ZERO)
+  include(FindOrFetchUmpireCXXAllocator)
+endif()
+add_dependencies(ttg-imported-packages-build vrg-build-external-projects)
 # PaRSEC
 include(FindOrFetchPARSEC)
 if (TARGET PaRSEC::parsec)

@@ -50,6 +50,7 @@ set(ttg-impl-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/devicescope.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/devicescratch.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/edge.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/env.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/execution.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/func.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/fwd.h
@@ -102,6 +103,15 @@ if (TARGET Boost::headers)
   else()
       list(APPEND ttg-deps Boost::headers)
   endif()
+  # N.B. if building boost from source, must deal with some boost targets that are not built automatically if install is invoked
+  #      always build such targets even if not using
+  if (TTG_BUILT_BOOST_FROM_SOURCE)
+      foreach(_target IN LISTS Boost_MODULAR_TARGETS_NOT_BUILT_BY_INSTALL)
+          if (TARGET Boost::${_target} AND Boost::${_target} IN_LIST Boost_FOUND_TARGETS)
+              list(APPEND ttg-deps Boost::${_target})
+          endif()
+      endforeach()
+  endif()
 else () # if Boost::headers is missing must use bundled Boost.CallableTraits
   list(APPEND ttg-defs "TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1")
   list(APPEND ttg-incs
@@ -132,6 +142,10 @@ if (TTG_HAVE_LEVEL_ZERO)
   list(APPEND ttg-deps level_zero::ze_loader)
 endif (TTG_HAVE_LEVEL_ZERO)
 
+if (TARGET umpire-cxx-allocator)
+  list(APPEND ttg-deps umpire-cxx-allocator)
+endif()
+
 set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers};${ttg_device_headers})
 if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
   list(APPEND ttg-sources ${ttg-external-headers})
@@ -139,6 +153,8 @@ if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
 endif()
 
 add_ttg_library(ttg "${ttg-sources}" PUBLIC_HEADER "${ttg-public-headers}" LINK_LIBRARIES "${ttg-deps}" INCLUDE_DIRECTORIES "${ttg-incs}" COMPILE_DEFINITIONS "${ttg-defs}")
+# for non-fetchcontentable packages like Umpire need to add dependence of TTG on Umpire's custom build target
+add_dependencies(ttg ttg-imported-packages-build)
 
 ########################
 ####### Serialization
