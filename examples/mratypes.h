@@ -2,6 +2,7 @@
 #define MADTYPES_H_INCL
 
 #include <complex>
+#include <cstdint>
 #include <iostream>
 
 namespace mra {
