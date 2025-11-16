@@ -16,3 +16,7 @@ if (TTG_EXAMPLES)
 else()
   set(TTG_OLDEST_BOOST_VERSION 1.66)
 endif()
+
+# oldest Doxygen we can tolerate ... doxygen-awesome-css requires doxygen 1.9.1 - 1.9.4 or 1.9.6 - 1.14.0, so just use 1.9.6 as the minimum
+set(TTG_OLDEST_DOXYGEN_VERSION 1.9.6)
+set(TTG_TRACKED_DOXYGEN_AWESOME_CSS_VERSION v2.4.1)
