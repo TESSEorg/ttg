@@ -5,15 +5,16 @@
 #include "pmw.h"
 
 template <typename T>
-auto make_plgsy(MatrixT<T>& A, unsigned long bump, unsigned long random_seed, ttg::Edge<Key2, void>& input, ttg::Edge<Key2, MatrixTile<T>>& output) {
-  auto f = [=](const Key2& key, std::tuple< ttg::Out<Key2, MatrixTile<T>> >& out) {
+auto make_plgsy(MatrixT<T>& A, unsigned long bump, unsigned long random_seed,
+                ttg::Edge<Key2, MatrixTile<double>>& input, ttg::Edge<Key2, MatrixTile<T>>& output) {
+  auto f = [=](const Key2& key, MatrixTile<double>&& tile,
+               std::tuple< ttg::Out<Key2, MatrixTile<T>> >& out) {
     /* write back any tiles that are not in the matrix already */
     const int I = key[0];
     const int J = key[1];
     if(ttg::tracing()) ttg::print("PLGSY( ", key, ") on rank ", A.rank_of(key[0], key[1]));
     assert(A.is_local(I, J));
 
-    auto tile = A(I, J);
     T *a = tile.data();
     int tempmm, tempnn, ldam;
 
@@ -33,7 +34,9 @@ auto make_plgsy(MatrixT<T>& A, unsigned long bump, unsigned long random_seed, tt
   return ttg::make_tt(f, ttg::edges(input), ttg::edges(output), "PLGSY", {"startup"}, {"output"});
 }
 
-auto make_plgsy_ttg(MatrixT<double> &A, unsigned long bump, unsigned long random_seed, ttg::Edge<Key2, void>& startup, ttg::Edge<Key2, MatrixTile<double>>&result, bool defer_write) {
+auto make_plgsy_ttg(MatrixT<double> &A, unsigned long bump, unsigned long random_seed,
+                    ttg::Edge<Key2, MatrixTile<double>>& startup,
+                    ttg::Edge<Key2, MatrixTile<double>>&result, bool defer_write) {
   auto keymap2 = [&](const Key2& key) {
     return A.rank_of(key[0], key[1]);
   };

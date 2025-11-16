@@ -8,8 +8,8 @@
 #include <ttg.h>
 #include <ttg/serialization/std/tuple.h>
 
+#include "init_matrix.h"
 #include "lauum.h"
-#include "plgsy.h"
 #include "pmw.h"
 #include "result.h"
 
@@ -82,7 +82,6 @@ int main(int argc, char **argv)
                                  (size_t)parsec_datadist_getsizeoftype(dcA.super.mtype));
   parsec_data_collection_set_key((parsec_data_collection_t*)&dcA, (char*)"Matrix A");
 
-  ttg::Edge<Key2, void> startup("startup");
   ttg::Edge<Key2, MatrixTile<double>> tolauum("To LAUUM");
   ttg::Edge<Key2, MatrixTile<double>> result("To result");
 
@@ -92,19 +91,9 @@ int main(int argc, char **argv)
   /* This works only with the parsec backend! */
   int random_seed = 3872;
 
-  auto init_tt =  ttg::make_tt<void>([&](std::tuple<ttg::Out<Key2, void>>& out) {
-    for(int i = 0; i < A.rows(); i++) {
-      for(int j = 0; j <= i && j < A.cols(); j++) {
-        if(A.is_local(i, j)) {
-          if(ttg::tracing()) ttg::print("init(", Key2{i, j}, ")");
-          ttg::sendk<0>(Key2{i, j}, out);
-        }
-      }
-    }
-  }, ttg::edges(), ttg::edges(startup), "Startup Trigger", {}, {"startup"});
-  init_tt->set_keymap([&]() {return world.rank();});
+  init_matrix(A, random_seed, defer_cow_hint);
 
-  auto plgsy_ttg = make_plgsy_ttg(A, N, random_seed, startup, tolauum, defer_cow_hint);
+  auto init_tt = make_load_tt(A, tolauum, defer_cow_hint);
   auto lauum_ttg = lauum::make_lauum_ttg(A, tolauum, result, defer_cow_hint);
   auto result_ttg = make_result_ttg(A, result, defer_cow_hint);
 

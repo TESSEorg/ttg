@@ -31,10 +31,8 @@ namespace ttg_parsec {
         if constexpr (std::is_const_v<view_type>) {
           // keep the flow at RW if it was RW to make sure we pull the data back out eventually
           access = PARSEC_FLOW_ACCESS_READ;
-        } else if constexpr (ttg::meta::is_devicescratch_v<view_type>) {
-          if (view.scope() == ttg::scope::Allocate) {
-            access = PARSEC_FLOW_ACCESS_WRITE;
-          }
+        } else if (view.scope() == ttg::scope::Allocate) {
+          access = PARSEC_FLOW_ACCESS_WRITE;
         }
 
         /* build the flow */
@@ -125,7 +123,6 @@ namespace ttg_parsec {
 
     bool is_current = false;
     for (i = 0; i < span.size(); ++i) {
-      /* get_parsec_data is overloaded for buffer and devicescratch */
       parsec_data_t* data = span[i].impl_data;
       ttg::scope scope = span[i].scope;
       bool is_const = span[i].is_const;
@@ -133,10 +130,10 @@ namespace ttg_parsec {
 
       if (nullptr != data) {
         auto access = PARSEC_FLOW_ACCESS_RW;
-        if (ttg::scope::Allocate == scope) {
-          access = PARSEC_FLOW_ACCESS_WRITE;
-        } else if (is_const) {
+        if (is_const) {
           access = PARSEC_FLOW_ACCESS_READ;
+        } else if (ttg::scope::Allocate == scope) {
+          access = PARSEC_FLOW_ACCESS_WRITE;
         }
 
         if (is_scratch) {
@@ -145,7 +142,8 @@ namespace ttg_parsec {
         }
 
         /* build the flow */
-        /* TODO: reuse the flows of the task class? How can we control the sync direction then? */
+        /* TODO: we can probably remove the initialization here
+         *       because that's been done on task creation */
         flows[i] = parsec_flow_t{.name = nullptr,
                                 .sym_type = PARSEC_SYM_INOUT,
                                 .flow_flags = static_cast<uint8_t>(access),
@@ -161,9 +159,24 @@ namespace ttg_parsec {
         assert(nullptr != data->device_copies[0]->original);
         caller->parsec_task.data[i].data_in = data->device_copies[0];
         caller->parsec_task.data[i].source_repo_entry = NULL;
+        // sanity check: we cannot sync in something that does not exist
+        if (scope == ttg::scope::SyncIn && data->device_copies[0]->version > 0) {
+#ifndef NDEBUG
+          // have to lock the data to avoid a race condition with the GPU manager
+          parsec_atomic_lock(&data->lock);
+          if (scope == ttg::scope::SyncIn && data->device_copies[0]->version > 0) {
+            // TODO: this assert would be nice to have but it's still failing spuriously
+            //       due to a race with PaRSEC.
+            //assert(data->device_copies[0]->device_private != NULL);
+          }
+          parsec_atomic_unlock(&data->lock);
+#endif
+        }
 
       } else {
         /* ignore the flow */
+        /* TODO: we can probably remove the initialization here
+         *       because that's been done on task creation */
         flows[i] = parsec_flow_t{.name = nullptr,
                                  .sym_type = PARSEC_FLOW_ACCESS_NONE,
                                  .flow_flags = 0,
@@ -199,13 +212,18 @@ namespace ttg_parsec {
       parsec_gpu_exec_stream_t *stream = detail::parsec_ttg_caller->dev_ptr->stream;
 
       /* enqueue the transfer into the compute stream to come back once the compute and transfer are complete */
-      if (data->owner_device != 0) {
+      if (nullptr != data && data->owner_device != 0) {
         parsec_device_gpu_module_t *device_module = detail::parsec_ttg_caller->dev_ptr->device;
+        if (nullptr == data->device_copies[0]->device_private) {
+          assert(nullptr != data->device_copies[0]->alloc_cb);
+          data->device_copies[0]->alloc_cb(data->device_copies[0], 0);
+        }
+
         int ret = device_module->memcpy_async(device_module, stream,
                                               data->device_copies[0]->device_private,
                                               data->device_copies[data->owner_device]->device_private,
                                               data->nb_elts, parsec_device_gpu_transfer_direction_d2h);
-        assert(ret == PARSEC_SUCCESS);
+        if (ret != PARSEC_SUCCESS) throw std::runtime_error("Failed to copy data from device to host!");
       }
       if constexpr (sizeof...(Is) > 0) {
         // recursion

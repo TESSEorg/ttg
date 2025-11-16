@@ -864,6 +864,7 @@ namespace ttg_parsec {
           : _keylist(std::move(key)), _outstanding_transfers(num_transfers), _cb(cb), _copy(copy) {}
 
       bool complete_transfer(void) {
+        assert(_outstanding_transfers > 0);
         int left = --_outstanding_transfers;
         if (0 == left) {
           _cb(std::move(_keylist), _copy);
@@ -963,10 +964,6 @@ namespace ttg_parsec {
       int32_t readers = copy_in->num_readers();
       assert(readers != 0);
 
-      /* try hard to defer writers if we cannot make copies
-       * if deferral fails we have to bail out */
-      bool defer_writer = (!std::is_copy_constructible_v<std::decay_t<Value>>) || task->defer_writer;
-
       if (readonly && !copy_in->is_mutable()) {
         /* simply increment the number of readers */
         readers = copy_in->increment_readers();
@@ -1005,6 +1002,11 @@ namespace ttg_parsec {
          *       (current task) or there are others, in which we case won't
          *       touch it.
          */
+        /* try hard to defer writers if we cannot make copies
+         * if deferral fails we have to bail out */
+        bool defer_writer = (!std::is_copy_constructible_v<std::decay_t<Value>>) ||
+                            ((nullptr != task) && task->defer_writer);
+
         if (1 == copy_in->num_readers() && !defer_writer) {
           /**
            * no other readers, mark copy as mutable and defer the release
@@ -1451,7 +1453,13 @@ namespace ttg_parsec {
       // get the promise which contains the views
       auto dev_data = dev_task.promise();
 
-      /* we should still be waiting for the transfer to complete */
+      if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT) {
+        /* The device task is sending out already but we go through the device scheduler
+         * for a pushout. We just report this task done, no callbacks to invoke. */
+        return PARSEC_HOOK_RETURN_DONE;
+      }
+
+      /* we're waiting for the initial transfers or for the kernel to complete */
       assert(dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_TRANSFER ||
              dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_WAIT_KERNEL);
 
@@ -1534,6 +1542,17 @@ namespace ttg_parsec {
         gpu_task->last_data_check_epoch = std::numeric_limits<uint64_t>::max(); // used internally
         gpu_task->pushout = 0;
         gpu_task->submit = &TT::device_static_submit;
+        parsec_flow_t *flows = task->dev_ptr->flows;
+        /* set up flow information so it is available for pushout */
+        for (uint8_t i = 0; i < MAX_PARAM_COUNT; ++i) {
+          gpu_task->flow[i] = &flows[i]; // will be set in register_device_memory
+          /* ignore the flow */
+          flows[i] = parsec_flow_t{.name = nullptr,
+                                   .sym_type = PARSEC_FLOW_ACCESS_NONE,
+                                   .flow_flags = 0,
+                                   .flow_index = i,
+                                   .flow_datatype_mask = ~0 };
+        }
 
         // one way to force the task device
         // currently this will probably break all of PaRSEC if this hint
@@ -1575,7 +1594,7 @@ namespace ttg_parsec {
           }
           for (int i = 0; i < MAX_PARAM_COUNT; ++i) {
             /* only set on mutable data since we have exclusive access */
-            if (tc.in[i]->flow_flags & PARSEC_FLOW_ACCESS_WRITE) {
+            if (tc.in[i] != nullptr && (tc.in[i]->flow_flags & PARSEC_FLOW_ACCESS_WRITE)) {
               parsec_data_t *data = parsec_task->data[i].data_in->original;
               /* only set the preferred device if the host has the latest copy
                * as otherwise we may end up with the wrong data if there is a newer
@@ -1619,9 +1638,18 @@ namespace ttg_parsec {
       // get the promise which contains the views
       ttg::device::detail::device_task_promise_type& dev_data = dev_task.promise();
 
-      if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT ||
-          dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_COMPLETE) {
-        /* the task jumped directly to send or returned so we're done */
+      parsec_gpu_task_t *gpu_task = task->dev_ptr->gpu_task;
+
+      if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_SENDOUT) {
+        /* check if any of the copies needs to be pushed out
+         * if so, we need to push the task into the scheduler where the pushout can happen */
+        if (gpu_task->pushout == 0) {
+          return PARSEC_HOOK_RETURN_DONE;
+        }
+      }
+
+      if (dev_data.state() == ttg::device::detail::TTG_DEVICE_CORO_COMPLETE) {
+        /* the task returned immediately so we're done */
         return PARSEC_HOOK_RETURN_DONE;
       }
 
@@ -1629,7 +1657,6 @@ namespace ttg_parsec {
       assert(NULL != device);
 
       task->dev_ptr->device = device;
-      parsec_gpu_task_t *gpu_task = task->dev_ptr->gpu_task;
       parsec_execution_stream_s *es = task->tt->world.impl().execution_stream();
 
       switch(device->super.type) {
@@ -2110,30 +2137,6 @@ namespace ttg_parsec {
             copy = detail::create_new_datacopy(descr.create_from_metadata(metadata));
           } else if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
             copy = detail::create_new_datacopy(decvalueT{});
-#if 0
-            // TODO: first attempt at sending directly to the device
-            parsec_gpu_data_copy_t* gpu_elem;
-            gpu_elem = PARSEC_DATA_GET_COPY(master, gpu_device->super.device_index);
-            int i = detail::first_device_id;
-            int devid = detail::first_device_id;
-            while (i < parsec_nb_devices) {
-              if (nullptr == gpu_elem) {
-                gpu_elem = PARSEC_OBJ_NEW(parsec_data_copy_t);
-                gpu_elem->flags = PARSEC_DATA_FLAG_PARSEC_OWNED | PARSEC_DATA_FLAG_PARSEC_MANAGED;
-                gpu_elem->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
-                gpu_elem->version = 0;
-                gpu_elem->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
-              }
-              if (nullptr == gpu_elem->device_private) {
-                gpu_elem->device_private = zone_malloc(gpu_device->memory, gpu_task->flow_nb_elts[i]);
-                if (nullptr == gpu_elem->device_private) {
-                  devid++;
-                  continue;
-                }
-                break;
-              }
-            }
-#endif // 0
             /* unpack the object, potentially discovering iovecs */
             pos = unpack(*static_cast<decvalueT *>(copy->get_ptr()), msg->bytes, pos);
           }
@@ -2159,11 +2162,17 @@ namespace ttg_parsec {
               std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
               pos += sizeof(cbtag);
 
+              copy->add_ref(); // so we can safely decrement the readers in the activation
               /* create the value from the metadata */
               auto activation = new detail::rma_delayed_activate(
-                  std::move(keylist), copy, num_iovecs, [this](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
+                  std::move(keylist), copy, num_iovecs, [this, &val](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
                     set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
                     this->world.impl().decrement_inflight_msg();
+                    detail::foreach_parsec_data(val, [&](parsec_data_t* data){
+                      /* decrement readers we incremented before the transfer */
+                      parsec_atomic_fetch_dec_int32(&data->device_copies[data->owner_device]->readers);
+                    });
+                    copy->drop_ref();
                   });
               return activation;
             };
@@ -2202,6 +2211,41 @@ namespace ttg_parsec {
                             /*world.impl().parsec_ttg_rma_tag()*/
                             cbtag, &fn_ptr, sizeof(std::intptr_t));
             };
+            /* make sure all buffers are properly allocated */
+            ttg::detail::buffer_apply(val, [&]<typename T, typename A>(const ttg::Buffer<T, A>& b){
+              /* cast away const */
+              auto& buffer = const_cast<ttg::Buffer<T, A>&>(b);
+              /* remember which device we used last time */
+              static auto last_device = ttg::device::Device{0, Space};
+              ttg::device::Device device;
+              if (inline_data || !world.impl().mpi_support(Space))  {
+                device = ttg::device::Device::host(); // have to allocate on host
+              } else if (!keylist.empty() && devicemap) {
+                device = devicemap(keylist[0]); // pick a device we know will use the data
+              } else {
+                device = last_device; // use the previously used device
+              }
+              // remember where we started so we can cycle through all devices once
+              auto start_device = device;
+              do {
+                /* try to allocate on any device */
+                try {
+                  buffer.allocate_on(device);
+                  buffer.set_owner_device(device);
+                  break;
+                } catch (const std::bad_alloc&) {
+                  device = device.cycle();
+                  if (device == start_device) {
+                    /* make sure we have memory on the host */
+                    buffer.allocate_on(ttg::device::Device::host());
+                    break; // failed to find a device that works
+                  }
+                  last_device = device;
+                }
+              } while(true);
+            });
+
+            /* kick off transfers */
             if constexpr (ttg::has_split_metadata<decvalueT>::value) {
               ttg::SplitMetadataDescriptor<decvalueT> descr;
               if (inline_data) {
@@ -2222,6 +2266,7 @@ namespace ttg_parsec {
               } else {
                 auto activation = create_activation_fn();
                 detail::foreach_parsec_data(val, [&](parsec_data_t* data){
+                  parsec_atomic_fetch_inc_int32(&data->device_copies[data->owner_device]->readers);
                   handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private}, activation);
                 });
               }
@@ -2851,7 +2896,7 @@ namespace ttg_parsec {
             pos += sizeof(cbtag);
           }
         };
-        auto handle_iovec_fn = [&](auto&& iovec){
+        auto handle_iovec_fn = [&](auto&& iovec, parsec_data_copy_t *device_copy = nullptr) {
 
           if (inline_data) {
             /* inline data is packed right after the tt_id in the message */
@@ -2869,9 +2914,13 @@ namespace ttg_parsec {
             /* TODO: only register once when we can broadcast the data! */
             parsec_ce.mem_register(iovec.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iovec.num_bytes, parsec_datatype_int8_t,
                                    iovec.num_bytes, &lreg, &lreg_size);
-            auto lreg_ptr = std::shared_ptr<void>{lreg, [](void *ptr) {
+            auto lreg_ptr = std::shared_ptr<void>{lreg, [device_copy](void *ptr) {
                                                     parsec_ce_mem_reg_handle_t memreg = (parsec_ce_mem_reg_handle_t)ptr;
                                                     parsec_ce.mem_unregister(&memreg);
+                                                    if (device_copy != nullptr) {
+                                                      /* remove a reader */
+                                                      parsec_atomic_fetch_sub_int32(&device_copy->readers, 1);
+                                                    }
                                                   }};
             int32_t lreg_size_i = lreg_size;
             std::memcpy(msg->bytes + pos, &lreg_size_i, sizeof(lreg_size_i));
@@ -2883,8 +2932,8 @@ namespace ttg_parsec {
             std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
               /* shared_ptr of value and registration captured by value so resetting
               * them here will eventually release the memory/registration */
-              detail::release_data_copy(copy);
               lreg_ptr.reset();
+              detail::release_data_copy(copy);
             });
             std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
             std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
@@ -2912,7 +2961,14 @@ namespace ttg_parsec {
           /* handle any iovecs contained in it */
           write_header_fn();
           detail::foreach_parsec_data(value, [&](parsec_data_t *data){
-            handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private});
+            int device = 0;
+            parsec_data_copy_t* device_copy = nullptr;
+            if (world.impl().mpi_support(Space) && Space != ttg::ExecutionSpace::Host) {
+              /* Try to find a device that is not the host and has the latest version. */
+              std::tie(device, device_copy) = detail::find_device_copy(data);
+            }
+            handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[device]->device_private},
+                            device_copy);
           });
         }
 
@@ -3046,7 +3102,7 @@ namespace ttg_parsec {
             pos += sizeof(cbtag);
           }
         };
-        auto handle_iov_fn = [&](auto&& iovec){
+        auto handle_iov_fn = [&](auto&& iovec, parsec_data_copy_t *device_copy = nullptr){
           if (inline_data) {
             /* inline data is packed right after the tt_id in the message */
             std::memcpy(msg->bytes + pos, iovec.data, iovec.num_bytes);
@@ -3057,14 +3113,21 @@ namespace ttg_parsec {
             parsec_ce.mem_register(iovec.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iovec.num_bytes, parsec_datatype_int8_t,
                                    iovec.num_bytes, &lreg, &lreg_size);
             /* TODO: use a static function for deregistration here? */
-            memregs.push_back(std::make_pair(static_cast<int32_t>(lreg_size),
-                                            /* TODO: this assumes that parsec_ce_mem_reg_handle_t is void* */
-                                            std::shared_ptr<void>{lreg, [](void *ptr) {
-                                                                    parsec_ce_mem_reg_handle_t memreg =
-                                                                        (parsec_ce_mem_reg_handle_t)ptr;
-                                                                    //std::cout << "broadcast_arg memunreg lreg " << memreg << std::endl;
-                                                                    parsec_ce.mem_unregister(&memreg);
-                                                                  }}));
+            memregs.push_back(
+              std::make_pair(static_cast<int32_t>(lreg_size),
+                             /* TODO: this assumes that parsec_ce_mem_reg_handle_t is void* */
+                             std::shared_ptr<void>{lreg,
+                                                  [device_copy](void *ptr) {
+                                                    parsec_ce_mem_reg_handle_t memreg =
+                                                        (parsec_ce_mem_reg_handle_t)ptr;
+                                                    //std::cout << "broadcast_arg memunreg lreg " << memreg << std::endl;
+                                                    parsec_ce.mem_unregister(&memreg);
+                                                    if (device_copy != nullptr) {
+                                                      /* remove a reader */
+                                                      parsec_atomic_fetch_sub_int32(&device_copy->readers, 1);
+                                                    }
+                                                  }})
+            );
             //std::cout << "broadcast_arg memreg lreg " << lreg << std::endl;
           }
         };
@@ -3089,8 +3152,15 @@ namespace ttg_parsec {
           memregs.reserve(num_iovs);
           write_iov_header();
           detail::foreach_parsec_data(value, [&](parsec_data_t *data){
+            int device = 0;
+            parsec_data_copy_t* device_copy = nullptr;
+            if (world.impl().mpi_support(Space) && Space != ttg::ExecutionSpace::Host) {
+              /* Try to find a device that is not the host and has the latest version. */
+              std::tie(device, device_copy) = detail::find_device_copy(data);
+            }
             handle_iov_fn(ttg::iovec{data->nb_elts,
-                                     data->device_copies[data->owner_device]->device_private});
+                                     data->device_copies[device]->device_private},
+                          device_copy);
           });
         }
 
@@ -3135,8 +3205,8 @@ namespace ttg_parsec {
               std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
                 /* shared_ptr of value and registration captured by value so resetting
                   * them here will eventually release the memory/registration */
-                detail::release_data_copy(copy);
                 lreg_ptr.reset();
+                detail::release_data_copy(copy);
               });
               std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
               std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
@@ -3462,6 +3532,7 @@ namespace ttg_parsec {
           /* find the flow */
           int flowidx = 0;
           while (flowidx < MAX_PARAM_COUNT &&
+                gpu_task->flow[flowidx] != nullptr &&
                 gpu_task->flow[flowidx]->flow_flags != PARSEC_FLOW_ACCESS_NONE) {
             if (detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in->original == data) {
               /* found the right data, set the corresponding flow as pushout */
@@ -3475,10 +3546,11 @@ namespace ttg_parsec {
           if (gpu_task->flow[flowidx]->flow_flags == PARSEC_FLOW_ACCESS_NONE) {
             /* no flow found, add one and mark it pushout */
             detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in = data->device_copies[0];
+            detail::parsec_ttg_caller->parsec_task.data[flowidx].data_out = data->device_copies[data->owner_device];
             gpu_task->flow_nb_elts[flowidx] = data->nb_elts;
           }
-          /* need to mark the flow RW to make PaRSEC happy */
-          ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_RW;
+          /* need to mark the flow WRITE, otherwise PaRSEC will not do the pushout */
+          ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_WRITE;
           gpu_task->pushout |= 1<<flowidx;
         }
       };
@@ -3564,14 +3636,7 @@ namespace ttg_parsec {
 
       /* check if there are non-local successors if it's a device task */
       if (!need_pushout) {
-        bool device_supported = false;
-        if constexpr (derived_has_cuda_op()) {
-          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::CUDA);
-        } else if constexpr (derived_has_hip_op()) {
-          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::HIP);
-        } else if constexpr (derived_has_level_zero_op()) {
-          device_supported = world.impl().mpi_support(ttg::ExecutionSpace::L0);
-        }
+        bool device_supported = world.impl().mpi_support(Space);
         /* if MPI supports the device we don't care whether we have remote peers
          * because we can send from the device directly */
         if (!device_supported) {

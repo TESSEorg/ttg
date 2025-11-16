@@ -47,7 +47,7 @@ namespace ttg {
     // movable
     TTG(TTG &&other)
         : TTBase(static_cast<TTBase &&>(other))
-        , tts(other.tts)
+        , tts(std::move(other.tts))
         , ins(std::move(other.ins))
         , outs(std::move(other.outs)) {
       is_ttg_ = true;

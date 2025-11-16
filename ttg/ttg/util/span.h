@@ -28,6 +28,7 @@ Code taken from https://github.com/tcbrindle/span/
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
+#include <exception>
 
 #ifndef TCB_SPAN_NO_EXCEPTIONS
 // Attempt to discover whether we're being compiled with exception support

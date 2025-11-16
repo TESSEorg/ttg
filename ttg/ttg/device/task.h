@@ -392,14 +392,14 @@ namespace ttg::device {
       RangesT kl = std::forward<RangesT>(keylists); // capture the keylist(s)
       if constexpr (ttg::meta::is_tuple_v<RangesT>) {
         // treat as tuple
-        prepare_broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value), t);
+        prepare_broadcast<0, I, Is...>(kl, std::forward<valueT>(value), t);
         co_await ttg::Void{}; // we'll come back once the task is done
-        ttg::device::detail::broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value), t);
+        ttg::device::detail::broadcast<0, I, Is...>(kl, std::forward<valueT>(value), t);
       } else if constexpr (!ttg::meta::is_tuple_v<RangesT>) {
         // create a tie to the captured keylist
-        prepare_broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value), t);
+        prepare_broadcast<0, I, Is...>(std::tie(kl), std::forward<valueT>(value), t);
         co_await ttg::Void{}; // we'll come back once the task is done
-        ttg::device::detail::broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value), t);
+        ttg::device::detail::broadcast<0, I, Is...>(std::tie(kl), std::forward<valueT>(value), t);
       }
     }
 
@@ -415,14 +415,14 @@ namespace ttg::device {
         // treat as tuple
         static_assert(sizeof...(Is)+1 == std::tuple_size_v<RangesT>,
                       "Size of keylist tuple must match the number of output terminals");
-        prepare_broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value));
+        prepare_broadcast<0, I, Is...>(kl, std::forward<valueT>(value));
         co_await ttg::Void{}; // we'll come back once the task is done
-        ttg::device::detail::broadcast<0, I, Is...>(kl, std::forward<std::decay_t<decltype(value)>>(value));
+        ttg::device::detail::broadcast<0, I, Is...>(kl, std::forward<valueT>(value));
       } else if constexpr (!ttg::meta::is_tuple_v<RangesT>) {
         // create a tie to the captured keylist
-        prepare_broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value));
+        prepare_broadcast<0, I, Is...>(std::tie(kl), std::forward<valueT>(value));
         co_await ttg::Void{}; // we'll come back once the task is done
-        ttg::device::detail::broadcast<0, I, Is...>(std::tie(kl), std::forward<std::decay_t<decltype(value)>>(value));
+        ttg::device::detail::broadcast<0, I, Is...>(std::tie(kl), std::forward<valueT>(value));
       }
     }
 

@@ -71,10 +71,8 @@ namespace madness {
       : m_fn(fn)
       { }
 
-      /// Stores (counts) data into the memory buffer.
 
-      /// The function only appears (due to \c enable_if) if \c T is
-      /// serializable.
+      /// Apply function to ttg::Buffer.
       /// \tparam T Type of the data to be stored (counted).
       /// \param[in] t Pointer to the data to be stored (counted).
       /// \param[in] n Size of data to be stored (counted).

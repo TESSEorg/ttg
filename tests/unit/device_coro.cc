@@ -42,7 +42,7 @@ struct derived_value_t {
   nested_value_t v;
 };
 
-#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
+#if defined(TTG_SERIALIZATION_SUPPORTS_MADNESS) && defined(TTG_IMPL_DEVICE_SUPPORT) && defined(TTG_HAVE_CUDA)
 namespace madness {
   namespace archive {
 
@@ -77,11 +77,6 @@ TEST_CASE("Device", "coro") {
     i = 0;
     ttg::detail::buffer_apply(v2, [&]<typename T>(const ttg::Buffer<T>& b){ i++; });
   }
-}
-
-#if defined(TTG_HAVE_DEVICE) && defined(TTG_IMPL_DEVICE_SUPPORT)
-
-TEST_CASE("Device", "coro") {
 
   SECTION("devicebuf") {
 
@@ -498,7 +493,5 @@ TEST_CASE("Device", "coro") {
   };
 
 }
-
-#endif // TTG_IMPL_DEVICE_SUPPORT
 
 #endif // TTG_SERIALIZATION_SUPPORTS_MADNESS

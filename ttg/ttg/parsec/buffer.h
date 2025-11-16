@@ -7,6 +7,8 @@
 #include <parsec.h>
 #include <parsec/data_internal.h>
 #include <parsec/mca/device/device.h>
+#include <parsec/mca/device/device_gpu.h>
+#include <parsec/utils/zone_malloc.h>
 #include "ttg/parsec/ttg_data_copy.h"
 #include "ttg/parsec/parsec-ext.h"
 #include "ttg/util/iovec.h"
@@ -61,6 +63,10 @@ namespace detail {
     using allocator_type = typename allocator_traits::allocator_type;
     using value_type = typename allocator_traits::value_type;
 
+    /* always allocate host memory if the host is the only execution space available */
+    static constexpr bool always_allocate_on_host
+                          = (ttg::device::available_execution_space == ttg::ExecutionSpace::Host);
+
     /* used as a hook into the PaRSEC object management system
      * so we can release the memory back to the allocator once
      * data copy is destroyed */
@@ -69,21 +75,41 @@ namespace detail {
     private:
       [[no_unique_address]]
       allocator_type m_allocator;
-      PtrT m_ptr; // keep a reference if PtrT is a shared_ptr
+      PtrT m_ptr;
       std::size_t m_size;
 
-      void allocate(std::size_t size) {
-        if constexpr (std::is_pointer_v<PtrT>) {
-          m_ptr = allocator_traits::allocate(m_allocator, size);
+      void do_allocate() {
+        /* some allocators may throw if they are out of memory */
+        try {
+          m_ptr = std::shared_ptr<value_type[]>(allocator_traits::allocate(m_allocator, m_size),
+                                                [allocator = m_allocator, size = m_size](value_type* ptr) mutable {
+                                                  allocator_traits::deallocate(allocator, ptr, size);
+                                                });
+        } catch(...) {
+          /* fall-back to regular memory if the allocator runs dry */
+          m_ptr = std::make_shared<value_type[]>(m_size);
         }
-        this->device_private = m_ptr;
-        m_size = size;
+        this->device_private = m_ptr.get();
       }
 
-      void deallocate() {
-        allocator_traits::deallocate(m_allocator, static_cast<value_type*>(this->device_private), this->m_size);
-        this->device_private = nullptr;
-        this->m_size = 0;
+      void do_deallocate() {
+        if (this->device_private != nullptr) {
+          auto ptr = std::move(m_ptr);
+          this->device_private = nullptr;
+          this->version = 0;
+          this->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
+          ptr.reset(); // deallocate the shared pointer
+        }
+      }
+
+      static void allocate(parsec_data_copy_t *parsec_copy, int device) {
+        data_copy_type* copy = static_cast<data_copy_type*>(parsec_copy);
+        copy->do_allocate();
+      }
+
+      static void deallocate(parsec_data_copy_t *parsec_copy, int device) {
+        data_copy_type* copy = static_cast<data_copy_type*>(parsec_copy);
+        copy->do_deallocate();
       }
 
     public:
@@ -95,25 +121,44 @@ namespace detail {
       data_copy_type& operator=(const data_copy_type&) = delete;
       data_copy_type& operator=(data_copy_type&&) = default;
 
-      void construct(PtrT ptr, std::size_t size) {
+      template<typename Ptr>
+      void construct(Ptr&& ptr, std::size_t size) {
         m_allocator = allocator_type{};
         constexpr const bool is_empty_allocator = std::is_same_v<Allocator, empty_allocator<value_type>>;
         assert(is_empty_allocator);
         m_ptr = std::move(ptr);
+        this->m_size = size;
+        this->dtt = parsec_datatype_int8_t;
         this->device_private = const_cast<value_type*>(to_address(m_ptr));
       }
 
+      template<typename AllocatorT = allocator_type>
       void construct(std::size_t size,
-                     const allocator_type& alloc = allocator_type()) {
-        constexpr const bool is_empty_allocator = std::is_same_v<Allocator, empty_allocator<value_type>>;
+                     ttg::scope scope,
+                     AllocatorT&& alloc = AllocatorT()) {
+        constexpr const bool is_empty_allocator = std::is_same_v<AllocatorT, empty_allocator<value_type>>;
         assert(!is_empty_allocator);
-        m_allocator = alloc;
-        allocate(size);
-        this->device_private = m_ptr;
+        m_allocator = std::forward<AllocatorT>(alloc);
+        this->m_size = size;
+        this->dtt = parsec_datatype_int8_t;
+        if (always_allocate_on_host || scope == ttg::scope::SyncIn) {
+          /* the user requested that the data be sync'ed into the device
+           * so we need to provide host memory for the user to fill prior */
+          do_allocate();
+        } else {
+          /* if the user only requests an allocation on the device
+           * we don't allocate host memory but provide PaRSEC with
+           * a way to request host memory from us. */
+          this->alloc_cb = &allocate;
+          this->release_cb  = &deallocate;
+          this->device_private = nullptr;
+        }
       }
 
       ~data_copy_type() {
-        this->deallocate();
+        this->alloc_cb = nullptr;
+        this->release_cb = nullptr;
+        this->do_deallocate();
       }
     };
 
@@ -143,14 +188,19 @@ namespace detail {
 
       /* create the host copy and allocate host memory */
       data_copy_type *copy = PARSEC_OBJ_NEW(data_copy_type);
-      copy->construct(size, allocator);
+      copy->construct(size, scope, allocator);
       parsec_data_copy_attach(data, copy, 0);
 
       /* adjust data flags */
       data->device_copies[0]->flags |= PARSEC_DATA_FLAG_PARSEC_MANAGED;
-      data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-      /* setting version to 0 causes data not to be sent to the device */
-      data->device_copies[0]->version = (scope == ttg::scope::SyncIn) ? 1 : 0;
+      if (always_allocate_on_host || scope == ttg::scope::SyncIn){
+        data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_EXCLUSIVE;
+        data->device_copies[0]->version = 1;
+      } else {
+        data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
+        /* setting version to 0 causes data not to be sent to the device */
+        data->device_copies[0]->version = 0;
+      }
 
       return data;
     }
@@ -167,9 +217,14 @@ namespace detail {
 
       /* adjust data flags */
       data->device_copies[0]->flags |= PARSEC_DATA_FLAG_PARSEC_MANAGED;
-      data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-      /* setting version to 0 causes data not to be sent to the device */
-      data->device_copies[0]->version = (scope == ttg::scope::SyncIn) ? 1 : 0;
+      if (always_allocate_on_host || scope == ttg::scope::SyncIn){
+        data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_EXCLUSIVE;
+        data->device_copies[0]->version = 1;
+      } else {
+        data->device_copies[0]->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
+        /* setting version to 0 causes data not to be sent to the device */
+        data->device_copies[0]->version = 0;
+      }
 
       return data;
     }
@@ -220,7 +275,7 @@ public:
   Buffer() = default;
 
   Buffer(std::size_t n, ttg::scope scope = ttg::scope::SyncIn)
-  : m_data(detail::ttg_parsec_data_types<T*, Allocator>::create_data(n, scope))
+  : m_data(detail::ttg_parsec_data_types<std::shared_ptr<value_type[]>, Allocator>::create_data(n, scope))
   , m_count(n)
   { }
 
@@ -285,7 +340,7 @@ public:
 
   /* set the current device, useful when a device
    * buffer was modified outside of a TTG */
-  void set_current_device(const ttg::device::Device& device) {
+  void set_owner_device(const ttg::device::Device& device) {
     assert(is_valid());
     int parsec_id = detail::ttg_device_to_parsec_device(device);
     /* make sure it's a valid device */
@@ -293,6 +348,8 @@ public:
     /* make sure it's a valid copy */
     assert(m_data->device_copies[parsec_id] != nullptr);
     m_data->owner_device = parsec_id;
+    m_data->device_copies[parsec_id]->version = m_data->device_copies[0]->version;
+    m_data->device_copies[parsec_id]->coherency_state = PARSEC_DATA_COHERENCY_EXCLUSIVE;
   }
 
   bool is_current_on(ttg::device::Device dev) const {
@@ -382,9 +439,37 @@ public:
     return (parsec_data_get_ptr(m_data, device_id) != nullptr);
   }
 
-  void allocate_on(const ttg::device::Device& device_id) {
-    /* TODO: need exposed PaRSEC memory allocator */
-    throw std::runtime_error("not implemented yet");
+  void allocate_on(const ttg::device::Device& device) {
+    if (is_valid_on(device)) return; // already allocated
+    if (!m_data) throw std::runtime_error("Cannot allocate on an empty buffer!");
+    int parsec_id = detail::ttg_device_to_parsec_device(device);
+    assert(parsec_nb_devices > parsec_id);
+    assert(m_data != nullptr);
+    if (m_data->device_copies[parsec_id] == nullptr || m_data->device_copies[parsec_id]->device_private == nullptr) {
+      if (device.is_device()) {
+        /* create the device copy */
+        parsec_device_gpu_module_t *device_module = (parsec_device_gpu_module_t*)parsec_mca_device_get(parsec_id);
+        /* thread-safe allocation from PaRSEC */
+        T* ptr = (T*)zone_malloc(device_module->memory, m_count*sizeof(T));
+        if (nullptr == ptr) {
+          throw std::bad_alloc{};
+        }
+        parsec_data_copy_t* copy = nullptr;
+        if (m_data->device_copies[parsec_id] == nullptr) {
+          /* transfer ownership of the memory to PaRSEC (so it can be pushed out if needed) */
+          copy = parsec_data_copy_new(m_data, parsec_id, parsec_datatype_int8_t,
+                                      PARSEC_DATA_FLAG_PARSEC_MANAGED | PARSEC_DATA_FLAG_PARSEC_OWNED);
+        } else {
+          copy = m_data->device_copies[parsec_id];
+        }
+        copy->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
+        copy->device_private = ptr;
+        m_data->device_copies[parsec_id] =  copy;
+      } else {
+        reset(m_count, ttg::scope::SyncIn);
+      }
+      m_data->device_copies[parsec_id]->version = 0;
+    }
   }
 
   /* TODO: can we do this automatically?
@@ -434,9 +519,8 @@ public:
 
   /* Reallocate the buffer with count elements */
   void reset(std::size_t n, ttg::scope scope = ttg::scope::SyncIn) {
-    if (n == m_count) return;
     release_data();
-    m_data = detail::ttg_parsec_data_types<T*, Allocator>::create_data(n, scope);
+    m_data = detail::ttg_parsec_data_types<std::shared_ptr<value_type[]>, Allocator>::create_data(n, scope);
     m_count = n;
   }
 
@@ -450,6 +534,14 @@ public:
   }
 
   /**
+   * Clears the buffer. After this operation, the buffer is empty.
+   */
+  void clear() {
+    release_data();
+    m_count = 0;
+  }
+
+  /**
    * Resets the scope of the buffer.
    * If scope is SyncIn then the next time
    * the buffer is made available on a device the host
@@ -459,7 +551,7 @@ public:
   void reset_scope(ttg::scope scope) {
     if (scope == ttg::scope::Allocate) {
       m_data->device_copies[0]->version = 0;
-    } else {
+    } else if (scope == ttg::scope::SyncIn) {
       m_data->device_copies[0]->version = 1;
       /* reset all other copies to force a sync-in */
       for (int i = 0; i < parsec_nb_devices; ++i) {
@@ -473,8 +565,8 @@ public:
 
   ttg::scope scope() const {
     /* if the host owns the data and has a version of zero we only have to allocate data */
-    if (nullptr != m_data) return ttg::scope::Invalid;
-    return (m_data->device_copies[0]->version == 0 && m_data->owner_device == 0)
+    if (nullptr == m_data) return ttg::scope::Invalid;
+    return (m_data->device_copies[0]->version == 0)
             ? ttg::scope::Allocate : ttg::scope::SyncIn;
   }
 
@@ -532,8 +624,8 @@ public:
         }
       } else {
         //std::cout << "serialize(IN) buffer " << this << " size " << s << std::endl;
-        /* initialize internal pointers and then reset */
-        reset(s);
+        /* initialize but don't force allocation on the host */
+        reset(s, ttg::scope::Allocate);
       }
     }
   }

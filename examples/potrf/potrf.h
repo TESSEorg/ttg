@@ -125,37 +125,29 @@ namespace potrf {
 
       // Instead of using scratch here, we should have hostWS and hostInfo globals and use to_device
       // this would reduce the number of I/O operations to devices
-      double *hostWS = new double[Lwork];
-      ttg::devicescratch<double> devWS = ttg::make_scratch(hostWS, ttg::scope::Allocate, Lwork);
-      int *hostInfo = iallocator->allocate(1);
-      ttg::devicescratch<int> devInfo = ttg::make_scratch(hostInfo, ttg::scope::Allocate);
-
-      *hostInfo = -32;
+      auto ws   = ttg::Buffer<T, Allocator<T>>(Lwork, ttg::scope::Allocate);
+      auto devInfo = ttg::Buffer<int, Allocator<int>>(1, ttg::scope::Allocate);
 
 #ifdef DEBUG_TILES_VALUES
       std::array<T, 2> norms;
       //auto norms_s  = ttg::make_scratch(norms.data(), ttg::scope::Allocate, norms.size());
       /* the workspace and the devInfo must be device-level pointers */
-      //co_await ttg::to_device(tile_kk.buffer(), devWS, devInfo, norms_s);
-      co_await ttg::device::select(tile_kk.buffer(), devWS, devInfo);
+      //co_await ttg::to_device(tile_kk.buffer(), ws, devInfo, norms_s);
+      co_await ttg::device::select(tile_kk.buffer(), ws, devInfo);
 
       /* compute the norm at input */
       static_assert(std::is_same_v<double, T>, "Norm debugging only implementation for T=double");
       device_norm(tile_kk, &norms[0]);
 #else
       /* the workspace and the devInfo must be device-level pointers */
-      co_await ttg::device::select(tile_kk.buffer(), devWS, devInfo);
+      co_await ttg::device::select(tile_kk.buffer(), ws, devInfo);
 #endif // DEBUG_TILES_VALUES
 
       int device = ttg::device::current_device();
       //std::cout << "POTRF [" << K << "] on " << device << std::endl;
 
-
-      //std::cout << "devWS host ptr " << hostWS << " device ptr " << devWS.device_ptr() << " size " <<  devWS.size()
-      //          << " devInfo host ptr " << hostInfo << " device ptr " << devInfo.device_ptr() << "size "  << devInfo.size() << std::endl;
-
       /* everything is on the device, call the POTRF */
-      device_potrf(tile_kk, devWS.device_ptr(), Lwork, devInfo.device_ptr());
+      device_potrf(tile_kk, ws.current_device_ptr(), Lwork, devInfo.current_device_ptr());
 
 #ifdef DEBUG_TILES_VALUES
       /* compute the norm at input */
@@ -164,6 +156,9 @@ namespace potrf {
       /* wait for the kernel to complete */
       co_await ttg::device::wait(devInfo);
       // check that we got the input tile we expected
+      if (!check_norm(tile_kk.norm(), norms[0])) {
+        std::cout << "POTRF " << key << ": norm check failed for tile " << K << " expected " << tile_kk.norm() << " found " << norms[0] << std::endl;
+      }
       assert(check_norm(tile_kk.norm(), norms[0]));
       // set the new norm
       tile_kk.set_norm(norms[1]);
@@ -172,11 +167,12 @@ namespace potrf {
       co_await ttg::device::wait(devInfo);
 #endif // DEBUG_TILES_VALUES
 
-      delete[] hostWS;
-      int info = *hostInfo;
+      int info = *devInfo.host_ptr();
       assert(info == 0);
-      iallocator->deallocate(hostInfo, 1);
       if( info == 0 ) {
+        // release the workspace and the devInfo
+        ws.clear();
+        devInfo.clear();
         co_await ttg::device::forward(ttg::device::broadcast<0, 1>(std::make_tuple(Key2(K, K), std::move(keylist)), std::move(tile_kk), out));
         // Anything after this co_await is never executed
         // co_return would look better, but co_return would destroy keylist before the runtime can handle it
@@ -310,6 +306,12 @@ namespace potrf {
       device_norm(tile_mk, &norms[2]);
       /* wait for the kernel to complete */
       co_await ttg::device::wait();
+      if (!check_norm(tile_kk.norm(), norms[0])) {
+        std::cout << "TRSM " << key << ": norm check failed for tile " << K << " expected " << tile_kk.norm() << " found " << norms[0] << std::endl;
+      }
+      if (!check_norm(tile_mk.norm(), norms[1])) {
+        std::cout << "TRSM " << key << ": tile_mk " << M << ", " << K << " expected norm " << tile_mk.norm() << "but found " << norms[1] << std::endl;
+      }
       // check that we got the input tiles we expected
       assert(check_norm(tile_kk.norm(), norms[0]));
       assert(check_norm(tile_mk.norm(), norms[1]));
@@ -439,6 +441,12 @@ namespace potrf {
       device_norm(tile_kk, &norms[2]);
       /* wait for the kernel to complete */
       co_await ttg::device::wait();
+      if (!check_norm(tile_mk.norm(), norms[0])) {
+        std::cout << "SYRK: tile_mk " << M << ", " << K << " expected norm " << tile_mk.norm() << "but found " << norms[0] << std::endl;
+      }
+      if (!check_norm(tile_kk.norm(), norms[1])) {
+        std::cout << "SYRK: tile_kk " << K << " expected norm " << tile_kk.norm() << "but found " << norms[1] << std::endl;
+      }
       // check that we got the input tiles we expected
       assert(check_norm(tile_mk.norm(), norms[0]));
       assert(check_norm(tile_kk.norm(), norms[1]));
@@ -680,16 +688,22 @@ namespace potrf {
     auto keymap3 = [&](const Key3& key) { return A.rank_of(key[0], key[1]); };
 
     /**
-     * Device map hints: we try to keep tiles on one row on the same device to minimize
-     * data movement between devices. This provides hints for load-balancing up front
-     * and avoids movement of the TRSM result to GEMM tasks.
+     * Set a device map, 2d block-cyclic
      */
-    auto devmap1 = [&](const Key1& key) { return (key[0] / A.P()) % ttg::device::num_devices(); };
+    int num_devices = ttg::device::num_devices();
+    int gp = std::sqrt(num_devices);
+    int gq = (num_devices > 0) ? (num_devices / gp) : 1;
+    auto mapper = [&A, gp,gq,num_devices](int i){
+              auto device = (((i/A.P())%gp)*gq) + (i/A.Q())%gq;
+              return device;
+            };
 
-    auto devmap2a = [&](const Key2& key) { return (key[0] / A.P()) % ttg::device::num_devices(); };
-    auto devmap2b = [&](const Key2& key) { return (key[1] / A.P()) % ttg::device::num_devices(); };
+    auto devmap1 = [=](const Key1& key) { return mapper(key[0]); };
 
-    auto devmap3 = [&](const Key3& key) { return (key[0] / A.P()) % ttg::device::num_devices(); };
+    auto devmap2a = [=](const Key2& key) { return mapper(key[0]); };
+    auto devmap2b = [=](const Key2& key) { return mapper(key[1]); };
+
+    auto devmap3 = [=](const Key3& key) { return mapper(key[0]); };
 
     ttg::Edge<Key1, MatrixTile<T>> syrk_potrf("syrk_potrf"), disp_potrf("disp_potrf");
 

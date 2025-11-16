@@ -9,12 +9,20 @@
 
 #include <ttg/serialization/splitmd_data_descriptor.h>
 
+template<typename T>
+struct is_device_allocator : std::false_type {};
+
+template<typename T>
+struct is_device_allocator_v : is_device_allocator<T>::value {};
 
 #include <ttg/env.h>
 
 #if defined(TILEDARRAY_HAS_DEVICE)
 template<typename T>
 using Allocator = ttg::pinned_allocator_t<T>;
+
+template<typename T>
+struct is_device_allocator<TiledArray::device_pinned_allocator<T>> : std::true_type {};
 
 inline void allocator_init(int argc, char **argv) {
   // initialize MADNESS so that TA allocators can be created
@@ -184,6 +192,15 @@ class MatrixTile : public ttg::TTValue<MatrixTile<T, AllocatorT>> {
   template<typename Archive>
   void serialize(Archive& ar) {
     ar & _rows & _cols & _lda;
+#ifdef DEBUG_TILES_VALUES
+    if (ttg::detail::is_output_archive_v<Archive>) {
+      ar & norm();
+    } else {
+      T n;
+      ar & n;
+      set_norm(n);
+    }
+#endif // DEBUG_TILES_VALUES
     ar & buffer();
   }
 };
