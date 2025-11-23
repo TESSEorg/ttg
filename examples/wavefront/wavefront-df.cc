@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #include <algorithm>  // for std::max
 #include <cassert>
 #include <chrono>

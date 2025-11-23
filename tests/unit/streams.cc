@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #include <catch2/catch_all.hpp>
 #include <ctime>
 

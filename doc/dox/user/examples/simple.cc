@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #include <ttg.h>
 
 static void a(std::tuple<ttg::Out<int, double>> &out) {

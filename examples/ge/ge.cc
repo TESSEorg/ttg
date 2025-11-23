@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #include <stdlib.h> /* atoi, srand, rand */
 #include <time.h>   /* time */
 #include <cmath>    /* fabs */

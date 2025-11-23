@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef TTG_DATA_COPY_H
 #define TTG_DATA_COPY_H
 

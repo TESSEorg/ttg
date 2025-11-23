@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 // clang-format off
 #ifndef PARSEC_TTG_H_INCLUDED
 #define PARSEC_TTG_H_INCLUDED

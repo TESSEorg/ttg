@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 if (NOT TARGET tiledarray AND NOT MPQC_BUILD_DEPENDENCIES_FROM_SOURCE)
   if(TiledArray_INSTALL_DIR)
     set(TiledArray_DIR ${TiledArray_INSTALL_DIR}/lib/cmake/tiledarray)

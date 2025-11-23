@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 // to be #include'd within runtime::ttg namespace
 
 #ifndef TTG_MAKE_TT_H

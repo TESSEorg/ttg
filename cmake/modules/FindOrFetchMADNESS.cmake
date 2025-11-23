@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 if (NOT TARGET MADworld)
   find_package(MADNESS 0.10.1 CONFIG QUIET COMPONENTS world HINTS "${MADNESS_ROOT_DIR}")
   if (TARGET MADworld)

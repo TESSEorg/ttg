@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #define CATCH_CONFIG_RUNNER
 
 #include <catch2/catch_all.hpp>

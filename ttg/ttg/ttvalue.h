@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef TTG_TTVALUE_H
 #define TTG_TTVALUE_H
 

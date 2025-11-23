@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 include(AddTTGExecutable)
 
 # TT unit test: core TTG ops

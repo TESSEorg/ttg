@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef MAD_FUNCTION_FUNCTOR_H_INCL
 #define MAD_FUNCTION_FUNCTOR_H_INCL
 

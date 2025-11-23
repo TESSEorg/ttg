@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 if(LEVEL_ZERO_FOUND)
     if(TARGET level_zero::ze_loader)
         message(STATUS "level-zero is found and TARGET level_zero::ze_loader is defined")

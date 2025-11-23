@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 include (AddTTGLibrary)
 
 ########################
@@ -154,7 +155,9 @@ endif()
 
 add_ttg_library(ttg "${ttg-sources}" PUBLIC_HEADER "${ttg-public-headers}" LINK_LIBRARIES "${ttg-deps}" INCLUDE_DIRECTORIES "${ttg-incs}" COMPILE_DEFINITIONS "${ttg-defs}")
 # for non-fetchcontentable packages like Umpire need to add dependence of TTG on Umpire's custom build target
-add_dependencies(ttg ttg-imported-packages-build)
+if (TARGET ttg-imported-packages-build)
+  add_dependencies(ttg ttg-imported-packages-build)
+endif()
 
 ########################
 ####### Serialization

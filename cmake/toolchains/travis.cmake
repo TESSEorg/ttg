@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 set(MPI_C_COMPILER "$ENV{INSTALL_PREFIX}/mpich/bin/mpicc" CACHE STRING "MPI C compiler wrapper")
 set(MPI_CXX_COMPILER "$ENV{INSTALL_PREFIX}/mpich/bin/mpicxx" CACHE STRING "MPI C++ compiler wrapper")
 set(MPI_CXX_SKIP_MPICXX ON CACHE BOOL "Whether to disable MPI-2 C++ bindings")

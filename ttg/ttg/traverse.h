@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef TTG_TRAVERSE_H
 #define TTG_TRAVERSE_H
 

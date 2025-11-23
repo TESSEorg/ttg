@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 # - Try to find Libunwind
 # Input variables:
 #  LIBUNWIND_DIR          - The libunwind install directory;

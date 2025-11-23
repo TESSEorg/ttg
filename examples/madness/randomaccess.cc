@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #define WORLD_INSTANTIATE_STATIC_TEMPLATES
 
 #define TTG_RUNTIME_H "madness/ttg.h"

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef MADNESS_TTG_H_INCLUDED
 #define MADNESS_TTG_H_INCLUDED
 

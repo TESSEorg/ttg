@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef MADDOMAIN_H_INCL
 #define MADDOMAIN_H_INCL
 

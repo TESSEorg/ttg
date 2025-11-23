@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef TTG_PARSEC_PARSEC_DATA_H
 #define TTG_PARSEC_PARSEC_DATA_H
 

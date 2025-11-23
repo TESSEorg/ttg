@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef GE_ITERATIVE_KERNEL
 #define GE_ITERATIVE_KERNEL
 

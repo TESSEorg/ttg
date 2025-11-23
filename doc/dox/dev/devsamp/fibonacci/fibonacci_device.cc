@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #include <ttg.h>
 
 #if defined(TTG_HAVE_CUDA)

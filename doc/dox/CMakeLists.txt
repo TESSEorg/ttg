@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 #-- Add an Option to toggle the generation of the API documentation
 
 find_package(Doxygen ${TTG_OLDEST_DOXYGEN_VERSION})

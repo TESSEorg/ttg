@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #define WORLD_INSTANTIATE_STATIC_TEMPLATES
 #include <madness/world/MADworld.h>
 #include <madness/world/buffer_archive.h>

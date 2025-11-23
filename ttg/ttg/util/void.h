@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef TTG_VOID_H
 #define TTG_VOID_H
 #include <iostream>

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef KEY_H_INCLUDED
 #define KEY_H_INCLUDED
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 # update the Boost version that we can tolerate
 if (NOT DEFINED Boost_OLDEST_BOOST_VERSION)
     set(Boost_OLDEST_BOOST_VERSION ${TTG_OLDEST_BOOST_VERSION})

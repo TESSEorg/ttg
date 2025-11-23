@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: BSD-3-Clause
 
 # this script builds a TTG docker image
 # usage: docker-build.sh <arch>

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 include(AddTTGExecutable)
 
 add_ttg_executable(test test/test.cc)

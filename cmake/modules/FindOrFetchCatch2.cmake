@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 if (NOT TARGET Catch2::Catch2)
   find_package(Catch2 ${TTG_TRACKED_CATCH2_VERSION} QUIET)
 endif (NOT TARGET Catch2::Catch2)

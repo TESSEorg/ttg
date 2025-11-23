@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #include "ttg/util/version.h"
 
 namespace ttg {

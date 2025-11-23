@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #include <ttg.h>
 #include <ttg/serialization/std/pair.h>
 #include <ttg/util/hash/std/pair.h>

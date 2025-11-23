@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef HAVE_DEVICETENSOR_H
 #define HAVE_DEVICETENSOR_H
 

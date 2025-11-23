@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 if (NOT TARGET BTAS::BTAS)
   find_package(BTAS 1.0.0 QUIET CONFIG)
   if (TARGET BTAS::BTAS)

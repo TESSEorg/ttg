@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef MADFUNCTIONNODE_H_INCL
 #define MADFUNCTIONNODE_H_INCL
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 # based on https://github.com/justusc/FindTBB
 macro (import_tbb)
   if(TBB_FOUND)

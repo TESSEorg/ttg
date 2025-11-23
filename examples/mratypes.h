@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef MADTYPES_H_INCL
 #define MADTYPES_H_INCL
 

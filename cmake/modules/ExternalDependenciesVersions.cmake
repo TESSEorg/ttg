@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 # for each dependency track both current and previous id (the variable for the latter must contain PREVIOUS)
 # to be able to auto-update them
 
