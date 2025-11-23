@@ -527,7 +527,7 @@ a Chrome Trace Format (CTF) JSON file that can be visuzalized using built-in bro
 in Chrome browser or using web-based [Perfetto trace viewer](https://ui.perfetto.dev/).
 To generate the trace results of any TTG program follow the process discussed below:
 
-- For simplicity we assume here that TTG will build PaRSEC from source. Make sure PaRSEC Python tools prerequisites have been installed, namely Python3 (version 3.8 is recommended) and the following Python packages (e.g., using `pip`):
+- For simplicity, we assume here that TTG will build PaRSEC from source. Make sure PaRSEC Python tools prerequisites have been installed, namely Python3 (version 3.8 is recommended) and the following Python packages (e.g., using `pip`):
   - `cython`
   - `2to3`
   - `numpy`
@@ -569,5 +569,5 @@ When referring to TTG in an academic setting please cite the following publicati
 
 The development of TTG was made possible by:
 
-- [The EPEXA project](https://tesseorg.github.io/), currently supported by the National Science Foundation under grants [1931387](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931387) at Stony Brook University, [1931347](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931347) at Virginia Tech, and [1931384](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931384) at the University of Tennesse, Knoxville.
-- The TESSE project, supported by the National Science Foundation under grants [1450344](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450344) at Stony Brook University, [1450262](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450262) at Virginia Tech, and [1450300](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450300) at the University of Tennesse, Knoxville.
+- [The EPEXA project](https://tesseorg.github.io/), currently supported by the National Science Foundation under grants [1931387](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931387) to Stony Brook University, [1931384](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931384) to the University of Tennessee, Knoxville, and [1931347](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931347) to Virginia Tech.
+- The TESSE project, supported by the National Science Foundation under grants [1450344](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450344) to Stony Brook University, [1450300](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450300) at the University of Tennesse, Knoxville, and [1450262](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450262) to Virginia Tech.
