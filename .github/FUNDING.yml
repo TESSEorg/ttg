@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# These are supported funding model platforms
+
+# GitHub Sponsors
+# github: [username1, username2]
+
+# Open Collective
+# open_collective: ttg
+
+# Patreon
+# patreon: ttg
+
+# Custom funding sources (NSF grants)
+custom:
+  - "https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931387"
+  - "https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931347"
+  - "https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931384"
+  - "https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450344"
+  - "https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450262"
+  - "https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450300"
