@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: 'TTG: Template Task Graph'
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Eduard
+    family-names: Valeyev
+    affiliation: Virginia Tech
+    orcid: 'https://orcid.org/0000-0001-2345-6789'
+  - given-names: Joseph
+    family-names: Schuchart
+    affiliation: Stony Brook University
+    orcid: 'https://orcid.org/0000-0003-2041-7877'
+  - given-names: Thomas
+    family-names: Herault
+    affiliation: 'Inria Bordeaux'
+    orcid: 'https://orcid.org/0000-0001-6756-6189'
+  - given-names: Robert J.
+    family-names: Harrison
+    affiliation: Stony Brook University
+    orcid: 'https://orcid.org/0000-0002-8777-7466'
+  - given-names: Poornima
+    family-names: Nookala
+    affiliation: Stony Brook University
+  - given-names: George
+    family-names: Bosilca
+    affiliation: 'NVIDIA'
+    orcid: 'https://orcid.org/0000-0003-2411-8495'
+repository-code: 'https://github.com/TESSEorg/ttg'
+url: 'https://tesseorg.github.io/ttg/'
+abstract: >-
+  TTG is a C++ API for the Template Task Graph programming model,
+  which enables flowgraph-based composition of high-performance
+  algorithms executable on distributed heterogeneous computer
+  platforms. The TTG API abstracts the details of the underlying
+  task and data flow runtime, with current implementations using
+  MADNESS and PaRSEC runtimes as backends.
+keywords:
+  - task-based programming
+  - dataflow
+  - high-performance computing
+  - distributed computing
+  - heterogeneous computing
+  - parallel programming
+license: BSD-3-Clause
+version: 1.0.0-alpha
+date-released: '2025-01-23'
+preferred-citation:
+  type: conference-paper
+  title: >-
+    The Template Task Graph (TTG) - an emerging practical dataflow
+    programming paradigm for scientific simulation at extreme scale
+  authors:
+    - given-names: George
+      family-names: Bosilca
+      affiliation: 'University of Tennessee, Knoxville'
+      orcid: 'https://orcid.org/0000-0003-2411-8495'
+    - given-names: Robert J.
+      family-names: Harrison
+      affiliation: Stony Brook University
+      orcid: 'https://orcid.org/0000-0002-8777-7466'
+    - given-names: Thomas
+      family-names: Herault
+      affiliation: 'University of Tennessee, Knoxville'
+      orcid: 'https://orcid.org/0000-0001-6756-6189'
+    - given-names: Mohammad Mahdi
+      family-names: Javanmard
+      affiliation: Stony Brook University
+    - given-names: Poornima
+      family-names: Nookala
+      affiliation: Stony Brook University
+    - given-names: Edward F.
+      family-names: Valeev
+      affiliation: Virginia Tech
+      orcid: 'https://orcid.org/0000-0001-2345-6789'
+  doi: 10.1109/ESPM251964.2020.00011
+  year: 2020
+  collection-title: >-
+    2020 IEEE/ACM Fifth International Workshop on Extreme Scale
+    Programming Models and Middleware (ESPM2)
+  start: 1
+  end: 7
+  conference:
+    name: ESPM2 2020
