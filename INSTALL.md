@@ -20,8 +20,8 @@ TTG is usable only on POSIX systems.
   - [Apple Clang](https://en.wikipedia.org/wiki/Xcode), version 10.0 or higher
   - [Intel C++ compiler](https://software.intel.com/en-us/c-compilers), version 2021.1 or higher
 - one or more of the following runtimes:
-  - [PaRSEC](https://bitbucket.org/icldistcomp/parsec): this distributed-memory runtime is the primary runtime intended for high-performance implementation of TTG
-  - [MADNESS](https://github.org/m-a-d-n-e-s-s/madness): this distributed-memory runtime is to be used primarily for developmental purposes
+  - [PaRSEC](https://bitbucket.org/icldistcomp/parsec): this distributed-memory runtime is the primary runtime intended for high-performance implementation of TTG, including on accelerators
+  - [MADNESS](https://github.org/m-a-d-n-e-s-s/madness): this distributed-memory runtime is to be used primarily for developmental purposes (host-only)
 - [Umpire C++ allocator](github.com/ValeevGroup/umpire-cxx-allocator) -- a C++ allocator for [LLNL/Umpire](https://github.com/LLNL/Umpire), a portable memory manager. Umpire itself is a prerequisite of this, and can be built from source.
 
 While the list of prerequisites is short, note that the runtimes have many more mandatory prerequisites; these are discussed under `transitive prerequisites` below.
@@ -32,7 +32,7 @@ Also: it is _strongly_ recommended that the runtimes and the memory manager are 
 - [Boost](https://boost.org/) version 1.81 or later. If the Boost package is not detected TTG can download and build Boost as part of its build process, but this is NOT recommended, you should obtain Boost via the system or third-party package manager. Experts may try to build Boost from source as part of TTG by configuring it with the CMake cache variable `TTG_FETCH_BOOST` set to `ON` (e.g., by adding `-DTTG_FETCH_BOOST=ON` to the CMake executable command line). The following primary Boost libraries/modules (and their transitive dependents) are used:
   - (required) [Boost.CallableTraits](): used to introspect generic callables given to `make_tt`. P.S. TTG has a bundled copy of `Boost.CallableTraits` which is used and installed if Boost is not found or built from source. To avoid the installation and use of the bundled Boost.CallableTraits configure TTG with the CMake cache variable `TTG_IGNORE_BUNDLED_EXTERNALS` set to `ON`.
   - (optional) [Boost.Serialization](https://www.boost.org/doc/libs/master/libs/serialization/doc/index.html): needed to use TTG with classes serializable by the [Boost.Serialization](https://www.boost.org/doc/libs/master/libs/serialization/doc/index.html) library. Note that `Boost.Serialization` is not header-only, i.e., it must be compiled. This is only required if TTG is configured with CMake cache variable `TTG_PARSEC_USE_BOOST_SERIALIZATION` set to `ON`.
-- ([Doxygen](http://www.doxygen.nl/), version 1.8.12 or later: needed for building documentation.
+- ([Doxygen](http://www.doxygen.nl/), version 1.9.6 or later: needed for building documentation.
 - for execution on GPGPUs and other accelerators, the following are required:
   - [CUDA compiler and runtime](https://developer.nvidia.com/cuda-zone) -- for execution on NVIDIA's CUDA-enabled accelerators. CUDA 11 or later is required.
   - [HIP/ROCm compiler and runtime](https://developer.nvidia.com/cuda-zone) -- for execution on AMD's ROCm-enabled accelerators.
