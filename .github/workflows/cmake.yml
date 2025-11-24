@@ -175,18 +175,16 @@ jobs:
         cp -p ttg-docs-template/* ttg-docs
         rm -rf ttg-docs-template
         cd ttg-docs
-        # copy TTG's README.md into index.md
-        cp ${{github.workspace}}/README.md index.md
-        # update dox
-        if [ -d dox-master ]; then
-          rm -rf dox-master
-        fi
-        mv ${{github.workspace}}/build/doc/dox/html dox-master
+        # remove old docs if present
+        rm -rf dox-master
+        # deploy doxygen HTML directly (README.md is already used as doxygen mainpage)
+        cp -rp ${{github.workspace}}/build/doc/dox/html/* .
         # Jekyll does not allow files with "special" names, e.g. whose names start with underscore
         # must "include" such files explicitly
         # re: how file names must be formatted: see https://github.com/jekyll/jekyll/issues/1352
         echo "include:" >> _config.yml
-        find dox-master -name "_*" | sed "s/dox-master\//  \- /g" >> _config.yml
+        find . -maxdepth 1 -name "_*" -type f | sed "s/\.\//  \- /g" >> _config.yml
+        find . -maxdepth 1 -name "_*" -type d | sed "s/\.\//  \- /g" | sed "s/$/\//g" >> _config.yml
         # make empty repo to ensure gh-pages contains no history
         git init
         git add *
