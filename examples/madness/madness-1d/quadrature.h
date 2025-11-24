@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef QUADRATURE_H_
 #define QUADRATURE_H_
 

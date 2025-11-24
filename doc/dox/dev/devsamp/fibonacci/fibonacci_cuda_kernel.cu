@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #include "fibonacci_cuda_kernel.h"
 
 #ifdef TTG_HAVE_CUDA

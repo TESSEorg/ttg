@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 cmake_minimum_required (VERSION 3.14) # supports FetchContent_MakeAvailable
 cmake_policy(SET CMP0104 OLD)
 
@@ -194,7 +195,9 @@ add_custom_target(ttg-imported-packages-build)
 if (TTG_HAVE_CUDA OR TTG_HAVE_HIP OR TTG_HAVE_LEVEL_ZERO)
   include(FindOrFetchUmpireCXXAllocator)
 endif()
-add_dependencies(ttg-imported-packages-build vrg-build-external-projects)
+if (TARGET vrg-build-external-projects)
+  add_dependencies(ttg-imported-packages-build vrg-build-external-projects)
+endif()
 # PaRSEC
 include(FindOrFetchPARSEC)
 if (TARGET PaRSEC::parsec)

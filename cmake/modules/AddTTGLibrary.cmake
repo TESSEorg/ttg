@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 # Copyright 2021 Eduard F Valeyev
 # Distributed under the OSI-approved BSD 3-Clause License.
 # See https://opensource.org/licenses/BSD-3-Clause for details.

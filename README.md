@@ -527,9 +527,8 @@ a Chrome Trace Format (CTF) JSON file that can be visuzalized using built-in bro
 in Chrome browser or using web-based [Perfetto trace viewer](https://ui.perfetto.dev/).
 To generate the trace results of any TTG program follow the process discussed below:
 
-- For simplicity we assume here that TTG will build PaRSEC from source. Make sure PaRSEC Python tools prerequisites have been installed, namely Python3 (version 3.8 is recommended) and the following Python packages (e.g., using `pip`):
+- For simplicity, we assume here that TTG will build PaRSEC from source. Make sure PaRSEC Python tools prerequisites have been installed, namely Python3 (version 3.8 is recommended) and the following Python packages (e.g., using `pip`):
   - `cython`
-  - `2to3`
   - `numpy`
   - `pandas`
   - `tables`
@@ -538,11 +537,10 @@ To generate the trace results of any TTG program follow the process discussed be
   - Build and install TTG
 - Build the TTG program to be traced.
 - Run the TTG program with tracing turned on:
-  - Create file `${HOME}/.parsec/mca-params.conf` and add line `mca_pins = task_profiler` to it
-  - Set the environment variable `PARSEC_MCA_profile_filename` to the PBT file name _prefix_, e.g. `/tmp/ttg`.
+  - Set the environment variables `PARSEC_MCA_mca_pins` and `PARSEC_MCA_profile_filename` to `task_profiler` and the PBT file name _prefix_ (e.g. `/tmp/ttg`), respectively.
   - Run the program and make sure the trace files (in PBT format) have been generated; e.g., if you set `PARSEC_MCA_profile_filename` to `/tmp/ttg` you should find file `/tmp/ttg-0.prof-...` containing the trace from MPI rank 0, `/tmp/ttg-1.prof-...` from rank 1, and so on.
 - Convert the traces from PaRSEC Binary Trace (PBT) format to the Chrome Trace Format (CTF):
-  - Add `{TTG build directory}/_deps/parsec-build/tools/profiling/python/build/{lib folder for your version of Python}` (currently it is not possible to use PaRSEC Python module from the install tree, only from its build tree)
+  - Add `{TTG build directory}/_deps/parsec-build/tools/profiling/python/python.test` (currently it is not possible to use PaRSEC Python module from the install tree, only from its build tree)
  to the `PYTHONPATH` environment variable so that the Python  interpreter can find the modules for reading the PaRSEC trace files.
   - Convert the PBT files to a CTF file by running the conversion script:
 ```
@@ -569,5 +567,5 @@ When referring to TTG in an academic setting please cite the following publicati
 
 The development of TTG was made possible by:
 
-- [The EPEXA project](https://tesseorg.github.io/), currently supported by the National Science Foundation under grants [1931387](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931387) at Stony Brook University, [1931347](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931347) at Virginia Tech, and [1931384](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931384) at the University of Tennesse, Knoxville.
-- The TESSE project, supported by the National Science Foundation under grants [1450344](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450344) at Stony Brook University, [1450262](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450262) at Virginia Tech, and [1450300](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450300) at the University of Tennesse, Knoxville.
+- [The EPEXA project](https://tesseorg.github.io/), currently supported by the National Science Foundation under grants [1931387](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931387) to Stony Brook University, [1931384](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931384) to the University of Tennessee, Knoxville, and [1931347](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1931347) to Virginia Tech.
+- The TESSE project, supported by the National Science Foundation under grants [1450344](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450344) to Stony Brook University, [1450300](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450300) at the University of Tennesse, Knoxville, and [1450262](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1450262) to Virginia Tech.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 # try find_package
 if (NOT TARGET umpire-cxx-allocator)
   find_package(umpire-cxx-allocator QUIET CONFIG)

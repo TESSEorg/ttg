@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 //
 // Created by Eduard Valeyev on 12/22/17.
 //

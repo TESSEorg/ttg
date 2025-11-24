@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Exclude build artifacts and development files from Docker build context
+
+# Build directories
+cmake-build-*
+build
+**/build
+_deps
+
+# Git
+.git
+.gitignore
+.github
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+venv
+.venv
+
+# Documentation build artifacts
+doc/dox/html
+doc/dox/xml
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+
+# Docker artifacts (avoid recursion)
+Dockerfile
+.dockerignore

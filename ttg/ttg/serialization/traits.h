@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef TTG_SERIALIZATION_TRAITS_H
 #define TTG_SERIALIZATION_TRAITS_H
 

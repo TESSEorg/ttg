@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 /*
 ./fw-apsp-mad 1024 16 iterative verify-results
 */

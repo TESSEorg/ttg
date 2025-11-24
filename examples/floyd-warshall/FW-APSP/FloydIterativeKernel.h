@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef FLOYD_ITERATIVE_KERNEL
 #define FLOYD_ITERATIVE_KERNEL
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef MADMXM_H_INCL
 #define MADMXM_H_INCL
 

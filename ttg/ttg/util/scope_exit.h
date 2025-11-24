@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef TTG_UTIL_SCOPE_EXIT_H
 #define TTG_UTIL_SCOPE_EXIT_H
 

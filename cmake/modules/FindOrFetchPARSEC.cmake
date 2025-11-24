@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 if (NOT TARGET PaRSEC::parsec)
   find_package(PaRSEC CONFIG QUIET COMPONENTS parsec HINTS ${PaRSEC_ROOT_DIR})
   if (TARGET PaRSEC::parsec)

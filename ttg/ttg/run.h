@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 //
 // Created by Eduard Valeyev on 11/5/21.
 //
@@ -12,6 +13,29 @@
 #include "ttg/world.h"
 
 namespace ttg {
+
+  namespace detail {
+    inline bool& initialized_accessor() {
+      static bool flag = false;
+      return flag;
+    }
+    inline bool& finalized_accessor() {
+      static bool flag = false;
+      return flag;
+    }
+  }
+
+  /// checks whether TTG has been initialized
+  /// @return true if TTG has been initialized
+  inline bool initialized() {
+    return detail::initialized_accessor();
+  }
+
+  /// checks whether TTG has been initialized
+  /// @return true if TTG has been initialized
+  inline bool finalized() {
+    return detail::finalized_accessor();
+  }
 
   /// Initializes the TTG runtime with the default backend
 
@@ -29,21 +53,31 @@ namespace ttg {
   ///        most users will want to omit this
   template <typename... RestOfArgs>
   inline void initialize(int argc, char** argv, int num_threads, RestOfArgs&&... args) {
-    // if requested by user, create a Debugger object
-    if (auto debugger_cstr = std::getenv("TTG_DEBUGGER")) {
-      using ttg::Debugger;
-      auto debugger = std::make_shared<Debugger>();
-      Debugger::set_default_debugger(debugger);
-      debugger->set_exec(argv[0]);
-      debugger->set_cmd(debugger_cstr);
+    if (!initialized()) {
+      if (finalized()) {
+        throw std::runtime_error("ttg::initialize(): TTG already finalized, cannot be re-initialized");
+      }
+
+      // if requested by user, create a Debugger object
+      if (auto debugger_cstr = std::getenv("TTG_DEBUGGER")) {
+        using ttg::Debugger;
+        auto debugger = std::make_shared<Debugger>();
+        Debugger::set_default_debugger(debugger);
+        debugger->set_exec(argv[0]);
+        debugger->set_cmd(debugger_cstr);
+      }
+
+      if (num_threads < 1) num_threads = detail::num_threads();
+      TTG_IMPL_NS::ttg_initialize(argc, argv, num_threads, std::forward<RestOfArgs>(args)...);
+
+      // finish setting up the Debugger, if needed
+      if (ttg::Debugger::default_debugger())
+        ttg::Debugger::default_debugger()->set_prefix(ttg::default_execution_context().rank());
+
+      detail::initialized_accessor() = true;
     }
-
-    if (num_threads < 1) num_threads = detail::num_threads();
-    TTG_IMPL_NS::ttg_initialize(argc, argv, num_threads, std::forward<RestOfArgs>(args)...);
-
-    // finish setting up the Debugger, if needed
-    if (ttg::Debugger::default_debugger())
-      ttg::Debugger::default_debugger()->set_prefix(ttg::default_execution_context().rank());
+    else
+      throw std::runtime_error("ttg::initialize(): TTG already initialized");
   }
 
   /// Finalizes the TTG runtime
@@ -55,7 +89,15 @@ namespace ttg {
   /// `initialize` call
   /// @internal ENABLE_WHEN_TTG_CAN_MULTIBACKEND To finalize the TTG runtime with multiple backends must call the
   /// corresponding `ttg_finalize` functions explicitly.
-  inline void finalize() { TTG_IMPL_NS::ttg_finalize(); }
+  inline void finalize() {
+    if (initialized()) {
+      TTG_IMPL_NS::ttg_finalize();
+      detail::initialized_accessor() = false;
+      detail::finalized_accessor() = true;
+    }
+    else
+      throw std::runtime_error("ttg::finalize(): TTG has not been initialized yet");
+  }
 
   /// Aborts the TTG program using the default backend's `ttg_abort` method
   [[noreturn]]

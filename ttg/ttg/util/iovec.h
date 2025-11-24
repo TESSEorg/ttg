@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef TTG_UTIL_IOVEC_H_
 #define TTG_UTIL_IOVEC_H_
 

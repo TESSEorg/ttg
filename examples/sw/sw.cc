@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #include <stdlib.h>  // std::atoi, std::rand()
 #include <algorithm>
 #include <fstream>

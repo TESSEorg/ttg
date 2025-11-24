@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef MADRANGE_H_INCL
 #define MADRANGE_H_INCL
 

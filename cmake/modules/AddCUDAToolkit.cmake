@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 find_package(CUDAToolkit)
 set(TTG_HAVE_CUDA ${CUDAToolkit_FOUND} CACHE BOOL "True if TTG supports CUDA")
 if (TTG_HAVE_CUDA)

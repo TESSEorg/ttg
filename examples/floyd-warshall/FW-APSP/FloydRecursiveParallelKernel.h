@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef FLOYD_RECURSIVE_PARALLEL_KERNEL
 #define FLOYD_RECURSIVE_PARALLEL_KERNEL
 

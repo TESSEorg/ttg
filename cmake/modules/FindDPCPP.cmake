@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 if(DPCPP_EXECUTABLE)
     get_filename_component( _dpcpp_path ${DPCPP_EXECUTABLE} PATH )
 else(DPCPP_EXECUTABLE)

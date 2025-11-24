@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 
 #ifndef TTG_DEMANGLE_H_INCLUDED
 #define TTG_DEMANGLE_H_INCLUDED

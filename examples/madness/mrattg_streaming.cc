@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 // TTG AND MADNESS RUNTIME STUFF
 
 #include "ttg.h"

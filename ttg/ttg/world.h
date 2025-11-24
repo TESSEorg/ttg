@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef TTG_WORLD_H
 #define TTG_WORLD_H
 

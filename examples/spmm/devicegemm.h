@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 
 #if defined(TTG_ENABLE_LEVEL_ZERO)
 #include <oneapi/mkl.hpp>

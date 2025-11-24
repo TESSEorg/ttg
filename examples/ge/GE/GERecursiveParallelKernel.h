@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef GE_RECURSIVE_PARALLEL_KERNEL
 #define GE_RECURSIVE_PARALLEL_KERNEL
 

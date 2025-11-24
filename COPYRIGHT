@@ -1,0 +1,83 @@
+TTG (Template Task Graph) Copyright and License
+================================================
+
+Copyright (c) 2016-2025, The TTG Developers
+All rights reserved.
+
+The TTG Developers
+------------------
+
+TTG is developed collaboratively by researchers from multiple institutions.
+The primary institutional contributors are:
+
+  * Stony Brook University (SBU)
+  * University of Tennessee, Knoxville (UTK)
+  * Virginia Tech (VT)
+
+Principal Contributors and Institutional Affiliations
+-----------------------------------------------------
+
+Based on substantial contributions to the codebase, the principal contributors
+and their primary institutional affiliations include:
+
+  Stony Brook University:
+    - Robert J. Harrison
+    - Joseph Schuchart
+    - Poornima Nookala
+
+  University of Tennessee, Knoxville:
+    - George Bosilca
+    - Thomas Herault
+
+  Virginia Tech:
+    - Eduard Valeyev
+
+Additional Contributors
+-----------------------
+
+TTG has benefited from contributions by many individuals. For a complete list
+of all contributors, please see the git commit history:
+
+    git log --format='%aN <%aE>' | sort -u
+
+or visit: https://github.com/TESSEorg/ttg/graphs/contributors
+
+Funding Acknowledgment
+----------------------
+
+The development of TTG has been supported by the National Science Foundation
+through the following grants:
+
+  The EPEXA Project:
+    - Award 1931387 (Stony Brook University)
+    - Award 1931384 (University of Tennessee, Knoxville)
+    - Award 1931347 (Virginia Tech)
+
+  The TESSE Project:
+    - Award 1450344 (Stony Brook University)
+    - Award 1450300 (University of Tennessee, Knoxville)
+    - Award 1450262 (Virginia Tech)
+
+License
+-------
+
+TTG is released under the BSD 3-Clause License.
+See the LICENSE file in the repository root for the complete license text.
+
+SPDX-License-Identifier: BSD-3-Clause
+
+Citation
+--------
+
+When referring to TTG in an academic setting, please cite:
+
+  G. Bosilca, R. J. Harrison, T. Herault, M. M. Javanmard, P. Nookala and
+  E. F. Valeev, "The Template Task Graph (TTG) - an emerging practical dataflow
+  programming paradigm for scientific simulation at extreme scale," 2020 IEEE/ACM
+  Fifth International Workshop on Extreme Scale Programming Models and Middleware
+  (ESPM2), 2020, pp. 1-7, doi: 10.1109/ESPM251964.2020.00011.
+
+Contact
+-------
+
+For questions about TTG, please visit: https://github.com/TESSEorg/ttg

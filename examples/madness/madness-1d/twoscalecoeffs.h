@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef TWOSCALECOEFFS_H_
 #define TWOSCALECOEFFS_H_
 

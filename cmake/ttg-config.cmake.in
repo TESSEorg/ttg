@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 # - CMAKE Config file for the TTG package
 
 # Set package version

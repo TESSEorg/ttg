@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef TTG_DEVICESCOPE_H
 #define TTG_DEVICESCOPE_H
 

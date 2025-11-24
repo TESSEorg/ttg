@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #include "ttg/serialization.h"
 
 #include "ttg/util/meta.h"

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 #ifndef TTG_MADNESS_BUFFER_H
 #define TTG_MADNESS_BUFFER_H
 

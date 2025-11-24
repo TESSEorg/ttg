@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 # modified to give preference to TBBROOT over all system paths
 
 # - Find ThreadingBuildingBlocks include dirs and libraries
