@@ -1,0 +1,60 @@
+{
+  "title": "TTG: Template Task Graph",
+  "description": "TTG is a C++ API for the Template Task Graph programming model, which enables flowgraph-based composition of high-performance algorithms executable on distributed heterogeneous computer platforms. The TTG API abstracts the details of the underlying task and data flow runtime, with current implementations using MADNESS and PaRSEC runtimes as backends.",
+  "upload_type": "software",
+  "version": "1.0.0",
+  "publication_date": "2025-11-24",
+  "creators": [
+    {
+      "name": "Valeyev, Eduard",
+      "affiliation": "Virginia Tech",
+      "orcid": "https://orcid.org/0000-0001-9923-6256"
+    },
+    {
+      "name": "Schuchart, Joseph",
+      "affiliation": "Stony Brook University",
+      "orcid": "https://orcid.org/0000-0003-2041-7877"
+    },
+    {
+      "name": "Herault, Thomas",
+      "affiliation": "Inria Bordeaux",
+      "orcid": "https://orcid.org/0000-0001-6756-6189"
+    },
+    {
+      "name": "Harrison, Robert J.",
+      "affiliation": "Stony Brook University",
+      "orcid": "https://orcid.org/0000-0002-8777-7466"
+    },
+    {
+      "name": "Nookala, Poornima",
+      "affiliation": "Stony Brook University"
+    },
+    {
+      "name": "Bosilca, George",
+      "affiliation": "NVIDIA",
+      "orcid": "https://orcid.org/0000-0003-2411-8495"
+    }
+  ],
+  "keywords": [
+    "task-based programming",
+    "dataflow",
+    "high-performance computing",
+    "distributed computing",
+    "heterogeneous computing",
+    "parallel programming"
+  ],
+  "license": "BSD-3-Clause",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/TESSEorg/ttg",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    },
+    {
+      "identifier": "10.1109/ESPM251964.2020.00011",
+      "relation": "cites",
+      "scheme": "doi"
+    }
+  ],
+  "access_right": "open"
+}

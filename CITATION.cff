@@ -12,7 +12,7 @@ authors:
   - given-names: Eduard
     family-names: Valeyev
     affiliation: Virginia Tech
-    orcid: 'https://orcid.org/0000-0001-2345-6789'
+    orcid: 'https://orcid.org/0000-0001-9923-6256'
   - given-names: Joseph
     family-names: Schuchart
     affiliation: Stony Brook University
@@ -78,7 +78,7 @@ preferred-citation:
     - given-names: Edward F.
       family-names: Valeev
       affiliation: Virginia Tech
-      orcid: 'https://orcid.org/0000-0001-2345-6789'
+      orcid: 'https://orcid.org/0000-0001-9923-6256'
   doi: 10.1109/ESPM251964.2020.00011
   year: 2020
   collection-title: >-
