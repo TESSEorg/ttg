@@ -1,0 +1,13 @@
+<map id="ttg_madness::initialize_watchpoints" name="ttg_madness::initialize_watchpoints">
+<area shape="rect" id="Node000001" title="must be called from main thread before setting watchpoints" alt="" coords="5,109,180,149"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#a78c09561304884c05c8a8f25006b0ee6" title="Accesses the default backend&#39;s default execution context." alt="" coords="257,5,428,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="125,107,173,80,227,55,248,47,250,52,229,60,175,85,128,112"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1detail_1_1_memory_watchpoint__x86__64_1_1_pool.html#a6464e134549f9a04956913215b151e32" title=" " alt="" coords="228,70,457,125"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="180,116,214,111,214,116,181,121"/>
+<area shape="rect" id="Node000004" href="$namespacettg.html#aacafa23974f833f3ac9c42ab4fbd7e68" title="atomically prints to std::cerr a sequence of items (separated by ttg::print_separator) followed by st..." alt="" coords="281,149,404,174"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="181,138,268,149,267,154,180,143"/>
+<area shape="rect" id="Node000006" href="$namespacettg__madness_1_1detail.html#a6e029e1e0e4d49e71abd3edbe02f49cd" title=" " alt="" coords="257,199,428,239"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="140,147,229,183,256,192,255,197,227,188,138,152"/>
+<area shape="rect" id="Node000005" href="$namespacettg_1_1detail.html#a26e07486d5ef8eb5735a8975991a7693" title=" " alt="" coords="505,141,633,181"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="404,159,491,159,491,164,404,164"/>
+</map>

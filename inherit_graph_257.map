@@ -1,0 +1,19 @@
+<map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
+<area shape="rect" id="Node000000" href="$classttg_1_1_terminal_base.html" title=" " alt="" coords="5,141,148,166"/>
+<area shape="rect" id="Node000001" href="$classttg_1_1_in_terminal_base.html" title=" " alt="" coords="201,5,357,45"/>
+<area shape="poly" id="edge167_Node000000_Node000001" title=" " alt="" coords="99,129,142,92,195,55,218,43,221,48,197,60,145,96,102,133"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_out_terminal_base.html" title=" " alt="" coords="196,69,363,109"/>
+<area shape="poly" id="edge168_Node000000_Node000002" title=" " alt="" coords="130,134,214,107,216,112,132,139"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_out_terminal_base.html" title=" " alt="" coords="196,133,363,173"/>
+<area shape="poly" id="edge169_Node000000_Node000003" title=" " alt="" coords="162,151,196,151,196,156,162,156"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1_in_terminal_base.html" title="Base type for input terminals receiving messages annotated by task IDs of type keyT" alt="" coords="201,197,357,237"/>
+<area shape="poly" id="edge171_Node000000_Node000005" title=" " alt="" coords="132,168,216,195,214,200,130,173"/>
+<area shape="rect" id="Node000007" href="$classttg_1_1_out_terminal_base.html" title=" " alt="" coords="196,261,363,301"/>
+<area shape="poly" id="edge173_Node000000_Node000007" title=" " alt="" coords="102,173,145,210,197,247,221,259,218,264,195,252,142,215,99,177"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_out.html" title=" " alt="" coords="411,141,600,166"/>
+<area shape="poly" id="edge170_Node000003_Node000004" title=" " alt="" coords="377,151,411,151,411,156,377,156"/>
+<area shape="rect" id="Node000006" href="$classttg_1_1_in.html" title=" " alt="" coords="416,205,595,230"/>
+<area shape="poly" id="edge172_Node000005_Node000006" title=" " alt="" coords="371,215,416,215,416,220,371,220"/>
+<area shape="rect" id="Node000008" href="$classttg_1_1_out.html" title=" " alt="" coords="411,269,600,294"/>
+<area shape="poly" id="edge174_Node000007_Node000008" title=" " alt="" coords="377,279,411,279,411,284,377,284"/>
+</map>

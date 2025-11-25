@@ -1,0 +1,17 @@
+<map id="ttg::detail::tt_base_trace_accessor" name="ttg::detail::tt_base_trace_accessor">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,81,149,121"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#af5e470229c1ddef41b83b6398a5dc583" title=" " alt="" coords="197,89,280,114"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="150,99,184,99,184,104,150,104"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#aacacfe8bc9582308a405c4370650a9d4" title="atomically prints to std::clog a sequence of items (separated by ttg::print_separator) followed by st..." alt="" coords="341,13,412,38"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="262,86,340,42,342,47,264,91"/>
+<area shape="rect" id="Node000005" href="$namespacettg.html#afbdd9c742be395e0746fdbc26c7d55cc" title="returns whether tracing was enabled at configure time" alt="" coords="473,79,619,105"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="280,97,460,92,460,97,281,103"/>
+<area shape="rect" id="Node000006" href="$namespacettg.html#abfb8501d408a1ed918cc2a540865a2d8" title="returns whether tracing is enabled" alt="" coords="328,114,425,139"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="281,106,315,113,314,118,280,111"/>
+<area shape="rect" id="Node000004" href="$namespacettg_1_1detail.html#a26e07486d5ef8eb5735a8975991a7693" title=" " alt="" coords="482,5,610,45"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="412,23,468,23,468,28,412,28"/>
+<area shape="poly" id="edge8_Node000006_Node000005" title=" " alt="" coords="425,114,470,105,471,110,426,119"/>
+<area shape="rect" id="Node000007" href="$namespacettg_1_1detail.html#a95356c3874e7ec9268a40feb4fc1519f" title=" " alt="" coords="481,148,611,188"/>
+<area shape="poly" id="edge6_Node000006_Node000007" title=" " alt="" coords="426,136,468,146,467,152,425,141"/>
+<area shape="poly" id="edge7_Node000007_Node000002" title=" " alt="" coords="481,173,407,170,366,164,327,155,295,141,267,124,270,120,297,136,329,149,367,159,407,164,481,168"/>
+</map>

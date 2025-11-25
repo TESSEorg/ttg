@@ -1,0 +1,22 @@
+<map id="ttg/ttg/util/meta.h" name="ttg/ttg/util/meta.h">
+<area shape="rect" id="Node000001" title=" " alt="" coords="125,5,266,31"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="19,79,110,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="176,33,99,74,97,70,173,28"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="5,152,100,177"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="188,33,124,106,80,145,76,141,120,102,184,29"/>
+<area shape="rect" id="Node000004" href="$span_8h.html" title=" " alt="" coords="185,79,302,104"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="205,30,230,66,226,69,201,33"/>
+<area shape="rect" id="Node000009" href="$typelist_8h.html" title=" " alt="" coords="399,79,533,104"/>
+<area shape="poly" id="edge9_Node000001_Node000009" title=" " alt="" coords="239,28,410,73,408,78,238,33"/>
+<area shape="poly" id="edge7_Node000004_Node000003" title=" " alt="" coords="214,107,98,149,96,144,212,102"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="125,152,183,177"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="231,106,181,145,178,141,227,102"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="207,152,279,177"/>
+<area shape="poly" id="edge5_Node000004_Node000006" title=" " alt="" coords="246,104,246,138,241,138,241,104"/>
+<area shape="rect" id="Node000007" title=" " alt="" coords="304,152,372,177"/>
+<area shape="poly" id="edge6_Node000004_Node000007" title=" " alt="" coords="260,102,313,141,310,146,257,106"/>
+<area shape="rect" id="Node000008" title=" " alt="" coords="397,152,485,177"/>
+<area shape="poly" id="edge8_Node000004_Node000008" title=" " alt="" coords="276,102,396,145,395,150,274,107"/>
+<area shape="rect" id="Node000010" title=" " alt="" coords="509,152,567,177"/>
+<area shape="poly" id="edge10_Node000009_Node000010" title=" " alt="" coords="480,102,518,140,515,144,476,106"/>
+</map>

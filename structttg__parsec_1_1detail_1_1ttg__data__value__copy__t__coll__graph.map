@@ -1,0 +1,10 @@
+<map id="ttg_parsec::detail::ttg_data_value_copy_t&lt; ValueT &gt;" name="ttg_parsec::detail::ttg_data_value_copy_t&lt; ValueT &gt;">
+<area shape="rect" id="Node000001" title=" " alt="" coords="288,23,457,77"/>
+<area shape="rect" id="Node000002" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__container__setter.html" title=" " alt="" coords="5,5,211,60"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="225,38,288,42,288,47,225,43"/>
+<area shape="rect" id="Node000003" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__t.html" title=" " alt="" coords="39,85,177,125"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="190,85,287,65,288,70,191,90"/>
+<area shape="rect" id="Node000004" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__self__t.html" title=" " alt="" coords="289,106,457,146"/>
+<area shape="poly" id="edge4_Node000004_Node000003" title=" " alt="" coords="191,109,289,117,288,122,191,114"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="274,131,264,131,234,131,178,123,178,118,235,126,264,126,274,126"/>
+</map>

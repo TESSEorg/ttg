@@ -1,0 +1,5 @@
+<map id="ttg::Edge::live" name="ttg::Edge::live">
+<area shape="rect" id="Node000001" title="probes if this is already has at least one input received on the input terminal" alt="" coords="5,5,123,31"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_edge.html#a789ba9fe110f90343d4d23c3fba6a437" title=" " alt="" coords="171,5,297,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="123,15,157,15,157,21,123,21"/>
+</map>

@@ -1,0 +1,26 @@
+<map id="ttg::Dot::operator()" name="ttg::Dot::operator()">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,176,155,201"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1detail_1_1_traverse.html#a22d05df03933ab48f7fd671213b8b9c1" title=" " alt="" coords="203,81,357,121"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="107,174,202,130,217,124,219,129,204,135,109,178"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1detail_1_1_traverse.html#a8f22396f983cd2b43113903985294410" title=" " alt="" coords="203,169,357,209"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="155,186,189,186,189,191,155,191"/>
+<area shape="rect" id="Node000010" href="$classttg_1_1_dot.html#a6e2c9e3186444ee3f28d18a28f0c65ea" title=" " alt="" coords="204,297,356,323"/>
+<area shape="poly" id="edge10_Node000001_Node000010" title=" " alt="" coords="103,199,247,288,244,292,101,204"/>
+<area shape="poly" id="edge8_Node000003_Node000003" title=" " alt="" coords="242,169,240,159,246,150,260,144,280,142,304,145,316,152,314,157,302,150,280,147,261,149,249,154,245,160,247,168"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_t_t_base.html#ac290f7b019ed37ec5f89777e853d3f27" title="Returns the vector of input terminals." alt="" coords="410,5,590,31"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="313,167,335,150,355,131,370,107,377,84,385,62,404,40,411,35,414,39,407,44,389,65,382,86,375,109,359,134,339,154,317,171"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1_t_t_base.html#ade3b1e6b149fe1124f7192aeca5f715c" title="Gets the name of this operation." alt="" coords="413,297,587,323"/>
+<area shape="poly" id="edge4_Node000003_Node000005" title=" " alt="" coords="304,207,349,245,407,282,426,291,424,295,404,287,346,250,300,211"/>
+<area shape="rect" id="Node000006" href="$classttg_1_1_t_t_base.html#a5158da66b2aa6b7af14998e7aac0fe29" title="Returns the vector of output terminals." alt="" coords="405,55,595,80"/>
+<area shape="poly" id="edge5_Node000003_Node000006" title=" " alt="" coords="308,166,356,131,379,109,404,90,423,82,425,87,407,95,382,113,359,135,311,171"/>
+<area shape="rect" id="Node000007" href="$classttg_1_1detail_1_1_traverse.html#a6aa44d45713f8fecf27bd4c91f1be475" title=" " alt="" coords="423,105,577,145"/>
+<area shape="poly" id="edge6_Node000003_Node000007" title=" " alt="" coords="349,166,417,146,419,151,350,171"/>
+<area shape="rect" id="Node000008" href="$classttg_1_1detail_1_1_traverse.html#a9c047df6c224aa7c87d9b72d15efc4c6" title=" " alt="" coords="423,169,577,209"/>
+<area shape="poly" id="edge7_Node000003_Node000008" title=" " alt="" coords="357,186,409,186,409,191,357,191"/>
+<area shape="rect" id="Node000009" href="$classttg_1_1detail_1_1_traverse.html#a5da2d82d0eb6f9216c6e23ef48c76ff0" title=" " alt="" coords="423,233,577,273"/>
+<area shape="poly" id="edge9_Node000003_Node000009" title=" " alt="" coords="350,206,419,226,417,231,349,211"/>
+<area shape="poly" id="edge11_Node000010_Node000005" title=" " alt="" coords="356,307,399,307,399,313,356,313"/>
+<area shape="poly" id="edge13_Node000010_Node000010" title=" " alt="" coords="247,299,240,289,244,279,257,273,280,271,308,274,319,284,316,288,306,279,280,276,259,278,248,283,245,288,251,296"/>
+<area shape="rect" id="Node000011" href="$classttg_1_1_t_t_base.html#aa5e66ccbaacb885f49c041b9d999ef30" title=" " alt="" coords="427,347,573,372"/>
+<area shape="poly" id="edge12_Node000010_Node000011" title=" " alt="" coords="338,320,430,341,429,346,337,325"/>
+</map>

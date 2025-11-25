@@ -1,0 +1,5 @@
+<map id="ttg::set_size" name="ttg::set_size">
+<area shape="rect" id="Node000001" title="Set the size of all streaming input terminals connected to an output terminal for a task,..." alt="" coords="5,5,108,31"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#a293bb7226707f202e735a9b3e4c76fab" title=" " alt="" coords="156,5,231,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="108,15,142,15,142,21,108,21"/>
+</map>

@@ -1,0 +1,11 @@
+<map id="ttg::Edge::edge" name="ttg::Edge::edge">
+<area shape="rect" id="Node000001" title=" " alt="" coords="196,80,323,105"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_edge.html#adf1150d7ec9cf09a79fb13cbb77132b8" title="Edge carrying a tuple of values." alt="" coords="12,5,141,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="219,76,147,44,117,33,118,28,149,40,221,71"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_edge.html#ad67604be2b8bc7195521ec911820f693" title="probes if this is already has at least one input received on the input terminal" alt="" coords="18,55,135,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="182,85,135,78,136,73,182,79"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_edge.html#a91e1e8540c48ae0b472204ed787da2c6" title="Sets the output terminal that goes into this Edge." alt="" coords="10,104,143,129"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="183,105,144,111,143,105,182,100"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1_edge.html#afb836fe2f992244f19a395e6f6dd88fc" title="Sets the input terminal that this Edge goes into." alt="" coords="5,153,148,179"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="219,113,149,143,115,156,114,151,147,138,217,108"/>
+</map>

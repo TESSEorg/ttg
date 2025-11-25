@@ -1,0 +1,11 @@
+<map id="ttg::Debugger::set_default_debugger" name="ttg::Debugger::set_default_debugger">
+<area shape="rect" id="Node000001" title="Set the global default debugger. The initial value is null." alt="" coords="400,23,551,63"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#a557cbca5e1f34dcc87a43afd0d03c6e4" title="Initializes the TTG runtime with the default backend." alt="" coords="214,5,321,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="386,35,320,27,321,22,386,30"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#a908edd0939096bd053fcbe6a5fee9609" title=" " alt="" coords="183,55,352,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="387,56,352,60,352,55,386,51"/>
+<area shape="rect" id="Node000004" href="$namespacettg.html#aed99f96dd2d42761584592b7adcf0908" title=" " alt="" coords="5,29,135,55"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="169,57,135,53,135,48,169,52"/>
+<area shape="rect" id="Node000005" href="$namespacettg.html#a852bfa03ac9a163a87014e93c59165f0" title=" " alt="" coords="6,79,134,104"/>
+<area shape="poly" id="edge4_Node000003_Node000005" title=" " alt="" coords="169,82,135,86,134,81,169,77"/>
+</map>

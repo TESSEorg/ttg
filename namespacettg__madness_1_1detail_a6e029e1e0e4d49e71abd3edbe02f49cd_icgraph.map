@@ -1,0 +1,9 @@
+<map id="ttg_madness::detail::watchpoints_threads" name="ttg_madness::detail::watchpoints_threads">
+<area shape="rect" id="Node000001" title=" " alt="" coords="272,69,443,109"/>
+<area shape="rect" id="Node000002" href="$namespacettg__madness.html#a1d0750abcb4d3cb112ff1755f38798f1" title="must be called from main thread before setting watchpoints" alt="" coords="27,5,202,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="267,68,190,48,192,43,268,63"/>
+<area shape="rect" id="Node000003" href="$namespacettg__madness.html#a410adda62f54efc8623cf0d50afdd53e" title="clears the hardware watchpoint for window [addr,addr+size) previously created with watchpoint_set&lt;T&gt;" alt="" coords="19,69,211,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="258,92,211,92,211,87,258,87"/>
+<area shape="rect" id="Node000004" href="$namespacettg__madness.html#a8cabd7cfbc5aaead3712f4a8e505e94f" title="sets a hardware watchpoint for window [addr,addr+size) and condition cond" alt="" coords="5,134,224,159"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="261,115,225,124,171,137,170,131,223,119,260,110"/>
+</map>

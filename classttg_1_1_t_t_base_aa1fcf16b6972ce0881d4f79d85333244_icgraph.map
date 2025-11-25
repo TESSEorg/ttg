@@ -1,0 +1,13 @@
+<map id="ttg::TTBase::outputs_tls_ptr_accessor" name="ttg::TTBase::outputs_tls_ptr_accessor">
+<area shape="rect" id="Node000001" title=" " alt="" coords="437,101,597,141"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_t_t_base.html#abce09fc450a24adfa427e23bc09da1fc" title="Returns this thread&#39;s pointer to the vector of output terminals." alt="" coords="200,37,389,77"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="433,100,364,80,366,75,435,95"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1_t_t_base.html#afe69f18e0c427bdb7fe86b1d9fde283e" title=" " alt="" coords="201,101,388,141"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="424,124,388,124,388,119,424,119"/>
+<area shape="rect" id="Node000006" href="$classttg_1_1_t_t_base.html#a1edef76017de6943b185341e88b3c535" title=" " alt="" coords="201,165,388,205"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="435,148,366,168,364,163,433,143"/>
+<area shape="rect" id="Node000003" href="$namespacettg_1_1detail.html#ab74de3de588f49984ad9db137518478b" title=" " alt="" coords="5,5,152,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="186,44,152,39,153,34,187,39"/>
+<area shape="rect" id="Node000004" href="$namespacettg_1_1detail.html#a34fe30520697b631fc025a97b54f88b9" title=" " alt="" coords="5,69,152,109"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="187,76,153,81,152,76,186,71"/>
+</map>

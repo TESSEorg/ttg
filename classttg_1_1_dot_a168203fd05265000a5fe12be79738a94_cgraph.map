@@ -1,0 +1,24 @@
+<map id="ttg::Dot::ttfunc" name="ttg::Dot::ttfunc">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,242,127,267"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_dot.html#acf2006cfe81db46f057e9501d6c1531b" title=" " alt="" coords="198,29,341,69"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="69,241,82,208,104,165,134,119,173,79,184,71,187,76,176,83,139,123,109,168,87,211,74,243"/>
+<area shape="rect" id="Node000004" href="$namespacettg.html#afbabcd9802bf1bbdd302e7a612459353" title="Make a tuple of Edges to pass to." alt="" coords="224,94,315,119"/>
+<area shape="poly" id="edge4_Node000001_Node000004" title=" " alt="" coords="72,240,111,186,139,155,173,128,209,113,211,118,176,133,143,159,115,189,77,243"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1_dot.html#a3b85f343706fbdd92d04b2d1ce656cf0" title=" " alt="" coords="205,143,333,169"/>
+<area shape="poly" id="edge5_Node000001_Node000005" title=" " alt="" coords="80,240,121,209,173,178,192,170,194,175,176,182,124,213,84,244"/>
+<area shape="rect" id="Node000006" href="$classttg_1_1_t_t_base.html#ac290f7b019ed37ec5f89777e853d3f27" title="Returns the vector of input terminals." alt="" coords="179,193,359,218"/>
+<area shape="poly" id="edge6_Node000001_Node000006" title=" " alt="" coords="118,239,203,219,204,224,120,245"/>
+<area shape="rect" id="Node000007" href="$classttg_1_1_t_t_base.html#ade3b1e6b149fe1124f7192aeca5f715c" title="Gets the name of this operation." alt="" coords="182,242,357,267"/>
+<area shape="poly" id="edge7_Node000001_Node000007" title=" " alt="" coords="127,252,168,252,168,257,127,257"/>
+<area shape="rect" id="Node000008" href="$classttg_1_1_t_t_base.html#a5158da66b2aa6b7af14998e7aac0fe29" title="Returns the vector of output terminals." alt="" coords="175,291,364,317"/>
+<area shape="poly" id="edge8_Node000001_Node000008" title=" " alt="" coords="120,265,204,285,203,291,118,270"/>
+<area shape="rect" id="Node000009" href="$classttg_1_1_t_t_base.html#aa5e66ccbaacb885f49c041b9d999ef30" title=" " alt="" coords="197,341,342,366"/>
+<area shape="poly" id="edge9_Node000001_Node000009" title=" " alt="" coords="84,265,124,295,176,326,197,334,195,339,174,330,121,300,81,269"/>
+<area shape="rect" id="Node000010" href="$classttg_1_1_dot.html#a2613119aa8fbf04526b29cd7db9e9851" title=" " alt="" coords="193,390,346,415"/>
+<area shape="poly" id="edge10_Node000001_Node000010" title=" " alt="" coords="77,266,115,319,143,349,176,375,190,383,188,387,173,380,140,353,111,323,73,269"/>
+<area shape="rect" id="Node000011" href="$namespacettg.html#a293bb7226707f202e735a9b3e4c76fab" title=" " alt="" coords="232,439,307,465"/>
+<area shape="poly" id="edge11_Node000001_Node000011" title=" " alt="" coords="74,267,87,299,108,342,138,387,176,425,197,436,219,443,217,448,194,441,173,429,134,390,104,345,82,301,69,269"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="231,30,229,20,235,11,249,5,269,3,293,6,306,13,303,18,291,11,269,8,250,10,238,15,234,21,236,28"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_t_t_base.html#adcab40e07df652c00c9b2b208412e767" title=" " alt="" coords="412,37,567,62"/>
+<area shape="poly" id="edge3_Node000002_Node000003" title=" " alt="" coords="341,47,398,47,398,52,341,52"/>
+</map>

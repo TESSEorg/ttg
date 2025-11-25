@@ -1,0 +1,12 @@
+<map id="ttg::OutTerminalBase::nsuccessors" name="ttg::OutTerminalBase::nsuccessors">
+<area shape="rect" id="Node000001" title=" " alt="" coords="453,35,620,75"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_out.html#ad2a015783a18cb7e66096c95a9ae77d0" title=" " alt="" coords="287,5,401,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="439,39,401,32,402,26,440,34"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_out.html#a19596b1bdc19006bfe9771b3ece65223" title=" " alt="" coords="283,79,405,104"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="440,76,406,83,405,77,439,71"/>
+<area shape="poly" id="edge3_Node000003_Node000003" title=" " alt="" coords="371,68,363,60,344,57,328,59,320,64,318,70,322,77,318,80,312,70,315,61,326,54,344,52,365,55,374,64"/>
+<area shape="rect" id="Node000004" href="$namespacettg.html#a8f6699133cf34d99b17a41af9834a272" title="Sends a value (without an accompanying task id) to the given output terminal." alt="" coords="144,79,235,104"/>
+<area shape="poly" id="edge4_Node000003_Node000004" title=" " alt="" coords="269,94,235,94,235,89,269,89"/>
+<area shape="rect" id="Node000005" href="$namespacettg.html#aec6fd6a228d0400a690001fd5171b468" title="Sends a value (without an accompanying task id) to the template tasks attached to the output terminal..." alt="" coords="5,79,96,104"/>
+<area shape="poly" id="edge5_Node000004_Node000005" title=" " alt="" coords="130,94,96,94,96,89,130,89"/>
+</map>

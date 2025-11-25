@@ -1,0 +1,9 @@
+<map id="ttg_madness::TT::fence" name="ttg_madness::TT::fence">
+<area shape="rect" id="Node000001" title="Waits for the entire TTG associated with this TT to be completed (collective)" alt="" coords="5,13,184,38"/>
+<area shape="rect" id="Node000002" href="$namespacettg__madness.html#a7170a1b75839c894aaeddebecb8d1eb7" title=" " alt="" coords="232,13,412,38"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="184,23,218,23,218,28,184,28"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1base_1_1_world.html#aabab7c9df8f16919ab41a864c8b1adc4" title=" " alt="" coords="460,13,627,38"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="412,23,446,23,446,28,412,28"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1base_1_1_world.html#af39ca1832f455a94134515f94aaa8533" title=" " alt="" coords="675,5,823,45"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="627,23,661,23,661,28,627,28"/>
+</map>

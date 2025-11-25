@@ -1,0 +1,17 @@
+<map id="ttg_madness::TT::invoke" name="ttg_madness::TT::invoke">
+<area shape="rect" id="Node000001" title="Manual injection of a task with all input arguments specified as a tuple." alt="" coords="5,92,192,117"/>
+<area shape="rect" id="Node000002" href="$classttg__madness_1_1_t_t.html#a3fb0ab18d00c27fae64e1bd1b78d3d0d" title=" " alt="" coords="721,117,885,142"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="128,89,221,55,285,36,358,19,436,7,516,3,596,9,674,27,707,42,737,63,784,105,780,109,734,67,704,47,672,32,596,14,516,8,436,12,359,24,287,41,223,60,130,94"/>
+<area shape="rect" id="Node000003" href="$namespacettg_1_1meta.html#affd90f350d054c6a5b4859644d834172" title=" " alt="" coords="517,66,631,92"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="192,97,503,80,504,85,192,102"/>
+<area shape="rect" id="Node000004" href="$classttg__madness_1_1_t_t.html#a59514d2ebb826c9b78b96d89f3067c51" title="Manual injection of a task that has no key or arguments." alt="" coords="240,117,427,142"/>
+<area shape="poly" id="edge5_Node000001_Node000004" title=" " alt="" coords="192,112,227,116,226,121,192,117"/>
+<area shape="rect" id="Node000005" href="$classttg__madness_1_1_t_t.html#af4e8733dca2905582a1cbaeb3a090322" title=" " alt="" coords="475,168,673,193"/>
+<area shape="poly" id="edge10_Node000001_Node000005" title=" " alt="" coords="129,115,180,135,241,152,354,170,461,177,461,182,353,175,239,158,179,140,127,120"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="766,119,758,109,762,99,778,93,803,90,836,94,848,104,845,108,834,99,803,96,779,98,766,103,763,108,770,115"/>
+<area shape="poly" id="edge4_Node000003_Node000003" title=" " alt="" coords="537,68,529,58,533,48,548,42,574,40,606,44,619,53,615,57,604,49,574,45,549,47,536,52,534,57,541,65"/>
+<area shape="poly" id="edge6_Node000004_Node000002" title=" " alt="" coords="427,127,707,127,707,132,427,132"/>
+<area shape="poly" id="edge7_Node000004_Node000003" title=" " alt="" coords="394,114,503,91,504,96,395,120"/>
+<area shape="poly" id="edge8_Node000004_Node000005" title=" " alt="" coords="395,140,501,162,499,168,394,145"/>
+<area shape="poly" id="edge9_Node000005_Node000002" title=" " alt="" coords="632,165,731,143,732,148,633,170"/>
+</map>

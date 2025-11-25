@@ -1,0 +1,9 @@
+<map id="ttg::device::current_device" name="ttg::device::current_device">
+<area shape="rect" id="Node000001" title=" " alt="" coords="212,69,363,109"/>
+<area shape="rect" id="Node000002" href="$structttg__parsec_1_1_buffer.html#ad7c9683797b26ee8911ae7cfe4712d50" title=" " alt="" coords="5,5,164,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="209,68,148,48,149,43,211,63"/>
+<area shape="rect" id="Node000003" href="$structttg__parsec_1_1_buffer.html#a87cfa2924a1165608d8180337682cdce" title=" " alt="" coords="5,69,164,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="198,92,164,92,164,87,198,87"/>
+<area shape="rect" id="Node000004" href="$structttg__parsec_1_1_buffer.html#a6d94b7f71accdae0bfd9c708006d359e" title=" " alt="" coords="9,133,161,173"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="211,116,149,136,148,131,209,111"/>
+</map>

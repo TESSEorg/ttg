@@ -1,0 +1,22 @@
+<map id="ttg::TerminalBase::get_name" name="ttg::TerminalBase::get_name">
+<area shape="rect" id="Node000001" title="Returns name of terminal." alt="" coords="501,98,652,138"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_out.html#a0dd09ce5a40514317b0677a68e08a4a8" title=" " alt="" coords="319,61,453,87"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="487,100,441,89,443,84,489,95"/>
+<area shape="rect" id="Node000007" href="$classttg_1_1_out.html#af3902b047294f85bdfaeb42dcd4488a4" title=" " alt="" coords="329,141,443,167"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="488,137,444,146,443,141,487,132"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#ac31d3ffe687039e52a8179b0ffca7153" title="Connect output terminal to successor input terminal." alt="" coords="162,55,265,80"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="305,74,265,72,265,67,305,68"/>
+<area shape="rect" id="Node000004" href="$namespacettg.html#a5f5c90f59ffa4fddb4a2aa1afe4d3db3" title="Connect producer output terminal outindex to consumer input terminal inindex (via unique or otherwise..." alt="" coords="5,5,108,31"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="159,53,97,33,99,28,160,48"/>
+<area shape="rect" id="Node000005" href="$namespacettg.html#aa1ae512e6c225e04ab2f19977d4dd310" title="Connect producer output terminal outindex to consumer input terminal inindex (via bare pointers to TT..." alt="" coords="5,55,108,80"/>
+<area shape="poly" id="edge4_Node000003_Node000005" title=" " alt="" coords="148,70,108,70,108,65,148,65"/>
+<area shape="rect" id="Node000006" href="$namespacettg.html#addc70370fc2c1bc2a58db5592cc6ec44" title="Connect producer output terminal outindex to consumer input terminal inindex (via TTBase pointers)" alt="" coords="5,104,108,129"/>
+<area shape="poly" id="edge5_Node000003_Node000006" title=" " alt="" coords="160,87,99,106,97,101,159,82"/>
+<area shape="poly" id="edge7_Node000007_Node000007" title=" " alt="" coords="416,131,407,123,386,120,368,122,359,127,357,132,362,140,357,143,351,133,355,123,367,117,386,115,409,118,419,127"/>
+<area shape="rect" id="Node000008" href="$classttg_1_1_out.html#ad2a015783a18cb7e66096c95a9ae77d0" title=" " alt="" coords="156,104,271,129"/>
+<area shape="poly" id="edge8_Node000007_Node000008" title=" " alt="" coords="315,141,270,132,271,126,316,136"/>
+<area shape="rect" id="Node000009" href="$namespacettg.html#a195eb3c0d9b0118dd7c94c0463840734" title="Sends a task id and a value to the given output terminal." alt="" coords="172,153,255,179"/>
+<area shape="poly" id="edge9_Node000007_Node000009" title=" " alt="" coords="315,162,255,166,255,160,315,156"/>
+<area shape="rect" id="Node000010" href="$namespacettg.html#a64fbfb8618ef226f6b3d49a7a46db0cb" title="Sends a control message (message without an accompanying task id or a value) to the given output term..." alt="" coords="172,203,255,228"/>
+<area shape="poly" id="edge10_Node000007_Node000010" title=" " alt="" coords="338,174,251,205,249,200,336,169"/>
+</map>

@@ -1,0 +1,28 @@
+<map id="ttg_parsec::TT::create_new_reducer_task" name="ttg_parsec::TT::create_new_reducer_task">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,98,173,138"/>
+<area shape="rect" id="Node000002" href="$classttg__parsec_1_1_t_t.html#aab59a1bf0fcc4f771457b5f05cb42741" title=" " alt="" coords="444,38,592,64"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="107,95,155,53,186,32,220,16,253,8,287,4,355,6,418,17,471,31,469,37,417,22,355,11,288,9,254,13,222,21,189,37,158,57,111,99"/>
+<area shape="rect" id="Node000003" href="$namespacettg_1_1meta.html#affd90f350d054c6a5b4859644d834172" title=" " alt="" coords="252,56,365,81"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="173,96,238,81,239,87,174,101"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_t_t_base.html#ade3b1e6b149fe1124f7192aeca5f715c" title="Gets the name of this operation." alt="" coords="221,105,396,130"/>
+<area shape="poly" id="edge5_Node000001_Node000004" title=" " alt="" coords="174,115,208,115,208,120,174,120"/>
+<area shape="rect" id="Node000005" href="$classttg__parsec_1_1_t_t.html#af277074081de727ff816c84638b7d038" title=" " alt="" coords="235,155,383,195"/>
+<area shape="poly" id="edge6_Node000001_Node000005" title=" " alt="" coords="167,135,222,150,221,155,166,140"/>
+<area shape="rect" id="Node000006" href="$namespacettg.html#af5e470229c1ddef41b83b6398a5dc583" title=" " alt="" coords="267,220,350,245"/>
+<area shape="poly" id="edge8_Node000001_Node000006" title=" " alt="" coords="117,136,164,171,222,205,255,217,253,222,220,209,161,175,114,140"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="486,40,479,30,483,20,496,14,518,12,545,15,556,24,553,28,543,20,518,17,497,19,486,24,484,29,490,37"/>
+<area shape="poly" id="edge4_Node000003_Node000003" title=" " alt="" coords="275,57,267,47,271,37,285,31,309,29,338,33,349,42,346,46,336,38,309,34,287,36,275,41,272,47,279,54"/>
+<area shape="poly" id="edge7_Node000005_Node000002" title=" " alt="" coords="367,152,395,139,447,105,490,71,494,75,450,109,397,144,370,157"/>
+<area shape="rect" id="Node000007" href="$namespacettg.html#aacacfe8bc9582308a405c4370650a9d4" title="atomically prints to std::clog a sequence of items (separated by ttg::print_separator) followed by st..." alt="" coords="483,144,553,169"/>
+<area shape="poly" id="edge9_Node000006_Node000007" title=" " alt="" coords="349,219,395,204,474,172,476,177,397,209,351,224"/>
+<area shape="rect" id="Node000009" href="$namespacettg.html#afbdd9c742be395e0746fdbc26c7d55cc" title="returns whether tracing was enabled at configure time" alt="" coords="640,210,785,236"/>
+<area shape="poly" id="edge11_Node000006_Node000009" title=" " alt="" coords="350,229,626,222,626,228,350,234"/>
+<area shape="rect" id="Node000010" href="$namespacettg.html#abfb8501d408a1ed918cc2a540865a2d8" title="returns whether tracing is enabled" alt="" coords="469,245,567,270"/>
+<area shape="poly" id="edge12_Node000006_Node000010" title=" " alt="" coords="351,235,456,248,455,253,350,240"/>
+<area shape="rect" id="Node000008" href="$namespacettg_1_1detail.html#a26e07486d5ef8eb5735a8975991a7693" title=" " alt="" coords="649,136,777,176"/>
+<area shape="poly" id="edge10_Node000007_Node000008" title=" " alt="" coords="554,154,635,154,635,159,554,159"/>
+<area shape="poly" id="edge15_Node000010_Node000009" title=" " alt="" coords="566,246,627,236,628,241,567,252"/>
+<area shape="rect" id="Node000011" href="$namespacettg_1_1detail.html#a95356c3874e7ec9268a40feb4fc1519f" title=" " alt="" coords="648,279,777,319"/>
+<area shape="poly" id="edge13_Node000010_Node000011" title=" " alt="" coords="567,265,635,280,634,285,566,270"/>
+<area shape="poly" id="edge14_Node000011_Node000006" title=" " alt="" coords="648,303,551,300,497,295,443,286,393,271,348,253,350,248,395,266,445,280,498,289,551,295,648,298"/>
+</map>

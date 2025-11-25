@@ -1,0 +1,10 @@
+<map id="ttg_parsec::TT::prepare_send" name="ttg_parsec::TT::prepare_send">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,59,225,84"/>
+<area shape="rect" id="Node000002" href="$classttg__parsec_1_1_t_t.html#aab59a1bf0fcc4f771457b5f05cb42741" title=" " alt="" coords="287,29,435,55"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="221,56,273,50,273,55,222,61"/>
+<area shape="rect" id="Node000003" href="$namespacettg__parsec.html#ae1b91b1ff1edc3fbc1e7e07d6c659c17" title=" " alt="" coords="273,79,448,119"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="226,81,260,85,259,90,225,87"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="325,31,317,21,321,11,336,5,361,3,391,6,403,15,400,20,389,11,361,8,337,10,325,15,322,20,329,28"/>
+<area shape="rect" id="Node000004" href="$namespacettg.html#a5829b255a41f2e47fa0e27bb5c791824" title=" " alt="" coords="496,87,667,112"/>
+<area shape="poly" id="edge4_Node000003_Node000004" title=" " alt="" coords="448,97,483,97,483,102,448,102"/>
+</map>

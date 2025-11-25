@@ -1,0 +1,47 @@
+<map id="ttg::device::Device::is_host" name="ttg::device::Device::is_host">
+<area shape="rect" id="Node000001" title=" " alt="" coords="839,473,985,513"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1device_1_1_device.html#acf0992ecbfbc2c91de0452122b06fe81" title=" " alt="" coords="623,431,791,457"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="825,475,759,459,761,454,826,470"/>
+<area shape="rect" id="Node000005" href="$namespacettg__parsec_1_1detail.html#a4e193da802fd145fa18041dd40ad7df9" title=" " alt="" coords="403,306,575,361"/>
+<area shape="poly" id="edge25_Node000001_Node000005" title=" " alt="" coords="870,468,832,444,790,422,679,382,574,354,576,349,680,377,792,418,835,440,873,463"/>
+<area shape="rect" id="Node000016" href="$classttg_1_1device_1_1_device.html#a40e2fd28be27282a6695d102f7c5fc1a" title=" " alt="" coords="633,531,780,571"/>
+<area shape="poly" id="edge17_Node000001_Node000016" title=" " alt="" coords="827,520,780,533,778,528,826,515"/>
+<area shape="rect" id="Node000020" href="$structttg__madness_1_1_buffer.html#af4997ff30c86321022cd5b89b4a7cd53" title=" " alt="" coords="627,595,786,635"/>
+<area shape="poly" id="edge24_Node000001_Node000020" title=" " alt="" coords="879,524,838,555,792,585,767,597,765,592,789,580,835,551,875,520"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1device_1_1_device.html#a5338c49397786a569fe0324b29f48af4" title=" " alt="" coords="415,387,562,427"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="618,432,562,422,563,417,619,426"/>
+<area shape="rect" id="Node000004" href="$namespacestd.html#a23678c41a80c407b186771df978f2a24" title=" " alt="" coords="423,451,554,477"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="609,456,555,461,554,455,609,450"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="669,427,573,377,546,363,548,358,576,372,671,422"/>
+<area shape="rect" id="Node000006" href="$structttg__parsec_1_1_buffer.html#aa172f84d2b71ad72b065bf2973b47ca4" title=" " alt="" coords="5,188,148,228"/>
+<area shape="poly" id="edge5_Node000005_Node000006" title=" " alt="" coords="466,295,447,263,421,229,390,198,353,174,325,164,294,159,232,161,173,173,123,190,122,185,171,168,231,155,295,154,326,159,356,170,393,194,425,226,451,260,470,292"/>
+<area shape="rect" id="Node000007" href="$structttg__parsec_1_1_buffer.html#ac03d171f76a9ebf145bdcc2b991cbf5e" title=" " alt="" coords="5,497,148,537"/>
+<area shape="poly" id="edge6_Node000005_Node000007" title=" " alt="" coords="410,371,405,376,394,391,388,406,384,437,378,466,370,481,356,494,333,509,307,520,252,532,198,535,148,532,148,527,198,530,252,527,305,515,330,504,353,490,366,477,373,464,379,436,383,405,389,389,401,373,407,367"/>
+<area shape="rect" id="Node000008" href="$structttg__parsec_1_1_buffer.html#ad7c9683797b26ee8911ae7cfe4712d50" title=" " alt="" coords="196,312,355,352"/>
+<area shape="poly" id="edge7_Node000005_Node000008" title=" " alt="" coords="389,335,355,335,355,330,389,330"/>
+<area shape="rect" id="Node000009" href="$structttg__parsec_1_1_buffer.html#a87cfa2924a1165608d8180337682cdce" title=" " alt="" coords="196,376,355,416"/>
+<area shape="poly" id="edge8_Node000005_Node000009" title=" " alt="" coords="390,365,345,379,343,373,389,360"/>
+<area shape="rect" id="Node000010" href="$structttg__parsec_1_1_buffer.html#a75237a0fe188810d1741db8091603c01" title=" " alt="" coords="204,440,347,480"/>
+<area shape="poly" id="edge9_Node000005_Node000010" title=" " alt="" coords="414,370,404,377,390,390,381,403,372,416,356,430,335,442,333,438,353,426,368,413,377,400,386,387,401,373,411,365"/>
+<area shape="rect" id="Node000011" href="$structttg__parsec_1_1_buffer.html#a14b779203a13f74eb18077dd76aa2462" title=" " alt="" coords="204,5,347,45"/>
+<area shape="poly" id="edge10_Node000005_Node000011" title=" " alt="" coords="475,293,459,241,434,179,399,115,377,86,353,59,337,48,340,43,356,55,381,82,403,112,439,176,464,239,480,292"/>
+<area shape="rect" id="Node000012" href="$structttg__parsec_1_1_buffer.html#ab9c2dbfb2165d1beebdf4c2d3a18d937" title=" " alt="" coords="204,69,347,109"/>
+<area shape="poly" id="edge11_Node000005_Node000012" title=" " alt="" coords="467,295,422,213,390,169,353,130,326,112,329,107,356,126,394,166,426,210,472,292"/>
+<area shape="rect" id="Node000013" href="$structttg__parsec_1_1_buffer.html#a57dc7b47c838715a12d2a59fb3d82b76" title=" " alt="" coords="204,248,347,288"/>
+<area shape="poly" id="edge12_Node000005_Node000013" title=" " alt="" coords="388,305,341,291,342,286,390,300"/>
+<area shape="rect" id="Node000014" href="$structttg__parsec_1_1_buffer.html#a17ee629839b81f7e11adf24164f3116b" title=" " alt="" coords="204,555,347,595"/>
+<area shape="poly" id="edge15_Node000005_Node000014" title=" " alt="" coords="409,371,405,376,391,397,384,416,381,455,378,495,371,516,357,538,334,557,330,552,353,534,366,514,373,494,376,455,379,415,386,394,401,373,406,368"/>
+<area shape="rect" id="Node000015" href="$structttg__parsec_1_1_buffer.html#ace745d5a5d55e60bde6b8a09b138192d" title=" " alt="" coords="200,184,351,224"/>
+<area shape="poly" id="edge16_Node000005_Node000015" title=" " alt="" coords="442,299,400,268,353,238,330,227,332,222,356,234,403,264,446,295"/>
+<area shape="poly" id="edge13_Node000013_Node000006" title=" " alt="" coords="195,246,143,231,144,226,196,241"/>
+<area shape="poly" id="edge14_Node000013_Node000007" title=" " alt="" coords="203,298,198,302,156,350,124,405,101,457,86,498,81,496,96,455,119,403,152,347,194,298,200,294"/>
+<area shape="poly" id="edge22_Node000016_Node000004" title=" " alt="" coords="653,527,574,492,536,479,538,474,576,487,656,522"/>
+<area shape="poly" id="edge18_Node000016_Node000007" title=" " alt="" coords="641,578,551,604,439,625,378,631,316,631,255,624,195,609,165,596,138,577,95,540,98,536,141,573,168,591,197,604,255,619,316,625,378,625,438,620,550,599,639,573"/>
+<area shape="poly" id="edge23_Node000016_Node000014" title=" " alt="" coords="620,558,347,573,347,568,619,553"/>
+<area shape="rect" id="Node000017" href="$structttg__madness_1_1_buffer.html#a9c3e638035902bf7709eb0515132f1cb" title=" " alt="" coords="409,669,568,709"/>
+<area shape="poly" id="edge19_Node000016_Node000017" title=" " alt="" coords="632,580,624,585,609,601,601,618,592,635,576,653,547,671,544,667,573,649,588,632,596,615,605,598,621,581,629,575"/>
+<area shape="rect" id="Node000018" href="$structttg__madness_1_1_buffer.html#a96481342b1b51b6bb9a0227d0010685c" title=" " alt="" coords="409,733,568,773"/>
+<area shape="poly" id="edge20_Node000016_Node000018" title=" " alt="" coords="628,581,625,584,612,601,605,618,601,652,598,687,590,705,577,723,561,735,558,731,573,719,586,703,592,686,596,652,600,617,607,599,621,581,625,577"/>
+<area shape="rect" id="Node000019" href="$structttg__madness_1_1_buffer.html#ab856ca462a43f94b61ca8bc4d345383b" title=" " alt="" coords="409,501,568,541"/>
+<area shape="poly" id="edge21_Node000016_Node000019" title=" " alt="" coords="619,542,568,535,568,529,620,536"/>
+</map>

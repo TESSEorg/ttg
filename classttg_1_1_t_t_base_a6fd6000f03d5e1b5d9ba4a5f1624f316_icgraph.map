@@ -1,0 +1,5 @@
+<map id="ttg::TTBase::out" name="ttg::TTBase::out">
+<area shape="rect" id="Node000001" title="Returns a pointer to the i&#39;th output terminal." alt="" coords="156,5,287,31"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#addc70370fc2c1bc2a58db5592cc6ec44" title="Connect producer output terminal outindex to consumer input terminal inindex (via TTBase pointers)" alt="" coords="5,5,108,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="142,21,108,21,108,15,142,15"/>
+</map>
