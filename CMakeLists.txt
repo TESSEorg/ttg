@@ -198,6 +198,9 @@ endif()
 if (TARGET vrg-build-external-projects)
   add_dependencies(ttg-imported-packages-build vrg-build-external-projects)
 endif()
+# {PaRSEC,MADNESS} rely on usability of {BLAS,LAPACK}_LIBRARIES
+include(SanitizeLinalgLibraries)
+SanitizeLinalgLibraries()
 # PaRSEC
 include(FindOrFetchPARSEC)
 if (TARGET PaRSEC::parsec)
