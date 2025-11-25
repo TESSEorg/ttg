@@ -11,6 +11,7 @@ endif()
 
 add_ttg_executable(fibonacci fibonacci.cc NOT_EXCLUDE_FROM_ALL)
 # Fib device test
+message(WARNING "TTG_HAVE_CUDA=${TTG_HAVE_CUDA}")
 if (TTG_HAVE_CUDA)
     add_ttg_executable(fibonacci_cuda
             fibonacci_device.cc

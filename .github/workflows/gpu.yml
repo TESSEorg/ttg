@@ -79,6 +79,27 @@ jobs:
       shell: bash
       run: cmake --build . --target install
 
+    - name: Configure Fibonacci Example
+      shell: bash
+      run: |
+        cmake -E make_directory ${{github.workspace}}/fibonacci-build
+        cd ${{github.workspace}}/fibonacci-build
+        cmake ${{github.workspace}}/doc/dox/dev/devsamp/fibonacci \
+          -G Ninja \
+          -DCMAKE_CXX_COMPILER=/home/evaleev/code/install/gcc/12/bin/g++ \
+          -DCMAKE_C_COMPILER=/home/evaleev/code/install/gcc/12/bin/gcc \
+          -DCMAKE_CUDA_HOST_COMPILER=/home/evaleev/code/install/gcc/12/bin/g++ \
+          -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+          -DCMAKE_CUDA_ARCHITECTURES=50 \
+          -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
+          -DCMAKE_PREFIX_PATH="${{github.workspace}}/install" \
+          || (cat CMakeFiles/CMakeConfigureLog.yaml && exit 1)
+
+    - name: Build Fibonacci CUDA Example
+      working-directory: ${{github.workspace}}/fibonacci-build
+      shell: bash
+      run: cmake --build . --target fibonacci_cuda-parsec
+
     - name: Run GPU Tests
       working-directory: ${{github.workspace}}/build
       shell: bash
@@ -107,6 +128,12 @@ jobs:
         if [ -f "examples/chain-ttg-cuda-parsec" ]; then
           echo "Testing chain-ttg-cuda-parsec..."
           mpiexec -n 1 ./examples/chain-ttg-cuda-parsec 100
+        fi
+
+        # Test fibonacci_cuda-parsec example (built from installed TTG)
+        if [ -f "${{github.workspace}}/fibonacci-build/fibonacci_cuda-parsec" ]; then
+          echo "Testing fibonacci_cuda-parsec..."
+          mpiexec -n 1 ${{github.workspace}}/fibonacci-build/fibonacci_cuda-parsec 20
         fi
 
     - name: Upload build artifacts
