@@ -93,6 +93,7 @@ jobs:
         # Test bspmm-cuda if it exists
         if [ -f "examples/bspmm-cuda-parsec" ]; then
           echo "Testing bspmm-cuda-parsec..."
+          mpiexec -n 1 ./examples/bspmm-cuda-parsec
           mpiexec -n 1 ./examples/bspmm-cuda-parsec 10 10 10
         fi
 
