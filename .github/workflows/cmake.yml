@@ -71,7 +71,7 @@ jobs:
         sudo dpkg -i cuda-keyring_1.1-1_all.deb
         sudo apt update
         sudo apt install -y cuda-toolkit-12
-        echo "CUDA_BUILD_OPTS=-DENABLE_CUDA=ON -DTTG_ENABLE_CUDA=ON -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-12 -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12/bin/nvcc -DCMAKE_CUDA_HOST_COMPILER=${{ matrix.cxx }}" >> $GITHUB_ENV
+        echo "CUDA_BUILD_OPTS=-DTTG_ENABLE_CUDA=ON -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-12 -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12/bin/nvcc -DCMAKE_CUDA_HOST_COMPILER=${{ matrix.cxx }}" >> $GITHUB_ENV
 
     - name: Create Build Environment
       # Some projects don't allow in-source building, so create a separate build directory
@@ -140,7 +140,7 @@ jobs:
         cmake --build test_install_devsamp_helloworld
         $MPIEXEC -n 2 test_install_devsamp_helloworld/helloworld-parsec
         $MPIEXEC -n 2 test_install_devsamp_helloworld/helloworld-mad
-        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/fibonacci -B test_install_devsamp_fibonacci -DCMAKE_PREFIX_PATH=${{github.workspace}}/install || (cat /home/runner/work/ttg/ttg/install/lib/cmake/ttg/ttg-config.cmake && cat test_install_devsamp_fibonacci/CMakeFiles/CMakeConfigureLog.yaml)
+        cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/fibonacci -B test_install_devsamp_fibonacci -DCMAKE_PREFIX_PATH=${{github.workspace}}/install $CUDA_BUILD_OPTS || (cat /home/runner/work/ttg/ttg/install/lib/cmake/ttg/ttg-config.cmake && cat test_install_devsamp_fibonacci/CMakeFiles/CMakeConfigureLog.yaml)
         cmake --build test_install_devsamp_fibonacci
         $MPIEXEC -n 2 test_install_devsamp_fibonacci/fibonacci-parsec
         cmake -E make_directory test_install_userexamples
