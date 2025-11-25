@@ -279,6 +279,8 @@ install(FILES
         "${PROJECT_SOURCE_DIR}/cmake/modules/AddTTGExecutable.cmake"
         "${PROJECT_SOURCE_DIR}/cmake/modules/AddTTGTestExecutable.cmake"
         "${PROJECT_SOURCE_DIR}/cmake/modules/FindCXXStdCoroutine.cmake"
+        "${PROJECT_SOURCE_DIR}/cmake/modules/FindDPCPP.cmake"
+        "${PROJECT_SOURCE_DIR}/cmake/modules/Findlevel-zero.cmake"
         DESTINATION "${CMAKE_INSTALL_CMAKEDIR}/modules"
         COMPONENT ttg-config)
 

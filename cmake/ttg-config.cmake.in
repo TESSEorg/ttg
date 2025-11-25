@@ -13,6 +13,17 @@ set(TTG_TRACKED_BOOST_VERSION "@TTG_TRACKED_BOOST_VERSION@")
 set(TTG_HAS_BOOST @TTG_HAS_BOOST@)
 set(TTG_IGNORE_BUNDLED_EXTERNALS @TTG_IGNORE_BUNDLED_EXTERNALS@)
 
+# Device runtime support
+set(TTG_HAVE_CUDA @TTG_HAVE_CUDA@)
+set(TTG_HAVE_CUDART @TTG_HAVE_CUDART@)
+set(TTG_HAVE_HIP @TTG_HAVE_HIP@)
+set(TTG_HAVE_HIPBLAS @TTG_HAVE_HIPBLAS@)
+set(TTG_HAVE_HIPSOLVER @TTG_HAVE_HIPSOLVER@)
+set(TTG_HAVE_LEVEL_ZERO @TTG_HAVE_LEVEL_ZERO@)
+set(TTG_HAVE_DPCPP @TTG_HAVE_DPCPP@)
+set(TTG_HAVE_DEVICE @TTG_HAVE_DEVICE@)
+set(TTG_HAVE_COROUTINE @TTG_HAVE_COROUTINE@)
+
 # make TTG CMake modules discoverable + load AddTTGExecutable by default
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/modules")
 include(AddTTGExecutable)
@@ -41,6 +52,45 @@ endif()
 # if C++ coroutines were used discover same version of them
 if (NOT TARGET std::coroutine AND CXX_COROUTINE_COMPONENT)
   find_package(CXXStdCoroutine MODULE QUIET REQUIRED COMPONENTS "${CXX_COROUTINE_COMPONENT}")
+endif()
+
+# Load device runtime support if enabled
+if (TTG_HAVE_CUDA)
+  # Enable CUDA language if not already enabled
+  include(CheckLanguage)
+  check_language(CUDA)
+  if(CMAKE_CUDA_COMPILER AND NOT CMAKE_CUDA_COMPILER_LOADED)
+    enable_language(CUDA)
+  endif()
+endif()
+
+if (TTG_HAVE_CUDART)
+  find_package(CUDAToolkit REQUIRED)
+endif()
+
+if (TTG_HAVE_HIP)
+  # Enable HIP language if not already enabled
+  include(CheckLanguage)
+  check_language(HIP)
+  if(CMAKE_HIP_COMPILER AND NOT CMAKE_HIP_COMPILER_LOADED)
+    enable_language(HIP)
+  endif()
+
+  if (TTG_HAVE_HIPBLAS)
+    find_package(hipblas REQUIRED)
+  endif()
+
+  if (TTG_HAVE_HIPSOLVER)
+    find_package(hipsolver REQUIRED)
+  endif()
+endif()
+
+if (TTG_HAVE_LEVEL_ZERO)
+  find_package(level-zero REQUIRED)
+  if (TTG_HAVE_DPCPP)
+    find_package(DPCPP REQUIRED)
+    find_package(MKL)
+  endif()
 endif()
 
 # Include library IMPORT targets
