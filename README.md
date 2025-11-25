@@ -365,20 +365,20 @@ The host-only part is completely independent of the type of the device programmi
 
 ```cpp
 struct Fn : public ttg::TTValue<Fn> {
-  std::unique_ptr<int64_t[]> F;  // F[0] = F_n, F[1] = F_{n-1}
+  std::shared_ptr<int64_t[]> F;  // F[0] = F_n, F[1] = F_{n-1}
   ttg::Buffer<int64_t> b; // buffer managing host and device memory
-  Fn() : F(std::make_unique<int64_t[]>(2)), b(F.get(), 2) { F[0] = 1; F[1] = 0; }
+  Fn() : F(std::make_shared<int64_t[]>(2)), b(F.get(), 2) { F[0] = 1; F[1] = 0; }
   Fn(const Fn&) = delete;
   Fn(Fn&& other) = default;
   Fn& operator=(const Fn& other) = delete;
   Fn& operator=(Fn&& other) = default;
   template <typename Archive>
   void serialize(Archive& ar) {
-    ttg::ttg_abort();
+    ar & F[0] & F[1] & b;
   }
   template <typename Archive>
   void serialize(Archive& ar, const unsigned int) {
-    ttg::ttg_abort();
+    ar & F[0] & F[1] & b;
   }
 };
 
@@ -449,7 +449,7 @@ For optimal performance, the low-level runtime that manages the data motion acro
 
 ##### `Buffer`
 `Buffer<T>` is a view of a contiguous sequence of objects of type `T` in the host memory that can be automatically moved by the runtime to/from the device memory. Here `Fn::b` is a view of the 2-element sequence pointed to by `Fn::F`; once it's constructed the content of `Fn::F` will be moved to/from the device by the runtime. The subsequent use of `Fn::b` cause the automatic transfers of data to (`device::select(f_n.b)`) and from (`ttg::device::wait(f_n.b)`) the device.
-A `Buffer<T>` can be either owning or non-owning. In the example above, the memory is owned by the `unique_ptr`.
+A `Buffer<T>` can be either freestanding or with lifetime tied to the lifetime of the host buffer; the latter is used in the example above, indicated by the use of `shared_ptr` to manage the lifetime of the host buffer.
 If no pointer is passed to the constructor of `Buffer<T>` the buffer allocates the necessary host-side memory.
 In order to guarantee relocatability of buffers, the data managed by a buffer should be located on the heap, i.e., dynamically allocated.
 

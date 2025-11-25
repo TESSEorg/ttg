@@ -14,24 +14,28 @@
 const int64_t F_n_max = 1000;
 /// N.B. contains values of F_n and F_{n-1}
 struct Fn : public ttg::TTValue<Fn> {
-  std::unique_ptr<int64_t[]> F;  // F[0] = F_n, F[1] = F_{n-1}
+  std::shared_ptr<int64_t[]> F;  // F[0] = F_n, F[1] = F_{n-1}
   ttg::Buffer<int64_t> b;
 
-  Fn() : F(std::make_unique<int64_t[]>(2)), b(F.get(), 2) { F[0] = 1; F[1] = 0; }
+  Fn() : F(std::make_shared<int64_t[]>(2)), b(F, 2) { F[0] = 1; F[1] = 0; }
 
   Fn(const Fn&) = delete;
   Fn(Fn&& other) = default;
   Fn& operator=(const Fn& other) = delete;
   Fn& operator=(Fn&& other) = default;
 
+#ifdef TTG_SERIALIZATION_SUPPORTS_MADNESS
   template <typename Archive>
   void serialize(Archive& ar) {
-    ttg::ttg_abort();
+    ar & madness::archive::wrap(F.get(), 2) & b;
   }
+#endif
+#ifdef TTG_SERIALIZATION_SUPPORTS_BOOST
   template <typename Archive>
   void serialize(Archive& ar, const unsigned int) {
-    ttg::ttg_abort();
+    ar & boost::serialization::make_array(F.get(), 2) & b;
   }
+#endif
 };
 
 auto make_ttg_fib_lt(const int64_t F_n_max = 1000) {

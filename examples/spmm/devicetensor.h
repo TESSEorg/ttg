@@ -63,7 +63,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     explicit DeviceTensor(const size_type& first, const _args&... rest)
     : ttvalue_type()
     , tensor_type(first, rest...)
-    , b(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size())
+    , b(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size())
     { }
 
     /// construct from \c range, allocate data, but not initialized
@@ -71,7 +71,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     explicit DeviceTensor(const Range& range, typename std::enable_if<btas::is_boxrange<Range>::value>::type* = 0)
     : ttvalue_type()
     , tensor_type(range)
-    , b(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size())
+    , b(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size())
     { }
 
     /// construct from \c range object, set all elements to \c v
@@ -79,7 +79,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     DeviceTensor(const Range& range, value_type v, typename std::enable_if<btas::is_boxrange<Range>::value>::type* = 0)
     : ttvalue_type()
     , tensor_type(range)
-    , b(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size())
+    , b(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size())
     { }
 
     /// construct from \c range object, copy elements from \c vec
@@ -87,7 +87,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     DeviceTensor(const Range& range, U* vec, typename std::enable_if<btas::is_boxrange<Range>::value>::type* = 0)
     : ttvalue_type()
     , tensor_type(range, vec)
-    , b(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size())
+    , b(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size())
     { }
 
     /// construct from \c range and \c storage
@@ -97,28 +97,28 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
                                    not std::is_same<Storage, storage_type>::value>::type* = 0)
     : ttvalue_type()
     , tensor_type(range, storage)
-    , b(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size())
+    , b(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size())
     { }
 
     /// copy-copy-construct from \c range and \c storage
     DeviceTensor(const range_type& range, const storage_type& storage)
     : ttvalue_type()
     , tensor_type(range, storage)
-    , b(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size())
+    , b(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size())
     { }
 
     /// copy-move-construct from \c range and \c storage
     DeviceTensor(const range_type& range, storage_type&& storage)
     : ttvalue_type()
     , tensor_type(range, std::forward<storage_type>(storage))
-    , b(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size())
+    , b(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size())
     { }
 
     /// move-construct from \c range and \c storage
     DeviceTensor(range_type&& range, storage_type&& storage)
     : ttvalue_type()
     , tensor_type(std::forward<range_type>(range), std::forward<storage_type>(storage))
-    , b(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size())
+    , b(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size())
     { }
 
     /// Construct an evaluated tensor
@@ -140,7 +140,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
            typename std::enable_if<btas::is_boxrange<Range>::value>::type* = 0)
     : ttvalue_type()
     , tensor_type(range, it, op)
-    , b(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size())
+    , b(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size())
     { }
 
     /// copy constructor
@@ -149,7 +149,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     DeviceTensor(const _Tensor& x) noexcept
     : ttvalue_type()
     , tensor_type(x.clone())
-    , b(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size())
+    , b(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size())
     {
       //std::cout << "DeviceTensor tensor_type copy ctor" << std::endl;
     }
@@ -158,7 +158,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     DeviceTensor(const DeviceTensor& x) noexcept
     : ttvalue_type(x)
     , tensor_type(x.clone())
-    , b(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size())
+    , b(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size())
     {
       //std::cout << "DeviceTensor copy ctor" << std::endl;
     }
@@ -167,7 +167,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     DeviceTensor(tensor_type&& x) noexcept
     : ttvalue_type()
     , tensor_type(std::move(x))
-    , b(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size())
+    , b(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size())
     {
       //std::cout << "DeviceTensor tensor_type move ctor" << std::endl;
     }
@@ -187,7 +187,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
                                  not std::is_same<typename _Tensor::storage_type, storage_type>::value>::type>
     DeviceTensor& operator=(const _Tensor& x) noexcept {
       tensor_type::operator=(x.clone());
-      b.reset(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size());
+      b.reset(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size());
       //std::cout << "DeviceTensor tensor_type copy operator" << std::endl;
       return *this;
     }
@@ -198,7 +198,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
                   std::is_same<typename _Tensor::storage_type, storage_type>::value>::type>
     DeviceTensor& operator=(const _Tensor& x) noexcept {
       tensor_type::operator=(x.clone());
-      b.reset(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size());
+      b.reset(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size());
       //std::cout << "DeviceTensor tensor_type copy operator" << std::endl;
       return *this;
     }
@@ -207,7 +207,7 @@ struct DeviceTensor : public ttg::TTValue<DeviceTensor<_T, _Range, _Storage>>
     DeviceTensor& operator=(const DeviceTensor& x) noexcept {
       ttvalue_type::operator=(x);
       tensor_type::operator=(x.clone());
-      b.reset(std::shared_ptr<_T[]>(pointer(), this->size() ? this->data() : nullptr), this->size());
+      b.reset(this->size() ? std::shared_ptr<_T[]>(pointer(), this->data()) : std::shared_ptr<_T[]>{}, this->size());
       //std::cout << "DeviceTensor copy operator" << std::endl;
       return *this;
     }
