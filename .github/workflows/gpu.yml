@@ -1,0 +1,118 @@
+name: GPU Tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master'}}
+
+jobs:
+  cuda-tests:
+    name: "CUDA Device Tests"
+    runs-on: self-hosted
+
+    env:
+      CCACHE_DIR: ${{github.workspace}}/build/.ccache
+      CCACHE_COMPRESS: true
+      CCACHE_COMPRESSLEVEL: 6
+      OMPI_MCA_btl_vader_single_copy_mechanism: none
+      PARSEC_MCA_runtime_bind_threads: 0
+      MKLROOT: /opt/intel/mkl
+      Eigen3_DIR: /home/evaleev/code/install/eigen-master
+      LD_LIBRARY_PATH: /home/evaleev/code/install/gcc/12/lib64
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup ccache
+      uses: actions/cache@v4
+      with:
+        path: ${{github.workspace}}/build/.ccache
+        key: ${{ runner.os }}-cuda-ccache-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-cuda-ccache-
+
+    - name: Create Build Environment
+      run: cmake -E make_directory ${{github.workspace}}/build
+
+    - name: Configure CMake
+      shell: bash
+      working-directory: ${{github.workspace}}/build
+      run: |
+        cmake $GITHUB_WORKSPACE \
+          -G Ninja \
+          -DCMAKE_CXX_COMPILER=/home/evaleev/code/install/gcc/12/bin/g++ \
+          -DCMAKE_C_COMPILER=/home/evaleev/code/install/gcc/12/bin/gcc \
+          -DCMAKE_CUDA_HOST_COMPILER=/home/evaleev/code/install/gcc/12/bin/g++ \
+          -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+          -DCMAKE_CUDA_ARCHITECTURES=50 \
+          -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_SHARED_LIBS=OFF \
+          -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install \
+          -DTTG_EXAMPLES=ON \
+          -DTTG_ENABLE_CUDA=ON \
+          -DMPIEXEC_PREFLAGS='--bind-to;none;--allow-run-as-root' \
+          || (cat CMakeFiles/CMakeConfigureLog.yaml && exit 1)
+
+    - name: Build TTG
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: ccache -p && ccache -z && cmake --build . && ccache -s
+
+    - name: Build CUDA Examples
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: |
+        echo "Building CUDA device examples..."
+        cmake --build . --target bspmm-cuda-parsec || echo "bspmm-cuda-parsec not available"
+        cmake --build . --target testing_dpotrf_cuda-parsec || echo "testing_dpotrf_cuda-parsec not available"
+        cmake --build . --target chain-ttg-cuda-parsec || echo "chain-ttg-cuda-parsec not available"
+
+    - name: Install
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: cmake --build . --target install
+
+    - name: Run GPU Tests
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: |
+        set -e  # Exit on first error
+
+        echo "=== GPU Device Information ==="
+        nvidia-smi || echo "nvidia-smi not available"
+
+        echo "=== Running CUDA Examples ==="
+
+        # Test bspmm-cuda if it exists
+        if [ -f "examples/bspmm-cuda-parsec" ]; then
+          echo "Testing bspmm-cuda-parsec..."
+          mpiexec -n 1 ./examples/bspmm-cuda-parsec 10 10 10
+        fi
+
+        # Test testing_dpotrf_cuda if it exists
+        if [ -f "examples/testing_dpotrf_cuda-parsec" ]; then
+          echo "Testing testing_dpotrf_cuda-parsec..."
+          mpiexec -n 1 ./examples/testing_dpotrf_cuda-parsec -N 100 -nb 25 -P 1
+        fi
+
+        # Test chain-ttg-cuda if it exists
+        if [ -f "examples/chain-ttg-cuda-parsec" ]; then
+          echo "Testing chain-ttg-cuda-parsec..."
+          mpiexec -n 1 ./examples/chain-ttg-cuda-parsec 100
+        fi
+
+    - name: Upload build artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: cuda-build-logs
+        path: |
+          ${{github.workspace}}/build/CMakeFiles/CMakeConfigureLog.yaml
+          ${{github.workspace}}/build/CMakeCache.txt
