@@ -72,8 +72,7 @@ namespace ttg {
           if (in) {
             if (count != in->get_index()) throw "ttg::Dot: lost count of ins";
             if (disable_type) {
-              ttss << " <in" << count << ">"
-                   << " " << escape(in->get_key_type_str()) << " " << escape(in->get_name());
+              ttss << " <in" << count << ">" << escape(in->get_name());
             } else {
               ttss << " <in" << count << ">"
                    << " " << escape("<" + in->get_key_type_str() + "," + in->get_value_type_str() + ">") << " "
@@ -97,8 +96,7 @@ namespace ttg {
           if (out) {
             if (count != out->get_index()) throw "ttg::Dot: lost count of outs";
             if (disable_type) {
-              ttss << " <out" << count << ">"
-                   << " " << escape(out->get_key_type_str()) << " " << out->get_name();
+              ttss << " <out" << count << ">" << out->get_name();
             } else {
               ttss << " <out" << count << ">"
                    << " " << escape("<" + out->get_key_type_str() + "," + out->get_value_type_str() + ">") << " "
