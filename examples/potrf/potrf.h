@@ -672,7 +672,7 @@ namespace potrf {
   template <typename MatrixT>
   auto make_potrf_ttg(MatrixT& A, ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& input,
                       ttg::Edge<Key2, MatrixTile<typename MatrixT::element_type>>& output, bool defer_write,
-                      bool enable_device_map = true) {
+                      bool enable_device_map = true, bool use_keygen_bcast = true) {
     using T = typename MatrixT::element_type;
     auto keymap1 = [&](const Key1& key) { return A.rank_of(key[0], key[0]); };
 
@@ -710,7 +710,7 @@ namespace potrf {
     tt_dispatch->set_keymap(keymap2a);
     tt_dispatch->set_defer_writer(defer_write);
 
-    auto tt_potrf = make_potrf(A, disp_potrf, syrk_potrf, potrf_trsm, output);
+    auto tt_potrf = make_potrf(A, disp_potrf, syrk_potrf, potrf_trsm, output, use_keygen_bcast);
     tt_potrf->set_keymap(keymap1);
     tt_potrf->set_defer_writer(defer_write);
 #ifdef ENABLE_DEVICE_KERNEL
@@ -719,7 +719,7 @@ namespace potrf {
     }
 #endif // 0
 
-    auto tt_trsm = make_trsm(A, disp_trsm, potrf_trsm, gemm_trsm, trsm_syrk, trsm_gemm_row, trsm_gemm_col, output);
+    auto tt_trsm = make_trsm(A, disp_trsm, potrf_trsm, gemm_trsm, trsm_syrk, trsm_gemm_row, trsm_gemm_col, output, use_keygen_bcast);
     tt_trsm->set_keymap(keymap2a);
     tt_trsm->set_defer_writer(defer_write);
 #ifdef ENABLE_DEVICE_KERNEL
