@@ -39,6 +39,7 @@ int main(int argc, char **argv)
   int ret = EXIT_SUCCESS;
   int niter = 3;
   bool print_dot = false;
+  bool use_keygen_bcast = true;
 
   if( (opt = getCmdOption(argv+1, argv+argc, "-N")) != nullptr ) {
     N = M = atoi(opt);
@@ -59,6 +60,8 @@ int main(int argc, char **argv)
   if( (opt = getCmdOption(argv+1, argv+argc, "-n")) != nullptr) {
     niter = atoi(opt);
   }
+
+  use_keygen_bcast = !cmdOptionExists(argv+1, argv+argc, "-nokeygenbcast");
 
   /* whether to print the TTG dot */
   print_dot = cmdOptionExists(argv+1, argv+argc, "-dot");
@@ -140,7 +143,7 @@ int main(int argc, char **argv)
       ttg::Edge<Key2, MatrixTile<double>> result("To result");
 
       auto potrf_init_tt = make_load_tt(A, startup, cow_hint);
-      auto potrf_ttg = potrf::make_potrf_ttg(A, startup, result, cow_hint, enable_device_map);
+      auto potrf_ttg = potrf::make_potrf_ttg(A, startup, result, cow_hint, enable_device_map, use_keygen_bcast);
       auto potrf_result_ttg = make_result_ttg(A, result, cow_hint);
 
       auto connected = make_graph_executable(potrf_init_tt.get());
