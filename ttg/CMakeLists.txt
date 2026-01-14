@@ -16,6 +16,7 @@ set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/dot.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/env.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/future.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/generator.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/hash.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/hash/std/pair.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/iovec.h

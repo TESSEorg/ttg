@@ -6,9 +6,12 @@
 #include <stdexcept>
 #include <type_traits>
 
+#include <version>
+
 #include "ttg/base/terminal.h"
 #include "ttg/fwd.h"
 #include "ttg/util/demangle.h"
+#include "ttg/util/generator.h"
 #include "ttg/util/meta.h"
 #include "ttg/util/trace.h"
 #include "ttg/world.h"
@@ -157,7 +160,8 @@ namespace ttg {
     using setsize_callback_type = typename base_type::setsize_callback_type;
     using finalize_callback_type = typename base_type::finalize_callback_type;
     using prepare_send_callback_type = meta::detail::prepare_send_callback_t<keyT, std::decay_t<valueT>>;
-    using query_processes_callback_type = meta::detail::query_processes_callback_t<keyT>;
+    using query_callback_type = meta::detail::query_callback_t<keyT>;
+    using broadcast_keygen_local_callback_type = meta::detail::broadcast_keygen_local_callback_t<keyT, std::decay_t<valueT>>;
     static constexpr bool is_an_input_terminal = true;
     ttg::detail::ContainerWrapper<keyT, valueT> container;
 
@@ -165,8 +169,9 @@ namespace ttg {
     send_callback_type send_callback;
     move_callback_type move_callback;
     broadcast_callback_type broadcast_callback;
+    broadcast_keygen_local_callback_type broadcast_keygen_local_callback;
+    query_callback_type query_callback;
     prepare_send_callback_type prepare_send_callback;
-    query_processes_callback_type query_processes_callback;
 
     // No moving, copying, assigning permitted
     In(In &&other) = delete;
@@ -197,12 +202,15 @@ namespace ttg {
                       const setsize_callback_type &setsize_callback = setsize_callback_type{},
                       const finalize_callback_type &finalize_callback = finalize_callback_type{},
                       const prepare_send_callback_type &prepare_send_callback = prepare_send_callback_type{},
-                      const query_processes_callback_type &query_processes_callback = query_processes_callback_type{}) {
+                      const query_callback_type &query_callback = query_callback_type{},
+                      const broadcast_keygen_local_callback_type &bcast_keygen_local_callback = broadcast_keygen_local_callback_type{}
+                    ) {
       this->send_callback = send_callback;
       this->move_callback = move_callback;
       this->broadcast_callback = bcast_callback;
       this->prepare_send_callback = prepare_send_callback;
-      this->query_processes_callback = query_processes_callback;
+      this->query_callback = query_callback;
+      this->broadcast_keygen_local_callback = bcast_keygen_local_callback;
       base_type::set_callback(setsize_callback, finalize_callback);
     }
 
@@ -345,23 +353,26 @@ namespace ttg {
 
     template<typename Key = keyT>
     requires(!ttg::meta::is_void_v<Key>)
-    void query_processes(const ttg::span<Key>& keys, std::function<void(const Key&, int, ttg::device::Device)> cb) {
-      if (query_processes_callback) {
-        query_processes_callback(keys, cb);
+    void query(std::function<void(const ttg::meta::detail::keymap_t<Key>&,
+                                  const ttg::meta::detail::keymap_t<Key, ttg::device::Device>&)>& cb) {
+      if (query_callback) {
+        query_callback(cb);
       } else {
-        throw std::runtime_error("No query_processes_callback set");
+        throw std::runtime_error("No query_callback set");
       }
     }
 
-    template<typename Key = keyT>
-    requires(ttg::meta::is_void_v<Key>)
-    void query_processes(std::function<void(int, ttg::device::Device)> cb) {
-      if (query_processes_callback) {
-        query_processes_callback(cb);
+    // A broadcast that takes a std::generator of strictly local keys
+    template <typename Key, typename Value>
+    std::enable_if_t<!meta::is_void_v<Value>, void>
+    broadcast_keygen_local(ttg::meta::detail::key_generator_type_t<Key> keygen, const Value &value) {
+      if (broadcast_keygen_local_callback) {
+        broadcast_keygen_local_callback(keygen, value);
       } else {
-        throw std::runtime_error("No query_processes_callback set");
+        for (auto &&key : keygen()) send(key, value);
       }
     }
+
   };
 
   namespace detail {
@@ -634,31 +645,44 @@ namespace ttg {
     }
 
     /**
-     * Queries the processes for the given key. Iterates over all connected input terminals
-     * and queries the
+     * A callback based query mechanism that is invoked by the successor TTs
+     * by passing a the process and device map callback to the callback.
+     *
+     * @param cb A callback that takes two parameters:
+     *           - keymap_t<keyT>: mapping from keys to processes
+     *           - keymap_t<keyT, ttg::device::Device>: mapping from keys to devices
      */
-    template<typename Key = keyT>
-    requires(!meta::is_void_v<Key>)
-    void query_processes(const ttg::span<Key>& keys, std::function<void(const Key&, int, ttg::device::Device)> cb) {
+    void query(std::function<void(const ttg::meta::detail::keymap_t<keyT>&,
+                                  const ttg::meta::detail::keymap_t<keyT, ttg::device::Device>&)> cb) {
       for (auto &&successor : this->successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
-          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->query_processes(keys, cb);
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->query(cb);
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
-          static_cast<In<keyT, valueT> *>(successor)->query_processes(keys, cb);
+          static_cast<In<keyT, valueT> *>(successor)->query(cb);
         }
       }
     }
 
-    template<typename Key = keyT>
-    requires(meta::is_void_v<Key>)
-    void query_processes(std::function<void(int, ttg::device::Device)> cb) {
+
+    /**
+     * A callback to broadcast to strictly local successors using std::generator
+     * for the keys.
+     *
+     * @param cb A callback that takes two parameters:
+     *           - keymap_t<keyT>: mapping from keys to processes
+     *           - keymap_t<keyT, ttg::device::Device>: mapping from keys to devices
+     */
+    template<typename Key, typename Value>
+    requires (!meta::is_void_v<Value>)
+    void broadcast_keygen_local(const ttg::meta::detail::key_generator_type_t<Key>& keygen,
+                                const Value &value) {
       for (auto &&successor : this->successors()) {
         assert(successor->get_type() != TerminalBase::Type::Write);
         if (successor->get_type() == TerminalBase::Type::Read) {
-          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->query_processes(cb);
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->template broadcast_keygen_local<Key>(keygen, value);
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
-          static_cast<In<keyT, valueT> *>(successor)->query_processes(cb);
+          static_cast<In<keyT, valueT> *>(successor)->template broadcast_keygen_local<Key>(keygen, value);
         }
       }
     }

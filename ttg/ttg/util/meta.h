@@ -5,6 +5,9 @@
 #include <functional>
 #include <type_traits>
 
+#include <version>
+
+#include "ttg/util/generator.h"
 #include "ttg/util/span.h"
 #include "ttg/util/typelist.h"
 
@@ -824,7 +827,7 @@ namespace ttg {
       using move_callback_t = typename move_callback<Key, Value>::type;
 
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-      // broadcast_callback_t<key,value> = std::function<void(const key&, value&&>, protected against void key or value
+      // broadcast_callback_t<key,value> = std::function<void(const key&, const value&)>, protected against void key or value
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       template <typename Key, typename Value, typename Enabler = void>
       struct broadcast_callback;
@@ -847,7 +850,47 @@ namespace ttg {
       template <typename Key, typename Value>
       using broadcast_callback_t = typename broadcast_callback<Key, Value>::type;
 
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // key_generator_type<key> = std::function<ttg::generator<Key>()>,
+      // protected against void key
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      template<typename Key, typename Enabler = void>
+      struct key_generator_type {
+        using type = std::function<ttg::generator<Key>()>;
+      };
 
+      template<typename Key>
+      struct key_generator_type<Key, std::enable_if_t<is_void_v<Key>>> {
+        using type = std::function<ttg::generator<bool>()>;
+      };
+
+      template<typename Key>
+      using key_generator_type_t = typename key_generator_type<Key>::type;
+
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // broadcast_local_stdgen_callback_t<key,value> = std::function<void(ttg::generator<Key>&, const Value&)>,
+      // protected against void key or value
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      template <typename Key, typename Value, typename Enabler = void>
+      struct broadcast_keygen_local_callback;
+      template <typename Key, typename Value>
+      struct broadcast_keygen_local_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
+        using type = std::function<void(key_generator_type_t<Key>&, const Value &)>;
+      };
+      template <typename Key, typename Value>
+      struct broadcast_keygen_local_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
+        using type = std::function<void(key_generator_type_t<Key>&)>;
+      };
+      template <typename Key, typename Value>
+      struct broadcast_keygen_local_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
+        using type = std::function<void(const Value &)>;
+      };
+      template <typename Key, typename Value>
+      struct broadcast_keygen_local_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
+        using type = std::function<void()>;
+      };
+      template <typename Key, typename Value>
+      using broadcast_keygen_local_callback_t = typename broadcast_keygen_local_callback<Key, Value>::type;
 
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       // setsize_callback_t<key> = std::function<void(const keyT &, std::size_t)> protected against void key
@@ -969,25 +1012,15 @@ namespace ttg {
       using constraint_callback_t = typename constraint_callback<Key>::type;
 
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-      // query_processes_callback_t<Key, Value> = std::function<void(span<Key> &, std::vector<int>&)> protected against void key
+      // query_callback_t<Key> = std::function<void (const std::function<void(const ttg::meta::keymap_t<Key>&,
+      //                                                                      const ttg::meta::keymap_t<Key, ttg::device::Device>&)>&)>&)
+      // protected against void key
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-      template<typename Key, typename Enabler = void>
-      struct query_processes_callback;
-
       template<typename Key>
-      struct query_processes_callback<Key, std::enable_if_t<!is_void_v<Key>>> {
-        using type = std::function<void(const ttg::span<Key> &,
-                                        std::function<void(const Key&, int, ttg::device::Device)>&)>;
-      };
-
-      template<typename Key>
-      struct query_processes_callback<Key, std::enable_if_t<is_void_v<Key>>> {
-        using type = std::function<void(std::function<void(int, ttg::device::Device)>&&)>;
-      };
-
-      template<typename Key>
-      using query_processes_callback_t = typename query_processes_callback<Key>::type;
+      using query_callback_t = std::function<void (
+                                const std::function<void (const keymap_t<Key>&,
+                                                          const keymap_t<Key, ttg::device::Device>&)>&)>;
 
 
     }  // namespace detail
