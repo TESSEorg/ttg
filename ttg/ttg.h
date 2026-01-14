@@ -13,6 +13,7 @@
 
 #include "ttg/runtimes.h"
 #include "ttg/util/demangle.h"
+#include "ttg/util/generator.h"
 #include "ttg/util/hash.h"
 #include "ttg/util/meta.h"
 #include "ttg/util/print.h"

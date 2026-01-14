@@ -31,6 +31,7 @@
 #include "ttg/terminal.h"
 #include "ttg/tt.h"
 #include "ttg/util/env.h"
+#include "ttg/util/generator.h"
 #include "ttg/util/hash.h"
 #include "ttg/util/meta.h"
 #include "ttg/util/meta/callable.h"
@@ -1298,14 +1299,14 @@ namespace ttg_parsec {
 
     /**
      * Type of tuple of vectors/bool passed to output generators.
+     * Replace void with bool to indicate whether an output was generated on that edge.
      */
-    using output_key_types = typename ttg::edges_to_output_key_types<output_edges_type>::type;
+    using output_key_types = typename ttg::meta::replace_any<typename ttg::edges_to_output_key_types<output_edges_type>::type, void, bool>::type;
     template<typename T>
     struct broadcast_keygen_tuple_type_helper;
     template<typename... Ts>
     struct broadcast_keygen_tuple_type_helper<std::tuple<Ts...>> {
-      using type = typename ttg::meta::replace_any<std::tuple<std::vector<Ts>...>,
-                                                   std::vector<void>, bool>::type;
+      using type = std::tuple<std::vector<Ts>...>;
     };
 
     using broadcast_keygen_tuple_type = typename broadcast_keygen_tuple_type_helper<output_key_types>::type;
@@ -1323,6 +1324,27 @@ namespace ttg_parsec {
 
     /* output generator callback */
     broadcast_keygen_callback_t broadcast_keygen_cb;
+
+    /**
+     * Definitions for std::generator broadcast key generation.
+     */
+    template<typename Key, typename T, typename Enabler = void>
+    struct broadcast_stdgen_tuple_cb_helper;
+
+    template<typename Key, typename... Ts>
+    struct broadcast_stdgen_tuple_cb_helper<Key, std::tuple<Ts...>, std::enable_if_t<!ttg::meta::is_void_v<Key>>> {
+      using type = std::function<std::tuple<ttg::meta::detail::key_generator_type_t<Ts>...>(const Key&)>;
+    };
+
+    template<typename Key, typename... Ts>
+    struct broadcast_stdgen_tuple_cb_helper<Key, std::tuple<Ts...>, std::enable_if_t<ttg::meta::is_void_v<Key>>> {
+      using type = std::function<std::tuple<ttg::meta::detail::key_generator_type_t<Ts>...>()>;
+    };
+
+    using broadcast_stdgen_tuple_cb_type = typename broadcast_stdgen_tuple_cb_helper<key_type, output_key_types>::type;
+    /* output generator callback */
+    broadcast_stdgen_tuple_cb_type broadcast_stdgen_cb;
+
 
     /* the offset of the key placed after the task structure in the memory from mempool */
     constexpr static const size_t task_key_offset = sizeof(task_t);
@@ -2399,26 +2421,26 @@ namespace ttg_parsec {
         auto world = ttg::default_execution_context();
         int myrank = world.rank();
         auto bcast_key_tuple = broadcast_keygen_tuple_type();
-        auto local_bcast_keys_tuple = broadcast_keygen_tuple_type();
         std::optional<std::set<ttg::device::Device>> deviceset = std::set<ttg::device::Device>();
         std::optional<std::set<int>> procset = std::set<int>();
-        broadcast_keygen_cb(key, bcast_key_tuple);
+        //broadcast_keygen_cb(key, bcast_key_tuple);
+        auto keygen_tuple = broadcast_stdgen_cb(key);
 
         /* collect the processes that are involved */
-        keygen_query_successor(bcast_key_tuple,
+        keygen_query_successor(keygen_tuple,
                                procset, // we don't care about the successor processes
                                deviceset,
-                               myrank, local_bcast_keys_tuple,
+                               myrank,
                                std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
 
         set_arg_fetch_value_and_release<value_type>(msg, deviceset.value(),
-          [this, key, procset = std::move(procset), local_bcast_keys_tuple = std::move(local_bcast_keys_tuple)]
+          [this, key, keygen_tuple = std::move(keygen_tuple), procset = std::move(procset)]
           (detail::ttg_data_copy_t *copy) {
             value_type& value = *reinterpret_cast<value_type *>(copy->get_ptr());
 
             auto dtm = DummyTaskManager(this, copy); // set the parsec_ttg_caller and holds on to it until the end of the function
 
-            broadcast_keygen_select(local_bcast_keys_tuple, procset.value(), key, value);
+            broadcast_keygen_select(keygen_tuple, procset.value(), key, value);
           });
 
       } else {
@@ -3387,49 +3409,93 @@ namespace ttg_parsec {
     }
 
 
+    template <std::size_t i, typename Key, typename Value>
+    std::enable_if_t<!ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>,
+                     void>
+    broadcast_local(std::function<ttg::generator<Key>()> &keygen, const Value &value) {
+
+#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
+      if(world.impl().profiling()) {
+        parsec_profiling_ts_trace(world.impl().parsec_ttg_profile_backend_bcast_arg_start, 0, 0, NULL);
+      }
+#endif
+      int myrank = world.rank();
+      parsec_task_t *task_ring = nullptr;
+      detail::ttg_data_copy_t *copy = nullptr;
+      if (nullptr != detail::parsec_ttg_caller) {
+        copy = detail::find_copy_in_task(detail::parsec_ttg_caller, &value);
+      }
+
+      for (auto key : keygen()) {
+        if (keymap(key) != myrank) continue;
+        set_arg_local_impl<i>(key, value, copy, &task_ring);
+      }
+
+      /* submit all ready tasks at once */
+      if (nullptr != task_ring) {
+        parsec_task_t *vp_task_ring[1] = { task_ring };
+        __parsec_schedule_vp(world.impl().execution_stream(), vp_task_ring, 0);
+      }
+#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
+      if(world.impl().profiling()) {
+        parsec_profiling_ts_trace(world.impl().parsec_ttg_profile_backend_set_arg_end, 0, 0, NULL);
+      }
+#endif
+    }
+
+
+
+
+    /**********************************************
+     * Keygen broadcast support
+     *********************************************/
+
+    /**
+     * Query properties of successors for the keys in the provided tuple.
+     * Properties include the set of processes and corresponding devices as
+     * well as whether any keys are destined for the local rank.
+     */
     template<std::size_t I, std::size_t... Is>
-    void keygen_query_successor(auto& bcast_key_tuple,
+    void keygen_query_successor(auto&& keygen_tuple,
                                 std::optional<std::set<int>>& procset,
                                 std::optional<std::set<ttg::device::Device>>& deviceset,
                                 int local_rank,
-                                auto& local_bcast_keys_tuple,
                                 std::index_sequence<I, Is...>)
     {
       using key_type = typename std::tuple_element_t<I, output_terminalsT>::key_type;
       if constexpr (ttg::meta::is_void_v<key_type>) {
         // the key is void so the entry is bool
-        if (std::get<I>(bcast_key_tuple)) {
-          std::get<I>(output_terminals).query_processes(
-                                          [&](int proc, ttg::device::Device device){
-                                            if (procset) procset->insert(proc);
-                                            if (proc == local_rank) {
-                                              if (deviceset) deviceset->insert(device);
-                                              std::get<I>(local_bcast_keys_tuple) = true;
-                                            }
-                                          });
+        if (std::get<I>(keygen_tuple)()) {
+        std::get<I>(output_terminals).query(
+            [&](const ttg::meta::detail::keymap_t<key_type>& keymap,
+                const ttg::meta::detail::keymap_t<key_type, ttg::device::Device>& devicemap){
+              int proc = keymap();
+              if (procset) procset->insert(proc);
+              if (proc == local_rank) {
+                if (deviceset) deviceset->insert(devicemap());
+              }
+            });
         }
       } else {
-        auto& keyvec = std::get<I>(bcast_key_tuple);
+        auto& keygen = std::get<I>(keygen_tuple);
         using key_type = typename std::tuple_element_t<I, output_terminalsT>::key_type;
-        static_assert(std::is_same_v<typename std::decay_t<decltype(keyvec)>::value_type, key_type>,
-                      "key type mismatch");
-        if (keyvec.size()) {
-          std::function<void(const key_type&, int, ttg::device::Device)> func =
-            [&](const key_type& key, int proc,
-                ttg::device::Device device){
+        std::get<I>(output_terminals).query(
+          [&](const ttg::meta::detail::keymap_t<key_type>& keymap,
+              const ttg::meta::detail::keymap_t<key_type, ttg::device::Device>& devicemap){
+            // Handle the query results here
+            for (auto&& key : keygen()) {
+              int proc = keymap(key);
+              ttg::device::Device device = devicemap ? devicemap(key) : ttg::device::Device{};
               if (procset) procset->insert(proc);
               if (proc == local_rank) {
                 if (deviceset) deviceset->insert(device);
-                std::get<I>(local_bcast_keys_tuple).push_back(key);
               }
-            };
-          std::get<I>(output_terminals).query_processes(ttg::span(keyvec.data(), keyvec.size()),
-                                                        func);
-        }
+            }
+          });
       }
       // recurse to next element in tuple
       if constexpr (sizeof...(Is) > 0) {
-        keygen_query_successor(bcast_key_tuple, procset, deviceset, local_rank, local_bcast_keys_tuple, std::index_sequence<Is...>());
+        keygen_query_successor(keygen_tuple, procset, deviceset, local_rank, std::index_sequence<Is...>());
       }
     }
 
@@ -3437,28 +3503,26 @@ namespace ttg_parsec {
      * Invoke all output terminals on the keys in the provided tuple.
      */
     template<std::size_t I, std::size_t... Is>
-    void bcast_keygen_local(auto& local_bcast_keys_tuple, auto& value, std::index_sequence<I, Is...>)
+    void bcast_keygen_local(auto& keygen_tuple, auto& value, std::index_sequence<I, Is...>)
     {
-      if constexpr (ttg::meta::is_void_v<typename std::tuple_element_t<I, output_terminalsT>::key_type>) {
+      using key_type = typename std::tuple_element_t<I, output_terminalsT>::key_type;
+      if constexpr (ttg::meta::is_void_v<key_type>) {
         // key is void so entry is bool
-        if (std::get<I>(local_bcast_keys_tuple)) {
+        if (std::get<I>(keygen_tuple)()) {
           std::get<I>(output_terminals).sendv(value);
         }
       } else {
-        auto& keyvec = std::get<I>(local_bcast_keys_tuple);
-        using key_type = std::tuple_element_t<I, output_terminalsT>::key_type;
-        if (keyvec.size()) {
-          std::get<I>(output_terminals).broadcast(keyvec, value);
-        }
+        auto& keygen = std::get<I>(keygen_tuple);
+        std::get<I>(output_terminals).template broadcast_keygen_local<key_type>(keygen, value);
       }
       if constexpr (sizeof...(Is) > 0) {
-        bcast_keygen_local(local_bcast_keys_tuple, value, std::index_sequence<Is...>());
+        bcast_keygen_local(keygen_tuple, value, std::index_sequence<Is...>());
       }
     }
 
 
     template<template<class> class Bcast, typename Key, typename Value>
-    void broadcast_keygen_impl(const auto& local_bcast_keys_tuple,
+    void broadcast_keygen_impl(const auto& keygen_tuple,
                                const auto& procset,
                                const Key& key,
                                const Value& value) {
@@ -3536,7 +3600,7 @@ namespace ttg_parsec {
 
       if (procset.contains(myrank)) {
         // local broadcast
-        bcast_keygen_local(local_bcast_keys_tuple, value,
+        bcast_keygen_local(keygen_tuple, value,
                           std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
       }
     }
@@ -3545,32 +3609,31 @@ namespace ttg_parsec {
     void broadcast_keygen(const Key& key, const Value& value) {
       int myrank = world.rank();
       int root = keymap(key);
-      auto bcast_key_tuple = broadcast_keygen_tuple_type();
-      auto local_bcast_keys_tuple = broadcast_keygen_tuple_type();
-      broadcast_keygen_cb(key, bcast_key_tuple);
+      //broadcast_keygen_cb(key, bcast_key_tuple);
+      auto keygen_tuple = broadcast_stdgen_cb(key);
 
       /* collect the processes that are involved */
       std::optional<std::set<int>> procset = std::set<int>();
       std::optional<std::set<ttg::device::Device>> deviceset = std::nullopt;
-      keygen_query_successor(bcast_key_tuple, procset, deviceset, // ignore the devices here
-                             myrank, local_bcast_keys_tuple,
+      keygen_query_successor(keygen_tuple, procset, deviceset, // ignore the devices here
+                             myrank,
                              std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
 
-      broadcast_keygen_select(local_bcast_keys_tuple, procset.value(), key, value);
+      broadcast_keygen_select(keygen_tuple, procset.value(), key, value);
     }
 
     template<typename Key, typename Value>
-    void broadcast_keygen_select(const auto& local_bcast_keys_tuple,
+    void broadcast_keygen_select(const auto& keygen_tuple,
                                  const auto& procset,
                                  const Key& key,
                                  const Value& value) {
       BroadcastType bcast_type = get_broadcast_type();
       switch (bcast_type) {
         case BroadcastType::Pipe:
-          broadcast_keygen_impl<BroadcastPipe>(local_bcast_keys_tuple, procset, key, value);
+          broadcast_keygen_impl<BroadcastPipe>(keygen_tuple, procset, key, value);
           break;
         case BroadcastType::Star:
-          broadcast_keygen_impl<BroadcastStar>(local_bcast_keys_tuple, procset, key, value);
+          broadcast_keygen_impl<BroadcastStar>(keygen_tuple, procset, key, value);
           break;
         default:
           throw std::runtime_error("Error: unknown broadcast type");
@@ -3587,7 +3650,7 @@ namespace ttg_parsec {
 
         broadcast_keygen(key, value);
       } else {
-        throw std::runtime_error("Error: broadcast_keygen invoked on a ttg::Task with no output terminals");
+        throw std::runtime_error("Error: broadcast_keygen invoked on a TT with no output terminals");
       }
     }
 
@@ -4102,22 +4165,18 @@ namespace ttg_parsec {
         auto prepare_send_callback = [this](const ttg::span<const keyT> &keylist, const valueT &value) {
           prepare_send<i, keyT, valueT>(keylist, value);
         };
-        auto query_processes = [this](const ttg::span<const keyT> &keylist, std::function<void(keyT, int, ttg::device::Device)> cb) {
-          if constexpr(derived_has_device_op()) {
-            for (auto& key : keylist) {
-              cb(key, keymap(key), devicemap(key));
-            }
-          } else {
-            for (auto& key : keylist) {
-              cb(key, keymap(key), ttg::device::Device{});
-            }
-          }
+        auto query_callback = [this](const std::function<void (const ttg::meta::detail::keymap_t<keyT>&,
+                                                               const ttg::meta::detail::keymap_t<keyT, ttg::device::Device>&)>& cb){
+          cb(keymap, devicemap);
+        };
+        auto broadcast_local_cb = [this](std::function<ttg::generator<keyT>()> &keygen, const valueT &value){
+          this->broadcast_local<i, keyT, valueT>(keygen, value);
         };
         auto setsize_callback = [this](const keyT &key, std::size_t size) { set_argstream_size<i>(key, size); };
         auto finalize_callback = [this](const keyT &key) { finalize_argstream<i>(key); };
         input.set_callback(send_callback, move_callback, broadcast_callback,
                            setsize_callback, finalize_callback, prepare_send_callback,
-                           query_processes);
+                           query_callback, broadcast_local_cb);
       }
       //////////////////////////////////////////////////////////////////
       // case 2: nonvoid key, void value, mixed inputs
@@ -4940,11 +4999,25 @@ namespace ttg_parsec {
      * Inside the task, only one bcast_gen call may be made, with the task's key and
      * the value that will then be sent to all keys provided by the output generator.
      */
+#if 0
     template<typename OutGen>
     void set_broadcast_keygen(OutGen &&gen) {
       static_assert(1 == std::tuple_size_v<ttg::meta::unique_tuple_types_t<ttg::edges_to_output_value_types_t<output_edges_type>>>,
                     "Generator-based broadcast currently supports only one output value type!");
       broadcast_keygen_cb = std::forward<OutGen>(gen);
+    }
+#endif // 0
+
+    /**
+     * Sets the output generator for the keygen broadcast function.
+     * The callback returns a tuple of \c std::function<ttg::generator<T>(const key_type&)>, i.e.,
+     * each tuple element returning a generator for the key type of the corresponding output terminal.
+     * Inside the task, only one bcast_gen call may be made, with the task's key and
+     * the value that will then be sent to all keys provided by the output generator.
+     */
+    template<typename OutGen>
+    void set_broadcast_keygen(OutGen &&gen) {
+      broadcast_stdgen_cb = std::forward<OutGen>(gen);
     }
 
     // Register the static_op function to associate it to instance_id

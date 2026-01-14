@@ -197,7 +197,11 @@ namespace potrf {
 #else /* defined(ENABLE_DEVICE_KERNEL) */
 
       auto info = lapack::potrf(lapack::Uplo::Lower, tile_kk.rows(), tile_kk.data(), tile_kk.lda());
-      assert(info == 0);
+      if (info != 0) {
+        // Well... Here we should interrupt the DAG of tasks, there is an error. Raise?
+        std::cerr << "Factorization of tile " << K << " failed: " << info << std::endl;
+        ttg::abort();
+      }
 
 #if defined(DEBUG_TILES_VALUES)
       //std::cout << "After POTRF(" << key << "), A(" << K << ", " << K << ") is " << tile_kk << std::endl;
@@ -215,11 +219,22 @@ namespace potrf {
     auto tt = ttg::make_tt<ES>(f_dev, ttg::edges(ttg::fuse(input, input_disp)), ttg::edges(output_result, output_trsm), "POTRF",
                                {"tile_kk/dispatcher"}, {"output_result", "output_trsm"});
     if (use_keygen_bcast) {
-      tt->set_broadcast_keygen([=](const Key1& key, auto& bcast_key_tuple){
-        auto [bcast_key_kk, bcast_key_list] = successor_fn(key);
-        std::get<0>(bcast_key_tuple).push_back(bcast_key_kk);
-        std::get<1>(bcast_key_tuple) = std::move(bcast_key_list);
-      });
+      tt->set_broadcast_keygen(
+        [=](const Key1& key) {
+          return std::make_tuple(
+            [=]() -> std::generator<Key2> {
+              co_yield Key2{key[0], key[0]};
+            },
+            [=]() -> std::generator<Key2> {
+              const auto K = key[0];
+              for (int m = K + 1; m < A.rows(); ++m) {
+                /* send tile to trsm */
+                if (ttg::tracing()) ttg::print("POTRF(", key, "): sending output to TRSM(", Key2{m, K}, ")");
+                co_yield Key2(m, K);
+              }
+            }
+          );
+        });
     }
 
     return tt;
@@ -368,12 +383,38 @@ namespace potrf {
                                ttg::edges(output_result, output_diag, output_row, output_col), "TRSM",
                                {"tile_kk", "tile_mk/dispatcher"}, {"output_result", "tile_mk", "output_row", "output_col"});
     if (use_keygen_bcast) {
-      tt->set_broadcast_keygen([=](const Key2& key, auto& bcast_key_tuple){
-        auto [bcast_key_result, bcast_key_syrk, bcast_key_list_row, bcast_key_list_col] = successor_fn(key);
-        std::get<0>(bcast_key_tuple).push_back(bcast_key_result);
-        std::get<1>(bcast_key_tuple).push_back(bcast_key_syrk);
-        std::get<2>(bcast_key_tuple) = std::move(bcast_key_list_row);
-        std::get<3>(bcast_key_tuple) = std::move(bcast_key_list_col);
+      tt->set_broadcast_keygen([=](const Key2& key){
+        return std::make_tuple(
+          [=] -> std::generator<Key2> {
+            co_yield key;
+          },
+          [=] -> std::generator<Key2> {
+            co_yield Key2{key[1], key[0]};
+          },
+          [=] -> std::generator<Key3> {
+            const int M = key[0];
+            const int K = key[1];  // the column equals the outer most look K (same as PO)
+
+            /* send tile to syrk on diagonal */
+            if (ttg::tracing()) ttg::print("TRSM(", key, "): sending output to syrk(", Key2{K, M}, ")");
+
+            /* send the tile to all gemms across in row i */
+            for (int n = K + 1; n < M; ++n) {
+              if (ttg::tracing()) ttg::print("TRSM(", key, "): sending output to gemm( ", Key3{M, n, K}, ")");
+              co_yield Key3(M, n, K);
+            }
+          },
+          [=] -> std::generator<Key3> {
+            const int M = key[0];
+            const int K = key[1];  // the column equals the outer most look K (same as PO)
+
+            /* send the tile to all gemms down in column i */
+            for (int m = M + 1; m < A.rows(); ++m) {
+              if (ttg::tracing()) ttg::print("TRSM(", key, "): sending output to gemm( ", Key3{m, M, K}, ")");
+              co_yield Key3(m, M, K);
+            }
+          }
+        );
       });
     }
     return tt;
