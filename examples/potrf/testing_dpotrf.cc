@@ -191,7 +191,7 @@ int main(int argc, char **argv)
     ttg::Edge<Key2, MatrixTile<double>> toresult("To Result");
 
     auto init_tt = make_load_tt(A, topotrf, cow_hint);
-    auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, toresult, cow_hint);
+    auto potrf_ttg = potrf::make_potrf_ttg(A, topotrf, toresult, cow_hint, enable_device_map, use_keygen_bcast);
     auto result2_ttg = make_result_ttg(A, toresult, cow_hint);
 
     bool connected = make_graph_executable(init_tt.get());
