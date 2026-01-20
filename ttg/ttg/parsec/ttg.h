@@ -2174,6 +2174,7 @@ namespace ttg_parsec {
                                          const std::set<ttg::device::Device>& deviceset,
                                          ReleaseFn&& release) {
       int32_t num_iovecs = msg->tt_id.num_iovecs;
+      bool inline_data = msg->tt_id.inline_data;
       uint64_t pos = 0;
       //bool inline_data = msg->inline_data;
       detail::ttg_data_copy_t *copy;
@@ -2194,7 +2195,7 @@ namespace ttg_parsec {
         pos = unpack(*static_cast<ValueT *>(copy->get_ptr()), msg->bytes, pos);
       }
 
-      if (num_iovecs == 0) {
+      if (num_iovecs == 0 && !inline_data) {
         release(copy);
         //set_arg_from_msg_keylist<i, ValueT>(ttg::span<keyT>(&keylist[0], num_keys), copy);
       } else {
@@ -2327,7 +2328,7 @@ namespace ttg_parsec {
           }
         }
 
-        assert(num_iovecs == nv);
+        assert(inline_data || num_iovecs == nv);
 
         if (inline_data) {
           release(copy);
@@ -3313,8 +3314,6 @@ namespace ttg_parsec {
         auto local_begin = keylist_sorted.end();
         auto local_end = keylist_sorted.end();
 
-        int32_t num_iovs = 0;
-
         detail::ttg_data_copy_t *copy;
         copy = detail::find_copy_in_task(detail::parsec_ttg_caller, &value);
         assert(nullptr != copy);
@@ -3332,6 +3331,7 @@ namespace ttg_parsec {
         std::vector<std::pair<int32_t, std::shared_ptr<void>>> memregs;
         memregs = register_bcast_data(value, inline_data, msg, pos);
 
+        int32_t num_iovs = memregs.size();
         msg->tt_id.num_iovecs = num_iovs;
 
         std::size_t save_pos = pos;
