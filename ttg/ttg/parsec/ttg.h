@@ -4158,8 +4158,8 @@ namespace ttg_parsec {
       }
     }
 
-    void print_incomplete_tasks() {
-      parsec_hash_table_for_all(&tasks_table, ht_iter_cb, this);
+    virtual void print_incomplete_tasks() const override {
+      parsec_hash_table_for_all((parsec_hash_table_t*)&tasks_table, ht_iter_cb, (void*)this);
     }
 
     virtual void release() override { do_release(); }

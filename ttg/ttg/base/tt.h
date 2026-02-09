@@ -232,6 +232,10 @@ namespace ttg {
     /// @return World in which this lives
     virtual ttg::World get_world() const = 0;
 
+    virtual void print_incomplete_tasks() const {
+      throw std::runtime_error("print_incomplete_tasks not implemented!");
+    }
+
     /// Returns a pointer to the i'th input terminal
     ttg::TerminalBase *in(size_t i) {
       if (i >= inputs.size()) throw name + ":TTBase: you are requesting an input terminal that does not exist";

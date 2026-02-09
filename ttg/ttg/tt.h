@@ -103,6 +103,12 @@ namespace ttg {
       for (auto &op : tts) op->make_executable();
     }
 
+    virtual void print_incomplete_tasks() const override {
+      for (auto& tt : tts) {
+        tt->print_incomplete_tasks();
+      }
+    }
+
    private:
     void own_my_tts() const {
       for (auto &op : tts) op->owning_ttg = this;
