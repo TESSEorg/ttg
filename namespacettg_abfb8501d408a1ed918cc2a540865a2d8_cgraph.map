@@ -1,0 +1,15 @@
+<map id="ttg::tracing" name="ttg::tracing">
+<area shape="rect" id="Node000001" title="returns whether tracing is enabled" alt="" coords="5,70,103,95"/>
+<area shape="rect" id="Node000002" href="$namespacettg_1_1detail.html#a95356c3874e7ec9268a40feb4fc1519f" title=" " alt="" coords="151,5,280,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="90,67,144,48,146,53,91,72"/>
+<area shape="rect" id="Node000006" href="$namespacettg.html#afbdd9c742be395e0746fdbc26c7d55cc" title="returns whether tracing was enabled at configure time" alt="" coords="459,119,604,145"/>
+<area shape="poly" id="edge7_Node000001_Node000006" title=" " alt="" coords="103,85,445,121,445,126,103,90"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#af5e470229c1ddef41b83b6398a5dc583" title=" " alt="" coords="328,70,411,95"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="271,43,323,63,321,68,269,48"/>
+<area shape="poly" id="edge6_Node000003_Node000001" title=" " alt="" coords="328,85,116,85,116,80,328,80"/>
+<area shape="rect" id="Node000004" href="$namespacettg.html#aacacfe8bc9582308a405c4370650a9d4" title="atomically prints to std::clog a sequence of items (separated by ttg::print_separator) followed by st..." alt="" coords="496,70,567,95"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="411,80,482,80,482,85,411,85"/>
+<area shape="poly" id="edge5_Node000003_Node000006" title=" " alt="" coords="412,93,477,113,475,118,410,98"/>
+<area shape="rect" id="Node000005" href="$namespacettg_1_1detail.html#a26e07486d5ef8eb5735a8975991a7693" title=" " alt="" coords="652,63,780,103"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="567,80,638,80,638,85,567,85"/>
+</map>

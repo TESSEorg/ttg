@@ -1,0 +1,15 @@
+<map id="ttg/ttg/util/iovec.h" name="ttg/ttg/util/iovec.h">
+<area shape="rect" id="Node000001" title=" " alt="" coords="142,5,285,31"/>
+<area shape="rect" id="Node000002" href="$parsec_2buffer_8h.html" title=" " alt="" coords="23,86,193,111"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="189,41,125,88,122,84,185,37"/>
+<area shape="rect" id="Node000005" href="$splitmd__data__descriptor_8h.html" title=" " alt="" coords="217,79,420,119"/>
+<area shape="poly" id="edge5_Node000001_Node000005" title=" " alt="" coords="241,37,295,76,292,81,238,41"/>
+<area shape="rect" id="Node000003" href="$parsec__data_8h.html" title=" " alt="" coords="5,167,168,207"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="104,126,94,167,89,166,99,124"/>
+<area shape="rect" id="Node000004" href="$ttg_2parsec_2ttg_8h.html" title=" " alt="" coords="131,255,280,280"/>
+<area shape="poly" id="edge4_Node000002_Node000004" title=" " alt="" coords="138,118,162,139,182,165,193,189,200,213,207,254,202,255,195,214,188,191,178,168,158,143,135,122"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="129,212,189,252,186,257,126,217"/>
+<area shape="rect" id="Node000006" href="$data__descriptor_8h.html" title=" " alt="" coords="243,167,394,207"/>
+<area shape="poly" id="edge6_Node000005_Node000006" title=" " alt="" coords="321,133,321,166,316,166,316,133"/>
+<area shape="poly" id="edge7_Node000006_Node000004" title=" " alt="" coords="282,217,224,257,221,252,279,212"/>
+</map>

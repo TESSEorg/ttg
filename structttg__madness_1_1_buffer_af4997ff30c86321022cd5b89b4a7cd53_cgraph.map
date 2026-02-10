@@ -1,0 +1,9 @@
+<map id="ttg_madness::Buffer::set_current_device" name="ttg_madness::Buffer::set_current_device">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,37,164,77"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1device_1_1_device.html#a16a73248d5e812cf4df7d55458faafb4" title=" " alt="" coords="218,5,365,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="164,42,204,36,204,41,165,48"/>
+<area shape="rect" id="Node000004" href="$structttg__madness_1_1_buffer.html#a873ee3d33f1b81dd8ddeec2bd05bf5cf" title=" " alt="" coords="212,69,371,109"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="165,67,199,72,198,78,164,72"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1device_1_1_device.html#a979477b9cde8927f919c75754d4d8329" title=" " alt="" coords="419,5,565,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="365,23,405,23,405,28,365,28"/>
+</map>

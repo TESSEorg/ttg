@@ -1,0 +1,11 @@
+<map id="ttg::detail::initialized_accessor" name="ttg::detail::initialized_accessor">
+<area shape="rect" id="Node000001" title=" " alt="" coords="323,22,484,62"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#a291ea1e5aadb0dd8fa226c0f1ba2d83a" title="Finalizes the TTG runtime." alt="" coords="9,5,108,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="309,24,274,19,217,17,160,19,108,20,108,15,160,14,217,12,275,14,309,19"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#a557cbca5e1f34dcc87a43afd0d03c6e4" title="Initializes the TTG runtime with the default backend." alt="" coords="5,55,112,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="309,65,275,70,189,74,112,73,112,68,189,69,274,65,309,60"/>
+<area shape="rect" id="Node000004" href="$namespacettg.html#ac2a23489e146ae0a7b155ba3f7fe177f" title=" " alt="" coords="160,29,275,55"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="309,45,275,45,275,39,309,39"/>
+<area shape="poly" id="edge4_Node000004_Node000002" title=" " alt="" coords="146,34,108,28,109,23,147,29"/>
+<area shape="poly" id="edge5_Node000004_Node000003" title=" " alt="" coords="147,56,113,62,112,56,146,51"/>
+</map>

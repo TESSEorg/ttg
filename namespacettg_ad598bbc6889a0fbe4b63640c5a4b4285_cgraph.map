@@ -1,0 +1,6 @@
+<map id="ttg::sendv" name="ttg::sendv">
+<area shape="rect" id="Node000001" title="Sends a value (without an accompanying task id) to the template tasks attached to the output terminal..." alt="" coords="5,29,96,55"/>
+<area shape="rect" id="Node000002" href="$namespacettg_1_1meta.html#affd90f350d054c6a5b4859644d834172" title=" " alt="" coords="144,29,257,55"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="96,39,130,39,130,45,96,45"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="175,31,170,21,173,11,183,5,201,3,221,6,230,15,226,19,219,11,201,8,185,10,177,15,175,20,180,28"/>
+</map>

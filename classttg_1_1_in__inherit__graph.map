@@ -1,0 +1,7 @@
+<map id="ttg::In&lt; keyT, valueT &gt;" name="ttg::In&lt; keyT, valueT &gt;">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,167,184,192"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_in_terminal_base.html" title="Base type for input terminals receiving messages annotated by task IDs of type keyT" alt="" coords="17,79,173,119"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="97,132,97,166,92,166,92,132"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_terminal_base.html" title=" " alt="" coords="23,5,166,31"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="97,44,97,79,92,79,92,44"/>
+</map>

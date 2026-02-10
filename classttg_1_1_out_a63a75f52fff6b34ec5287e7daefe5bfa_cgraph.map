@@ -1,0 +1,8 @@
+<map id="ttg::Out::sendk" name="ttg::Out::sendk">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,29,128,55"/>
+<area shape="poly" id="edge1_Node000001_Node000001" title=" " alt="" coords="35,31,28,21,32,11,45,5,67,3,93,6,104,15,101,19,91,11,67,8,46,10,36,15,33,20,39,28"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_out_terminal_base.html#aa0341fd67b25363d5c45d77646294cf9" title=" " alt="" coords="176,22,343,62"/>
+<area shape="poly" id="edge2_Node000001_Node000002" title=" " alt="" coords="128,39,162,39,162,45,128,45"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_terminal_base.html#ab21d3f0050249488606592cfe99c3409" title="Get connections to successors." alt="" coords="391,22,541,62"/>
+<area shape="poly" id="edge3_Node000002_Node000003" title=" " alt="" coords="343,39,377,39,377,45,343,45"/>
+</map>

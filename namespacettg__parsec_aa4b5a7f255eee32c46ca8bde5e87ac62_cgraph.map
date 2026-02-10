@@ -1,0 +1,7 @@
+<map id="ttg_parsec::ttg_ctl_edge" name="ttg_parsec::ttg_ctl_edge">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,13,189,38"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1base_1_1_world.html#aabab7c9df8f16919ab41a864c8b1adc4" title=" " alt="" coords="237,13,404,38"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="190,23,223,23,223,28,190,28"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1base_1_1_world.html#af39ca1832f455a94134515f94aaa8533" title=" " alt="" coords="452,5,600,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="404,23,438,23,438,28,404,28"/>
+</map>

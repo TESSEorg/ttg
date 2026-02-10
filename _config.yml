@@ -1,0 +1,18 @@
+theme: jekyll-theme-minimal
+include:
+  - _recommended-_workflow-_elements.html
+  - _design-_pull.html
+  - _design-_device_8md.html
+  - _c_i-_administration-_notes_8md.html
+  - _documenting-_t_t_g_8md.html
+  - _c_i-_administration-_notes.html
+  - _documenting-_t_t_g.html
+  - _coding-_standards_8md.html
+  - _r_e_a_d_m_e_8md.html
+  - _workflow_8md.html
+  - _coding-_standards.html
+  - _config.yml
+  - _design-_device.html
+  - _pull-terminal-design-doc_8md.html
+  - _t_t_g-_build-_infrastructure_8md.html
+  - _t_t_g-_build-_infrastructure.html

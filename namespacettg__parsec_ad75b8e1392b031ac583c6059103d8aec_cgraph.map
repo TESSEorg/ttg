@@ -1,0 +1,7 @@
+<map id="ttg_parsec::ttg_initialize" name="ttg_parsec::ttg_initialize">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,42,189,67"/>
+<area shape="rect" id="Node000002" href="$namespacettg__parsec_1_1detail.html#a4d5f8e33feee47fa541e697b30ac4ece" title=" " alt="" coords="261,5,399,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="189,40,247,33,247,38,190,46"/>
+<area shape="rect" id="Node000003" href="$namespacettg_1_1detail.html#ac7958c35eef5d60f2c16fac47d3baf62" title="Determine the number of compute threads to use by TTG when not given to ttg::initialize" alt="" coords="237,70,423,95"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="190,63,224,67,224,73,189,68"/>
+</map>

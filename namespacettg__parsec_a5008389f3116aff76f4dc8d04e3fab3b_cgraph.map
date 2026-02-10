@@ -1,0 +1,13 @@
+<map id="ttg_parsec::ttg_finalize" name="ttg_parsec::ttg_finalize">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,106,181,131"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#a78c09561304884c05c8a8f25006b0ee6" title="Accesses the default backend&#39;s default execution context." alt="" coords="233,5,403,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="120,103,228,55,246,48,248,53,230,60,122,108"/>
+<area shape="rect" id="Node000003" href="$structttg__parsec_1_1detail_1_1ptr__impl.html#a19c7c72b0d727e864279957d3b4dc2ad" title=" " alt="" coords="229,69,407,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="181,105,215,100,216,105,182,110"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1base_1_1_world.html#aabab7c9df8f16919ab41a864c8b1adc4" title=" " alt="" coords="235,134,401,159"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="182,127,221,132,221,137,181,132"/>
+<area shape="rect" id="Node000006" href="$namespacettg__parsec_1_1detail.html#a4d5f8e33feee47fa541e697b30ac4ece" title=" " alt="" coords="249,184,387,224"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="129,129,230,168,252,177,251,182,228,173,127,134"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1base_1_1_world.html#af39ca1832f455a94134515f94aaa8533" title=" " alt="" coords="455,127,603,167"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="402,144,441,144,441,149,402,149"/>
+</map>

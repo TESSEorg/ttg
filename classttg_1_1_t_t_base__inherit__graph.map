@@ -1,0 +1,19 @@
+<map id="ttg::TTBase" name="ttg::TTBase">
+<area shape="rect" id="Node000001" title="A base class for all template tasks." alt="" coords="5,306,105,331"/>
+<area shape="rect" id="Node000002" href="$classttg__parsec_1_1_t_t.html" title=" " alt="" coords="188,5,415,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="60,292,71,253,90,206,116,157,152,114,186,89,189,93,155,118,121,160,95,208,77,255,65,294"/>
+<area shape="rect" id="Node000003" href="$classttg__parsec_1_1_t_t.html" title=" " alt="" coords="153,129,449,242"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="84,296,152,252,175,240,178,244,155,257,87,300"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1_sink_t_t.html" title="A data sink for one input." alt="" coords="228,267,375,307"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="119,308,227,294,228,299,119,313"/>
+<area shape="rect" id="Node000006" href="$classttg_1_1_t_t_g.html" title="a template task graph implementation" alt="" coords="201,331,401,371"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="120,324,201,335,201,340,119,330"/>
+<area shape="rect" id="Node000007" href="$classttg__madness_1_1_t_t.html" title=" " alt="" coords="197,395,406,450"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="85,338,117,360,154,380,197,396,195,401,152,385,115,364,82,342"/>
+<area shape="rect" id="Node000008" href="$classttg__parsec_1_1_t_t.html" title=" " alt="" coords="197,474,406,529"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="69,343,102,403,126,434,155,460,198,482,195,487,152,465,122,438,97,406,65,345"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_binary_tree_reduce.html" title="generic binary reduction of a set of key&#45;value pairs." alt="" coords="497,165,719,205"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="463,183,497,183,497,188,463,188"/>
+<area shape="rect" id="Node000009" href="$classttg_1_1_binary_tree_broadcast.html" title="generic binary broadcast of a value to a set of {key,value} pairs" alt="" coords="511,481,705,521"/>
+<area shape="poly" id="edge8_Node000008_Node000009" title=" " alt="" coords="419,499,511,499,511,504,419,504"/>
+</map>

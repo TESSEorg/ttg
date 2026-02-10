@@ -1,0 +1,13 @@
+<map id="ttg_parsec::detail::ttg_data_copy_self_t" name="ttg_parsec::detail::ttg_data_copy_self_t">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,69,173,109"/>
+<area shape="rect" id="Node000002" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__t.html" title=" " alt="" coords="221,69,360,109"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="187,87,221,87,221,92,187,92"/>
+<area shape="rect" id="Node000003" href="$structttg__parsec_1_1_t_t_value.html" title=" " alt="" coords="415,5,571,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="367,63,428,43,430,48,368,68"/>
+<area shape="rect" id="Node000005" href="$structttg__parsec_1_1_t_t_value.html" title=" " alt="" coords="415,69,571,109"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="373,87,414,87,414,92,373,92"/>
+<area shape="rect" id="Node000006" href="$structttg__parsec_1_1detail_1_1ttg__data__value__copy__t.html" title=" " alt="" coords="408,134,577,189"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="361,111,417,131,415,136,359,116"/>
+<area shape="rect" id="Node000004" href="$struct_fn.html" title="N.B. contains values of F_n and F_{n&#45;1}." alt="" coords="625,13,665,38"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="584,23,625,23,625,28,584,28"/>
+</map>

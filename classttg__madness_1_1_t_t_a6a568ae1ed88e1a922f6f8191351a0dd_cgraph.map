@@ -1,0 +1,16 @@
+<map id="ttg_madness::TT::get_terminal_data" name="ttg_madness::TT::get_terminal_data">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,104,169,144"/>
+<area shape="rect" id="Node000002" href="$classttg__madness_1_1_t_t.html#a3fb0ab18d00c27fae64e1bd1b78d3d0d" title=" " alt="" coords="457,99,621,124"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="105,102,152,59,183,38,216,23,269,7,313,3,357,8,410,23,441,35,470,52,516,88,513,92,467,56,439,40,408,28,356,13,313,8,270,13,218,28,185,43,155,63,109,105"/>
+<area shape="rect" id="Node000003" href="$namespacettg_1_1meta.html#affd90f350d054c6a5b4859644d834172" title=" " alt="" coords="257,62,370,87"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="169,103,243,87,244,92,171,108"/>
+<area shape="rect" id="Node000004" href="$classttg__madness_1_1_t_t.html#a5710a1c0eb7368d752a26d7fb4baaee0" title="Returns pointer to input terminal i to facilitate connection — terminal cannot be copied,..." alt="" coords="236,111,391,136"/>
+<area shape="poly" id="edge5_Node000001_Node000004" title=" " alt="" coords="170,121,222,121,222,126,170,126"/>
+<area shape="rect" id="Node000005" href="$classttg__madness_1_1_t_t.html#a9c167a878e2685d22e00ce7aa33f75a0" title=" " alt="" coords="221,160,405,186"/>
+<area shape="poly" id="edge6_Node000001_Node000005" title=" " alt="" coords="171,139,242,155,241,160,169,144"/>
+<area shape="rect" id="Node000006" href="$classttg__madness_1_1_t_t.html#a1af5d243a8ad194662a1d79df4f58d0d" title=" " alt="" coords="217,210,409,235"/>
+<area shape="poly" id="edge7_Node000001_Node000006" title=" " alt="" coords="120,142,166,169,218,195,243,203,241,208,216,200,163,173,117,146"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="503,101,495,91,499,81,514,75,539,72,571,76,583,86,580,90,569,81,539,78,515,80,503,85,500,90,507,97"/>
+<area shape="poly" id="edge4_Node000003_Node000003" title=" " alt="" coords="277,63,269,53,273,43,288,37,313,35,345,39,357,48,354,53,343,44,313,40,289,42,277,47,274,53,281,60"/>
+<area shape="poly" id="edge8_Node000006_Node000002" title=" " alt="" coords="373,207,408,195,464,164,510,131,513,135,467,168,410,200,375,212"/>
+</map>

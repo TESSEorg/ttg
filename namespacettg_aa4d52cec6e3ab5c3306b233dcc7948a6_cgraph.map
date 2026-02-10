@@ -1,0 +1,9 @@
+<map id="ttg::send" name="ttg::send">
+<area shape="rect" id="Node000001" title="Sends a task id and a value to the template tasks attached to the output terminal of this template ta..." alt="" coords="5,67,88,92"/>
+<area shape="rect" id="Node000002" href="$namespacettg_1_1meta.html#affd90f350d054c6a5b4859644d834172" title=" " alt="" coords="136,29,249,55"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="88,66,129,56,130,61,89,71"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#a1b23b6cea5360627c9f1e1e9f421bcf3" title="Sends a control message (message without an accompanying task id or a value) to the template tasks at..." alt="" coords="151,103,234,128"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="89,87,139,99,137,105,88,92"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="168,30,163,21,166,11,176,5,193,3,213,6,221,15,217,18,210,11,193,8,178,10,170,15,168,20,173,28"/>
+<area shape="poly" id="edge4_Node000003_Node000003" title=" " alt="" coords="168,104,163,94,166,85,176,78,193,76,213,80,221,88,217,92,210,84,193,81,178,83,170,88,168,94,173,101"/>
+</map>

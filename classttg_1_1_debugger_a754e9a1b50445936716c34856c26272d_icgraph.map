@@ -1,0 +1,5 @@
+<map id="ttg::Debugger::default_debugger" name="ttg::Debugger::default_debugger">
+<area shape="rect" id="Node000001" title="Return the global default debugger." alt="" coords="160,5,335,45"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#a557cbca5e1f34dcc87a43afd0d03c6e4" title="Initializes the TTG runtime with the default backend." alt="" coords="5,13,112,38"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="146,28,112,28,112,23,146,23"/>
+</map>

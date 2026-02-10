@@ -1,0 +1,10 @@
+<map id="ttg::device::Device::operator int" name="ttg::device::Device::operator int">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,35,152,75"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1device_1_1_device.html#acf0992ecbfbc2c91de0452122b06fe81" title=" " alt="" coords="200,42,368,67"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="152,52,186,52,186,57,152,57"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1device_1_1_device.html#a16a73248d5e812cf4df7d55458faafb4" title=" " alt="" coords="416,5,563,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="368,40,402,35,403,40,369,45"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1device_1_1_device.html#a979477b9cde8927f919c75754d4d8329" title=" " alt="" coords="611,35,757,75"/>
+<area shape="poly" id="edge4_Node000002_Node000004" title=" " alt="" coords="368,54,416,55,563,55,597,54,597,59,563,60,416,60,368,59"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="563,34,597,39,597,44,562,39"/>
+</map>

@@ -1,0 +1,5 @@
+<map id="ttg::Debugger::handle_defaults" name="ttg::Debugger::handle_defaults">
+<area shape="rect" id="Node000001" title="This calls handle(int) with all of the major signals." alt="" coords="5,5,179,45"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_debugger.html#ad0d04b2f2ce3e296bd25478b0704bb4c" title="The Debugger will be activated when sig is caught." alt="" coords="227,13,400,38"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="179,23,213,23,213,28,179,28"/>
+</map>
