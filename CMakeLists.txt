@@ -46,6 +46,17 @@ include(ExternalDependenciesVersions)
 include(LoadFetchContent)
 include(AddCustomTargetSubproject)
 
+# Bring ValeevGroup cmake toolkit ==============================================
+include(FetchVGCMakeKit)
+
+# Detect libc++ linker mismatch (e.g. Homebrew LLVM headers vs system libc++)
+include(CheckCXXFeatures)
+if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  vgkit_check_libcxx_linker_mismatch(MODIFY_GLOBAL_FLAGS)
+else()
+  vgkit_check_libcxx_linker_mismatch()
+endif()
+
 # augment GNUInstallDirs's dirs with CMAKEDIR
 set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
         CACHE PATH "TTG CMAKE install directory")
