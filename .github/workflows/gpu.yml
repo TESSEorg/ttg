@@ -50,7 +50,7 @@ jobs:
           -DCMAKE_C_COMPILER=/home/evaleev/code/install/gcc/12/bin/gcc \
           -DCMAKE_CUDA_HOST_COMPILER=/home/evaleev/code/install/gcc/12/bin/g++ \
           -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
-          -DCMAKE_CUDA_ARCHITECTURES=50 \
+          -DCMAKE_CUDA_ARCHITECTURES=native \
           -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
           -DCMAKE_BUILD_TYPE=Release \
           -DBUILD_SHARED_LIBS=OFF \
@@ -90,7 +90,7 @@ jobs:
           -DCMAKE_C_COMPILER=/home/evaleev/code/install/gcc/12/bin/gcc \
           -DCMAKE_CUDA_HOST_COMPILER=/home/evaleev/code/install/gcc/12/bin/g++ \
           -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
-          -DCMAKE_CUDA_ARCHITECTURES=50 \
+          -DCMAKE_CUDA_ARCHITECTURES=native \
           -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
           -DCMAKE_PREFIX_PATH="${{github.workspace}}/install" \
           || (cat CMakeFiles/CMakeConfigureLog.yaml && exit 1)
