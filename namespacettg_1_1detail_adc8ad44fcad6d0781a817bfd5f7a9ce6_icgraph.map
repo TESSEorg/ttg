@@ -1,0 +1,18 @@
+<map id="ttg::detail::broadcast" name="ttg::detail::broadcast">
+<area shape="rect" id="Node000001" title=" " alt="" coords="216,153,379,179"/>
+<area shape="poly" id="edge5_Node000001_Node000001" title=" " alt="" coords="335,144,325,135,297,132,275,134,263,139,261,144,267,152,263,155,255,145,259,135,274,129,297,127,327,130,338,139"/>
+<area shape="rect" id="Node000002" href="$namespacettg_1_1detail.html#af0cd55a640abd73c4760329260a09ba2" title=" " alt="" coords="5,5,168,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="276,144,229,94,199,67,167,44,142,33,144,28,169,40,203,63,233,90,280,141"/>
+<area shape="rect" id="Node000003" href="$namespacettg_1_1detail.html#a9d591282fbb338459fafb4d2c1360d8c" title=" " alt="" coords="5,55,168,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="264,148,219,120,167,94,136,83,138,78,169,89,222,116,267,143"/>
+<area shape="rect" id="Node000004" href="$namespacettg_1_1detail.html#adaaa172e6c45c0096b3b94b9c2df68bb" title=" " alt="" coords="5,104,168,129"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="229,153,141,132,142,127,230,148"/>
+<area shape="rect" id="Node000005" href="$namespacettg.html#ac8e21a740dc51633bdb551ca9a15599c" title=" " alt="" coords="29,153,145,179"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="202,169,145,169,145,163,202,163"/>
+<area shape="rect" id="Node000006" href="$namespacettg.html#a755e4e30482082d4e484cd9c339007a5" title=" " alt="" coords="29,203,145,228"/>
+<area shape="poly" id="edge6_Node000001_Node000006" title=" " alt="" coords="230,184,142,205,141,200,229,179"/>
+<area shape="rect" id="Node000007" href="$namespacettg.html#acd90a9ecb881d48728663b44d3935ff3" title=" " alt="" coords="25,252,149,277"/>
+<area shape="poly" id="edge7_Node000001_Node000007" title=" " alt="" coords="267,188,221,215,169,242,135,254,133,249,167,237,219,211,264,184"/>
+<area shape="rect" id="Node000008" href="$namespacettg.html#ad969e1e680fbdf6ae4ac7119198020ec" title=" " alt="" coords="25,301,149,327"/>
+<area shape="poly" id="edge8_Node000001_Node000008" title=" " alt="" coords="279,191,233,241,202,268,169,291,141,304,139,299,167,286,199,264,229,237,276,187"/>
+</map>

@@ -1,0 +1,6 @@
+<map id="ttg::TTBase::register_terminal" name="ttg::TTBase::register_terminal">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,22,167,62"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_t_t_base.html#a75f76765d30d0f996bc1aad23ea65b68" title="Returns a pointer to the i&#39;th output terminal ... to make API consistent with TT." alt="" coords="215,29,345,55"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="167,39,201,39,201,45,167,45"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="248,31,242,21,245,11,258,5,280,3,306,6,317,15,314,19,304,11,280,8,260,10,249,15,247,20,253,28"/>
+</map>

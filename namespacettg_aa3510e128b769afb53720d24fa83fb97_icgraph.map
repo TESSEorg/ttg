@@ -1,0 +1,13 @@
+<map id="ttg::print" name="ttg::print">
+<area shape="rect" id="Node000001" title="atomically prints to std::cout a sequence of items (separated by ttg::print_separator) followed by st..." alt="" coords="452,70,535,95"/>
+<area shape="rect" id="Node000002" href="$classttg__parsec_1_1_world_impl.html#a8486bd3e8dc829175f7ad0538e0dce4b" title=" " alt="" coords="229,5,401,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="439,68,377,48,378,43,441,63"/>
+<area shape="rect" id="Node000004" href="$distributed_8cc.html#a3c04138a5bfe5d72780bb7e82a18e627" title=" " alt="" coords="287,70,343,95"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="438,85,343,85,343,80,438,80"/>
+<area shape="rect" id="Node000005" href="$classttg__parsec_1_1_t_t.html#ab0bde8f642c472a5cf19274f7251268f" title=" " alt="" coords="225,120,404,160"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="441,102,378,123,377,117,439,97"/>
+<area shape="rect" id="Node000003" href="$classttg__parsec_1_1_world_impl.html#a5dbc8b40e4d489a0d913efccfb7d0ae0" title=" " alt="" coords="5,5,177,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="215,28,177,28,177,23,215,23"/>
+<area shape="rect" id="Node000006" href="$classttg__parsec_1_1_t_t.html#ac36a15986a5a4182b0cadb188014192a" title="Marks this executable." alt="" coords="10,120,173,160"/>
+<area shape="poly" id="edge5_Node000005_Node000006" title=" " alt="" coords="211,143,173,143,173,137,211,137"/>
+</map>

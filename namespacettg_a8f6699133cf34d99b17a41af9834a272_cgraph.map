@@ -1,0 +1,20 @@
+<map id="ttg::sendv" name="ttg::sendv">
+<area shape="rect" id="Node000001" title="Sends a value (without an accompanying task id) to the given output terminal." alt="" coords="5,109,96,134"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_out.html#a19596b1bdc19006bfe9771b3ece65223" title=" " alt="" coords="144,109,267,134"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="96,119,130,119,130,124,96,124"/>
+<area shape="poly" id="edge8_Node000002_Node000002" title=" " alt="" coords="179,110,174,100,177,91,188,84,205,82,227,85,236,94,232,98,224,90,205,87,189,89,181,94,179,100,184,107"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_terminal_base.html#a57202041203e7ed427c3f2fe28d39e7b" title="Returns the terminal type." alt="" coords="323,5,473,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="225,106,313,55,328,48,330,53,316,60,227,111"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_out_terminal_base.html#a19283a6990d4c46f7c74fbaab4fddce5" title=" " alt="" coords="315,69,481,109"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="266,109,301,103,302,108,267,114"/>
+<area shape="rect" id="Node000006" href="$classttg_1_1_in.html#a7c9662d2c659f82f611354178d3776af" title=" " alt="" coords="342,198,454,223"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="226,132,267,157,316,183,337,191,335,196,314,188,264,162,224,136"/>
+<area shape="rect" id="Node000008" href="$classttg_1_1_out_terminal_base.html#aa0341fd67b25363d5c45d77646294cf9" title=" " alt="" coords="315,133,481,173"/>
+<area shape="poly" id="edge9_Node000002_Node000008" title=" " alt="" coords="267,129,302,135,301,140,266,134"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1_terminal_base.html#ab21d3f0050249488606592cfe99c3409" title="Get connections to successors." alt="" coords="529,89,680,129"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="482,95,516,98,515,103,481,100"/>
+<area shape="rect" id="Node000007" href="$namespacettg_1_1meta.html#affd90f350d054c6a5b4859644d834172" title=" " alt="" coords="548,198,661,223"/>
+<area shape="poly" id="edge6_Node000006_Node000007" title=" " alt="" coords="454,208,534,208,534,213,454,213"/>
+<area shape="poly" id="edge7_Node000007_Node000007" title=" " alt="" coords="571,200,564,190,567,180,581,174,605,171,633,175,645,184,641,188,631,180,605,177,583,179,571,183,569,189,575,196"/>
+<area shape="poly" id="edge10_Node000008_Node000005" title=" " alt="" coords="481,133,515,126,517,131,482,138"/>
+</map>

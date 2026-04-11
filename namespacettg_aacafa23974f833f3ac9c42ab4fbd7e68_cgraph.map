@@ -1,0 +1,5 @@
+<map id="ttg::print_error" name="ttg::print_error">
+<area shape="rect" id="Node000001" title="atomically prints to std::cerr a sequence of items (separated by ttg::print_separator) followed by st..." alt="" coords="5,13,128,38"/>
+<area shape="rect" id="Node000002" href="$namespacettg_1_1detail.html#a26e07486d5ef8eb5735a8975991a7693" title=" " alt="" coords="176,5,304,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="128,23,162,23,162,28,128,28"/>
+</map>

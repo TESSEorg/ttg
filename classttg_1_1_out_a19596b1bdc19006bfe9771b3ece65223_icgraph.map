@@ -1,0 +1,8 @@
+<map id="ttg::Out::sendv" name="ttg::Out::sendv">
+<area shape="rect" id="Node000001" title=" " alt="" coords="283,29,405,55"/>
+<area shape="poly" id="edge1_Node000001_Node000001" title=" " alt="" coords="371,19,363,11,344,8,328,10,320,15,318,20,322,28,318,31,312,21,315,11,326,5,344,3,365,6,374,15"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#a8f6699133cf34d99b17a41af9834a272" title="Sends a value (without an accompanying task id) to the given output terminal." alt="" coords="144,29,235,55"/>
+<area shape="poly" id="edge2_Node000001_Node000002" title=" " alt="" coords="269,45,235,45,235,39,269,39"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#aec6fd6a228d0400a690001fd5171b468" title="Sends a value (without an accompanying task id) to the template tasks attached to the output terminal..." alt="" coords="5,29,96,55"/>
+<area shape="poly" id="edge3_Node000002_Node000003" title=" " alt="" coords="130,45,96,45,96,39,130,39"/>
+</map>

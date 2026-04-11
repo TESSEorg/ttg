@@ -1,0 +1,30 @@
+<map id="ttg::send" name="ttg::send">
+<area shape="rect" id="Node000001" title="Sends a control message (message without an accompanying task id or a value) to the given output term..." alt="" coords="5,119,88,145"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_out.html#af3902b047294f85bdfaeb42dcd4488a4" title=" " alt="" coords="136,119,251,145"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="88,129,122,129,122,135,88,135"/>
+<area shape="poly" id="edge4_Node000002_Node000002" title=" " alt="" coords="168,121,163,111,166,101,176,95,193,93,214,96,222,105,219,108,211,101,193,98,178,100,170,105,169,110,173,118"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_terminal_base.html#afb14b11c29459fc8aa5a2cb4297b5c2e" title="Returns name of terminal." alt="" coords="307,5,457,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="208,117,247,87,297,55,310,49,313,53,300,60,250,91,211,121"/>
+<area shape="rect" id="Node000004" href="$namespacettg.html#ac0ad1dd3b87329e4acf9774df6dc8473" title=" " alt="" coords="342,70,422,95"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="242,117,328,94,329,99,243,122"/>
+<area shape="rect" id="Node000005" href="$namespacettg.html#a293bb7226707f202e735a9b3e4c76fab" title=" " alt="" coords="345,119,419,145"/>
+<area shape="poly" id="edge5_Node000002_Node000005" title=" " alt="" coords="251,129,331,129,331,135,251,135"/>
+<area shape="rect" id="Node000006" href="$classttg_1_1_out_terminal_base.html#aa0341fd67b25363d5c45d77646294cf9" title=" " alt="" coords="299,169,465,209"/>
+<area shape="poly" id="edge6_Node000002_Node000006" title=" " alt="" coords="237,142,303,163,302,168,235,147"/>
+<area shape="rect" id="Node000008" href="$namespacettg.html#af5e470229c1ddef41b83b6398a5dc583" title=" " alt="" coords="341,259,423,285"/>
+<area shape="poly" id="edge8_Node000002_Node000008" title=" " alt="" coords="210,143,250,178,300,219,347,250,344,254,297,223,246,183,206,147"/>
+<area shape="rect" id="Node000007" href="$classttg_1_1_terminal_base.html#ab21d3f0050249488606592cfe99c3409" title="Get connections to successors." alt="" coords="513,144,664,184"/>
+<area shape="poly" id="edge7_Node000006_Node000007" title=" " alt="" coords="465,176,499,172,500,178,466,182"/>
+<area shape="rect" id="Node000009" href="$namespacettg.html#aacacfe8bc9582308a405c4370650a9d4" title="atomically prints to std::clog a sequence of items (separated by ttg::print_separator) followed by st..." alt="" coords="553,209,624,234"/>
+<area shape="poly" id="edge9_Node000008_Node000009" title=" " alt="" coords="423,259,539,231,541,236,424,265"/>
+<area shape="rect" id="Node000011" href="$namespacettg.html#afbdd9c742be395e0746fdbc26c7d55cc" title="returns whether tracing was enabled at configure time" alt="" coords="712,275,857,301"/>
+<area shape="poly" id="edge11_Node000008_Node000011" title=" " alt="" coords="424,271,698,282,698,287,423,276"/>
+<area shape="rect" id="Node000012" href="$namespacettg.html#abfb8501d408a1ed918cc2a540865a2d8" title="returns whether tracing is enabled" alt="" coords="540,310,637,335"/>
+<area shape="poly" id="edge12_Node000008_Node000012" title=" " alt="" coords="424,279,527,305,526,310,423,285"/>
+<area shape="rect" id="Node000010" href="$namespacettg_1_1detail.html#a26e07486d5ef8eb5735a8975991a7693" title=" " alt="" coords="721,201,849,241"/>
+<area shape="poly" id="edge10_Node000009_Node000010" title=" " alt="" coords="624,219,707,219,707,224,624,224"/>
+<area shape="poly" id="edge15_Node000012_Node000011" title=" " alt="" coords="637,311,698,301,699,306,638,317"/>
+<area shape="rect" id="Node000013" href="$namespacettg_1_1detail.html#a95356c3874e7ec9268a40feb4fc1519f" title=" " alt="" coords="720,344,849,384"/>
+<area shape="poly" id="edge13_Node000012_Node000013" title=" " alt="" coords="638,330,707,345,706,350,637,335"/>
+<area shape="poly" id="edge14_Node000013_Node000008" title=" " alt="" coords="720,371,621,369,566,363,512,351,455,325,409,295,412,291,458,321,514,345,567,358,621,364,720,366"/>
+</map>

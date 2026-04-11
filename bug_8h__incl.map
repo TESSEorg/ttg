@@ -1,0 +1,17 @@
+<map id="ttg/ttg/util/bug.h" name="ttg/ttg/util/bug.h">
+<area shape="rect" id="Node000001" title=" " alt="" coords="280,5,415,31"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="5,79,76,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="297,33,90,81,89,76,296,28"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="100,79,179,104"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="315,33,187,77,185,72,313,28"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="203,79,291,104"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="333,33,276,73,273,68,330,29"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="316,79,379,104"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="350,31,350,65,345,65,345,31"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="403,79,534,104"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="368,28,439,69,436,74,365,33"/>
+<area shape="rect" id="Node000007" title=" " alt="" coords="558,79,622,104"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="387,28,545,74,544,79,386,33"/>
+<area shape="rect" id="Node000008" title=" " alt="" coords="647,79,736,104"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="403,28,634,76,633,81,402,33"/>
+</map>

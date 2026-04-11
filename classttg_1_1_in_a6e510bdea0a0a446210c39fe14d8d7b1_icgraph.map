@@ -1,0 +1,7 @@
+<map id="ttg::In::send" name="ttg::In::send">
+<area shape="rect" id="Node000001" title=" " alt="" coords="192,31,296,56"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_in.html#a7bf2067b7676e662270752030ccd92e9" title=" " alt="" coords="5,5,144,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="178,36,144,31,145,26,179,31"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_in.html#aa975309ae6c0b91e4ec8db77b98d7b70" title=" " alt="" coords="5,55,144,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="179,55,145,60,144,55,178,50"/>
+</map>

@@ -1,0 +1,11 @@
+<map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
+<area shape="rect" id="Node000000" title=" " alt="" coords="5,5,175,45"/>
+<area shape="rect" id="Node000001" href="$classttg_1_1detail_1_1boost__optimized__iarchive.html" title="optimized data&#45;only deserializer for boost_optimized_oarchive" alt="" coords="223,7,413,62"/>
+<area shape="poly" id="edge3_Node000000_Node000001" title=" " alt="" coords="189,27,223,28,222,33,189,32"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="5,120,175,160"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1detail_1_1boost__optimized__oarchive.html" title="optimized data&#45;only serializer" alt="" coords="223,95,413,150"/>
+<area shape="poly" id="edge4_Node000004_Node000003" title=" " alt="" coords="189,130,222,127,223,133,189,135"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="10,70,170,95"/>
+<area shape="poly" id="edge5_Node000002_Node000001" title=" " alt="" coords="164,65,222,52,223,57,165,70"/>
+<area shape="poly" id="edge6_Node000002_Node000003" title=" " alt="" coords="177,95,223,103,222,109,176,100"/>
+</map>

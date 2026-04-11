@@ -1,0 +1,11 @@
+<map id="ttg_parsec::detail::ttg_device_to_parsec_device" name="ttg_parsec::detail::ttg_device_to_parsec_device">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,23,177,78"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1device_1_1_device.html#acf0992ecbfbc2c91de0452122b06fe81" title=" " alt="" coords="225,63,393,89"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="178,58,212,62,212,67,177,63"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1device_1_1_device.html#a16a73248d5e812cf4df7d55458faafb4" title=" " alt="" coords="441,5,588,45"/>
+<area shape="poly" id="edge5_Node000001_Node000003" title=" " alt="" coords="178,43,427,28,428,33,178,48"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="361,61,427,44,429,49,362,66"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1device_1_1_device.html#a979477b9cde8927f919c75754d4d8329" title=" " alt="" coords="636,35,783,75"/>
+<area shape="poly" id="edge4_Node000002_Node000004" title=" " alt="" coords="393,69,622,57,622,62,394,74"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="588,34,623,39,622,44,588,39"/>
+</map>

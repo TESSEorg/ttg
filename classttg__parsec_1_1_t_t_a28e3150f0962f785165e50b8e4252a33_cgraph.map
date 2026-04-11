@@ -1,0 +1,12 @@
+<map id="ttg_parsec::TT::finalize_argstream_from_msg" name="ttg_parsec::TT::finalize_argstream_from_msg">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,44,180,84"/>
+<area shape="rect" id="Node000002" href="$classttg__parsec_1_1_t_t.html#aab59a1bf0fcc4f771457b5f05cb42741" title=" " alt="" coords="452,40,600,65"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="136,42,180,25,227,12,277,5,316,3,404,12,444,21,480,32,479,37,442,26,404,18,316,8,277,10,229,18,181,30,138,47"/>
+<area shape="rect" id="Node000003" href="$namespacettg_1_1meta.html#affd90f350d054c6a5b4859644d834172" title=" " alt="" coords="259,52,373,77"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="181,62,245,62,245,67,181,67"/>
+<area shape="rect" id="Node000004" href="$classttg__parsec_1_1_t_t.html#aa36be4d28cc80665afc2e2d521e4ab72" title=" " alt="" coords="228,101,404,126"/>
+<area shape="poly" id="edge5_Node000001_Node000004" title=" " alt="" coords="181,81,245,95,244,101,180,86"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="492,41,485,31,488,21,503,15,526,13,555,17,566,26,563,30,553,22,526,18,504,20,492,25,490,31,496,38"/>
+<area shape="poly" id="edge4_Node000003_Node000003" title=" " alt="" coords="282,53,275,43,278,33,293,27,316,25,345,29,356,38,353,42,343,34,316,30,294,32,282,37,280,43,286,50"/>
+<area shape="poly" id="edge6_Node000004_Node000002" title=" " alt="" coords="360,98,403,86,468,66,470,71,405,91,362,104"/>
+</map>

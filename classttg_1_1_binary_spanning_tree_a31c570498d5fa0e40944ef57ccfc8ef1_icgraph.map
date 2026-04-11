@@ -1,0 +1,11 @@
+<map id="ttg::BinarySpanningTree::parent_key" name="ttg::BinarySpanningTree::parent_key">
+<area shape="rect" id="Node000001" title=" " alt="" coords="511,35,701,75"/>
+<area shape="poly" id="edge5_Node000001_Node000001" title=" " alt="" coords="646,23,632,16,606,13,583,15,569,20,564,26,567,34,562,35,559,25,566,16,582,10,606,8,634,11,649,18"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_binary_spanning_tree.html#a622b8d511132839777fabfb8d71c8c12" title=" " alt="" coords="272,5,463,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="497,44,462,40,463,34,497,39"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_binary_tree_reduce.html#adec52e1e033aef60a708faf752768360" title=" " alt="" coords="14,66,215,91"/>
+<area shape="poly" id="edge4_Node000001_Node000004" title=" " alt="" coords="497,63,216,76,215,71,497,57"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_binary_tree_broadcast.html#aa839d772aa8ece8897255cd8f87a9456" title=" " alt="" coords="5,13,224,38"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="258,28,224,28,224,23,258,23"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="260,51,176,69,175,63,259,46"/>
+</map>
