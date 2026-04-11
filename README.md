@@ -554,9 +554,7 @@ For example, executing the Fibonacci program described above using 2 MPI process
 
 # TTG reference documentation
 
-TTG API documentation is available for the following versions:
-
-- [master branch](https://tesseorg.github.io/ttg/dox-master) .
+TTG API documentation is available [online](https://tesseorg.github.io/ttg).
 
 # Cite
 
