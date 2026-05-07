@@ -90,3 +90,51 @@ if (TARGET MADworld)
   add_ttg_executable(randomaccess randomaccess/randomaccess.cc RUNTIMES "mad")
 endif (TARGET MADworld)
 
+# Integral-direct pivoted Cholesky decomposition of 4-center AO ERIs (Koch 2003).
+# Multiple TTG-graph variants are built as separate executables; see the
+# matching v*.md description files under examples/eri-pch/.
+find_package(Libint2 2.10.0 QUIET CONFIG)
+if (Libint2_FOUND)
+  add_ttg_executable(eri-pch_v1 "eri-pch/v1.cc;eri-pch/common.cc" LINK_LIBRARIES Libint2::cxx)
+  add_ttg_executable(eri-pch_v2 "eri-pch/v2.cc;eri-pch/common.cc" LINK_LIBRARIES Libint2::cxx)
+  # v3 routes Eigen's matrix-matrix ops to a system BLAS (Apple Accelerate
+  # on macOS, OpenBLAS/MKL on Linux). Falls back to Eigen's templated dgemm
+  # if no BLAS is detected.
+  # v3 routes Eigen's level-3 ops to a system BLAS, which is a clean win on
+  # the v3 algorithm because the gather is one big sequential dgemm.
+  find_package(BLAS QUIET)
+  if (BLAS_FOUND)
+    add_ttg_executable(eri-pch_v3 "eri-pch/v3.cc;eri-pch/common.cc"
+                       LINK_LIBRARIES Libint2::cxx ${BLAS_LIBRARIES}
+                       COMPILE_DEFINITIONS EIGEN_USE_BLAS)
+  else (BLAS_FOUND)
+    add_ttg_executable(eri-pch_v3 "eri-pch/v3.cc;eri-pch/common.cc"
+                       LINK_LIBRARIES Libint2::cxx)
+  endif (BLAS_FOUND)
+  # v4 fans out the gather across row chunks. On Apple Silicon, Accelerate's
+  # internal libdispatch threading turns into a serialization point when called
+  # from many TTG worker threads, so v4 by default uses Eigen's templated
+  # dgemm. A BLAS-linked variant (eri-pch_v4_blas) is also built when BLAS is
+  # found; on Linux with single-threaded OpenBLAS / MKL it usually beats the
+  # native variant.
+  add_ttg_executable(eri-pch_v4 "eri-pch/v4.cc;eri-pch/common.cc"
+                     LINK_LIBRARIES Libint2::cxx)
+  if (BLAS_FOUND)
+    add_ttg_executable(eri-pch_v4_blas "eri-pch/v4.cc;eri-pch/common.cc"
+                       LINK_LIBRARIES Libint2::cxx ${BLAS_LIBRARIES}
+                       COMPILE_DEFINITIONS EIGEN_USE_BLAS)
+  endif (BLAS_FOUND)
+  # v5 makes data part of the dataflow: per-chunk L and d tiles flow
+  # iter-to-iter as Eigen::Tensor over edges. No more shared-state
+  # CholeskyDriver members that tasks read by reference. Requires the
+  # Eigen::Tensor module from unsupported/ (header-only).
+  add_ttg_executable(eri-pch_v5 "eri-pch/v5.cc;eri-pch/common.cc"
+                     LINK_LIBRARIES Libint2::cxx)
+  # v6 = v5 + Almlöf-significant shell-pair screening (overlap-norm based,
+  # threshold 1e-12 by default; override via env var TTG_ERI_PCH_SP_THRESHOLD,
+  # 0 disables and reproduces v5). Drops the O(N_shell^2) layout cost for
+  # spatially extended molecules without changing the TTG graph.
+  add_ttg_executable(eri-pch_v6 "eri-pch/v6.cc;eri-pch/common.cc"
+                     LINK_LIBRARIES Libint2::cxx)
+endif (Libint2_FOUND)
+
