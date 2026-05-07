@@ -1361,7 +1361,15 @@ namespace ttg_parsec {
     ttg::meta::detail::input_reducers_t<actual_input_tuple_type>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
     std::array<parsec_task_class_t*, numins> inpute_reducers_taskclass = { nullptr };
-    std::array<std::size_t, numins> static_stream_goal = { std::numeric_limits<std::size_t>::max() };
+    // Each input terminal's stream goal defaults to "unbounded" (max). The
+    // braced-init form only sets element 0; use an IIFE lambda so all
+    // elements are initialized to max() (otherwise any input index > 0
+    // looks already-bounded to set_static_argstream_size).
+    std::array<std::size_t, numins> static_stream_goal = []() {
+      std::array<std::size_t, numins> a{};
+      for (auto& x : a) x = std::numeric_limits<std::size_t>::max();
+      return a;
+    }();
     int num_pullins = 0;
 
     bool m_defer_writer = TTG_PARSEC_DEFER_WRITER;
