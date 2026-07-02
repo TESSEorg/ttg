@@ -1908,8 +1908,11 @@ namespace ttg_parsec {
         if constexpr(!val_is_void) {
           /* the copies to reduce out of */
           detail::ttg_data_copy_t *source_copy;
-          parsec_list_item_t *item;
-          item = parsec_lifo_pop(&parent_task->streams[i].reduce_copies);
+          parsec_list_item_t *item = nullptr;
+          {
+            std::lock_guard<std::mutex> lock(parent_task->streams[i].reduce_copies_lock);
+            item = parent_task->streams[i].reduce_copies.empty() ? nullptr : parent_task->streams[i].reduce_copies.pop_back();
+          }
           if (nullptr == item) {
             // maybe someone is changing the goal right now
             break;
@@ -2595,7 +2598,10 @@ namespace ttg_parsec {
             detail::ttg_data_copy_t *copy = get_copy_fn(task, std::forward<Value>(value), true);
 
             /* enqueue the data copy to be reduced */
-            parsec_lifo_push(&task->streams[i].reduce_copies, &copy->super);
+            {
+              std::lock_guard<parsec_lifo_t> lock(task->streams[i].reduce_copies_lock);
+              task->streams[i].reduce_copies.push_back(&copy->super);
+            }
             submit_reducer_task(task);
           }
         } else {
