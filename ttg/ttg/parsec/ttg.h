@@ -2602,7 +2602,7 @@ namespace ttg_parsec {
             /* enqueue the data copy to be reduced */
             {
               std::lock_guard<std::mutex> lock(task->streams[i].reduce_copies_lock);
-              task->streams[i].reduce_copies.push_back(&copy);
+              task->streams[i].reduce_copies.push_back(copy);
             }
             submit_reducer_task(task);
           }
