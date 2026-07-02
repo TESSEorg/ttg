@@ -97,7 +97,7 @@ namespace ttg_parsec {
       struct stream_info_t {
         std::size_t goal;
         std::size_t size;
-        std::mutex mutex;
+        std::mutex reduce_copies_lock;
         std::vector<ttg_data_copy_t*> reduce_copies;
         std::atomic<std::size_t> reduce_count;
       };

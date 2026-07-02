@@ -1710,18 +1710,16 @@ namespace ttg_parsec {
         nullptr;
 #endif // TTG_HAVE_COROUTINE
       //std::cout << "static_op: suspended_task_address " << suspended_task_address << std::endl;
+      ttT *baseobj = task->tt;
+      derivedT *obj = static_cast<derivedT *>(baseobj);
+      if constexpr (!ttg::meta::is_void_v<keyT>)
+        ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": executing");
+      else
+        ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : executing");
       if (suspended_task_address == nullptr) {  // task is a coroutine that has not started or an ordinary function
 
-        ttT *baseobj = task->tt;
-        derivedT *obj = static_cast<derivedT *>(baseobj);
         assert(detail::parsec_ttg_caller == nullptr);
         detail::parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
-        if (obj->tracing()) {
-          if constexpr (!ttg::meta::is_void_v<keyT>)
-            ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": executing");
-          else
-            ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : executing");
-        }
 
         if constexpr (!ttg::meta::is_void_v<keyT> && !ttg::meta::is_empty_tuple_v<input_values_tuple_type>) {
           auto input = make_tuple_of_ref_from_array(task, std::make_index_sequence<numinvals>{});
@@ -1890,12 +1888,12 @@ namespace ttg_parsec {
       if (rtask->is_first) {
         if (0 == (parent_task->streams[i].reduce_count.fetch_sub(1, std::memory_order_acq_rel)-1)) {
           /* we were the first and there is nothing to be done */
-          if (obj->tracing()) {
+          //if (obj->tracing()) {
             if constexpr (!ttg::meta::is_void_v<keyT>)
               ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", parent_task->key, ": first reducer empty");
             else
               ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : first reducer empty");
-          }
+          //}
 
           return PARSEC_HOOK_RETURN_DONE;
         }
@@ -1908,16 +1906,19 @@ namespace ttg_parsec {
         if constexpr(!val_is_void) {
           /* the copies to reduce out of */
           detail::ttg_data_copy_t *source_copy;
-          parsec_list_item_t *item = nullptr;
+          detail::ttg_data_copy_t *item = nullptr;
           {
             std::lock_guard<std::mutex> lock(parent_task->streams[i].reduce_copies_lock);
-            item = parent_task->streams[i].reduce_copies.empty() ? nullptr : parent_task->streams[i].reduce_copies.pop_back();
+            if (!parent_task->streams[i].reduce_copies.empty()) {
+              item = parent_task->streams[i].reduce_copies.back();
+              parent_task->streams[i].reduce_copies.pop_back();
+            }
           }
           if (nullptr == item) {
             // maybe someone is changing the goal right now
             break;
           }
-          source_copy = ((detail::ttg_data_copy_self_t *)(item))->self;
+          source_copy = item;
           assert(target_copy->num_readers() == target_copy->mutable_tag);
           assert(source_copy->num_readers() > 0);
           reducer(*reinterpret_cast<std::decay_t<value_t> *>(target_copy->get_ptr()),
@@ -1938,6 +1939,7 @@ namespace ttg_parsec {
       //std::cout << "static_reducer_op size " << size
       //          << " of " << parent_task->streams[i].goal << " complete " << complete
       //          << " c " << c << std::endl;
+      ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", parent_task->key, ": size ", size, " of ", parent_task->streams[i].goal, " complete ", complete, " c ", c);
       if (complete && c == 0) {
         if constexpr(input_is_const) {
           /* make the consumer task a reader if its input is const */
@@ -2599,8 +2601,8 @@ namespace ttg_parsec {
 
             /* enqueue the data copy to be reduced */
             {
-              std::lock_guard<parsec_lifo_t> lock(task->streams[i].reduce_copies_lock);
-              task->streams[i].reduce_copies.push_back(&copy->super);
+              std::lock_guard<std::mutex> lock(task->streams[i].reduce_copies_lock);
+              task->streams[i].reduce_copies.push_back(&copy);
             }
             submit_reducer_task(task);
           }

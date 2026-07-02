@@ -507,7 +507,7 @@ namespace ttg::device {
                                   valueT &&value,
                                   std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
     ttg::detail::value_copy_handler<Runtime> copy_handler;
-    if constexpr (ttg::meta::is_tuple_v<RangesT>) {
+    if constexpr (ttg::meta::is_tuple_v<rangeT>) {
       return detail::send_t{
               detail::broadcast_coro<I, Is...>(std::forward<rangeT>(keylist),
                                                copy_handler(std::forward<valueT>(value)),
@@ -525,16 +525,16 @@ namespace ttg::device {
             ttg::Runtime Runtime = ttg::ttg_runtime>
   inline detail::send_t broadcast(RangesT &&keylist, valueT &&value) {
     ttg::detail::value_copy_handler<Runtime> copy_handler;
-    if constexpr (ttg::meta::is_tuple_v<rangeT>) {
-      return detail::send_t{detail::broadcast_coro<i, is...>(std::forward<rangeT>(keylist),
+    if constexpr (ttg::meta::is_tuple_v<RangesT>) {
+      return detail::send_t{detail::broadcast_coro<I, Is...>(std::forward<RangesT>(keylist),
                                                      copy_handler(std::forward<valueT>(value)),
                                                      std::move(copy_handler))};
     } else if constexpr(std::is_rvalue_reference_v<decltype(keylist)>) {
-      return detail::send_t{detail::broadcast_coro<i, is...>(std::make_tuple(std::forward<rangeT>(keylist)),
+      return detail::send_t{detail::broadcast_coro<I, Is...>(std::make_tuple(std::forward<RangesT>(keylist)),
                                                      copy_handler(std::forward<valueT>(value)),
                                                      std::move(copy_handler))};
     } else {
-      return detail::send_t{detail::broadcast_coro<i, is...>(std::tie(keylist),
+      return detail::send_t{detail::broadcast_coro<I, Is...>(std::tie(keylist),
                                                      copy_handler(std::forward<valueT>(value)),
                                                      std::move(copy_handler))};
     }
