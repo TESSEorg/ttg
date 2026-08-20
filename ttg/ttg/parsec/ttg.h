@@ -1939,7 +1939,11 @@ namespace ttg_parsec {
       //std::cout << "static_reducer_op size " << size
       //          << " of " << parent_task->streams[i].goal << " complete " << complete
       //          << " c " << c << std::endl;
-      ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", parent_task->key, ": size ", size, " of ", parent_task->streams[i].goal, " complete ", complete, " c ", c);
+      if constexpr (!ttg::meta::is_void_v<keyT>) {
+        ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", parent_task->key, ": size ", size, " of ", parent_task->streams[i].goal, " complete ", complete, " c ", c);
+      } else {
+        ttg::trace(obj->get_world().rank(), ":", obj->get_name(), ": size ", size, " of ", parent_task->streams[i].goal, " complete ", complete, " c ", c);
+      }
       if (complete && c == 0) {
         if constexpr(input_is_const) {
           /* make the consumer task a reader if its input is const */
