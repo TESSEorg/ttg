@@ -8,7 +8,7 @@ set(TTG_TRACKED_MADNESS_TAG 214f7c3461a33a45944849164361c04e1a6ffd8a)
 set(TTG_TRACKED_PARSEC_TAG parsec-for-ttg)
 set(TTG_TRACKED_UMPIRE_CXX_ALLOCATOR_TAG 1ba7f5f0aa99438826dd1c6bc1cd396080b9d608)
 set(TTG_TRACKED_BTAS_TAG 74ee8a27386c746b36f0455cd5a0e3c33bd5f4d2)
-set(TTG_TRACKED_TILEDARRAY_TAG c4a8927845e0c4503ecacf85ce8e73243ab48a62)
+set(TTG_TRACKED_TILEDARRAY_TAG 5fae6ec2f89d7b75e35caf27588aac769494b340)
 
 # need Boost.CallableTraits (header only, part of Boost 1.66 released in Dec 2017) for wrap.h to work
 # BUT if will be building examples, inherit the oldest version from the pickiest Boost consumer (TA and/or BSPMM)
