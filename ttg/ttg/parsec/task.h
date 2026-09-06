@@ -97,7 +97,8 @@ namespace ttg_parsec {
       struct stream_info_t {
         std::size_t goal;
         std::size_t size;
-        parsec_lifo_t reduce_copies;
+        std::mutex reduce_copies_lock;
+        std::vector<ttg_data_copy_t*> reduce_copies;
         std::atomic<std::size_t> reduce_count;
       };
 
@@ -108,7 +109,7 @@ namespace ttg_parsec {
           if (std::get<i>(tt->input_reducers)) {
             streams[i].goal = tt->static_stream_goal[i];
             streams[i].size = 0;
-            PARSEC_OBJ_CONSTRUCT(&streams[i].reduce_copies, parsec_lifo_t);
+            streams[i].reduce_copies.clear();
             streams[i].reduce_count.store(0, std::memory_order_relaxed);
           }
           /* recursion */

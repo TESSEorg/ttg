@@ -47,6 +47,13 @@ namespace ttg::device {
     }
   }  // namespace detail
 
+  /**
+   * A collection of input buffer objects to be used in a device task.
+   *
+   * TODO:
+   *  - Filter out empty buffers. They can cause problems if empty flows appear between non-empty flows.
+   *  - Filter out or error out on duplicated buffers.
+   */
   struct Input {
   private:
     std::vector<detail::device_input_data_t> m_data;
@@ -328,7 +335,7 @@ namespace ttg::device {
 
     template<typename T, typename Enabler = void>
     struct broadcast_keylist_trait {
-      using type = T;
+      using key_type = T;
     };
 
     /* overload for iterable types that extracts the type of the first element */
@@ -500,41 +507,62 @@ namespace ttg::device {
                                   valueT &&value,
                                   std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
     ttg::detail::value_copy_handler<Runtime> copy_handler;
-    return detail::send_t{
-            detail::broadcast_coro<I, Is...>(std::forward<rangeT>(keylist),
-                                            copy_handler(std::forward<valueT>(value)),
-                                            t, std::move(copy_handler))};
+    if constexpr (ttg::meta::is_tuple_v<rangeT>) {
+      return detail::send_t{
+              detail::broadcast_coro<I, Is...>(std::forward<rangeT>(keylist),
+                                               copy_handler(std::forward<valueT>(value)),
+                                               t, std::move(copy_handler))};
+    } else {
+      return detail::send_t{
+              detail::broadcast_coro<I, Is...>(std::tie(keylist),
+                                               copy_handler(std::forward<valueT>(value)),
+                                               t, std::move(copy_handler))};
+    }
   }
 
   /* overload with implicit terminals and keylist passed by const reference */
-  template <size_t i, typename rangeT, typename valueT,
+  template <size_t I, size_t... Is, typename RangesT, typename valueT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
-  inline detail::send_t broadcast(rangeT &&keylist, valueT &&value) {
+  inline detail::send_t broadcast(RangesT &&keylist, valueT &&value) {
     ttg::detail::value_copy_handler<Runtime> copy_handler;
-    return detail::send_t{detail::broadcast_coro<i>(std::tie(keylist),
-                                                    copy_handler(std::forward<valueT>(value)),
-                                                    std::move(copy_handler))};
+    if constexpr (ttg::meta::is_tuple_v<RangesT>) {
+      return detail::send_t{detail::broadcast_coro<I, Is...>(std::forward<RangesT>(keylist),
+                                                     copy_handler(std::forward<valueT>(value)),
+                                                     std::move(copy_handler))};
+    } else if constexpr(std::is_rvalue_reference_v<decltype(keylist)>) {
+      return detail::send_t{detail::broadcast_coro<I, Is...>(std::make_tuple(std::forward<RangesT>(keylist)),
+                                                     copy_handler(std::forward<valueT>(value)),
+                                                     std::move(copy_handler))};
+    } else {
+      return detail::send_t{detail::broadcast_coro<I, Is...>(std::tie(keylist),
+                                                     copy_handler(std::forward<valueT>(value)),
+                                                     std::move(copy_handler))};
+    }
   }
 
   /* overload with explicit terminals and keylist passed by const reference */
-  template <size_t I, size_t... Is, typename rangeT, typename... out_keysT, typename... out_valuesT,
+  template <size_t I, size_t... Is, typename RangesT, typename... out_keysT, typename... out_valuesT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
   [[nodiscard]]
-  inline detail::send_t broadcastk(rangeT &&keylist,
+  inline detail::send_t broadcastk(RangesT &&keylist,
                                    std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
     ttg::detail::value_copy_handler<Runtime> copy_handler;
-    return detail::send_t{
-            detail::broadcastk_coro<I, Is...>(std::forward<rangeT>(keylist), t)};
+    if constexpr (ttg::meta::is_tuple_v<RangesT>) {
+      return detail::send_t{detail::broadcastk_coro<I, Is...>(std::forward<RangesT>(keylist), t)};
+    } else {
+      return detail::send_t{
+              detail::broadcastk_coro<I, Is...>(std::tie(keylist), t)};
+    }
   }
 
   /* overload with implicit terminals and keylist passed by const reference */
-  template <size_t i, typename rangeT,
+  template <size_t I, size_t... Is, typename RangesT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
-  inline detail::send_t broadcastk(rangeT &&keylist) {
-    if constexpr (std::is_rvalue_reference_v<decltype(keylist)>) {
-      return detail::send_t{detail::broadcastk_coro<i>(std::forward<rangeT>(keylist))};
+  inline detail::send_t broadcastk(RangesT &&keylist) {
+    if constexpr (ttg::meta::is_tuple_v<RangesT>) {
+      return detail::send_t{detail::broadcastk_coro<I, Is...>(std::forward<RangesT>(keylist))};
     } else {
-      return detail::send_t{detail::broadcastk_coro<i>(std::tie(keylist))};
+      return detail::send_t{detail::broadcastk_coro<I, Is...>(std::tie(keylist))};
     }
   }
 

@@ -90,6 +90,9 @@ if (TTG_ENABLE_ASAN)
     add_link_options(-fsanitize=address)
 endif (TTG_ENABLE_ASAN)
 
+# someone thought it was a brilliant idea to automatically enable thread-parallel BLAS
+set(use_openmp OFF)
+
 set(TTG_HIP_PLATFORM "__HIP_PLATFORM_AMD__" CACHE STRING "Which platform to use when compiling HIP-related code (default: __HIP_PLATFORM_AMD__)")
 ##########################
 #### prerequisites
