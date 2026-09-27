@@ -37,6 +37,7 @@ jobs:
       CCACHE_COMPRESSLEVEL : 6
       OMPI_MCA_btl_vader_single_copy_mechanism : none
       PARSEC_MCA_runtime_bind_threads : 0
+      MAD_CHECK_BINDING: OFF
       BUILD_CONFIG : >
         -G Ninja
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
