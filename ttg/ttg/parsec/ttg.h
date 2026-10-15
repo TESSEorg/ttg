@@ -1712,12 +1712,12 @@ namespace ttg_parsec {
       //std::cout << "static_op: suspended_task_address " << suspended_task_address << std::endl;
       ttT *baseobj = task->tt;
       derivedT *obj = static_cast<derivedT *>(baseobj);
-      if constexpr (!ttg::meta::is_void_v<keyT>)
-        obj->trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": executing");
-      else
-        obj->trace(obj->get_world().rank(), ":", obj->get_name(), " : executing");
       if (suspended_task_address == nullptr) {  // task is a coroutine that has not started or an ordinary function
 
+        if constexpr (!ttg::meta::is_void_v<keyT>)
+          obj->trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": executing");
+        else
+          obj->trace(obj->get_world().rank(), ":", obj->get_name(), " : executing");
         assert(detail::parsec_ttg_caller == nullptr);
         detail::parsec_ttg_caller = static_cast<detail::parsec_ttg_task_base_t*>(task);
 
@@ -1793,12 +1793,10 @@ namespace ttg_parsec {
       task->suspended_task_address = suspended_task_address;
 #endif // TTG_HAVE_COROUTINE
       if (suspended_task_address == nullptr) {
-        if (obj->tracing()) {
-          if constexpr (!ttg::meta::is_void_v<keyT>)
-            ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": done executing");
-          else
-            ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
-        }
+        if constexpr (!ttg::meta::is_void_v<keyT>)
+          obj->trace(obj->get_world().rank(), ":", obj->get_name(), " : ", task->key, ": done executing");
+        else
+          obj->trace(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
       }
 
       return PARSEC_HOOK_RETURN_DONE;
@@ -1868,12 +1866,10 @@ namespace ttg_parsec {
 
       //std::cout << "static_reducer_op " << parent_task->key << std::endl;
 
-      if (obj->tracing()) {
-        if constexpr (!ttg::meta::is_void_v<keyT>)
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", parent_task->key, ": reducer executing");
-        else
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : reducer executing");
-      }
+      if constexpr (!ttg::meta::is_void_v<keyT>)
+        obj->trace(obj->get_world().rank(), ":", obj->get_name(), " : ", parent_task->key, ": reducer executing");
+      else
+        obj->trace(obj->get_world().rank(), ":", obj->get_name(), " : reducer executing");
 
       /* the copy to reduce into */
       detail::ttg_data_copy_t *target_copy;
@@ -1904,7 +1900,7 @@ namespace ttg_parsec {
           detail::ttg_data_copy_t *source_copy;
           detail::ttg_data_copy_t *item = nullptr;
           {
-            std::lock_guard<std::mutex> lock(parent_task->streams[i].reduce_copies_lock);
+            detail::atomic_lock_guard lock(parent_task->streams[i].reduce_copies_lock);
             if (!parent_task->streams[i].reduce_copies.empty()) {
               item = parent_task->streams[i].reduce_copies.back();
               parent_task->streams[i].reduce_copies.pop_back();
@@ -1940,6 +1936,13 @@ namespace ttg_parsec {
       } else {
         obj->trace(obj->get_world().rank(), ":", obj->get_name(), ": size ", size, " of ", parent_task->streams[i].goal, " complete ", complete, " c ", c);
       }
+      /* trace before releasing the parent task: once released it may run to completion and be
+       * destroyed on another thread, which invalidates parent_task->key */
+      if constexpr (!ttg::meta::is_void_v<keyT>)
+        obj->trace(obj->get_world().rank(), ":", obj->get_name(), " : ", parent_task->key, ": done executing");
+      else
+        obj->trace(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
+
       if (complete && c == 0) {
         if constexpr(input_is_const) {
           /* make the consumer task a reader if its input is const */
@@ -1951,13 +1954,6 @@ namespace ttg_parsec {
       }
 
       detail::parsec_ttg_caller = NULL;
-
-      if (obj->tracing()) {
-        if constexpr (!ttg::meta::is_void_v<keyT>)
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : ", parent_task->key, ": done executing");
-        else
-          ttg::trace(obj->get_world().rank(), ":", obj->get_name(), " : done executing");
-      }
 
       return PARSEC_HOOK_RETURN_DONE;
     }
@@ -2087,10 +2083,11 @@ namespace ttg_parsec {
       /* restore the previous task */
       detail::parsec_ttg_caller = parsec_ttg_caller_save;
 
-      /* release the dummy task */
-      complete_task_and_release(es, &dummy->parsec_task);
+      /* release the dummy task; its PaRSEC header stays readable after destroy() */
+      parsec_task_t *dummy_parsec_task = &dummy->parsec_task;
+      complete_task_and_release(es, dummy_parsec_task);
       dummy->destroy();
-      parsec_thread_mempool_free(mempool, &dummy->parsec_task);
+      parsec_thread_mempool_free(mempool, dummy_parsec_task);
     }
 
     // there are 6 types of set_arg:
@@ -2602,7 +2599,7 @@ namespace ttg_parsec {
 
             /* enqueue the data copy to be reduced */
             {
-              std::lock_guard<std::mutex> lock(task->streams[i].reduce_copies_lock);
+              detail::atomic_lock_guard lock(task->streams[i].reduce_copies_lock);
               task->streams[i].reduce_copies.push_back(copy);
             }
             submit_reducer_task(task);

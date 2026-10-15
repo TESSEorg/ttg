@@ -5,7 +5,6 @@
 #include "ttg/parsec/ttg_data_copy.h"
 
 #include <memory>
-#include <mutex>
 #include <vector>
 
 #include <parsec/parsec_internal.h>
@@ -91,6 +90,17 @@ namespace ttg_parsec {
 
     typedef parsec_hook_return_t (*parsec_static_op_t)(void *);  // static_op will be cast to this type
 
+    /// RAII guard for a PaRSEC spinlock
+    struct atomic_lock_guard {
+      explicit atomic_lock_guard(parsec_atomic_lock_t &lock) : m_lock(lock) { parsec_atomic_lock(&m_lock); }
+      ~atomic_lock_guard() { parsec_atomic_unlock(&m_lock); }
+      atomic_lock_guard(const atomic_lock_guard &) = delete;
+      atomic_lock_guard &operator=(const atomic_lock_guard &) = delete;
+
+     private:
+      parsec_atomic_lock_t &m_lock;
+    };
+
     struct parsec_ttg_task_base_t {
       parsec_task_t parsec_task;
       int32_t in_data_count = 0;   //< number of satisfied inputs
@@ -99,9 +109,11 @@ namespace ttg_parsec {
       parsec_hash_table_item_t tt_ht_item = {};
 
       struct stream_info_t {
+        stream_info_t() { parsec_atomic_lock_init(&reduce_copies_lock); }
         std::size_t goal;
         std::size_t size;
-        std::mutex reduce_copies_lock;
+        /* a spinlock rather than std::mutex: every task carries one per input */
+        parsec_atomic_lock_t reduce_copies_lock;
         std::vector<ttg_data_copy_t*> reduce_copies;
         std::atomic<std::size_t> reduce_count;
       };
@@ -113,6 +125,7 @@ namespace ttg_parsec {
           if (std::get<i>(tt->input_reducers)) {
             streams[i].goal = tt->static_stream_goal[i];
             streams[i].size = 0;
+            parsec_atomic_lock_init(&streams[i].reduce_copies_lock);
             streams[i].reduce_copies.clear();
             streams[i].reduce_count.store(0, std::memory_order_relaxed);
           }
@@ -250,13 +263,17 @@ namespace ttg_parsec {
       }
 
       /**
-       * Destroys the non-trivial members of the task. The task is placement-new'd into
-       * a PaRSEC mempool and never destructed, so this must be called before the task's
-       * memory is returned to the mempool.
+       * Runs the destructor of the task. Tasks are placement-new'd into a PaRSEC mempool
+       * and never deleted, so this must be called before the task's memory is returned
+       * to the mempool. Running the full destructor (rather than destroying selected
+       * members) stays correct when members are added. The PaRSEC task header is
+       * trivially destructible, so the mempool can still read it afterwards.
+       *
+       * @note tasks still pending when the TT is destroyed are not destroyed: the mempool
+       *       frees their memory as raw chunks, so their members leak.
        */
       void destroy() {
-        std::destroy_at(&key);
-        std::destroy(streams.begin(), streams.end());
+        this->~parsec_ttg_task_t();
       }
 
       static void release_task(parsec_ttg_task_base_t* task_base) {
@@ -318,12 +335,17 @@ namespace ttg_parsec {
       }
 
       /**
-       * Destroys the non-trivial members of the task. The task is placement-new'd into
-       * a PaRSEC mempool and never destructed, so this must be called before the task's
-       * memory is returned to the mempool.
+       * Runs the destructor of the task. Tasks are placement-new'd into a PaRSEC mempool
+       * and never deleted, so this must be called before the task's memory is returned
+       * to the mempool. Running the full destructor (rather than destroying selected
+       * members) stays correct when members are added. The PaRSEC task header is
+       * trivially destructible, so the mempool can still read it afterwards.
+       *
+       * @note tasks still pending when the TT is destroyed are not destroyed: the mempool
+       *       frees their memory as raw chunks, so their members leak.
        */
       void destroy() {
-        std::destroy(streams.begin(), streams.end());
+        this->~parsec_ttg_task_t();
       }
 
       static void release_task(parsec_ttg_task_base_t* task_base) {
