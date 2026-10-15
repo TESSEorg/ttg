@@ -90,8 +90,10 @@ if (TTG_ENABLE_ASAN)
     add_link_options(-fsanitize=address)
 endif (TTG_ENABLE_ASAN)
 
-# someone thought it was a brilliant idea to automatically enable thread-parallel BLAS
-set(use_openmp OFF)
+# blaspp enables OpenMP-threaded BLAS by default (via its use_openmp option), which oversubscribes
+# the cores already occupied by the TTG backend's worker threads
+option(TTG_BLASPP_USE_OPENMP "Allow blaspp/lapackpp to use OpenMP-threaded BLAS (may oversubscribe TTG worker threads)" OFF)
+set(use_openmp ${TTG_BLASPP_USE_OPENMP})
 
 set(TTG_HIP_PLATFORM "__HIP_PLATFORM_AMD__" CACHE STRING "Which platform to use when compiling HIP-related code (default: __HIP_PLATFORM_AMD__)")
 ##########################
