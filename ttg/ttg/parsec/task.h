@@ -4,6 +4,10 @@
 
 #include "ttg/parsec/ttg_data_copy.h"
 
+#include <memory>
+#include <mutex>
+#include <vector>
+
 #include <parsec/parsec_internal.h>
 #include <parsec/mca/device/device_gpu.h>
 
@@ -245,6 +249,16 @@ namespace ttg_parsec {
         init_stream_info(tt, streams);
       }
 
+      /**
+       * Destroys the non-trivial members of the task. The task is placement-new'd into
+       * a PaRSEC mempool and never destructed, so this must be called before the task's
+       * memory is returned to the mempool.
+       */
+      void destroy() {
+        std::destroy_at(&key);
+        std::destroy(streams.begin(), streams.end());
+      }
+
       static void release_task(parsec_ttg_task_base_t* task_base) {
         parsec_ttg_task_t *task = static_cast<parsec_ttg_task_t*>(task_base);
         TT *tt = task->tt;
@@ -301,6 +315,15 @@ namespace ttg_parsec {
         tt_ht_item.key = pkey();
         this->dev_ptr = this->dev_state.dev_ptr();
         init_stream_info(tt, streams);
+      }
+
+      /**
+       * Destroys the non-trivial members of the task. The task is placement-new'd into
+       * a PaRSEC mempool and never destructed, so this must be called before the task's
+       * memory is returned to the mempool.
+       */
+      void destroy() {
+        std::destroy(streams.begin(), streams.end());
       }
 
       static void release_task(parsec_ttg_task_base_t* task_base) {
