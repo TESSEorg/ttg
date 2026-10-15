@@ -137,6 +137,18 @@ While it is possible to use a specific TTG backend explicitly, by using the appr
 
 To initialize the TTG runtime invoke `ttg::initialize(argc, argv)`. There are several overloads of this function that also accept other optional parameters, such as the number of threads in the main thread pool, the MPI communicator for execution, etc.
 
+#### Thread Pool Size and CPU Binding
+
+Unless the number of threads is passed to `ttg::initialize()` or set via the environment variable `TTG_NUM_THREADS`, each process sizes its worker thread pool to the number of hardware threads of the host, regardless of how many of them the process may actually use. MPI launchers frequently confine each rank to a subset of the cores (e.g., Open MPI binds each rank to a single core when launching few ranks per node), and several ranks on one host each default to a full-host thread pool; in both cases the threads time-share cores and the program runs correctly but very slowly.
+
+The MADNESS backend refuses to start in that situation: `madness::initialize()`, invoked by `ttg::initialize()`, checks that the threads of each rank fit into its CPU set and that the ranks sharing a host do not over-subscribe it, and otherwise prints a diagnostic and throws. To resolve this, launch without binding (e.g., `mpiexec --bind-to none ...`) and set `TTG_NUM_THREADS` so that the ranks on a host together request no more threads than the host has cores, e.g. on an 8-core host:
+
+```sh
+TTG_NUM_THREADS=4 mpiexec -n 2 --bind-to none ./my-ttg-program
+```
+
+To run anyway, set the environment variable `MAD_CHECK_BINDING=OFF`. The PaRSEC backend does not perform this check.
+
 ## Create a TTG
 
 To make a TTG, create and connect one or more TTs. The simplest TTG consists of a single TT as in the "Hello, World!" example.

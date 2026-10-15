@@ -93,7 +93,11 @@ endif (TTG_ENABLE_ASAN)
 # blaspp enables OpenMP-threaded BLAS by default (via its use_openmp option), which oversubscribes
 # the cores already occupied by the TTG backend's worker threads
 option(TTG_BLASPP_USE_OPENMP "Allow blaspp/lapackpp to use OpenMP-threaded BLAS (may oversubscribe TTG worker threads)" OFF)
-set(use_openmp ${TTG_BLASPP_USE_OPENMP})
+# blaspp reads use_openmp via option(); a normal variable set here overrides its cache entry (CMP0077),
+# so seed it only if blaspp's own use_openmp was not configured explicitly
+if (NOT DEFINED use_openmp)
+  set(use_openmp ${TTG_BLASPP_USE_OPENMP})
+endif()
 
 set(TTG_HIP_PLATFORM "__HIP_PLATFORM_AMD__" CACHE STRING "Which platform to use when compiling HIP-related code (default: __HIP_PLATFORM_AMD__)")
 ##########################

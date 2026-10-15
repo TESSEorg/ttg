@@ -37,7 +37,8 @@ jobs:
       CCACHE_COMPRESSLEVEL : 6
       OMPI_MCA_btl_vader_single_copy_mechanism : none
       PARSEC_MCA_runtime_bind_threads : 0
-      # runtime env var (not a CMake flag): skip MADNESS' startup check that MAD_NUM_THREADS fits the CPU mask
+      # runtime env var (not a CMake flag): skip MADNESS' startup check that the thread pool fits the CPU mask
+      # (the "Test Install Tree" step runs one MADNESS-backend binary with the check enabled)
       MAD_CHECK_BINDING : OFF
       BUILD_CONFIG : >
         -G Ninja
@@ -142,6 +143,8 @@ jobs:
         cmake --build test_install_devsamp_helloworld
         $MPIEXEC -n 2 test_install_devsamp_helloworld/helloworld-parsec
         $MPIEXEC -n 2 test_install_devsamp_helloworld/helloworld-mad
+        # same binary with MADNESS' thread-binding check enabled: 2 ranks x 1 thread fit on any runner
+        MAD_CHECK_BINDING=ON TTG_NUM_THREADS=1 $MPIEXEC -n 2 --bind-to none test_install_devsamp_helloworld/helloworld-mad
         cmake -S $GITHUB_WORKSPACE/doc/dox/dev/devsamp/fibonacci -B test_install_devsamp_fibonacci -DCMAKE_PREFIX_PATH=${{github.workspace}}/install $CUDA_BUILD_OPTS || (cat /home/runner/work/ttg/ttg/install/lib/cmake/ttg/ttg-config.cmake && cat test_install_devsamp_fibonacci/CMakeFiles/CMakeConfigureLog.yaml)
         cmake --build test_install_devsamp_fibonacci
         $MPIEXEC -n 2 test_install_devsamp_fibonacci/fibonacci-parsec
