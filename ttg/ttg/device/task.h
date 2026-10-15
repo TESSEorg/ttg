@@ -400,6 +400,8 @@ namespace ttg::device {
       RangesT kl = std::forward<RangesT>(keylists); // capture the keylist(s)
       if constexpr (ttg::meta::is_tuple_v<std::remove_cvref_t<RangesT>>) {
         // treat as tuple
+        static_assert(sizeof...(Is)+1 == std::tuple_size_v<std::remove_cvref_t<RangesT>>,
+                      "Size of keylist tuple must match the number of output terminals");
         prepare_broadcast<0, I, Is...>(kl, std::forward<valueT>(value), t);
         co_await ttg::Void{}; // we'll come back once the task is done
         ttg::device::detail::broadcast<0, I, Is...>(kl, std::forward<valueT>(value), t);
@@ -470,6 +472,8 @@ namespace ttg::device {
       RangesT kl = std::forward<RangesT>(keylists); // capture the keylist(s)
       if constexpr (ttg::meta::is_tuple_v<std::remove_cvref_t<RangesT>>) {
         // treat as tuple
+        static_assert(sizeof...(Is)+1 == std::tuple_size_v<std::remove_cvref_t<RangesT>>,
+                      "Size of keylist tuple must match the number of output terminals");
         co_await ttg::Void{}; // we'll come back once the task is done
         ttg::device::detail::broadcastk<0, I, Is...>(kl, t);
       } else {
