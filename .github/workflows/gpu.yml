@@ -21,7 +21,7 @@ jobs:
       CCACHE_COMPRESS: true
       CCACHE_COMPRESSLEVEL: 6
       OMPI_MCA_btl_vader_single_copy_mechanism: none
-      PARSEC_MCA_runtime_bind_threads: 0
+      PARSEC_MCA_bind_threads: 0
       MKLROOT: /opt/intel/mkl
       Eigen3_DIR: /home/evaleev/code/install/eigen-master
       LD_LIBRARY_PATH: /home/evaleev/code/install/gcc/12/lib64

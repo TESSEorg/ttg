@@ -149,6 +149,8 @@ TTG_NUM_THREADS=4 mpiexec -n 2 --bind-to none ./my-ttg-program
 
 To run anyway, set the environment variable `MAD_CHECK_BINDING=OFF`. The PaRSEC backend does not perform this check.
 
+Note that TTG builds MADNESS on top of the PaRSEC task backend, and PaRSEC by default pins its worker threads, including the thread that calls `ttg::initialize()`, to individual cores. This pinning happens before the MADNESS check runs and is what the check then sees, so with either backend set `PARSEC_MCA_bind_threads=0` to leave thread placement to the MPI launcher.
+
 ## Create a TTG
 
 To make a TTG, create and connect one or more TTs. The simplest TTG consists of a single TT as in the "Hello, World!" example.

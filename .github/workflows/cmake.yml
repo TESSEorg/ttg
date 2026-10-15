@@ -36,7 +36,8 @@ jobs:
       CCACHE_COMPRESS : true
       CCACHE_COMPRESSLEVEL : 6
       OMPI_MCA_btl_vader_single_copy_mechanism : none
-      PARSEC_MCA_runtime_bind_threads : 0
+      # PaRSEC renamed runtime_bind_threads to bind_threads in 2023 (4d854e511); unknown MCA names are silently ignored
+      PARSEC_MCA_bind_threads : 0
       # runtime env var (not a CMake flag): skip MADNESS' startup check that the thread pool fits the CPU mask
       # (the "Test Install Tree" step runs one MADNESS-backend binary with the check enabled)
       MAD_CHECK_BINDING : OFF
