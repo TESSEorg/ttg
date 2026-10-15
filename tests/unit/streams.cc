@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 #include <catch2/catch_all.hpp>
 #include <ctime>
+#include <numeric>
 
 #include "ttg.h"
 
@@ -207,5 +208,56 @@ TEST_CASE("streams", "[streams][core]") {
 
     ttg::ttg_fence(ttg::default_execution_context());
     CHECK(reduce_ops == N/nranks);
+  }
+  // the same data copy is broadcast to several reducing consumers at once;
+  // each consumer must track its contribution independently of the others
+  SECTION("streams-same-copy-to-multiple-reducers") {
+    ttg::Edge<int, int> I2O;
+    ttg::Edge<int, int> O2S;
+    const int nranks = ttg::default_execution_context().size();
+    const int rank = ttg::default_execution_context().rank();
+
+    constexpr int NKEYS = 8;          // reducing consumers that share every value
+    constexpr int N = 2000;           // contributions each consumer reduces
+    constexpr int VALUE = 1;
+    std::atomic<std::size_t> reduce_ops = 0;
+    std::atomic<std::size_t> sink_ops = 0;
+
+    auto op = ttg::make_tt(
+        [&](const int &n, const int &i, std::tuple<ttg::Out<int, int>> &outs) {
+          std::vector<int> keys(NKEYS);
+          std::iota(keys.begin(), keys.end(), 0);
+          // one copy of i is handed to all NKEYS consumers
+          ttg::broadcast<0>(keys, i, outs);
+        },
+        ttg::edges(I2O), ttg::edges(O2S));
+
+    auto sink_op = ttg::make_tt(
+        [&](const int key, const int &value) {
+          CHECK(value == N);
+          sink_ops++;
+        },
+        ttg::edges(O2S), ttg::edges());
+
+    op->set_keymap([=](const int &key) { return key % nranks; });
+    sink_op->set_keymap([=](const int &key) { return key % nranks; });
+    sink_op->set_input_reducer<0>([&](int &a, const int &b) {
+      a += 1;  // count contributions
+      CHECK(b == VALUE);
+      reduce_ops++;
+    }, N);
+
+    make_graph_executable(op);
+    ttg::execute(ttg::default_execution_context());
+    if (rank == 0) {
+      for (int n = 0; n < N; ++n) {
+        op->invoke(n, VALUE);
+      }
+    }
+
+    ttg::ttg_fence(ttg::default_execution_context());
+    const std::size_t keys_on_rank = NKEYS / nranks + ((rank < NKEYS % nranks) ? 1 : 0);
+    CHECK(sink_ops == keys_on_rank);
+    CHECK(reduce_ops == keys_on_rank * (N - 1));
   }
 }  // TEST_CASE("streams")
