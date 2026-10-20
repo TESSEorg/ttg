@@ -1,0 +1,9 @@
+<map id="ttg_parsec::Buffer::~Buffer" name="ttg_parsec::Buffer::~Buffer">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,37,148,77"/>
+<area shape="rect" id="Node000002" href="$structttg__parsec_1_1_buffer.html#aae442b3f2d8074b03be78bad70c2f9d1" title=" " alt="" coords="196,37,339,77"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="148,55,183,55,183,60,148,60"/>
+<area shape="rect" id="Node000003" href="$structttg__parsec_1_1_buffer.html#a3780a9611c746e0d1ea617720d469ad5" title=" " alt="" coords="387,5,529,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="338,43,373,37,374,42,339,48"/>
+<area shape="rect" id="Node000004" href="$structttg__parsec_1_1_buffer.html#ae0b1b7c0ef36ddffc0a721fd86335c4e" title=" " alt="" coords="387,69,529,109"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="339,67,374,72,373,78,338,72"/>
+</map>

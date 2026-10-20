@@ -1,0 +1,25 @@
+<map id="ttg/ttg/device/task.h" name="ttg/ttg/device/task.h">
+<area shape="rect" id="Node000001" title=" " alt="" coords="1436,5,1593,31"/>
+<area shape="rect" id="Node000002" href="$ttg_8h.html" title=" " alt="" coords="976,79,1053,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="1423,35,1054,87,1053,82,1422,30"/>
+<area shape="rect" id="Node000010" href="$ttg_2madness_2ttg_8h.html" title=" " alt="" coords="1432,167,1597,192"/>
+<area shape="poly" id="edge11_Node000001_Node000010" title=" " alt="" coords="1517,44,1517,166,1512,166,1512,44"/>
+<area shape="rect" id="Node000011" href="$ttg_2parsec_2ttg_8h.html" title=" " alt="" coords="1621,167,1771,192"/>
+<area shape="poly" id="edge12_Node000001_Node000011" title=" " alt="" coords="1540,38,1684,164,1681,168,1536,42"/>
+<area shape="rect" id="Node000003" href="$fibonacci_8cc.html" title=" " alt="" coords="208,159,379,199"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="962,97,715,114,554,130,391,155,358,162,357,157,390,149,553,125,714,108,962,92"/>
+<area shape="rect" id="Node000004" href="$fibonacci__device_8cc.html" title=" " alt="" coords="403,152,573,207"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="962,100,794,121,586,155,574,157,573,152,585,149,793,115,962,95"/>
+<area shape="rect" id="Node000005" href="$helloworld_8cpp.html" title=" " alt="" coords="598,159,799,199"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="963,109,769,162,768,157,962,104"/>
+<area shape="rect" id="Node000006" href="$distributed_8cc.html" title=" " alt="" coords="824,159,1003,199"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="992,115,937,161,934,157,989,111"/>
+<area shape="rect" id="Node000007" href="$iterative_8cc.html" title=" " alt="" coords="1027,159,1205,199"/>
+<area shape="poly" id="edge6_Node000002_Node000007" title=" " alt="" coords="1041,111,1095,157,1092,161,1037,115"/>
+<area shape="rect" id="Node000008" href="$reducing_8cc.html" title=" " alt="" coords="1229,159,1408,199"/>
+<area shape="poly" id="edge7_Node000002_Node000008" title=" " alt="" coords="1068,105,1253,157,1251,162,1066,110"/>
+<area shape="rect" id="Node000009" href="$simple_8cc.html" title=" " alt="" coords="5,159,184,199"/>
+<area shape="poly" id="edge8_Node000002_Node000009" title=" " alt="" coords="962,96,828,99,638,109,419,126,196,155,161,162,160,157,196,149,418,121,638,103,828,94,962,91"/>
+<area shape="poly" id="edge9_Node000002_Node000010" title=" " alt="" coords="1067,96,1226,116,1421,149,1478,164,1476,169,1419,155,1225,121,1067,101"/>
+<area shape="poly" id="edge10_Node000002_Node000011" title=" " alt="" coords="1068,92,1304,108,1456,125,1610,149,1664,164,1663,169,1609,155,1456,130,1303,113,1067,97"/>
+</map>

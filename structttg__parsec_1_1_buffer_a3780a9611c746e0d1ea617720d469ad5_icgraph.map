@@ -1,0 +1,29 @@
+<map id="ttg_parsec::Buffer::is_valid" name="ttg_parsec::Buffer::is_valid">
+<area shape="rect" id="Node000001" title=" " alt="" coords="403,293,545,333"/>
+<area shape="rect" id="Node000002" href="$structttg__parsec_1_1_buffer.html#ad7c9683797b26ee8911ae7cfe4712d50" title=" " alt="" coords="196,5,355,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="463,281,450,232,427,173,396,112,376,84,353,59,337,48,340,43,356,55,380,81,400,110,432,171,455,231,468,279"/>
+<area shape="rect" id="Node000003" href="$structttg__parsec_1_1_buffer.html#a87cfa2924a1165608d8180337682cdce" title=" " alt="" coords="196,69,355,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="458,282,441,245,418,203,388,161,353,123,335,112,338,107,356,119,393,157,423,200,446,243,463,279"/>
+<area shape="rect" id="Node000004" href="$structttg__parsec_1_1_buffer.html#a75237a0fe188810d1741db8091603c01" title=" " alt="" coords="204,133,347,173"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="448,284,407,235,381,210,353,188,333,176,335,171,356,183,385,206,411,231,452,280"/>
+<area shape="rect" id="Node000005" href="$structttg__parsec_1_1_buffer.html#a14b779203a13f74eb18077dd76aa2462" title=" " alt="" coords="204,197,347,237"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="425,289,354,252,327,240,329,235,356,247,427,284"/>
+<area shape="rect" id="Node000006" href="$structttg__parsec_1_1_buffer.html#a6d94b7f71accdae0bfd9c708006d359e" title=" " alt="" coords="199,261,351,301"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="389,302,351,296,352,291,389,297"/>
+<area shape="rect" id="Node000007" href="$structttg__parsec_1_1_buffer.html#a57dc7b47c838715a12d2a59fb3d82b76" title=" " alt="" coords="204,325,347,365"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="390,330,347,336,347,331,389,324"/>
+<area shape="rect" id="Node000010" href="$structttg__parsec_1_1_buffer.html#ac8c052f38d5f4afbbbede1ae4b64f798" title=" " alt="" coords="200,389,351,429"/>
+<area shape="poly" id="edge9_Node000001_Node000010" title=" " alt="" coords="427,343,356,380,329,392,327,387,354,375,425,338"/>
+<area shape="rect" id="Node000011" href="$structttg__parsec_1_1_buffer.html#a36b597388d7fa9a9e02d2183df2bd53d" title=" " alt="" coords="200,453,351,493"/>
+<area shape="poly" id="edge10_Node000001_Node000011" title=" " alt="" coords="452,346,411,395,385,421,356,444,335,456,333,451,353,439,381,417,407,392,448,343"/>
+<area shape="rect" id="Node000012" href="$structttg__parsec_1_1_buffer.html#ace745d5a5d55e60bde6b8a09b138192d" title=" " alt="" coords="200,517,351,557"/>
+<area shape="poly" id="edge11_Node000001_Node000012" title=" " alt="" coords="463,347,446,384,423,426,393,469,356,507,338,520,335,515,353,503,388,466,418,424,441,381,458,345"/>
+<area shape="rect" id="Node000013" href="$structttg__parsec_1_1_buffer.html#aae442b3f2d8074b03be78bad70c2f9d1" title=" " alt="" coords="204,581,347,621"/>
+<area shape="poly" id="edge12_Node000001_Node000013" title=" " alt="" coords="468,347,455,396,432,456,400,517,380,546,356,571,340,583,337,579,353,567,376,542,396,514,427,454,450,394,463,346"/>
+<area shape="rect" id="Node000008" href="$structttg__parsec_1_1_buffer.html#aa172f84d2b71ad72b065bf2973b47ca4" title=" " alt="" coords="5,293,148,333"/>
+<area shape="poly" id="edge7_Node000007_Node000008" title=" " alt="" coords="190,334,148,327,149,322,191,329"/>
+<area shape="rect" id="Node000009" href="$structttg__parsec_1_1_buffer.html#ac03d171f76a9ebf145bdcc2b991cbf5e" title=" " alt="" coords="5,357,148,397"/>
+<area shape="poly" id="edge8_Node000007_Node000009" title=" " alt="" coords="191,362,149,368,148,363,190,356"/>
+<area shape="rect" id="Node000014" href="$structttg__parsec_1_1_buffer.html#a436632d1ae4608b3e9747704bbf628a7" title=" " alt="" coords="5,581,148,621"/>
+<area shape="poly" id="edge13_Node000013_Node000014" title=" " alt="" coords="190,604,148,604,148,599,190,599"/>
+</map>

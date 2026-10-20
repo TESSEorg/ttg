@@ -1,0 +1,5 @@
+<map id="ttg::TTBase::set_trace_instance" name="ttg::TTBase::set_trace_instance">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,5,175,45"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#afbdd9c742be395e0746fdbc26c7d55cc" title="returns whether tracing was enabled at configure time" alt="" coords="223,13,368,38"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="175,23,209,23,209,28,175,28"/>
+</map>

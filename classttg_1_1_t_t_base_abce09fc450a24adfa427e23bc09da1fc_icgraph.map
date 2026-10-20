@@ -1,0 +1,7 @@
+<map id="ttg::TTBase::get_outputs_tls_ptr" name="ttg::TTBase::get_outputs_tls_ptr">
+<area shape="rect" id="Node000001" title="Returns this thread&#39;s pointer to the vector of output terminals." alt="" coords="200,37,389,77"/>
+<area shape="rect" id="Node000002" href="$namespacettg_1_1detail.html#ab74de3de588f49984ad9db137518478b" title=" " alt="" coords="5,5,152,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="186,44,152,39,153,34,187,39"/>
+<area shape="rect" id="Node000003" href="$namespacettg_1_1detail.html#a34fe30520697b631fc025a97b54f88b9" title=" " alt="" coords="5,69,152,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="187,76,153,81,152,76,186,71"/>
+</map>

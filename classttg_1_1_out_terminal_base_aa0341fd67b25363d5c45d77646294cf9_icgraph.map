@@ -1,0 +1,63 @@
+<map id="ttg::OutTerminalBase::successors" name="ttg::OutTerminalBase::successors">
+<area shape="rect" id="Node000001" title=" " alt="" coords="604,356,771,396"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_out.html#a5e3565d4f06d2476f4537882072c1225" title=" " alt="" coords="169,37,319,62"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="682,342,675,275,655,190,638,147,616,106,589,70,554,40,521,22,484,12,446,8,408,10,335,22,278,39,277,34,334,17,407,4,446,3,485,7,523,17,558,35,593,66,621,103,643,145,660,189,680,274,687,342"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_out.html#a61dbd5c1f8d8cc7f5370f2b8b400b900" title=" " alt="" coords="393,74,543,99"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="676,343,661,292,637,231,602,168,580,139,554,114,534,102,537,97,558,110,584,136,606,165,642,228,667,291,681,342"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_out_terminal_base.html#a17d34c774c64c9aed0cd9424cafba0e2" title=" " alt="" coords="385,148,551,188"/>
+<area shape="poly" id="edge5_Node000001_Node000004" title=" " alt="" coords="666,346,620,278,589,241,554,209,524,190,527,186,558,205,593,238,624,274,670,343"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1_out_terminal_base.html#af7831a958cf8a5774153bf0c3c0cfaa6" title=" " alt="" coords="161,177,327,217"/>
+<area shape="poly" id="edge10_Node000001_Node000005" title=" " alt="" coords="661,347,615,297,586,273,555,253,499,230,439,215,381,206,328,201,328,196,381,201,440,210,500,225,557,248,590,269,619,293,665,343"/>
+<area shape="rect" id="Node000008" href="$classttg_1_1_out.html#a57b889eeff9324054e816caed0561ae1" title=" " alt="" coords="380,287,556,313"/>
+<area shape="poly" id="edge11_Node000001_Node000008" title=" " alt="" coords="615,354,505,316,507,310,617,349"/>
+<area shape="rect" id="Node000009" href="$classttg_1_1_out.html#a5ac82dc10b43caa7723a6b20d2ef85b2" title=" " alt="" coords="156,313,332,338"/>
+<area shape="poly" id="edge14_Node000001_Node000009" title=" " alt="" coords="590,368,332,338,333,333,590,362"/>
+<area shape="rect" id="Node000010" href="$classttg_1_1_out.html#af3902b047294f85bdfaeb42dcd4488a4" title=" " alt="" coords="411,463,525,489"/>
+<area shape="poly" id="edge15_Node000001_Node000010" title=" " alt="" coords="631,404,498,466,496,461,629,400"/>
+<area shape="rect" id="Node000011" href="$classttg_1_1_out.html#ad2a015783a18cb7e66096c95a9ae77d0" title=" " alt="" coords="187,389,301,414"/>
+<area shape="poly" id="edge20_Node000001_Node000011" title=" " alt="" coords="590,384,302,401,301,396,590,379"/>
+<area shape="rect" id="Node000014" href="$classttg_1_1_out.html#a63a75f52fff6b34ec5287e7daefe5bfa" title=" " alt="" coords="407,537,529,562"/>
+<area shape="poly" id="edge21_Node000001_Node000014" title=" " alt="" coords="661,408,614,454,558,502,497,539,494,535,554,498,611,450,657,404"/>
+<area shape="rect" id="Node000017" href="$classttg_1_1_out.html#a19596b1bdc19006bfe9771b3ece65223" title=" " alt="" coords="407,610,529,635"/>
+<area shape="poly" id="edge25_Node000001_Node000017" title=" " alt="" coords="673,410,627,490,595,535,558,575,530,597,501,612,498,608,527,592,554,572,591,531,623,487,668,407"/>
+<area shape="rect" id="Node000020" href="$classttg_1_1_out_terminal_base.html#ae49bef4469c9abd4dd1f10b0429984b4" title=" " alt="" coords="385,684,551,724"/>
+<area shape="poly" id="edge29_Node000001_Node000020" title=" " alt="" coords="679,410,662,460,636,522,602,588,558,649,535,670,511,686,508,682,532,665,554,645,597,585,631,520,657,458,674,408"/>
+<area shape="rect" id="Node000025" href="$classttg_1_1_out_terminal_base.html#a5ce0ce0c4247e276201644e30314ba70" title=" " alt="" coords="161,741,327,781"/>
+<area shape="poly" id="edge36_Node000001_Node000025" title=" " alt="" coords="688,410,681,481,661,571,644,618,622,663,594,704,558,738,532,755,503,767,443,781,383,784,327,780,328,775,383,779,443,776,502,762,529,750,554,734,589,700,618,660,640,616,656,570,675,480,682,410"/>
+<area shape="poly" id="edge3_Node000003_Node000002" title=" " alt="" coords="379,75,318,65,319,59,380,69"/>
+<area shape="poly" id="edge4_Node000003_Node000003" title=" " alt="" coords="507,65,496,56,468,53,445,55,432,60,430,65,436,72,432,76,425,66,429,56,443,50,468,47,498,51,510,60"/>
+<area shape="poly" id="edge6_Node000004_Node000004" title=" " alt="" coords="505,136,492,129,468,127,447,129,434,134,430,139,432,147,427,148,425,138,431,129,446,124,468,121,494,124,508,132"/>
+<area shape="poly" id="edge7_Node000004_Node000005" title=" " alt="" coords="371,184,328,189,327,184,370,178"/>
+<area shape="rect" id="Node000006" href="$namespacettg.html#a7075f199efa0ec86240a4b8c0fc621da" title="Finalize streaming input terminals connecting to the given output terminal for tasks identified by ke..." alt="" coords="7,161,106,186"/>
+<area shape="poly" id="edge8_Node000005_Node000006" title=" " alt="" coords="147,188,106,182,107,177,147,182"/>
+<area shape="rect" id="Node000007" href="$namespacettg.html#ac12ebacc01669eddae361b592e94188e" title="Finalize streaming input terminals connected to the given output terminal; use this to finalize termi..." alt="" coords="7,210,106,235"/>
+<area shape="poly" id="edge9_Node000005_Node000007" title=" " alt="" coords="147,213,107,219,106,214,147,208"/>
+<area shape="poly" id="edge12_Node000008_Node000008" title=" " alt="" coords="507,278,496,269,468,266,445,268,432,273,430,278,436,286,432,289,425,279,429,269,443,263,468,261,498,265,510,274"/>
+<area shape="poly" id="edge13_Node000008_Node000009" title=" " alt="" coords="367,314,333,318,332,313,366,309"/>
+<area shape="poly" id="edge16_Node000010_Node000010" title=" " alt="" coords="507,454,496,445,468,442,445,444,432,449,430,454,436,462,432,465,425,455,429,445,443,439,468,437,498,441,510,450"/>
+<area shape="poly" id="edge17_Node000010_Node000011" title=" " alt="" coords="422,461,331,428,293,417,295,412,333,423,424,456"/>
+<area shape="rect" id="Node000012" href="$namespacettg.html#a195eb3c0d9b0118dd7c94c0463840734" title="Sends a task id and a value to the given output terminal." alt="" coords="203,438,285,463"/>
+<area shape="poly" id="edge18_Node000010_Node000012" title=" " alt="" coords="396,471,285,458,286,453,397,465"/>
+<area shape="rect" id="Node000013" href="$namespacettg.html#a64fbfb8618ef226f6b3d49a7a46db0cb" title="Sends a control message (message without an accompanying task id or a value) to the given output term..." alt="" coords="203,487,285,513"/>
+<area shape="poly" id="edge19_Node000010_Node000013" title=" " alt="" coords="397,486,286,498,285,493,396,481"/>
+<area shape="poly" id="edge22_Node000014_Node000014" title=" " alt="" coords="507,527,496,519,468,515,445,518,432,522,430,528,436,535,432,538,425,529,429,519,443,512,468,510,498,514,510,523"/>
+<area shape="rect" id="Node000015" href="$namespacettg.html#a83562836ce105890c0e32d75cad1e421" title="Sends a task id (without an accompanying value) to the given output terminal." alt="" coords="199,537,289,562"/>
+<area shape="poly" id="edge23_Node000014_Node000015" title=" " alt="" coords="392,552,290,552,290,547,392,547"/>
+<area shape="rect" id="Node000016" href="$namespacettg.html#aef6947191f40b85e515f63ef87a250ff" title="Sends a task id (without an accompanying value) to the template tasks attached to the output terminal..." alt="" coords="11,537,102,562"/>
+<area shape="poly" id="edge24_Node000015_Node000016" title=" " alt="" coords="185,552,103,552,103,547,185,547"/>
+<area shape="poly" id="edge26_Node000017_Node000017" title=" " alt="" coords="507,601,496,592,468,589,445,591,432,596,430,601,436,608,432,612,425,602,429,592,443,586,468,583,498,587,510,596"/>
+<area shape="rect" id="Node000018" href="$namespacettg.html#a8f6699133cf34d99b17a41af9834a272" title="Sends a value (without an accompanying task id) to the given output terminal." alt="" coords="199,593,289,618"/>
+<area shape="poly" id="edge27_Node000017_Node000018" title=" " alt="" coords="393,620,289,612,290,606,393,614"/>
+<area shape="rect" id="Node000019" href="$namespacettg.html#aec6fd6a228d0400a690001fd5171b468" title="Sends a value (without an accompanying task id) to the template tasks attached to the output terminal..." alt="" coords="11,593,102,618"/>
+<area shape="poly" id="edge28_Node000018_Node000019" title=" " alt="" coords="185,608,103,608,103,603,185,603"/>
+<area shape="poly" id="edge30_Node000020_Node000020" title=" " alt="" coords="505,672,492,665,468,663,447,665,434,670,430,675,432,683,427,684,425,674,431,665,446,660,468,657,494,660,508,668"/>
+<area shape="rect" id="Node000021" href="$namespacettg.html#a647ab7e77f26372e8ed5519e373caf3b" title=" " alt="" coords="193,642,295,667"/>
+<area shape="poly" id="edge31_Node000020_Node000021" title=" " alt="" coords="371,685,295,669,296,663,372,680"/>
+<area shape="rect" id="Node000024" href="$namespacettg.html#af31d31d8a37261b9f89f1852e9e3c10f" title="Set the size of all streaming input terminals connected to an output terminal with void key." alt="" coords="193,691,295,717"/>
+<area shape="poly" id="edge34_Node000020_Node000024" title=" " alt="" coords="371,707,296,707,296,701,371,701"/>
+<area shape="poly" id="edge35_Node000020_Node000025" title=" " alt="" coords="377,730,323,744,322,739,375,725"/>
+<area shape="rect" id="Node000022" href="$namespacettg.html#aeb9f920fc147bba8f435b2ca39cdd414" title=" " alt="" coords="5,642,108,667"/>
+<area shape="poly" id="edge32_Node000021_Node000022" title=" " alt="" coords="178,657,108,657,108,652,178,652"/>
+<area shape="rect" id="Node000023" href="$namespacettg.html#ae96ab8dfc75550533beda7e2644dc00f" title=" " alt="" coords="5,691,108,717"/>
+<area shape="poly" id="edge33_Node000021_Node000023" title=" " alt="" coords="183,674,107,694,105,689,181,668"/>
+</map>

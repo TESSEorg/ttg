@@ -1,0 +1,19 @@
+<map id="ttg::TTBase::trace" name="ttg::TTBase::trace">
+<area shape="rect" id="Node000001" title="Like ttg::trace(), but only produces tracing output if this&#45;&gt;tracing()==true" alt="" coords="5,93,148,118"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#aacacfe8bc9582308a405c4370650a9d4" title="atomically prints to std::clog a sequence of items (separated by ttg::print_separator) followed by st..." alt="" coords="687,13,757,38"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="140,90,195,79,268,62,341,49,524,32,673,24,673,29,525,37,342,55,269,68,197,84,141,95"/>
+<area shape="rect" id="Node000004" href="$namespacettg.html#afbdd9c742be395e0746fdbc26c7d55cc" title="returns whether tracing was enabled at configure time" alt="" coords="649,150,795,175"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="137,115,197,128,269,145,342,157,430,164,519,164,601,164,635,163,635,169,601,169,519,169,430,169,341,163,268,150,195,133,136,121"/>
+<area shape="rect" id="Node000005" href="$namespacettg.html#abfb8501d408a1ed918cc2a540865a2d8" title="returns whether tracing is enabled" alt="" coords="196,93,293,118"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="148,103,182,103,182,108,148,108"/>
+<area shape="rect" id="Node000003" href="$namespacettg_1_1detail.html#a26e07486d5ef8eb5735a8975991a7693" title=" " alt="" coords="843,5,971,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="758,23,829,23,829,28,758,28"/>
+<area shape="poly" id="edge10_Node000005_Node000004" title=" " alt="" coords="278,116,342,135,419,147,497,155,636,161,635,166,497,160,418,152,341,140,276,121"/>
+<area shape="rect" id="Node000006" href="$namespacettg_1_1detail.html#a95356c3874e7ec9268a40feb4fc1519f" title=" " alt="" coords="341,85,471,125"/>
+<area shape="poly" id="edge5_Node000005_Node000006" title=" " alt="" coords="294,103,328,103,328,108,294,108"/>
+<area shape="rect" id="Node000007" href="$namespacettg.html#af5e470229c1ddef41b83b6398a5dc583" title=" " alt="" coords="519,66,601,91"/>
+<area shape="poly" id="edge6_Node000006_Node000007" title=" " alt="" coords="471,91,504,86,505,91,472,97"/>
+<area shape="poly" id="edge7_Node000007_Node000002" title=" " alt="" coords="599,63,672,39,674,44,600,68"/>
+<area shape="poly" id="edge8_Node000007_Node000004" title=" " alt="" coords="587,89,685,141,683,146,584,94"/>
+<area shape="poly" id="edge9_Node000007_Node000005" title=" " alt="" coords="518,76,436,70,389,71,342,76,289,90,288,85,341,71,388,66,436,65,518,71"/>
+</map>

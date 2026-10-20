@@ -1,0 +1,21 @@
+<map id="ttg_parsec::detail::parsec_ttg_task_t&lt; TT, KeyIsVoid &gt;" name="ttg_parsec::detail::parsec_ttg_task_t&lt; TT, KeyIsVoid &gt;">
+<area shape="rect" id="Node000001" title=" " alt="" coords="576,205,724,259"/>
+<area shape="rect" id="Node000002" href="$structttg__parsec_1_1detail_1_1parsec__ttg__task__base__t.html" title=" " alt="" coords="261,51,447,91"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="444,93,460,100,547,151,617,202,614,207,544,156,457,105,442,98"/>
+<area shape="rect" id="Node000003" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__t.html" title=" " alt="" coords="5,112,144,152"/>
+<area shape="poly" id="edge10_Node000001_Node000003" title=" " alt="" coords="158,153,169,156,209,168,250,179,425,207,576,223,575,229,424,212,249,184,208,174,167,161,157,158"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="157,111,262,88,263,93,158,117"/>
+<area shape="rect" id="Node000004" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__self__t.html" title=" " alt="" coords="270,115,438,155"/>
+<area shape="poly" id="edge4_Node000004_Node000003" title=" " alt="" coords="158,147,168,148,219,149,270,146,270,151,220,155,168,153,157,152"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="256,136,225,136,144,135,144,130,225,131,256,131"/>
+<area shape="rect" id="Node000005" href="$structttg__parsec_1_1detail_1_1device__ptr__t.html" title=" " alt="" coords="5,5,144,45"/>
+<area shape="poly" id="edge5_Node000002_Node000005" title=" " alt="" coords="158,36,261,53,260,58,157,41"/>
+<area shape="rect" id="Node000006" href="$classttg__parsec_1_1_t_t.html" title=" " alt="" coords="249,321,459,375"/>
+<area shape="poly" id="edge6_Node000001_Node000006" title=" " alt="" coords="442,313,551,271,584,257,586,262,553,276,444,318"/>
+<area shape="rect" id="Node000007" href="$classttg_1_1_t_t_base.html" title="A base class for all template tasks." alt="" coords="25,363,125,389"/>
+<area shape="poly" id="edge7_Node000006_Node000007" title=" " alt="" coords="138,367,249,356,250,361,139,372"/>
+<area shape="rect" id="Node000008" href="$structttg__parsec_1_1detail_1_1_parsec_t_t_base.html" title=" " alt="" coords="5,299,144,339"/>
+<area shape="poly" id="edge8_Node000006_Node000008" title=" " alt="" coords="158,325,250,334,249,340,157,330"/>
+<area shape="rect" id="Node000009" href="$structttg__parsec_1_1detail_1_1device__state__t.html" title=" " alt="" coords="249,242,459,297"/>
+<area shape="poly" id="edge9_Node000001_Node000009" title=" " alt="" coords="472,252,575,239,576,244,472,257"/>
+</map>

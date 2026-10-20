@@ -1,0 +1,18 @@
+<map id="ttg::detail::Traverse::traverse" name="ttg::detail::Traverse::traverse">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,126,160,166"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1detail_1_1_traverse.html#a8f22396f983cd2b43113903985294410" title=" " alt="" coords="208,126,363,166"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="160,143,194,143,194,149,160,149"/>
+<area shape="poly" id="edge7_Node000002_Node000002" title=" " alt="" coords="247,126,245,116,251,107,265,101,285,99,309,102,322,110,319,114,307,107,285,105,266,107,254,111,250,117,252,125"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_t_t_base.html#ac290f7b019ed37ec5f89777e853d3f27" title="Returns the vector of input terminals." alt="" coords="415,5,595,31"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="303,124,349,81,378,59,409,40,425,33,427,38,412,44,381,63,352,85,307,128"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_t_t_base.html#ade3b1e6b149fe1124f7192aeca5f715c" title="Gets the name of this operation." alt="" coords="418,55,593,80"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="327,123,410,89,434,81,436,86,412,94,329,128"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1_t_t_base.html#a5158da66b2aa6b7af14998e7aac0fe29" title="Returns the vector of output terminals." alt="" coords="411,104,600,129"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="362,133,397,128,397,134,363,138"/>
+<area shape="rect" id="Node000006" href="$classttg_1_1detail_1_1_traverse.html#a6aa44d45713f8fecf27bd4c91f1be475" title=" " alt="" coords="428,154,583,194"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="363,153,414,160,414,165,362,158"/>
+<area shape="rect" id="Node000007" href="$classttg_1_1detail_1_1_traverse.html#a9c047df6c224aa7c87d9b72d15efc4c6" title=" " alt="" coords="428,218,583,258"/>
+<area shape="poly" id="edge6_Node000002_Node000007" title=" " alt="" coords="326,164,412,204,430,211,428,216,410,208,324,169"/>
+<area shape="rect" id="Node000008" href="$classttg_1_1detail_1_1_traverse.html#a5da2d82d0eb6f9216c6e23ef48c76ff0" title=" " alt="" coords="428,282,583,322"/>
+<area shape="poly" id="edge8_Node000002_Node000008" title=" " alt="" coords="304,165,349,216,379,244,412,268,423,274,420,279,409,272,376,248,346,220,300,168"/>
+</map>

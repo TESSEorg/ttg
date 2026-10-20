@@ -1,0 +1,9 @@
+<map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
+<area shape="rect" id="Node000000" href="$structboost_1_1callable__traits_1_1detail_1_1default__callable__traits.html" title=" " alt="" coords="5,62,188,117"/>
+<area shape="rect" id="Node000001" href="$structboost_1_1callable__traits_1_1detail_1_1function.html" title=" " alt="" coords="236,5,407,45"/>
+<area shape="poly" id="edge17_Node000000_Node000001" title=" " alt="" coords="201,57,250,43,251,48,202,62"/>
+<area shape="rect" id="Node000002" href="$structboost_1_1callable__traits_1_1detail_1_1pmd.html" title=" " alt="" coords="241,69,402,109"/>
+<area shape="poly" id="edge18_Node000000_Node000002" title=" " alt="" coords="202,87,240,87,240,92,202,92"/>
+<area shape="rect" id="Node000003" href="$structboost_1_1callable__traits_1_1detail_1_1pmf.html" title=" " alt="" coords="241,133,402,173"/>
+<area shape="poly" id="edge19_Node000000_Node000003" title=" " alt="" coords="202,117,251,131,250,136,201,122"/>
+</map>

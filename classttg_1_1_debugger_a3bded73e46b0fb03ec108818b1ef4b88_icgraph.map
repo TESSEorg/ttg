@@ -1,0 +1,7 @@
+<map id="ttg::Debugger::__traceback" name="ttg::Debugger::__traceback">
+<area shape="rect" id="Node000001" title=" " alt="" coords="441,13,648,38"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_debugger.html#a7081cd8a132843fdfb522704abec79af" title=" " alt="" coords="201,13,393,38"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="428,28,394,28,394,23,428,23"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_debugger.html#a14e7cc5aa0e16747eebf152e8f3abb25" title="Called when signal sig is received. This is mainly for internal use." alt="" coords="5,5,153,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="188,28,154,28,154,23,188,23"/>
+</map>

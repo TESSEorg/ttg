@@ -1,0 +1,9 @@
+<map id="ttg::BinaryTreeReduce&lt; Value, BinaryOp, OutKey &gt;" name="ttg::BinaryTreeReduce&lt; Value, BinaryOp, OutKey &gt;">
+<area shape="rect" id="Node000001" title="generic binary reduction of a set of key&#45;value pairs." alt="" coords="536,42,757,82"/>
+<area shape="rect" id="Node000002" href="$classttg__parsec_1_1_t_t.html" title=" " alt="" coords="192,5,488,119"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="502,59,536,59,536,65,502,65"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_t_t_base.html" title="A base class for all template tasks." alt="" coords="25,20,125,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="138,37,192,43,192,48,138,42"/>
+<area shape="rect" id="Node000004" href="$structttg__parsec_1_1detail_1_1_parsec_t_t_base.html" title=" " alt="" coords="5,70,144,110"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="158,79,191,75,192,80,158,84"/>
+</map>
