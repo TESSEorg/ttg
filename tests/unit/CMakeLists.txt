@@ -14,7 +14,7 @@ set(ut_libs Catch2::Catch2)
 # coroutine tests
 # we definitely have TARGET std::coroutine
 if (CXXStdCoroutine_FOUND)
-    list(APPEND ut_src fibonacci-coro.cc)
+    list(APPEND ut_src fibonacci-coro.cc device_broadcast.cc)
     if (TTG_HAVE_CUDA)
         list(APPEND ut_src device_coro.cc cuda_kernel.cu)
     endif(TTG_HAVE_CUDA)

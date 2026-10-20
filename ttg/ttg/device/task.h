@@ -47,6 +47,13 @@ namespace ttg::device {
     }
   }  // namespace detail
 
+  /**
+   * A collection of input buffer objects to be used in a device task.
+   *
+   * TODO:
+   *  - Filter out empty buffers. They can cause problems if empty flows appear between non-empty flows.
+   *  - Filter out or error out on duplicated buffers.
+   */
   struct Input {
   private:
     std::vector<detail::device_input_data_t> m_data;
@@ -328,7 +335,7 @@ namespace ttg::device {
 
     template<typename T, typename Enabler = void>
     struct broadcast_keylist_trait {
-      using type = T;
+      using key_type = T;
     };
 
     /* overload for iterable types that extracts the type of the first element */
@@ -391,12 +398,14 @@ namespace ttg::device {
                     ttg::detail::value_copy_handler<Runtime>&& ch) {
       ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
       RangesT kl = std::forward<RangesT>(keylists); // capture the keylist(s)
-      if constexpr (ttg::meta::is_tuple_v<RangesT>) {
+      if constexpr (ttg::meta::is_tuple_v<std::remove_cvref_t<RangesT>>) {
         // treat as tuple
+        static_assert(sizeof...(Is)+1 == std::tuple_size_v<std::remove_cvref_t<RangesT>>,
+                      "Size of keylist tuple must match the number of output terminals");
         prepare_broadcast<0, I, Is...>(kl, std::forward<valueT>(value), t);
         co_await ttg::Void{}; // we'll come back once the task is done
         ttg::device::detail::broadcast<0, I, Is...>(kl, std::forward<valueT>(value), t);
-      } else if constexpr (!ttg::meta::is_tuple_v<RangesT>) {
+      } else {
         // create a tie to the captured keylist
         prepare_broadcast<0, I, Is...>(std::tie(kl), std::forward<valueT>(value), t);
         co_await ttg::Void{}; // we'll come back once the task is done
@@ -412,14 +421,14 @@ namespace ttg::device {
                     ttg::detail::value_copy_handler<Runtime>&& ch) {
       ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
       RangesT kl = std::forward<RangesT>(keylists); // capture the keylist(s)
-      if constexpr (ttg::meta::is_tuple_v<RangesT>) {
+      if constexpr (ttg::meta::is_tuple_v<std::remove_cvref_t<RangesT>>) {
         // treat as tuple
-        static_assert(sizeof...(Is)+1 == std::tuple_size_v<RangesT>,
+        static_assert(sizeof...(Is)+1 == std::tuple_size_v<std::remove_cvref_t<RangesT>>,
                       "Size of keylist tuple must match the number of output terminals");
         prepare_broadcast<0, I, Is...>(kl, std::forward<valueT>(value));
         co_await ttg::Void{}; // we'll come back once the task is done
         ttg::device::detail::broadcast<0, I, Is...>(kl, std::forward<valueT>(value));
-      } else if constexpr (!ttg::meta::is_tuple_v<RangesT>) {
+      } else {
         // create a tie to the captured keylist
         prepare_broadcast<0, I, Is...>(std::tie(kl), std::forward<valueT>(value));
         co_await ttg::Void{}; // we'll come back once the task is done
@@ -461,11 +470,13 @@ namespace ttg::device {
     broadcastk_coro(RangesT &&keylists,
                     std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
       RangesT kl = std::forward<RangesT>(keylists); // capture the keylist(s)
-      if constexpr (ttg::meta::is_tuple_v<RangesT>) {
+      if constexpr (ttg::meta::is_tuple_v<std::remove_cvref_t<RangesT>>) {
         // treat as tuple
+        static_assert(sizeof...(Is)+1 == std::tuple_size_v<std::remove_cvref_t<RangesT>>,
+                      "Size of keylist tuple must match the number of output terminals");
         co_await ttg::Void{}; // we'll come back once the task is done
         ttg::device::detail::broadcastk<0, I, Is...>(kl, t);
-      } else if constexpr (!ttg::meta::is_tuple_v<RangesT>) {
+      } else {
         // create a tie to the captured keylist
         co_await ttg::Void{}; // we'll come back once the task is done
         ttg::device::detail::broadcastk<0, I, Is...>(std::tie(kl), t);
@@ -478,13 +489,13 @@ namespace ttg::device {
     inline send_coro_state
     broadcastk_coro(RangesT &&keylists) {
       RangesT kl = std::forward<RangesT>(keylists); // capture the keylist(s)
-      if constexpr (ttg::meta::is_tuple_v<RangesT>) {
+      if constexpr (ttg::meta::is_tuple_v<std::remove_cvref_t<RangesT>>) {
         // treat as tuple
-        static_assert(sizeof...(Is)+1 == std::tuple_size_v<RangesT>,
+        static_assert(sizeof...(Is)+1 == std::tuple_size_v<std::remove_cvref_t<RangesT>>,
                       "Size of keylist tuple must match the number of output terminals");
         co_await ttg::Void{}; // we'll come back once the task is done
         ttg::device::detail::broadcastk<0, I, Is...>(kl);
-      } else if constexpr (!ttg::meta::is_tuple_v<RangesT>) {
+      } else {
         // create a tie to the captured keylist
         co_await ttg::Void{}; // we'll come back once the task is done
         ttg::device::detail::broadcastk<0, I, Is...>(std::tie(kl));
@@ -492,50 +503,51 @@ namespace ttg::device {
     }
   }  // namespace detail
 
-  /* overload with explicit terminals and keylist passed by const reference */
-  template <size_t I, size_t... Is, typename rangeT, typename valueT, typename... out_keysT, typename... out_valuesT,
+  /*
+   * The keylist(s) are forwarded into the coroutine frame: rvalues are moved into the frame,
+   * lvalues are captured by reference and must outlive the send. A tuple of keylists is used
+   * to broadcast to multiple terminals, one keylist per terminal.
+   */
+
+  /* overload with explicit terminals */
+  template <size_t I, size_t... Is, typename RangesT, typename valueT, typename... out_keysT, typename... out_valuesT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
   [[nodiscard]]
-  inline detail::send_t broadcast(rangeT &&keylist,
+  inline detail::send_t broadcast(RangesT &&keylist,
                                   valueT &&value,
                                   std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
     ttg::detail::value_copy_handler<Runtime> copy_handler;
     return detail::send_t{
-            detail::broadcast_coro<I, Is...>(std::forward<rangeT>(keylist),
-                                            copy_handler(std::forward<valueT>(value)),
-                                            t, std::move(copy_handler))};
+            detail::broadcast_coro<I, Is...>(std::forward<RangesT>(keylist),
+                                             copy_handler(std::forward<valueT>(value)),
+                                             t, std::move(copy_handler))};
   }
 
-  /* overload with implicit terminals and keylist passed by const reference */
-  template <size_t i, typename rangeT, typename valueT,
-            ttg::Runtime Runtime = ttg::ttg_runtime>
-  inline detail::send_t broadcast(rangeT &&keylist, valueT &&value) {
-    ttg::detail::value_copy_handler<Runtime> copy_handler;
-    return detail::send_t{detail::broadcast_coro<i>(std::tie(keylist),
-                                                    copy_handler(std::forward<valueT>(value)),
-                                                    std::move(copy_handler))};
-  }
-
-  /* overload with explicit terminals and keylist passed by const reference */
-  template <size_t I, size_t... Is, typename rangeT, typename... out_keysT, typename... out_valuesT,
+  /* overload with implicit terminals */
+  template <size_t I, size_t... Is, typename RangesT, typename valueT,
             ttg::Runtime Runtime = ttg::ttg_runtime>
   [[nodiscard]]
-  inline detail::send_t broadcastk(rangeT &&keylist,
-                                   std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+  inline detail::send_t broadcast(RangesT &&keylist, valueT &&value) {
     ttg::detail::value_copy_handler<Runtime> copy_handler;
     return detail::send_t{
-            detail::broadcastk_coro<I, Is...>(std::forward<rangeT>(keylist), t)};
+            detail::broadcast_coro<I, Is...>(std::forward<RangesT>(keylist),
+                                             copy_handler(std::forward<valueT>(value)),
+                                             std::move(copy_handler))};
   }
 
-  /* overload with implicit terminals and keylist passed by const reference */
-  template <size_t i, typename rangeT,
-            ttg::Runtime Runtime = ttg::ttg_runtime>
-  inline detail::send_t broadcastk(rangeT &&keylist) {
-    if constexpr (std::is_rvalue_reference_v<decltype(keylist)>) {
-      return detail::send_t{detail::broadcastk_coro<i>(std::forward<rangeT>(keylist))};
-    } else {
-      return detail::send_t{detail::broadcastk_coro<i>(std::tie(keylist))};
-    }
+  /* overload with explicit terminals */
+  template <size_t I, size_t... Is, typename RangesT, typename... out_keysT, typename... out_valuesT>
+  [[nodiscard]]
+  inline detail::send_t broadcastk(RangesT &&keylist,
+                                   std::tuple<ttg::Out<out_keysT, out_valuesT>...> &t) {
+    return detail::send_t{detail::broadcastk_coro<I, Is...>(std::forward<RangesT>(keylist), t)};
+  }
+
+  /* overload with implicit terminals */
+  template <size_t I, size_t... Is, typename RangesT>
+  [[nodiscard]]
+  inline detail::send_t broadcastk(RangesT &&keylist) {
+    return detail::send_t{detail::broadcastk_coro<I, Is...>(std::forward<RangesT>(keylist))};
   }
 
   template<typename... Args, ttg::Runtime Runtime = ttg::ttg_runtime>
