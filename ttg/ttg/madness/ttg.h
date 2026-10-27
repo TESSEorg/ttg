@@ -1252,34 +1252,47 @@ namespace ttg_madness {
         std::is_same_v<std::decay_t<Value>,
                        std::decay_t<typename std::tuple_element_t<I, output_terminalsT>::value_type>>;
 
+    /* throws if keys are generated for an output terminal that cannot accept the value, before anything is sent */
+    template <std::size_t I, std::size_t... Is, typename KeygenTuple, typename Value>
+    void broadcast_keygen_check_outputs(KeygenTuple &keygen_tuple, const Value &value, std::index_sequence<I, Is...>) {
+      if constexpr (!keygen_output_accepts_v<I, Value>) {
+        auto &keygen = std::get<I>(keygen_tuple);
+        if (keygen) {
+          bool selected = false;
+          for (auto &&k : keygen()) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(k)>, bool>) {
+              selected = selected || k;  // void key: the generator yields whether to send
+            } else {
+              selected = true;
+            }
+          }
+          if (selected) {
+            throw std::runtime_error(
+                "Error: broadcast_keygen generated keys for an output terminal of a different value type");
+          }
+        }
+      }
+      if constexpr (sizeof...(Is) > 0) {
+        broadcast_keygen_check_outputs(keygen_tuple, value, std::index_sequence<Is...>{});
+      }
+    }
+
     /* sends the value to all keys generated for output terminal I and the following terminals */
     template <std::size_t I, std::size_t... Is, typename KeygenTuple, typename Value>
     void broadcast_keygen_outputs(KeygenTuple &keygen_tuple, const Value &value, std::index_sequence<I, Is...>) {
       using out_key_type = typename std::tuple_element_t<I, output_terminalsT>::key_type;
       auto &keygen = std::get<I>(keygen_tuple);
-      if (keygen) {
-        if constexpr (ttg::meta::is_void_v<out_key_type>) {
-          // the key is void so the generator yields whether to send
-          bool selected = false;
-          for (bool s : keygen()) selected = selected || s;
-          if (selected) {
-            if constexpr (keygen_output_accepts_v<I, Value>) {
-              std::get<I>(output_terminals).sendv(value);
-            } else {
-              throw std::runtime_error(
-                  "Error: broadcast_keygen generated keys for an output terminal of a different value type");
-            }
-          }
-        } else {
-          std::vector<out_key_type> keylist;
-          for (auto &&key : keygen()) keylist.push_back(key);
-          if (!keylist.empty()) {
-            if constexpr (keygen_output_accepts_v<I, Value>) {
-              std::get<I>(output_terminals).broadcast(keylist, value);
-            } else {
-              throw std::runtime_error(
-                  "Error: broadcast_keygen generated keys for an output terminal of a different value type");
-            }
+      if constexpr (keygen_output_accepts_v<I, Value>) {
+        if (keygen) {
+          if constexpr (ttg::meta::is_void_v<out_key_type>) {
+            // the key is void so the generator yields whether to send
+            bool selected = false;
+            for (bool s : keygen()) selected = selected || s;
+            if (selected) std::get<I>(output_terminals).sendv(value);
+          } else {
+            std::vector<out_key_type> keylist;
+            for (auto &&key : keygen()) keylist.push_back(key);
+            if (!keylist.empty()) std::get<I>(output_terminals).broadcast(keylist, value);
           }
         }
       }
@@ -1300,6 +1313,8 @@ namespace ttg_madness {
           throw std::runtime_error("Error: broadcast_keygen invoked on a TT without a keygen (see set_broadcast_keygen)");
         }
         auto keygen_tuple = broadcast_keygen_cb(key);
+        broadcast_keygen_check_outputs(keygen_tuple, value,
+                                       std::make_index_sequence<std::tuple_size_v<output_terminalsT>>{});
         broadcast_keygen_outputs(keygen_tuple, value,
                                  std::make_index_sequence<std::tuple_size_v<output_terminalsT>>{});
       } else {
@@ -1458,6 +1473,11 @@ namespace ttg_madness {
     assert(nullptr != tt);
     /* type punning to void*; the TT on the other end knows the types too */
     tt->broadcast_keygen(&key, &value);
+  }
+
+  template <typename keyT, typename valueT>
+  inline void prepare_keygen(const keyT &key, const valueT &value) {
+    /* nothing to prepare, MADNESS only supports host tasks */
   }
 
 }  // namespace ttg_madness

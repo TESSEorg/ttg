@@ -1310,20 +1310,6 @@ namespace ttg_parsec {
     };
 
     using broadcast_keygen_tuple_type = typename broadcast_keygen_tuple_type_helper<output_key_types>::type;
-    template<typename T, bool IsVoid = ttg::meta::is_void_v<T>>
-    struct broadcast_keygen_callback {
-      using type = std::function<void(const T&, broadcast_keygen_tuple_type&)>;
-    };
-
-    template<typename T>
-    struct broadcast_keygen_callback<T, true> {
-      using type = std::function<void(broadcast_keygen_tuple_type&)>;
-    };
-
-    using broadcast_keygen_callback_t = typename broadcast_keygen_callback<key_type>::type;
-
-    /* output generator callback */
-    broadcast_keygen_callback_t broadcast_keygen_cb;
 
     /**
      * Definitions for std::generator broadcast key generation.
@@ -2426,10 +2412,8 @@ namespace ttg_parsec {
 
         auto world = ttg::default_execution_context();
         int myrank = world.rank();
-        auto bcast_key_tuple = broadcast_keygen_tuple_type();
         std::optional<std::set<ttg::device::Device>> deviceset = std::set<ttg::device::Device>();
         std::optional<std::set<int>> procset = std::set<int>();
-        //broadcast_keygen_cb(key, bcast_key_tuple);
         auto keygen_tuple = broadcast_stdgen_cb(key);
 
         /* collect the processes that are involved */
@@ -3500,6 +3484,23 @@ namespace ttg_parsec {
         std::is_same_v<std::decay_t<Value>, std::decay_t<typename std::tuple_element_t<I, output_terminalsT>::value_type>>;
 
     /**
+     * Throws if keys are generated for an output terminal that cannot accept the broadcast value.
+     * Called on the root before anything is sent so the error is reported in the task.
+     */
+    template<std::size_t I, std::size_t... Is, typename Value>
+    void keygen_check_outputs(auto& keygen_tuple, const Value& value, std::index_sequence<I, Is...>) {
+      using key_type = typename std::tuple_element_t<I, output_terminalsT>::key_type;
+      if constexpr (!keygen_output_accepts_v<I, Value>) {
+        if (keygen_selects_any<key_type>(std::get<I>(keygen_tuple))) {
+          throw std::runtime_error("Error: broadcast_keygen generated keys for an output terminal of a different value type");
+        }
+      }
+      if constexpr (sizeof...(Is) > 0) {
+        keygen_check_outputs(keygen_tuple, value, std::index_sequence<Is...>{});
+      }
+    }
+
+    /**
      * Query properties of successors for the keys in the provided tuple.
      * Properties include the set of processes and corresponding devices as
      * well as whether any keys are destined for the local rank.
@@ -3556,10 +3557,7 @@ namespace ttg_parsec {
     {
       using key_type = typename std::tuple_element_t<I, output_terminalsT>::key_type;
       if constexpr (!keygen_output_accepts_v<I, decltype(value)>) {
-        // the broadcast value cannot be sent on this terminal, which is only an error if any keys are generated for it
-        if (keygen_selects_any<key_type>(std::get<I>(keygen_tuple))) {
-          throw std::runtime_error("Error: broadcast_keygen generated keys for an output terminal of a different value type");
-        }
+        // the value cannot be sent on this terminal, which keygen_check_outputs ensured on the root
       } else if constexpr (ttg::meta::is_void_v<key_type>) {
         // key is void so the generator yields whether to send; successors only accept the value if they are local
         if (keygen_void_selected(std::get<I>(keygen_tuple))) {
@@ -3663,8 +3661,9 @@ namespace ttg_parsec {
     void broadcast_keygen(const Key& key, const Value& value) {
       int myrank = world.rank();
       int root = keymap(key);
-      //broadcast_keygen_cb(key, bcast_key_tuple);
       auto keygen_tuple = broadcast_stdgen_cb(key);
+      keygen_check_outputs(keygen_tuple, value,
+                           std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
 
       /* collect the processes that are involved */
       std::optional<std::set<int>> procset = std::set<int>();
@@ -3710,7 +3709,7 @@ namespace ttg_parsec {
 
 
     template<typename Value, std::size_t I, std::size_t... Is>
-    void do_prepare_keygen(auto& key_tuple,
+    void do_prepare_keygen(auto& keygen_tuple,
                            const Value& value,
                            std::index_sequence<I, Is...>)
     {
@@ -3718,13 +3717,22 @@ namespace ttg_parsec {
       if constexpr (!keygen_output_accepts_v<I, Value>) {
         // the value cannot be sent on this terminal, nothing to prepare
       } else if constexpr (ttg::meta::is_void_v<key_type>) {
-        std::get<I>(output_terminals).prepare_send(value);
+        if (keygen_void_selected(std::get<I>(keygen_tuple))) {
+          std::get<I>(output_terminals).prepare_send(value);
+        }
       } else {
-        std::get<I>(output_terminals).prepare_send(std::get<I>(key_tuple), value);
+        auto& keygen = std::get<I>(keygen_tuple);
+        if (keygen) {
+          std::vector<key_type> keylist;
+          for (auto&& key : keygen()) keylist.push_back(key);
+          if (!keylist.empty()) {
+            std::get<I>(output_terminals).prepare_send(keylist, value);
+          }
+        }
       }
       // recurse to next element in tuple
       if constexpr (sizeof...(Is) > 0) {
-        do_prepare_keygen(key_tuple, value, std::index_sequence<Is...>{});
+        do_prepare_keygen(keygen_tuple, value, std::index_sequence<Is...>{});
       }
     }
 
@@ -3738,10 +3746,9 @@ namespace ttg_parsec {
         using value_type = std::tuple_element_t<0, ttg::edges_to_output_value_types_t<output_edges_type>>;
         const auto& value = *static_cast<const value_type*>(value_ptr);
         const key_type& key = *static_cast<const key_type*>(key_ptr);
-        auto bcast_key_tuple = broadcast_keygen_tuple_type();
-        broadcast_keygen_cb(key, bcast_key_tuple);
+        auto keygen_tuple = broadcast_stdgen_cb(key);
 
-        do_prepare_keygen(bcast_key_tuple, value, std::make_index_sequence<std::tuple_size_v<decltype(bcast_key_tuple)>>{});
+        do_prepare_keygen(keygen_tuple, value, std::make_index_sequence<std::tuple_size_v<broadcast_keygen_tuple_type>>{});
       }
     }
 
@@ -5050,26 +5057,6 @@ namespace ttg_parsec {
       // need to make this a shared_ptr since it's shared between different callbacks
       this->add_constraint(std::make_shared<Constraint>(std::forward<Constraint>(c)), std::forward<Mapper>(map));
     }
-
-    /**
-     * Sets the output generator for the task.
-     * Output generators take a tuple of vectors of output key types, one for each output
-     * terminal.
-     * Currently only supported on TTs with one output value type, i.e., all output terminals
-     * must produce the same output value type.
-     * The callback has the form `void(const key_type&, broadcast_keygen_tuple_type&)`, i.e.,
-     * it takes the a task's key and generates into the tuple the result keys.
-     * Inside the task, only one bcast_gen call may be made, with the task's key and
-     * the value that will then be sent to all keys provided by the output generator.
-     */
-#if 0
-    template<typename OutGen>
-    void set_broadcast_keygen(OutGen &&gen) {
-      static_assert(1 == std::tuple_size_v<ttg::meta::unique_tuple_types_t<ttg::edges_to_output_value_types_t<output_edges_type>>>,
-                    "Generator-based broadcast currently supports only one output value type!");
-      broadcast_keygen_cb = std::forward<OutGen>(gen);
-    }
-#endif // 0
 
     /**
      * Sets the output generator for the keygen broadcast function.

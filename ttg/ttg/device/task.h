@@ -510,8 +510,10 @@ namespace ttg::device {
                     ttg::detail::value_copy_handler<Runtime>&& ch) {
       ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
       if constexpr(ttg::runtime_traits<ttg::ttg_runtime>::supports_broadcast_keygen) {
+        keyT k = key; // the key may be a temporary, keep a copy in the coroutine frame
+        TTG_IMPL_NS::prepare_keygen(k, value);
         co_await ttg::Void{}; // we'll come back once the task is done
-        TTG_IMPL_NS::broadcast_keygen(key, copy_handler(std::forward<valueT>(value)));
+        TTG_IMPL_NS::broadcast_keygen(k, value);
       } else {
         // the runtime does not support keygen broadcasts
         throw std::runtime_error("ttg::broadcast_keygen not supported in this runtime");
