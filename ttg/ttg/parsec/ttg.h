@@ -3685,6 +3685,9 @@ namespace ttg_parsec {
         case BroadcastType::Star:
           broadcast_keygen_impl<BroadcastStar>(keygen_tuple, procset, key, value);
           break;
+        case BroadcastType::BinaryTree:
+          broadcast_keygen_impl<BroadcastBinaryTree>(keygen_tuple, procset, key, value);
+          break;
         default:
           throw std::runtime_error("Error: unknown broadcast type");
       }
