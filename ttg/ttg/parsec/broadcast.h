@@ -3,6 +3,7 @@
 
 #include <ttg/util/span.h>
 #include <cstdlib>
+#include <cstring>
 #include <mutex>
 
 
@@ -13,7 +14,7 @@ namespace ttg_parsec {
     Pipe
   };
 
-  BroadcastType get_broadcast_type() {
+  inline BroadcastType get_broadcast_type() {
     static std::once_flag init_flag;
     static BroadcastType bcast_type = BroadcastType::Star;
     std::call_once(init_flag, [&](){

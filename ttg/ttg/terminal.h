@@ -352,7 +352,6 @@ namespace ttg {
     }
 
     template<typename Key = keyT>
-    requires(!ttg::meta::is_void_v<Key>)
     void query(std::function<void(const ttg::meta::detail::keymap_t<Key>&,
                                   const ttg::meta::detail::keymap_t<Key, ttg::device::Device>&)>& cb) {
       if (query_callback) {
@@ -370,6 +369,17 @@ namespace ttg {
         broadcast_keygen_local_callback(keygen, value);
       } else {
         for (auto &&key : keygen()) send(key, value);
+      }
+    }
+
+    // void-key variant: the callback delivers the value only if the successor is local
+    template <typename Value, typename Key = keyT>
+    requires(ttg::meta::is_void_v<Key> && !meta::is_void_v<Value>)
+    void broadcast_keygen_local(const Value &value) {
+      if (broadcast_keygen_local_callback) {
+        broadcast_keygen_local_callback(value);
+      } else {
+        throw std::runtime_error("No broadcast_keygen_local_callback set");
       }
     }
 
@@ -683,6 +693,23 @@ namespace ttg {
           static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->template broadcast_keygen_local<Key>(keygen, value);
         } else if (successor->get_type() == TerminalBase::Type::Consume) {
           static_cast<In<keyT, valueT> *>(successor)->template broadcast_keygen_local<Key>(keygen, value);
+        }
+      }
+    }
+
+    /**
+     * Void-key variant of broadcast_keygen_local: each successor only accepts
+     * the value if it is mapped to the local process.
+     */
+    template<typename Value, typename Key = keyT>
+    requires (ttg::meta::is_void_v<Key> && !meta::is_void_v<Value>)
+    void broadcast_keygen_local(const Value &value) {
+      for (auto &&successor : this->successors()) {
+        assert(successor->get_type() != TerminalBase::Type::Write);
+        if (successor->get_type() == TerminalBase::Type::Read) {
+          static_cast<In<keyT, std::add_const_t<valueT>> *>(successor)->broadcast_keygen_local(value);
+        } else if (successor->get_type() == TerminalBase::Type::Consume) {
+          static_cast<In<keyT, valueT> *>(successor)->broadcast_keygen_local(value);
         }
       }
     }
