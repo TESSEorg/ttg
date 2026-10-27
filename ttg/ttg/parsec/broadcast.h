@@ -2,9 +2,11 @@
 #define TTG_PARSEC_BROADCAST_H
 
 #include <ttg/util/span.h>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <utility>
 
 
 namespace ttg_parsec {
@@ -45,7 +47,7 @@ namespace ttg_parsec {
     {}
 
     bool has_peers() const {
-      return m_me == m_root && m_procs_begin != m_procs_end;
+      return m_me == m_root && std::any_of(m_procs_begin, m_procs_end, [&](int p){ return p != m_root; });
     }
 
     template<typename SendFn>
@@ -69,29 +71,39 @@ namespace ttg_parsec {
     Iter m_procs_begin;
     Iter m_procs_end;
 
-  public:
-
-    BroadcastPipe(int root, int me, Iter procs_begin, Iter procs_end)
-    : m_root(root), m_me(me), m_procs_begin(procs_begin), m_procs_end(procs_end)
-    {
-      assert(std::is_sorted(m_procs_begin, m_procs_end));
+    /* position in the pipe: processes following the root in ascending order, then wrapping around */
+    std::pair<bool, int> pipe_pos(int p) const {
+      return {p < m_root, p};
     }
 
+    /* the process following this process in the pipe, or -1 if this process is the last */
+    int next_peer() const {
+      auto me_pos = pipe_pos(m_me);
+      int next = -1;
+      for (auto it = m_procs_begin; it != m_procs_end; ++it) {
+        int p = *it;
+        if (p == m_root || pipe_pos(p) <= me_pos) continue;
+        if (next < 0 || pipe_pos(p) < pipe_pos(next)) next = p;
+      }
+      return next;
+    }
+
+  public:
+
+    /* the root does not have to be in the set of processes */
+    BroadcastPipe(int root, int me, Iter procs_begin, Iter procs_end)
+    : m_root(root), m_me(me), m_procs_begin(procs_begin), m_procs_end(procs_end)
+    { }
+
     bool has_peers() const {
-      auto me_iter = std::find(m_procs_begin, m_procs_end, m_me);
-      return me_iter != m_procs_end;
+      return next_peer() >= 0;
     }
 
     template<typename SendFn>
     void operator()(SendFn&& send_fn) {
-      auto iter = std::find(m_procs_begin, m_procs_end, m_me);
-      assert(iter != m_procs_end);
-      // wrap around if we reached the end
-      if ((++iter) == m_procs_end) iter = m_procs_begin;
-      // if we reached root we reached the end of the pipe
-      if (*iter != m_root) {
-        //while (next != m_procs_end && (*next == m_me || *next == m_root)) ++next;
-        send_fn(*iter);
+      int next = next_peer();
+      if (next >= 0) {
+        send_fn(next);
       }
     }
   };
