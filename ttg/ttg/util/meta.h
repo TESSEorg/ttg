@@ -5,12 +5,19 @@
 #include <functional>
 #include <type_traits>
 
+#include <version>
+
+#include "ttg/util/generator.h"
 #include "ttg/util/span.h"
 #include "ttg/util/typelist.h"
 
 namespace ttg {
 
   class Void;
+
+  namespace device {
+    class Device; // fwd-decl
+  } // namespace device
 
   namespace meta {
 
@@ -646,6 +653,53 @@ namespace ttg {
     static_assert(is_empty_tuple_v<std::tuple<Void>>, "ouch");
     static_assert(is_empty_tuple_v<std::tuple<Void, Void, Void>>, "ouch");
 
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// Given a tuple of types, collect all unique types into a result tuple.
+    /// Example: unique_tuple_t<std::tuple<int, double, int, float>> == std::tuple<int, double, float>
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    template <typename Tuple, typename Result = std::tuple<>>
+    struct unique_tuple_types_impl;
+
+    template <typename Result>
+    struct unique_tuple_types_impl<std::tuple<>, Result> {
+      using type = Result;
+    };
+
+    template <typename T, typename... Ts, typename... Us>
+    struct unique_tuple_types_impl<std::tuple<T, Ts...>, std::tuple<Us...>> {
+      using type = std::conditional_t<
+          (std::is_same_v<T, Us> || ...),
+          typename unique_tuple_types_impl<std::tuple<Ts...>, std::tuple<Us...>>::type,
+          typename unique_tuple_types_impl<std::tuple<Ts...>, std::tuple<Us..., T>>::type>;
+    };
+
+    template <typename Tuple>
+    using unique_tuple_types_t = typename unique_tuple_types_impl<Tuple>::type;
+
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// Given a tuple of types, replace all occurences of void and Void with a given type.
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    template<typename Tuple, typename T, typename R>
+    struct replace_any;
+
+    template<typename T, typename R>
+    struct replace_any<std::tuple<>, T, R> {
+      using type = std::tuple<>;
+    };
+
+    template<typename Head, typename... Tail, typename T, typename R>
+    struct replace_any<std::tuple<Head, Tail...>, T, R> {
+      using type = decltype(std::tuple_cat(
+        std::conditional_t<std::is_same_v<Head, T>, std::tuple<R>, std::tuple<Head>>{},
+        typename replace_any<std::tuple<Tail...>, T, R>::type{}
+      ));
+    };
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // nonesuch struct from Library Fundamentals V2, source from https://en.cppreference.com/w/cpp/experimental/nonesuch
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -773,7 +827,7 @@ namespace ttg {
       using move_callback_t = typename move_callback<Key, Value>::type;
 
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-      // broadcast_callback_t<key,value> = std::function<void(const key&, value&&>, protected against void key or value
+      // broadcast_callback_t<key,value> = std::function<void(const key&, const value&)>, protected against void key or value
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       template <typename Key, typename Value, typename Enabler = void>
       struct broadcast_callback;
@@ -796,7 +850,47 @@ namespace ttg {
       template <typename Key, typename Value>
       using broadcast_callback_t = typename broadcast_callback<Key, Value>::type;
 
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // key_generator_type<key> = std::function<ttg::generator<Key>()>,
+      // protected against void key
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      template<typename Key, typename Enabler = void>
+      struct key_generator_type {
+        using type = std::function<ttg::generator<Key>()>;
+      };
 
+      template<typename Key>
+      struct key_generator_type<Key, std::enable_if_t<is_void_v<Key>>> {
+        using type = std::function<ttg::generator<bool>()>;
+      };
+
+      template<typename Key>
+      using key_generator_type_t = typename key_generator_type<Key>::type;
+
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // broadcast_local_stdgen_callback_t<key,value> = std::function<void(ttg::generator<Key>&, const Value&)>,
+      // protected against void key or value
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      template <typename Key, typename Value, typename Enabler = void>
+      struct broadcast_keygen_local_callback;
+      template <typename Key, typename Value>
+      struct broadcast_keygen_local_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && !is_void_v<Value>>> {
+        using type = std::function<void(key_generator_type_t<Key>&, const Value &)>;
+      };
+      template <typename Key, typename Value>
+      struct broadcast_keygen_local_callback<Key, Value, std::enable_if_t<!is_void_v<Key> && is_void_v<Value>>> {
+        using type = std::function<void(key_generator_type_t<Key>&)>;
+      };
+      template <typename Key, typename Value>
+      struct broadcast_keygen_local_callback<Key, Value, std::enable_if_t<is_void_v<Key> && !is_void_v<Value>>> {
+        using type = std::function<void(const Value &)>;
+      };
+      template <typename Key, typename Value>
+      struct broadcast_keygen_local_callback<Key, Value, std::enable_if_t<is_void_v<Key> && is_void_v<Value>>> {
+        using type = std::function<void()>;
+      };
+      template <typename Key, typename Value>
+      using broadcast_keygen_local_callback_t = typename broadcast_keygen_local_callback<Key, Value>::type;
 
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       // setsize_callback_t<key> = std::function<void(const keyT &, std::size_t)> protected against void key
@@ -897,6 +991,10 @@ namespace ttg {
       template <typename Key, typename Value>
       using prepare_send_callback_t = typename prepare_send_callback<Key, Value>::type;
 
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // constraint_callback_t<Key, Value> = std::function<bool(Key &)> protected against void key
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
       template<typename Key, typename Enabler = void>
       struct constraint_callback;
 
@@ -912,6 +1010,18 @@ namespace ttg {
 
       template<typename Key>
       using constraint_callback_t = typename constraint_callback<Key>::type;
+
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // query_callback_t<Key> = std::function<void (const std::function<void(const ttg::meta::keymap_t<Key>&,
+      //                                                                      const ttg::meta::keymap_t<Key, ttg::device::Device>&)>&)>&)
+      // protected against void key
+      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+      template<typename Key>
+      using query_callback_t = std::function<void (
+                                const std::function<void (const keymap_t<Key>&,
+                                                          const keymap_t<Key, ttg::device::Device>&)>&)>;
+
 
     }  // namespace detail
 

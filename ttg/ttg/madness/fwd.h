@@ -86,6 +86,12 @@ namespace ttg_madness {
 
   inline int num_devices();
 
+  template <typename keyT, typename valueT>
+  inline void broadcast_keygen(const keyT& key, const valueT& value);
+
+  template <typename keyT, typename valueT>
+  inline void prepare_keygen(const keyT& key, const valueT& value);
+
 }  // namespace ttg_madness
 
 #endif  // TTG_MADNESS_FWD_H

@@ -8,7 +8,7 @@
 
 #ifdef TTG_HAVE_COROUTINE
 
-// Compile-time coverage of ttg::device::broadcast/broadcastk keylist handling.
+// Compile-time coverage of ttg::device::broadcast/broadcastk/broadcast_keygen keylist handling.
 // Every keylist shape (lvalue/rvalue keylist, lvalue/rvalue tuple of keylists,
 // explicit/implicit terminals) must instantiate. The coroutines are never
 // resumed, so this test only has to compile.
@@ -49,13 +49,21 @@ namespace {
     co_await ttg::device::forward(ttg::device::broadcastk<0>(std::vector<int>{5}));
   }
 
+  ttg::device::Task broadcast_keygen_value(const int &key, int value) {
+    // temporary key: copied into the coroutine frame before the coroutine suspends
+    co_await ttg::device::forward(ttg::device::broadcast_keygen(key + 1, value));
+    // lvalue key and rvalue value
+    co_await ttg::device::forward(ttg::device::broadcast_keygen(key, std::move(value)));
+  }
+
 }  // namespace
 
 TEST_CASE("device-broadcast-keylists", "[device][broadcast][compile-only]") {
   // the coroutines above are instantiated by the compiler; they must never be invoked here
   static_cast<void>(&broadcast_value);
   static_cast<void>(&broadcast_key_only);
-  SUCCEED("ttg::device::broadcast/broadcastk instantiate for all keylist shapes");
+  static_cast<void>(&broadcast_keygen_value);
+  SUCCEED("ttg::device::broadcast/broadcastk/broadcast_keygen instantiate for all keylist shapes");
 }
 
 #endif  // TTG_HAVE_COROUTINE
