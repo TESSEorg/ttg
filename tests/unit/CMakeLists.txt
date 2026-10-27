@@ -5,6 +5,7 @@ include(AddTTGExecutable)
 set(ut_src
         fibonacci.cc
         ranges.cc
+        broadcast_keygen.cc
         tt.cc
         unit_main.cpp
 		streams.cc

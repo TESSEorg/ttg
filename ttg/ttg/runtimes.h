@@ -32,7 +32,7 @@ namespace ttg {
   struct runtime_traits<Runtime::MADWorld> {
     static constexpr const bool supports_streaming_terminal = true;
     static constexpr const bool supports_async_reduction = true;
-    static constexpr const bool supports_broadcast_keygen = false;
+    static constexpr const bool supports_broadcast_keygen = true;
     using hash_t = uint64_t;
     constexpr static ExecutionSpace execution_spaces[] = {ExecutionSpace::Host};
     constexpr static std::size_t num_execution_spaces = sizeof(execution_spaces) / sizeof(ExecutionSpace);

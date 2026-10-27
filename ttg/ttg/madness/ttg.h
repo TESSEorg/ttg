@@ -183,6 +183,14 @@ namespace ttg_madness {
     world.impl().impl().gop.broadcast_serializable(data, source_rank);
   }
 
+  namespace detail {
+    /// Type-erased interface through which ttg_madness::broadcast_keygen reaches the TT of the running task
+    struct KeygenBroadcastBase {
+      virtual ~KeygenBroadcastBase() = default;
+      virtual void broadcast_keygen(const void *key_ptr, const void *value_ptr) = 0;
+    };
+  }  // namespace detail
+
   /// CRTP base for MADNESS-based TT classes
   /// \tparam keyT a Key type
   /// \tparam output_terminalsT
@@ -192,7 +200,9 @@ namespace ttg_madness {
   ///         flowing into this TT; a const type indicates nonmutating (read-only) use, nonconst type
   ///         indicates mutating use (e.g. the corresponding input can be used as scratch, moved-from, etc.)
   template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs, ttg::ExecutionSpace Space>
-  class TT : public ttg::TTBase, public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs, Space>> {
+  class TT : public ttg::TTBase,
+             public detail::KeygenBroadcastBase,
+             public ::madness::WorldObject<TT<keyT, output_terminalsT, derivedT, input_valueTs, Space>> {
     static_assert(Space == ttg::ExecutionSpace::Host, "MADNESS backend only supports Host Execution Space");
     static_assert(ttg::meta::is_typelist_v<input_valueTs>,
                   "The fourth template for ttg::TT must be a ttg::typelist containing the input types");
@@ -288,6 +298,25 @@ namespace ttg_madness {
    private:
     input_terminals_type input_terminals;
     output_terminalsT output_terminals;
+
+    /**
+     * Keygen broadcast support: the callback returns, for a given task key, a tuple with one key generator
+     * per output terminal. Void-key terminals use a generator of bool that indicates whether to send.
+     */
+    using output_key_types = typename ttg::meta::replace_any<
+        typename ttg::edges_to_output_key_types<output_edges_type>::type, void, bool>::type;
+    template <typename Key, typename T, typename Enabler = void>
+    struct broadcast_keygen_cb_helper;
+    template <typename Key, typename... Ts>
+    struct broadcast_keygen_cb_helper<Key, std::tuple<Ts...>, std::enable_if_t<!ttg::meta::is_void_v<Key>>> {
+      using type = std::function<std::tuple<ttg::meta::detail::key_generator_type_t<Ts>...>(const Key &)>;
+    };
+    template <typename Key, typename... Ts>
+    struct broadcast_keygen_cb_helper<Key, std::tuple<Ts...>, std::enable_if_t<ttg::meta::is_void_v<Key>>> {
+      using type = std::function<std::tuple<ttg::meta::detail::key_generator_type_t<Ts>...>()>;
+    };
+    using broadcast_keygen_cb_type = typename broadcast_keygen_cb_helper<keyT, output_key_types>::type;
+    broadcast_keygen_cb_type broadcast_keygen_cb;
 
    protected:
     const auto &get_output_terminals() const { return output_terminals; }
@@ -1204,6 +1233,80 @@ namespace ttg_madness {
       keymap = km;
     }
 
+    /**
+     * Sets the output generator for the keygen broadcast function.
+     * The callback returns a tuple of \c std::function<ttg::generator<T>()>, i.e.,
+     * each tuple element returning a generator for the key type of the corresponding output terminal.
+     * Inside the task, only one ttg::broadcast_keygen call may be made, with the task's key and
+     * the value that will then be sent to all keys provided by the output generator.
+     */
+    template <typename OutGen>
+    void set_broadcast_keygen(OutGen &&gen) {
+      broadcast_keygen_cb = std::forward<OutGen>(gen);
+    }
+
+   private:
+    /* whether a value of type Value broadcast via keygen can be sent on output terminal I */
+    template <std::size_t I, typename Value>
+    static constexpr bool keygen_output_accepts_v =
+        std::is_same_v<std::decay_t<Value>,
+                       std::decay_t<typename std::tuple_element_t<I, output_terminalsT>::value_type>>;
+
+    /* sends the value to all keys generated for output terminal I and the following terminals */
+    template <std::size_t I, std::size_t... Is, typename KeygenTuple, typename Value>
+    void broadcast_keygen_outputs(KeygenTuple &keygen_tuple, const Value &value, std::index_sequence<I, Is...>) {
+      using out_key_type = typename std::tuple_element_t<I, output_terminalsT>::key_type;
+      auto &keygen = std::get<I>(keygen_tuple);
+      if (keygen) {
+        if constexpr (ttg::meta::is_void_v<out_key_type>) {
+          // the key is void so the generator yields whether to send
+          bool selected = false;
+          for (bool s : keygen()) selected = selected || s;
+          if (selected) {
+            if constexpr (keygen_output_accepts_v<I, Value>) {
+              std::get<I>(output_terminals).sendv(value);
+            } else {
+              throw std::runtime_error(
+                  "Error: broadcast_keygen generated keys for an output terminal of a different value type");
+            }
+          }
+        } else {
+          std::vector<out_key_type> keylist;
+          for (auto &&key : keygen()) keylist.push_back(key);
+          if (!keylist.empty()) {
+            if constexpr (keygen_output_accepts_v<I, Value>) {
+              std::get<I>(output_terminals).broadcast(keylist, value);
+            } else {
+              throw std::runtime_error(
+                  "Error: broadcast_keygen generated keys for an output terminal of a different value type");
+            }
+          }
+        }
+      }
+      if constexpr (sizeof...(Is) > 0) {
+        broadcast_keygen_outputs(keygen_tuple, value, std::index_sequence<Is...>{});
+      }
+    }
+
+   public:
+    /// implementation of detail::KeygenBroadcastBase::broadcast_keygen()
+    void broadcast_keygen(const void *key_ptr, const void *value_ptr) override final {
+      // assuming that all output types are the same
+      if constexpr (std::tuple_size_v<output_terminalsT> > 0 && !ttg::meta::is_void_v<keyT>) {
+        using value_type = std::tuple_element_t<0, ttg::edges_to_output_value_types_t<output_edges_type>>;
+        const keyT &key = *static_cast<const keyT *>(key_ptr);
+        const value_type &value = *static_cast<const value_type *>(value_ptr);
+        if (!broadcast_keygen_cb) {
+          throw std::runtime_error("Error: broadcast_keygen invoked on a TT without a keygen (see set_broadcast_keygen)");
+        }
+        auto keygen_tuple = broadcast_keygen_cb(key);
+        broadcast_keygen_outputs(keygen_tuple, value,
+                                 std::make_index_sequence<std::tuple_size_v<output_terminalsT>>{});
+      } else {
+        throw std::runtime_error("Error: broadcast_keygen invoked on a TT with no output terminals");
+      }
+    }
+
     auto get_priomap(void) const { return priomap; }
 
     /// Set the priority map, mapping a Key to an integral value.
@@ -1342,6 +1445,20 @@ namespace ttg_madness {
   };
 
 #include "ttg/make_tt.h"
+
+  template <typename keyT, typename valueT>
+  inline void broadcast_keygen(const keyT &key, const valueT &value) {
+    /* the running task's output terminals lead us to its TT */
+    auto *outputs = ttg::TTBase::get_outputs_tls_ptr();
+    if (nullptr == outputs || outputs->empty()) {
+      throw std::runtime_error(
+          "ttg::broadcast_keygen must be called inside a task that does not take its output terminals as argument");
+    }
+    auto *tt = dynamic_cast<detail::KeygenBroadcastBase *>(outputs->front()->get_tt());
+    assert(nullptr != tt);
+    /* type punning to void*; the TT on the other end knows the types too */
+    tt->broadcast_keygen(&key, &value);
+  }
 
 }  // namespace ttg_madness
 
