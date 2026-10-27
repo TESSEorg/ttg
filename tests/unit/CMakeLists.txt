@@ -6,6 +6,7 @@ set(ut_src
         fibonacci.cc
         ranges.cc
         broadcast_keygen.cc
+        broadcast_algorithms.cc
         tt.cc
         unit_main.cpp
 		streams.cc
@@ -25,6 +26,19 @@ endif(CXXStdCoroutine_FOUND)
 list(APPEND ut_src constraints.cc)
 
 add_ttg_executable(core-unittests-ttg "${ut_src}" LINK_LIBRARIES "${ut_libs}" COMPILE_DEFINITIONS "CATCH_CONFIG_NO_POSIX_SIGNALS=1" )
+
+# the keygen broadcast tests above use the default (star) broadcast, run them again with the pipe broadcast
+if (TARGET core-unittests-ttg-parsec AND MPIEXEC_EXECUTABLE)
+    foreach (p 1 2)
+        add_test(NAME ttg/test/core-unittests-ttg-parsec/run-keygen-pipe-np-${p}
+                 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${p} ${MPIEXEC_PREFLAGS}
+                         $<TARGET_FILE:core-unittests-ttg-parsec> ${MPIEXEC_POSTFLAGS} "[keygen]")
+        set_tests_properties(ttg/test/core-unittests-ttg-parsec/run-keygen-pipe-np-${p}
+                PROPERTIES FIXTURES_REQUIRED TTG_TEST_core-unittests-ttg-parsec_FIXTURE
+                WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
+                ENVIRONMENT "TTG_NUM_THREADS=2;TTG_BCAST_TYPE=pipe")
+    endforeach(p)
+endif ()
 
 # serialization test: probes serialization via all supported serialization methods (MADNESS, Boost::serialization) that are available
 add_ttg_executable(serialization serialization.cc unit_main.cpp
