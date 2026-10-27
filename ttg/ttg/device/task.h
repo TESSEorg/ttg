@@ -513,7 +513,7 @@ namespace ttg::device {
         co_await ttg::Void{}; // we'll come back once the task is done
         TTG_IMPL_NS::broadcast_keygen(key, copy_handler(std::forward<valueT>(value)));
       } else {
-        // TODO: need to implement a mechanism for MADNESS
+        // the runtime does not support keygen broadcasts
         throw std::runtime_error("ttg::broadcast_keygen not supported in this runtime");
       }
     }
