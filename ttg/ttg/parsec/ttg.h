@@ -1978,7 +1978,7 @@ namespace ttg_parsec {
         }
         /* task may not be runnable yet because other inputs are missing, have release_task decide */
         parent_task->remove_from_hash = true;
-        parent_task->release_task(parent_task);
+        parent_task->release_task();
       }
 
       detail::parsec_ttg_caller = NULL;
@@ -2256,8 +2256,6 @@ namespace ttg_parsec {
         ttg::detail::buffer_apply(val, [&]<typename T, typename A>(const ttg::Buffer<T, A>& b){
           /* cast away const */
           auto& buffer = const_cast<ttg::Buffer<T, A>&>(b);
-          /* remember which device we used last time */
-          static auto last_device = ttg::device::Device{0, Space};
           ttg::device::Device device;
           if (inline_data ||                      // all data has been inlined
               !world.impl().mpi_support(Space) || // no support for device communication
@@ -2282,7 +2280,6 @@ namespace ttg_parsec {
                 buffer.allocate_on(ttg::device::Device::host());
                 break; // failed to find a device that works
               }
-              last_device = device;
             }
           } while(true);
         });

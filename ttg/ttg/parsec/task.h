@@ -294,24 +294,6 @@ namespace ttg_parsec {
         this->~parsec_ttg_task_t();
       }
 
-      static void release_task(parsec_ttg_task_base_t* task_base) {
-        parsec_ttg_task_t *task = static_cast<parsec_ttg_task_t*>(task_base);
-        TT *tt = task->tt_ptr();
-        tt->release_task(task);
-      }
-
-      static void broadcast_keygen(parsec_ttg_task_base_t* task_base, const void* key, const void* value) {
-        parsec_ttg_task_t *task = static_cast<parsec_ttg_task_t*>(task_base);
-        TT *tt = task->tt_ptr();
-        tt->broadcast_keygen(key, value);
-      }
-
-      static void prepare_keygen(parsec_ttg_task_base_t* task_base, const void* key, const void* value) {
-        parsec_ttg_task_t *task = static_cast<parsec_ttg_task_t*>(task_base);
-        TT *tt = task->tt_ptr();
-        tt->prepare_keygen(key, value);
-      }
-
       template<ttg::ExecutionSpace Space>
       parsec_hook_return_t invoke_op() {
         if constexpr (Space == ttg::ExecutionSpace::Host) {
@@ -336,7 +318,6 @@ namespace ttg_parsec {
     template <typename TT>
     struct parsec_ttg_task_t<TT, true> : public parsec_ttg_task_base_t {
       static constexpr size_t num_streams = TT::numins;
-      TT* tt = nullptr;
       std::array<stream_info_t, num_streams> streams;
 #ifdef TTG_HAVE_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
@@ -379,12 +360,6 @@ namespace ttg_parsec {
        */
       void destroy() {
         this->~parsec_ttg_task_t();
-      }
-
-      static void release_task(parsec_ttg_task_base_t* task_base) {
-        parsec_ttg_task_t *task = static_cast<parsec_ttg_task_t*>(task_base);
-        TT *tt = task->tt_ptr();
-        tt->release_task(task);
       }
 
       template<ttg::ExecutionSpace Space>
