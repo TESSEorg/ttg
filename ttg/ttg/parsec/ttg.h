@@ -2398,7 +2398,12 @@ namespace ttg_parsec {
         }
         set_arg_fetch_value_and_release<decvalueT>(msg, deviceset,
           [this](detail::ttg_data_copy_t *copy) {
-            set_arg<i, keyT, decvalueT>(*reinterpret_cast<decvalueT *>(copy->get_ptr()), copy);
+            DummyTaskManager dtm(this, copy); // set the parsec_ttg_caller and holds on to it until the end of the function
+            if constexpr (std::is_copy_constructible_v<decvalueT>) {
+              set_arg_local_impl<i>(ttg::Void{}, *reinterpret_cast<decvalueT *>(copy->get_ptr()), copy);
+            } else {
+              set_arg_local_impl<i>(ttg::Void{}, std::move(*reinterpret_cast<decvalueT *>(copy->get_ptr())), copy);
+            }
           });
         // case 5 and 6
       } else if constexpr (ttg::meta::is_void_v<keyT> && std::is_void_v<valueT>) {
@@ -2702,7 +2707,7 @@ namespace ttg_parsec {
             /* we are responsible for creating the reduction task */
             detail::reducer_task_t *reduce_task;
             reduce_task = create_new_reducer_task<i>(parent_task, false);
-            reduce_task->release_task(reduce_task); // release immediately
+            reduce_task->release_task(); // release immediately
           }
         };
 
@@ -2731,7 +2736,7 @@ namespace ttg_parsec {
              * TODO: can we delay that until we get the second value?
              */
             if (copy->get_next_task() != &reduce_task->parsec_task) {
-              reduce_task->release_task(reduce_task);
+              reduce_task->release_task();
             }
 
             /* now we can unlock the bucket */
@@ -3220,7 +3225,7 @@ namespace ttg_parsec {
           }
         };
 
-        auto handle_bcast_iov = [&](auto&& iovec, auto* device_copy = nullptr){
+        auto handle_bcast_iov = [&](auto&& iovec, parsec_data_copy_t* device_copy = nullptr){
           if (inline_data) {
             /* inline data is packed right after the tt_id in the message */
             std::memcpy(msg->bytes + pos, iovec.data, iovec.num_bytes);
@@ -3443,12 +3448,56 @@ namespace ttg_parsec {
 #endif
     }
 
+    /* void-key variant: only the process this TT is mapped to accepts the value */
+    template <std::size_t i, typename Key, typename Value>
+    std::enable_if_t<ttg::meta::is_void_v<Key> && !std::is_void_v<std::decay_t<Value>>,
+                     void>
+    broadcast_local(const Value &value) {
+      if (keymap() != world.rank()) return;
+      detail::ttg_data_copy_t *copy = nullptr;
+      if (nullptr != detail::parsec_ttg_caller) {
+        copy = detail::find_copy_in_task(detail::parsec_ttg_caller, &value);
+      }
+      set_arg_local_impl<i>(ttg::Void{}, value, copy);
+    }
+
 
 
 
     /**********************************************
      * Keygen broadcast support
      *********************************************/
+
+    /**
+     * Evaluate the generator of a void-key output terminal: the value is sent
+     * if the generator yields true.
+     */
+    static bool keygen_void_selected(const ttg::meta::detail::key_generator_type_t<void>& keygen) {
+      if (!keygen) return false;
+      for (bool selected : keygen()) {
+        if (selected) return true;
+      }
+      return false;
+    }
+
+    /**
+     * Whether the generator of an output terminal selects any successor.
+     */
+    template<typename Key>
+    static bool keygen_selects_any(const ttg::meta::detail::key_generator_type_t<Key>& keygen) {
+      if constexpr (ttg::meta::is_void_v<Key>) {
+        return keygen_void_selected(keygen);
+      } else {
+        if (!keygen) return false;
+        auto gen = keygen();
+        return gen.begin() != gen.end();
+      }
+    }
+
+    /* whether a value of type Value broadcast via keygen can be sent on output terminal I */
+    template<std::size_t I, typename Value>
+    static constexpr bool keygen_output_accepts_v =
+        std::is_same_v<std::decay_t<Value>, std::decay_t<typename std::tuple_element_t<I, output_terminalsT>::value_type>>;
 
     /**
      * Query properties of successors for the keys in the provided tuple.
@@ -3464,15 +3513,15 @@ namespace ttg_parsec {
     {
       using key_type = typename std::tuple_element_t<I, output_terminalsT>::key_type;
       if constexpr (ttg::meta::is_void_v<key_type>) {
-        // the key is void so the entry is bool
-        if (std::get<I>(keygen_tuple)()) {
-        std::get<I>(output_terminals).query(
+        // the key is void so the generator yields whether to send
+        if (keygen_void_selected(std::get<I>(keygen_tuple))) {
+          std::get<I>(output_terminals).query(
             [&](const ttg::meta::detail::keymap_t<key_type>& keymap,
                 const ttg::meta::detail::keymap_t<key_type, ttg::device::Device>& devicemap){
               int proc = keymap();
               if (procset) procset->insert(proc);
               if (proc == local_rank) {
-                if (deviceset) deviceset->insert(devicemap());
+                if (deviceset) deviceset->insert(devicemap ? devicemap() : ttg::device::Device{});
               }
             });
         }
@@ -3506,10 +3555,15 @@ namespace ttg_parsec {
     void bcast_keygen_local(auto& keygen_tuple, auto& value, std::index_sequence<I, Is...>)
     {
       using key_type = typename std::tuple_element_t<I, output_terminalsT>::key_type;
-      if constexpr (ttg::meta::is_void_v<key_type>) {
-        // key is void so entry is bool
-        if (std::get<I>(keygen_tuple)()) {
-          std::get<I>(output_terminals).sendv(value);
+      if constexpr (!keygen_output_accepts_v<I, decltype(value)>) {
+        // the broadcast value cannot be sent on this terminal, which is only an error if any keys are generated for it
+        if (keygen_selects_any<key_type>(std::get<I>(keygen_tuple))) {
+          throw std::runtime_error("Error: broadcast_keygen generated keys for an output terminal of a different value type");
+        }
+      } else if constexpr (ttg::meta::is_void_v<key_type>) {
+        // key is void so the generator yields whether to send; successors only accept the value if they are local
+        if (keygen_void_selected(std::get<I>(keygen_tuple))) {
+          std::get<I>(output_terminals).broadcast_keygen_local(value);
         }
       } else {
         auto& keygen = std::get<I>(keygen_tuple);
@@ -3661,10 +3715,11 @@ namespace ttg_parsec {
                            std::index_sequence<I, Is...>)
     {
       using key_type = typename std::tuple_element_t<I, output_terminalsT>::key_type;
-      if constexpr (ttg::meta::is_void_v<key_type>) {
+      if constexpr (!keygen_output_accepts_v<I, Value>) {
+        // the value cannot be sent on this terminal, nothing to prepare
+      } else if constexpr (ttg::meta::is_void_v<key_type>) {
         std::get<I>(output_terminals).prepare_send(value);
       } else {
-        // the key is void so the entry is bool
         std::get<I>(output_terminals).prepare_send(std::get<I>(key_tuple), value);
       }
       // recurse to next element in tuple
@@ -4209,7 +4264,15 @@ namespace ttg_parsec {
         auto prepare_send_callback = [this](const valueT &value) {
             prepare_send<i, void>(value);
         };
-        input.set_callback(send_callback, move_callback, {}, setsize_callback, finalize_callback, prepare_send_callback);
+        auto query_callback = [this](const std::function<void (const ttg::meta::detail::keymap_t<keyT>&,
+                                                               const ttg::meta::detail::keymap_t<keyT, ttg::device::Device>&)>& cb){
+          cb(keymap, devicemap);
+        };
+        auto broadcast_local_cb = [this](const valueT &value){
+          this->broadcast_local<i, keyT, valueT>(value);
+        };
+        input.set_callback(send_callback, move_callback, {}, setsize_callback, finalize_callback, prepare_send_callback,
+                           query_callback, broadcast_local_cb);
       }
       //////////////////////////////////////////////////////////////////
       // case 5: void key, void value, mixed inputs

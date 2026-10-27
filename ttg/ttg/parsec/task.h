@@ -156,7 +156,14 @@ namespace ttg_parsec {
       */
     //public:
       void release_task() {
-        tt_base->release_task(this);
+        if (nullptr != tt_base) {
+          tt_base->release_task(this);
+        } else {
+          /* tasks without a TT (reducer tasks) have one mutable input so the task can be submitted on the first release */
+          parsec_task_t *vp_task_rings[1] = { &parsec_task };
+          parsec_execution_stream_t *es = parsec_my_execution_stream();
+          __parsec_schedule_vp(es, vp_task_rings, 0);
+        }
       }
 
       void broadcast_keygen(const void* key, const void* value) {
@@ -344,7 +351,7 @@ namespace ttg_parsec {
                                                              // +1 for the copy needed during send/bcast
 
       parsec_ttg_task_t(parsec_thread_mempool_t *mempool, parsec_task_class_t *task_class, TT *tt_ptr)
-          : parsec_ttg_task_base_t(mempool, task_class, num_streams, tt_ptr, copies)
+          : parsec_ttg_task_base_t(mempool, task_class, num_streams, copies, tt_ptr)
       {
         tt_ht_item.key = pkey();
         this->dev_ptr = this->dev_state.dev_ptr();
@@ -418,7 +425,7 @@ namespace ttg_parsec {
                      int32_t priority, bool is_first)
       : parsec_ttg_task_base_t(mempool, task_class, taskpool, priority,
                                0, nullptr,
-                               nullptr, // we don't have a base
+                               nullptr, // we don't have a base, release_task() submits the task directly
                                true /* deferred until other readers have completed */)
       , parent_task(task)
       , is_first(is_first)
@@ -427,13 +434,6 @@ namespace ttg_parsec {
         for (int i = 0; i < 4; ++i) {
           parsec_task.locals[i] = task->parsec_task.locals[i];
         }
-      }
-
-      static void release_task(parsec_ttg_task_base_t* task_base) {
-        /* reducer tasks have one mutable input so the task can be submitted on the first release */
-        parsec_task_t *vp_task_rings[1] = { &task_base->parsec_task };
-        parsec_execution_stream_t *es = parsec_my_execution_stream();
-        __parsec_schedule_vp(es, vp_task_rings, 0);
       }
     };
 
