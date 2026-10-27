@@ -31,6 +31,7 @@ set(ttg-util-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/typelist.h
         ${CMAKE_CURRENT_BINARY_DIR}/ttg/util/version.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/void.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/3rd-party/generator/generator.h
     )
 set(ttg-base-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/keymap.h
@@ -155,6 +156,9 @@ if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
 endif()
 
 add_ttg_library(ttg "${ttg-sources}" PUBLIC_HEADER "${ttg-public-headers}" LINK_LIBRARIES "${ttg-deps}" INCLUDE_DIRECTORIES "${ttg-incs}" COMPILE_DEFINITIONS "${ttg-defs}")
+# the license of the bundled std::generator implementation must accompany its header
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/ttg/3rd-party/generator/LICENSE
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ttg/3rd-party/generator" COMPONENT ttg)
 # for non-fetchcontentable packages like Umpire need to add dependence of TTG on Umpire's custom build target
 if (TARGET ttg-imported-packages-build)
   add_dependencies(ttg ttg-imported-packages-build)
@@ -249,6 +253,8 @@ endif(TARGET MADworld)
 ########################
 if (TARGET PaRSEC::parsec)
   set(ttg-parsec-headers
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/broadcast.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/broadcast_keygen.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/buffer.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/device.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/devicefunc.h
@@ -260,6 +266,7 @@ if (TARGET PaRSEC::parsec)
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/parsec_data.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/task.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/thread_local.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/tt.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttg.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttg_data_copy.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/parsec/ttvalue.h
