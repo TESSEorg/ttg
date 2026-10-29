@@ -2,7 +2,7 @@
 # for each dependency track both current and previous id (the variable for the latter must contain PREVIOUS)
 # to be able to auto-update them
 
-set(TTG_TRACKED_VG_CMAKE_KIT_TAG 256d9462bb765787f5acb69be154b26d6efba8b6)  # provides FindOrFetchLinalgPP and "real" FindOrFetchBoost
+set(TTG_TRACKED_VG_CMAKE_KIT_TAG e820ffd200aebf6b97f2cf223d7b14134755d82e)  # provides FindOrFetchLinalgPP and "real" FindOrFetchBoost
 set(TTG_TRACKED_CATCH2_VERSION 3.5.0)
 set(TTG_TRACKED_MADNESS_TAG 846301f4786a5f19a7a6c237306dc86c493fd590)
 set(TTG_TRACKED_PARSEC_TAG parsec-for-ttg)
@@ -10,13 +10,9 @@ set(TTG_TRACKED_UMPIRE_CXX_ALLOCATOR_TAG 1ba7f5f0aa99438826dd1c6bc1cd396080b9d60
 set(TTG_TRACKED_BTAS_TAG 74ee8a27386c746b36f0455cd5a0e3c33bd5f4d2)
 set(TTG_TRACKED_TILEDARRAY_TAG 58acda635a6cedca73e6c4e260b73c8729c89c44)
 
-# need Boost.CallableTraits (header only, part of Boost 1.66 released in Dec 2017) for wrap.h to work
-# BUT if will be building examples, inherit the oldest version from the pickiest Boost consumer (TA and/or BSPMM)
-if (TTG_EXAMPLES)
-  set(TTG_OLDEST_BOOST_VERSION 1.81)
-else()
-  set(TTG_OLDEST_BOOST_VERSION 1.66)
-endif()
+# oldest Boost we can tolerate: same as the rest of the ValeevGroup packages (BTAS, TiledArray, SeQuant, MPQC);
+# TTG itself needs Boost.CallableTraits (header only, part of Boost 1.66) for wrap.h to work
+set(TTG_OLDEST_BOOST_VERSION 1.81)
 
 # oldest Doxygen we can tolerate ... doxygen-awesome-css requires doxygen 1.9.1 - 1.9.4 or 1.9.6 - 1.14.0, so just use 1.9.6 as the minimum
 set(TTG_OLDEST_DOXYGEN_VERSION 1.9.6)
