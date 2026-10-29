@@ -21,7 +21,7 @@ if (CXXStdCoroutine_FOUND)
     list(APPEND ut_libs std::coroutine)
 endif(CXXStdCoroutine_FOUND)
 
-list(APPEND ut_src constraints.cc)
+list(APPEND ut_src callable.cc constraints.cc)
 
 add_ttg_executable(core-unittests-ttg "${ut_src}" LINK_LIBRARIES "${ut_libs}" COMPILE_DEFINITIONS "CATCH_CONFIG_NO_POSIX_SIGNALS=1" )
 

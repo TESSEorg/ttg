@@ -39,7 +39,12 @@ namespace ttg::meta {
     template <typename F>
     struct callable_traits_impl<F*, std::enable_if_t<std::is_function_v<F>>> : callable_traits_impl<F> {};
 
-    // member function pointers: the (reference to the) object is the first argument, args_sans_object omits it
+    // member function pointers: the (reference to the) object is the first argument, args_sans_object omits it.
+    // The macros below expand to one partial specialization per combination of the PMF's qualifiers:
+    //   4 cv (none, const, volatile, const volatile) x 3 ref (none, &, &&) x 2 noexcept x 2 C-style varargs = 48.
+    // OBJREF is the reference type of the object argument: & for unqualified and &-qualified PMFs, && for
+    // &&-qualified ones (e.g. `void (C::*)(int) const` -> args = typelist<const C&, int>).
+    // Abominable function types (e.g. `void(int) const`) are not callables and are deliberately not handled.
 #define TTG_CALLABLE_TRAITS_PMF_IMPL(CV, REF, OBJREF, NOEXCEPT, VARARGS)                                       \
   template <typename R, typename C, typename... Args>                                                         \
   struct callable_traits_impl<R (C::*)(Args... VARARGS) CV REF NOEXCEPT>                                      \
@@ -69,12 +74,21 @@ namespace ttg::meta {
 #undef TTG_CALLABLE_TRAITS_COMMA_ELLIPSIS
 #undef TTG_CALLABLE_TRAITS_PMF_IMPL
 
+    /// traits of a function object given the type of `&T::operator()`; static operator() (C++23) yields a function
+    /// pointer, whose arguments are used as is
+    template <typename CallOpPtr, typename Enabler = void>
+    struct function_object_traits : callable_traits_impl<CallOpPtr> {};
+    // nonstatic operator(): drop the object argument
+    template <typename CallOpPtr>
+    struct function_object_traits<CallOpPtr, std::enable_if_t<std::is_member_function_pointer_v<CallOpPtr>>> {
+      using return_type = typename callable_traits_impl<CallOpPtr>::return_type;
+      using args = typename callable_traits_impl<CallOpPtr>::args_sans_object;
+    };
+
     // function objects with a unique (non-template, non-overloaded) operator()
     template <typename T>
-    struct callable_traits_impl<T, std::void_t<decltype(&T::operator())>> {
-      using return_type = typename callable_traits_impl<decltype(&T::operator())>::return_type;
-      using args = typename callable_traits_impl<decltype(&T::operator())>::args_sans_object;
-    };
+    struct callable_traits_impl<T, std::void_t<decltype(&T::operator())>>
+        : function_object_traits<decltype(&T::operator())> {};
   }  // namespace detail
 
   /// introspects the signature of a nongeneric callable; for generic or overloaded callables it has no members

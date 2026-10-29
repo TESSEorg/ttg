@@ -94,15 +94,6 @@ set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
         COMPILE_DEFINITIONS "TTG_GIT_REVISION=\"${TTG_GIT_REVISION}\";TTG_GIT_DESCRIPTION=\"${TTG_GIT_DESCRIPTION}\"")
 
 # optional dependencies
-# N.B. if building boost from source, must deal with some boost targets that are not built automatically if install is invoked
-#      always build such targets even if not using
-if (TTG_BUILT_BOOST_FROM_SOURCE)
-  foreach(_target IN LISTS Boost_MODULAR_TARGETS_NOT_BUILT_BY_INSTALL)
-    if (TARGET Boost::${_target} AND Boost::${_target} IN_LIST Boost_FOUND_TARGETS)
-      list(APPEND ttg-deps Boost::${_target})
-    endif()
-  endforeach()
-endif()
 if (TARGET TTG_Libunwind)
   list(APPEND ttg-deps TTG_Libunwind)
 endif(TARGET TTG_Libunwind)
@@ -137,6 +128,15 @@ add_ttg_library(ttg "${ttg-sources}" PUBLIC_HEADER "${ttg-public-headers}" LINK_
 # for non-fetchcontentable packages like Umpire need to add dependence of TTG on Umpire's custom build target
 if (TARGET ttg-imported-packages-build)
   add_dependencies(ttg ttg-imported-packages-build)
+endif()
+# N.B. if building boost from source, must deal with some boost targets that are not built automatically if install is invoked
+#      always build such targets even if not using; ttg does not use Boost, so add build-order dependencies only
+if (TTG_BUILT_BOOST_FROM_SOURCE)
+  foreach(_target IN LISTS Boost_MODULAR_TARGETS_NOT_BUILT_BY_INSTALL)
+    if (TARGET boost_${_target} AND Boost::${_target} IN_LIST Boost_FOUND_TARGETS)
+      add_dependencies(ttg boost_${_target})
+    endif()
+  endforeach()
 endif()
 
 ########################

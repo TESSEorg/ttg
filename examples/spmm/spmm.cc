@@ -2,6 +2,7 @@
 #include <Eigen/SparseCore>
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <chrono>
 #include <iostream>
 #include <numeric>
@@ -1047,9 +1048,12 @@ static void initSpMatrixMarket(const std::function<int(const Key<2> &)> &keymap,
 /// generates \p E edges (duplicates possible) of an R-MAT graph (Chakrabarti, Zhan, Faloutsos, 2004) with \p N vertices
 /// by recursively selecting one of the adjacency matrix quadrants with probabilities \p a, \p b, \p c, \p d;
 /// vertex labels are randomly permuted
+/// \pre `N > 0`, `E >= 0`, \p a, \p b, \p c, \p d are nonnegative with a positive sum
 template <typename Generator>
 static std::vector<std::pair<int, int>> generateRmatEdges(Generator &gen, int N, int E, double a, double b, double c,
                                                           double d) {
+  assert(N > 0 && E >= 0);
+  assert(a >= 0 && b >= 0 && c >= 0 && d >= 0 && a + b + c + d > 0);
   int scale = 0;
   while ((1L << scale) < N) ++scale;
   std::discrete_distribution<int> quadrant({a, b, c, d});
@@ -1059,7 +1063,15 @@ static std::vector<std::pair<int, int>> generateRmatEdges(Generator &gen, int N,
 
   std::vector<std::pair<int, int>> edges;
   edges.reserve(E);
-  while ((int)edges.size() < E) {
+  // for some N and quadrant probabilities (e.g. a = 0 with N not a power of 2) few or no edges fall inside the matrix,
+  // so bound the number of attempts
+  const long max_attempts = 1000L * (E + 1);
+  for (long attempt = 0; (int)edges.size() < E; ++attempt) {
+    if (attempt == max_attempts) {
+      std::cerr << "R-MAT: generated only " << edges.size() << " of " << E << " edges in " << max_attempts
+                << " attempts, use a > 0 or a power-of-2 number of nodes" << std::endl;
+      exit(1);
+    }
     long u = 0, v = 0;
     for (int level = 0; level < scale; ++level) {
       const int q = quadrant(gen);
@@ -1085,6 +1097,10 @@ static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const c
   std::string token;
   std::string option = std::string(opt);
   N = parseOption(option, -1);
+  if (N <= 0) {
+    std::cerr << "-rmat: #nodes must be positive" << std::endl;
+    exit(1);
+  }
   K = N;
   M = N;
 
@@ -1097,6 +1113,14 @@ static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const c
   b = parseOption(option, b);
   c = parseOption(option, c);
   d = parseOption(option, d);
+  if (E < 0) {
+    std::cerr << "-rmat: #edges must be nonnegative" << std::endl;
+    exit(1);
+  }
+  if (a < 0 || b < 0 || c < 0 || d < 0 || !(a + b + c + d > 0)) {
+    std::cerr << "-rmat: a/b/c/d must be nonnegative with a positive sum" << std::endl;
+    exit(1);
+  }
 
   if (ttg::default_execution_context().rank() == 0) {
     std::cout << "#R-MAT: " << N << " nodes, " << E << " edges, a/b/c/d = " << a << "/" << b << "/" << c << "/" << d
