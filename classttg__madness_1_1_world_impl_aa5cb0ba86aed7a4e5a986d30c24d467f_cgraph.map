@@ -1,0 +1,13 @@
+<map id="ttg_madness::WorldImpl::~WorldImpl" name="ttg_madness::WorldImpl::~WorldImpl">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,101,193,141"/>
+<area shape="rect" id="Node000002" href="$classttg__madness_1_1_world_impl.html#acaed2630a3cc07893cff1f92032d56ce" title=" " alt="" coords="241,101,429,141"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="194,119,227,119,227,124,194,124"/>
+<area shape="rect" id="Node000003" href="$namespacettg_1_1detail.html#a0737a159633e6fbe20a71c7297ba3645" title=" " alt="" coords="491,5,657,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="377,99,476,55,496,47,498,52,478,60,379,104"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1base_1_1_world_impl_base.html#ae8af1cf2a5cccc4d5066492a5d041630" title=" " alt="" coords="477,69,671,109"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="429,106,463,101,464,107,430,111"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1base_1_1_world_impl_base.html#ad1471b7fb4deb6279b873a58b2d3af5d" title=" " alt="" coords="477,133,671,173"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="430,131,464,136,463,141,429,137"/>
+<area shape="rect" id="Node000006" href="$classttg_1_1base_1_1_world_impl_base.html#a4cf5efcd1c577c54c6634708a141230b" title=" " alt="" coords="477,197,671,237"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="379,139,478,183,498,190,496,195,476,188,377,144"/>
+</map>

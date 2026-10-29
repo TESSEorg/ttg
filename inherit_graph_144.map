@@ -1,0 +1,13 @@
+<map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
+<area shape="rect" id="Node000000" title=" " alt="" coords="5,112,127,137"/>
+<area shape="rect" id="Node000001" href="$classttg_1_1detail_1_1byte__istreambuf.html" title="streambuf that writes bytes to a buffer in memory" alt="" coords="177,5,383,31"/>
+<area shape="poly" id="edge129_Node000000_Node000001" title=" " alt="" coords="88,100,126,69,173,40,204,28,206,33,176,44,130,73,92,104"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1detail_1_1byte__ostreambuf.html" title="streambuf that writes bytes to a buffer in memory" alt="" coords="175,55,385,80"/>
+<area shape="poly" id="edge130_Node000000_Node000002" title=" " alt="" coords="121,105,174,90,223,78,225,83,175,95,122,110"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1detail_1_1counting__streambuf.html" title="streambuf that counts bytes" alt="" coords="203,105,357,145"/>
+<area shape="poly" id="edge131_Node000000_Node000003" title=" " alt="" coords="140,122,202,122,202,127,140,127"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1detail_1_1iovec__istreambuf.html" title="streambuf that reads vector of address&#45;size pairs" alt="" coords="215,169,345,209"/>
+<area shape="poly" id="edge132_Node000000_Node000004" title=" " alt="" coords="123,139,215,167,214,172,122,144"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1detail_1_1iovec__ostreambuf.html" title="streambuf that records vector of address&#45;size pairs" alt="" coords="215,233,345,273"/>
+<area shape="poly" id="edge133_Node000000_Node000005" title=" " alt="" coords="90,146,128,183,176,218,215,235,213,240,173,223,124,187,86,150"/>
+</map>

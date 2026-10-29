@@ -1,0 +1,13 @@
+<map id="ttg/ttg/util/span.h" name="ttg/ttg/util/span.h">
+<area shape="rect" id="Node000001" title=" " alt="" coords="149,5,289,31"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="5,79,64,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="190,33,78,76,76,71,188,28"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="88,79,160,104"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="205,33,152,72,149,68,202,29"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="185,79,253,104"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="221,31,221,65,216,65,216,31"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="277,79,371,104"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="237,28,297,69,294,73,234,33"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="396,79,484,104"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="255,28,392,72,391,77,253,33"/>
+</map>

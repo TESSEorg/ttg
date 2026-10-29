@@ -1,0 +1,5 @@
+<map id="ttg::sendk" name="ttg::sendk">
+<area shape="rect" id="Node000001" title="Sends a task id (without an accompanying value) to the given output terminal." alt="" coords="144,5,235,31"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#aef6947191f40b85e515f63ef87a250ff" title="Sends a task id (without an accompanying value) to the template tasks attached to the output terminal..." alt="" coords="5,5,96,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="130,21,96,21,96,15,130,15"/>
+</map>

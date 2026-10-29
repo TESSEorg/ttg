@@ -1,0 +1,6 @@
+<map id="ttg::Dot::build_ttg_hierarchy" name="ttg::Dot::build_ttg_hierarchy">
+<area shape="rect" id="Node000001" title=" " alt="" coords="175,29,317,69"/>
+<area shape="poly" id="edge1_Node000001_Node000001" title=" " alt="" coords="276,17,265,11,246,8,229,10,219,15,215,21,217,28,212,30,210,20,215,11,228,5,246,3,267,6,279,13"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_dot.html#a168203fd05265000a5fe12be79738a94" title=" " alt="" coords="5,37,127,62"/>
+<area shape="poly" id="edge2_Node000001_Node000002" title=" " alt="" coords="161,52,127,52,127,47,161,47"/>
+</map>

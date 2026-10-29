@@ -1,0 +1,11 @@
+<map id="ttg::Out::prepare_send" name="ttg::Out::prepare_send">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,55,181,80"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_out.html#a57b889eeff9324054e816caed0561ae1" title=" " alt="" coords="229,29,405,55"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="181,55,215,51,216,56,182,60"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_out_terminal_base.html#aa0341fd67b25363d5c45d77646294cf9" title=" " alt="" coords="453,47,620,87"/>
+<area shape="poly" id="edge5_Node000001_Node000003" title=" " alt="" coords="182,65,440,65,440,70,182,70"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="282,31,274,21,278,11,293,5,317,3,348,6,360,15,357,20,346,11,317,8,294,10,282,15,279,20,286,28"/>
+<area shape="poly" id="edge3_Node000002_Node000003" title=" " alt="" coords="406,50,440,54,439,59,405,55"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_terminal_base.html#ab21d3f0050249488606592cfe99c3409" title="Get connections to successors." alt="" coords="668,47,819,87"/>
+<area shape="poly" id="edge4_Node000003_Node000004" title=" " alt="" coords="620,65,654,65,654,70,620,70"/>
+</map>

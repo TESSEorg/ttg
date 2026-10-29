@@ -1,0 +1,9 @@
+<map id="ttg_parsec::get_ptr" name="ttg_parsec::get_ptr">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,45,156,70"/>
+<area shape="rect" id="Node000002" href="$namespacettg__parsec_1_1detail.html#abb5f8a2eb005a7dc66279a6decd9e8c5" title=" " alt="" coords="213,5,389,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="156,44,199,37,200,43,157,49"/>
+<area shape="rect" id="Node000004" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__t.html#a7e1910ed6d9295519d18342582f3ba97" title=" " alt="" coords="204,69,399,109"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="157,66,191,71,190,76,156,71"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#a78c09561304884c05c8a8f25006b0ee6" title="Accesses the default backend&#39;s default execution context." alt="" coords="447,5,617,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="390,23,433,23,433,28,390,28"/>
+</map>

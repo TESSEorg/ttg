@@ -1,0 +1,16 @@
+<map id="ttg::detail::Traverse::traverse" name="ttg::detail::Traverse::traverse">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,126,160,166"/>
+<area shape="poly" id="edge6_Node000001_Node000001" title=" " alt="" coords="42,126,39,116,46,107,60,101,83,99,108,102,122,110,120,114,107,107,83,105,62,107,49,111,44,117,47,125"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_t_t_base.html#ac290f7b019ed37ec5f89777e853d3f27" title="Returns the vector of input terminals." alt="" coords="213,5,393,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="101,124,146,81,175,59,207,40,222,33,225,38,209,44,178,63,150,85,104,128"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_t_t_base.html#ade3b1e6b149fe1124f7192aeca5f715c" title="Gets the name of this operation." alt="" coords="215,55,390,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="124,123,207,89,232,81,233,86,209,94,126,128"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_t_t_base.html#a5158da66b2aa6b7af14998e7aac0fe29" title="Returns the vector of output terminals." alt="" coords="208,104,397,129"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="160,133,194,128,195,134,160,138"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1detail_1_1_traverse.html#a6aa44d45713f8fecf27bd4c91f1be475" title=" " alt="" coords="225,154,380,194"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="160,153,212,160,211,165,160,158"/>
+<area shape="rect" id="Node000006" href="$classttg_1_1detail_1_1_traverse.html#a9c047df6c224aa7c87d9b72d15efc4c6" title=" " alt="" coords="225,218,380,258"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="124,164,209,204,227,211,225,216,207,208,121,169"/>
+<area shape="rect" id="Node000007" href="$classttg_1_1detail_1_1_traverse.html#a5da2d82d0eb6f9216c6e23ef48c76ff0" title=" " alt="" coords="225,282,380,322"/>
+<area shape="poly" id="edge7_Node000001_Node000007" title=" " alt="" coords="101,165,147,216,177,244,209,268,220,274,218,279,207,272,173,248,143,220,97,168"/>
+</map>

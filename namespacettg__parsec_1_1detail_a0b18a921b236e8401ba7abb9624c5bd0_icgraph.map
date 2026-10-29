@@ -1,0 +1,19 @@
+<map id="ttg_parsec::detail::ttg_data_copy_container" name="ttg_parsec::detail::ttg_data_copy_container">
+<area shape="rect" id="Node000001" title=" " alt="" coords="341,265,537,305"/>
+<area shape="rect" id="Node000002" href="$structttg__parsec_1_1detail_1_1ttg__data__value__copy__t.html#a3745ee194a20f009074e2e8c0bb50e3a" title=" " alt="" coords="65,5,234,60"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="422,253,402,212,373,163,336,115,292,75,264,59,233,48,235,43,266,54,295,71,340,112,377,160,406,209,427,250"/>
+<area shape="rect" id="Node000003" href="$structttg__parsec_1_1_t_t_value.html#ac192fbd7de1a7f3937d1aecc3d411db8" title=" " alt="" coords="71,85,227,125"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="414,255,363,195,329,164,292,139,260,125,227,116,228,111,262,120,295,134,332,160,366,191,418,251"/>
+<area shape="rect" id="Node000004" href="$structttg__parsec_1_1detail_1_1ttg__data__value__copy__t.html#a280e41dcde17c62b2d45f8a65e18e982" title=" " alt="" coords="65,149,234,204"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="386,261,292,219,233,200,235,195,294,214,389,256"/>
+<area shape="rect" id="Node000005" href="$structttg__parsec_1_1_t_t_value.html#a929c5f9ba954d11856cc249bbb960125" title=" " alt="" coords="71,229,227,269"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="327,273,227,261,228,256,328,268"/>
+<area shape="rect" id="Node000006" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__container__setter.html#a6eb8c4d47cf3815fad5b18362cc38fb2" title=" " alt="" coords="5,293,293,348"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="328,301,294,305,293,300,327,296"/>
+<area shape="rect" id="Node000007" href="$structttg__parsec_1_1detail_1_1ttg__data__value__copy__t.html#a95b010e353f7d5985e57e42aae13515b" title=" " alt="" coords="53,372,246,427"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="393,314,346,339,294,362,247,378,245,373,292,357,344,334,391,309"/>
+<area shape="rect" id="Node000008" href="$structttg__parsec_1_1detail_1_1ttg__data__value__copy__t.html#a74cf20530edbe7bcc13e81c989194405" title=" " alt="" coords="53,451,246,505"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="419,318,367,380,333,413,295,440,247,461,245,457,292,436,329,408,363,376,415,314"/>
+<area shape="rect" id="Node000009" href="$structttg__parsec_1_1detail_1_1ttg__data__value__copy__t.html#a1f3e762b244708746aa98be325a57889" title=" " alt="" coords="53,529,246,584"/>
+<area shape="poly" id="edge8_Node000001_Node000009" title=" " alt="" coords="429,319,409,364,381,418,343,472,320,497,295,519,272,533,247,543,245,538,270,528,292,515,316,493,339,469,376,415,405,362,424,317"/>
+</map>

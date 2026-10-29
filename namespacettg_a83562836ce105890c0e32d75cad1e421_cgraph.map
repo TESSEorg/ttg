@@ -1,0 +1,10 @@
+<map id="ttg::sendk" name="ttg::sendk">
+<area shape="rect" id="Node000001" title="Sends a task id (without an accompanying value) to the given output terminal." alt="" coords="5,29,96,55"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_out.html#a63a75f52fff6b34ec5287e7daefe5bfa" title=" " alt="" coords="144,29,267,55"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="96,39,130,39,130,45,96,45"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="179,31,174,21,177,11,188,5,205,3,227,6,236,15,232,19,224,11,205,8,189,10,181,15,179,20,184,28"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_out_terminal_base.html#aa0341fd67b25363d5c45d77646294cf9" title=" " alt="" coords="315,22,481,62"/>
+<area shape="poly" id="edge3_Node000002_Node000003" title=" " alt="" coords="267,39,301,39,301,45,267,45"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_terminal_base.html#ab21d3f0050249488606592cfe99c3409" title="Get connections to successors." alt="" coords="529,22,680,62"/>
+<area shape="poly" id="edge4_Node000003_Node000004" title=" " alt="" coords="482,39,516,39,516,45,482,45"/>
+</map>
