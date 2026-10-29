@@ -438,7 +438,7 @@ TEST_CASE("TemplateTask", "[core]") {
 
     {
       static_assert(!ttg::meta::is_generic_callable_v<decltype(&args_pmf::X::f)>);
-      static_assert(std::is_same_v<boost::callable_traits::args_t<decltype(&args_pmf::X::f), ttg::typelist>,
+      static_assert(std::is_same_v<ttg::meta::callable_args_t<decltype(&args_pmf::X::f)>,
                                    ttg::typelist<args_pmf::X &, int &>>);
       static_assert(!ttg::meta::is_generic_callable_v<decltype(&args_pmf::X::g<int>)>);
     }
