@@ -6,34 +6,106 @@
 #ifndef TTG_META_CALLABLE_H
 #define TTG_META_CALLABLE_H
 
+#include <type_traits>
+
 #include "ttg/util/meta.h"
 #include "ttg/util/typelist.h"
-
-#ifdef TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS
-#include <ttg/external/boost/callable_traits.hpp>
-#else
-#include <boost/callable_traits.hpp>
-#endif
 
 namespace ttg::meta {
 
   //////////////////////////////////////
+  // callable signature introspection
+  //////////////////////////////////////
+  namespace detail {
+    template <typename R, typename... Args>
+    struct callable_signature {
+      using return_type = R;
+      using args = ttg::typelist<Args...>;
+    };
+
+    /// primary template: not a callable with a unique signature (e.g. generic or overloaded callables)
+    template <typename T, typename Enabler = void>
+    struct callable_traits_impl {};
+
+    // functions and function pointers; C-style varargs are not part of the argument list
+    template <typename R, typename... Args>
+    struct callable_traits_impl<R(Args...)> : callable_signature<R, Args...> {};
+    template <typename R, typename... Args>
+    struct callable_traits_impl<R(Args...) noexcept> : callable_signature<R, Args...> {};
+    template <typename R, typename... Args>
+    struct callable_traits_impl<R(Args..., ...)> : callable_signature<R, Args...> {};
+    template <typename R, typename... Args>
+    struct callable_traits_impl<R(Args..., ...) noexcept> : callable_signature<R, Args...> {};
+    template <typename F>
+    struct callable_traits_impl<F*, std::enable_if_t<std::is_function_v<F>>> : callable_traits_impl<F> {};
+
+    // member function pointers: the (reference to the) object is the first argument, args_sans_object omits it
+#define TTG_CALLABLE_TRAITS_PMF_IMPL(CV, REF, OBJREF, NOEXCEPT, VARARGS)                                       \
+  template <typename R, typename C, typename... Args>                                                         \
+  struct callable_traits_impl<R (C::*)(Args... VARARGS) CV REF NOEXCEPT>                                      \
+      : callable_signature<R, CV C OBJREF, Args...> {                                                         \
+    using args_sans_object = ttg::typelist<Args...>;                                                          \
+  };
+#define TTG_CALLABLE_TRAITS_COMMA_ELLIPSIS , ...
+#define TTG_CALLABLE_TRAITS_PMF_VARARGS(CV, REF, OBJREF, NOEXCEPT) \
+  TTG_CALLABLE_TRAITS_PMF_IMPL(CV, REF, OBJREF, NOEXCEPT, )        \
+  TTG_CALLABLE_TRAITS_PMF_IMPL(CV, REF, OBJREF, NOEXCEPT, TTG_CALLABLE_TRAITS_COMMA_ELLIPSIS)
+#define TTG_CALLABLE_TRAITS_PMF_NOEXCEPT(CV, REF, OBJREF) \
+  TTG_CALLABLE_TRAITS_PMF_VARARGS(CV, REF, OBJREF, )      \
+  TTG_CALLABLE_TRAITS_PMF_VARARGS(CV, REF, OBJREF, noexcept)
+#define TTG_CALLABLE_TRAITS_PMF_REF(CV)    \
+  TTG_CALLABLE_TRAITS_PMF_NOEXCEPT(CV, , &) \
+  TTG_CALLABLE_TRAITS_PMF_NOEXCEPT(CV, &, &) \
+  TTG_CALLABLE_TRAITS_PMF_NOEXCEPT(CV, &&, &&)
+
+    TTG_CALLABLE_TRAITS_PMF_REF()
+    TTG_CALLABLE_TRAITS_PMF_REF(const)
+    TTG_CALLABLE_TRAITS_PMF_REF(volatile)
+    TTG_CALLABLE_TRAITS_PMF_REF(const volatile)
+
+#undef TTG_CALLABLE_TRAITS_PMF_REF
+#undef TTG_CALLABLE_TRAITS_PMF_NOEXCEPT
+#undef TTG_CALLABLE_TRAITS_PMF_VARARGS
+#undef TTG_CALLABLE_TRAITS_COMMA_ELLIPSIS
+#undef TTG_CALLABLE_TRAITS_PMF_IMPL
+
+    // function objects with a unique (non-template, non-overloaded) operator()
+    template <typename T>
+    struct callable_traits_impl<T, std::void_t<decltype(&T::operator())>> {
+      using return_type = typename callable_traits_impl<decltype(&T::operator())>::return_type;
+      using args = typename callable_traits_impl<decltype(&T::operator())>::args_sans_object;
+    };
+  }  // namespace detail
+
+  /// introspects the signature of a nongeneric callable; for generic or overloaded callables it has no members
+  /// \tparam Callable a function, (member) function pointer, function object, or reference to one of these
+  template <typename Callable>
+  using callable_traits = detail::callable_traits_impl<std::remove_cvref_t<Callable>>;
+
+  /// argument types of a nongeneric \p Callable as a ttg::typelist; for member function pointers the first type
+  /// is the reference to the object; SFINAE-friendly
+  template <typename Callable>
+  using callable_args_t = typename callable_traits<Callable>::args;
+
+  /// return type of a nongeneric \p Callable; SFINAE-friendly
+  template <typename Callable>
+  using callable_return_t = typename callable_traits<Callable>::return_type;
+
+  //////////////////////////////////////
   // nongeneric callables
   //////////////////////////////////////
-  // handled using Boost.CallableTraits ... to detect whether a callable is generic or not detect existence of
-  // boost::callable_traits::args_t
+  // to detect whether a callable is generic or not detect existence of callable_args_t
   template <typename Callable, typename = void>
   struct is_generic_callable : std::true_type {};
 
   template <typename Callable>
-  struct is_generic_callable<Callable, ttg::meta::void_t<boost::callable_traits::args_t<Callable, ttg::typelist>>>
-      : std::false_type {};
+  struct is_generic_callable<Callable, ttg::meta::void_t<callable_args_t<Callable>>> : std::false_type {};
 
   template <typename Callable>
   constexpr inline bool is_generic_callable_v = is_generic_callable<Callable>::value;
 
   /// callable_args<Callable> detects whether `Callable` is generic or not, and in the latter case
-  /// detects (using Boost.CallableTraits) its return and argument types.
+  /// detects (using callable_traits) its return and argument types.
   /// callable_args<Callable> is a constexpr value of type
   /// `std::pair<bool,ttg::typelist<ttg::typelist<ReturnType>,ttg::typelist<ArgTypes>>>`
   /// where:
@@ -45,9 +117,8 @@ namespace ttg::meta {
   constexpr std::pair<bool, std::pair<ttg::typelist<>, ttg::typelist<>>> callable_args = {true, {}};
 
   template <typename Callable>
-  constexpr auto callable_args<Callable, ttg::meta::void_t<boost::callable_traits::args_t<Callable, ttg::typelist>>> =
-      std::pair<bool, std::pair<ttg::typelist<boost::callable_traits::return_type_t<Callable>>,
-                                boost::callable_traits::args_t<Callable, ttg::typelist>>>{false, {}};
+  constexpr auto callable_args<Callable, ttg::meta::void_t<callable_args_t<Callable>>> =
+      std::pair<bool, std::pair<ttg::typelist<callable_return_t<Callable>>, callable_args_t<Callable>>>{false, {}};
 
   //////////////////////////////////////
   // generic callables
@@ -201,7 +272,7 @@ namespace ttg::meta {
                                         //   indicate to the runtime that the argument is CONSUMABLE and may cause
                                         //   creation of extra copies. Thus you should not try to use nongeneric
                                         //   data arguments in generic task functions; for purely nongeneric functions
-                                        //   a different introspection mechanism (Boost.CallableTraits) is used
+                                        //   a different introspection mechanism (callable_traits) is used
                                         T&&, const T&
                                         // - no need to check T& since auto& and auto&& both bind to it
                                         //, T&

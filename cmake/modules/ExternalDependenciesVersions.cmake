@@ -10,8 +10,8 @@ set(TTG_TRACKED_UMPIRE_CXX_ALLOCATOR_TAG 1ba7f5f0aa99438826dd1c6bc1cd396080b9d60
 set(TTG_TRACKED_BTAS_TAG 74ee8a27386c746b36f0455cd5a0e3c33bd5f4d2)
 set(TTG_TRACKED_TILEDARRAY_TAG 58acda635a6cedca73e6c4e260b73c8729c89c44)
 
-# need Boost.CallableTraits (header only, part of Boost 1.66 released in Dec 2017) for wrap.h to work
-# BUT if will be building examples, inherit the oldest version from the pickiest Boost consumer (TA and/or BSPMM)
+# Boost is only used for (optional) Boost.Serialization support and by the examples' dependencies;
+# if will be building examples, inherit the oldest version from the pickiest Boost consumer (TA and/or BSPMM)
 if (TTG_EXAMPLES)
   set(TTG_OLDEST_BOOST_VERSION 1.81)
 else()

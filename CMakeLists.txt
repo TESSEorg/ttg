@@ -73,7 +73,6 @@ option(TTG_ENABLE_ASAN "Whether to enable address sanitizer" OFF)
 
 option(TTG_ENABLE_COROUTINES "Whether to enable C++ coroutines, needed for accelerator device support" ON)
 option(TTG_FETCH_BOOST "Whether to fetch+build Boost, if missing" ON)
-option(TTG_IGNORE_BUNDLED_EXTERNALS "Whether to skip installation and use of bundled external dependencies (Boost.CallableTraits)" OFF)
 option(TTG_ENABLE_TRACE "Whether to enable ttg::trace() output" OFF)
 # See https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
 option (FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." TRUE)
@@ -114,7 +113,7 @@ endif (BUILD_TESTING)
 ###########################
 #### optional prerequisites
 ###########################
-# Boost: only truly needed if TTG_PARSEC_USE_BOOST_SERIALIZATION=ON or building examples
+# Boost: only needed if TTG_PARSEC_USE_BOOST_SERIALIZATION=ON or building examples (TiledArray/BTAS need it)
 if (TTG_PARSEC_USE_BOOST_SERIALIZATION OR TTG_EXAMPLES)
   include("${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchBoost.cmake")
 endif()

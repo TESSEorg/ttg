@@ -8,8 +8,7 @@ add_ttg_executable(t9-streaming t9/t9_streaming.cc)
 # sparse matmul need Eigen ... it's always provided by TA
 if (TARGET tiledarray)
     # MADworld used for MADNESS serialization
-    add_ttg_executable(spmm spmm/spmm.cc LINK_LIBRARIES TiledArray_Eigen $<TARGET_NAME_IF_EXISTS:Boost::graph>
-                                         COMPILE_DEFINITIONS $<$<TARGET_EXISTS:Boost::graph>:HAVE_BOOST_GRAPH=1>)
+    add_ttg_executable(spmm spmm/spmm.cc LINK_LIBRARIES TiledArray_Eigen)
     # block-sparse needs BTAS ... it's always provided by TA
     # since only need to use matrices, limit BTAS_TARGET_MAX_INDEX_RANK to 2
     add_ttg_executable(bspmm spmm/spmm.cc LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS

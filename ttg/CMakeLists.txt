@@ -37,9 +37,6 @@ set(ttg-base-headers
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/terminal.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/base/world.h
     )
-file(GLOB_RECURSE ttg-external-headers $<$<VERSION_GREATER_EQUAL:${CMAKE_VERSION},3.12>:CONFIGURE_DEPENDS>
-        ${CMAKE_CURRENT_SOURCE_DIR}/ttg/external/boost/*
-    )
 configure_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/config.in.h
         ${CMAKE_CURRENT_BINARY_DIR}/ttg/config.h
@@ -82,7 +79,6 @@ set(ttg-sources
         ${ttg-base-headers}
         ${ttg-util-headers}
         ${ttg_device_headers}
-        ${ttg-external-headers}
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/backtrace.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/bug.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/env.cpp
@@ -98,27 +94,15 @@ set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ttg/util/version.cc
         COMPILE_DEFINITIONS "TTG_GIT_REVISION=\"${TTG_GIT_REVISION}\";TTG_GIT_DESCRIPTION=\"${TTG_GIT_DESCRIPTION}\"")
 
 # optional dependencies
-if (TARGET Boost::headers)
-  if (TARGET Boost::callable_traits)  # using modularized Boost?
-      list(APPEND ttg-deps Boost::callable_traits)
-  else()
-      list(APPEND ttg-deps Boost::headers)
-  endif()
-  # N.B. if building boost from source, must deal with some boost targets that are not built automatically if install is invoked
-  #      always build such targets even if not using
-  if (TTG_BUILT_BOOST_FROM_SOURCE)
-      foreach(_target IN LISTS Boost_MODULAR_TARGETS_NOT_BUILT_BY_INSTALL)
-          if (TARGET Boost::${_target} AND Boost::${_target} IN_LIST Boost_FOUND_TARGETS)
-              list(APPEND ttg-deps Boost::${_target})
-          endif()
-      endforeach()
-  endif()
-else () # if Boost::headers is missing must use bundled Boost.CallableTraits
-  list(APPEND ttg-defs "TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS=1")
-  list(APPEND ttg-incs
-          "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ttg/external>"
-          "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/ttg/external>")
-endif ()
+# N.B. if building boost from source, must deal with some boost targets that are not built automatically if install is invoked
+#      always build such targets even if not using
+if (TTG_BUILT_BOOST_FROM_SOURCE)
+  foreach(_target IN LISTS Boost_MODULAR_TARGETS_NOT_BUILT_BY_INSTALL)
+    if (TARGET Boost::${_target} AND Boost::${_target} IN_LIST Boost_FOUND_TARGETS)
+      list(APPEND ttg-deps Boost::${_target})
+    endif()
+  endforeach()
+endif()
 if (TARGET TTG_Libunwind)
   list(APPEND ttg-deps TTG_Libunwind)
 endif(TARGET TTG_Libunwind)
@@ -148,10 +132,6 @@ if (TARGET umpire-cxx-allocator)
 endif()
 
 set(ttg-public-headers ${ttg-headers};${ttg-impl-headers};${ttg-base-headers};${ttg-util-headers};${ttg_device_headers})
-if (NOT TTG_IGNORE_BUNDLED_EXTERNALS)
-  list(APPEND ttg-sources ${ttg-external-headers})
-  list(APPEND ttg-public-headers ${ttg-external-headers})
-endif()
 
 add_ttg_library(ttg "${ttg-sources}" PUBLIC_HEADER "${ttg-public-headers}" LINK_LIBRARIES "${ttg-deps}" INCLUDE_DIRECTORIES "${ttg-incs}" COMPILE_DEFINITIONS "${ttg-defs}")
 # for non-fetchcontentable packages like Umpire need to add dependence of TTG on Umpire's custom build target

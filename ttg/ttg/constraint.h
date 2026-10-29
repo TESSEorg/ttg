@@ -10,11 +10,7 @@
 
 #include "ttg/util/span.h"
 
-#ifdef TTG_USE_BUNDLED_BOOST_CALLABLE_TRAITS
-#include <ttg/external/boost/callable_traits.hpp>
-#else
-#include <boost/callable_traits.hpp>
-#endif
+#include "ttg/util/meta/callable.h"
 
 namespace ttg {
 
@@ -354,23 +350,22 @@ namespace ttg {
   };
 
   // deduction guides: take type of first argument to Mapper as the key type
-  // TODO: can we use the TTG callable_args instead?
-  template<typename Mapper, typename = std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>>>>
+  template<typename Mapper, typename = std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, ttg::meta::callable_args_t<Mapper>>>>>>
   SequencedKeysConstraint(Mapper&&)
     -> SequencedKeysConstraint<
-          std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>,
-          std::decay_t<boost::callable_traits::return_type_t<Mapper>>,
-          std::less<std::decay_t<boost::callable_traits::return_type_t<Mapper>>>,
-          std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>>, Mapper>
+          std::decay_t<std::tuple_element_t<0, ttg::meta::callable_args_t<Mapper>>>,
+          std::decay_t<ttg::meta::callable_return_t<Mapper>>,
+          std::less<std::decay_t<ttg::meta::callable_return_t<Mapper>>>,
+          std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, ttg::meta::callable_args_t<Mapper>>>>, Mapper>
           >;
 
-  template<typename Mapper, typename = std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>>>>
+  template<typename Mapper, typename = std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, ttg::meta::callable_args_t<Mapper>>>>>>
   SequencedKeysConstraint(Mapper&&, bool)
     -> SequencedKeysConstraint<
-          std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>,
-          std::decay_t<boost::callable_traits::return_type_t<Mapper>>,
-          std::less<std::decay_t<boost::callable_traits::return_type_t<Mapper>>>,
-          std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, boost::callable_traits::args_t<Mapper>>>>, Mapper>
+          std::decay_t<std::tuple_element_t<0, ttg::meta::callable_args_t<Mapper>>>,
+          std::decay_t<ttg::meta::callable_return_t<Mapper>>,
+          std::less<std::decay_t<ttg::meta::callable_return_t<Mapper>>>,
+          std::enable_if_t<std::is_invocable_v<Mapper, std::decay_t<std::tuple_element_t<0, ttg::meta::callable_args_t<Mapper>>>>, Mapper>
           >;
 
   template<typename Key, typename Ordinal, typename Compare, typename Mapper>
