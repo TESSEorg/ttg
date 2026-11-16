@@ -105,6 +105,38 @@ namespace callable_test {
   };
   static_assert(std::is_same_v<callable_args_t<F_static>, typelist<int, const double &>>);
   static_assert(std::is_same_v<callable_return_t<F_static>, int>);
+  struct F_static_noargs {
+    static void operator()();
+  };
+  static_assert(std::is_same_v<callable_args_t<F_static_noargs>, typelist<>>);
+  // static operator() whose first parameter is the object type: not to be confused with an explicit object parameter
+  struct F_static_selfarg {
+    static void operator()(const F_static_selfarg &, int);
+  };
+  static_assert(std::is_same_v<callable_args_t<F_static_selfarg>, typelist<const F_static_selfarg &, int>>);
+#endif
+
+#if defined(__cpp_explicit_this_parameter) && __cpp_explicit_this_parameter >= 202110L
+  // explicit object parameter: the object argument is dropped, as for implicit object parameters
+  struct F_explicit_object {
+    long operator()(this const F_explicit_object &, int, double &);
+  };
+  struct F_explicit_object_byvalue {
+    void operator()(this F_explicit_object_byvalue, int);
+  };
+  struct F_explicit_object_rvalue {
+    void operator()(this F_explicit_object_rvalue &&);
+  };
+  struct F_explicit_object_derived : F_explicit_object {};
+  struct F_explicit_object_generic {
+    void operator()(this auto &&, int);
+  };
+  static_assert(std::is_same_v<callable_args_t<F_explicit_object>, typelist<int, double &>>);
+  static_assert(std::is_same_v<callable_return_t<F_explicit_object>, long>);
+  static_assert(std::is_same_v<callable_args_t<F_explicit_object_byvalue>, typelist<int>>);
+  static_assert(std::is_same_v<callable_args_t<F_explicit_object_rvalue>, typelist<>>);
+  static_assert(std::is_same_v<callable_args_t<F_explicit_object_derived>, typelist<int, double &>>);
+  static_assert(!has_signature_v<F_explicit_object_generic>);
 #endif
 
   // lambdas

@@ -74,21 +74,57 @@ namespace ttg::meta {
 #undef TTG_CALLABLE_TRAITS_COMMA_ELLIPSIS
 #undef TTG_CALLABLE_TRAITS_PMF_IMPL
 
-    /// traits of a function object given the type of `&T::operator()`; static operator() (C++23) yields a function
-    /// pointer, whose arguments are used as is
-    template <typename CallOpPtr, typename Enabler = void>
+    /// splits a nonempty ttg::typelist into its first type and the rest; has no members for an empty typelist
+    template <typename Typelist>
+    struct typelist_split_first {};
+    template <typename First, typename... Rest>
+    struct typelist_split_first<ttg::typelist<First, Rest...>> {
+      using first = First;
+      using rest = ttg::typelist<Rest...>;
+    };
+
+    template <typename F, typename Typelist>
+    constexpr bool is_invocable_with_v = false;
+    template <typename F, typename... Args>
+    constexpr bool is_invocable_with_v<F, ttg::typelist<Args...>> = std::is_invocable_v<F, Args...>;
+
+    /// true if \p CallOpPtr , the type of `&T::operator()`, is a function pointer obtained from an operator() with
+    /// an explicit object parameter (C++23 "deducing this", e.g. `void operator()(this const T&, int)`): its first
+    /// parameter is the object (of type \p T or its base), and an object of type \p T can only be invoked without it.
+    /// The latter check distinguishes it from a static operator() whose first parameter happens to be the object type.
+    template <typename T, typename CallOpPtr, typename Enabler = void>
+    constexpr bool is_explicit_object_call_op_v = false;
+    template <typename T, typename CallOpPtr>
+    constexpr bool is_explicit_object_call_op_v<
+        T, CallOpPtr,
+        std::enable_if_t<std::is_pointer_v<CallOpPtr> &&
+                         std::is_base_of_v<std::remove_cvref_t<typename typelist_split_first<
+                                               typename callable_traits_impl<CallOpPtr>::args>::first>,
+                                           T>>> =
+        !is_invocable_with_v<T &, typename callable_traits_impl<CallOpPtr>::args> &&
+        !is_invocable_with_v<T &&, typename callable_traits_impl<CallOpPtr>::args>;
+
+    /// traits of a function object of type \p T given \p CallOpPtr , the type of `&T::operator()`;
+    /// static operator() (C++23) yields a function pointer, whose arguments are used as is
+    template <typename T, typename CallOpPtr, typename Enabler = void>
     struct function_object_traits : callable_traits_impl<CallOpPtr> {};
-    // nonstatic operator(): drop the object argument
-    template <typename CallOpPtr>
-    struct function_object_traits<CallOpPtr, std::enable_if_t<std::is_member_function_pointer_v<CallOpPtr>>> {
+    // implicit object parameter (nonstatic operator()): drop the object argument
+    template <typename T, typename CallOpPtr>
+    struct function_object_traits<T, CallOpPtr, std::enable_if_t<std::is_member_function_pointer_v<CallOpPtr>>> {
       using return_type = typename callable_traits_impl<CallOpPtr>::return_type;
       using args = typename callable_traits_impl<CallOpPtr>::args_sans_object;
+    };
+    // explicit object parameter: &T::operator() is a function pointer whose first parameter is the object, drop it
+    template <typename T, typename CallOpPtr>
+    struct function_object_traits<T, CallOpPtr, std::enable_if_t<is_explicit_object_call_op_v<T, CallOpPtr>>> {
+      using return_type = typename callable_traits_impl<CallOpPtr>::return_type;
+      using args = typename typelist_split_first<typename callable_traits_impl<CallOpPtr>::args>::rest;
     };
 
     // function objects with a unique (non-template, non-overloaded) operator()
     template <typename T>
     struct callable_traits_impl<T, std::void_t<decltype(&T::operator())>>
-        : function_object_traits<decltype(&T::operator())> {};
+        : function_object_traits<T, decltype(&T::operator())> {};
   }  // namespace detail
 
   /// introspects the signature of a nongeneric callable; for generic or overloaded callables it has no members
