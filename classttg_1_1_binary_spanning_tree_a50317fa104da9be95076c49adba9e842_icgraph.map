@@ -1,0 +1,9 @@
+<map id="ttg::BinarySpanningTree::size" name="ttg::BinarySpanningTree::size">
+<area shape="rect" id="Node000001" title=" " alt="" coords="272,63,463,103"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_binary_spanning_tree.html#ace575e2f7466b0b43b1b0b9925e92388" title=" " alt="" coords="19,5,210,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="265,62,203,48,204,43,266,57"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_binary_tree_broadcast.html#aa839d772aa8ece8897255cd8f87a9456" title=" " alt="" coords="5,70,224,95"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="258,85,224,85,224,80,258,80"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_binary_tree_reduce.html#adec52e1e033aef60a708faf752768360" title=" " alt="" coords="14,119,215,145"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="259,106,181,122,180,117,258,101"/>
+</map>

@@ -1,0 +1,11 @@
+var searchData=
+[
+  ['reference_0',['reference',['../class_t_c_b___s_p_a_n___n_a_m_e_s_p_a_c_e___n_a_m_e_1_1span.html#ae20eed08efab872b4930d635b23cfc5f',1,'TCB_SPAN_NAMESPACE_NAME::span']]],
+  ['reference_5ftype_1',['reference_type',['../structttg__parsec_1_1detail_1_1persistent__value__ref.html#a733189db4494352f3bf0beacde4f8495',1,'ttg_parsec::detail::persistent_value_ref']]],
+  ['release_5ftask_5ffn_2',['release_task_fn',['../structttg__parsec_1_1detail_1_1parsec__ttg__task__base__t.html#a6f89b3b9409beba55ba3ae1a9b121094',1,'ttg_parsec::detail::parsec_ttg_task_base_t']]],
+  ['remove_5fcvr_5ft_3',['remove_cvr_t',['../namespacettg_1_1meta.html#a8ae5d2c1fa1373a399e7cf1a27dd696f',1,'ttg::meta']]],
+  ['remove_5fpointer_5ft_4',['remove_pointer_t',['../namespace_t_c_b___s_p_a_n___n_a_m_e_s_p_a_c_e___n_a_m_e_1_1detail.html#ac3914c5ccaed380eacbac14729d7b0d0',1,'TCB_SPAN_NAMESPACE_NAME::detail']]],
+  ['rest_5',['rest',['../structttg_1_1meta_1_1detail_1_1typelist__split__first_3_01ttg_1_1typelist_3_01_first_00_01_rest_8_8_8_01_4_01_4.html#adbc38afc225ee5ef4dcbeafe18b7d26a',1,'ttg::meta::detail::typelist_split_first&lt; ttg::typelist&lt; First, Rest... &gt; &gt;']]],
+  ['return_5ftype_6',['return_type',['../structttg_1_1meta_1_1detail_1_1callable__signature.html#ab89ff0a86c4b0b647195c57132d26d71',1,'ttg::meta::detail::callable_signature::return_type'],['../structttg_1_1meta_1_1detail_1_1function__object__traits_3_01_t_00_01_call_op_ptr_00_01std_1_1ena16cd511b74d80dd30d982ab194c454b8.html#a13e3476aac8ed677504e69a5611da432',1,'ttg::meta::detail::function_object_traits&lt; T, CallOpPtr, std::enable_if_t&lt; std::is_member_function_pointer_v&lt; CallOpPtr &gt; &gt; &gt;::return_type'],['../structttg_1_1meta_1_1detail_1_1function__object__traits_3_01_t_00_01_call_op_ptr_00_01std_1_1enabc4889c02a50ca2d68dc01727f7c8324.html#a2d0461f44affa40b12c40272a2c72769',1,'ttg::meta::detail::function_object_traits&lt; T, CallOpPtr, std::enable_if_t&lt; is_explicit_object_call_op_v&lt; T, CallOpPtr &gt; &gt; &gt;::return_type']]],
+  ['reverse_5fiterator_7',['reverse_iterator',['../class_t_c_b___s_p_a_n___n_a_m_e_s_p_a_c_e___n_a_m_e_1_1span.html#a5130a00ef3e5906087cc2fc2fe8d2734',1,'TCB_SPAN_NAMESPACE_NAME::span']]]
+];

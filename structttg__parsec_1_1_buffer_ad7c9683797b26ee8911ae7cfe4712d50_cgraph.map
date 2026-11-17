@@ -1,0 +1,19 @@
+<map id="ttg_parsec::Buffer::current_device_ptr" name="ttg_parsec::Buffer::current_device_ptr">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,101,164,141"/>
+<area shape="rect" id="Node000002" href="$namespacettg_1_1device.html#a5c5ca5f871db61a4e703ca6170582a5e" title=" " alt="" coords="223,5,373,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="122,99,211,55,227,48,229,53,213,60,124,104"/>
+<area shape="rect" id="Node000003" href="$structttg__parsec_1_1_buffer.html#ac81a3d9b9e2dcbbcba93cf1a35512f04" title=" " alt="" coords="227,69,369,109"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="164,107,213,99,214,105,165,112"/>
+<area shape="rect" id="Node000004" href="$structttg__parsec_1_1_buffer.html#a3780a9611c746e0d1ea617720d469ad5" title=" " alt="" coords="227,133,369,173"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="165,131,214,138,213,143,164,136"/>
+<area shape="rect" id="Node000005" href="$namespacettg__parsec_1_1detail.html#a4e193da802fd145fa18041dd40ad7df9" title=" " alt="" coords="212,198,384,253"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="126,139,213,183,227,190,224,194,211,188,124,144"/>
+<area shape="rect" id="Node000006" href="$classttg_1_1device_1_1_device.html#acf0992ecbfbc2c91de0452122b06fe81" title=" " alt="" coords="432,238,600,263"/>
+<area shape="poly" id="edge5_Node000005_Node000006" title=" " alt="" coords="385,233,419,237,418,242,384,238"/>
+<area shape="rect" id="Node000007" href="$classttg_1_1device_1_1_device.html#a16a73248d5e812cf4df7d55458faafb4" title=" " alt="" coords="648,180,795,220"/>
+<area shape="poly" id="edge9_Node000005_Node000007" title=" " alt="" coords="384,218,634,203,634,208,385,223"/>
+<area shape="poly" id="edge6_Node000006_Node000007" title=" " alt="" coords="568,235,634,219,635,224,569,240"/>
+<area shape="rect" id="Node000008" href="$classttg_1_1device_1_1_device.html#a979477b9cde8927f919c75754d4d8329" title=" " alt="" coords="843,209,989,249"/>
+<area shape="poly" id="edge8_Node000006_Node000008" title=" " alt="" coords="600,244,829,231,829,237,600,249"/>
+<area shape="poly" id="edge7_Node000007_Node000008" title=" " alt="" coords="795,208,829,214,829,219,794,214"/>
+</map>

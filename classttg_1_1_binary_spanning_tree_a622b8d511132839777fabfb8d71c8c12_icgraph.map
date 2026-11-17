@@ -1,0 +1,7 @@
+<map id="ttg::BinarySpanningTree::child_keys" name="ttg::BinarySpanningTree::child_keys">
+<area shape="rect" id="Node000001" title=" " alt="" coords="272,23,463,63"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_binary_tree_broadcast.html#aa839d772aa8ece8897255cd8f87a9456" title=" " alt="" coords="5,5,224,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="258,35,224,32,225,26,259,30"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_binary_tree_reduce.html#adec52e1e033aef60a708faf752768360" title=" " alt="" coords="14,55,215,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="259,56,216,60,215,55,258,51"/>
+</map>

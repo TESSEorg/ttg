@@ -1,0 +1,5 @@
+<map id="ttg::default_data_descriptor&lt; T, std::enable_if_t&lt; ttg::has_split_metadata&lt; T &gt;::value &gt; &gt;::payload_size" name="ttg::default_data_descriptor&lt; T, std::enable_if_t&lt; ttg::has_split_metadata&lt; T &gt;::value &gt; &gt;::payload_size">
+<area shape="rect" id="Node000001" title="measures the size of the binary representation of object" alt="" coords="5,5,216,75"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#a293bb7226707f202e735a9b3e4c76fab" title=" " alt="" coords="264,27,339,53"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="216,37,251,37,251,43,216,43"/>
+</map>

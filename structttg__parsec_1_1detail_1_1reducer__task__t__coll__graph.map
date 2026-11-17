@@ -1,0 +1,13 @@
+<map id="ttg_parsec::detail::reducer_task_t" name="ttg_parsec::detail::reducer_task_t">
+<area shape="rect" id="Node000001" title=" " alt="" coords="223,211,361,251"/>
+<area shape="rect" id="Node000002" href="$structttg__parsec_1_1detail_1_1parsec__ttg__task__base__t.html" title=" " alt="" coords="200,108,387,148"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="293,162,292,172,293,210,288,210,287,172,287,162"/>
+<area shape="poly" id="edge6_Node000001_Node000002" title=" " alt="" coords="296,162,295,211,290,211,290,162"/>
+<area shape="rect" id="Node000003" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__t.html" title=" " alt="" coords="63,5,201,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="175,50,265,106,262,110,172,55"/>
+<area shape="rect" id="Node000004" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__self__t.html" title=" " alt="" coords="5,108,173,148"/>
+<area shape="poly" id="edge4_Node000004_Node000003" title=" " alt="" coords="92,56,82,70,80,89,83,107,78,108,74,89,78,68,88,53"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="106,95,112,83,125,45,130,47,117,85,111,97"/>
+<area shape="rect" id="Node000005" href="$structttg__parsec_1_1detail_1_1device__ptr__t.html" title=" " alt="" coords="225,5,364,45"/>
+<area shape="poly" id="edge5_Node000002_Node000005" title=" " alt="" coords="297,59,296,108,291,108,292,59"/>
+</map>

@@ -1,0 +1,13 @@
+<map id="ttg::finalize" name="ttg::finalize">
+<area shape="rect" id="Node000001" title="Finalize streaming input terminals connecting to the given output terminal for tasks identified by ke..." alt="" coords="5,66,104,91"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_out_terminal_base.html#af7831a958cf8a5774153bf0c3c0cfaa6" title=" " alt="" coords="152,59,319,99"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="104,76,138,76,138,81,104,81"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_out_terminal_base.html#a17d34c774c64c9aed0cd9424cafba0e2" title=" " alt="" coords="367,29,533,69"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="319,65,352,60,353,65,320,70"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_out_terminal_base.html#aa0341fd67b25363d5c45d77646294cf9" title=" " alt="" coords="581,59,748,99"/>
+<area shape="poly" id="edge6_Node000002_Node000004" title=" " alt="" coords="319,78,367,79,533,79,568,78,568,84,533,84,367,84,319,83"/>
+<area shape="poly" id="edge3_Node000003_Node000003" title=" " alt="" coords="410,30,408,20,414,10,428,5,450,3,475,6,489,13,486,18,473,11,450,8,430,10,417,15,413,21,415,28"/>
+<area shape="poly" id="edge4_Node000003_Node000004" title=" " alt="" coords="534,58,568,63,567,68,534,63"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1_terminal_base.html#ab21d3f0050249488606592cfe99c3409" title="Get connections to successors." alt="" coords="796,59,947,99"/>
+<area shape="poly" id="edge5_Node000004_Node000005" title=" " alt="" coords="748,76,782,76,782,81,748,81"/>
+</map>

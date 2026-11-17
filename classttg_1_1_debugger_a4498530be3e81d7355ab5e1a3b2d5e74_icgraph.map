@@ -1,0 +1,5 @@
+<map id="ttg::Debugger::handle_defaults" name="ttg::Debugger::handle_defaults">
+<area shape="rect" id="Node000001" title="This calls handle(int) with all of the major signals." alt="" coords="248,5,421,45"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_debugger.html#aefd3fb0dcd8a59ab403fdb4587184e59" title="Programmatic construction of Debugger." alt="" coords="5,13,200,38"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="234,28,200,28,200,23,234,23"/>
+</map>

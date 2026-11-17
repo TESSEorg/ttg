@@ -1,0 +1,7 @@
+<map id="ttg::initialized" name="ttg::initialized">
+<area shape="rect" id="Node000001" title=" " alt="" coords="160,31,275,56"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#a291ea1e5aadb0dd8fa226c0f1ba2d83a" title="Finalizes the TTG runtime." alt="" coords="9,5,108,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="146,35,108,29,109,23,147,29"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#a557cbca5e1f34dcc87a43afd0d03c6e4" title="Initializes the TTG runtime with the default backend." alt="" coords="5,55,112,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="147,57,112,62,112,57,146,51"/>
+</map>

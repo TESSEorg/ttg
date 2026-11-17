@@ -1,0 +1,15 @@
+<map id="ttg::Debugger::Debugger" name="ttg::Debugger::Debugger">
+<area shape="rect" id="Node000001" title="Programmatic construction of Debugger." alt="" coords="5,92,200,117"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_debugger.html#a9d300701a1afd231052bc95bb9f7f027" title="Calls set_cmd with a hopefully suitable default." alt="" coords="248,5,459,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="129,89,183,65,247,41,279,31,280,37,249,46,185,70,132,94"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_debugger.html#a4498530be3e81d7355ab5e1a3b2d5e74" title="This calls handle(int) with all of the major signals." alt="" coords="267,55,440,95"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="200,91,252,84,253,90,201,96"/>
+<area shape="rect" id="Node000006" href="$classttg_1_1_debugger.html#ab0b4815698da0db89c33d315392a5c10" title=" " alt="" coords="279,120,427,145"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="201,113,266,120,265,126,200,118"/>
+<area shape="rect" id="Node000007" href="$classttg_1_1_debugger.html#afc1422f751270f66c54fd067c5195a64" title=" " alt="" coords="261,169,445,195"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="136,115,249,155,278,163,277,169,247,161,134,120"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_debugger.html#a0348965e839512d046e097894042aa6e" title=" " alt="" coords="507,5,689,31"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="459,15,493,15,493,21,459,21"/>
+<area shape="rect" id="Node000005" href="$classttg_1_1_debugger.html#ad0d04b2f2ce3e296bd25478b0704bb4c" title="The Debugger will be activated when sig is caught." alt="" coords="511,63,685,88"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="440,73,497,73,497,78,440,78"/>
+</map>

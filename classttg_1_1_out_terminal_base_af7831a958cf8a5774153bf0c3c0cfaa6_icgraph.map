@@ -1,0 +1,7 @@
+<map id="ttg::OutTerminalBase::finalize" name="ttg::OutTerminalBase::finalize">
+<area shape="rect" id="Node000001" title=" " alt="" coords="152,23,319,63"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#a7075f199efa0ec86240a4b8c0fc621da" title="Finalize streaming input terminals connecting to the given output terminal for tasks identified by ke..." alt="" coords="5,5,104,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="138,32,104,28,105,22,139,27"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#ac12ebacc01669eddae361b592e94188e" title="Finalize streaming input terminals connected to the given output terminal; use this to finalize termi..." alt="" coords="5,55,104,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="139,59,105,63,104,58,138,54"/>
+</map>

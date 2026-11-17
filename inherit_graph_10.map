@@ -1,0 +1,57 @@
+<map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
+<area shape="rect" id="Node000000" title=" " alt="" coords="5,1007,125,1032"/>
+<area shape="rect" id="Node000001" href="$struct_t_c_b___s_p_a_n___n_a_m_e_s_p_a_c_e___n_a_m_e_1_1detail_1_1has__size__and__data.html" title=" " alt="" coords="176,5,443,60"/>
+<area shape="poly" id="edge48_Node000000_Node000001" title=" " alt="" coords="65,992,76,797,98,504,112,356,129,225,149,125,160,91,171,70,183,58,187,62,175,73,165,93,154,126,135,226,118,356,103,504,81,797,71,993"/>
+<area shape="rect" id="Node000002" href="$struct_t_c_b___s_p_a_n___n_a_m_e_s_p_a_c_e___n_a_m_e_1_1detail_1_1is__complete.html" title=" " alt="" coords="205,84,414,139"/>
+<area shape="poly" id="edge49_Node000000_Node000002" title=" " alt="" coords="63,993,64,824,67,703,75,572,87,440,107,319,134,219,151,180,171,150,186,136,203,126,205,131,189,140,175,153,156,182,139,221,112,320,93,441,80,572,73,703,69,824,69,993"/>
+<area shape="rect" id="Node000003" href="$struct_t_c_b___s_p_a_n___n_a_m_e_s_p_a_c_e___n_a_m_e_1_1detail_1_1is__container__element__type__compatible.html" title=" " alt="" coords="173,163,445,233"/>
+<area shape="poly" id="edge50_Node000000_Node000003" title=" " alt="" coords="64,993,67,841,81,617,95,501,113,394,138,305,154,270,171,243,183,231,187,235,175,246,159,272,143,307,119,395,100,502,87,618,73,841,69,993"/>
+<area shape="rect" id="Node000004" href="$struct_t_c_b___s_p_a_n___n_a_m_e_s_p_a_c_e___n_a_m_e_1_1detail_1_1is__span.html" title=" " alt="" coords="211,257,408,312"/>
+<area shape="poly" id="edge51_Node000000_Node000004" title=" " alt="" coords="64,993,69,854,85,653,98,550,116,454,140,376,155,345,171,322,189,306,209,296,212,300,192,311,175,325,160,348,145,378,122,456,103,551,90,654,75,855,70,993"/>
+<area shape="rect" id="Node000005" href="$struct_t_c_b___s_p_a_n___n_a_m_e_s_p_a_c_e___n_a_m_e_1_1detail_1_1is__std__array.html" title=" " alt="" coords="211,336,408,391"/>
+<area shape="poly" id="edge52_Node000000_Node000005" title=" " alt="" coords="65,993,72,869,90,692,103,601,121,518,144,449,157,422,171,402,189,386,209,376,212,380,192,391,175,405,161,425,149,451,126,519,109,602,95,693,77,869,70,993"/>
+<area shape="rect" id="Node000006" href="$structttg_1_1detail_1_1has__buffer__apply__helper.html" title=" " alt="" coords="201,415,418,455"/>
+<area shape="poly" id="edge53_Node000000_Node000006" title=" " alt="" coords="65,992,74,879,93,721,106,641,124,567,145,507,158,483,171,465,199,446,202,451,175,469,162,486,150,509,129,569,112,642,98,722,79,880,71,993"/>
+<area shape="rect" id="Node000008" href="$structttg_1_1detail_1_1is__boost__array__serializable_3_01_archive_00_01_t_01_4.html" title=" " alt="" coords="229,480,389,535"/>
+<area shape="poly" id="edge55_Node000000_Node000008" title=" " alt="" coords="66,993,78,894,98,760,113,692,129,630,149,579,171,544,198,525,228,513,230,518,200,529,175,548,154,582,134,632,118,694,104,761,83,895,72,993"/>
+<area shape="rect" id="Node000009" href="$structttg_1_1detail_1_1is__boost__buffer__serializable.html" title=" " alt="" coords="232,559,387,613"/>
+<area shape="poly" id="edge56_Node000000_Node000009" title=" " alt="" coords="63,993,65,920,78,821,91,768,110,715,137,666,172,623,199,603,231,591,233,596,202,608,175,627,141,669,115,718,96,769,83,822,70,921,68,993"/>
+<area shape="rect" id="Node000010" href="$structttg_1_1detail_1_1is__boost__default__buffer__serializable.html" title=" " alt="" coords="205,637,414,692"/>
+<area shape="poly" id="edge57_Node000000_Node000010" title=" " alt="" coords="65,993,71,933,88,855,101,813,119,773,143,735,172,701,203,681,206,685,175,705,147,738,124,775,106,815,93,856,77,934,70,993"/>
+<area shape="rect" id="Node000011" href="$structttg_1_1detail_1_1is__boost__default__serializable.html" title=" " alt="" coords="229,716,390,771"/>
+<area shape="poly" id="edge58_Node000000_Node000011" title=" " alt="" coords="68,992,79,947,99,889,129,831,148,804,172,780,198,763,228,752,230,757,201,767,175,784,153,807,133,833,104,891,84,948,74,994"/>
+<area shape="rect" id="Node000012" href="$structttg_1_1detail_1_1is__madness__buffer__serializable.html" title=" " alt="" coords="222,795,397,849"/>
+<area shape="poly" id="edge59_Node000000_Node000012" title=" " alt="" coords="75,993,111,926,138,889,172,859,195,845,221,835,223,839,198,849,175,863,142,893,115,929,79,995"/>
+<area shape="rect" id="Node000013" href="$structttg_1_1detail_1_1is__madness__input__serializable.html" title=" " alt="" coords="199,873,419,928"/>
+<area shape="poly" id="edge60_Node000000_Node000013" title=" " alt="" coords="89,995,127,965,172,937,198,926,200,931,175,942,130,969,93,999"/>
+<area shape="rect" id="Node000014" href="$structttg_1_1detail_1_1is__madness__output__serializable.html" title=" " alt="" coords="222,952,397,1007"/>
+<area shape="poly" id="edge61_Node000000_Node000014" title=" " alt="" coords="139,1005,221,991,222,996,139,1010"/>
+<area shape="rect" id="Node000015" href="$structttg_1_1detail_1_1is__madness__user__buffer__serializable.html" title=" " alt="" coords="214,1031,405,1085"/>
+<area shape="poly" id="edge62_Node000000_Node000015" title=" " alt="" coords="140,1028,214,1040,213,1046,139,1034"/>
+<area shape="rect" id="Node000016" href="$structttg_1_1detail_1_1is__printable.html" title=" " alt="" coords="222,1110,397,1150"/>
+<area shape="poly" id="edge63_Node000000_Node000016" title=" " alt="" coords="93,1039,130,1068,174,1094,223,1111,221,1116,172,1099,127,1072,89,1043"/>
+<area shape="rect" id="Node000017" href="$structttg_1_1detail_1_1is__user__buffer__serializable.html" title="is_user_buffer_serializable&lt;T&gt; evaluates to true if T can be serialized to a buffer using user&#45;provid..." alt="" coords="232,1175,387,1229"/>
+<area shape="poly" id="edge64_Node000000_Node000017" title=" " alt="" coords="81,1043,118,1102,144,1133,175,1160,203,1175,233,1186,231,1191,200,1180,172,1164,140,1137,114,1105,77,1046"/>
+<area shape="rect" id="Node000018" href="$structttg_1_1has__split__metadata.html" title=" " alt="" coords="219,1254,399,1294"/>
+<area shape="poly" id="edge65_Node000000_Node000018" title=" " alt="" coords="74,1045,86,1088,105,1140,135,1194,153,1218,175,1239,196,1252,220,1261,218,1266,194,1257,172,1243,149,1221,130,1197,100,1142,81,1089,69,1046"/>
+<area shape="rect" id="Node000019" href="$structttg_1_1meta_1_1has__member__function__hash.html" title=" " alt="" coords="197,1318,421,1358"/>
+<area shape="poly" id="edge66_Node000000_Node000019" title=" " alt="" coords="71,1046,79,1101,96,1171,109,1207,127,1243,149,1276,175,1304,198,1319,195,1324,172,1308,144,1279,122,1245,105,1209,91,1172,73,1102,66,1047"/>
+<area shape="rect" id="Node000020" href="$structttg_1_1meta_1_1has__ttg__hash__specialization.html" title=" " alt="" coords="229,1383,390,1437"/>
+<area shape="poly" id="edge67_Node000000_Node000020" title=" " alt="" coords="69,1046,74,1111,89,1197,102,1244,120,1289,145,1331,175,1368,200,1386,229,1398,227,1403,198,1391,172,1372,140,1334,116,1291,97,1245,84,1199,68,1111,64,1046"/>
+<area shape="rect" id="Node000021" href="$structttg_1_1meta_1_1is__buffer.html" title=" " alt="" coords="215,1461,404,1487"/>
+<area shape="poly" id="edge68_Node000000_Node000021" title=" " alt="" coords="72,1046,84,1136,105,1258,119,1318,136,1373,154,1417,175,1447,194,1460,215,1468,213,1473,191,1464,171,1451,150,1420,131,1375,114,1320,100,1259,79,1137,67,1046"/>
+<area shape="rect" id="Node000022" href="$structttg_1_1meta_1_1is__devicescratch.html" title=" " alt="" coords="189,1511,430,1536"/>
+<area shape="poly" id="edge69_Node000000_Node000022" title=" " alt="" coords="71,1046,82,1146,102,1282,116,1350,133,1412,153,1463,175,1496,192,1508,189,1513,171,1500,148,1465,128,1414,111,1352,97,1283,77,1146,66,1046"/>
+<area shape="rect" id="Node000023" href="$structttg_1_1meta_1_1is__generic__callable_3_01_callable_00_01ttg_1_1meta_1_1void__t_3_01callabl3e5c74045e2481aa4e2e43fdcbd5000a.html" title=" " alt="" coords="208,1561,411,1630"/>
+<area shape="poly" id="edge70_Node000000_Node000023" title=" " alt="" coords="71,1046,81,1154,101,1303,115,1380,132,1449,152,1506,175,1546,191,1560,209,1571,206,1575,188,1564,171,1549,148,1509,127,1451,110,1381,96,1304,76,1154,66,1046"/>
+<area shape="rect" id="Node000024" href="$structttg_1_1meta_1_1is__output__terminal__tuple.html" title=" " alt="" coords="226,1654,393,1694"/>
+<area shape="poly" id="edge71_Node000000_Node000024" title=" " alt="" coords="70,1046,77,1172,93,1351,107,1442,125,1526,148,1594,161,1621,175,1640,199,1657,227,1667,225,1672,196,1662,171,1644,156,1623,143,1596,120,1527,102,1443,88,1351,71,1172,65,1046"/>
+<area shape="rect" id="Node000025" href="$structttg_1_1meta_1_1is__ptr.html" title=" " alt="" coords="225,1719,393,1744"/>
+<area shape="poly" id="edge72_Node000000_Node000025" title=" " alt="" coords="70,1046,74,1184,88,1383,102,1485,120,1578,144,1654,159,1683,175,1704,198,1720,226,1729,224,1734,196,1725,171,1708,154,1685,140,1656,115,1579,96,1486,83,1383,68,1184,64,1046"/>
+<area shape="rect" id="Node000026" href="$structttg_1_1meta_1_1is__typelist.html" title=" " alt="" coords="210,1768,409,1793"/>
+<area shape="poly" id="edge73_Node000000_Node000026" title=" " alt="" coords="69,1046,72,1192,85,1406,98,1516,117,1617,142,1699,158,1730,175,1753,192,1766,211,1775,209,1780,189,1771,171,1757,153,1733,138,1701,112,1618,93,1517,80,1406,67,1192,64,1046"/>
+<area shape="rect" id="Node000027" href="$structttg__parsec_1_1detail_1_1is__ttvalue__base.html" title=" " alt="" coords="229,1817,389,1872"/>
+<area shape="poly" id="edge74_Node000000_Node000027" title=" " alt="" coords="69,1046,72,1200,85,1428,98,1545,117,1653,142,1743,158,1777,175,1803,200,1823,230,1834,228,1839,197,1827,171,1806,153,1779,137,1744,112,1655,93,1546,80,1428,66,1201,64,1046"/>
+<area shape="rect" id="Node000007" href="$structttg_1_1detail_1_1has__buffer__apply.html" title=" " alt="" coords="493,415,660,455"/>
+<area shape="poly" id="edge54_Node000006_Node000007" title=" " alt="" coords="432,433,493,433,493,438,432,438"/>
+</map>

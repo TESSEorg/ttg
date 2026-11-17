@@ -1,0 +1,9 @@
+<map id="ttg::detail::value_copy_handler&lt; ttg::Runtime::PaRSEC &gt;::operator()" name="ttg::detail::value_copy_handler&lt; ttg::Runtime::PaRSEC &gt;::operator()">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,30,240,85"/>
+<area shape="rect" id="Node000002" href="$namespacettg__parsec_1_1detail.html#abb5f8a2eb005a7dc66279a6decd9e8c5" title=" " alt="" coords="297,5,473,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="240,40,283,35,284,40,241,46"/>
+<area shape="rect" id="Node000004" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__t.html#a7e1910ed6d9295519d18342582f3ba97" title=" " alt="" coords="288,69,483,109"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="241,69,274,73,274,78,240,74"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#a78c09561304884c05c8a8f25006b0ee6" title="Accesses the default backend&#39;s default execution context." alt="" coords="531,5,701,45"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="474,23,517,23,517,28,474,28"/>
+</map>

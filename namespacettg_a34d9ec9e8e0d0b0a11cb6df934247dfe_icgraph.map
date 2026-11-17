@@ -1,0 +1,10 @@
+<map id="ttg::diagnose" name="ttg::diagnose">
+<area shape="rect" id="Node000001" title=" " alt="" coords="393,31,504,56"/>
+<area shape="rect" id="Node000002" href="$namespacettg_1_1detail.html#a4a06c1c34d39dbe2113c1e17684bb8e1" title=" " alt="" coords="188,23,345,63"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="379,55,346,55,346,50,379,49"/>
+<area shape="poly" id="edge2_Node000002_Node000001" title=" " alt="" coords="359,32,393,32,393,38,359,37"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#aacf9cee7849bcfb0208794af9ee52941" title=" " alt="" coords="5,5,140,31"/>
+<area shape="poly" id="edge3_Node000002_Node000003" title=" " alt="" coords="174,34,140,29,140,24,174,29"/>
+<area shape="rect" id="Node000004" href="$namespacettg.html#a0367b1d8f25df55737220b1eef1d19d8" title=" " alt="" coords="5,55,140,80"/>
+<area shape="poly" id="edge4_Node000002_Node000004" title=" " alt="" coords="174,57,140,62,140,56,174,52"/>
+</map>
