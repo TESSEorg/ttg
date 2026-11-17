@@ -58,9 +58,6 @@ endif()
 # Bring ValeevGroup cmake toolkit, if not yet available
 include(FetchVGCMakeKit)
 include(${vg_cmake_kit_SOURCE_DIR}/modules/FindOrFetchBoost.cmake)
-if (Boost_BUILT_FROM_SOURCE)
-    set(TTG_BUILT_BOOST_FROM_SOURCE 1)
-endif()
 
 if (TARGET Boost::headers)
     set(TTG_HAS_BOOST 1)
