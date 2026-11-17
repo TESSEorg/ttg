@@ -45,10 +45,3 @@ Add this to your CI workflow to ensure all files have license headers:
 - name: Check license headers
   run: ./bin/admin/update-license-headers.sh --check-only
 ```
-
-## Other Scripts
-
-### make_boost_snapshot.sh
-
-Creates a snapshot of Boost.CallableTraits for bundling with TTG.
-This is used to maintain the vendored copy in `ttg/ttg/external/boost/`.

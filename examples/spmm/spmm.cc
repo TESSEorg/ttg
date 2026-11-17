@@ -2,8 +2,10 @@
 #include <Eigen/SparseCore>
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <chrono>
 #include <iostream>
+#include <numeric>
 #include <random>
 #include <thread>
 #include <unordered_set>
@@ -23,9 +25,6 @@
 
 #include <sys/time.h>
 #if !defined(BLOCK_SPARSE_GEMM)
-#include <boost/graph/rmat_graph_generator.hpp>
-#include <boost/graph/directed_graph.hpp>
-#include <boost/random/linear_congruential.hpp>
 #include <unsupported/Eigen/SparseExtra>
 #endif
 
@@ -97,9 +96,9 @@ namespace ttg {
     }
     static auto get_data(blk_t &b) {
       if (!b.empty())
-        return boost::container::small_vector<iovec, 1>(1, iovec{b.size() * sizeof(double), b.data()});
+        return std::vector<iovec>(1, iovec{b.size() * sizeof(double), b.data()});
       else
-        return boost::container::small_vector<iovec, 1>{};
+        return std::vector<iovec>{};
     }
     static auto create_from_metadata(const std::pair<int, int> &meta) {
       if (meta != std::pair{0, 0}) // N.B. allocate only, do not fill with zeroes
@@ -1046,7 +1045,45 @@ static void initSpMatrixMarket(const std::function<int(const Key<2> &)> &keymap,
   K = (int)A.cols();
 }
 
-#ifdef HAVE_BOOST_GRAPH
+/// generates \p E edges (duplicates possible) of an R-MAT graph (Chakrabarti, Zhan, Faloutsos, 2004) with \p N vertices
+/// by recursively selecting one of the adjacency matrix quadrants with probabilities \p a, \p b, \p c, \p d;
+/// vertex labels are randomly permuted
+/// \pre `N > 0`, `E >= 0`, \p a, \p b, \p c, \p d are nonnegative with a positive sum
+template <typename Generator>
+static std::vector<std::pair<int, int>> generateRmatEdges(Generator &gen, int N, int E, double a, double b, double c,
+                                                          double d) {
+  assert(N > 0 && E >= 0);
+  assert(a >= 0 && b >= 0 && c >= 0 && d >= 0 && a + b + c + d > 0);
+  int scale = 0;
+  while ((1L << scale) < N) ++scale;
+  std::discrete_distribution<int> quadrant({a, b, c, d});
+  std::vector<int> perm(N);
+  std::iota(perm.begin(), perm.end(), 0);
+  std::shuffle(perm.begin(), perm.end(), gen);
+
+  std::vector<std::pair<int, int>> edges;
+  edges.reserve(E);
+  // for some N and quadrant probabilities (e.g. a = 0 with N not a power of 2) few or no edges fall inside the matrix,
+  // so bound the number of attempts
+  const long max_attempts = 1000L * (E + 1);
+  for (long attempt = 0; (int)edges.size() < E; ++attempt) {
+    if (attempt == max_attempts) {
+      std::cerr << "R-MAT: generated only " << edges.size() << " of " << E << " edges in " << max_attempts
+                << " attempts, use a > 0 or a power-of-2 number of nodes" << std::endl;
+      exit(1);
+    }
+    long u = 0, v = 0;
+    for (int level = 0; level < scale; ++level) {
+      const int q = quadrant(gen);
+      u = 2 * u + (q >> 1);
+      v = 2 * v + (q & 1);
+    }
+    // N need not be a power of 2: reject edges outside of the matrix
+    if (u < N && v < N) edges.emplace_back(perm[u], perm[v]);
+  }
+  return edges;
+}
+
 static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const char *opt, SpMatrix<> &A, SpMatrix<> &B,
                        SpMatrix<> &C, int &M, int &N, int &K, unsigned long seed) {
   int E;
@@ -1060,6 +1097,10 @@ static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const c
   std::string token;
   std::string option = std::string(opt);
   N = parseOption(option, -1);
+  if (N <= 0) {
+    std::cerr << "-rmat: #nodes must be positive" << std::endl;
+    exit(1);
+  }
   K = N;
   M = N;
 
@@ -1072,14 +1113,22 @@ static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const c
   b = parseOption(option, b);
   c = parseOption(option, c);
   d = parseOption(option, d);
+  if (E < 0) {
+    std::cerr << "-rmat: #edges must be nonnegative" << std::endl;
+    exit(1);
+  }
+  if (a < 0 || b < 0 || c < 0 || d < 0 || !(a + b + c + d > 0)) {
+    std::cerr << "-rmat: a/b/c/d must be nonnegative with a positive sum" << std::endl;
+    exit(1);
+  }
 
   if (ttg::default_execution_context().rank() == 0) {
     std::cout << "#R-MAT: " << N << " nodes, " << E << " edges, a/b/c/d = " << a << "/" << b << "/" << c << "/" << d
               << std::endl;
   }
 
-  boost::minstd_rand gen(seed);
-  boost::rmat_iterator<boost::minstd_rand, boost::directed_graph<>> rmat_it(gen, N, E, a, b, c, d);
+  std::minstd_rand gen(seed);
+  const auto rmat_edges = generateRmatEdges(gen, N, E, a, b, c, d);
 
   using triplet_t = ttg::matrix::Triplet<blk_t>;
   std::vector<triplet_t> A_elements;
@@ -1087,8 +1136,7 @@ static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const c
     nnz++;
     A_elements.emplace_back(i, i, 1.0);
   }
-  for (int i = 0; i < E; i++) {
-    auto x = *rmat_it++;
+  for (const auto &x : rmat_edges) {
     if (x.first != x.second) {
       A_elements.emplace_back(x.first, x.second, 1.0);
       nnz++;
@@ -1103,7 +1151,6 @@ static void initSpRmat(const std::function<int(const Key<2> &)> &keymap, const c
     std::cout << "#R-MAT: " << E << " nonzero elements, density: " << (double)nnz / (double)N / (double)N << std::endl;
   }
 }
-#endif // HAVE_BOOST_GRAPH
 
 static void initSpHardCoded(const std::function<int(const Key<2> &)> &keymap, SpMatrix<> &A, SpMatrix<> &B,
                             SpMatrix<> &C, int &m, int &n, int &k) {
@@ -1734,12 +1781,10 @@ int main(int argc, char **argv) {
         char *filename = getCmdOption(argv, argv + argc, "-mm");
         tiling_type = filename;
         initSpMatrixMarket(ij_keymap, filename, A, B, C, M, N, K);
-#ifdef HAVE_BOOST_GRAPH
       } else if (cmdOptionExists(argv, argv + argc, "-rmat")) {
         char *opt = getCmdOption(argv, argv + argc, "-rmat");
         tiling_type = "RandomSparseMatrix";
         initSpRmat(ij_keymap, opt, A, B, C, M, N, K, seed);
-#endif // HAVE_BOOST_GRAPH
       } else {
         tiling_type = "HardCodedSparseMatrix";
         initSpHardCoded(ij_keymap, A, B, C, M, N, K);

@@ -11,7 +11,7 @@ set(TTG_TRACKED_BTAS_TAG 74ee8a27386c746b36f0455cd5a0e3c33bd5f4d2)
 set(TTG_TRACKED_TILEDARRAY_TAG 58acda635a6cedca73e6c4e260b73c8729c89c44)
 
 # oldest Boost we can tolerate: same as the rest of the ValeevGroup packages (BTAS, TiledArray, SeQuant, MPQC);
-# TTG itself needs Boost.CallableTraits (header only, part of Boost 1.66) for wrap.h to work
+# Boost is only used for (optional) Boost.Serialization support and by the examples' dependencies
 set(TTG_OLDEST_BOOST_VERSION 1.81)
 
 # oldest Doxygen we can tolerate ... doxygen-awesome-css requires doxygen 1.9.1 - 1.9.4 or 1.9.6 - 1.14.0, so just use 1.9.6 as the minimum

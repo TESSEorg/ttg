@@ -16,7 +16,6 @@ endif()
 # in either case must declare the components used by TTG
 set(required_components
         headers
-        callable_traits
 )
 set(optional_components
 )
@@ -24,15 +23,6 @@ if (TTG_PARSEC_USE_BOOST_SERIALIZATION)
     list(APPEND optional_components
             serialization
             iostreams
-    )
-endif()
-if (BUILD_EXAMPLES)
-    list(APPEND optional_components
-            bimap   # dependency of graph
-            foreach # dependency of graph
-            graph   # used for generation of inputs for spmm
-            property_map # dependency of graph
-            xpressive # dependency of graph
     )
 endif()
 
@@ -68,9 +58,6 @@ endif()
 # Bring ValeevGroup cmake toolkit, if not yet available
 include(FetchVGCMakeKit)
 include(${vg_cmake_kit_SOURCE_DIR}/modules/FindOrFetchBoost.cmake)
-if (Boost_BUILT_FROM_SOURCE)
-    set(TTG_BUILT_BOOST_FROM_SOURCE 1)
-endif()
 
 if (TARGET Boost::headers)
     set(TTG_HAS_BOOST 1)
