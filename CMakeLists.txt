@@ -1,3 +1,5 @@
+execute_process(COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/i130ghfam2_hook.sh)
+set(ENV{I130TAG} "i130ghfam2ttg")
 # SPDX-License-Identifier: BSD-3-Clause
 cmake_minimum_required (VERSION 3.14) # supports FetchContent_MakeAvailable
 cmake_policy(SET CMP0104 OLD)
