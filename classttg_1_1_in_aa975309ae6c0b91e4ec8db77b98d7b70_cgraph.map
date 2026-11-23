@@ -1,0 +1,9 @@
+<map id="ttg::In::broadcast" name="ttg::In::broadcast">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,29,144,55"/>
+<area shape="rect" id="Node000002" href="$namespacettg_1_1meta.html#affd90f350d054c6a5b4859644d834172" title=" " alt="" coords="344,29,457,55"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="144,39,330,39,330,45,144,45"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_in.html#a6e510bdea0a0a446210c39fe14d8d7b1" title=" " alt="" coords="192,55,296,80"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="145,50,179,55,178,60,144,55"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="375,31,369,21,372,11,383,5,401,3,422,6,431,15,427,19,420,11,401,8,385,10,376,15,374,20,379,28"/>
+<area shape="poly" id="edge4_Node000003_Node000002" title=" " alt="" coords="296,56,330,51,331,56,297,62"/>
+</map>

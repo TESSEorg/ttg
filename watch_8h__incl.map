@@ -1,0 +1,21 @@
+<map id="ttg/ttg/madness/watch.h" name="ttg/ttg/madness/watch.h">
+<area shape="rect" id="Node000001" title=" " alt="" coords="177,5,363,31"/>
+<area shape="rect" id="Node000002" href="$impl__selector_8h.html" title=" " alt="" coords="121,79,267,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="260,33,218,71,215,67,256,29"/>
+<area shape="rect" id="Node000003" href="$bug_8h.html" title=" " alt="" coords="292,79,403,104"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="284,29,326,67,323,71,281,33"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="5,152,76,177"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="297,107,90,154,89,149,296,101"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="100,152,179,177"/>
+<area shape="poly" id="edge4_Node000003_Node000005" title=" " alt="" coords="315,107,187,150,185,145,313,101"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="203,152,291,177"/>
+<area shape="poly" id="edge5_Node000003_Node000006" title=" " alt="" coords="333,106,276,146,273,142,330,102"/>
+<area shape="rect" id="Node000007" title=" " alt="" coords="316,152,379,177"/>
+<area shape="poly" id="edge6_Node000003_Node000007" title=" " alt="" coords="350,104,350,138,345,138,345,104"/>
+<area shape="rect" id="Node000008" title=" " alt="" coords="403,152,534,177"/>
+<area shape="poly" id="edge7_Node000003_Node000008" title=" " alt="" coords="368,102,439,143,436,147,365,106"/>
+<area shape="rect" id="Node000009" title=" " alt="" coords="558,152,622,177"/>
+<area shape="poly" id="edge8_Node000003_Node000009" title=" " alt="" coords="387,101,545,147,544,153,386,107"/>
+<area shape="rect" id="Node000010" title=" " alt="" coords="647,152,736,177"/>
+<area shape="poly" id="edge9_Node000003_Node000010" title=" " alt="" coords="403,101,634,149,633,154,402,107"/>
+</map>

@@ -1,0 +1,14 @@
+<map id="ttg/ttg/parsec/task.h" name="ttg/ttg/parsec/task.h">
+<area shape="rect" id="Node000001" title=" " alt="" coords="241,5,400,31"/>
+<area shape="rect" id="Node000002" href="$parsec_2devicefunc_8h.html" title=" " alt="" coords="5,79,209,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="274,37,143,81,141,76,273,32"/>
+<area shape="rect" id="Node000003" href="$ttg_2parsec_2ttg_8h.html" title=" " alt="" coords="246,152,395,177"/>
+<area shape="poly" id="edge7_Node000001_Node000003" title=" " alt="" coords="299,43,285,60,275,79,274,99,282,119,309,150,305,154,277,121,269,100,270,78,281,57,295,39"/>
+<area shape="rect" id="Node000004" href="$parsec_2devicescratch_8h.html" title=" " alt="" coords="284,79,507,104"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="344,38,385,77,381,80,341,42"/>
+<area shape="rect" id="Node000005" href="$parsec_2ptr_8h.html" title=" " alt="" coords="530,79,679,104"/>
+<area shape="poly" id="edge5_Node000001_Node000005" title=" " alt="" coords="380,31,559,76,558,81,379,37"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="155,106,287,149,285,154,154,111"/>
+<area shape="poly" id="edge4_Node000004_Node000003" title=" " alt="" coords="375,115,335,154,331,150,372,111"/>
+<area shape="poly" id="edge6_Node000005_Node000003" title=" " alt="" coords="547,110,367,154,366,149,545,105"/>
+</map>

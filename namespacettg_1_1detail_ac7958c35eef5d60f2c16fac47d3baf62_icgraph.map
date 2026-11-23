@@ -1,0 +1,9 @@
+<map id="ttg::detail::num_threads" name="ttg::detail::num_threads">
+<area shape="rect" id="Node000001" title="Determine the number of compute threads to use by TTG when not given to ttg::initialize" alt="" coords="253,55,439,80"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#a557cbca5e1f34dcc87a43afd0d03c6e4" title="Initializes the TTG runtime with the default backend." alt="" coords="52,5,159,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="269,54,158,31,159,26,270,49"/>
+<area shape="rect" id="Node000003" href="$namespacettg__parsec.html#ad75b8e1392b031ac583c6059103d8aec" title=" " alt="" coords="13,55,197,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="240,70,197,70,197,65,240,65"/>
+<area shape="rect" id="Node000004" href="$namespacettg__madness.html#a1e84e21cf6c33558d570bd866eea5e0b" title=" " alt="" coords="5,104,205,129"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="271,85,169,107,168,101,270,80"/>
+</map>

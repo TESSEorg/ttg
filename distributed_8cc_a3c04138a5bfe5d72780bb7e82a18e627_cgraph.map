@@ -1,0 +1,30 @@
+<map id="main" name="main">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,252,61,277"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#afbabcd9802bf1bbdd302e7a612459353" title="Make a tuple of Edges to pass to." alt="" coords="171,5,262,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="32,252,35,211,46,153,69,93,86,64,108,40,131,26,157,18,158,23,133,30,111,44,90,68,73,95,51,155,41,211,38,252"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#a1261c57f70c978771f64af07d7f7d7cd" title="Starts the execution in the given execution context." alt="" coords="165,55,268,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="34,251,40,219,53,175,74,129,90,108,108,89,128,77,151,69,153,74,131,82,111,93,94,111,79,131,58,177,45,220,39,252"/>
+<area shape="rect" id="Node000004" href="$namespacettg.html#a807bf42719a82b1539603d477aa2a3fd" title="Returns when all tasks associated with the given execution context have finished on all ranks." alt="" coords="173,104,260,129"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="36,251,60,196,81,165,108,139,132,126,159,118,160,123,134,131,111,143,85,168,65,199,41,253"/>
+<area shape="rect" id="Node000005" href="$namespacettg.html#a96780ef3c553a2f45aa7ea881bdb6490" title="Finalizes the TTG runtime." alt="" coords="167,177,266,203"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="48,250,75,230,108,212,153,197,155,202,110,216,78,235,51,254"/>
+<area shape="rect" id="Node000006" href="$namespacettg.html#a5829b255a41f2e47fa0e27bb5c791824" title=" " alt="" coords="372,363,543,388"/>
+<area shape="poly" id="edge6_Node000001_Node000006" title=" " alt="" coords="41,276,64,328,84,355,111,376,146,391,184,401,223,406,262,407,337,401,400,389,401,394,338,406,262,412,223,411,183,406,144,396,108,380,81,359,60,330,36,279"/>
+<area shape="rect" id="Node000007" href="$namespacettg.html#a19c06079af2c21be154b525ff21028d1" title=" " alt="" coords="163,276,270,301"/>
+<area shape="poly" id="edge7_Node000001_Node000007" title=" " alt="" coords="62,266,150,277,149,283,61,271"/>
+<area shape="rect" id="Node000008" href="$namespacettg.html#ade4672895f07e88909dab1644c69e60a" title="Make the TTG tts executable. Applies." alt="" coords="109,227,324,252"/>
+<area shape="poly" id="edge8_Node000001_Node000008" title=" " alt="" coords="61,258,111,251,112,257,62,264"/>
+<area shape="rect" id="Node000010" href="$namespacettg.html#aa3510e128b769afb53720d24fa83fb97" title="atomically prints to std::cout a sequence of items (separated by ttg::print_separator) followed by st..." alt="" coords="175,515,258,540"/>
+<area shape="poly" id="edge10_Node000001_Node000010" title=" " alt="" coords="37,278,40,321,49,382,59,414,72,446,89,476,111,501,135,516,163,523,161,528,133,521,108,505,85,479,67,449,54,416,44,383,34,322,32,278"/>
+<area shape="rect" id="Node000012" href="$namespacettg.html#a1b23b6cea5360627c9f1e1e9f421bcf3" title="Sends a control message (message without an accompanying task id or a value) to the template tasks at..." alt="" coords="175,465,258,491"/>
+<area shape="poly" id="edge12_Node000001_Node000012" title=" " alt="" coords="40,277,63,343,84,384,111,420,138,441,167,457,164,462,135,446,107,424,79,387,58,345,35,279"/>
+<area shape="rect" id="Node000013" href="$namespacettg__parsec.html#ae1b91b1ff1edc3fbc1e7e07d6c659c17" title=" " alt="" coords="129,326,304,366"/>
+<area shape="poly" id="edge14_Node000001_Node000013" title=" " alt="" coords="53,275,111,310,131,319,129,324,108,315,50,280"/>
+<area shape="poly" id="edge5_Node000005_Node000005" title=" " alt="" coords="187,179,180,169,184,159,196,153,217,151,242,154,252,163,249,167,239,159,217,156,198,158,188,163,185,168,191,176"/>
+<area shape="rect" id="Node000009" href="$namespacettg.html#ac9c4eec56ea2e0cbc9bf52e1129bfee5" title=" " alt="" coords="383,227,532,252"/>
+<area shape="poly" id="edge9_Node000008_Node000009" title=" " alt="" coords="324,237,369,237,369,242,324,242"/>
+<area shape="rect" id="Node000011" href="$namespacettg_1_1detail.html#a26e07486d5ef8eb5735a8975991a7693" title=" " alt="" coords="393,507,521,547"/>
+<area shape="poly" id="edge11_Node000010_Node000011" title=" " alt="" coords="258,525,380,525,380,530,258,530"/>
+<area shape="poly" id="edge13_Node000012_Node000012" title=" " alt="" coords="187,467,180,457,184,447,196,441,217,439,242,442,252,451,249,455,239,447,217,444,198,446,188,451,185,456,191,464"/>
+<area shape="poly" id="edge15_Node000013_Node000006" title=" " alt="" coords="305,354,358,361,358,366,304,359"/>
+</map>

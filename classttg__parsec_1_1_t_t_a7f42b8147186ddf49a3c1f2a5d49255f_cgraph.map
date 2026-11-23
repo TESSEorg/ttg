@@ -1,0 +1,21 @@
+<map id="ttg_parsec::TT::do_release" name="ttg_parsec::TT::do_release">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,36,148,76"/>
+<area shape="rect" id="Node000002" href="$classttg__parsec_1_1_t_t.html#aab59a1bf0fcc4f771457b5f05cb42741" title=" " alt="" coords="620,84,768,110"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="148,35,232,18,335,6,448,5,504,10,559,21,589,31,618,45,666,74,664,79,616,49,587,36,558,26,504,16,448,10,336,11,233,24,149,40"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1base_1_1_world.html#aabab7c9df8f16919ab41a864c8b1adc4" title=" " alt="" coords="196,43,363,68"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="149,53,182,53,182,58,149,58"/>
+<area shape="rect" id="Node000005" href="$classttg__parsec_1_1_t_t.html#acec939399109ea862fb2e5d011aa9706" title=" " alt="" coords="200,93,359,133"/>
+<area shape="poly" id="edge5_Node000001_Node000005" title=" " alt="" coords="149,73,196,87,194,92,147,78"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="660,86,653,76,656,66,671,60,694,58,723,61,734,70,731,75,721,66,694,63,672,65,660,70,658,75,664,83"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1base_1_1_world.html#af39ca1832f455a94134515f94aaa8533" title=" " alt="" coords="411,36,559,76"/>
+<area shape="poly" id="edge4_Node000003_Node000004" title=" " alt="" coords="363,53,397,53,397,58,363,58"/>
+<area shape="poly" id="edge6_Node000005_Node000002" title=" " alt="" coords="359,107,606,98,606,103,359,113"/>
+<area shape="rect" id="Node000006" href="$classttg__parsec_1_1_t_t.html#a68814131fd8aa487afce9a89a5ee7f2b" title=" " alt="" coords="415,150,555,190"/>
+<area shape="poly" id="edge7_Node000005_Node000006" title=" " alt="" coords="352,130,402,145,401,150,351,136"/>
+<area shape="poly" id="edge8_Node000006_Node000002" title=" " alt="" coords="533,148,606,120,633,111,634,116,608,125,535,153"/>
+<area shape="rect" id="Node000007" href="$namespacettg_1_1meta.html#affd90f350d054c6a5b4859644d834172" title=" " alt="" coords="637,158,751,183"/>
+<area shape="poly" id="edge9_Node000006_Node000007" title=" " alt="" coords="555,168,624,168,624,173,555,173"/>
+<area shape="rect" id="Node000008" href="$classttg_1_1_t_t_base.html#ade3b1e6b149fe1124f7192aeca5f715c" title="Gets the name of this operation." alt="" coords="607,207,781,232"/>
+<area shape="poly" id="edge11_Node000006_Node000008" title=" " alt="" coords="555,184,627,201,625,206,554,189"/>
+<area shape="poly" id="edge10_Node000007_Node000007" title=" " alt="" coords="660,159,653,149,656,139,671,133,694,131,723,135,734,144,731,148,721,140,694,136,672,138,660,143,658,149,664,156"/>
+</map>

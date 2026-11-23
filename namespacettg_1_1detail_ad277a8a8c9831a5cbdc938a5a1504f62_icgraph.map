@@ -1,0 +1,20 @@
+<map id="ttg::detail::buffer_apply" name="ttg::detail::buffer_apply">
+<area shape="rect" id="Node000001" title=" " alt="" coords="701,163,837,203"/>
+<area shape="rect" id="Node000002" href="$namespacettg__parsec_1_1detail.html#a4daca8ffc2e91c825340381688737ff0" title=" " alt="" coords="483,131,653,171"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="688,173,653,167,654,162,689,168"/>
+<area shape="rect" id="Node000008" href="$classttg__parsec_1_1_t_t.html#ab9cbb6fbff64a26d98e2905560422e8c" title=" " alt="" coords="282,223,429,263"/>
+<area shape="poly" id="edge10_Node000001_Node000008" title=" " alt="" coords="688,198,429,235,428,230,687,192"/>
+<area shape="rect" id="Node000003" href="$classttg__parsec_1_1_t_t.html#ab267d50d29a8a845a5578f67d6c75f2a" title=" " alt="" coords="5,8,228,33"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="541,122,495,75,466,52,434,35,378,18,320,10,263,8,211,11,210,5,263,3,321,5,379,13,436,30,469,48,499,71,545,119"/>
+<area shape="rect" id="Node000004" href="$classttg__parsec_1_1_t_t.html#a620e641c7024e14437f199e475f92db6" title=" " alt="" coords="280,45,431,85"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="504,128,404,87,406,82,506,123"/>
+<area shape="rect" id="Node000005" href="$classttg__parsec_1_1_t_t.html#af647004ce89dc81d1202dd68070f0bde" title=" " alt="" coords="43,70,190,110"/>
+<area shape="poly" id="edge9_Node000002_Node000005" title=" " alt="" coords="468,140,190,102,191,97,469,135"/>
+<area shape="rect" id="Node000006" href="$classttg__parsec_1_1_t_t.html#af0ad3fe4092ed50f7d73ed92f568b209" title=" " alt="" coords="276,159,435,199"/>
+<area shape="poly" id="edge6_Node000002_Node000006" title=" " alt="" coords="469,167,435,171,434,166,469,162"/>
+<area shape="poly" id="edge8_Node000002_Node000008" title=" " alt="" coords="512,180,436,214,407,226,405,221,434,209,510,175"/>
+<area shape="poly" id="edge4_Node000004_Node000003" title=" " alt="" coords="266,51,186,36,187,31,267,46"/>
+<area shape="poly" id="edge5_Node000004_Node000005" title=" " alt="" coords="267,77,190,85,190,80,266,71"/>
+<area shape="rect" id="Node000007" href="$classttg__parsec_1_1_t_t.html#a2e11524aaacb5beebc988786e1f6a92c" title=" " alt="" coords="45,159,188,199"/>
+<area shape="poly" id="edge7_Node000006_Node000007" title=" " alt="" coords="262,182,188,182,188,177,262,177"/>
+</map>

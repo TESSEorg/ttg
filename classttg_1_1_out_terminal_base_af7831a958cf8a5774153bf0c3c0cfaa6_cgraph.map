@@ -1,0 +1,11 @@
+<map id="ttg::OutTerminalBase::finalize" name="ttg::OutTerminalBase::finalize">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,59,172,99"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_out_terminal_base.html#a17d34c774c64c9aed0cd9424cafba0e2" title=" " alt="" coords="220,29,387,69"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="172,65,206,60,206,65,173,70"/>
+<area shape="rect" id="Node000003" href="$classttg_1_1_out_terminal_base.html#aa0341fd67b25363d5c45d77646294cf9" title=" " alt="" coords="435,59,601,99"/>
+<area shape="poly" id="edge5_Node000001_Node000003" title=" " alt="" coords="172,78,220,79,387,79,421,78,421,84,387,84,220,84,172,83"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="263,30,261,20,267,10,282,5,303,3,328,6,342,13,339,18,327,11,303,8,283,10,271,15,266,21,268,28"/>
+<area shape="poly" id="edge3_Node000002_Node000003" title=" " alt="" coords="388,58,421,63,420,68,387,63"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_terminal_base.html#ab21d3f0050249488606592cfe99c3409" title="Get connections to successors." alt="" coords="649,59,800,99"/>
+<area shape="poly" id="edge4_Node000003_Node000004" title=" " alt="" coords="602,76,636,76,636,81,602,81"/>
+</map>

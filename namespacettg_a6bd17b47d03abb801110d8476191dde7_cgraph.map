@@ -1,0 +1,5 @@
+<map id="ttg::connect" name="ttg::connect">
+<area shape="rect" id="Node000001" title="Connect output terminal to successor input terminal." alt="" coords="5,13,108,38"/>
+<area shape="rect" id="Node000002" href="$classttg_1_1_terminal_base.html#a3688d91930078d355a833312a32ef13a" title=" " alt="" coords="156,5,307,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="108,23,142,23,142,28,108,28"/>
+</map>

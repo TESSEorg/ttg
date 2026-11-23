@@ -1,0 +1,5 @@
+<map id="ttg::TTBase::trace" name="ttg::TTBase::trace">
+<area shape="rect" id="Node000001" title="Like ttg::trace(), but only produces tracing output if this&#45;&gt;tracing()==true" alt="" coords="228,13,371,38"/>
+<area shape="rect" id="Node000002" href="$classttg__parsec_1_1_t_t.html#aa50ec2908d3cecdf17c962e05760bec7" title=" " alt="" coords="5,5,180,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="214,28,180,28,180,23,214,23"/>
+</map>

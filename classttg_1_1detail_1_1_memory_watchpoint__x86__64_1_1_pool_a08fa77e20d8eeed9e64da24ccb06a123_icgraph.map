@@ -1,0 +1,7 @@
+<map id="ttg::detail::MemoryWatchpoint_x86_64::Pool::instance" name="ttg::detail::MemoryWatchpoint_x86_64::Pool::instance">
+<area shape="rect" id="Node000001" title="accesses the unique pool; asserts that the default instance has been initialized by calling initializ..." alt="" coords="272,35,501,75"/>
+<area shape="rect" id="Node000002" href="$namespacettg__madness.html#a410adda62f54efc8623cf0d50afdd53e" title="clears the hardware watchpoint for window [addr,addr+size) previously created with watchpoint_set&lt;T&gt;" alt="" coords="19,5,211,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="258,44,211,38,211,33,259,38"/>
+<area shape="rect" id="Node000003" href="$namespacettg__madness.html#a8cabd7cfbc5aaead3712f4a8e505e94f" title="sets a hardware watchpoint for window [addr,addr+size) and condition cond" alt="" coords="5,70,224,95"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="259,71,224,74,224,69,258,65"/>
+</map>

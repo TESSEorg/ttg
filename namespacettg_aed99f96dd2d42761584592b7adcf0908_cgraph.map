@@ -1,0 +1,10 @@
+<map id="ttg::launch_gdb" name="ttg::launch_gdb">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,31,135,56"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#a908edd0939096bd053fcbe6a5fee9609" title=" " alt="" coords="183,56,352,81"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="135,49,169,53,169,59,135,54"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#ac0ad1dd3b87329e4acf9774df6dc8473" title=" " alt="" coords="435,5,515,31"/>
+<area shape="poly" id="edge4_Node000001_Node000003" title=" " alt="" coords="135,37,422,19,422,24,135,42"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="320,53,421,28,423,33,321,58"/>
+<area shape="rect" id="Node000004" href="$classttg_1_1_debugger.html#a348f33c40ae29063b35d22c7f7562c4f" title="Set the global default debugger. The initial value is null." alt="" coords="400,55,551,95"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="352,69,386,70,386,75,352,74"/>
+</map>

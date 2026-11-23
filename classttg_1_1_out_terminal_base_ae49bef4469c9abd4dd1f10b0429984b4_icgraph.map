@@ -1,0 +1,14 @@
+<map id="ttg::OutTerminalBase::set_size" name="ttg::OutTerminalBase::set_size">
+<area shape="rect" id="Node000001" title=" " alt="" coords="371,71,537,111"/>
+<area shape="poly" id="edge1_Node000001_Node000001" title=" " alt="" coords="490,60,477,53,454,50,434,52,421,57,417,63,419,70,414,72,412,62,418,52,432,47,454,45,479,48,493,55"/>
+<area shape="rect" id="Node000002" href="$namespacettg.html#a647ab7e77f26372e8ed5519e373caf3b" title=" " alt="" coords="188,29,291,55"/>
+<area shape="poly" id="edge2_Node000001_Node000002" title=" " alt="" coords="356,72,290,56,291,51,357,66"/>
+<area shape="rect" id="Node000005" href="$namespacettg.html#af31d31d8a37261b9f89f1852e9e3c10f" title="Set the size of all streaming input terminals connected to an output terminal with void key." alt="" coords="188,79,291,104"/>
+<area shape="poly" id="edge5_Node000001_Node000005" title=" " alt="" coords="356,94,291,94,291,89,356,89"/>
+<area shape="rect" id="Node000006" href="$classttg_1_1_out_terminal_base.html#a5ce0ce0c4247e276201644e30314ba70" title=" " alt="" coords="156,129,323,169"/>
+<area shape="poly" id="edge6_Node000001_Node000006" title=" " alt="" coords="366,118,315,131,314,126,365,112"/>
+<area shape="rect" id="Node000003" href="$namespacettg.html#aeb9f920fc147bba8f435b2ca39cdd414" title=" " alt="" coords="5,5,108,31"/>
+<area shape="poly" id="edge3_Node000002_Node000003" title=" " alt="" coords="174,36,108,27,109,22,174,31"/>
+<area shape="rect" id="Node000004" href="$namespacettg.html#ae96ab8dfc75550533beda7e2644dc00f" title=" " alt="" coords="5,55,108,80"/>
+<area shape="poly" id="edge4_Node000002_Node000004" title=" " alt="" coords="174,54,109,63,108,58,174,48"/>
+</map>

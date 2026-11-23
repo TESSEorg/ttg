@@ -1,0 +1,23 @@
+<map id="ttg/ttg/reduce.h" name="ttg/ttg/reduce.h">
+<area shape="rect" id="Node000001" title=" " alt="" coords="849,5,977,31"/>
+<area shape="rect" id="Node000002" href="$ttg_8h.html" title=" " alt="" coords="875,79,952,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="916,44,916,79,911,79,911,44"/>
+<area shape="rect" id="Node000003" href="$fibonacci_8cc.html" title=" " alt="" coords="5,159,176,199"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="861,96,741,101,573,111,382,128,188,155,155,162,154,157,188,149,381,122,573,105,740,95,861,91"/>
+<area shape="rect" id="Node000004" href="$fibonacci__device_8cc.html" title=" " alt="" coords="200,152,371,207"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="861,99,651,117,517,133,383,155,372,157,371,152,382,149,517,128,650,112,860,93"/>
+<area shape="rect" id="Node000005" href="$helloworld_8cpp.html" title=" " alt="" coords="395,159,597,199"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="862,105,610,155,577,162,576,157,609,149,860,100"/>
+<area shape="rect" id="Node000006" href="$distributed_8cc.html" title=" " alt="" coords="621,159,800,199"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="874,112,756,162,754,157,872,107"/>
+<area shape="rect" id="Node000007" href="$iterative_8cc.html" title=" " alt="" coords="824,159,1003,199"/>
+<area shape="poly" id="edge6_Node000002_Node000007" title=" " alt="" coords="916,118,916,159,911,159,911,118"/>
+<area shape="rect" id="Node000008" href="$reducing_8cc.html" title=" " alt="" coords="1027,159,1205,199"/>
+<area shape="poly" id="edge7_Node000002_Node000008" title=" " alt="" coords="954,107,1072,157,1070,162,952,112"/>
+<area shape="rect" id="Node000009" href="$simple_8cc.html" title=" " alt="" coords="1229,159,1408,199"/>
+<area shape="poly" id="edge8_Node000002_Node000009" title=" " alt="" coords="966,99,1218,149,1249,157,1247,162,1217,155,965,105"/>
+<area shape="rect" id="Node000010" href="$ttg_2madness_2ttg_8h.html" title=" " alt="" coords="1432,167,1597,192"/>
+<area shape="poly" id="edge9_Node000002_Node000010" title=" " alt="" coords="966,94,1166,112,1293,128,1421,149,1479,164,1477,169,1419,155,1292,133,1166,117,966,99"/>
+<area shape="rect" id="Node000011" href="$ttg_2parsec_2ttg_8h.html" title=" " alt="" coords="1621,167,1771,192"/>
+<area shape="poly" id="edge10_Node000002_Node000011" title=" " alt="" coords="966,91,1082,95,1242,104,1425,121,1610,149,1665,164,1663,169,1609,155,1425,127,1242,109,1082,100,965,96"/>
+</map>

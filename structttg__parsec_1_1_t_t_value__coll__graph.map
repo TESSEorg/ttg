@@ -1,0 +1,10 @@
+<map id="ttg_parsec::TTValue&lt; DerivedT &gt;" name="ttg_parsec::TTValue&lt; DerivedT &gt;">
+<area shape="rect" id="Node000001" title=" " alt="" coords="289,40,445,80"/>
+<area shape="rect" id="Node000002" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__container__setter.html" title=" " alt="" coords="5,5,205,75"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="219,46,289,51,288,57,219,51"/>
+<area shape="rect" id="Node000003" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__t.html" title=" " alt="" coords="36,99,175,139"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="188,98,288,75,289,80,189,103"/>
+<area shape="rect" id="Node000004" href="$structttg__parsec_1_1detail_1_1ttg__data__copy__self__t.html" title=" " alt="" coords="283,113,451,153"/>
+<area shape="poly" id="edge4_Node000004_Node000003" title=" " alt="" coords="189,121,282,126,282,131,188,126"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="269,144,259,144,229,144,175,136,176,131,230,139,259,139,268,138"/>
+</map>
