@@ -1,20 +1,39 @@
 name: GPU Tests
 
+# SECURITY: this job runs on a persistent self-hosted GPU runner.
+# - The runner lives in the TESSEorg runner group "ttg-gpu", which is restricted
+#   (server-side) to THIS file as it exists on master. PRs cannot use the runner
+#   via `pull_request` or via new/edited workflow files.
+# - PRs are tested via `pull_request_target` (workflow definition always comes from
+#   master), but this job checks out and builds PR code, i.e. runs untrusted code.
+#   It therefore only runs automatically for PRs authored by org members/collaborators;
+#   for anyone else a maintainer must review the diff and apply the `gpu-ci` label
+#   (each new push requires removing and re-applying the label).
+# - No secrets are used; the token is read-only; the ccache is only saved from master.
 on:
   push:
     branches: [ master ]
-  pull_request:
+  pull_request_target:
     branches: [ master ]
+    types: [ opened, synchronize, reopened, labeled ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/master'}}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
 
 jobs:
   cuda-tests:
     name: "CUDA Device Tests"
-    runs-on: self-hosted
+    if: >-
+      github.event_name != 'pull_request_target' ||
+      (github.event.action != 'labeled' &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)) ||
+      (github.event.action == 'labeled' && github.event.label.name == 'gpu-ci')
+    runs-on: [ self-hosted, GPU ]
 
     env:
       CCACHE_DIR: ${{github.workspace}}/build/.ccache
@@ -28,9 +47,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        # pull_request_target checks out master by default; test the PR head instead
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        persist-credentials: false
 
-    - name: Setup ccache
-      uses: actions/cache@v4
+    # restore only: PR runs must not write to the master-scoped cache (cache poisoning)
+    - name: Restore ccache
+      id: ccache-restore
+      uses: actions/cache/restore@v4
       with:
         path: ${{github.workspace}}/build/.ccache
         key: ${{ runner.os }}-cuda-ccache-${{ github.sha }}
@@ -64,6 +89,13 @@ jobs:
       working-directory: ${{github.workspace}}/build
       shell: bash
       run: ccache -p && ccache -z && cmake --build . && ccache -s
+
+    - name: Save ccache
+      if: github.event_name == 'push'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{github.workspace}}/build/.ccache
+        key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
 
     - name: Build CUDA Examples
       working-directory: ${{github.workspace}}/build
