@@ -501,6 +501,25 @@ namespace ttg::device {
         ttg::device::detail::broadcastk<0, I, Is...>(std::tie(kl));
       }
     }
+
+
+    template<typename keyT, typename valueT,
+              ttg::Runtime Runtime = ttg::ttg_runtime>
+    inline send_coro_state
+    broadcast_keygen_coro(const keyT& key, valueT&& value,
+                    ttg::detail::value_copy_handler<Runtime>&& ch) {
+      ttg::detail::value_copy_handler<Runtime> copy_handler = std::move(ch); // destroyed at the end of the coro
+      if constexpr(ttg::runtime_traits<ttg::ttg_runtime>::supports_broadcast_keygen) {
+        keyT k = key; // the key may be a temporary, keep a copy in the coroutine frame
+        TTG_IMPL_NS::prepare_keygen(k, value);
+        co_await ttg::Void{}; // we'll come back once the task is done
+        TTG_IMPL_NS::broadcast_keygen(k, value);
+      } else {
+        // the runtime does not support keygen broadcasts
+        throw std::runtime_error("ttg::broadcast_keygen not supported in this runtime");
+      }
+    }
+
   }  // namespace detail
 
   /*
@@ -549,6 +568,17 @@ namespace ttg::device {
   inline detail::send_t broadcastk(RangesT &&keylist) {
     return detail::send_t{detail::broadcastk_coro<I, Is...>(std::forward<RangesT>(keylist))};
   }
+
+  /* overload with implicit terminals and keylist passed by const reference */
+  template <typename keyT, typename valueT,
+            ttg::Runtime Runtime = ttg::ttg_runtime>
+  inline detail::send_t broadcast_keygen(keyT&& key, valueT &&value) {
+    ttg::detail::value_copy_handler<Runtime> copy_handler;
+    return detail::send_t{detail::broadcast_keygen_coro(std::forward<keyT>(key),
+                                                        copy_handler(std::forward<valueT>(value)),
+                                                        std::move(copy_handler))};
+  }
+
 
   template<typename... Args, ttg::Runtime Runtime = ttg::ttg_runtime>
   [[nodiscard]]

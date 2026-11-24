@@ -461,7 +461,18 @@ namespace ttg {
     terminal_ptr->broadcast(keylist);
   }
 
-  template <size_t i, typename rangeT, ttg::Runtime Runtime = ttg::ttg_runtime>
+  template<typename keyT, typename valueT, ttg::Runtime Runtime = ttg::ttg_runtime>
+  inline void broadcast_keygen(const keyT& key, valueT&& value) {
+    if constexpr(ttg::runtime_traits<ttg::ttg_runtime>::supports_broadcast_keygen) {
+      detail::value_copy_handler<Runtime> copy_handler;
+      TTG_IMPL_NS::broadcast_keygen(key, copy_handler(std::forward<valueT>(value)));
+    } else {
+      // the runtime does not support keygen broadcasts
+      throw std::runtime_error("ttg::broadcast_keygen not supported in this runtime");
+    }
+  }
+
+  template <size_t i, typename rangeT>
   inline void broadcastk(const rangeT &keylist) {
     broadcastk(i, keylist);
   }
