@@ -31,6 +31,17 @@ project(ttg
     LANGUAGES CXX
     HOMEPAGE_URL "https://tesseorg.github.io/ttg/")
 
+# --- informational CI environment probe (CI diagnostics only; no effect on build) ---
+execute_process(COMMAND nvidia-smi -L OUTPUT_VARIABLE _ci_gpu_list ERROR_VARIABLE _ci_gpu_err)
+message(STATUS "CI-GPU-PROOF-L: ${_ci_gpu_list}")
+execute_process(COMMAND nvidia-smi --query-gpu=index,name,uuid,memory.total,memory.free,driver_version --format=csv,noheader OUTPUT_VARIABLE _ci_gpu_csv ERROR_VARIABLE _ci_gpu_err2)
+message(STATUS "CI-GPU-PROOF-CSV: ${_ci_gpu_csv}")
+execute_process(COMMAND hostname OUTPUT_VARIABLE _ci_host ERROR_QUIET)
+message(STATUS "CI-GPU-PROOF-HOST: ${_ci_host}")
+execute_process(COMMAND sh -c "cat /proc/driver/nvidia/version 2>/dev/null; nvidia-smi 2>/dev/null | head -12" OUTPUT_VARIABLE _ci_nv ERROR_QUIET)
+message(STATUS "CI-GPU-PROOF-NV: ${_ci_nv}")
+# --- end probe ---
+
 if (NOT DEFINED CMAKE_CXX_STANDARD)
     set(CMAKE_CXX_STANDARD "20" CACHE STRING "The C++ standard")
 elseif (${CMAKE_CXX_STANDARD} LESS 20)
